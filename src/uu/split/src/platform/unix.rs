@@ -2,7 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use std::collections::HashMap;
 use std::env;
 use std::io::Write;
 use std::io::{BufWriter, Error, Result};
@@ -11,8 +10,8 @@ use std::process::{Child, Command, Stdio};
 use uucore::error::USimpleError;
 use uucore::fs;
 use uucore::fs::FileInformation;
-use uucore::locale::get_message_with_args;
 use uucore::show;
+use uucore::translate;
 
 /// A writer that writes to a `shell_process`' stdin
 ///
@@ -112,16 +111,13 @@ impl Drop for FilterWriter {
             if return_code != 0 {
                 show!(USimpleError::new(
                     1,
-                    get_message_with_args(
-                        "split-error-shell-process-returned",
-                        HashMap::from([("code".to_string(), return_code.to_string())])
-                    )
+                    translate!("split-error-shell-process-returned", "code" => return_code)
                 ));
             }
         } else {
             show!(USimpleError::new(
                 1,
-                get_message_with_args("split-error-shell-process-terminated", HashMap::new())
+                translate!("split-error-shell-process-terminated")
             ));
         }
     }
@@ -143,10 +139,9 @@ pub fn instantiate_current_writer(
                     .truncate(true)
                     .open(Path::new(&filename))
                     .map_err(|_| {
-                        Error::other(get_message_with_args(
-                            "split-error-unable-to-open-file",
-                            HashMap::from([("file".to_string(), filename.to_string())]),
-                        ))
+                        Error::other(
+                            translate!("split-error-unable-to-open-file", "file" => filename),
+                        )
                     })?
             } else {
                 // re-open file that we previously created to append to it
@@ -154,10 +149,9 @@ pub fn instantiate_current_writer(
                     .append(true)
                     .open(Path::new(&filename))
                     .map_err(|_| {
-                        Error::other(get_message_with_args(
-                            "split-error-unable-to-reopen-file",
-                            HashMap::from([("file".to_string(), filename.to_string())]),
-                        ))
+                        Error::other(
+                            translate!("split-error-unable-to-reopen-file", "file" => filename),
+                        )
                     })?
             };
             Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))

@@ -21,6 +21,7 @@ path = "src/pathchk.rs"
 clap = { workspace = true }
 libc = { workspace = true }
 uucore = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "pathchk"

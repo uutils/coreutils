@@ -20,6 +20,7 @@ path = "src/echo.rs"
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["format"] }
+fluent = { workspace = true }
 
 [[bin]]
 name = "echo"

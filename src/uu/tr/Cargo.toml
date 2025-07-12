@@ -21,6 +21,7 @@ path = "src/tr.rs"
 nom = { workspace = true }
 clap = { workspace = true }
 uucore = { workspace = true, features = ["fs"] }
+fluent = { workspace = true }
 
 [[bin]]
 name = "tr"

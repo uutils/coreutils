@@ -5,11 +5,10 @@
 // spell-checker:ignore numberparse
 //! Errors returned by seq.
 use crate::numberparse::ParseNumberError;
-use std::collections::HashMap;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 #[derive(Debug, Error)]
 pub enum SeqError {
@@ -17,32 +16,32 @@ pub enum SeqError {
     ///
     /// The parameters are the [`String`] argument as read from the
     /// command line and the underlying parsing error itself.
-    #[error("{}", get_message_with_args("seq-error-parse", HashMap::from([("type".to_string(), parse_error_type(.1).to_string()), ("arg".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("seq-error-parse", "type" => parse_error_type(.1), "arg" => .0.quote()))]
     ParseError(String, ParseNumberError),
 
     /// The increment argument was zero, which is not allowed.
     ///
     /// The parameter is the increment argument as a [`String`] as read
     /// from the command line.
-    #[error("{}", get_message_with_args("seq-error-zero-increment", HashMap::from([("arg".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("seq-error-zero-increment", "arg" => .0.quote()))]
     ZeroIncrement(String),
 
     /// No arguments were passed to this function, 1 or more is required
-    #[error("{}", get_message_with_args("seq-error-no-arguments", HashMap::new()))]
+    #[error("{}", translate!("seq-error-no-arguments"))]
     NoArguments,
 
     /// Both a format and equal width where passed to seq
     #[error(
         "{}",
-        get_message_with_args("seq-error-format-and-equal-width", HashMap::new())
+        translate!("seq-error-format-and-equal-width")
     )]
     FormatAndEqualWidth,
 }
 
 fn parse_error_type(e: &ParseNumberError) -> String {
     match e {
-        ParseNumberError::Float => get_message("seq-parse-error-type-float"),
-        ParseNumberError::Nan => get_message("seq-parse-error-type-nan"),
+        ParseNumberError::Float => translate!("seq-parse-error-type-float"),
+        ParseNumberError::Nan => translate!("seq-parse-error-type-nan"),
     }
 }
 

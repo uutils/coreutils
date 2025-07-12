@@ -6,7 +6,7 @@ use clap::{Arg, ArgAction, Command};
 use std::{ffi::OsString, io::Write};
 use uucore::error::{UResult, set_exit_code};
 
-use uucore::locale::get_message;
+use uucore::translate;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -45,20 +45,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("false-about"))
+        .about(translate!("false-about"))
         // We provide our own help and version options, to ensure maximum compatibility with GNU.
         .disable_help_flag(true)
         .disable_version_flag(true)
         .arg(
             Arg::new("help")
                 .long("help")
-                .help(get_message("false-help-text"))
+                .help(translate!("false-help-text"))
                 .action(ArgAction::Help),
         )
         .arg(
             Arg::new("version")
                 .long("version")
-                .help(get_message("false-version-text"))
+                .help(translate!("false-version-text"))
                 .action(ArgAction::Version),
         )
 }

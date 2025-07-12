@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use uu_base32::base_common::{self, BASE_CMD_PARSE_ERROR, Config};
 use uucore::error::UClapError;
-use uucore::locale::get_message;
+use uucore::translate;
 use uucore::{
     encoding::Format,
     error::{UResult, UUsageError},
@@ -16,36 +16,36 @@ use uucore::{
 
 fn get_encodings() -> Vec<(&'static str, Format, String)> {
     vec![
-        ("base64", Format::Base64, get_message("basenc-help-base64")),
+        ("base64", Format::Base64, translate!("basenc-help-base64")),
         (
             "base64url",
             Format::Base64Url,
-            get_message("basenc-help-base64url"),
+            translate!("basenc-help-base64url"),
         ),
-        ("base32", Format::Base32, get_message("basenc-help-base32")),
+        ("base32", Format::Base32, translate!("basenc-help-base32")),
         (
             "base32hex",
             Format::Base32Hex,
-            get_message("basenc-help-base32hex"),
+            translate!("basenc-help-base32hex"),
         ),
-        ("base16", Format::Base16, get_message("basenc-help-base16")),
+        ("base16", Format::Base16, translate!("basenc-help-base16")),
         (
             "base2lsbf",
             Format::Base2Lsbf,
-            get_message("basenc-help-base2lsbf"),
+            translate!("basenc-help-base2lsbf"),
         ),
         (
             "base2msbf",
             Format::Base2Msbf,
-            get_message("basenc-help-base2msbf"),
+            translate!("basenc-help-base2msbf"),
         ),
-        ("z85", Format::Z85, get_message("basenc-help-z85")),
+        ("z85", Format::Z85, translate!("basenc-help-z85")),
     ]
 }
 
 pub fn uu_app() -> Command {
-    let about: &'static str = Box::leak(get_message("basenc-about").into_boxed_str());
-    let usage: &'static str = Box::leak(get_message("basenc-usage").into_boxed_str());
+    let about: &'static str = Box::leak(translate!("basenc-about").into_boxed_str());
+    let usage: &'static str = Box::leak(translate!("basenc-usage").into_boxed_str());
 
     let encodings = get_encodings();
     let mut command = base_common::base_app(about, usage);
@@ -75,7 +75,7 @@ fn parse_cmd_args(args: impl uucore::Args) -> UResult<(Config, Format)> {
         .ok_or_else(|| {
             UUsageError::new(
                 BASE_CMD_PARSE_ERROR,
-                get_message("basenc-error-missing-encoding-type"),
+                translate!("basenc-error-missing-encoding-type"),
             )
         })?
         .1;

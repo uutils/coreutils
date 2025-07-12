@@ -12,7 +12,7 @@ use crate::uu_app;
 use uucore::entries::{Locate, Passwd};
 use uucore::error::{FromIo, UResult};
 use uucore::libc::S_IWGRP;
-use uucore::locale::get_message;
+use uucore::translate;
 use uucore::utmpx::{self, Utmpx, time};
 
 use std::io::BufReader;
@@ -26,7 +26,7 @@ use std::path::PathBuf;
 fn get_long_usage() -> String {
     format!(
         "{}{}",
-        get_message("pinky-long-usage-description"),
+        translate!("pinky-long-usage-description"),
         utmpx::DEFAULT_FILE
     )
 }
@@ -218,17 +218,17 @@ impl Pinky {
     }
 
     fn print_heading(&self) {
-        print!("{:<8}", get_message("pinky-column-login"));
+        print!("{:<8}", translate!("pinky-column-login"));
         if self.include_fullname {
-            print!(" {:<19}", get_message("pinky-column-name"));
+            print!(" {:<19}", translate!("pinky-column-name"));
         }
-        print!(" {:<9}", get_message("pinky-column-tty"));
+        print!(" {:<9}", translate!("pinky-column-tty"));
         if self.include_idle {
-            print!(" {:<6}", get_message("pinky-column-idle"));
+            print!(" {:<6}", translate!("pinky-column-idle"));
         }
-        print!(" {:<16}", get_message("pinky-column-when"));
+        print!(" {:<16}", translate!("pinky-column-when"));
         if self.include_where {
-            print!(" {}", get_message("pinky-column-where"));
+            print!(" {}", translate!("pinky-column-where"));
         }
         println!();
     }
@@ -251,8 +251,8 @@ impl Pinky {
         for u in &self.names {
             print!(
                 "{} {u:<28}{} ",
-                get_message("pinky-login-name-label"),
-                get_message("pinky-real-life-label")
+                translate!("pinky-login-name-label"),
+                translate!("pinky-real-life-label")
             );
             if let Ok(pw) = Passwd::locate(u.as_str()) {
                 let fullname = gecos_to_fullname(&pw).unwrap_or_default();
@@ -260,14 +260,14 @@ impl Pinky {
                 let user_shell = pw.user_shell.unwrap_or_default();
                 println!(" {fullname}");
                 if self.include_home_and_shell {
-                    print!("{} {user_dir:<29}", get_message("pinky-directory-label"));
-                    println!("{}  {user_shell}", get_message("pinky-shell-label"));
+                    print!("{} {user_dir:<29}", translate!("pinky-directory-label"));
+                    println!("{}  {user_shell}", translate!("pinky-shell-label"));
                 }
                 if self.include_project {
                     let mut p = PathBuf::from(&user_dir);
                     p.push(".project");
                     if let Ok(f) = File::open(p) {
-                        print!("{} ", get_message("pinky-project-label"));
+                        print!("{} ", translate!("pinky-project-label"));
                         read_to_console(f);
                     }
                 }
@@ -275,7 +275,7 @@ impl Pinky {
                     let mut p = PathBuf::from(&user_dir);
                     p.push(".plan");
                     if let Ok(f) = File::open(p) {
-                        println!("{}:", get_message("pinky-plan-label"));
+                        println!("{}:", translate!("pinky-plan-label"));
                         read_to_console(f);
                     }
                 }

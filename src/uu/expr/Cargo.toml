@@ -24,6 +24,7 @@ num-traits = { workspace = true }
 onig = { workspace = true }
 uucore = { workspace = true, features = ["i18n-collator"] }
 thiserror = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "expr"

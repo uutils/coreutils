@@ -5,7 +5,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::env;
-use uucore::locale::get_message;
+use uucore::translate;
 use uucore::{error::UResult, format_usage};
 
 static OPT_NULL: &str = "null";
@@ -54,14 +54,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("printenv-about"))
-        .override_usage(format_usage(&get_message("printenv-usage")))
+        .about(translate!("printenv-about"))
+        .override_usage(format_usage(&translate!("printenv-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_NULL)
                 .short('0')
                 .long(OPT_NULL)
-                .help(get_message("printenv-help-null"))
+                .help(translate!("printenv-help-null"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

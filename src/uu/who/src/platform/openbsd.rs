@@ -8,10 +8,10 @@
 use crate::uu_app;
 
 use uucore::error::UResult;
-use uucore::locale::get_message;
+use uucore::translate;
 
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let _matches = uu_app().try_get_matches_from(args)?;
-    println!("{}", get_message("who-unsupported-openbsd"));
+    println!("{}", translate!("who-unsupported-openbsd"));
     Ok(())
 }

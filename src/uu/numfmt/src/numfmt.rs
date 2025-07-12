@@ -8,7 +8,6 @@ use crate::format::format_and_print;
 use crate::options::*;
 use crate::units::{Result, Unit};
 use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
-use std::collections::HashMap;
 use std::io::{BufRead, Error, Write};
 use std::result::Result as StdResult;
 use std::str::FromStr;
@@ -16,7 +15,8 @@ use std::str::FromStr;
 use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
 use uucore::error::UResult;
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
+
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::ranges::Range;
 use uucore::{format_usage, show, show_error};
@@ -98,7 +98,7 @@ fn parse_unit(s: &str) -> Result<Unit> {
         "iec" => Ok(Unit::Iec(false)),
         "iec-i" => Ok(Unit::Iec(true)),
         "none" => Ok(Unit::None),
-        _ => Err(get_message("numfmt-error-unsupported-unit")),
+        _ => Err(translate!("numfmt-error-unsupported-unit")),
     }
 }
 
@@ -120,10 +120,7 @@ fn parse_unit_size(s: &str) -> Result<usize> {
         }
     }
 
-    Err(get_message_with_args(
-        "numfmt-error-invalid-unit-size",
-        HashMap::from([("size".to_string(), s.quote().to_string())]),
-    ))
+    Err(translate!("numfmt-error-invalid-unit-size", "size" => s.quote()))
 }
 
 /// Parses a suffix of a unit size and returns the corresponding multiplier. For example,
@@ -174,12 +171,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
                 0 => Err(s),
                 _ => Ok(n),
             })
-            .map_err(|s| {
-                get_message_with_args(
-                    "numfmt-error-invalid-padding",
-                    HashMap::from([("value".to_string(), s.quote().to_string())]),
-                )
-            }),
+            .map_err(|s| translate!("numfmt-error-invalid-padding", "value" => s.quote())),
         None => Ok(0),
     }?;
 
@@ -193,12 +185,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
                 0 => Err(value),
                 _ => Ok(n),
             })
-            .map_err(|value| {
-                get_message_with_args(
-                    "numfmt-error-invalid-header",
-                    HashMap::from([("value".to_string(), value.quote().to_string())]),
-                )
-            })
+            .map_err(|value| translate!("numfmt-error-invalid-header", "value" => value.quote()))
     } else {
         Ok(0)
     }?;
@@ -220,8 +207,8 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     };
 
     if format.grouping && to != Unit::None {
-        return Err(get_message(
-            "numfmt-error-grouping-cannot-be-combined-with-to",
+        return Err(translate!(
+            "numfmt-error-grouping-cannot-be-combined-with-to"
         ));
     }
 
@@ -229,8 +216,8 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         if arg.len() == 1 {
             Ok(Some(arg.to_string()))
         } else {
-            Err(get_message(
-                "numfmt-error-delimiter-must-be-single-character",
+            Err(translate!(
+                "numfmt-error-delimiter-must-be-single-character"
             ))
         }
     })?;
@@ -292,9 +279,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("numfmt-about"))
-        .after_help(get_message("numfmt-after-help"))
-        .override_usage(format_usage(&get_message("numfmt-usage")))
+        .about(translate!("numfmt-about"))
+        .after_help(translate!("numfmt-after-help"))
+        .override_usage(format_usage(&translate!("numfmt-usage")))
         .allow_negative_numbers(true)
         .infer_long_args(true)
         .arg(
@@ -302,12 +289,12 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(DELIMITER)
                 .value_name("X")
-                .help(get_message("numfmt-help-delimiter")),
+                .help(translate!("numfmt-help-delimiter")),
         )
         .arg(
             Arg::new(FIELD)
                 .long(FIELD)
-                .help(get_message("numfmt-help-field"))
+                .help(translate!("numfmt-help-field"))
                 .value_name("FIELDS")
                 .allow_hyphen_values(true)
                 .default_value(FIELD_DEFAULT),
@@ -315,48 +302,48 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(FORMAT)
                 .long(FORMAT)
-                .help(get_message("numfmt-help-format"))
+                .help(translate!("numfmt-help-format"))
                 .value_name("FORMAT")
                 .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(FROM)
                 .long(FROM)
-                .help(get_message("numfmt-help-from"))
+                .help(translate!("numfmt-help-from"))
                 .value_name("UNIT")
                 .default_value(FROM_DEFAULT),
         )
         .arg(
             Arg::new(FROM_UNIT)
                 .long(FROM_UNIT)
-                .help(get_message("numfmt-help-from-unit"))
+                .help(translate!("numfmt-help-from-unit"))
                 .value_name("N")
                 .default_value(FROM_UNIT_DEFAULT),
         )
         .arg(
             Arg::new(TO)
                 .long(TO)
-                .help(get_message("numfmt-help-to"))
+                .help(translate!("numfmt-help-to"))
                 .value_name("UNIT")
                 .default_value(TO_DEFAULT),
         )
         .arg(
             Arg::new(TO_UNIT)
                 .long(TO_UNIT)
-                .help(get_message("numfmt-help-to-unit"))
+                .help(translate!("numfmt-help-to-unit"))
                 .value_name("N")
                 .default_value(TO_UNIT_DEFAULT),
         )
         .arg(
             Arg::new(PADDING)
                 .long(PADDING)
-                .help(get_message("numfmt-help-padding"))
+                .help(translate!("numfmt-help-padding"))
                 .value_name("N"),
         )
         .arg(
             Arg::new(HEADER)
                 .long(HEADER)
-                .help(get_message("numfmt-help-header"))
+                .help(translate!("numfmt-help-header"))
                 .num_args(..=1)
                 .value_name("N")
                 .default_missing_value(HEADER_DEFAULT)
@@ -365,7 +352,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(ROUND)
                 .long(ROUND)
-                .help(get_message("numfmt-help-round"))
+                .help(translate!("numfmt-help-round"))
                 .value_name("METHOD")
                 .default_value("from-zero")
                 .value_parser(ShortcutValueParser::new([
@@ -379,13 +366,13 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(SUFFIX)
                 .long(SUFFIX)
-                .help(get_message("numfmt-help-suffix"))
+                .help(translate!("numfmt-help-suffix"))
                 .value_name("SUFFIX"),
         )
         .arg(
             Arg::new(INVALID)
                 .long(INVALID)
-                .help(get_message("numfmt-help-invalid"))
+                .help(translate!("numfmt-help-invalid"))
                 .default_value("abort")
                 .value_parser(["abort", "fail", "warn", "ignore"])
                 .value_name("INVALID"),
@@ -394,7 +381,7 @@ pub fn uu_app() -> Command {
             Arg::new(ZERO_TERMINATED)
                 .long(ZERO_TERMINATED)
                 .short('z')
-                .help(get_message("numfmt-help-zero-terminated"))
+                .help(translate!("numfmt-help-zero-terminated"))
                 .action(ArgAction::SetTrue),
         )
         .arg(Arg::new(NUMBER).hide(true).action(ArgAction::Append))

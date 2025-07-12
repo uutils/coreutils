@@ -41,6 +41,7 @@ thiserror = { workspace = true }
 #    debian. In this case, libstdbuf.so should be installed separately to its
 #    correct location and the environment variable LIBSTDBUF_DIR configures the
 #    installation directory during the build. E.g. LIBSTDBUF_DIR="/usr/lib"
+fluent = { workspace = true }
 [features]
 feat_external_libstdbuf = []
 

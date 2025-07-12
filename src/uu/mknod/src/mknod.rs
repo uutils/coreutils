@@ -8,13 +8,12 @@
 use clap::{Arg, ArgAction, Command, value_parser};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 use libc::{dev_t, mode_t};
-use std::collections::HashMap;
 use std::ffi::CString;
 
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::format_usage;
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
 
@@ -130,14 +129,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         (FileType::Fifo, _, _) => {
             return Err(UUsageError::new(
                 1,
-                get_message("mknod-error-fifo-no-major-minor"),
+                translate!("mknod-error-fifo-no-major-minor"),
             ));
         }
         (_, Some(&major), Some(&minor)) => makedev(major, minor),
         _ => {
             return Err(UUsageError::new(
                 1,
-                get_message("mknod-error-special-require-major-minor"),
+                translate!("mknod-error-special-require-major-minor"),
             ));
         }
     };
@@ -157,47 +156,47 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("mknod-usage")))
-        .after_help(get_message("mknod-after-help"))
-        .about(get_message("mknod-about"))
+        .override_usage(format_usage(&translate!("mknod-usage")))
+        .after_help(translate!("mknod-after-help"))
+        .about(translate!("mknod-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::MODE)
                 .short('m')
                 .long("mode")
                 .value_name("MODE")
-                .help(get_message("mknod-help-mode")),
+                .help(translate!("mknod-help-mode")),
         )
         .arg(
             Arg::new("name")
                 .value_name("NAME")
-                .help(get_message("mknod-help-name"))
+                .help(translate!("mknod-help-name"))
                 .required(true)
                 .value_hint(clap::ValueHint::AnyPath),
         )
         .arg(
             Arg::new(options::TYPE)
                 .value_name("TYPE")
-                .help(get_message("mknod-help-type"))
+                .help(translate!("mknod-help-type"))
                 .required(true)
                 .value_parser(parse_type),
         )
         .arg(
             Arg::new(options::MAJOR)
                 .value_name(options::MAJOR)
-                .help(get_message("mknod-help-major"))
+                .help(translate!("mknod-help-major"))
                 .value_parser(value_parser!(u64)),
         )
         .arg(
             Arg::new(options::MINOR)
                 .value_name(options::MINOR)
-                .help(get_message("mknod-help-minor"))
+                .help(translate!("mknod-help-minor"))
                 .value_parser(value_parser!(u64)),
         )
         .arg(
             Arg::new(options::SELINUX)
                 .short('Z')
-                .help(get_message("mknod-help-selinux"))
+                .help(translate!("mknod-help-selinux"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -207,7 +206,7 @@ pub fn uu_app() -> Command {
                 .value_parser(value_parser!(String))
                 .num_args(0..=1)
                 .require_equals(true)
-                .help(get_message("mknod-help-context")),
+                .help(translate!("mknod-help-context")),
         )
 }
 
@@ -215,15 +214,10 @@ fn get_mode(str_mode: Option<&String>) -> Result<mode_t, String> {
     match str_mode {
         None => Ok(MODE_RW_UGO),
         Some(str_mode) => uucore::mode::parse_mode(str_mode)
-            .map_err(|e| {
-                get_message_with_args(
-                    "mknod-error-invalid-mode",
-                    HashMap::from([("error".to_string(), e.to_string())]),
-                )
-            })
+            .map_err(|e| translate!("mknod-error-invalid-mode", "error" => e))
             .and_then(|mode| {
                 if mode > 0o777 {
-                    Err(get_message("mknod-error-mode-permission-bits-only"))
+                    Err(translate!("mknod-error-mode-permission-bits-only"))
                 } else {
                     Ok(mode)
                 }
@@ -236,14 +230,11 @@ fn parse_type(tpe: &str) -> Result<FileType, String> {
     // 'mknod /dev/rst0 character 18 0'.
     tpe.chars()
         .next()
-        .ok_or_else(|| get_message("mknod-error-missing-device-type"))
+        .ok_or_else(|| translate!("mknod-error-missing-device-type"))
         .and_then(|first_char| match first_char {
             'b' => Ok(FileType::Block),
             'c' | 'u' => Ok(FileType::Character),
             'p' => Ok(FileType::Fifo),
-            _ => Err(get_message_with_args(
-                "mknod-error-invalid-device-type",
-                HashMap::from([("type".to_string(), tpe.quote().to_string())]),
-            )),
+            _ => Err(translate!("mknod-error-invalid-device-type", "type" => tpe.quote())),
         })
 }

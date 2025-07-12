@@ -6,9 +6,8 @@
 
 use crate::csplit_error::CsplitError;
 use regex::Regex;
-use std::collections::HashMap;
-use uucore::locale::get_message_with_args;
 use uucore::show_warning;
+use uucore::translate;
 
 /// The definition of a pattern to match on a line.
 #[derive(Debug)]
@@ -172,10 +171,7 @@ fn validate_line_numbers(patterns: &[Pattern]) -> Result<(), CsplitError> {
             (n, m) if n == m => {
                 show_warning!(
                     "{}",
-                    get_message_with_args(
-                        "csplit-warning-line-number-same-as-previous",
-                        HashMap::from([("line_number".to_string(), n.to_string())])
-                    )
+                    translate!("csplit-warning-line-number-same-as-previous", "line_number" => n)
                 );
                 Ok(n)
             }

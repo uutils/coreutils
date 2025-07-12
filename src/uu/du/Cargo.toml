@@ -24,6 +24,7 @@ glob = { workspace = true }
 clap = { workspace = true }
 uucore = { workspace = true, features = ["format", "parser"] }
 thiserror = { workspace = true }
+fluent = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true, features = [

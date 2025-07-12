@@ -21,6 +21,7 @@ path = "src/hostid.rs"
 clap = { workspace = true }
 libc = { workspace = true }
 uucore = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "hostid"

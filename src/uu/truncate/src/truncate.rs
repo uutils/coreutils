@@ -5,7 +5,6 @@
 
 // spell-checker:ignore (ToDO) RFILE refsize rfilename fsize tsize
 use clap::{Arg, ArgAction, Command};
-use std::collections::HashMap;
 use std::fs::{OpenOptions, metadata};
 use std::io::ErrorKind;
 #[cfg(unix)]
@@ -14,7 +13,8 @@ use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
+
 use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
 
 #[derive(Debug, Eq, PartialEq)]
@@ -84,7 +84,7 @@ pub mod options {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app()
-        .after_help(get_message("truncate-after-help"))
+        .after_help(translate!("truncate-after-help"))
         .try_get_matches_from(args)
         .map_err(|e| {
             e.print().expect("Error writing clap::Error");
@@ -102,7 +102,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if files.is_empty() {
         Err(UUsageError::new(
             1,
-            get_message("truncate-error-missing-file-operand"),
+            translate!("truncate-error-missing-file-operand"),
         ))
     } else {
         let io_blocks = matches.get_flag(options::IO_BLOCKS);
@@ -118,21 +118,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("truncate-about"))
-        .override_usage(format_usage(&get_message("truncate-usage")))
+        .about(translate!("truncate-about"))
+        .override_usage(format_usage(&translate!("truncate-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::IO_BLOCKS)
                 .short('o')
                 .long(options::IO_BLOCKS)
-                .help(get_message("truncate-help-io-blocks"))
+                .help(translate!("truncate-help-io-blocks"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_CREATE)
                 .short('c')
                 .long(options::NO_CREATE)
-                .help(get_message("truncate-help-no-create"))
+                .help(translate!("truncate-help-no-create"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -140,7 +140,7 @@ pub fn uu_app() -> Command {
                 .short('r')
                 .long(options::REFERENCE)
                 .required_unless_present(options::SIZE)
-                .help(get_message("truncate-help-reference"))
+                .help(translate!("truncate-help-reference"))
                 .value_name("RFILE")
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -149,7 +149,7 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(options::SIZE)
                 .required_unless_present(options::REFERENCE)
-                .help(get_message("truncate-help-size"))
+                .help(translate!("truncate-help-size"))
                 .value_name("SIZE"),
         )
         .arg(
@@ -179,10 +179,7 @@ fn file_truncate(filename: &str, create: bool, size: u64) -> UResult<()> {
         if metadata.file_type().is_fifo() {
             return Err(USimpleError::new(
                 1,
-                get_message_with_args(
-                    "truncate-error-cannot-open-no-device",
-                    HashMap::from([("filename".to_string(), filename.quote().to_string())]),
-                ),
+                translate!("truncate-error-cannot-open-no-device", "filename" => filename.quote()),
             ));
         }
     }
@@ -193,12 +190,9 @@ fn file_truncate(filename: &str, create: bool, size: u64) -> UResult<()> {
         Err(e) if e.kind() == ErrorKind::NotFound && !create => Ok(()),
         Err(e) => Err(e),
     }
-    .map_err_context(|| {
-        get_message_with_args(
-            "truncate-error-cannot-open-for-writing",
-            HashMap::from([("filename".to_string(), filename.quote().to_string())]),
-        )
-    })
+    .map_err_context(
+        || translate!("truncate-error-cannot-open-for-writing", "filename" => filename.quote()),
+    )
 }
 
 /// Truncate files to a size relative to a given file.
@@ -228,16 +222,13 @@ fn truncate_reference_and_size(
         Err(e) => {
             return Err(USimpleError::new(
                 1,
-                get_message_with_args(
-                    "truncate-error-invalid-number",
-                    HashMap::from([("error".to_string(), e.to_string())]),
-                ),
+                translate!("truncate-error-invalid-number", "error" => e),
             ));
         }
         Ok(TruncateMode::Absolute(_)) => {
             return Err(USimpleError::new(
                 1,
-                get_message("truncate-error-must-specify-relative-size"),
+                translate!("truncate-error-must-specify-relative-size"),
             ));
         }
         Ok(m) => m,
@@ -246,17 +237,14 @@ fn truncate_reference_and_size(
     if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = mode {
         return Err(USimpleError::new(
             1,
-            get_message("truncate-error-division-by-zero"),
+            translate!("truncate-error-division-by-zero"),
         ));
     }
 
     let metadata = metadata(rfilename).map_err(|e| match e.kind() {
         ErrorKind::NotFound => USimpleError::new(
             1,
-            get_message_with_args(
-                "truncate-error-cannot-stat-no-such-file",
-                HashMap::from([("filename".to_string(), rfilename.quote().to_string())]),
-            ),
+            translate!("truncate-error-cannot-stat-no-such-file", "filename" => rfilename.quote()),
         ),
         _ => e.map_err_context(String::new),
     })?;
@@ -292,10 +280,7 @@ fn truncate_reference_file_only(
     let metadata = metadata(rfilename).map_err(|e| match e.kind() {
         ErrorKind::NotFound => USimpleError::new(
             1,
-            get_message_with_args(
-                "truncate-error-cannot-stat-no-such-file",
-                HashMap::from([("filename".to_string(), rfilename.quote().to_string())]),
-            ),
+            translate!("truncate-error-cannot-stat-no-such-file", "filename" => rfilename.quote()),
         ),
         _ => e.map_err_context(String::new),
     })?;
@@ -328,19 +313,13 @@ fn truncate_reference_file_only(
 /// If at least one file is a named pipe (also known as a fifo).
 fn truncate_size_only(size_string: &str, filenames: &[String], create: bool) -> UResult<()> {
     let mode = parse_mode_and_size(size_string).map_err(|e| {
-        USimpleError::new(
-            1,
-            get_message_with_args(
-                "truncate-error-invalid-number",
-                HashMap::from([("error".to_string(), e.to_string())]),
-            ),
-        )
+        USimpleError::new(1, translate!("truncate-error-invalid-number", "error" => e))
     })?;
 
     if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = mode {
         return Err(USimpleError::new(
             1,
-            get_message("truncate-error-division-by-zero"),
+            translate!("truncate-error-division-by-zero"),
         ));
     }
 
@@ -351,10 +330,7 @@ fn truncate_size_only(size_string: &str, filenames: &[String], create: bool) -> 
                 if m.file_type().is_fifo() {
                     return Err(USimpleError::new(
                         1,
-                        get_message_with_args(
-                            "truncate-error-cannot-open-no-device",
-                            HashMap::from([("filename".to_string(), filename.quote().to_string())]),
-                        ),
+                        translate!("truncate-error-cannot-open-no-device", "filename" => filename.quote()),
                     ));
                 }
                 m.len()

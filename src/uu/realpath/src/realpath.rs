@@ -11,7 +11,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use uucore::fs::make_path_relative_to;
-use uucore::locale::get_message;
+use uucore::translate;
 use uucore::{
     display::{Quotable, print_verbatim},
     error::{FromIo, UClapError, UResult},
@@ -86,14 +86,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("realpath-about"))
-        .override_usage(format_usage(&get_message("realpath-usage")))
+        .about(translate!("realpath-about"))
+        .override_usage(format_usage(&translate!("realpath-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_QUIET)
                 .short('q')
                 .long(OPT_QUIET)
-                .help(get_message("realpath-help-quiet"))
+                .help(translate!("realpath-help-quiet"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -101,21 +101,21 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(OPT_STRIP)
                 .visible_alias("no-symlinks")
-                .help(get_message("realpath-help-strip"))
+                .help(translate!("realpath-help-strip"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_ZERO)
                 .short('z')
                 .long(OPT_ZERO)
-                .help(get_message("realpath-help-zero"))
+                .help(translate!("realpath-help-zero"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_LOGICAL)
                 .short('L')
                 .long(OPT_LOGICAL)
-                .help(get_message("realpath-help-logical"))
+                .help(translate!("realpath-help-logical"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -123,21 +123,21 @@ pub fn uu_app() -> Command {
                 .short('P')
                 .long(OPT_PHYSICAL)
                 .overrides_with_all([OPT_STRIP, OPT_LOGICAL])
-                .help(get_message("realpath-help-physical"))
+                .help(translate!("realpath-help-physical"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_CANONICALIZE_EXISTING)
                 .short('e')
                 .long(OPT_CANONICALIZE_EXISTING)
-                .help(get_message("realpath-help-canonicalize-existing"))
+                .help(translate!("realpath-help-canonicalize-existing"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_CANONICALIZE_MISSING)
                 .short('m')
                 .long(OPT_CANONICALIZE_MISSING)
-                .help(get_message("realpath-help-canonicalize-missing"))
+                .help(translate!("realpath-help-canonicalize-missing"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -145,14 +145,14 @@ pub fn uu_app() -> Command {
                 .long(OPT_RELATIVE_TO)
                 .value_name("DIR")
                 .value_parser(NonEmptyStringValueParser::new())
-                .help(get_message("realpath-help-relative-to")),
+                .help(translate!("realpath-help-relative-to")),
         )
         .arg(
             Arg::new(OPT_RELATIVE_BASE)
                 .long(OPT_RELATIVE_BASE)
                 .value_name("DIR")
                 .value_parser(NonEmptyStringValueParser::new())
-                .help(get_message("realpath-help-relative-base")),
+                .help(translate!("realpath-help-relative-base")),
         )
         .arg(
             Arg::new(ARG_FILES)

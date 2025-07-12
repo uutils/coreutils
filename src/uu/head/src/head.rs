@@ -17,6 +17,7 @@ use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::line_ending::LineEnding;
+use uucore::translate;
 use uucore::{format_usage, show};
 
 const BUF_SIZE: usize = 65536;
@@ -33,28 +34,26 @@ mod options {
 
 mod parse;
 mod take;
-use std::collections::HashMap;
 use take::copy_all_but_n_bytes;
 use take::copy_all_but_n_lines;
 use take::take_lines;
-use uucore::locale::{get_message, get_message_with_args};
 
 #[derive(Error, Debug)]
 enum HeadError {
     /// Wrapper around `io::Error`
-    #[error("{}", get_message_with_args("head-error-reading-file", HashMap::from([("name".to_string(), name.clone()), ("err".to_string(), err.to_string())])))]
+    #[error("{}", translate!("head-error-reading-file", "name" => name.clone(), "err" => err))]
     Io { name: String, err: io::Error },
 
-    #[error("{}", get_message_with_args("head-error-parse-error", HashMap::from([("err".to_string(), 0.to_string())])))]
+    #[error("{}", translate!("head-error-parse-error", "err" => 0))]
     ParseError(String),
 
-    #[error("{}", get_message("head-error-bad-encoding"))]
+    #[error("{}", translate!("head-error-bad-encoding"))]
     BadEncoding,
 
-    #[error("{}", get_message("head-error-num-too-large"))]
+    #[error("{}", translate!("head-error-num-too-large"))]
     NumTooLarge(#[from] TryFromIntError),
 
-    #[error("{}", get_message_with_args("head-error-clap", HashMap::from([("err".to_string(), 0.to_string())])))]
+    #[error("{}", translate!("head-error-clap", "err" => 0))]
     Clap(#[from] clap::Error),
 
     #[error("{0}")]
@@ -72,15 +71,15 @@ type HeadResult<T> = Result<T, HeadError>;
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("head-about"))
-        .override_usage(format_usage(&get_message("head-usage")))
+        .about(translate!("head-about"))
+        .override_usage(format_usage(&translate!("head-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::BYTES_NAME)
                 .short('c')
                 .long("bytes")
                 .value_name("[-]NUM")
-                .help(get_message("head-help-bytes"))
+                .help(translate!("head-help-bytes"))
                 .overrides_with_all([options::BYTES_NAME, options::LINES_NAME])
                 .allow_hyphen_values(true),
         )
@@ -89,7 +88,7 @@ pub fn uu_app() -> Command {
                 .short('n')
                 .long("lines")
                 .value_name("[-]NUM")
-                .help(get_message("head-help-lines"))
+                .help(translate!("head-help-lines"))
                 .overrides_with_all([options::LINES_NAME, options::BYTES_NAME])
                 .allow_hyphen_values(true),
         )
@@ -98,7 +97,7 @@ pub fn uu_app() -> Command {
                 .short('q')
                 .long("quiet")
                 .visible_alias("silent")
-                .help(get_message("head-help-quiet"))
+                .help(translate!("head-help-quiet"))
                 .overrides_with_all([options::VERBOSE_NAME, options::QUIET_NAME])
                 .action(ArgAction::SetTrue),
         )
@@ -106,7 +105,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::VERBOSE_NAME)
                 .short('v')
                 .long("verbose")
-                .help(get_message("head-help-verbose"))
+                .help(translate!("head-help-verbose"))
                 .overrides_with_all([options::QUIET_NAME, options::VERBOSE_NAME])
                 .action(ArgAction::SetTrue),
         )
@@ -121,7 +120,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::ZERO_NAME)
                 .short('z')
                 .long("zero-terminated")
-                .help(get_message("head-help-zero-terminated"))
+                .help(translate!("head-help-zero-terminated"))
                 .overrides_with(options::ZERO_NAME)
                 .action(ArgAction::SetTrue),
         )
@@ -149,24 +148,16 @@ impl Default for Mode {
 impl Mode {
     fn from(matches: &ArgMatches) -> Result<Self, String> {
         if let Some(v) = matches.get_one::<String>(options::BYTES_NAME) {
-            let (n, all_but_last) = parse::parse_num(v).map_err(|err| {
-                get_message_with_args(
-                    "head-error-invalid-bytes",
-                    HashMap::from([("err".to_string(), err.to_string())]),
-                )
-            })?;
+            let (n, all_but_last) = parse::parse_num(v)
+                .map_err(|err| translate!("head-error-invalid-bytes", "err" => err))?;
             if all_but_last {
                 Ok(Self::AllButLastBytes(n))
             } else {
                 Ok(Self::FirstBytes(n))
             }
         } else if let Some(v) = matches.get_one::<String>(options::LINES_NAME) {
-            let (n, all_but_last) = parse::parse_num(v).map_err(|err| {
-                get_message_with_args(
-                    "head-error-invalid-lines",
-                    HashMap::from([("err".to_string(), err.to_string())]),
-                )
-            })?;
+            let (n, all_but_last) = parse::parse_num(v)
+                .map_err(|err| translate!("head-error-invalid-lines", "err" => err))?;
             if all_but_last {
                 Ok(Self::AllButLastLines(n))
             } else {
@@ -187,10 +178,9 @@ fn arg_iterate<'a>(
         if let Some(s) = second.to_str() {
             match parse::parse_obsolete(s) {
                 Some(Ok(iter)) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
-                Some(Err(parse::ParseError)) => Err(HeadError::ParseError(get_message_with_args(
-                    "head-error-bad-argument-format",
-                    HashMap::from([("arg".to_string(), s.quote().to_string())]),
-                ))),
+                Some(Err(parse::ParseError)) => Err(HeadError::ParseError(
+                    translate!("head-error-bad-argument-format", "arg" => s.quote()),
+                )),
                 None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
             }
         } else {
@@ -236,10 +226,7 @@ impl HeadOptions {
 fn wrap_in_stdout_error(err: io::Error) -> io::Error {
     io::Error::new(
         err.kind(),
-        get_message_with_args(
-            "head-error-writing-stdout",
-            HashMap::from([("err".to_string(), err.to_string())]),
-        ),
+        translate!("head-error-writing-stdout", "err" => err),
     )
 }
 
@@ -480,7 +467,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     if !first {
                         println!();
                     }
-                    println!("{}", get_message("head-header-stdin"));
+                    println!("{}", translate!("head-header-stdin"));
                 }
                 let stdin = io::stdin();
 
@@ -523,10 +510,9 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 let mut file = match File::open(name) {
                     Ok(f) => f,
                     Err(err) => {
-                        show!(err.map_err_context(|| get_message_with_args(
-                            "head-error-cannot-open",
-                            HashMap::from([("name".to_string(), name.quote().to_string())])
-                        )));
+                        show!(err.map_err_context(
+                            || translate!("head-error-cannot-open", "name" => name.quote())
+                        ));
                         continue;
                     }
                 };

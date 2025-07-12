@@ -25,7 +25,7 @@ use memchr::memchr2;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
-use uucore::locale::get_message;
+use uucore::translate;
 use uucore::{fast_inc::fast_inc_one, format_usage};
 
 /// Linux splice support
@@ -274,8 +274,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("cat-usage")))
-        .about(get_message("cat-about"))
+        .override_usage(format_usage(&translate!("cat-usage")))
+        .about(translate!("cat-about"))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(

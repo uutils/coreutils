@@ -9,7 +9,6 @@
 //! read and write progress of a running `dd` process. The
 //! [`gen_prog_updater`] function can be used to implement a progress
 //! updater that runs in its own thread.
-use std::collections::HashMap;
 use std::io::Write;
 use std::sync::mpsc;
 #[cfg(target_os = "linux")]
@@ -21,8 +20,8 @@ use signal_hook::iterator::Handle;
 use uucore::{
     error::UResult,
     format::num_format::{FloatVariant, Formatter},
-    locale::get_message_with_args,
     locale::setup_localization,
+    translate,
 };
 
 use crate::numbers::{SuffixType, to_magnitude_and_suffix};
@@ -106,10 +105,7 @@ impl ProgUpdate {
         match self.read_stat.records_truncated {
             0 => {}
             count => {
-                let message = get_message_with_args(
-                    "dd-progress-truncated-record",
-                    HashMap::from([("count".to_string(), count.to_string())]),
-                );
+                let message = translate!("dd-progress-truncated-record", "count" => count);
                 writeln!(w, "{message}")?;
             }
         }
@@ -173,41 +169,18 @@ impl ProgUpdate {
         // print a more concise representation of the number, like
         // "1.2 kB" and "1.0 KiB".
         let message = match btotal {
-            1 => get_message_with_args(
-                "dd-progress-byte-copied",
-                HashMap::from([
-                    ("bytes".to_string(), btotal.to_string()),
-                    ("duration".to_string(), duration_str.to_string()),
-                    ("rate".to_string(), transfer_rate.to_string()),
-                ]),
-            ),
-            0..=999 => get_message_with_args(
-                "dd-progress-bytes-copied",
-                HashMap::from([
-                    ("bytes".to_string(), btotal.to_string()),
-                    ("duration".to_string(), duration_str.to_string()),
-                    ("rate".to_string(), transfer_rate.to_string()),
-                ]),
-            ),
-            1000..=1023 => get_message_with_args(
-                "dd-progress-bytes-copied-si",
-                HashMap::from([
-                    ("bytes".to_string(), btotal.to_string()),
-                    ("si".to_string(), btotal_metric.to_string()),
-                    ("duration".to_string(), duration_str.to_string()),
-                    ("rate".to_string(), transfer_rate.to_string()),
-                ]),
-            ),
-            _ => get_message_with_args(
-                "dd-progress-bytes-copied-si-iec",
-                HashMap::from([
-                    ("bytes".to_string(), btotal.to_string()),
-                    ("si".to_string(), btotal_metric.to_string()),
-                    ("iec".to_string(), btotal_bin.to_string()),
-                    ("duration".to_string(), duration_str.to_string()),
-                    ("rate".to_string(), transfer_rate.to_string()),
-                ]),
-            ),
+            1 => {
+                translate!("dd-progress-byte-copied", "bytes" => btotal, "duration" => duration_str, "rate" => transfer_rate)
+            }
+            0..=999 => {
+                translate!("dd-progress-bytes-copied", "bytes" => btotal, "duration" => duration_str, "rate" => transfer_rate)
+            }
+            1000..=1023 => {
+                translate!("dd-progress-bytes-copied-si", "bytes" => btotal, "si" => btotal_metric, "duration" => duration_str, "rate" => transfer_rate)
+            }
+            _ => {
+                translate!("dd-progress-bytes-copied-si-iec", "bytes" => btotal, "si" => btotal_metric, "iec" => btotal_bin, "duration" => duration_str, "rate" => transfer_rate)
+            }
         };
 
         write!(w, "{carriage_return}{message}{newline}")?;
@@ -340,13 +313,7 @@ impl ReadStat {
     ///
     /// If there is a problem writing to `w`.
     fn report(&self, w: &mut impl Write) -> std::io::Result<()> {
-        let message = get_message_with_args(
-            "dd-progress-records-in",
-            HashMap::from([
-                ("complete".to_string(), self.reads_complete.to_string()),
-                ("partial".to_string(), self.reads_partial.to_string()),
-            ]),
-        );
+        let message = translate!("dd-progress-records-in", "complete" => self.reads_complete, "partial" => self.reads_partial);
         writeln!(w, "{message}")?;
         Ok(())
     }
@@ -400,13 +367,7 @@ impl WriteStat {
     ///
     /// If there is a problem writing to `w`.
     fn report(&self, w: &mut impl Write) -> std::io::Result<()> {
-        let message = get_message_with_args(
-            "dd-progress-records-out",
-            HashMap::from([
-                ("complete".to_string(), self.writes_complete.to_string()),
-                ("partial".to_string(), self.writes_partial.to_string()),
-            ]),
-        );
+        let message = translate!("dd-progress-records-out", "complete" => self.writes_complete, "partial" => self.writes_partial);
         writeln!(w, "{message}")
     }
 }

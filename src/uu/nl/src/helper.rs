@@ -5,8 +5,7 @@
 // spell-checker:ignore (ToDO) conv
 
 use crate::options;
-use std::collections::HashMap;
-use uucore::locale::get_message_with_args;
+use uucore::translate;
 
 // parse_options loads the options into the settings, returning an array of
 // error messages.
@@ -61,18 +60,12 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
     match opts.get_one::<usize>(options::NUMBER_WIDTH) {
         None => {}
         Some(num) if *num > 0 => settings.number_width = *num,
-        Some(_) => errs.push(get_message_with_args(
-            "nl-error-invalid-line-width",
-            HashMap::from([("value".to_string(), "0".to_string())]),
-        )),
+        Some(_) => errs.push(translate!("nl-error-invalid-line-width", "value" => "0")),
     }
     match opts.get_one::<u64>(options::JOIN_BLANK_LINES) {
         None => {}
         Some(num) if *num > 0 => settings.join_blank_lines = *num,
-        Some(_) => errs.push(get_message_with_args(
-            "nl-error-invalid-blank-lines",
-            HashMap::from([("value".to_string(), "0".to_string())]),
-        )),
+        Some(_) => errs.push(translate!("nl-error-invalid-blank-lines", "value" => "0")),
     }
     if let Some(num) = opts.get_one::<i64>(options::LINE_INCREMENT) {
         settings.line_increment = *num;

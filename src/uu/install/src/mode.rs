@@ -2,12 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use uucore::locale::get_message_with_args;
 #[cfg(not(windows))]
 use uucore::mode;
+use uucore::translate;
 
 /// Takes a user-supplied string and tries to parse to u16 mode bitmask.
 pub fn parse(mode_string: &str, considering_dir: bool, umask: u32) -> Result<u32, String> {
@@ -29,13 +28,7 @@ pub fn chmod(path: &Path, mode: u32) -> Result<(), ()> {
     fs::set_permissions(path, fs::Permissions::from_mode(mode)).map_err(|err| {
         show_error!(
             "{}",
-            get_message_with_args(
-                "install-error-chmod-failed-detailed",
-                HashMap::from([
-                    ("path".to_string(), path.maybe_quote().to_string()),
-                    ("error".to_string(), err.to_string())
-                ])
-            )
+            translate!("install-error-chmod-failed-detailed", "path" => path.maybe_quote(), "error" => err)
         );
     })
 }

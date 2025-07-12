@@ -21,7 +21,7 @@ use uucore::{format_usage, show};
 
 use crate::error::TacError;
 
-use uucore::locale::get_message;
+use uucore::translate;
 
 mod options {
     pub static BEFORE: &str = "before";
@@ -56,28 +56,28 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("tac-usage")))
-        .about(get_message("tac-about"))
+        .override_usage(format_usage(&translate!("tac-usage")))
+        .about(translate!("tac-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::BEFORE)
                 .short('b')
                 .long(options::BEFORE)
-                .help(get_message("tac-help-before"))
+                .help(translate!("tac-help-before"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::REGEX)
                 .short('r')
                 .long(options::REGEX)
-                .help(get_message("tac-help-regex"))
+                .help(translate!("tac-help-regex"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SEPARATOR)
                 .short('s')
                 .long(options::SEPARATOR)
-                .help(get_message("tac-help-separator"))
+                .help(translate!("tac-help-separator"))
                 .value_name("STRING"),
         )
         .arg(

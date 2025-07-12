@@ -22,6 +22,7 @@ clap = { workspace = true }
 uucore = { workspace = true, features = ["libc", "fsext", "parser"] }
 unicode-width = { workspace = true }
 thiserror = { workspace = true }
+fluent = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

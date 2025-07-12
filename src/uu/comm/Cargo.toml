@@ -20,6 +20,7 @@ path = "src/comm.rs"
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["fs"] }
+fluent = { workspace = true }
 
 [[bin]]
 name = "comm"

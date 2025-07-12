@@ -13,8 +13,8 @@ use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use uucore::buf_copy;
-use uucore::locale::get_message;
 use uucore::mode::get_umask;
+use uucore::translate;
 
 use crate::{
     CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode,
@@ -397,7 +397,7 @@ pub(crate) fn copy_on_write(
             clone(source, dest, CloneFallback::Error)
         }
         (ReflinkMode::Always, _) => {
-            return Err(get_message("cp-error-reflink-always-sparse-auto").into());
+            return Err(translate!("cp-error-reflink-always-sparse-auto").into());
         }
     };
     result.map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;

@@ -20,6 +20,7 @@ path = "src/truncate.rs"
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["parser"] }
+fluent = { workspace = true }
 
 [[bin]]
 name = "truncate"

@@ -6,14 +6,12 @@
 // spell-checker:ignore (ToDO) fullname
 
 use clap::{Arg, ArgAction, Command};
-use std::collections::HashMap;
 use std::path::{PathBuf, is_separator};
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError};
 use uucore::format_usage;
 use uucore::line_ending::LineEnding;
-
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 pub mod options {
     pub static MULTIPLE: &str = "multiple";
@@ -40,7 +38,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if name_args.is_empty() {
         return Err(UUsageError::new(
             1,
-            get_message("basename-error-missing-operand"),
+            translate!("basename-error-missing-operand"),
         ));
     }
     let multiple_paths =
@@ -59,10 +57,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             _ => {
                 return Err(UUsageError::new(
                     1,
-                    get_message_with_args(
-                        "basename-error-extra-operand",
-                        HashMap::from([("operand".to_string(), name_args[2].quote().to_string())]),
-                    ),
+                    translate!("basename-error-extra-operand",
+                               "operand" => name_args[2].quote()),
                 ));
             }
         }
@@ -82,14 +78,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("basename-about"))
-        .override_usage(format_usage(&get_message("basename-usage")))
+        .about(translate!("basename-about"))
+        .override_usage(format_usage(&translate!("basename-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::MULTIPLE)
                 .short('a')
                 .long(options::MULTIPLE)
-                .help(get_message("basename-help-multiple"))
+                .help(translate!("basename-help-multiple"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::MULTIPLE),
         )
@@ -105,14 +101,14 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(options::SUFFIX)
                 .value_name("SUFFIX")
-                .help(get_message("basename-help-suffix"))
+                .help(translate!("basename-help-suffix"))
                 .overrides_with(options::SUFFIX),
         )
         .arg(
             Arg::new(options::ZERO)
                 .short('z')
                 .long(options::ZERO)
-                .help(get_message("basename-help-zero"))
+                .help(translate!("basename-help-zero"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::ZERO),
         )

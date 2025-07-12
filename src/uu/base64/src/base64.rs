@@ -5,7 +5,8 @@
 
 use clap::Command;
 use uu_base32::base_common;
-use uucore::{encoding::Format, error::UResult, locale::get_message};
+use uucore::translate;
+use uucore::{encoding::Format, error::UResult};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -22,7 +23,7 @@ pub fn uu_app() -> Command {
 }
 
 fn get_info() -> (&'static str, &'static str) {
-    let about: &'static str = Box::leak(get_message("base64-about").into_boxed_str());
-    let usage: &'static str = Box::leak(get_message("base64-usage").into_boxed_str());
+    let about: &'static str = Box::leak(translate!("base64-about").into_boxed_str());
+    let usage: &'static str = Box::leak(translate!("base64-usage").into_boxed_str());
     (about, usage)
 }

@@ -21,6 +21,7 @@ path = "src/rm.rs"
 thiserror = { workspace = true }
 clap = { workspace = true }
 uucore = { workspace = true, features = ["fs"] }
+fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }

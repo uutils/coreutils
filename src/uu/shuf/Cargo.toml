@@ -22,6 +22,7 @@ clap = { workspace = true }
 rand = { workspace = true }
 rand_core = { workspace = true }
 uucore = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "shuf"

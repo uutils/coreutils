@@ -415,16 +415,16 @@ fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
 /// # Examples
 ///
 /// ```
-/// use uucore::translation;
+/// use uucore::translate;
 ///
 /// // Simple message without arguments
-/// let greeting = translation!("greeting");
+/// let greeting = translate!("greeting");
 ///
 /// // Message with one argument
-/// let welcome = translation!("welcome", "name" => "Alice");
+/// let welcome = translate!("welcome", "name" => "Alice");
 ///
 /// // Message with multiple arguments
-/// let notification = translation!(
+/// let notification = translate!(
 ///     "user-stats",
 ///     "name" => username,
 ///     "count" => item_count,
@@ -432,7 +432,7 @@ fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
 /// );
 /// ```
 #[macro_export]
-macro_rules! translation {
+macro_rules! translate {
     // Case 1: Message ID only (no arguments)
     ($id:expr) => {
         $crate::locale::get_message($id)
@@ -451,7 +451,7 @@ macro_rules! translation {
 }
 
 // Re-export the macro for easier access
-pub use translation;
+pub use translate;
 
 #[cfg(test)]
 mod tests {

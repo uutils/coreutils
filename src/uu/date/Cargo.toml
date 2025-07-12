@@ -28,6 +28,7 @@ jiff = { workspace = true, features = [
 ] }
 uucore = { workspace = true, features = ["parser"] }
 parse_datetime = { workspace = true }
+fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }

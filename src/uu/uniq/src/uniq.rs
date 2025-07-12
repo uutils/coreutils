@@ -7,7 +7,6 @@ use clap::{
     Arg, ArgAction, ArgMatches, Command, builder::ValueParser, error::ContextKind, error::Error,
     error::ErrorKind,
 };
-use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write, stdin, stdout};
@@ -17,8 +16,7 @@ use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::posix::{OBSOLETE, posix_version};
-
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 pub mod options {
     pub static ALL_REPEATED: &str = "all-repeated";
@@ -61,7 +59,7 @@ macro_rules! write_line_terminator {
     ($writer:expr, $line_terminator:expr) => {
         $writer
             .write_all(&[$line_terminator])
-            .map_err_context(|| get_message("uniq-error-write-line-terminator"))
+            .map_err_context(|| translate!("uniq-error-write-line-terminator"))
     };
 }
 
@@ -111,7 +109,7 @@ impl Uniq {
         }
         writer
             .flush()
-            .map_err_context(|| get_message("uniq-error-write-error"))?;
+            .map_err_context(|| translate!("uniq-error-write-error"))?;
         Ok(())
     }
 
@@ -228,7 +226,7 @@ impl Uniq {
         } else {
             writer.write_all(line)
         }
-        .map_err_context(|| get_message("uniq-error-write-error"))?;
+        .map_err_context(|| translate!("uniq-error-write-error"))?;
 
         write_line_terminator!(writer, line_terminator)
     }
@@ -242,13 +240,7 @@ fn opt_parsed(opt_name: &str, matches: &ArgMatches) -> UResult<Option<usize>> {
                 IntErrorKind::PosOverflow => Ok(Some(usize::MAX)),
                 _ => Err(USimpleError::new(
                     1,
-                    get_message_with_args(
-                        "uniq-error-invalid-argument",
-                        HashMap::from([
-                            ("opt_name".to_string(), opt_name.to_string()),
-                            ("arg".to_string(), arg_str.maybe_quote().to_string()),
-                        ]),
-                    ),
+                    translate!("uniq-error-invalid-argument", "opt_name" => opt_name, "arg" => arg_str.maybe_quote()),
                 )),
             },
         },
@@ -518,11 +510,11 @@ fn handle_extract_obs_skip_chars(
 /// for `uniq` hardcode and require the exact wording of the error message
 /// and it is not compatible with how Clap formats and displays those error messages.
 fn map_clap_errors(clap_error: Error) -> Box<dyn UError> {
-    let footer = get_message("uniq-error-try-help");
-    let override_arg_conflict = get_message("uniq-error-group-mutually-exclusive") + "\n" + &footer;
-    let override_group_badoption = get_message("uniq-error-group-badoption") + "\n" + &footer;
+    let footer = translate!("uniq-error-try-help");
+    let override_arg_conflict = translate!("uniq-error-group-mutually-exclusive") + "\n" + &footer;
+    let override_group_badoption = translate!("uniq-error-group-badoption") + "\n" + &footer;
     let override_all_repeated_badoption =
-        get_message("uniq-error-all-repeated-badoption") + "\n" + &footer;
+        translate!("uniq-error-all-repeated-badoption") + "\n" + &footer;
 
     let error_message = match clap_error.kind() {
         ErrorKind::ArgumentConflict => override_arg_conflict,
@@ -587,7 +579,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if uniq.show_counts && uniq.all_repeated {
         return Err(USimpleError::new(
             1,
-            get_message("uniq-error-counts-and-repeated-meaningless"),
+            translate!("uniq-error-counts-and-repeated-meaningless"),
         ));
     }
 
@@ -600,16 +592,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("uniq-about"))
-        .override_usage(format_usage(&get_message("uniq-usage")))
+        .about(translate!("uniq-about"))
+        .override_usage(format_usage(&translate!("uniq-usage")))
         .infer_long_args(true)
-        .after_help(get_message("uniq-after-help"))
+        .after_help(translate!("uniq-after-help"))
         .arg(
             Arg::new(options::ALL_REPEATED)
                 .short('D')
                 .long(options::ALL_REPEATED)
                 .value_parser(ShortcutValueParser::new(["none", "prepend", "separate"]))
-                .help(get_message("uniq-help-all-repeated"))
+                .help(translate!("uniq-help-all-repeated"))
                 .value_name("delimit-method")
                 .num_args(0..=1)
                 .default_missing_value("none")
@@ -621,7 +613,7 @@ pub fn uu_app() -> Command {
                 .value_parser(ShortcutValueParser::new([
                     "separate", "prepend", "append", "both",
                 ]))
-                .help(get_message("uniq-help-group"))
+                .help(translate!("uniq-help-group"))
                 .value_name("group-method")
                 .num_args(0..=1)
                 .default_missing_value("separate")
@@ -637,56 +629,56 @@ pub fn uu_app() -> Command {
             Arg::new(options::CHECK_CHARS)
                 .short('w')
                 .long(options::CHECK_CHARS)
-                .help(get_message("uniq-help-check-chars"))
+                .help(translate!("uniq-help-check-chars"))
                 .value_name("N"),
         )
         .arg(
             Arg::new(options::COUNT)
                 .short('c')
                 .long(options::COUNT)
-                .help(get_message("uniq-help-count"))
+                .help(translate!("uniq-help-count"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::IGNORE_CASE)
                 .short('i')
                 .long(options::IGNORE_CASE)
-                .help(get_message("uniq-help-ignore-case"))
+                .help(translate!("uniq-help-ignore-case"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::REPEATED)
                 .short('d')
                 .long(options::REPEATED)
-                .help(get_message("uniq-help-repeated"))
+                .help(translate!("uniq-help-repeated"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SKIP_CHARS)
                 .short('s')
                 .long(options::SKIP_CHARS)
-                .help(get_message("uniq-help-skip-chars"))
+                .help(translate!("uniq-help-skip-chars"))
                 .value_name("N"),
         )
         .arg(
             Arg::new(options::SKIP_FIELDS)
                 .short('f')
                 .long(options::SKIP_FIELDS)
-                .help(get_message("uniq-help-skip-fields"))
+                .help(translate!("uniq-help-skip-fields"))
                 .value_name("N"),
         )
         .arg(
             Arg::new(options::UNIQUE)
                 .short('u')
                 .long(options::UNIQUE)
-                .help(get_message("uniq-help-unique"))
+                .help(translate!("uniq-help-unique"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ZERO_TERMINATED)
                 .short('z')
                 .long(options::ZERO_TERMINATED)
-                .help(get_message("uniq-help-zero-terminated"))
+                .help(translate!("uniq-help-zero-terminated"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -723,12 +715,9 @@ fn get_delimiter(matches: &ArgMatches) -> Delimiters {
 fn open_input_file(in_file_name: Option<&OsStr>) -> UResult<Box<dyn BufRead>> {
     Ok(match in_file_name {
         Some(path) if path != "-" => {
-            let in_file = File::open(path).map_err_context(|| {
-                get_message_with_args(
-                    "uniq-error-could-not-open",
-                    HashMap::from([("path".to_string(), path.maybe_quote().to_string())]),
-                )
-            })?;
+            let in_file = File::open(path).map_err_context(
+                || translate!("uniq-error-could-not-open", "path" => path.maybe_quote()),
+            )?;
             Box::new(BufReader::new(in_file))
         }
         _ => Box::new(stdin().lock()),
@@ -739,12 +728,9 @@ fn open_input_file(in_file_name: Option<&OsStr>) -> UResult<Box<dyn BufRead>> {
 fn open_output_file(out_file_name: Option<&OsStr>) -> UResult<Box<dyn Write>> {
     Ok(match out_file_name {
         Some(path) if path != "-" => {
-            let out_file = File::create(path).map_err_context(|| {
-                get_message_with_args(
-                    "uniq-error-could-not-open",
-                    HashMap::from([("path".to_string(), path.maybe_quote().to_string())]),
-                )
-            })?;
+            let out_file = File::create(path).map_err_context(
+                || translate!("uniq-error-could-not-open", "path" => path.maybe_quote()),
+            )?;
             Box::new(BufWriter::new(out_file))
         }
         _ => Box::new(stdout().lock()),

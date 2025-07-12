@@ -10,7 +10,7 @@ use std::io::{IsTerminal, Write};
 use uucore::error::{UResult, set_exit_code};
 use uucore::format_usage;
 
-use uucore::locale::get_message;
+use uucore::translate;
 
 mod options {
     pub const SILENT: &str = "silent";
@@ -39,7 +39,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Ok(name) => writeln!(stdout, "{}", name.display()),
         Err(_) => {
             set_exit_code(1);
-            writeln!(stdout, "{}", get_message("tty-not-a-tty"))
+            writeln!(stdout, "{}", translate!("tty-not-a-tty"))
         }
     };
 
@@ -55,15 +55,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("tty-about"))
-        .override_usage(format_usage(&get_message("tty-usage")))
+        .about(translate!("tty-about"))
+        .override_usage(format_usage(&translate!("tty-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::SILENT)
                 .long(options::SILENT)
                 .visible_alias("quiet")
                 .short('s')
-                .help(get_message("tty-help-silent"))
+                .help(translate!("tty-help-silent"))
                 .action(ArgAction::SetTrue),
         )
 }

@@ -13,7 +13,7 @@ use uucore::format_usage;
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
 
-use uucore::locale::get_message;
+use uucore::translate;
 const OPT_LOGICAL: &str = "logical";
 const OPT_PHYSICAL: &str = "physical";
 
@@ -119,7 +119,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         physical_path()
     }
-    .map_err_context(|| get_message("pwd-error-failed-to-get-current-directory"))?;
+    .map_err_context(|| translate!("pwd-error-failed-to-get-current-directory"))?;
 
     // \\?\ is a prefix Windows gives to paths under certain circumstances,
     // including when canonicalizing them.
@@ -133,21 +133,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap_or(cwd);
 
     println_verbatim(cwd)
-        .map_err_context(|| get_message("pwd-error-failed-to-print-current-directory"))?;
+        .map_err_context(|| translate!("pwd-error-failed-to-print-current-directory"))?;
     Ok(())
 }
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("pwd-about"))
-        .override_usage(format_usage(&get_message("pwd-usage")))
+        .about(translate!("pwd-about"))
+        .override_usage(format_usage(&translate!("pwd-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_LOGICAL)
                 .short('L')
                 .long(OPT_LOGICAL)
-                .help(get_message("pwd-help-logical"))
+                .help(translate!("pwd-help-logical"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -155,7 +155,7 @@ pub fn uu_app() -> Command {
                 .short('P')
                 .long(OPT_PHYSICAL)
                 .overrides_with(OPT_LOGICAL)
-                .help(get_message("pwd-help-physical"))
+                .help(translate!("pwd-help-physical"))
                 .action(ArgAction::SetTrue),
         )
 }

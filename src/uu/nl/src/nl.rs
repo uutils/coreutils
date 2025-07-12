@@ -4,12 +4,12 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command};
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, stdin};
 use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
+
 use uucore::{format_usage, show_error};
 
 mod helper;
@@ -90,12 +90,9 @@ impl TryFrom<&str> for NumberingStyle {
             "n" => Ok(Self::None),
             _ if s.starts_with('p') => match regex::Regex::new(&s[1..]) {
                 Ok(re) => Ok(Self::Regex(Box::new(re))),
-                Err(_) => Err(get_message("nl-error-invalid-regex")),
+                Err(_) => Err(translate!("nl-error-invalid-regex")),
             },
-            _ => Err(get_message_with_args(
-                "nl-error-invalid-numbering-style",
-                HashMap::from([("style".to_string(), s.to_string())]),
-            )),
+            _ => Err(translate!("nl-error-invalid-numbering-style", "style" => s)),
         }
     }
 }
@@ -191,7 +188,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             1,
             format!(
                 "{}\n{}",
-                get_message("nl-error-invalid-arguments"),
+                translate!("nl-error-invalid-arguments"),
                 parse_errors.join("\n")
             ),
         ));
@@ -214,10 +211,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if path.is_dir() {
                 show_error!(
                     "{}",
-                    get_message_with_args(
-                        "nl-error-is-directory",
-                        HashMap::from([("path".to_string(), path.display().to_string())])
-                    )
+                    translate!("nl-error-is-directory", "path" => path.display())
                 );
                 set_exit_code(1);
             } else {
@@ -233,16 +227,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about(get_message("nl-about"))
+        .about(translate!("nl-about"))
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("nl-usage")))
-        .after_help(get_message("nl-after-help"))
+        .override_usage(format_usage(&translate!("nl-usage")))
+        .after_help(translate!("nl-after-help"))
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help(get_message("nl-help-help"))
+                .help(translate!("nl-help-help"))
                 .action(ArgAction::Help),
         )
         .arg(
@@ -255,35 +249,35 @@ pub fn uu_app() -> Command {
             Arg::new(options::BODY_NUMBERING)
                 .short('b')
                 .long(options::BODY_NUMBERING)
-                .help(get_message("nl-help-body-numbering"))
+                .help(translate!("nl-help-body-numbering"))
                 .value_name("STYLE"),
         )
         .arg(
             Arg::new(options::SECTION_DELIMITER)
                 .short('d')
                 .long(options::SECTION_DELIMITER)
-                .help(get_message("nl-help-section-delimiter"))
+                .help(translate!("nl-help-section-delimiter"))
                 .value_name("CC"),
         )
         .arg(
             Arg::new(options::FOOTER_NUMBERING)
                 .short('f')
                 .long(options::FOOTER_NUMBERING)
-                .help(get_message("nl-help-footer-numbering"))
+                .help(translate!("nl-help-footer-numbering"))
                 .value_name("STYLE"),
         )
         .arg(
             Arg::new(options::HEADER_NUMBERING)
                 .short('h')
                 .long(options::HEADER_NUMBERING)
-                .help(get_message("nl-help-header-numbering"))
+                .help(translate!("nl-help-header-numbering"))
                 .value_name("STYLE"),
         )
         .arg(
             Arg::new(options::LINE_INCREMENT)
                 .short('i')
                 .long(options::LINE_INCREMENT)
-                .help(get_message("nl-help-line-increment"))
+                .help(translate!("nl-help-line-increment"))
                 .value_name("NUMBER")
                 .value_parser(clap::value_parser!(i64)),
         )
@@ -291,7 +285,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::JOIN_BLANK_LINES)
                 .short('l')
                 .long(options::JOIN_BLANK_LINES)
-                .help(get_message("nl-help-join-blank-lines"))
+                .help(translate!("nl-help-join-blank-lines"))
                 .value_name("NUMBER")
                 .value_parser(clap::value_parser!(u64)),
         )
@@ -299,7 +293,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::NUMBER_FORMAT)
                 .short('n')
                 .long(options::NUMBER_FORMAT)
-                .help(get_message("nl-help-number-format"))
+                .help(translate!("nl-help-number-format"))
                 .value_name("FORMAT")
                 .value_parser(["ln", "rn", "rz"]),
         )
@@ -307,21 +301,21 @@ pub fn uu_app() -> Command {
             Arg::new(options::NO_RENUMBER)
                 .short('p')
                 .long(options::NO_RENUMBER)
-                .help(get_message("nl-help-no-renumber"))
+                .help(translate!("nl-help-no-renumber"))
                 .action(ArgAction::SetFalse),
         )
         .arg(
             Arg::new(options::NUMBER_SEPARATOR)
                 .short('s')
                 .long(options::NUMBER_SEPARATOR)
-                .help(get_message("nl-help-number-separator"))
+                .help(translate!("nl-help-number-separator"))
                 .value_name("STRING"),
         )
         .arg(
             Arg::new(options::STARTING_LINE_NUMBER)
                 .short('v')
                 .long(options::STARTING_LINE_NUMBER)
-                .help(get_message("nl-help-starting-line-number"))
+                .help(translate!("nl-help-starting-line-number"))
                 .value_name("NUMBER")
                 .value_parser(clap::value_parser!(i64)),
         )
@@ -329,7 +323,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::NUMBER_WIDTH)
                 .short('w')
                 .long(options::NUMBER_WIDTH)
-                .help(get_message("nl-help-number-width"))
+                .help(translate!("nl-help-number-width"))
                 .value_name("NUMBER")
                 .value_parser(clap::value_parser!(usize)),
         )
@@ -340,7 +334,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
     let mut current_numbering_style = &settings.body_numbering;
 
     for line in reader.lines() {
-        let line = line.map_err_context(|| get_message("nl-error-could-not-read-line"))?;
+        let line = line.map_err_context(|| translate!("nl-error-could-not-read-line"))?;
 
         if line.is_empty() {
             stats.consecutive_empty_lines += 1;
@@ -382,7 +376,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                 let Some(line_number) = stats.line_number else {
                     return Err(USimpleError::new(
                         1,
-                        get_message("nl-error-line-number-overflow"),
+                        translate!("nl-error-line-number-overflow"),
                     ));
                 };
                 println!(

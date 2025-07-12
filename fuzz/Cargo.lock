@@ -1435,6 +1435,7 @@ name = "uu_cksum"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "fluent",
  "hex",
  "uucore",
 ]
@@ -1445,6 +1446,7 @@ version = "0.1.0"
 dependencies = [
  "bstr",
  "clap",
+ "fluent",
  "memchr",
  "uucore",
 ]
@@ -1455,6 +1457,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "clap",
+ "fluent",
  "jiff",
  "libc",
  "parse_datetime",
@@ -1467,6 +1470,7 @@ name = "uu_echo"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "fluent",
  "uucore",
 ]
 
@@ -1475,6 +1479,7 @@ name = "uu_env"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "fluent",
  "nix",
  "rust-ini",
  "thiserror",
@@ -1486,6 +1491,7 @@ name = "uu_expr"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "fluent",
  "num-bigint",
  "num-traits",
  "onig",
@@ -1498,6 +1504,7 @@ name = "uu_printf"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "fluent",
  "uucore",
 ]
 
@@ -1507,6 +1514,7 @@ version = "0.1.0"
 dependencies = [
  "bigdecimal",
  "clap",
+ "fluent",
  "num-bigint",
  "num-traits",
  "thiserror",
@@ -1522,6 +1530,7 @@ dependencies = [
  "clap",
  "compare",
  "ctrlc",
+ "fluent",
  "fnv",
  "itertools",
  "memchr",
@@ -1540,6 +1549,7 @@ name = "uu_split"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "fluent",
  "memchr",
  "thiserror",
  "uucore",
@@ -1550,6 +1560,7 @@ name = "uu_test"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "fluent",
  "libc",
  "thiserror",
  "uucore",
@@ -1560,6 +1571,7 @@ name = "uu_tr"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "fluent",
  "nom",
  "uucore",
 ]
@@ -1570,6 +1582,7 @@ version = "0.1.0"
 dependencies = [
  "bytecount",
  "clap",
+ "fluent",
  "libc",
  "nix",
  "thiserror",

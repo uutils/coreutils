@@ -5,7 +5,7 @@
 
 // spell-checker:ignore funcs
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::io::BufRead;
 use std::io::{self, Write, stdin, stdout};
 
@@ -14,9 +14,8 @@ use num_bigint::BigUint;
 use num_traits::FromPrimitive;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
+use uucore::translate;
 use uucore::{format_usage, show_error, show_warning};
-
-use uucore::locale::{get_message, get_message_with_args};
 
 mod options {
     pub static EXPONENTS: &str = "exponents";
@@ -46,12 +45,12 @@ fn print_factors_str(
     if let Some(_remaining) = remaining {
         return Err(USimpleError::new(
             1,
-            get_message("factor-error-factorization-incomplete"),
+            translate!("factor-error-factorization-incomplete"),
         ));
     }
 
     write_result(w, &x, factorization, print_exponents)
-        .map_err_context(|| get_message("factor-error-write-error"))?;
+        .map_err_context(|| translate!("factor-error-write-error"))?;
 
     Ok(())
 }
@@ -105,13 +104,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
                 Err(e) => {
                     set_exit_code(1);
-                    show_error!(
-                        "{}",
-                        get_message_with_args(
-                            "factor-error-reading-input",
-                            HashMap::from([("error".to_string(), e.to_string())])
-                        )
-                    );
+                    show_error!("{}", translate!("factor-error-reading-input", "error" => e));
                     return Ok(());
                 }
             }
@@ -128,8 +121,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("factor-about"))
-        .override_usage(format_usage(&get_message("factor-usage")))
+        .about(translate!("factor-about"))
+        .override_usage(format_usage(&translate!("factor-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .args_override_self(true)
@@ -138,13 +131,13 @@ pub fn uu_app() -> Command {
             Arg::new(options::EXPONENTS)
                 .short('h')
                 .long(options::EXPONENTS)
-                .help(get_message("factor-help-exponents"))
+                .help(translate!("factor-help-exponents"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help(get_message("factor-help-help"))
+                .help(translate!("factor-help-help"))
                 .action(ArgAction::Help),
         )
 }

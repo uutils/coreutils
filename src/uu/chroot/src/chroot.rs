@@ -19,7 +19,7 @@ use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
 use uucore::{format_usage, show};
 
-use uucore::locale::get_message;
+use uucore::translate;
 
 mod options {
     pub const NEWROOT: &str = "newroot";
@@ -176,7 +176,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     {
         return Err(UUsageError::new(
             125,
-            get_message("chroot-error-skip-chdir-only-permitted"),
+            translate!("chroot-error-skip-chdir-only-permitted"),
         ));
     }
 
@@ -236,8 +236,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("chroot-about"))
-        .override_usage(format_usage(&get_message("chroot-usage")))
+        .about(translate!("chroot-about"))
+        .override_usage(format_usage(&translate!("chroot-usage")))
         .infer_long_args(true)
         .trailing_var_arg(true)
         .arg(
@@ -251,19 +251,19 @@ pub fn uu_app() -> Command {
             Arg::new(options::GROUPS)
                 .long(options::GROUPS)
                 .overrides_with(options::GROUPS)
-                .help(get_message("chroot-help-groups"))
+                .help(translate!("chroot-help-groups"))
                 .value_name("GROUP1,GROUP2..."),
         )
         .arg(
             Arg::new(options::USERSPEC)
                 .long(options::USERSPEC)
-                .help(get_message("chroot-help-userspec"))
+                .help(translate!("chroot-help-userspec"))
                 .value_name("USER:GROUP"),
         )
         .arg(
             Arg::new(options::SKIP_CHDIR)
                 .long(options::SKIP_CHDIR)
-                .help(get_message("chroot-help-skip-chdir"))
+                .help(translate!("chroot-help-skip-chdir"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

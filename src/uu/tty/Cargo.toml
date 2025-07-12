@@ -21,6 +21,7 @@ path = "src/tty.rs"
 clap = { workspace = true }
 nix = { workspace = true, features = ["term"] }
 uucore = { workspace = true, features = ["fs"] }
+fluent = { workspace = true }
 
 [[bin]]
 name = "tty"

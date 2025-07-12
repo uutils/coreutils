@@ -3,26 +3,25 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use std::collections::HashMap;
 use thiserror::Error;
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 /// Represents an error encountered while parsing a test expression
 #[derive(Error, Debug)]
 pub enum ParseError {
-    #[error("{}", get_message("test-error-expected-value"))]
+    #[error("{}", translate!("test-error-expected-value"))]
     ExpectedValue,
-    #[error("{}", get_message_with_args("test-error-expected", HashMap::from([("value".to_string(), .0.to_string())])))]
+    #[error("{}", translate!("test-error-expected", "value" => .0))]
     Expected(String),
-    #[error("{}", get_message_with_args("test-error-extra-argument", HashMap::from([("argument".to_string(), .0.to_string())])))]
+    #[error("{}", translate!("test-error-extra-argument", "argument" => .0))]
     ExtraArgument(String),
-    #[error("{}", get_message_with_args("test-error-missing-argument", HashMap::from([("argument".to_string(), .0.to_string())])))]
+    #[error("{}", translate!("test-error-missing-argument", "argument" => .0))]
     MissingArgument(String),
-    #[error("{}", get_message_with_args("test-error-unknown-operator", HashMap::from([("operator".to_string(), .0.to_string())])))]
+    #[error("{}", translate!("test-error-unknown-operator", "operator" => .0))]
     UnknownOperator(String),
-    #[error("{}", get_message_with_args("test-error-invalid-integer", HashMap::from([("value".to_string(), .0.to_string())])))]
+    #[error("{}", translate!("test-error-invalid-integer", "value" => .0))]
     InvalidInteger(String),
-    #[error("{}", get_message_with_args("test-error-unary-operator-expected", HashMap::from([("operator".to_string(), .0.to_string())])))]
+    #[error("{}", translate!("test-error-unary-operator-expected", "operator" => .0))]
     UnaryOperatorExpected(String),
 }
 

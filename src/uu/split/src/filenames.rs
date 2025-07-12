@@ -39,12 +39,11 @@ use crate::{
     OPT_NUMERIC_SUFFIXES_SHORT, OPT_SUFFIX_LENGTH,
 };
 use clap::ArgMatches;
-use std::collections::HashMap;
 use std::path::is_separator;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 /// The format to use for suffixes in the filename for each output chunk.
 #[derive(Clone, Copy)]
@@ -84,15 +83,15 @@ pub struct Suffix {
 #[derive(Debug, Error)]
 pub enum SuffixError {
     /// Invalid suffix length parameter.
-    #[error("{}", get_message_with_args("split-error-suffix-not-parsable", HashMap::from([("value".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("split-error-suffix-not-parsable", "value" => .0.quote()))]
     NotParsable(String),
 
     /// Suffix contains a directory separator, which is not allowed.
-    #[error("{}", get_message_with_args("split-error-suffix-contains-separator", HashMap::from([("value".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("split-error-suffix-contains-separator", "value" => .0.quote()))]
     ContainsSeparator(String),
 
     /// Suffix is not large enough to split into specified chunks
-    #[error("{}", get_message_with_args("split-error-suffix-too-small", HashMap::from([("length".to_string(), .0.to_string())])))]
+    #[error("{}", translate!("split-error-suffix-too-small", "length" => .0))]
     TooSmall(usize),
 }
 
@@ -317,7 +316,7 @@ impl<'a> FilenameIterator<'a> {
                 FixedWidthNumber::new(radix, suffix.length, suffix.start).map_err(|_| {
                     USimpleError::new(
                         1,
-                        get_message("split-error-numerical-suffix-start-too-large"),
+                        translate!("split-error-numerical-suffix-start-too-large"),
                     )
                 })?,
             )

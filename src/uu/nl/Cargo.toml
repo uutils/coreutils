@@ -21,6 +21,7 @@ path = "src/nl.rs"
 clap = { workspace = true }
 regex = { workspace = true }
 uucore = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "nl"

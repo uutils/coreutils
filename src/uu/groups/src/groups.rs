@@ -14,7 +14,7 @@ use uucore::{
 };
 
 use clap::{Arg, ArgAction, Command};
-use uucore::locale::get_message;
+use uucore::translate;
 
 mod options {
     pub const USERS: &str = "USERNAME";
@@ -22,13 +22,13 @@ mod options {
 
 #[derive(Debug, Error)]
 enum GroupsError {
-    #[error("{message}", message = get_message("groups-error-fetch"))]
+    #[error("{message}", message = translate!("groups-error-fetch"))]
     GetGroupsFailed,
 
-    #[error("{message} {gid}", message = get_message("groups-error-notfound"), gid = .0)]
+    #[error("{message} {gid}", message = translate!("groups-error-notfound"), gid = .0)]
     GroupNotFound(u32),
 
-    #[error("{user}: {message}", user = .0.quote(), message = get_message("groups-error-user"))]
+    #[error("{user}: {message}", user = .0.quote(), message = translate!("groups-error-user"))]
     UserNotFound(String),
 }
 
@@ -81,8 +81,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("groups-about"))
-        .override_usage(format_usage(&get_message("groups-usage")))
+        .about(translate!("groups-about"))
+        .override_usage(format_usage(&translate!("groups-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::USERS)

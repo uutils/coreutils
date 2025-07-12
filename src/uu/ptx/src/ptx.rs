@@ -18,7 +18,7 @@ use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::format_usage;
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 #[derive(Debug)]
 enum OutFormat {
@@ -195,10 +195,10 @@ struct WordRef {
 
 #[derive(Debug, Error)]
 enum PtxError {
-    #[error("{}", get_message("ptx-error-dumb-format"))]
+    #[error("{}", translate!("ptx-error-dumb-format"))]
     DumbFormat,
 
-    #[error("{}", get_message_with_args("ptx-error-not-implemented", HashMap::from([("feature".to_string(), (*.0).to_string())])))]
+    #[error("{}", translate!("ptx-error-not-implemented", "feature" => (*.0)))]
     NotImplemented(&'static str),
 
     #[error("{0}")]
@@ -692,12 +692,12 @@ fn write_traditional_output(
             }
         };
         writeln!(writer, "{output_line}")
-            .map_err_context(|| get_message("ptx-error-write-failed"))?;
+            .map_err_context(|| translate!("ptx-error-write-failed"))?;
     }
 
     writer
         .flush()
-        .map_err_context(|| get_message("ptx-error-write-failed"))?;
+        .map_err_context(|| translate!("ptx-error-write-failed"))?;
 
     Ok(())
 }
@@ -755,10 +755,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if let Some(file) = files.next() {
             return Err(UUsageError::new(
                 1,
-                get_message_with_args(
-                    "ptx-error-extra-operand",
-                    HashMap::from([("operand".to_string(), file.quote().to_string())]),
-                ),
+                translate!("ptx-error-extra-operand", "operand" => file.quote()),
             ));
         }
     }
@@ -771,9 +768,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about(get_message("ptx-about"))
+        .about(translate!("ptx-about"))
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("ptx-usage")))
+        .override_usage(format_usage(&translate!("ptx-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE)
@@ -785,28 +782,28 @@ pub fn uu_app() -> Command {
             Arg::new(options::AUTO_REFERENCE)
                 .short('A')
                 .long(options::AUTO_REFERENCE)
-                .help(get_message("ptx-help-auto-reference"))
+                .help(translate!("ptx-help-auto-reference"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TRADITIONAL)
                 .short('G')
                 .long(options::TRADITIONAL)
-                .help(get_message("ptx-help-traditional"))
+                .help(translate!("ptx-help-traditional"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FLAG_TRUNCATION)
                 .short('F')
                 .long(options::FLAG_TRUNCATION)
-                .help(get_message("ptx-help-flag-truncation"))
+                .help(translate!("ptx-help-flag-truncation"))
                 .value_name("STRING"),
         )
         .arg(
             Arg::new(options::MACRO_NAME)
                 .short('M')
                 .long(options::MACRO_NAME)
-                .help(get_message("ptx-help-macro-name"))
+                .help(translate!("ptx-help-macro-name"))
                 .value_name("STRING"),
         )
         .arg(
@@ -819,14 +816,14 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::format::ROFF)
                 .short('O')
-                .help(get_message("ptx-help-roff"))
+                .help(translate!("ptx-help-roff"))
                 .overrides_with_all([options::FORMAT, options::format::ROFF, options::format::TEX])
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::format::TEX)
                 .short('T')
-                .help(get_message("ptx-help-tex"))
+                .help(translate!("ptx-help-tex"))
                 .overrides_with_all([options::FORMAT, options::format::ROFF, options::format::TEX])
                 .action(ArgAction::SetTrue),
         )
@@ -834,28 +831,28 @@ pub fn uu_app() -> Command {
             Arg::new(options::RIGHT_SIDE_REFS)
                 .short('R')
                 .long(options::RIGHT_SIDE_REFS)
-                .help(get_message("ptx-help-right-side-refs"))
+                .help(translate!("ptx-help-right-side-refs"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SENTENCE_REGEXP)
                 .short('S')
                 .long(options::SENTENCE_REGEXP)
-                .help(get_message("ptx-help-sentence-regexp"))
+                .help(translate!("ptx-help-sentence-regexp"))
                 .value_name("REGEXP"),
         )
         .arg(
             Arg::new(options::WORD_REGEXP)
                 .short('W')
                 .long(options::WORD_REGEXP)
-                .help(get_message("ptx-help-word-regexp"))
+                .help(translate!("ptx-help-word-regexp"))
                 .value_name("REGEXP"),
         )
         .arg(
             Arg::new(options::BREAK_FILE)
                 .short('b')
                 .long(options::BREAK_FILE)
-                .help(get_message("ptx-help-break-file"))
+                .help(translate!("ptx-help-break-file"))
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -863,21 +860,21 @@ pub fn uu_app() -> Command {
             Arg::new(options::IGNORE_CASE)
                 .short('f')
                 .long(options::IGNORE_CASE)
-                .help(get_message("ptx-help-ignore-case"))
+                .help(translate!("ptx-help-ignore-case"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::GAP_SIZE)
                 .short('g')
                 .long(options::GAP_SIZE)
-                .help(get_message("ptx-help-gap-size"))
+                .help(translate!("ptx-help-gap-size"))
                 .value_name("NUMBER"),
         )
         .arg(
             Arg::new(options::IGNORE_FILE)
                 .short('i')
                 .long(options::IGNORE_FILE)
-                .help(get_message("ptx-help-ignore-file"))
+                .help(translate!("ptx-help-ignore-file"))
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -885,7 +882,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::ONLY_FILE)
                 .short('o')
                 .long(options::ONLY_FILE)
-                .help(get_message("ptx-help-only-file"))
+                .help(translate!("ptx-help-only-file"))
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -893,7 +890,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::REFERENCES)
                 .short('r')
                 .long(options::REFERENCES)
-                .help(get_message("ptx-help-references"))
+                .help(translate!("ptx-help-references"))
                 .value_name("FILE")
                 .action(ArgAction::SetTrue),
         )
@@ -901,7 +898,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::WIDTH)
                 .short('w')
                 .long(options::WIDTH)
-                .help(get_message("ptx-help-width"))
+                .help(translate!("ptx-help-width"))
                 .value_name("NUMBER"),
         )
 }
