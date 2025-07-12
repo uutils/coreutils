@@ -120,6 +120,19 @@ fn test_closes_file_descriptors() {
 }
 
 #[test]
+fn test_broken_pipe() {
+    let mut cmd = new_ucmd!();
+    let mut child = cmd
+        .args(&["alpha.txt"])
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+    // Dropping the stdout should not lead to an error.
+    // The "Broken pipe" error should be silently ignored.
+    child.close_stdout();
+    child.wait().unwrap().fails_silently();
+}
+
+#[test]
 #[cfg(unix)]
 fn test_piped_to_regular_file() {
     use std::fs::read_to_string;

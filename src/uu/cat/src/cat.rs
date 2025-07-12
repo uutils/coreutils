@@ -8,8 +8,10 @@
 mod platform;
 
 use crate::platform::is_unsafe_overwrite;
+use clap::{Arg, ArgAction, Command};
+use memchr::memchr2;
 use std::fs::{File, metadata};
-use std::io::{self, BufWriter, IsTerminal, Read, Write};
+use std::io::{self, BufWriter, ErrorKind, IsTerminal, Read, Write};
 /// Unix domain socket support
 #[cfg(unix)]
 use std::net::Shutdown;
@@ -19,12 +21,11 @@ use std::os::fd::AsFd;
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
-
-use clap::{Arg, ArgAction, Command};
-use memchr::memchr2;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
+#[cfg(not(target_os = "windows"))]
+use uucore::libc;
 use uucore::locale::get_message;
 use uucore::{fast_inc::fast_inc_one, format_usage};
 
@@ -220,6 +221,15 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // When we receive a SIGPIPE signal, we want to terminate the process so
+    // that we don't print any error messages to stderr. Rust ignores SIGPIPE
+    // (see https://github.com/rust-lang/rust/issues/62569), so we restore it's
+    // default action here.
+    #[cfg(not(target_os = "windows"))]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+
     let matches = uu_app().try_get_matches_from(args)?;
 
     let number_mode = if matches.get_flag(options::NUMBER_NONBLANK) {
@@ -502,7 +512,9 @@ fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
                 if n == 0 {
                     break;
                 }
-                stdout_lock.write_all(&buf[..n])?;
+                stdout_lock
+                    .write_all(&buf[..n])
+                    .inspect_err(handle_broken_pipe)?;
             }
             Err(e) => return Err(e.into()),
         }
@@ -513,7 +525,7 @@ fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     // that will succeed, data pushed through splice will be output before
     // the data buffered in stdout.lock. Therefore additional explicit flush
     // is required here.
-    stdout_lock.flush()?;
+    stdout_lock.flush().inspect_err(handle_broken_pipe)?;
     Ok(())
 }
 
@@ -584,7 +596,7 @@ fn write_lines<R: FdReadable>(
         // and not be buffered internally to the `cat` process.
         // Hence it's necessary to flush our buffer before every time we could potentially block
         // on a `std::io::Read::read` call.
-        writer.flush()?;
+        writer.flush().inspect_err(handle_broken_pipe)?;
     }
 
     Ok(())
@@ -704,9 +716,16 @@ fn write_end_of_line<W: Write>(
 ) -> CatResult<()> {
     writer.write_all(end_of_line)?;
     if is_interactive {
-        writer.flush()?;
+        writer.flush().inspect_err(handle_broken_pipe)?;
     }
     Ok(())
+}
+
+fn handle_broken_pipe(error: &io::Error) {
+    // SIGPIPE is not available on Windows.
+    if cfg!(target_os = "windows") && error.kind() == ErrorKind::BrokenPipe {
+        std::process::exit(13);
+    }
 }
 
 #[cfg(test)]
