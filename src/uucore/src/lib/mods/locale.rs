@@ -401,6 +401,58 @@ fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
     }
 }
 
+/// Macro for retrieving localized messages with optional arguments.
+///
+/// This macro provides a unified interface for both simple message retrieval
+/// and message retrieval with variable substitution. It accepts a message ID
+/// and optionally key-value pairs using the `"key" => value` syntax.
+///
+/// # Arguments
+///
+/// * `$id` - The message identifier string
+/// * Optional key-value pairs in the format `"key" => value`
+///
+/// # Examples
+///
+/// ```
+/// use uucore::translation;
+///
+/// // Simple message without arguments
+/// let greeting = translation!("greeting");
+///
+/// // Message with one argument
+/// let welcome = translation!("welcome", "name" => "Alice");
+///
+/// // Message with multiple arguments
+/// let notification = translation!(
+///     "user-stats",
+///     "name" => username,
+///     "count" => item_count,
+///     "status" => "active"
+/// );
+/// ```
+#[macro_export]
+macro_rules! translation {
+    // Case 1: Message ID only (no arguments)
+    ($id:expr) => {
+        $crate::locale::get_message($id)
+    };
+
+    // Case 2: Message ID with key-value arguments
+    ($id:expr, $($key:expr => $value:expr),+ $(,)?) => {
+        {
+            let mut args = std::collections::HashMap::new();
+            $(
+                args.insert($key.to_string(), $value.to_string());
+            )+
+            $crate::locale::get_message_with_args($id, args)
+        }
+    };
+}
+
+// Re-export the macro for easier access
+pub use translation;
+
 #[cfg(test)]
 mod tests {
     use super::*;
