@@ -1295,3 +1295,25 @@ fn test_du_inodes_blocksize_ineffective() {
             );
     }
 }
+
+#[test]
+fn test_du_inodes_total_text() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("d/d");
+
+    let result = ts.ucmd().arg("--inodes").arg("-c").arg("d").succeeds();
+
+    let lines: Vec<&str> = result.stdout_str().lines().collect();
+
+    assert_eq!(lines.len(), 3);
+
+    let total_line = lines.last().unwrap();
+    assert!(total_line.contains("total"));
+
+    let parts: Vec<&str> = total_line.split('\t').collect();
+    assert_eq!(parts.len(), 2);
+
+    assert!(parts[0].parse::<u64>().is_ok());
+}
