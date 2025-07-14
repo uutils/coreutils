@@ -4898,10 +4898,11 @@ fn test_when_piped_input_then_no_broken_pipe() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_when_output_closed_then_no_broken_pie() {
     let mut cmd = new_ucmd!();
     let mut child = cmd
-        .args(&[FOOBAR_TXT])
+        .args(&["-c", "100000", "/dev/zero"])
         .set_stdout(Stdio::piped())
         .run_no_wait();
     // Dropping the stdout should not lead to an error.
