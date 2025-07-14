@@ -524,7 +524,7 @@ fn full_version_argument() {
 }
 
 #[test]
-fn only_help_argument_prints_help() {
+fn full_help_argument() {
     assert_ne!(new_ucmd!().arg("--help").succeeds().stdout(), b"--help\n");
     assert_ne!(new_ucmd!().arg("--help").succeeds().stdout(), b"--help"); // This one is just in case.
 }
