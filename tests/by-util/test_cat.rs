@@ -120,10 +120,11 @@ fn test_closes_file_descriptors() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_broken_pipe() {
     let mut cmd = new_ucmd!();
     let mut child = cmd
-        .args(&["alpha.txt"])
+        .set_stdin(Stdio::from(File::open("/dev/zero").unwrap()))
         .set_stdout(Stdio::piped())
         .run_no_wait();
     // Dropping the stdout should not lead to an error.
