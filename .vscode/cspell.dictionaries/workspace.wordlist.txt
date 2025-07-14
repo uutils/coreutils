@@ -311,6 +311,7 @@ freecon
 getfilecon
 lgetfilecon
 lsetfilecon
+restorecon
 setfilecon
 
 # * vars/uucore
