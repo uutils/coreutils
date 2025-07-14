@@ -92,6 +92,7 @@ struct StatPrinter {
     time_format: String,
     line_ending: LineEnding,
     summarize: bool,
+    total_text: String,
 }
 
 #[derive(PartialEq, Clone)]
@@ -546,11 +547,7 @@ impl StatPrinter {
         }
 
         if self.total {
-            print!(
-                "{}\t{}",
-                self.convert_size(grand_total),
-                get_message("du-total")
-            );
+            print!("{}\t{}", self.convert_size(grand_total), self.total_text);
             print!("{}", self.line_ending);
         }
 
@@ -779,6 +776,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         time,
         time_format,
         line_ending: LineEnding::from_zero_flag(matches.get_flag(options::NULL)),
+        total_text: get_message("du-total"),
     };
 
     if stat_printer.inodes
