@@ -167,6 +167,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         //                     echo --help
         uu_app().print_help()?;
         return Ok(());
+    } else if args.len() == 1 && args[0] == "--version" {
+        print!("{}", uu_app().render_version());
+        return Ok(());
     } else {
         // if POSIXLY_CORRECT is not set we filter the flags normally
         filter_flags(args.into_iter())
