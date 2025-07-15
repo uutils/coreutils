@@ -8,10 +8,9 @@ use clap::{Arg, ArgAction, Command};
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, StdoutLock, Write};
-use uucore::error::{UResult, USimpleError};
+use uucore::error::UResult;
 use uucore::format::{FormatChar, OctalParsing, parse_escape_only};
-use uucore::format_usage;
-use uucore::os_str_as_bytes;
+use uucore::{format_usage, os_str_as_bytes};
 
 use uucore::locale::get_message;
 
@@ -223,9 +222,9 @@ pub fn uu_app() -> Command {
 
 fn execute(stdout: &mut StdoutLock, args: Vec<OsString>, options: Options) -> UResult<()> {
     for (i, arg) in args.into_iter().enumerate() {
-        let bytes = os_str_as_bytes(arg.as_os_str())
-            .map_err(|_| USimpleError::new(1, get_message("echo-error-non-utf8")))?;
+        let bytes = os_str_as_bytes(&arg)?;
 
+        // Don't print a space before the first argument
         if i > 0 {
             stdout.write_all(b" ")?;
         }

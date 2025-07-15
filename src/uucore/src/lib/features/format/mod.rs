@@ -37,8 +37,12 @@ pub mod human;
 pub mod num_format;
 mod spec;
 
+pub use self::escape::{EscapedChar, OctalParsing};
 use crate::extendedbigdecimal::ExtendedBigDecimal;
-pub use argument::*;
+pub use argument::{FormatArgument, FormatArguments};
+
+use self::{escape::parse_escape_code, num_format::Formatter};
+use crate::{NonUtf8OsStrError, error::UError};
 pub use spec::Spec;
 use std::{
     error::Error,
@@ -49,13 +53,6 @@ use std::{
 };
 
 use os_display::Quotable;
-
-use crate::error::UError;
-
-pub use self::{
-    escape::{EscapedChar, OctalParsing, parse_escape_code},
-    num_format::Formatter,
-};
 
 #[derive(Debug)]
 pub enum FormatError {
@@ -74,6 +71,7 @@ pub enum FormatError {
     /// The hexadecimal characters represent a code point that cannot represent a
     /// Unicode character (e.g., a surrogate code point)
     InvalidCharacter(char, Vec<u8>),
+    InvalidEncoding(NonUtf8OsStrError),
 }
 
 impl Error for FormatError {}
@@ -82,6 +80,12 @@ impl UError for FormatError {}
 impl From<std::io::Error> for FormatError {
     fn from(value: std::io::Error) -> Self {
         Self::IoError(value)
+    }
+}
+
+impl From<NonUtf8OsStrError> for FormatError {
+    fn from(value: NonUtf8OsStrError) -> FormatError {
+        FormatError::InvalidEncoding(value)
     }
 }
 
@@ -118,6 +122,7 @@ impl Display for FormatError {
                 "invalid universal character name \\{escape_char}{}",
                 String::from_utf8_lossy(digits)
             ),
+            Self::InvalidEncoding(no) => no.fmt(f),
         }
     }
 }

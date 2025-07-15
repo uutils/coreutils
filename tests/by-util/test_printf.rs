@@ -805,7 +805,7 @@ fn test_overflow() {
 fn partial_char() {
     new_ucmd!()
         .args(&["%d", "'abc"])
-        .fails_with_code(1)
+        .succeeds()
         .stdout_is("97")
         .stderr_is(
             "printf: warning: bc: character(s) following character constant have been ignored\n",
@@ -1293,23 +1293,80 @@ fn float_arg_with_whitespace() {
 
 #[test]
 fn mb_input() {
-    for format in ["\"á", "\'á", "'\u{e1}"] {
+    let cases = vec![
+        ("%04x\n", "\"á", "00e1\n"),
+        ("%04x\n", "'á", "00e1\n"),
+        ("%04x\n", "'\u{e1}", "00e1\n"),
+        ("%i\n", "\"á", "225\n"),
+        ("%i\n", "'á", "225\n"),
+        ("%i\n", "'\u{e1}", "225\n"),
+        ("%f\n", "'á", "225.000000\n"),
+    ];
+    for (format, arg, stdout) in cases {
         new_ucmd!()
-            .args(&["%04x\n", format])
+            .args(&[format, arg])
             .succeeds()
-            .stdout_only("00e1\n");
+            .stdout_only(stdout);
     }
 
     let cases = vec![
-        ("\"á=", "="),
-        ("\'á-", "-"),
-        ("\'á=-==", "=-=="),
-        ("'\u{e1}++", "++"),
+        ("%04x\n", "\"á=", "00e1\n", "="),
+        ("%04x\n", "'á-", "00e1\n", "-"),
+        ("%04x\n", "'á=-==", "00e1\n", "=-=="),
+        ("%04x\n", "'á'", "00e1\n", "'"),
+        ("%04x\n", "'\u{e1}++", "00e1\n", "++"),
+        ("%04x\n", "''á'", "0027\n", "á'"),
+        ("%i\n", "\"á=", "225\n", "="),
     ];
-
-    for (format, expected) in cases {
+    for (format, arg, stdout, stderr) in cases {
         new_ucmd!()
-            .args(&["%04x\n", format])
+            .args(&[format, arg])
+            .succeeds()
+            .stdout_is(stdout)
+            .stderr_is(format!("printf: warning: {stderr}: character(s) following character constant have been ignored\n"));
+    }
+
+    for arg in ["\"", "'"] {
+        new_ucmd!()
+            .args(&["%04x\n", arg])
+            .fails()
+            .stderr_contains("expected a numeric value");
+    }
+}
+
+#[test]
+#[cfg(target_family = "unix")]
+fn mb_invalid_unicode() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let cases = vec![
+        ("%04x\n", b"\"\xe1", "00e1\n"),
+        ("%04x\n", b"'\xe1", "00e1\n"),
+        ("%i\n", b"\"\xe1", "225\n"),
+        ("%i\n", b"'\xe1", "225\n"),
+        ("%f\n", b"'\xe1", "225.000000\n"),
+    ];
+    for (format, arg, stdout) in cases {
+        new_ucmd!()
+            .arg(format)
+            .arg(OsStr::from_bytes(arg))
+            .succeeds()
+            .stdout_only(stdout);
+    }
+
+    let cases = vec![
+        (b"\"\xe1=".as_slice(), "="),
+        (b"'\xe1-".as_slice(), "-"),
+        (b"'\xe1=-==".as_slice(), "=-=="),
+        (b"'\xe1'".as_slice(), "'"),
+        // unclear if original or replacement character is better in stderr
+        //(b"''\xe1'".as_slice(), "'�'"),
+    ];
+    for (arg, expected) in cases {
+        new_ucmd!()
+            .arg("%04x\n")
+            .arg(OsStr::from_bytes(arg))
             .succeeds()
             .stdout_is("00e1\n")
             .stderr_is(format!("printf: warning: {expected}: character(s) following character constant have been ignored\n"));
@@ -1363,4 +1420,36 @@ fn positional_format_specifiers() {
         ])
         .succeeds()
         .stdout_only("Octal: 115, Int: 42, Float: 3.141590, String: hello, Hex: ff, Scientific: 1.000000e-05, Char: A, Unsigned: 100, Integer: 123");
+}
+
+#[test]
+#[cfg(target_family = "unix")]
+fn non_utf_8_input() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    // ISO-8859-1 encoded text
+    // spell-checker:disable
+    const INPUT_AND_OUTPUT: &[u8] =
+        b"Swer an rehte g\xFCete wendet s\xEEn gem\xFCete, dem volget s\xE6lde und \xEAre.";
+    // spell-checker:enable
+
+    let os_str = OsStr::from_bytes(INPUT_AND_OUTPUT);
+
+    new_ucmd!()
+        .arg("%s")
+        .arg(os_str)
+        .succeeds()
+        .stdout_only_bytes(INPUT_AND_OUTPUT);
+
+    new_ucmd!()
+        .arg(os_str)
+        .succeeds()
+        .stdout_only_bytes(INPUT_AND_OUTPUT);
+
+    new_ucmd!()
+        .arg("%d")
+        .arg(os_str)
+        .fails()
+        .stderr_contains("expected a numeric value");
 }
