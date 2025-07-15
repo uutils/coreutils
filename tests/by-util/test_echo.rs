@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) araba merci efjkow
 
+use regex::Regex;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util::UCommand;
@@ -515,7 +516,15 @@ fn partial_help_argument() {
 }
 
 #[test]
-fn only_help_argument_prints_help() {
+fn full_version_argument() {
+    new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .stdout_matches(&Regex::new(r"^echo \(uutils coreutils\) (\d+\.\d+\.\d+)\n$").unwrap());
+}
+
+#[test]
+fn full_help_argument() {
     assert_ne!(new_ucmd!().arg("--help").succeeds().stdout(), b"--help\n");
     assert_ne!(new_ucmd!().arg("--help").succeeds().stdout(), b"--help"); // This one is just in case.
 }
