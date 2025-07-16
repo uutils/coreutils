@@ -120,8 +120,8 @@ fn util_invalid_name_help() {
         .unwrap();
     let output = child.wait_with_output().unwrap();
     assert_eq!(output.status.code(), Some(0));
-    assert_eq!(output.stderr, b"");
-    let output_str = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(output.stdout, b"");
+    let output_str = String::from_utf8(output.stderr).unwrap();
     assert!(output_str.contains("(multi-call binary)"), "{output_str:?}");
     assert!(
         output_str.contains("Usage: invalid_name [function "),
@@ -159,8 +159,8 @@ fn util_non_utf8_name_help() {
         .unwrap();
     let output = child.wait_with_output().unwrap();
     assert_eq!(output.status.code(), Some(0));
-    assert_eq!(output.stderr, b"");
-    let output_str = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(output.stdout, b"");
+    let output_str = String::from_utf8(output.stderr).unwrap();
     assert!(output_str.contains("(multi-call binary)"), "{output_str:?}");
     assert!(
         output_str.contains("Usage: <unknown binary name> [function "),
