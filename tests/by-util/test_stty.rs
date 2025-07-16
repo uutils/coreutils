@@ -31,6 +31,17 @@ fn print_all() {
 }
 
 #[test]
+#[ignore = "Fails because cargo test does not run in a tty"]
+fn sane_settings() {
+    new_ucmd!().args(&["intr", "^A"]).succeeds();
+    new_ucmd!().succeeds().stdout_contains("intr = ^A");
+    new_ucmd!()
+        .args(&["sane"])
+        .succeeds()
+        .stdout_str_check(|s| !s.contains("intr = ^A"));
+}
+
+#[test]
 fn save_and_setting() {
     new_ucmd!()
         .args(&["--save", "nl0"])
