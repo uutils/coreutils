@@ -916,9 +916,8 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
     if let Some(val) = ascii_num {
         if val > 255 {
             return Err(ControlCharMappingError::IntOutOfRange(s.to_string()));
-        } else {
-            return Ok(val as u8);
         }
+        return Ok(val as u8);
     }
     // try to parse ^<char> or just <char>
     let mut chars = s.chars();
