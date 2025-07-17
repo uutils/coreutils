@@ -39,6 +39,7 @@ executable
 executables
 exponentiate
 eval
+esac
 falsey
 fileio
 filesystem
