@@ -28,7 +28,8 @@
     "vendor/**",
     "**/*.svg",
     "src/uu/*/locales/*.ftl",
-    "src/uucore/locales/*.ftl"
+    "src/uucore/locales/*.ftl",
+    ".devcontainer/**"
   ],
 
   "enableGlobDot": true,
