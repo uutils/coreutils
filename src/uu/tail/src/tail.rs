@@ -177,7 +177,7 @@ fn tail_file(
             return Ok(());
         }
         observer.add_bad_path(path, input.display_name.as_str(), false)?;
-    } else if input.is_tailable() {
+    } else {
         match File::open(path) {
             Ok(mut file) => {
                 let st = file.metadata()?;
@@ -194,12 +194,16 @@ fn tail_file(
                     reader = BufReader::new(file);
                     unbounded_tail(&mut reader, settings)?;
                 }
-                observer.add_path(
-                    path,
-                    input.display_name.as_str(),
-                    Some(Box::new(reader)),
-                    true,
-                )?;
+                if input.is_tailable() {
+                    observer.add_path(
+                        path,
+                        input.display_name.as_str(),
+                        Some(Box::new(reader)),
+                        true,
+                    )?;
+                } else {
+                    observer.add_bad_path(path, input.display_name.as_str(), false)?;
+                }
             }
             Err(e) if e.kind() == ErrorKind::PermissionDenied => {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
@@ -220,8 +224,6 @@ fn tail_file(
                 }));
             }
         }
-    } else {
-        observer.add_bad_path(path, input.display_name.as_str(), false)?;
     }
 
     Ok(())
