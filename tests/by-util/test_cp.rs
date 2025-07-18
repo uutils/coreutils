@@ -4322,6 +4322,13 @@ fn test_cp_default_virtual_file() {
 
     use std::os::unix::prelude::MetadataExt;
     let ts = TestScenario::new(util_name!());
+
+    // in case the kernel was not built with profiling support, e.g. WSL
+    if !ts.fixtures.file_exists("/sys/kernel/profiling") {
+        println!("test skipped: /sys/kernel/profiling does not exist");
+        return;
+    }
+
     let at = &ts.fixtures;
     ts.ucmd().arg("/sys/kernel/profiling").arg("b").succeeds();
 
@@ -4405,6 +4412,13 @@ fn test_cp_debug_sparse_always_sparse_virtual_file() {
     // This file has existed at least since 2008, so we assume that it is present on "all" Linux kernels.
     // https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-profiling
     let ts = TestScenario::new(util_name!());
+
+    // in case the kernel was not built with profiling support, e.g. WSL
+    if !ts.fixtures.file_exists("/sys/kernel/profiling") {
+        println!("test skipped: /sys/kernel/profiling does not exist");
+        return;
+    }
+
     ts.ucmd()
         .arg("--debug")
         .arg("--sparse=always")
@@ -4579,6 +4593,13 @@ fn test_cp_debug_default_sparse_virtual_file() {
     // This file has existed at least since 2008, so we assume that it is present on "all" Linux kernels.
     // https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-profiling
     let ts = TestScenario::new(util_name!());
+
+    // in case the kernel was not built with profiling support, e.g. WSL
+    if !ts.fixtures.file_exists("/sys/kernel/profiling") {
+        println!("test skipped: /sys/kernel/profiling does not exist");
+        return;
+    }
+
     ts.ucmd()
         .arg("--debug")
         .arg("/sys/kernel/profiling")
