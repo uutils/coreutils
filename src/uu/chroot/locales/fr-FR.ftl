@@ -14,7 +14,8 @@ chroot-error-command-not-found = échec de l'exécution de la commande { $cmd } 
 chroot-error-groups-parsing-failed = échec de l'analyse de --groups
 chroot-error-invalid-group = groupe invalide : { $group }
 chroot-error-invalid-group-list = liste de groupes invalide : { $list }
-chroot-error-missing-newroot = Opérande manquant : NOUVRACINE\nEssayez '{ $util_name } --help' pour plus d'informations.
+chroot-error-missing-newroot = Opérande manquant : NOUVRACINE
+  Essayez '{ $util_name } --help' pour plus d'informations.
 chroot-error-no-group-specified = aucun groupe spécifié pour l'uid inconnu : { $uid }
 chroot-error-no-such-user = utilisateur invalide
 chroot-error-no-such-group = groupe invalide
