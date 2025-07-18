@@ -37,6 +37,33 @@ pub fn format_item_flo64(f: f64) -> String {
     format!(" {}", format_flo64(f))
 }
 
+fn format_flo32_exp(f: f32, width: usize) -> String {
+    if f.abs().log10() < 0.0 {
+        return format!("{f:width$e}");
+    }
+    // Leave room for the '+' sign
+    let formatted = format!("{f:width$e}", width = width - 1);
+    formatted.replace('e', "e+")
+}
+
+fn format_flo64_exp(f: f64, width: usize) -> String {
+    if f.abs().log10() < 0.0 {
+        return format!("{f:width$e}");
+    }
+    // Leave room for the '+' sign
+    let formatted = format!("{f:width$e}", width = width - 1);
+    formatted.replace('e', "e+")
+}
+
+fn format_flo64_exp_precision(f: f64, width: usize, precision: usize) -> String {
+    if f.abs().log10() < 0.0 {
+        return format!("{f:width$.precision$e}");
+    }
+    // Leave room for the '+' sign
+    let formatted = format!("{f:width$.precision$e}", width = width - 1);
+    formatted.replace('e', "e+")
+}
+
 fn format_flo16(f: f16) -> String {
     format_float(f64::from(f), 9, 4)
 }
@@ -49,7 +76,7 @@ fn format_flo32(f: f32) -> String {
 
     if f.classify() == FpCategory::Subnormal {
         // subnormal numbers will be normal as f64, so will print with a wrong precision
-        format!("{f:width$e}") // subnormal numbers
+        format_flo32_exp(f, width) // subnormal numbers
     } else {
         format_float(f64::from(f), width, precision)
     }
@@ -67,7 +94,7 @@ fn format_float(f: f64, width: usize, precision: usize) -> String {
         if f == 0.0 || !f.is_finite() {
             return format!("{f:width$}");
         }
-        return format!("{f:width$e}"); // subnormal numbers
+        return format_flo64_exp(f, width); // subnormal numbers
     }
 
     let mut l = f.abs().log10().floor() as i32;
@@ -83,7 +110,7 @@ fn format_float(f: f64, width: usize, precision: usize) -> String {
     } else if l == -1 {
         format!("{f:width$.precision$}")
     } else {
-        format!("{f:width$.dec$e}", dec = precision - 1)
+        return format_flo64_exp_precision(f, width, precision - 1); // subnormal numbers
     }
 }
 
@@ -108,11 +135,11 @@ fn test_format_flo32() {
     assert_eq!(format_flo32(9_999_999.0), "     9999999.0");
     assert_eq!(format_flo32(10_000_000.0), "      10000000");
     assert_eq!(format_flo32(99_999_992.0), "      99999992");
-    assert_eq!(format_flo32(100_000_000.0), "   1.0000000e8");
-    assert_eq!(format_flo32(9.999_999_4e8), "   9.9999994e8");
-    assert_eq!(format_flo32(1.0e9), "   1.0000000e9");
-    assert_eq!(format_flo32(9.999_999_0e9), "   9.9999990e9");
-    assert_eq!(format_flo32(1.0e10), "  1.0000000e10");
+    assert_eq!(format_flo32(100_000_000.0), "  1.0000000e+8");
+    assert_eq!(format_flo32(9.999_999_4e8), "  9.9999994e+8");
+    assert_eq!(format_flo32(1.0e9), "  1.0000000e+9");
+    assert_eq!(format_flo32(9.999_999_0e9), "  9.9999990e+9");
+    assert_eq!(format_flo32(1.0e10), " 1.0000000e+10");
 
     assert_eq!(format_flo32(0.1), "    0.10000000");
     assert_eq!(format_flo32(0.999_999_94), "    0.99999994");
@@ -138,11 +165,11 @@ fn test_format_flo32() {
     assert_eq!(format_flo32(-9_999_999.0), "    -9999999.0");
     assert_eq!(format_flo32(-10_000_000.0), "     -10000000");
     assert_eq!(format_flo32(-99_999_992.0), "     -99999992");
-    assert_eq!(format_flo32(-100_000_000.0), "  -1.0000000e8");
-    assert_eq!(format_flo32(-9.999_999_4e8), "  -9.9999994e8");
-    assert_eq!(format_flo32(-1.0e9), "  -1.0000000e9");
-    assert_eq!(format_flo32(-9.999_999_0e9), "  -9.9999990e9");
-    assert_eq!(format_flo32(-1.0e10), " -1.0000000e10");
+    assert_eq!(format_flo32(-100_000_000.0), " -1.0000000e+8");
+    assert_eq!(format_flo32(-9.999_999_4e8), " -9.9999994e+8");
+    assert_eq!(format_flo32(-1.0e9), " -1.0000000e+9");
+    assert_eq!(format_flo32(-9.999_999_0e9), " -9.9999990e+9");
+    assert_eq!(format_flo32(-1.0e10), "-1.0000000e+10");
 
     assert_eq!(format_flo32(-0.1), "   -0.10000000");
     assert_eq!(format_flo32(-0.999_999_94), "   -0.99999994");
@@ -151,13 +178,13 @@ fn test_format_flo32() {
     assert_eq!(format_flo32(-0.001), " -1.0000000e-3");
     assert_eq!(format_flo32(-0.009_999_999_8), " -9.9999998e-3");
 
-    assert_eq!(format_flo32(3.402_823_3e38), "  3.4028233e38");
-    assert_eq!(format_flo32(-3.402_823_3e38), " -3.4028233e38");
+    assert_eq!(format_flo32(3.402_823_3e38), " 3.4028233e+38");
+    assert_eq!(format_flo32(-3.402_823_3e38), "-3.4028233e+38");
     assert_eq!(format_flo32(-1.166_310_8e-38), "-1.1663108e-38");
     assert_eq!(format_flo32(-4.701_977_1e-38), "-4.7019771e-38");
     assert_eq!(format_flo32(1e-45), "         1e-45");
 
-    assert_eq!(format_flo32(-3.402_823_466e+38), " -3.4028235e38");
+    assert_eq!(format_flo32(-3.402_823_466e+38), "-3.4028235e+38");
     assert_eq!(format_flo32(f32::NAN), "           NaN");
     assert_eq!(format_flo32(f32::INFINITY), "           inf");
     assert_eq!(format_flo32(f32::NEG_INFINITY), "          -inf");
@@ -180,7 +207,7 @@ fn test_format_flo64() {
     );
     assert_eq!(
         format_flo64(100_000_000_000_000_000.0),
-        "   1.0000000000000000e17"
+        "  1.0000000000000000e+17"
     );
 
     assert_eq!(format_flo64(-0.1), "    -0.10000000000000001");
@@ -210,13 +237,13 @@ fn test_format_flo16() {
     assert_eq!(format_flo16(f16::from_f32(10.0)), "    10.00");
     assert_eq!(format_flo16(f16::from_f32(100.0)), "    100.0");
     assert_eq!(format_flo16(f16::from_f32(1000.0)), "     1000");
-    assert_eq!(format_flo16(f16::from_f32(10000.0)), "  1.000e4");
+    assert_eq!(format_flo16(f16::from_f32(10000.0)), " 1.000e+4");
 
     assert_eq!(format_flo16(f16::from_f32(-0.2)), "  -0.2000");
     assert_eq!(format_flo16(f16::from_f32(-0.02)), "-2.000e-2");
 
     assert_eq!(format_flo16(f16::MIN_POSITIVE_SUBNORMAL), " 5.960e-8");
-    assert_eq!(format_flo16(f16::MIN), " -6.550e4");
+    assert_eq!(format_flo16(f16::MIN), "-6.550e+4");
     assert_eq!(format_flo16(f16::NAN), "      NaN");
     assert_eq!(format_flo16(f16::INFINITY), "      inf");
     assert_eq!(format_flo16(f16::NEG_INFINITY), "     -inf");
