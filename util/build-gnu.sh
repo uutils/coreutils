@@ -60,6 +60,13 @@ elif [ -x /usr/local/bin/timeout ]; then
     SYSTEM_TIMEOUT="/usr/local/bin/timeout"
 fi
 
+SYSTEM_YES="yes"
+if [ -x /usr/bin/yes ]; then
+    SYSTEM_YES="/usr/bin/yes"
+elif [ -x /usr/local/bin/yes ]; then
+    SYSTEM_YES="/usr/local/bin/yes"
+fi
+
 ###
 
 release_tag_GNU="v9.7"
@@ -211,6 +218,11 @@ sed -i "s|cannot create regular file 'no-such/': Not a directory|'no-such/' is n
 sed -i "s|warning: unrecognized escape|warning: incomplete hex escape|" tests/stat/stat-printf.pl
 
 sed -i 's|timeout |'"${SYSTEM_TIMEOUT}"' |' tests/tail/follow-stdin.sh
+
+# trap_sigpipe_or_skip_ fails with uutils tools because of a bug in
+# timeout/yes (https://github.com/uutils/coreutils/issues/7252), so we use
+# system's yes/timeout to make sure the tests run (instead of being skipped).
+sed -i 's|\(trap .* \)timeout\( .* \)yes|'"\1${SYSTEM_TIMEOUT}\2${SYSTEM_YES}"'|' init.cfg
 
 # Remove dup of /usr/bin/ and /usr/local/bin/ when executed several times
 grep -rlE '/usr/bin/\s?/usr/bin' init.cfg tests/* | xargs -r sed -Ei 's|/usr/bin/\s?/usr/bin/|/usr/bin/|g'
