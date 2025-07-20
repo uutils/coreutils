@@ -8,7 +8,7 @@
 //! filesystem mounted at a particular directory. It also includes
 //! information on amount of space available and amount of space used.
 // spell-checker:ignore canonicalized
-use std::path::Path;
+use std::{ffi::OsString, path::Path};
 
 #[cfg(unix)]
 use uucore::fsext::statfs;
@@ -28,7 +28,7 @@ pub(crate) struct Filesystem {
     /// When invoking `df` with a positional argument, it displays
     /// usage information for the filesystem that contains the given
     /// file. If given, this field contains that filename.
-    pub file: Option<String>,
+    pub file: Option<OsString>,
 
     /// Information about the mounted device, mount directory, and related options.
     pub mount_info: MountInfo,
@@ -123,7 +123,7 @@ where
 
 impl Filesystem {
     // TODO: resolve uuid in `mount_info.dev_name` if exists
-    pub(crate) fn new(mount_info: MountInfo, file: Option<String>) -> Option<Self> {
+    pub(crate) fn new(mount_info: MountInfo, file: Option<OsString>) -> Option<Self> {
         let _stat_path = if mount_info.mount_dir.is_empty() {
             #[cfg(unix)]
             {
@@ -154,7 +154,7 @@ impl Filesystem {
     pub(crate) fn from_mount(
         mounts: &[MountInfo],
         mount: &MountInfo,
-        file: Option<String>,
+        file: Option<OsString>,
     ) -> Result<Self, FsError> {
         if is_over_mounted(mounts, mount) {
             Err(FsError::OverMounted)
@@ -189,7 +189,7 @@ impl Filesystem {
     where
         P: AsRef<Path>,
     {
-        let file = path.as_ref().display().to_string();
+        let file = path.as_ref().as_os_str().to_owned();
         let canonicalize = true;
 
         let result = mount_info_from_path(mounts, path, canonicalize);

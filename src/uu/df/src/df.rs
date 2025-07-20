@@ -431,7 +431,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let opt = Options::from(&matches).map_err(DfError::OptionsError)?;
     // Get the list of filesystems to display in the output table.
-    let filesystems: Vec<Filesystem> = match matches.get_many::<String>(OPT_PATHS) {
+    let filesystems: Vec<Filesystem> = match matches.get_many::<OsString>(OPT_PATHS) {
         None => {
             let filesystems = get_all_filesystems(&opt).map_err(|e| {
                 let context = get_message("df-error-cannot-read-table-of-mounted-filesystems");
@@ -611,6 +611,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_PATHS)
                 .action(ArgAction::Append)
+                .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }

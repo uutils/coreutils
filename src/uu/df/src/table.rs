@@ -16,6 +16,7 @@ use crate::{BlockSize, Options};
 use uucore::fsext::{FsUsage, MountInfo};
 use uucore::locale::get_message;
 
+use std::ffi::OsString;
 use std::fmt;
 use std::ops::AddAssign;
 
@@ -25,7 +26,7 @@ use std::ops::AddAssign;
 /// filesystem device, the mountpoint, the number of bytes used, etc.
 pub(crate) struct Row {
     /// The filename given on the command-line, if given.
-    file: Option<String>,
+    file: Option<OsString>,
 
     /// Name of the device on which the filesystem lives.
     fs_device: String,
@@ -283,7 +284,12 @@ impl<'a> RowFormatter<'a> {
                 Column::Iused => self.scaled_inodes(self.row.inodes_used),
                 Column::Iavail => self.scaled_inodes(self.row.inodes_free),
                 Column::Ipcent => Self::percentage(self.row.inodes_usage),
-                Column::File => self.row.file.as_ref().unwrap_or(&"-".into()).to_string(),
+                Column::File => self
+                    .row
+                    .file
+                    .as_ref()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or("-".into()),
 
                 Column::Fstype => self.row.fs_type.to_string(),
                 #[cfg(target_os = "macos")]
@@ -516,7 +522,7 @@ mod tests {
     impl Default for Row {
         fn default() -> Self {
             Self {
-                file: Some("/path/to/file".to_string()),
+                file: Some("/path/to/file".into()),
                 fs_device: "my_device".to_string(),
                 fs_type: "my_type".to_string(),
                 fs_mount: "my_mount".to_string(),
