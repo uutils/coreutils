@@ -18,20 +18,21 @@ use native_int_str::{
     Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation_owned,
 };
 #[cfg(unix)]
-use nix::sys::signal::{
-    SaFlags, SigAction, SigHandler, SigHandler::SigIgn, SigSet, Signal, raise, sigaction, signal,
-};
+use nix::libc;
+#[cfg(unix)]
+use nix::sys::signal::{SigHandler::SigIgn, Signal, signal};
+#[cfg(unix)]
+use nix::unistd::execvp;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
+#[cfg(unix)]
+use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Write};
-
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
-#[cfg(unix)]
-use std::os::unix::process::{CommandExt, ExitStatusExt};
-use std::process::{self};
+
 use uucore::display::Quotable;
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
@@ -605,6 +606,15 @@ impl EnvAppData {
         Ok(())
     }
 
+    /// Run the program specified by the options.
+    ///
+    /// Note that the env command must exec the program, not spawn it. See
+    /// <https://github.com/uutils/coreutils/issues/8361> for more information.
+    ///
+    /// Exit status:
+    /// - 125: if the env command itself fails
+    /// - 126: if the program is found but cannot be invoked
+    /// - 127: if the program cannot be found
     fn run_program(
         &mut self,
         opts: &Options<'_>,
@@ -617,19 +627,9 @@ impl EnvAppData {
         let arg0 = prog.clone();
         let args = &opts.program[1..];
 
-        /*
-         * On Unix-like systems Command::status either ends up calling either fork or posix_spawnp
-         * (which ends up calling clone). Keep using the current process would be ideal, but the
-         * standard library contains many checks and fail-safes to ensure the process ends up being
-         * created. This is much simpler than dealing with the hassles of calling execvp directly.
-         */
-        let mut cmd = process::Command::new(&*prog);
-        cmd.args(args);
-
         if let Some(_argv0) = opts.argv0 {
             #[cfg(unix)]
             {
-                cmd.arg0(_argv0);
                 arg0 = Cow::Borrowed(_argv0);
                 if do_debug_printing {
                     eprintln!("argv0:     {}", arg0.quote());
@@ -652,40 +652,70 @@ impl EnvAppData {
             }
         }
 
-        match cmd.status() {
-            Ok(exit) if !exit.success() => {
-                #[cfg(unix)]
-                {
-                    if let Some(exit_code) = exit.code() {
-                        return Err(exit_code.into());
-                    }
+        #[cfg(unix)]
+        {
+            // Convert program name to CString.
+            let Ok(prog_cstring) = CString::new(prog.as_bytes()) else {
+                return Err(self.make_error_no_such_file_or_dir(&prog));
+            };
 
-                    // `exit.code()` returns `None` on Unix when the process is terminated by a signal.
-                    // See std::os::unix::process::ExitStatusExt for more information. This prints out
-                    // the interrupted process and the signal it received.
-                    let signal_code = exit.signal().unwrap();
-                    let signal = Signal::try_from(signal_code).unwrap();
+            // Prepare arguments for execvp.
+            let mut argv = Vec::new();
 
-                    // We have to disable any handler that's installed by default.
-                    // This ensures that we exit on this signal.
-                    // For example, `SIGSEGV` and `SIGBUS` have default handlers installed in Rust.
-                    // We ignore the errors because there is not much we can do if that fails anyway.
-                    // SAFETY: The function is unsafe because installing functions is unsafe, but we are
-                    // just defaulting to default behavior and not installing a function. Hence, the call
-                    // is safe.
-                    let _ = unsafe {
-                        sigaction(
-                            signal,
-                            &SigAction::new(SigHandler::SigDfl, SaFlags::empty(), SigSet::all()),
-                        )
-                    };
+            // Convert arg0 to CString.
+            let Ok(arg0_cstring) = CString::new(arg0.as_bytes()) else {
+                return Err(self.make_error_no_such_file_or_dir(&prog));
+            };
+            argv.push(arg0_cstring);
 
-                    let _ = raise(signal);
-                }
-                return Err(exit.code().unwrap().into());
+            // Convert remaining arguments to CString.
+            for arg in args {
+                let Ok(arg_cstring) = CString::new(arg.as_bytes()) else {
+                    return Err(self.make_error_no_such_file_or_dir(&prog));
+                };
+                argv.push(arg_cstring);
             }
-            Err(ref err) => {
-                return match err.kind() {
+
+            // Execute the program using execvp. this replaces the current
+            // process. The execvp function takes care of appending a NULL
+            // argument to the argument list so that we don't have to.
+            match execvp(&prog_cstring, &argv) {
+                Err(nix::errno::Errno::ENOENT) => Err(self.make_error_no_such_file_or_dir(&prog)),
+                Err(nix::errno::Errno::EACCES) => {
+                    uucore::show_error!(
+                        "{}",
+                        get_message_with_args(
+                            "env-error-permission-denied",
+                            HashMap::from([("program".to_string(), prog.quote().to_string())])
+                        )
+                    );
+                    Err(126.into())
+                }
+                Err(_) => {
+                    uucore::show_error!(
+                        "{}",
+                        get_message_with_args(
+                            "env-error-unknown",
+                            HashMap::from([("error".to_string(), "execvp failed".to_string())])
+                        )
+                    );
+                    Err(126.into())
+                }
+                Ok(_) => {
+                    unreachable!("execvp should never return on success")
+                }
+            }
+        }
+
+        #[cfg(not(unix))]
+        {
+            // Fallback to Command::status for non-Unix systems
+            let mut cmd = std::process::Command::new(&*prog);
+            cmd.args(args);
+
+            match cmd.status() {
+                Ok(exit) if !exit.success() => Err(exit.code().unwrap_or(1).into()),
+                Err(ref err) => match err.kind() {
                     io::ErrorKind::NotFound | io::ErrorKind::InvalidInput => {
                         Err(self.make_error_no_such_file_or_dir(&prog))
                     }
@@ -709,11 +739,10 @@ impl EnvAppData {
                         );
                         Err(126.into())
                     }
-                };
+                },
+                Ok(_) => Ok(()),
             }
-            Ok(_) => (),
         }
-        Ok(())
     }
 }
 
@@ -911,6 +940,12 @@ fn ignore_signal(sig: Signal) -> UResult<()> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // Rust ignores SIGPIPE (see https://github.com/rust-lang/rust/issues/62569).
+    // We restore its default action here.
+    #[cfg(unix)]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
     EnvAppData::default().run_env(args)
 }
 
