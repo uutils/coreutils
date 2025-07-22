@@ -10,6 +10,7 @@ use clap::parser::ValuesRef;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::collections::HashMap;
 use std::ffi::OsString;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 #[cfg(not(windows))]
 use uucore::error::FromIo;
@@ -81,7 +82,7 @@ fn get_mode(matches: &ArgMatches, mode_had_minus_prefix: bool) -> Result<u32, St
 }
 
 #[cfg(windows)]
-fn strip_minus_from_mode(_args: &mut [String]) -> bool {
+fn strip_minus_from_mode(_args: &mut [OsString]) -> bool {
     false
 }
 
@@ -89,16 +90,18 @@ fn strip_minus_from_mode(_args: &mut [String]) -> bool {
 // of a prefix '-' if it's associated with MODE
 // e.g. "chmod -v -xw -R FILE" -> "chmod -v xw -R FILE"
 #[cfg(not(windows))]
-fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
+fn strip_minus_from_mode(args: &mut Vec<OsString>) -> bool {
     for arg in args {
         if arg == "--" {
             break;
         }
-        if let Some(arg_stripped) = arg.strip_prefix('-') {
-            if let Some('r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0'..='7') =
-                arg.chars().nth(1)
+        let bytes = arg.as_bytes();
+        if let Some(b'-') = bytes.first() {
+            if let Some(
+                b'r' | b'w' | b'x' | b'X' | b's' | b't' | b'u' | b'g' | b'o' | b'0'..=b'7',
+            ) = bytes.get(1)
             {
-                *arg = arg_stripped.to_string();
+                *arg = std::ffi::OsStr::from_bytes(&bytes[1..]).to_owned();
                 return true;
             }
         }
@@ -108,7 +111,7 @@ fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut args = args.collect_lossy();
+    let mut args: Vec<OsString> = args.collect();
 
     // Before we can parse 'args' with clap (and previously getopts),
     // a possible MODE prefix '-' needs to be removed (e.g. "chmod -x FILE").
