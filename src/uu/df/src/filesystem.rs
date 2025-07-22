@@ -127,18 +127,18 @@ impl Filesystem {
         let _stat_path = if mount_info.mount_dir.is_empty() {
             #[cfg(unix)]
             {
-                mount_info.dev_name.clone()
+                mount_info.dev_name.clone().into()
             }
             #[cfg(windows)]
             {
                 // On windows, we expect the volume id
-                mount_info.dev_id.clone()
+                mount_info.dev_id.clone().into()
             }
         } else {
             mount_info.mount_dir.clone()
         };
         #[cfg(unix)]
-        let usage = FsUsage::new(statfs(_stat_path).ok()?);
+        let usage = FsUsage::new(statfs(&_stat_path).ok()?);
         #[cfg(windows)]
         let usage = FsUsage::new(Path::new(&_stat_path)).ok()?;
         Some(Self {
@@ -205,6 +205,8 @@ mod tests {
 
     mod mount_info_from_path {
 
+        use std::ffi::OsString;
+
         use uucore::fsext::MountInfo;
 
         use crate::filesystem::{FsError, mount_info_from_path};
@@ -215,9 +217,9 @@ mod tests {
                 dev_id: String::default(),
                 dev_name: String::default(),
                 fs_type: String::default(),
-                mount_dir: String::from(mount_dir),
+                mount_dir: OsString::from(mount_dir),
                 mount_option: String::default(),
-                mount_root: String::default(),
+                mount_root: OsString::default(),
                 remote: Default::default(),
                 dummy: Default::default(),
             }
@@ -312,6 +314,8 @@ mod tests {
 
     #[cfg(not(windows))]
     mod over_mount {
+        use std::ffi::OsString;
+
         use crate::filesystem::{Filesystem, FsError, is_over_mounted};
         use uucore::fsext::MountInfo;
 
@@ -320,9 +324,9 @@ mod tests {
                 dev_id: String::default(),
                 dev_name: dev_name.map(String::from).unwrap_or_default(),
                 fs_type: String::default(),
-                mount_dir: String::from(mount_dir),
+                mount_dir: OsString::from(mount_dir),
                 mount_option: String::default(),
-                mount_root: String::default(),
+                mount_root: OsString::default(),
                 remote: Default::default(),
                 dummy: Default::default(),
             }

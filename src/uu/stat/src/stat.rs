@@ -22,7 +22,6 @@ use std::ffi::{OsStr, OsString};
 use std::fs::{FileType, Metadata};
 use std::io::Write;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
-use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 use std::{env, fs};
 
@@ -258,7 +257,7 @@ struct Stater {
     show_fs: bool,
     from_user: bool,
     files: Vec<OsString>,
-    mount_list: Option<Vec<String>>,
+    mount_list: Option<Vec<OsString>>,
     default_tokens: Vec<Token>,
     default_dev_tokens: Vec<Token>,
 }
@@ -876,7 +875,7 @@ impl Stater {
                 })?
                 .iter()
                 .map(|mi| mi.mount_dir.clone())
-                .collect::<Vec<String>>();
+                .collect::<Vec<_>>();
             // Reverse sort. The longer comes first.
             mount_list.sort();
             mount_list.reverse();
@@ -899,7 +898,8 @@ impl Stater {
 
         for root in self.mount_list.as_ref()? {
             if path.starts_with(root) {
-                return Some(root.clone());
+                // TODO: This is probably wrong, we should pass the OsString
+                return Some(root.to_string_lossy().into_owned());
             }
         }
         None
@@ -992,7 +992,7 @@ impl Stater {
                     'h' => OutputType::Unsigned(meta.nlink()),
                     // inode number
                     'i' => OutputType::Unsigned(meta.ino()),
-                    // mount point
+                    // mount point: TODO: This should be an OsStr
                     'm' => OutputType::Str(self.find_mount_point(file).unwrap()),
                     // file name
                     'n' => OutputType::Str(display_name.to_string()),
@@ -1092,11 +1092,7 @@ impl Stater {
             OsString::from(file)
         };
         if self.show_fs {
-            #[cfg(unix)]
-            let p = file.as_bytes();
-            #[cfg(not(unix))]
-            let p = file.into_string().unwrap();
-            match statfs(p) {
+            match statfs(&file) {
                 Ok(meta) => {
                     let tokens = &self.default_tokens;
 

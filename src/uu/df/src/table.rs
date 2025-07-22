@@ -35,7 +35,7 @@ pub(crate) struct Row {
     fs_type: String,
 
     /// Path at which the filesystem is mounted.
-    fs_mount: String,
+    fs_mount: OsString,
 
     /// Total number of bytes in the filesystem regardless of whether they are used.
     bytes: u64,
@@ -277,7 +277,7 @@ impl<'a> RowFormatter<'a> {
                     if self.is_total_row && !self.options.columns.contains(&Column::Source) {
                         get_message("df-total")
                     } else {
-                        self.row.fs_mount.to_string()
+                        self.row.fs_mount.to_string_lossy().into_owned()
                     }
                 }
                 Column::Itotal => self.scaled_inodes(self.row.inodes),
@@ -288,8 +288,7 @@ impl<'a> RowFormatter<'a> {
                     .row
                     .file
                     .as_ref()
-                    .map(|s| s.to_string_lossy().into_owned())
-                    .unwrap_or("-".into()),
+                    .map_or("-".into(), |s| s.to_string_lossy().into_owned()),
 
                 Column::Fstype => self.row.fs_type.to_string(),
                 #[cfg(target_os = "macos")]
@@ -525,7 +524,7 @@ mod tests {
                 file: Some("/path/to/file".into()),
                 fs_device: "my_device".to_string(),
                 fs_type: "my_type".to_string(),
-                fs_mount: "my_mount".to_string(),
+                fs_mount: "my_mount".into(),
 
                 bytes: 100,
                 bytes_used: 25,
@@ -684,7 +683,7 @@ mod tests {
         };
         let row = Row {
             fs_device: "my_device".to_string(),
-            fs_mount: "my_mount".to_string(),
+            fs_mount: "my_mount".into(),
 
             bytes: 100,
             bytes_used: 25,
@@ -711,7 +710,7 @@ mod tests {
         let row = Row {
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
-            fs_mount: "my_mount".to_string(),
+            fs_mount: "my_mount".into(),
 
             bytes: 100,
             bytes_used: 25,
@@ -737,7 +736,7 @@ mod tests {
         };
         let row = Row {
             fs_device: "my_device".to_string(),
-            fs_mount: "my_mount".to_string(),
+            fs_mount: "my_mount".into(),
 
             inodes: 10,
             inodes_used: 2,
@@ -781,7 +780,7 @@ mod tests {
         let row = Row {
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
-            fs_mount: "my_mount".to_string(),
+            fs_mount: "my_mount".into(),
 
             bytes: 4000,
             bytes_used: 1000,
@@ -808,7 +807,7 @@ mod tests {
         let row = Row {
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
-            fs_mount: "my_mount".to_string(),
+            fs_mount: "my_mount".into(),
 
             bytes: 4096,
             bytes_used: 1024,
@@ -874,9 +873,9 @@ mod tests {
                 dev_id: "28".to_string(),
                 dev_name: "none".to_string(),
                 fs_type: "9p".to_string(),
-                mount_dir: "/usr/lib/wsl/drivers".to_string(),
+                mount_dir: "/usr/lib/wsl/drivers".into(),
                 mount_option: "ro,nosuid,nodev,noatime".to_string(),
-                mount_root: "/".to_string(),
+                mount_root: "/".into(),
                 remote: false,
                 dummy: false,
             },
@@ -905,9 +904,9 @@ mod tests {
                 dev_id: "28".to_string(),
                 dev_name: "none".to_string(),
                 fs_type: "9p".to_string(),
-                mount_dir: "/usr/lib/wsl/drivers".to_string(),
+                mount_dir: "/usr/lib/wsl/drivers".into(),
                 mount_option: "ro,nosuid,nodev,noatime".to_string(),
-                mount_root: "/".to_string(),
+                mount_root: "/".into(),
                 remote: false,
                 dummy: false,
             },

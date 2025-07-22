@@ -28,8 +28,9 @@ static EXIT_ERR: i32 = 1;
 #[cfg(windows)]
 use crate::show_warning;
 
-#[cfg(windows)]
 use std::ffi::OsStr;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 #[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
 #[cfg(windows)]
@@ -61,17 +62,15 @@ fn to_nul_terminated_wide_string(s: impl AsRef<OsStr>) -> Vec<u16> {
 use libc::{
     S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, mode_t, strerror,
 };
-use std::borrow::Cow;
 #[cfg(unix)]
-use std::ffi::CStr;
-#[cfg(unix)]
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::io::Error as IOError;
 #[cfg(unix)]
 use std::mem;
 #[cfg(windows)]
 use std::path::Path;
 use std::time::UNIX_EPOCH;
+use std::{borrow::Cow, ffi::OsString};
 
 #[cfg(any(
     target_os = "linux",
@@ -123,14 +122,16 @@ impl BirthTime for Metadata {
     }
 }
 
+// TODO: Types for this struct are probably mostly wrong. Possibly, most of them
+// should be OsString.
 #[derive(Debug, Clone)]
 pub struct MountInfo {
     /// Stores `volume_name` in windows platform and `dev_id` in unix platform
     pub dev_id: String,
     pub dev_name: String,
     pub fs_type: String,
-    pub mount_root: String,
-    pub mount_dir: String,
+    pub mount_root: OsString,
+    pub mount_dir: OsString,
     /// We only care whether this field contains "bind"
     pub mount_option: String,
     pub remote: bool,
@@ -138,7 +139,9 @@ pub struct MountInfo {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn replace_special_chars(s: String) -> String {
+fn replace_special_chars(s: &[u8]) -> Vec<u8> {
+    use bstr::ByteSlice;
+
     // Replace
     //
     // * ASCII space with a regular space character,
@@ -152,7 +155,11 @@ fn replace_special_chars(s: String) -> String {
 
 impl MountInfo {
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    fn new(file_name: &str, raw: &[&str]) -> Option<Self> {
+    fn new(file_name: &str, raw: &[&[u8]]) -> Option<Self> {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::ffi::OsStringExt;
+
         let dev_name;
         let fs_type;
         let mount_root;
@@ -165,21 +172,24 @@ impl MountInfo {
             // "man proc" for more details
             LINUX_MOUNTINFO => {
                 const FIELDS_OFFSET: usize = 6;
-                let after_fields = raw[FIELDS_OFFSET..].iter().position(|c| *c == "-").unwrap()
+                let after_fields = raw[FIELDS_OFFSET..]
+                    .iter()
+                    .position(|c| *c == b"-")
+                    .unwrap()
                     + FIELDS_OFFSET
                     + 1;
-                dev_name = raw[after_fields + 1].to_string();
-                fs_type = raw[after_fields].to_string();
-                mount_root = raw[3].to_string();
-                mount_dir = replace_special_chars(raw[4].to_string());
-                mount_option = raw[5].to_string();
+                dev_name = String::from_utf8_lossy(raw[after_fields + 1]).to_string();
+                fs_type = String::from_utf8_lossy(raw[after_fields]).to_string();
+                mount_root = OsStr::from_bytes(raw[3]).to_owned();
+                mount_dir = OsString::from_vec(replace_special_chars(raw[4]));
+                mount_option = String::from_utf8_lossy(raw[5]).to_string();
             }
             LINUX_MTAB => {
-                dev_name = raw[0].to_string();
-                fs_type = raw[2].to_string();
-                mount_root = String::new();
-                mount_dir = replace_special_chars(raw[1].to_string());
-                mount_option = raw[3].to_string();
+                dev_name = String::from_utf8_lossy(raw[0]).to_string();
+                fs_type = String::from_utf8_lossy(raw[2]).to_string();
+                mount_root = OsString::new();
+                mount_dir = OsString::from_vec(replace_special_chars(raw[1]));
+                mount_option = String::from_utf8_lossy(raw[3]).to_string();
             }
             _ => return None,
         };
@@ -343,7 +353,7 @@ fn is_remote_filesystem(dev_name: &str, fs_type: &str) -> bool {
 }
 
 #[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
-fn mount_dev_id(mount_dir: &str) -> String {
+fn mount_dev_id(mount_dir: &OsStr) -> String {
     use std::os::unix::fs::MetadataExt;
 
     if let Ok(stat) = std::fs::metadata(mount_dir) {
@@ -426,10 +436,10 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
             .or_else(|_| File::open(LINUX_MTAB).map(|f| (LINUX_MTAB, f)))?;
         let reader = BufReader::new(f);
         Ok(reader
-            .lines()
+            .split(b'\n')
             .map_while(Result::ok)
             .filter_map(|line| {
-                let raw_data = line.split_whitespace().collect::<Vec<&str>>();
+                let raw_data = line.split(|c| *c == b' ').collect::<Vec<&[u8]>>();
                 MountInfo::new(file_name, &raw_data)
             })
             .collect::<Vec<_>>())
@@ -855,11 +865,13 @@ impl FsMeta for StatFs {
 }
 
 #[cfg(unix)]
-pub fn statfs<P>(path: P) -> Result<StatFs, String>
-where
-    P: Into<Vec<u8>>,
-{
-    match CString::new(path) {
+pub fn statfs(path: &OsStr) -> Result<StatFs, String> {
+    #[cfg(unix)]
+    let p = path.as_bytes();
+    #[cfg(not(unix))]
+    let p = path.into_string().unwrap();
+
+    match CString::new(p) {
         Ok(p) => {
             let mut buffer: StatFs = unsafe { mem::zeroed() };
             unsafe {
@@ -1060,8 +1072,8 @@ mod tests {
         // spell-checker:ignore (word) relatime
         let info = MountInfo::new(
             LINUX_MOUNTINFO,
-            &"106 109 253:6 / /mnt rw,relatime - xfs /dev/fs0 rw"
-                .split_ascii_whitespace()
+            &b"106 109 253:6 / /mnt rw,relatime - xfs /dev/fs0 rw"
+                .split(|c| *c == b' ')
                 .collect::<Vec<_>>(),
         )
         .unwrap();
@@ -1075,8 +1087,8 @@ mod tests {
         // Test parsing with different amounts of optional fields.
         let info = MountInfo::new(
             LINUX_MOUNTINFO,
-            &"106 109 253:6 / /mnt rw,relatime master:1 - xfs /dev/fs0 rw"
-                .split_ascii_whitespace()
+            &b"106 109 253:6 / /mnt rw,relatime master:1 - xfs /dev/fs0 rw"
+                .split(|c| *c == b' ')
                 .collect::<Vec<_>>(),
         )
         .unwrap();
@@ -1086,8 +1098,8 @@ mod tests {
 
         let info = MountInfo::new(
             LINUX_MOUNTINFO,
-            &"106 109 253:6 / /mnt rw,relatime master:1 shared:2 - xfs /dev/fs0 rw"
-                .split_ascii_whitespace()
+            &b"106 109 253:6 / /mnt rw,relatime master:1 shared:2 - xfs /dev/fs0 rw"
+                .split(|c| *c == b' ')
                 .collect::<Vec<_>>(),
         )
         .unwrap();
@@ -1101,8 +1113,8 @@ mod tests {
     fn test_mountinfo_dir_special_chars() {
         let info = MountInfo::new(
             LINUX_MOUNTINFO,
-            &r#"317 61 7:0 / /mnt/f\134\040\011oo rw,relatime shared:641 - ext4 /dev/loop0 rw"#
-                .split_ascii_whitespace()
+            &br#"317 61 7:0 / /mnt/f\134\040\011oo rw,relatime shared:641 - ext4 /dev/loop0 rw"#
+                .split(|c| *c == b' ')
                 .collect::<Vec<_>>(),
         )
         .unwrap();
@@ -1111,8 +1123,8 @@ mod tests {
 
         let info = MountInfo::new(
             LINUX_MTAB,
-            &r#"/dev/loop0 /mnt/f\134\040\011oo ext4 rw,relatime 0 0"#
-                .split_ascii_whitespace()
+            &br#"/dev/loop0 /mnt/f\134\040\011oo ext4 rw,relatime 0 0"#
+                .split(|c| *c == b' ')
                 .collect::<Vec<_>>(),
         )
         .unwrap();
