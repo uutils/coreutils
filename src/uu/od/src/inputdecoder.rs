@@ -2,7 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use half::f16;
+// spell-checker:ignore bfloat
+use half::{bf16, f16};
 use std::io;
 
 use crate::byteorder_io::ByteOrder;
@@ -154,6 +155,13 @@ impl MemoryDecoder<'_> {
             8 => self.byte_order.read_f64(&self.data[start..start + 8]),
             _ => panic!("Invalid byte_size: {byte_size}"),
         }
+    }
+
+    /// Returns a bfloat16 as f64 from the internal buffer at position `start`.
+    pub fn read_bfloat(&self, start: usize) -> f64 {
+        let bits = self.byte_order.read_u16(&self.data[start..start + 2]);
+        let val = f32::from(bf16::from_bits(bits));
+        f64::from(val)
     }
 }
 

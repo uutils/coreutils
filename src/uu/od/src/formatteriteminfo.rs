@@ -11,6 +11,7 @@ use std::fmt;
 pub enum FormatWriter {
     IntWriter(fn(u64) -> String),
     FloatWriter(fn(f64) -> String),
+    BFloatWriter(fn(f64) -> String),
     MultibyteWriter(fn(&[u8]) -> String),
 }
 
@@ -23,6 +24,10 @@ impl fmt::Debug for FormatWriter {
             }
             Self::FloatWriter(ref p) => {
                 f.write_str("FloatWriter:")?;
+                fmt::Pointer::fmt(p, f)
+            }
+            Self::BFloatWriter(ref p) => {
+                f.write_str("BFloatWriter:")?;
                 fmt::Pointer::fmt(p, f)
             }
             Self::MultibyteWriter(ref p) => {
