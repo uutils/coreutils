@@ -25,6 +25,12 @@ pub static FORMAT_ITEM_F64: FormatterItemInfo = FormatterItemInfo {
     formatter: FormatWriter::FloatWriter(format_item_flo64),
 };
 
+pub static FORMAT_ITEM_BF16: FormatterItemInfo = FormatterItemInfo {
+    byte_size: 2,
+    print_width: 15,
+    formatter: FormatWriter::BFloatWriter(format_item_bf16),
+};
+
 pub fn format_item_flo16(f: f64) -> String {
     format!(" {}", format_flo16(f16::from_f64(f)))
 }
@@ -62,6 +68,10 @@ fn format_flo64_exp_precision(f: f64, width: usize, precision: usize) -> String 
     // Leave room for the '+' sign
     let formatted = format!("{f:width$.precision$e}", width = width - 1);
     formatted.replace('e', "e+")
+}
+
+pub fn format_item_bf16(f: f64) -> String {
+    format!(" {}", format_flo32(f as f32))
 }
 
 fn format_flo16(f: f16) -> String {

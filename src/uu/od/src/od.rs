@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (clap) dont
 // spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset mockstream nrofbytes partialreader odfunc multifile exitcode
-// spell-checker:ignore Anone
+// spell-checker:ignore Anone bfloat
 
 mod byteorder_io;
 mod formatteriteminfo;
@@ -574,6 +574,10 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
                 }
                 FormatWriter::FloatWriter(func) => {
                     let p = input_decoder.read_float(b, f.formatter_item_info.byte_size);
+                    output_text.push_str(&func(p));
+                }
+                FormatWriter::BFloatWriter(func) => {
+                    let p = input_decoder.read_bfloat(b);
                     output_text.push_str(&func(p));
                 }
                 FormatWriter::MultibyteWriter(func) => {
