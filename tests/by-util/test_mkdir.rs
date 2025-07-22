@@ -34,6 +34,18 @@ fn test_mkdir_mkdir() {
     new_ucmd!().arg("test_dir").succeeds();
 }
 
+#[cfg(feature = "test_risky_names")]
+#[test]
+fn test_mkdir_non_unicode() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let target = uucore::os_str_from_bytes(b"some-\xc0-dir-\xf3")
+        .expect("Only unix platforms can test non-unicode names");
+    ucmd.arg(&target).succeeds();
+
+    assert!(at.dir_exists(target));
+}
+
 #[test]
 fn test_mkdir_verbose() {
     let expected = "mkdir: created directory 'test_dir'\n";
