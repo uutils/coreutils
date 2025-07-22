@@ -228,8 +228,8 @@ fn test_mv_multiple_folders() {
         .succeeds()
         .no_stderr();
 
-    assert!(at.dir_exists(&format!("{target_dir}/{dir_a}")));
-    assert!(at.dir_exists(&format!("{target_dir}/{dir_b}")));
+    assert!(at.dir_exists(format!("{target_dir}/{dir_a}")));
+    assert!(at.dir_exists(format!("{target_dir}/{dir_b}")));
 }
 
 #[test]
@@ -555,7 +555,7 @@ fn test_mv_hardlink_to_symlink() {
         .arg(hardlink_to_symlink_file)
         .succeeds();
     assert!(!at2.symlink_exists(symlink_file));
-    assert!(at2.symlink_exists(&format!("{hardlink_to_symlink_file}~")));
+    assert!(at2.symlink_exists(format!("{hardlink_to_symlink_file}~")));
 }
 
 #[test]
@@ -649,7 +649,7 @@ fn test_mv_simple_backup_for_directory() {
 
     assert!(!at.dir_exists(dir_a));
     assert!(at.dir_exists(dir_b));
-    assert!(at.dir_exists(&format!("{dir_b}~")));
+    assert!(at.dir_exists(format!("{dir_b}~")));
     assert!(at.file_exists(format!("{dir_b}/file_a")));
     assert!(at.file_exists(format!("{dir_b}~/file_b")));
 }
@@ -1353,7 +1353,7 @@ fn test_mv_backup_dir() {
 
     assert!(!at.dir_exists(dir_a));
     assert!(at.dir_exists(dir_b));
-    assert!(at.dir_exists(&format!("{dir_b}~")));
+    assert!(at.dir_exists(format!("{dir_b}~")));
 }
 
 #[test]
@@ -1572,7 +1572,7 @@ fn test_mv_dir_into_dir_with_source_name_a_prefix_of_target_name() {
 
     ucmd.arg(source).arg(target).succeeds().no_output();
 
-    assert!(at.dir_exists(&format!("{target}/{source}")));
+    assert!(at.dir_exists(format!("{target}/{source}")));
 }
 
 #[test]
