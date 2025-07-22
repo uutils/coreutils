@@ -165,7 +165,7 @@ impl Filesystem {
 
     /// Find and create the filesystem from the given mount.
     #[cfg(windows)]
-    pub(crate) fn from_mount(mount: &MountInfo, file: Option<String>) -> Result<Self, FsError> {
+    pub(crate) fn from_mount(mount: &MountInfo, file: Option<OsString>) -> Result<Self, FsError> {
         Self::new(mount.clone(), file).ok_or(FsError::MountMissing)
     }
 

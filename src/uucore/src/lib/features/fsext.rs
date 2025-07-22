@@ -19,12 +19,12 @@ const MAX_PATH: usize = 266;
 static EXIT_ERR: i32 = 1;
 
 #[cfg(any(
-    windows,
     target_os = "freebsd",
     target_vendor = "apple",
     target_os = "netbsd",
     target_os = "openbsd"
 ))]
+use crate::os_str_from_bytes;
 #[cfg(windows)]
 use crate::show_warning;
 
@@ -243,6 +243,8 @@ impl MountInfo {
             // TODO: support the case when `GetLastError()` returns `ERROR_MORE_DATA`
             return None;
         }
+        // TODO: This should probably call `OsString::from_wide`, but unclear if
+        // terminating zeros need to be striped first.
         let mount_root = LPWSTR2String(&mount_root_buf);
 
         let mut fs_type_buf = [0u16; MAX_PATH];
@@ -273,8 +275,8 @@ impl MountInfo {
             dev_id: volume_name,
             dev_name,
             fs_type: fs_type.unwrap_or_default(),
-            mount_root,
-            mount_dir: String::new(),
+            mount_root: mount_root.into(), // TODO: We should figure out how to keep an OsString here.
+            mount_dir: OsString::new(),
             mount_option: String::new(),
             remote,
             dummy: false,
@@ -302,12 +304,11 @@ impl From<StatFs> for MountInfo {
                 .to_string_lossy()
                 .into_owned()
         };
-        let mount_dir = unsafe {
+        let mount_dir_bytes = unsafe {
             // spell-checker:disable-next-line
-            CStr::from_ptr(&statfs.f_mntonname[0])
-                .to_string_lossy()
-                .into_owned()
+            CStr::from_ptr(&statfs.f_mntonname[0]).to_bytes()
         };
+        let mount_dir = os_str_from_bytes(mount_dir_bytes).unwrap().into_owned();
 
         let dev_id = mount_dev_id(&mount_dir);
         let dummy = is_dummy_filesystem(&fs_type, "");
@@ -318,7 +319,7 @@ impl From<StatFs> for MountInfo {
             dev_name,
             fs_type,
             mount_dir,
-            mount_root: String::new(),
+            mount_root: OsString::new(),
             mount_option: String::new(),
             remote,
             dummy,
