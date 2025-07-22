@@ -1518,6 +1518,13 @@ fn test_install_dir_dot() {
         .arg("-v")
         .succeeds()
         .stdout_contains("creating directory 'dir5/cali'");
+    scene
+        .ucmd()
+        .arg("-d")
+        .arg("dir6/./")
+        .arg("-v")
+        .succeeds()
+        .stdout_contains("creating directory 'dir6'");
 
     let at = &scene.fixtures;
 
@@ -1526,6 +1533,7 @@ fn test_install_dir_dot() {
     assert!(at.dir_exists("dir3"));
     assert!(at.dir_exists("dir4/cal"));
     assert!(at.dir_exists("dir5/cali"));
+    assert!(at.dir_exists("dir6"));
 }
 
 #[test]

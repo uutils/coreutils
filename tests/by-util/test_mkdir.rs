@@ -333,6 +333,22 @@ fn test_mkdir_trailing_dot() {
 }
 
 #[test]
+fn test_mkdir_trailing_dot_and_slash() {
+    new_ucmd!().arg("-p").arg("-v").arg("test_dir").succeeds();
+
+    new_ucmd!()
+        .arg("-p")
+        .arg("-v")
+        .arg("test_dir_a/./")
+        .succeeds()
+        .stdout_contains("created directory 'test_dir_a'");
+
+    let scene = TestScenario::new("ls");
+    let result = scene.ucmd().arg("-al").run();
+    println!("ls dest {}", result.stdout_str());
+}
+
+#[test]
 #[cfg(not(windows))]
 fn test_umask_compliance() {
     fn test_single_case(umask_set: mode_t) {
