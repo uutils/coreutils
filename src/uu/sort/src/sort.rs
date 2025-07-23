@@ -232,9 +232,9 @@ pub struct Output {
 }
 
 impl Output {
-    fn new(name: Option<&OsStr>) -> UResult<Self> {
+    fn new(name: Option<impl AsRef<OsStr>>) -> UResult<Self> {
         let file = if let Some(name) = name {
-            let path = Path::new(name);
+            let path = Path::new(name.as_ref());
             // This is different from `File::create()` because we don't truncate the output yet.
             // This allows using the output file as an input file.
             #[allow(clippy::suspicious_open_options)]
@@ -246,7 +246,7 @@ impl Output {
                     path: path.to_owned(),
                     error: e,
                 })?;
-            Some((name.to_os_string(), file))
+            Some((name.as_ref().to_owned(), file))
         } else {
             None
         };
@@ -1058,17 +1058,16 @@ impl FieldSelector {
 
 /// Creates an `Arg` that conflicts with all other sort modes.
 fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
-    let mut arg = Arg::new(mode)
+    Arg::new(mode)
         .short(short)
         .long(mode)
         .help(help)
-        .action(ArgAction::SetTrue);
-    for possible_mode in &options::modes::ALL_SORT_MODES {
-        if *possible_mode != mode {
-            arg = arg.conflicts_with(possible_mode);
-        }
-    }
-    arg
+        .action(ArgAction::SetTrue)
+        .conflicts_with_all(
+            options::modes::ALL_SORT_MODES
+                .iter()
+                .filter(|&&m| m != mode),
+        )
 }
 
 #[cfg(target_os = "linux")]
@@ -1169,43 +1168,37 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.mode = if matches.get_flag(options::modes::HUMAN_NUMERIC)
         || matches
             .get_one::<String>(options::modes::SORT)
-            .map(|s| s.as_str())
-            == Some("human-numeric")
+            .is_some_and(|s| s == "human-numeric")
     {
         SortMode::HumanNumeric
     } else if matches.get_flag(options::modes::MONTH)
         || matches
             .get_one::<String>(options::modes::SORT)
-            .map(|s| s.as_str())
-            == Some("month")
+            .is_some_and(|s| s == "month")
     {
         SortMode::Month
     } else if matches.get_flag(options::modes::GENERAL_NUMERIC)
         || matches
             .get_one::<String>(options::modes::SORT)
-            .map(|s| s.as_str())
-            == Some("general-numeric")
+            .is_some_and(|s| s == "general-numeric")
     {
         SortMode::GeneralNumeric
     } else if matches.get_flag(options::modes::NUMERIC)
         || matches
             .get_one::<String>(options::modes::SORT)
-            .map(|s| s.as_str())
-            == Some("numeric")
+            .is_some_and(|s| s == "numeric")
     {
         SortMode::Numeric
     } else if matches.get_flag(options::modes::VERSION)
         || matches
             .get_one::<String>(options::modes::SORT)
-            .map(|s| s.as_str())
-            == Some("version")
+            .is_some_and(|s| s == "version")
     {
         SortMode::Version
     } else if matches.get_flag(options::modes::RANDOM)
         || matches
             .get_one::<String>(options::modes::SORT)
-            .map(|s| s.as_str())
-            == Some("random")
+            .is_some_and(|s| s == "random")
     {
         settings.salt = Some(get_rand_string());
         SortMode::Random
@@ -1264,15 +1257,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             Err(e) => {
                 let error_message = if *e.kind() == IntErrorKind::PosOverflow {
+
+                    let batch_too_large = get_message_with_args(
+                        "sort-batch-size-too-large",
+                        HashMap::from([("arg".to_string(), n_merge.quote().to_string())]),
+                    );
+
                     #[cfg(target_os = "linux")]
                     {
-                        show_error!(
-                            "{}",
-                            get_message_with_args(
-                                "sort-batch-size-too-large",
-                                HashMap::from([("arg".to_string(), n_merge.quote().to_string())])
-                            )
-                        );
+                        show_error!("{}", batch_too_large);
 
                         get_message_with_args(
                             "sort-maximum-batch-size-rlimit",
@@ -1281,10 +1274,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     }
                     #[cfg(not(target_os = "linux"))]
                     {
-                        get_message_with_args(
-                            "sort-batch-size-too-large",
-                            HashMap::from([("arg".to_string(), n_merge.quote().to_string())]),
-                        )
+                        batch_too_large
                     }
                 } else {
                     get_message_with_args(
@@ -1398,11 +1388,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         open(file)?;
     }
 
-    let output = Output::new(
-        matches
-            .get_one::<OsString>(options::OUTPUT)
-            .map(|s| s.as_os_str()),
-    )?;
+    let output = Output::new(matches.get_one::<OsString>(options::OUTPUT))?;
 
     settings.init_precomputed();
 
@@ -1991,13 +1977,7 @@ fn month_compare(a: &str, b: &str) -> Ordering {
     let ma = month_parse(a);
     let mb = month_parse(b);
 
-    if ma > mb {
-        Ordering::Greater
-    } else if ma < mb {
-        Ordering::Less
-    } else {
-        Ordering::Equal
-    }
+    ma.cmp(&mb)
 }
 
 fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
