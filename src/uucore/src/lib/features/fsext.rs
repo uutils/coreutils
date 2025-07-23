@@ -1131,4 +1131,35 @@ mod tests {
 
         assert_eq!(info.mount_dir, r#"/mnt/f\ 	oo"#);
     }
+
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_mountinfo_dir_non_unicode() {
+        let info = MountInfo::new(
+            LINUX_MOUNTINFO,
+            &b"317 61 7:0 / /mnt/some-\xc0-dir-\xf3 rw,relatime shared:641 - ext4 /dev/loop0 rw"
+                .split(|c| *c == b' ')
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            info.mount_dir,
+            crate::os_str_from_bytes(b"/mnt/some-\xc0-dir-\xf3").unwrap()
+        );
+
+        let info = MountInfo::new(
+            LINUX_MOUNTINFO,
+            &b"317 61 7:0 / /mnt/some-\\040-dir-\xf3 rw,relatime shared:641 - ext4 /dev/loop0 rw"
+                .split(|c| *c == b' ')
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+
+        // Note that the \040 above will have been substituted by a space.
+        assert_eq!(
+            info.mount_dir,
+            crate::os_str_from_bytes(b"/mnt/some- -dir-\xf3").unwrap()
+        );
+    }
 }
