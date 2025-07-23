@@ -192,6 +192,43 @@ impl From<Filesystem> for Row {
     }
 }
 
+/// A `Cell` in the table. We store raw `bytes` as the data (e.g. directory name
+/// may be non-Unicode). We also record the printed `width` for alignment purpose,
+/// as it is easier to compute on the original string.
+struct Cell {
+    bytes: Vec<u8>,
+    width: usize,
+}
+
+impl Cell {
+    /// Create a cell, knowing that s contains only 1-length chars
+    fn from_ascii_string<T: AsRef<str>>(s: T) -> Cell {
+        let s = s.as_ref();
+        Cell {
+            bytes: s.as_bytes().into(),
+            width: s.len(),
+        }
+    }
+
+    /// Create a cell from an unknown origin string that may contain
+    /// wide characters.
+    fn from_string<T: AsRef<str>>(s: T) -> Cell {
+        let s = s.as_ref();
+        Cell {
+            bytes: s.as_bytes().into(),
+            width: UnicodeWidthStr::width(s),
+        }
+    }
+
+    /// Create a cell from an `OsString`
+    fn from_os_string(os: &OsString) -> Cell {
+        Cell {
+            bytes: uucore::os_str_as_bytes(os).unwrap().to_vec(),
+            width: UnicodeWidthStr::width(os.to_string_lossy().as_ref()),
+        }
+    }
+}
+
 /// A formatter for [`Row`].
 ///
 /// The `options` control how the information in the row gets formatted.
@@ -225,47 +262,50 @@ impl<'a> RowFormatter<'a> {
     /// Get a string giving the scaled version of the input number.
     ///
     /// The scaling factor is defined in the `options` field.
-    fn scaled_bytes(&self, size: u64) -> String {
-        if let Some(h) = self.options.human_readable {
+    fn scaled_bytes(&self, size: u64) -> Cell {
+        let s = if let Some(h) = self.options.human_readable {
             to_magnitude_and_suffix(size.into(), SuffixType::HumanReadable(h))
         } else {
             let BlockSize::Bytes(d) = self.options.block_size;
             (size as f64 / d as f64).ceil().to_string()
-        }
+        };
+        Cell::from_ascii_string(s)
     }
 
     /// Get a string giving the scaled version of the input number.
     ///
     /// The scaling factor is defined in the `options` field.
-    fn scaled_inodes(&self, size: u128) -> String {
-        if let Some(h) = self.options.human_readable {
+    fn scaled_inodes(&self, size: u128) -> Cell {
+        let s = if let Some(h) = self.options.human_readable {
             to_magnitude_and_suffix(size, SuffixType::HumanReadable(h))
         } else {
             size.to_string()
-        }
+        };
+        Cell::from_ascii_string(s)
     }
 
     /// Convert a float between 0 and 1 into a percentage string.
     ///
     /// If `None`, return the string `"-"` instead.
-    fn percentage(fraction: Option<f64>) -> String {
-        match fraction {
+    fn percentage(fraction: Option<f64>) -> Cell {
+        let s = match fraction {
             None => "-".to_string(),
             Some(x) => format!("{:.0}%", (100.0 * x).ceil()),
-        }
+        };
+        Cell::from_ascii_string(s)
     }
 
     /// Returns formatted row data.
-    fn get_values(&self) -> Vec<String> {
-        let mut strings = Vec::new();
+    fn get_cells(&self) -> Vec<Cell> {
+        let mut cells = Vec::new();
 
         for column in &self.options.columns {
-            let string = match column {
+            let cell = match column {
                 Column::Source => {
                     if self.is_total_row {
-                        get_message("df-total")
+                        Cell::from_string(get_message("df-total"))
                     } else {
-                        self.row.fs_device.to_string()
+                        Cell::from_string(&self.row.fs_device)
                     }
                 }
                 Column::Size => self.scaled_bytes(self.row.bytes),
@@ -275,9 +315,9 @@ impl<'a> RowFormatter<'a> {
 
                 Column::Target => {
                     if self.is_total_row && !self.options.columns.contains(&Column::Source) {
-                        get_message("df-total")
+                        Cell::from_string(get_message("df-total"))
                     } else {
-                        self.row.fs_mount.to_string_lossy().into_owned()
+                        Cell::from_os_string(&self.row.fs_mount)
                     }
                 }
                 Column::Itotal => self.scaled_inodes(self.row.inodes),
@@ -288,17 +328,17 @@ impl<'a> RowFormatter<'a> {
                     .row
                     .file
                     .as_ref()
-                    .map_or("-".into(), |s| s.to_string_lossy().into_owned()),
+                    .map_or(Cell::from_ascii_string("-"), Cell::from_os_string),
 
-                Column::Fstype => self.row.fs_type.to_string(),
+                Column::Fstype => Cell::from_string(&self.row.fs_type),
                 #[cfg(target_os = "macos")]
                 Column::Capacity => Self::percentage(self.row.bytes_capacity),
             };
 
-            strings.push(string);
+            cells.push(cell);
         }
 
-        strings
+        cells
     }
 }
 
@@ -375,7 +415,7 @@ impl Header {
 /// The output table.
 pub(crate) struct Table {
     alignments: Vec<Alignment>,
-    rows: Vec<Vec<String>>,
+    rows: Vec<Vec<Cell>>,
     widths: Vec<usize>,
 }
 
@@ -389,7 +429,7 @@ impl Table {
             .map(|(i, col)| Column::min_width(col).max(headers[i].len()))
             .collect();
 
-        let mut rows = vec![headers];
+        let mut rows = vec![headers.iter().map(Cell::from_string).collect()];
 
         // The running total of filesystem sizes and usage.
         //
@@ -404,7 +444,7 @@ impl Table {
             if options.show_all_fs || filesystem.usage.blocks > 0 {
                 let row = Row::from(filesystem);
                 let fmt = RowFormatter::new(&row, options, false);
-                let values = fmt.get_values();
+                let values = fmt.get_cells();
                 total += row;
 
                 rows.push(values);
@@ -413,15 +453,15 @@ impl Table {
 
         if options.show_total {
             let total_row = RowFormatter::new(&total, options, true);
-            rows.push(total_row.get_values());
+            rows.push(total_row.get_cells());
         }
 
         // extend the column widths (in chars) for long values in rows
         // do it here, after total row was added to the list of rows
         for row in &rows {
             for (i, value) in row.iter().enumerate() {
-                if UnicodeWidthStr::width(value.as_str()) > widths[i] {
-                    widths[i] = UnicodeWidthStr::width(value.as_str());
+                if value.width > widths[i] {
+                    widths[i] = value.width;
                 }
             }
         }
@@ -450,6 +490,8 @@ impl fmt::Display for Table {
         while let Some(row) = row_iter.next() {
             let mut col_iter = row.iter().enumerate().peekable();
             while let Some((i, elem)) = col_iter.next() {
+                // TODO: Fix this, and print the bytes directly.
+                let elem = String::from_utf8(elem.bytes.clone()).unwrap_or("meh?".to_string());
                 let is_last_col = col_iter.peek().is_none();
 
                 match self.alignments.get(i) {
@@ -490,7 +532,7 @@ mod tests {
 
     use crate::blocks::HumanReadable;
     use crate::columns::Column;
-    use crate::table::{Header, HeaderMode, Row, RowFormatter, Table};
+    use crate::table::{Cell, Header, HeaderMode, Row, RowFormatter, Table};
     use crate::{BlockSize, Options};
 
     fn init() {
@@ -674,6 +716,13 @@ mod tests {
         );
     }
 
+    fn compare_cell_content(cells: Vec<Cell>, expected: Vec<&str>) -> bool {
+        cells
+            .into_iter()
+            .zip(expected)
+            .all(|(c, s)| c.bytes == s.as_bytes())
+    }
+
     #[test]
     fn test_row_formatter() {
         init();
@@ -693,10 +742,10 @@ mod tests {
             ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options, false);
-        assert_eq!(
-            fmt.get_values(),
+        assert!(compare_cell_content(
+            fmt.get_cells(),
             vec!("my_device", "100", "25", "75", "25%", "my_mount")
-        );
+        ));
     }
 
     #[test]
@@ -720,10 +769,10 @@ mod tests {
             ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options, false);
-        assert_eq!(
-            fmt.get_values(),
+        assert!(compare_cell_content(
+            fmt.get_cells(),
             vec!("my_device", "my_type", "100", "25", "75", "25%", "my_mount")
-        );
+        ));
     }
 
     #[test]
@@ -746,10 +795,10 @@ mod tests {
             ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options, false);
-        assert_eq!(
-            fmt.get_values(),
+        assert!(compare_cell_content(
+            fmt.get_cells(),
             vec!("my_device", "10", "2", "8", "20%", "my_mount")
-        );
+        ));
     }
 
     #[test]
@@ -766,7 +815,7 @@ mod tests {
             ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options, false);
-        assert_eq!(fmt.get_values(), vec!("1", "10"));
+        assert!(compare_cell_content(fmt.get_cells(), vec!("1", "10")));
     }
 
     #[test]
@@ -790,10 +839,10 @@ mod tests {
             ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options, false);
-        assert_eq!(
-            fmt.get_values(),
+        assert!(compare_cell_content(
+            fmt.get_cells(),
             vec!("my_device", "my_type", "4k", "1k", "3k", "25%", "my_mount")
-        );
+        ));
     }
 
     #[test]
@@ -817,10 +866,10 @@ mod tests {
             ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options, false);
-        assert_eq!(
-            fmt.get_values(),
+        assert!(compare_cell_content(
+            fmt.get_cells(),
             vec!("my_device", "my_type", "4K", "1K", "3K", "25%", "my_mount")
-        );
+        ));
     }
 
     #[test]
@@ -835,13 +884,13 @@ mod tests {
             ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options, false);
-        assert_eq!(fmt.get_values(), vec!("26%"));
+        assert!(compare_cell_content(fmt.get_cells(), vec!("26%")));
     }
 
     #[test]
     fn test_row_formatter_with_round_up_byte_values() {
         init();
-        fn get_formatted_values(bytes: u64, bytes_used: u64, bytes_avail: u64) -> Vec<String> {
+        fn get_formatted_values(bytes: u64, bytes_used: u64, bytes_avail: u64) -> Vec<Cell> {
             let options = Options {
                 block_size: BlockSize::Bytes(1000),
                 columns: vec![Column::Size, Column::Used, Column::Avail],
@@ -854,13 +903,25 @@ mod tests {
                 bytes_avail,
                 ..Default::default()
             };
-            RowFormatter::new(&row, &options, false).get_values()
+            RowFormatter::new(&row, &options, false).get_cells()
         }
 
-        assert_eq!(get_formatted_values(100, 100, 0), vec!("1", "1", "0"));
-        assert_eq!(get_formatted_values(100, 99, 1), vec!("1", "1", "1"));
-        assert_eq!(get_formatted_values(1000, 1000, 0), vec!("1", "1", "0"));
-        assert_eq!(get_formatted_values(1001, 1000, 1), vec!("2", "1", "1"));
+        assert!(compare_cell_content(
+            get_formatted_values(100, 100, 0),
+            vec!("1", "1", "0")
+        ));
+        assert!(compare_cell_content(
+            get_formatted_values(100, 99, 1),
+            vec!("1", "1", "1")
+        ));
+        assert!(compare_cell_content(
+            get_formatted_values(1000, 1000, 0),
+            vec!("1", "1", "0")
+        ));
+        assert!(compare_cell_content(
+            get_formatted_values(1001, 1000, 1),
+            vec!("2", "1", "1")
+        ));
     }
 
     #[test]
