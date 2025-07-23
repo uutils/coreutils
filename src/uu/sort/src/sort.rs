@@ -42,7 +42,6 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
 use thiserror::Error;
-use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError, set_exit_code};
@@ -57,7 +56,6 @@ use uucore::{format_usage, show_error};
 use crate::tmp_dir::TmpDirWrapper;
 
 use uucore::locale::{get_message, get_message_with_args};
-
 mod options {
     pub mod modes {
         pub const SORT: &str = "sort";
@@ -112,10 +110,10 @@ mod options {
     pub const FILES: &str = "files";
 }
 
-const DECIMAL_PT: char = '.';
+const DECIMAL_PT: u8 = b'.';
 
-const NEGATIVE: char = '-';
-const POSITIVE: char = '+';
+const NEGATIVE: &u8 = &b'-';
+const POSITIVE: &u8 = &b'+';
 
 // Choosing a higher buffer size does not result in performance improvements
 // (at least not on my machine). TODO: In the future, we should also take the amount of
@@ -288,7 +286,7 @@ pub struct GlobalSettings {
     check_silent: bool,
     salt: Option<[u8; 16]>,
     selectors: Vec<FieldSelector>,
-    separator: Option<char>,
+    separator: Option<u8>,
     threads: String,
     line_ending: LineEnding,
     buffer_size: usize,
@@ -481,15 +479,15 @@ impl Default for KeySettings {
 }
 enum Selection<'a> {
     AsBigDecimal(GeneralBigDecimalParseResult),
-    WithNumInfo(&'a str, NumInfo),
-    Str(&'a str),
+    WithNumInfo(&'a [u8], NumInfo),
+    Str(&'a [u8]),
 }
 
 type Field = Range<usize>;
 
 #[derive(Clone, Debug)]
 pub struct Line<'a> {
-    line: &'a str,
+    line: &'a [u8],
     index: usize,
 }
 
@@ -499,7 +497,7 @@ impl<'a> Line<'a> {
     /// If additional data is needed for sorting it is added to `line_data`.
     /// `token_buffer` allows to reuse the allocation for tokens.
     fn create(
-        line: &'a str,
+        line: &'a [u8],
         index: usize,
         line_data: &mut LineData<'a>,
         token_buffer: &mut Vec<Field>,
@@ -511,9 +509,10 @@ impl<'a> Line<'a> {
         }
         if settings.mode == SortMode::Numeric {
             // exclude inf, nan, scientific notation
-            let line_num_float = (!line.contains(char::is_alphabetic))
-                .then(|| line.parse::<f64>().ok())
-                .flatten();
+            let line_num_float = (!line.iter().any(u8::is_ascii_alphabetic))
+                .then(|| std::str::from_utf8(line).ok())
+                .flatten()
+                .and_then(|s| s.parse::<f64>().ok());
             line_data.line_num_floats.push(line_num_float);
         }
         for (selector, selection) in settings
@@ -541,7 +540,7 @@ impl<'a> Line<'a> {
         if settings.debug {
             self.print_debug(settings, writer)?;
         } else {
-            writer.write_all(self.line.as_bytes())?;
+            writer.write_all(self.line)?;
             writer.write_all(&[settings.line_ending.into()])?;
         }
         Ok(())
@@ -558,8 +557,15 @@ impl<'a> Line<'a> {
         // which are not a performance problem in any case. Therefore there aren't any special performance
         // optimizations here.
 
-        let line = self.line.replace('\t', ">");
-        writeln!(writer, "{line}")?;
+        let line = self
+            .line
+            .iter()
+            .copied()
+            .map(|c| if c == b'\t' { b'>' } else { c })
+            .collect::<Vec<_>>();
+
+        writer.write_all(&line)?;
+        writeln!(writer)?;
 
         let mut fields = vec![];
         tokenize(self.line, settings.separator, &mut fields);
@@ -569,7 +575,7 @@ impl<'a> Line<'a> {
                 SortMode::Numeric | SortMode::HumanNumeric => {
                     // find out which range is used for numeric comparisons
                     let (_, num_range) = NumInfo::parse(
-                        &self.line[selection.clone()].as_bytes(),
+                        &self.line[selection.clone()],
                         &NumInfoParseSettings {
                             accept_si_units: selector.settings.mode == SortMode::HumanNumeric,
                             ..Default::default()
@@ -585,23 +591,26 @@ impl<'a> Line<'a> {
                         // This was not a valid number.
                         // Report no match at the first non-whitespace character.
                         let leading_whitespace = self.line[selection.clone()]
-                            .find(|c: char| !c.is_whitespace())
+                            .iter()
+                            .position(|c| !c.is_ascii_whitespace())
                             .unwrap_or(0);
                         selection.start += leading_whitespace;
                         selection.end += leading_whitespace;
                     } else {
                         // include a trailing si unit
-                        if selector.settings.mode == SortMode::HumanNumeric
-                            && self.line[selection.end..initial_selection.end].starts_with(
-                                &['k', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y', 'R', 'Q'][..],
-                            )
-                        {
-                            selection.end += 1;
+                        if selector.settings.mode == SortMode::HumanNumeric {
+                            if let Some(
+                                b'k' | b'K' | b'M' | b'G' | b'T' | b'P' | b'E' | b'Z' | b'Y' | b'R'
+                                | b'Q',
+                            ) = self.line[selection.end..initial_selection.end].first()
+                            {
+                                selection.end += 1;
+                            }
                         }
 
                         // include leading zeroes, a leading minus or a leading decimal point
-                        while self.line[initial_selection.start..selection.start]
-                            .ends_with(&['-', '0', '.'][..])
+                        while let Some(b'-' | b'0' | b'.') =
+                            self.line[initial_selection.start..selection.start].last()
                         {
                             selection.start -= 1;
                         }
@@ -617,7 +626,7 @@ impl<'a> Line<'a> {
                     selection.end = selection.start + leading.len();
                 }
                 SortMode::Month => {
-                    let initial_selection = &self.line.as_bytes()[selection.clone()];
+                    let initial_selection = &self.line[selection.clone()];
 
                     let mut month_chars = initial_selection
                         .iter()
@@ -647,20 +656,14 @@ impl<'a> Line<'a> {
                 _ => {}
             }
 
-            write!(
-                writer,
-                "{}",
-                " ".repeat(UnicodeWidthStr::width(&line[..selection.start]))
-            )?;
+            let select = &line[..selection.start];
+            write!(writer, "{}", " ".repeat(select.len()))?;
 
             if selection.is_empty() {
                 writeln!(writer, "{}", get_message("sort-error-no-match-for-key"))?;
             } else {
-                writeln!(
-                    writer,
-                    "{}",
-                    "_".repeat(UnicodeWidthStr::width(&line[selection]))
-                )?;
+                let select = &line[selection];
+                writeln!(writer, "{}", "_".repeat(select.len()))?;
             }
         }
 
@@ -681,11 +684,7 @@ impl<'a> Line<'a> {
             if self.line.is_empty() {
                 writeln!(writer, "{}", get_message("sort-error-no-match-for-key"))?;
             } else {
-                writeln!(
-                    writer,
-                    "{}",
-                    "_".repeat(UnicodeWidthStr::width(line.as_str()))
-                )?;
+                writeln!(writer, "{}", "_".repeat(self.line.len()))?;
             }
         }
         Ok(())
@@ -693,7 +692,7 @@ impl<'a> Line<'a> {
 }
 
 /// Tokenize a line into fields. The result is stored into `token_buffer`.
-fn tokenize(line: &str, separator: Option<char>, token_buffer: &mut Vec<Field>) {
+fn tokenize(line: &[u8], separator: Option<u8>, token_buffer: &mut Vec<Field>) {
     assert!(token_buffer.is_empty());
     if let Some(separator) = separator {
         tokenize_with_separator(line, separator, token_buffer);
@@ -705,12 +704,12 @@ fn tokenize(line: &str, separator: Option<char>, token_buffer: &mut Vec<Field>) 
 /// By default fields are separated by the first whitespace after non-whitespace.
 /// Whitespace is included in fields at the start.
 /// The result is stored into `token_buffer`.
-fn tokenize_default(line: &str, token_buffer: &mut Vec<Field>) {
+fn tokenize_default(line: &[u8], token_buffer: &mut Vec<Field>) {
     token_buffer.push(0..0);
     // pretend that there was whitespace in front of the line
     let mut previous_was_whitespace = true;
-    for (idx, char) in line.char_indices() {
-        if char.is_whitespace() {
+    for (idx, char) in line.iter().enumerate() {
+        if char.is_ascii_whitespace() {
             if !previous_was_whitespace {
                 token_buffer.last_mut().unwrap().end = idx;
                 token_buffer.push(idx..0);
@@ -725,10 +724,11 @@ fn tokenize_default(line: &str, token_buffer: &mut Vec<Field>) {
 
 /// Split between separators. These separators are not included in fields.
 /// The result is stored into `token_buffer`.
-fn tokenize_with_separator(line: &str, separator: char, token_buffer: &mut Vec<Field>) {
+fn tokenize_with_separator(line: &[u8], separator: u8, token_buffer: &mut Vec<Field>) {
     let separator_indices = line
-        .char_indices()
-        .filter_map(|(i, c)| if c == separator { Some(i) } else { None });
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &c)| if c == separator { Some(i) } else { None });
     let mut start = 0;
     for sep_idx in separator_indices {
         token_buffer.push(start..sep_idx);
@@ -935,38 +935,38 @@ impl FieldSelector {
 
     /// Get the selection that corresponds to this selector for the line.
     /// If `needs_fields` returned false, tokens may be empty.
-    fn get_selection<'a>(&self, line: &'a str, tokens: &[Field]) -> Selection<'a> {
+    fn get_selection<'a>(&self, line: &'a [u8], tokens: &[Field]) -> Selection<'a> {
         // `get_range` expects `None` when we don't need tokens and would get confused by an empty vector.
         let tokens = if self.needs_tokens {
             Some(tokens)
         } else {
             None
         };
-        let mut range = &line[self.get_range(line, tokens)];
+        let mut range_str = &line[self.get_range(line, tokens)];
         if self.settings.mode == SortMode::Numeric || self.settings.mode == SortMode::HumanNumeric {
             // Parse NumInfo for this number.
             let (info, num_range) = NumInfo::parse(
-                range.as_bytes(),
+                range_str,
                 &NumInfoParseSettings {
                     accept_si_units: self.settings.mode == SortMode::HumanNumeric,
                     ..Default::default()
                 },
             );
             // Shorten the range to what we need to pass to numeric_str_cmp later.
-            range = &range[num_range];
-            Selection::WithNumInfo(range, info)
+            range_str = &range_str[num_range];
+            Selection::WithNumInfo(range_str, info)
         } else if self.settings.mode == SortMode::GeneralNumeric {
             // Parse this number as BigDecimal, as this is the requirement for general numeric sorting.
-            Selection::AsBigDecimal(general_bd_parse(&range[get_leading_gen(range)]))
+            Selection::AsBigDecimal(general_bd_parse(&range_str[get_leading_gen(range_str)]))
         } else {
             // This is not a numeric sort, so we don't need a NumCache.
-            Selection::Str(range)
+            Selection::Str(range_str)
         }
     }
 
     /// Look up the range in the line that corresponds to this selector.
     /// If `needs_fields` returned false, tokens must be None.
-    fn get_range(&self, line: &str, tokens: Option<&[Field]>) -> Range<usize> {
+    fn get_range(&self, line: &[u8], tokens: Option<&[Field]>) -> Range<usize> {
         enum Resolution {
             // The start index of the resolved character, inclusive
             StartOfChar(usize),
@@ -981,7 +981,7 @@ impl FieldSelector {
 
         /// Get the index for this line given the [`KeyPosition`]
         fn resolve_index(
-            line: &str,
+            line: &[u8],
             tokens: Option<&[Field]>,
             position: &KeyPosition,
         ) -> Resolution {
@@ -1005,13 +1005,15 @@ impl FieldSelector {
                 // strip blanks if needed
                 if position.ignore_blanks {
                     idx += line[idx..]
-                        .char_indices()
-                        .find(|(_, c)| !c.is_whitespace())
+                        .iter()
+                        .enumerate()
+                        .find(|(_, c)| !c.is_ascii_whitespace())
                         .map_or(line[idx..].len(), |(idx, _)| idx);
                 }
                 // apply the character index
                 idx += line[idx..]
-                    .char_indices()
+                    .iter()
+                    .enumerate()
                     .nth(position.char - 1)
                     .map_or(line[idx..].len(), |(idx, _)| idx);
                 if idx >= line.len() {
@@ -1029,7 +1031,7 @@ impl FieldSelector {
                 let mut range = match to {
                     Some(Resolution::StartOfChar(mut to)) => {
                         // We need to include the character at `to`.
-                        to += line[to..].chars().next().map_or(1, char::len_utf8);
+                        to += 1;
                         from..to
                     }
                     Some(Resolution::EndOfChar(to)) => from..to,
@@ -1341,7 +1343,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // This rejects non-ASCII codepoints, but perhaps we don't have to.
         // On the other hand GNU accepts any single byte, valid unicode or not.
         // (Supporting multi-byte chars would require changes in tokenize_with_separator().)
-        if separator.len() != 1 {
+        let &[sep_char] = separator.as_bytes() else {
             return Err(UUsageError::new(
                 2,
                 get_message_with_args(
@@ -1349,8 +1351,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     HashMap::from([("separator".to_string(), separator.quote().to_string())]),
                 ),
             ));
-        }
-        settings.separator = Some(separator.chars().next().unwrap());
+        };
+        settings.separator = Some(sep_char);
     }
 
     if let Some(values) = matches.get_many::<String>(options::KEY) {
@@ -1723,8 +1725,8 @@ fn compare_by<'a>(
             SortMode::Random => {
                 // check if the two strings are equal
                 if custom_str_cmp(
-                    a_str.as_bytes(),
-                    b_str.as_bytes(),
+                    a_str,
+                    b_str,
                     settings.ignore_non_printing,
                     settings.dictionary_order,
                     settings.ignore_case,
@@ -1733,7 +1735,7 @@ fn compare_by<'a>(
                     Ordering::Equal
                 } else {
                     // Only if they are not equal compare by the hash
-                    random_shuffle(a_str.as_bytes(), b_str.as_bytes(), &global_settings.salt.unwrap())
+                    random_shuffle(a_str, b_str, &global_settings.salt.unwrap())
                 }
             }
             SortMode::Numeric => {
@@ -1742,10 +1744,7 @@ fn compare_by<'a>(
                 let b_num_info = &b_line_data.num_infos
                     [b.index * global_settings.precomputed.num_infos_per_line + num_info_index];
                 num_info_index += 1;
-                numeric_str_cmp(
-                    (a_str.as_bytes(), a_num_info),
-                    (b_str.as_bytes(), b_num_info),
-                )
+                numeric_str_cmp((a_str, a_num_info), (b_str, b_num_info))
             }
             SortMode::HumanNumeric => {
                 let a_num_info = &a_line_data.num_infos
@@ -1753,10 +1752,7 @@ fn compare_by<'a>(
                 let b_num_info = &b_line_data.num_infos
                     [b.index * global_settings.precomputed.num_infos_per_line + num_info_index];
                 num_info_index += 1;
-                human_numeric_str_cmp(
-                    (a_str.as_bytes(), a_num_info),
-                    (b_str.as_bytes(), b_num_info),
-                )
+                human_numeric_str_cmp((a_str, a_num_info), (b_str, b_num_info))
             }
             SortMode::GeneralNumeric => {
                 let a_float = &a_line_data.parsed_floats
@@ -1766,11 +1762,11 @@ fn compare_by<'a>(
                 parsed_float_index += 1;
                 general_numeric_compare(a_float, b_float)
             }
-            SortMode::Month => month_compare(a_str.as_bytes(), b_str.as_bytes()),
-            SortMode::Version => version_cmp(a_str.as_bytes(), b_str.as_bytes()),
+            SortMode::Month => month_compare(a_str, b_str),
+            SortMode::Version => version_cmp(a_str, b_str),
             SortMode::Default => custom_str_cmp(
-                a_str.as_bytes(),
-                b_str.as_bytes(),
+                a_str,
+                b_str,
                 settings.ignore_non_printing,
                 settings.dictionary_order,
                 settings.ignore_case,
@@ -1803,20 +1799,21 @@ fn compare_by<'a>(
 // scientific notation, so we strip those lines only after the end of the following numeric string.
 // For example, 5e10KFD would be 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
 #[allow(clippy::cognitive_complexity)]
-fn get_leading_gen(input: &str) -> Range<usize> {
-    let trimmed = input.trim_start();
-    let leading_whitespace_len = input.len() - trimmed.len();
+fn get_leading_gen(inp: &[u8]) -> Range<usize> {
+    let trimmed = inp.trim_ascii_start();
+    let leading_whitespace_len = inp.len() - trimmed.len();
 
     // check for inf, -inf and nan
-    for allowed_prefix in ["inf", "-inf", "nan"] {
-        if trimmed.is_char_boundary(allowed_prefix.len())
+    const ALLOWED_PREFIXES: &[&[u8]] = &[b"inf", b"-inf", b"nan"];
+    for &allowed_prefix in ALLOWED_PREFIXES {
+        if trimmed.len() >= allowed_prefix.len()
             && trimmed[..allowed_prefix.len()].eq_ignore_ascii_case(allowed_prefix)
         {
             return leading_whitespace_len..(leading_whitespace_len + allowed_prefix.len());
         }
     }
     // Make this iter peekable to see if next char is numeric
-    let mut char_indices = itertools::peek_nth(trimmed.char_indices());
+    let mut char_indices = itertools::peek_nth(trimmed.iter().enumerate());
 
     let first = char_indices.peek();
 
@@ -1827,13 +1824,13 @@ fn get_leading_gen(input: &str) -> Range<usize> {
     let mut had_e_notation = false;
     let mut had_decimal_pt = false;
     let mut had_hex_notation: bool = false;
-    while let Some((idx, c)) = char_indices.next() {
+    while let Some((idx, &c)) = char_indices.next() {
         if had_hex_notation && c.is_ascii_hexdigit() {
             continue;
         }
 
         if c.is_ascii_digit() {
-            if c == '0' && matches!(char_indices.peek(), Some((_, 'x' | 'X'))) {
+            if c == b'0' && matches!(char_indices.peek(), Some((_, b'x' | b'X'))) {
                 had_hex_notation = true;
                 char_indices.next();
             }
@@ -1844,12 +1841,12 @@ fn get_leading_gen(input: &str) -> Range<usize> {
             had_decimal_pt = true;
             continue;
         }
-        let is_decimal_e = (c == 'e' || c == 'E') && !had_hex_notation;
-        let is_hex_e = (c == 'p' || c == 'P') && had_hex_notation;
+        let is_decimal_e = (c == b'e' || c == b'E') && !had_hex_notation;
+        let is_hex_e = (c == b'p' || c == b'P') && had_hex_notation;
         if (is_decimal_e || is_hex_e) && !had_e_notation {
             // we can only consume the 'e' if what follow is either a digit, or a sign followed by a digit.
-            if let Some(&(_, next_char)) = char_indices.peek() {
-                if (next_char == '+' || next_char == '-')
+            if let Some(&(_, &next_char)) = char_indices.peek() {
+                if (next_char == b'+' || next_char == b'-')
                     && matches!(
                         char_indices.peek_nth(2),
                         Some((_, c)) if c.is_ascii_digit()
@@ -1868,7 +1865,7 @@ fn get_leading_gen(input: &str) -> Range<usize> {
         }
         return leading_whitespace_len..(leading_whitespace_len + idx);
     }
-    leading_whitespace_len..input.len()
+    leading_whitespace_len..inp.len()
 }
 
 #[derive(Clone, PartialEq, PartialOrd, Debug)]
@@ -1883,7 +1880,12 @@ pub enum GeneralBigDecimalParseResult {
 /// Parse the beginning string into a [`GeneralBigDecimalParseResult`].
 /// Using a [`GeneralBigDecimalParseResult`] instead of [`ExtendedBigDecimal`] is necessary to correctly order floats.
 #[inline(always)]
-fn general_bd_parse(a: &str) -> GeneralBigDecimalParseResult {
+fn general_bd_parse(a: &[u8]) -> GeneralBigDecimalParseResult {
+    // The string should be valid ASCII to be parsed.
+    let Ok(a) = std::str::from_utf8(a) else {
+        return GeneralBigDecimalParseResult::Invalid;
+    };
+
     // Parse digits, and fold in recoverable errors
     let ebd = match ExtendedBigDecimal::extended_parse(a) {
         Err(ExtendedParserError::NotNumeric) => return GeneralBigDecimalParseResult::Invalid,
@@ -2070,7 +2072,7 @@ mod tests {
 
     use super::*;
 
-    fn tokenize_helper(line: &str, separator: Option<char>) -> Vec<Field> {
+    fn tokenize_helper(line: &[u8], separator: Option<u8>) -> Vec<Field> {
         let mut buffer = vec![];
         tokenize(line, separator, &mut buffer);
         buffer
@@ -2118,13 +2120,13 @@ mod tests {
 
     #[test]
     fn test_tokenize_fields() {
-        let line = "foo bar b    x";
+        let line = b"foo bar b    x";
         assert_eq!(tokenize_helper(line, None), vec![0..3, 3..7, 7..9, 9..14]);
     }
 
     #[test]
     fn test_tokenize_fields_leading_whitespace() {
-        let line = "    foo bar b    x";
+        let line = b"    foo bar b    x";
         assert_eq!(
             tokenize_helper(line, None),
             vec![0..7, 7..11, 11..13, 13..18]
@@ -2133,21 +2135,21 @@ mod tests {
 
     #[test]
     fn test_tokenize_fields_custom_separator() {
-        let line = "aaa foo bar b    x";
+        let line = b"aaa foo bar b    x";
         assert_eq!(
-            tokenize_helper(line, Some('a')),
+            tokenize_helper(line, Some(b'a')),
             vec![0..0, 1..1, 2..2, 3..9, 10..18]
         );
     }
 
     #[test]
     fn test_tokenize_fields_trailing_custom_separator() {
-        let line = "a";
-        assert_eq!(tokenize_helper(line, Some('a')), vec![0..0]);
-        let line = "aa";
-        assert_eq!(tokenize_helper(line, Some('a')), vec![0..0, 1..1]);
-        let line = "..a..a";
-        assert_eq!(tokenize_helper(line, Some('a')), vec![0..2, 3..5]);
+        let line = b"a";
+        assert_eq!(tokenize_helper(line, Some(b'a')), vec![0..0]);
+        let line = b"aa";
+        assert_eq!(tokenize_helper(line, Some(b'a')), vec![0..0, 1..1]);
+        let line = b"..a..a";
+        assert_eq!(tokenize_helper(line, Some(b'a')), vec![0..2, 3..5]);
     }
 
     #[test]
