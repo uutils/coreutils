@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit
 
 mod check;
 mod chunks;
@@ -1834,15 +1834,27 @@ fn get_leading_gen(input: &str) -> Range<usize> {
 
     let mut had_e_notation = false;
     let mut had_decimal_pt = false;
+    let mut had_hex_notation: bool = false;
     while let Some((idx, c)) = char_indices.next() {
-        if c.is_ascii_digit() {
+        if had_hex_notation && c.is_ascii_hexdigit() {
             continue;
         }
+
+        if c.is_ascii_digit() {
+            if c == '0' && matches!(char_indices.peek(), Some((_, 'x' | 'X'))) {
+                had_hex_notation = true;
+                char_indices.next();
+            }
+            continue;
+        }
+
         if c == DECIMAL_PT && !had_decimal_pt && !had_e_notation {
             had_decimal_pt = true;
             continue;
         }
-        if (c == 'e' || c == 'E') && !had_e_notation {
+        let is_decimal_e = (c == 'e' || c == 'E') && !had_hex_notation;
+        let is_hex_e = (c == 'p' || c == 'P') && had_hex_notation;
+        if (is_decimal_e || is_hex_e) && !had_e_notation {
             // we can only consume the 'e' if what follow is either a digit, or a sign followed by a digit.
             if let Some(&(_, next_char)) = char_indices.peek() {
                 if (next_char == '+' || next_char == '-')
