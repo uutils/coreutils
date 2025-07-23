@@ -4,8 +4,6 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) reallylongexecutable nbaz
 
-#[cfg(any(unix, target_os = "redox"))]
-use std::ffi::OsStr;
 use uutests::new_ucmd;
 
 #[test]
@@ -139,19 +137,24 @@ fn test_too_many_args_output() {
 }
 
 #[cfg(any(unix, target_os = "redox"))]
-fn test_invalid_utf8_args(os_str: &OsStr) {
-    let test_vec = vec![os_str.to_os_string()];
-    new_ucmd!().args(&test_vec).succeeds().stdout_is("fo�o\n");
-}
-
-#[cfg(any(unix, target_os = "redox"))]
 #[test]
-fn invalid_utf8_args_unix() {
-    use std::os::unix::ffi::OsStrExt;
+fn test_invalid_utf8_args() {
+    let param = uucore::os_str_from_bytes(b"/tmp/some-\xc0-file.k\xf3")
+        .expect("Only unix platforms can test non-unicode names");
 
-    let source = [0x66, 0x6f, 0x80, 0x6f];
-    let os_str = OsStr::from_bytes(&source[..]);
-    test_invalid_utf8_args(os_str);
+    new_ucmd!()
+        .arg(&param)
+        .succeeds()
+        .stdout_is_bytes(b"some-\xc0-file.k\xf3\n");
+
+    let suffix = uucore::os_str_from_bytes(b".k\xf3")
+        .expect("Only unix platforms can test non-unicode names");
+
+    new_ucmd!()
+        .arg(&param)
+        .arg(&suffix)
+        .succeeds()
+        .stdout_is_bytes(b"some-\xc0-file\n");
 }
 
 #[test]
