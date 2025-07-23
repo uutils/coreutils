@@ -184,6 +184,13 @@ fn test_triple_slash() {
 }
 
 #[test]
+fn test_trailing_dot() {
+    new_ucmd!().arg("/.").succeeds().stdout_is(".\n");
+    new_ucmd!().arg("hello/.").succeeds().stdout_is(".\n");
+    new_ucmd!().arg("/foo/bar/.").succeeds().stdout_is(".\n");
+}
+
+#[test]
 fn test_simple_format() {
     new_ucmd!().args(&["a-a", "-a"]).succeeds().stdout_is("a\n");
     new_ucmd!()

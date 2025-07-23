@@ -119,6 +119,11 @@ pub fn uu_app() -> Command {
 }
 
 fn basename(fullname: &str, suffix: &str) -> String {
+    // Handle special case where path ends with /.
+    if fullname.ends_with("/.") {
+        return ".".to_string();
+    }
+
     // Convert to path buffer and get last path component
     let pb = PathBuf::from(fullname);
 
