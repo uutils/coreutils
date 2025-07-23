@@ -569,7 +569,7 @@ impl<'a> Line<'a> {
                 SortMode::Numeric | SortMode::HumanNumeric => {
                     // find out which range is used for numeric comparisons
                     let (_, num_range) = NumInfo::parse(
-                        &self.line[selection.clone()],
+                        &self.line[selection.clone()].as_bytes(),
                         &NumInfoParseSettings {
                             accept_si_units: selector.settings.mode == SortMode::HumanNumeric,
                             ..Default::default()
@@ -617,11 +617,12 @@ impl<'a> Line<'a> {
                     selection.end = selection.start + leading.len();
                 }
                 SortMode::Month => {
-                    let initial_selection = &self.line[selection.clone()];
+                    let initial_selection = &self.line.as_bytes()[selection.clone()];
 
                     let mut month_chars = initial_selection
-                        .char_indices()
-                        .skip_while(|(_, c)| c.is_whitespace());
+                        .iter()
+                        .enumerate()
+                        .skip_while(|(_, c)| c.is_ascii_whitespace());
 
                     let month = if month_parse(initial_selection) == Month::Unknown {
                         // We failed to parse a month, which is equivalent to matching nothing.
@@ -945,7 +946,7 @@ impl FieldSelector {
         if self.settings.mode == SortMode::Numeric || self.settings.mode == SortMode::HumanNumeric {
             // Parse NumInfo for this number.
             let (info, num_range) = NumInfo::parse(
-                range,
+                range.as_bytes(),
                 &NumInfoParseSettings {
                     accept_si_units: self.settings.mode == SortMode::HumanNumeric,
                     ..Default::default()
@@ -1257,7 +1258,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             Err(e) => {
                 let error_message = if *e.kind() == IntErrorKind::PosOverflow {
-
                     let batch_too_large = get_message_with_args(
                         "sort-batch-size-too-large",
                         HashMap::from([("arg".to_string(), n_merge.quote().to_string())]),
@@ -1723,8 +1723,8 @@ fn compare_by<'a>(
             SortMode::Random => {
                 // check if the two strings are equal
                 if custom_str_cmp(
-                    a_str,
-                    b_str,
+                    a_str.as_bytes(),
+                    b_str.as_bytes(),
                     settings.ignore_non_printing,
                     settings.dictionary_order,
                     settings.ignore_case,
@@ -1733,7 +1733,7 @@ fn compare_by<'a>(
                     Ordering::Equal
                 } else {
                     // Only if they are not equal compare by the hash
-                    random_shuffle(a_str, b_str, &global_settings.salt.unwrap())
+                    random_shuffle(a_str.as_bytes(), b_str.as_bytes(), &global_settings.salt.unwrap())
                 }
             }
             SortMode::Numeric => {
@@ -1742,7 +1742,10 @@ fn compare_by<'a>(
                 let b_num_info = &b_line_data.num_infos
                     [b.index * global_settings.precomputed.num_infos_per_line + num_info_index];
                 num_info_index += 1;
-                numeric_str_cmp((a_str, a_num_info), (b_str, b_num_info))
+                numeric_str_cmp(
+                    (a_str.as_bytes(), a_num_info),
+                    (b_str.as_bytes(), b_num_info),
+                )
             }
             SortMode::HumanNumeric => {
                 let a_num_info = &a_line_data.num_infos
@@ -1750,7 +1753,10 @@ fn compare_by<'a>(
                 let b_num_info = &b_line_data.num_infos
                     [b.index * global_settings.precomputed.num_infos_per_line + num_info_index];
                 num_info_index += 1;
-                human_numeric_str_cmp((a_str, a_num_info), (b_str, b_num_info))
+                human_numeric_str_cmp(
+                    (a_str.as_bytes(), a_num_info),
+                    (b_str.as_bytes(), b_num_info),
+                )
             }
             SortMode::GeneralNumeric => {
                 let a_float = &a_line_data.parsed_floats
@@ -1760,11 +1766,11 @@ fn compare_by<'a>(
                 parsed_float_index += 1;
                 general_numeric_compare(a_float, b_float)
             }
-            SortMode::Month => month_compare(a_str, b_str),
+            SortMode::Month => month_compare(a_str.as_bytes(), b_str.as_bytes()),
             SortMode::Version => version_cmp(a_str.as_bytes(), b_str.as_bytes()),
             SortMode::Default => custom_str_cmp(
-                a_str,
-                b_str,
+                a_str.as_bytes(),
+                b_str.as_bytes(),
                 settings.ignore_non_printing,
                 settings.dictionary_order,
                 settings.ignore_case,
@@ -1919,7 +1925,7 @@ fn get_hash<T: Hash>(t: &T) -> u64 {
     s.finish()
 }
 
-fn random_shuffle(a: &str, b: &str, salt: &[u8]) -> Ordering {
+fn random_shuffle(a: &[u8], b: &[u8], salt: &[u8]) -> Ordering {
     let da = get_hash(&(a, salt));
     let db = get_hash(&(b, salt));
     da.cmp(&db)
@@ -1943,37 +1949,27 @@ enum Month {
 }
 
 /// Parse the beginning string into a Month, returning [`Month::Unknown`] on errors.
-fn month_parse(line: &str) -> Month {
-    let line = line.trim();
+fn month_parse(line: &[u8]) -> Month {
+    let line = line.trim_ascii_start();
 
-    const MONTHS: [(&str, Month); 12] = [
-        ("JAN", Month::January),
-        ("FEB", Month::February),
-        ("MAR", Month::March),
-        ("APR", Month::April),
-        ("MAY", Month::May),
-        ("JUN", Month::June),
-        ("JUL", Month::July),
-        ("AUG", Month::August),
-        ("SEP", Month::September),
-        ("OCT", Month::October),
-        ("NOV", Month::November),
-        ("DEC", Month::December),
-    ];
-
-    for (month_str, month) in &MONTHS {
-        if line.is_char_boundary(month_str.len())
-            && line[..month_str.len()].eq_ignore_ascii_case(month_str)
-        {
-            return *month;
-        }
+    match line.get(..3).map(|x| x.to_ascii_uppercase()).as_deref() {
+        Some(b"JAN") => Month::January,
+        Some(b"FEB") => Month::February,
+        Some(b"MAR") => Month::March,
+        Some(b"APR") => Month::April,
+        Some(b"MAY") => Month::May,
+        Some(b"JUN") => Month::June,
+        Some(b"JUL") => Month::July,
+        Some(b"AUG") => Month::August,
+        Some(b"SEP") => Month::September,
+        Some(b"OCT") => Month::October,
+        Some(b"NOV") => Month::November,
+        Some(b"DEC") => Month::December,
+        _ => Month::Unknown,
     }
-
-    Month::Unknown
 }
 
-fn month_compare(a: &str, b: &str) -> Ordering {
-    #![allow(clippy::comparison_chain)]
+fn month_compare(a: &[u8], b: &[u8]) -> Ordering {
     let ma = month_parse(a);
     let mb = month_parse(b);
 
@@ -2089,8 +2085,8 @@ mod tests {
 
     #[test]
     fn test_random_shuffle() {
-        let a = "Ted";
-        let b = "Ted";
+        let a = b"Ted";
+        let b = b"Ted";
         let c = get_rand_string();
 
         assert_eq!(Ordering::Equal, random_shuffle(a, b, &c));
@@ -2098,8 +2094,8 @@ mod tests {
 
     #[test]
     fn test_month_compare() {
-        let a = "JaN";
-        let b = "OCt";
+        let a = b"JaN";
+        let b = b"OCt";
 
         assert_eq!(Ordering::Less, month_compare(a, b));
     }
@@ -2113,8 +2109,8 @@ mod tests {
 
     #[test]
     fn test_random_compare() {
-        let a = "9";
-        let b = "9";
+        let a = b"9";
+        let b = b"9";
         let c = get_rand_string();
 
         assert_eq!(Ordering::Equal, random_shuffle(a, b, &c));
