@@ -9,6 +9,7 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
 use std::collections::HashMap;
 use std::ffi::OsString;
+use std::io::{Write, stdout};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError};
@@ -73,7 +74,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     //
 
     for path in name_args {
-        print!("{}{line_ending}", basename(path, &suffix));
+        stdout().write_all(&basename(path, &suffix)?)?;
+        print!("{line_ending}");
     }
 
     Ok(())
@@ -120,24 +122,30 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn basename(fullname: &OsString, suffix: &OsString) -> String {
-    // TODO: Remove those 2 lines.
-    let fullname = &fullname.to_string_lossy().to_string();
-    let suffix = &suffix.to_string_lossy().to_string();
+// We return a Vec<u8>. Returning a seemingly more proper `OsString` would
+// require back and forth conversions as we need a &[u8] for printing anyway.
+fn basename(fullname: &OsString, suffix: &OsString) -> UResult<Vec<u8>> {
+    let fullname_bytes = uucore::os_str_as_bytes(fullname)?;
 
     // Handle special case where path ends with /.
-    if fullname.ends_with("/.") {
-        return ".".to_string();
+    if fullname_bytes.ends_with(b"/.") {
+        return Ok(b".".into());
     }
 
+    // Convert to path buffer and get last path component
     let pb = PathBuf::from(fullname);
 
-    pb.components().next_back().map_or_else(String::new, |c| {
-        let name = c.as_os_str().to_str().unwrap();
+    pb.components().next_back().map_or(Ok([].into()), |c| {
+        let name = c.as_os_str();
+        let name_bytes = uucore::os_str_as_bytes(name)?;
         if name == suffix {
-            name.to_string()
+            Ok(name_bytes.into())
         } else {
-            name.strip_suffix(suffix).unwrap_or(name).to_string()
+            let suffix_bytes = uucore::os_str_as_bytes(suffix)?;
+            Ok(name_bytes
+                .strip_suffix(suffix_bytes)
+                .unwrap_or(name_bytes)
+                .into())
         }
     })
 }
