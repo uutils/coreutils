@@ -1018,6 +1018,56 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn test_table_column_width_non_unicode() {
+        init();
+        let bad_unicode_os_str = uucore::os_str_from_bytes(b"/usr/lib/w\xf3l/drivers")
+            .expect("Only unix platforms can test non-unicode names")
+            .to_os_string();
+        let d1 = crate::Filesystem {
+            file: None,
+            mount_info: crate::MountInfo {
+                dev_id: "28".to_string(),
+                dev_name: "none".to_string(),
+                fs_type: "9p".to_string(),
+                mount_dir: bad_unicode_os_str,
+                mount_option: "ro,nosuid,nodev,noatime".to_string(),
+                mount_root: "/".into(),
+                remote: false,
+                dummy: false,
+            },
+            usage: crate::table::FsUsage {
+                blocksize: 4096,
+                blocks: 244_029_695,
+                bfree: 125_085_030,
+                bavail: 125_085_030,
+                bavail_top_bit_set: false,
+                files: 99_999_999_999,
+                ffree: 999_999,
+            },
+        };
+
+        let filesystems = vec![d1];
+
+        let options = Options {
+            show_total: false,
+            columns: vec![Column::Source, Column::Target, Column::Itotal],
+            ..Default::default()
+        };
+
+        let table = Table::new(&options, filesystems.clone());
+        let mut data: Vec<u8> = vec![];
+        table.write_to(&mut data).expect("Write error.");
+        assert_eq!(
+            data,
+            b"Filesystem     Mounted on                Inodes\n\
+              none           /usr/lib/w\xf3l/drivers 99999999999\n",
+            "Comparison failed, lossy data for reference:\n{}\n",
+            String::from_utf8_lossy(&data)
+        );
+    }
+
     #[test]
     fn test_row_accumulation_u64_overflow() {
         init();
