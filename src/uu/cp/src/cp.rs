@@ -1708,20 +1708,30 @@ pub(crate) fn copy_attributes(
 
         let dest_uid = source_metadata.uid();
         let dest_gid = source_metadata.gid();
-        // gnu compatibility: cp doesn't report an error if it fails to set the ownership.
-        let _ = wrap_chown(
-            dest,
-            &dest
-                .symlink_metadata()
-                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?,
-            Some(dest_uid),
-            Some(dest_gid),
-            false,
-            Verbosity {
-                groups_only: false,
-                level: VerbosityLevel::Silent,
-            },
-        );
+        let meta = &dest
+            .symlink_metadata()
+            .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+
+        let try_chown = {
+            |uid| {
+                wrap_chown(
+                    dest,
+                    meta,
+                    uid,
+                    Some(dest_gid),
+                    false,
+                    Verbosity {
+                        groups_only: false,
+                        level: VerbosityLevel::Silent,
+                    },
+                )
+            }
+        };
+        // gnu compatibility: cp doesn't report an error if it fails to set the ownership,
+        // and will fall back to changing only the gid if possible.
+        if try_chown(Some(dest_uid)).is_err() {
+            let _ = try_chown(None);
+        }
         Ok(())
     })?;
 
