@@ -166,12 +166,12 @@ if test -f gnu-built; then
 else
     # Disable useless checks
     sed -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
+    # Change the PATH to test the uutils coreutils instead of the GNU coreutils
+    sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" tests/local.mk
     ./bootstrap --skip-po
     ./configure --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references
     #Add timeout to to protect against hangs
     sed -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
-    # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils
-    sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
     sed -i 's| tr | /usr/bin/tr |' tests/init.sh
     # Use a better diff
     sed -i 's|diff -c|diff -u|g' tests/Coreutils.pm
