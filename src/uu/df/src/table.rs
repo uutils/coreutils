@@ -17,7 +17,6 @@ use uucore::fsext::{FsUsage, MountInfo};
 use uucore::locale::get_message;
 
 use std::ffi::OsString;
-use std::fmt;
 use std::ops::AddAssign;
 
 /// A row in the filesystem usage data table.
@@ -482,12 +481,9 @@ impl Table {
 
         alignments
     }
-}
 
-impl fmt::Display for Table {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut row_iter = self.rows.iter().peekable();
-        while let Some(row) = row_iter.next() {
+    pub(crate) fn write_to(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
+        for row in &self.rows {
             let mut col_iter = row.iter().enumerate().peekable();
             while let Some((i, elem)) = col_iter.next() {
                 // TODO: Fix this, and print the bytes directly.
@@ -498,26 +494,24 @@ impl fmt::Display for Table {
                     Some(Alignment::Left) => {
                         if is_last_col {
                             // no trailing spaces in last column
-                            write!(f, "{elem}")?;
+                            write!(writer, "{elem}")?;
                         } else {
-                            write!(f, "{elem:<width$}", width = self.widths[i])?;
+                            write!(writer, "{elem:<width$}", width = self.widths[i])?;
                         }
                     }
                     Some(Alignment::Right) => {
-                        write!(f, "{elem:>width$}", width = self.widths[i])?;
+                        write!(writer, "{elem:>width$}", width = self.widths[i])?;
                     }
                     None => break,
                 }
 
                 if !is_last_col {
                     // column separator
-                    write!(f, " ")?;
+                    write!(writer, " ")?;
                 }
             }
 
-            if row_iter.peek().is_some() {
-                writeln!(f)?;
-            }
+            writeln!(writer)?;
         }
 
         Ok(())
@@ -996,22 +990,30 @@ mod tests {
         };
 
         let table_w_total = Table::new(&options, filesystems.clone());
+        let mut data_w_total: Vec<u8> = vec![];
+        table_w_total
+            .write_to(&mut data_w_total)
+            .expect("Write error.");
         assert_eq!(
-            table_w_total.to_string(),
+            String::from_utf8_lossy(&data_w_total),
             "Filesystem           Inodes        IUsed   IFree\n\
              none            99999999999  99999000000  999999\n\
              none            99999999999  99999000000  999999\n\
-             total          199999999998 199998000000 1999998"
+             total          199999999998 199998000000 1999998\n"
         );
 
         options.show_total = false;
 
         let table_w_o_total = Table::new(&options, filesystems);
+        let mut data_w_o_total: Vec<u8> = vec![];
+        table_w_o_total
+            .write_to(&mut data_w_o_total)
+            .expect("Write error.");
         assert_eq!(
-            table_w_o_total.to_string(),
+            String::from_utf8_lossy(&data_w_o_total),
             "Filesystem          Inodes       IUsed  IFree\n\
              none           99999999999 99999000000 999999\n\
-             none           99999999999 99999000000 999999"
+             none           99999999999 99999000000 999999\n"
         );
     }
 
