@@ -30,41 +30,17 @@ env:
   TEST_SELINUX_FULL_SUMMARY_FILE: 'selinux-gnu-full-result.json'
   TEST_SELINUX_ROOT_FULL_SUMMARY_FILE: 'selinux-root-gnu-full-result.json'
   REPO_GNU_REF: "v9.7"
+  TEST_LOGS_GLOB: "gnu/tests/**/*.log" ## note: not usable at bash CLI; [why] double globstar not enabled by default b/c MacOS includes only bash v3 which doesn't have double globstar support
 
 jobs:
-  gnu:
+  native:
     permissions:
       actions: read  # for dawidd6/action-download-artifact to query and download artifacts
       contents: read  # for actions/checkout to fetch code
       pull-requests: read  # for dawidd6/action-download-artifact to query commit hash
-    name: Run GNU tests
+    name: Run GNU tests (native)
     runs-on: ubuntu-24.04
     steps:
-    - name: Initialize workflow variables
-      id: vars
-      shell: bash
-      run: |
-        ## VARs setup
-        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-        # * config
-        path_reference="reference"
-        outputs path_reference
-        #
-        repo_default_branch="$DEFAULT_BRANCH"
-        repo_reference_branch="$DEFAULT_BRANCH"
-        outputs repo_default_branch repo_reference_branch
-        #
-        SUITE_LOG_FILE="gnu/tests/test-suite.log"
-        ROOT_SUITE_LOG_FILE="gnu/tests/test-suite-root.log"
-        SELINUX_SUITE_LOG_FILE="gnu/tests/selinux-test-suite.log"
-        SELINUX_ROOT_SUITE_LOG_FILE="gnu/tests/selinux-test-suite-root.log"
-        TEST_LOGS_GLOB="gnu/tests/**/*.log" ## note: not usable at bash CLI; [why] double globstar not enabled by default b/c MacOS includes only bash v3 which doesn't have double globstar support
-        TEST_FILESET_PREFIX='test-fileset-IDs.sha1#'
-        TEST_FILESET_SUFFIX='.txt'
-        TEST_SUMMARY_FILE='gnu-result.json'
-        AGGREGATED_SUMMARY_FILE='aggregated-result.json'
-
-        outputs SUITE_LOG_FILE ROOT_SUITE_LOG_FILE SELINUX_SUITE_LOG_FILE SELINUX_ROOT_SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE AGGREGATED_SUMMARY_FILE
     - name: Checkout code (uutil)
       uses: actions/checkout@v4
       with:
@@ -94,16 +70,6 @@ jobs:
         git submodule update --init --recursive --depth 1
       working-directory: gnu
 
-    - name: Retrieve reference artifacts
-      uses: dawidd6/action-download-artifact@v11
-      # ref: <https://github.com/dawidd6/action-download-artifact>
-      continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
-      with:
-        workflow: GnuTests.yml
-        branch: "${{ steps.vars.outputs.repo_reference_branch }}"
-        # workflow_conclusion: success ## (default); * but, if commit with failed GnuTests is merged into the default branch, future commits will all show regression errors in GnuTests CI until o/w fixed
-        workflow_conclusion: completed ## continually recalibrates to last commit of default branch with a successful GnuTests (ie, "self-heals" from GnuTest regressions, but needs more supervision for/of regressions)
-        path: "${{ steps.vars.outputs.path_reference }}"
     - name: Install dependencies
       shell: bash
       run: |
@@ -167,67 +133,6 @@ jobs:
         path_UUTILS='uutils'
         python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }}
 
-    - name: Extract/summarize testing info
-      id: summary
-      shell: bash
-      run: |
-        ## Extract/summarize testing info
-        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-
-        path_UUTILS='uutils'
-
-        # Check if the file exists
-        if test -f "${{ env.TEST_FULL_SUMMARY_FILE }}"
-        then
-            # Look at all individual results and summarize
-            eval $(python3 uutils/util/analyze-gnu-results.py -o=${{ steps.vars.outputs.AGGREGATED_SUMMARY_FILE }} ${{ env.TEST_FULL_SUMMARY_FILE }} ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }} ${{ env.TEST_SELINUX_FULL_SUMMARY_FILE }} ${{ env.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }})
-
-            if [[ "$TOTAL" -eq 0 || "$TOTAL" -eq 1 ]]; then
-              echo "::error ::Failed to parse test results from '${{ env.TEST_FULL_SUMMARY_FILE }}'; failing early"
-              exit 1
-            fi
-
-            output="GNU tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / ERROR: $ERROR / SKIP: $SKIP"
-            echo "${output}"
-
-            if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then
-              echo "::warning ::${output}"
-            fi
-
-            jq -n \
-                  --arg date "$(date --rfc-email)" \
-                  --arg sha "$GITHUB_SHA" \
-                  --arg total "$TOTAL" \
-                  --arg pass "$PASS" \
-                  --arg skip "$SKIP" \
-                  --arg fail "$FAIL" \
-                  --arg xpass "$XPASS" \
-                  --arg error "$ERROR" \
-                  '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, xpass: $xpass, error: $error, }}' > '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
-            HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
-            outputs HASH
-          else
-            echo "::error ::Failed to find summary of test results (missing '${{ env.TEST_FULL_SUMMARY_FILE }}'); failing early"
-            exit 1
-          fi
-
-          # Compress logs before upload (fails otherwise)
-          gzip ${{ steps.vars.outputs.TEST_LOGS_GLOB }}
-    - name: Reserve SHA1/ID of 'test-summary'
-      uses: actions/upload-artifact@v4
-      with:
-        name: "${{ steps.summary.outputs.HASH }}"
-        path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
-    - name: Reserve test results summary
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-summary
-        path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
-    - name: Reserve test logs
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-logs
-        path: "${{ steps.vars.outputs.TEST_LOGS_GLOB }}"
     - name: Upload full json results
       uses: actions/upload-artifact@v4
       with:
@@ -238,91 +143,20 @@ jobs:
       with:
         name: gnu-root-full-result
         path: ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }}
-    - name: Upload selinux json results
-      uses: actions/upload-artifact@v4
-      with:
-        name: selinux-gnu-full-result
-        path: ${{ env.TEST_SELINUX_FULL_SUMMARY_FILE }}
-    - name: Upload selinux root json results
-      uses: actions/upload-artifact@v4
-      with:
-        name: selinux-root-gnu-full-result.json
-        path: ${{ env.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }}
-    - name: Upload aggregated json results
-      uses: actions/upload-artifact@v4
-      with:
-        name: aggregated-result
-        path: ${{ steps.vars.outputs.AGGREGATED_SUMMARY_FILE }}
-    - name: Compare test failures VS reference
+
+    - name: Compress logs
       shell: bash
-      run: |
-        ## Compare test failures VS reference using JSON files
-        REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/aggregated-result/aggregated-result.json'
-        CURRENT_SUMMARY_FILE='${{ steps.vars.outputs.AGGREGATED_SUMMARY_FILE }}'
-        REPO_DEFAULT_BRANCH='${{ steps.vars.outputs.repo_default_branch }}'
-        path_UUTILS='uutils'
-
-        # Path to ignore file for intermittent issues
-        IGNORE_INTERMITTENT="uutils/.github/workflows/ignore-intermittent.txt"
-
-        # Set up comment directory
-        COMMENT_DIR="${{ steps.vars.outputs.path_reference }}/comment"
-        mkdir -p ${COMMENT_DIR}
-        echo ${{ github.event.number }} > ${COMMENT_DIR}/NR
-        COMMENT_LOG="${COMMENT_DIR}/result.txt"
-
-        COMPARISON_RESULT=0
-        if test -f "${CURRENT_SUMMARY_FILE}"; then
-          if test -f "${REF_SUMMARY_FILE}"; then
-            echo "Reference summary SHA1/ID: $(sha1sum -- "${REF_SUMMARY_FILE}")"
-            echo "Current summary SHA1/ID: $(sha1sum -- "${CURRENT_SUMMARY_FILE}")"
-
-            python3 uutils/util/compare_test_results.py \
-              --ignore-file "${IGNORE_INTERMITTENT}" \
-              --output "${COMMENT_LOG}" \
-              "${CURRENT_SUMMARY_FILE}" "${REF_SUMMARY_FILE}"
-
-            COMPARISON_RESULT=$?
-          else
-            echo "::warning ::Skipping test comparison; no prior reference summary is available at '${REF_SUMMARY_FILE}'."
-          fi
-        else
-          echo "::error ::Failed to find summary of test results (missing '${CURRENT_SUMMARY_FILE}'); failing early"
-          exit 1
-        fi
-
-        if [ ${COMPARISON_RESULT} -eq 1 ]; then
-          echo "ONLY_INTERMITTENT=false" >> $GITHUB_ENV
-          echo "::error ::Found new non-intermittent test failures"
-          exit 1
-        else
-          echo "ONLY_INTERMITTENT=true" >> $GITHUB_ENV
-          echo "::notice ::No new test failures detected"
-        fi
-    - name: Upload comparison log (for GnuComment workflow)
-      if: success() || failure() # run regardless of prior step success/failure
+      run : |
+        # Compress logs before upload (fails otherwise)
+        gzip ${{ env.TEST_LOGS_GLOB }}
+    - name: Reserve test logs
       uses: actions/upload-artifact@v4
       with:
-        name: comment
-        path: ${{ steps.vars.outputs.path_reference }}/comment/
-    - name: Compare test summary VS reference
-      if: success() || failure() # run regardless of prior step success/failure
-      shell: bash
-      run: |
-        ## Compare test summary VS reference
-        REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/test-summary/gnu-result.json'
-        if test -f "${REF_SUMMARY_FILE}"; then
-          echo "Reference SHA1/ID: $(sha1sum -- "${REF_SUMMARY_FILE}")"
-          mv "${REF_SUMMARY_FILE}" main-gnu-result.json
-          python uutils/util/compare_gnu_result.py
-        else
-          echo "::warning ::Skipping test summary comparison; no prior reference summary is available."
-        fi
+        name: test-logs
+        path: "${{ env.TEST_LOGS_GLOB }}"
 
   selinux:
-#    permissions:
-#      contents: read  # for actions/checkout to fetch code
-    name: Run SELinux GNU tests
+    name: Run GNU tests (SELinux)
     runs-on: ubuntu-24.04
     steps:
     - name: Checkout code (uutil)
@@ -444,3 +278,213 @@ jobs:
         cp -f gnu/tests-selinux/test-suite-root.log gnu/tests/selinux-test-suite-root.log
         cp -f gnu/tests-selinux/${{ env.TEST_SELINUX_FULL_SUMMARY_FILE }} .
         cp -f gnu/tests-selinux/${{ env.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }} .
+
+    - name: Upload selinux json results
+      uses: actions/upload-artifact@v4
+      with:
+        name: selinux-gnu-full-result
+        path: ${{ env.TEST_SELINUX_FULL_SUMMARY_FILE }}
+
+    - name: Upload selinux root json results
+      uses: actions/upload-artifact@v4
+      with:
+        name: selinux-root-gnu-full-result
+        path: ${{ env.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }}
+
+    - name: Compress logs
+      shell: bash
+      run : |
+        # Compress logs before upload (fails otherwise)
+        gzip ${{ env.TEST_LOGS_GLOB }}
+    - name: Reserve test logs
+      uses: actions/upload-artifact@v4
+      with:
+        name: selinux-test-logs
+        path: "${{ env.TEST_LOGS_GLOB }}"
+
+
+  aggregate:
+    needs: [native, selinux]
+    permissions:
+      actions: read  # for dawidd6/action-download-artifact to query and download artifacts
+      contents: read  # for actions/checkout to fetch code
+      pull-requests: read  # for dawidd6/action-download-artifact to query commit hash
+    name: Aggregate GNU test results
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Initialize workflow variables
+      id: vars
+      shell: bash
+      run: |
+        ## VARs setup
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+        # * config
+        path_reference="reference"
+        outputs path_reference
+        #
+        repo_default_branch="$DEFAULT_BRANCH"
+        repo_reference_branch="$DEFAULT_BRANCH"
+        outputs repo_default_branch repo_reference_branch
+        #
+        TEST_SUMMARY_FILE='gnu-result.json'
+        AGGREGATED_SUMMARY_FILE='aggregated-result.json'
+
+        outputs TEST_SUMMARY_FILE AGGREGATED_SUMMARY_FILE
+    - name: Checkout code (uutils)
+      uses: actions/checkout@v4
+      with:
+        path: 'uutils'
+        persist-credentials: false
+    - name: Retrieve reference artifacts
+      uses: dawidd6/action-download-artifact@v11
+      # ref: <https://github.com/dawidd6/action-download-artifact>
+      continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
+      with:
+        workflow: GnuTests.yml
+        branch: "${{ steps.vars.outputs.repo_reference_branch }}"
+        # workflow_conclusion: success ## (default); * but, if commit with failed GnuTests is merged into the default branch, future commits will all show regression errors in GnuTests CI until o/w fixed
+        workflow_conclusion: completed ## continually recalibrates to last commit of default branch with a successful GnuTests (ie, "self-heals" from GnuTest regressions, but needs more supervision for/of regressions)
+        path: "${{ steps.vars.outputs.path_reference }}"
+    - name: Download selinux json results
+      uses: actions/download-artifact@v4
+      with:
+        name: selinux-gnu-full-result
+        path: ${{ env.TEST_SELINUX_FULL_SUMMARY_FILE }}
+    - name: Download selinux root json results
+      uses: actions/download-artifact@v4
+      with:
+        name: selinux-root-gnu-full-result.json
+        path: ${{ env.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }}
+    - name: Download full json results
+      uses: actions/download-artifact@v4
+      with:
+        name: gnu-full-result
+        path: ${{ env.TEST_FULL_SUMMARY_FILE }}
+    - name: Download root json results
+      uses: actions/download-artifact@v4
+      with:
+        name: gnu-root-full-result
+        path: ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }}
+    - name: Extract/summarize testing info
+      id: summary
+      shell: bash
+      run: |
+        ## Extract/summarize testing info
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+
+        path_UUTILS='uutils'
+
+        # Check if the file exists
+        if test -f "${{ env.TEST_FULL_SUMMARY_FILE }}"
+        then
+            # Look at all individual results and summarize
+            eval $(python3 uutils/util/analyze-gnu-results.py -o=${{ steps.vars.outputs.AGGREGATED_SUMMARY_FILE }} ${{ env.TEST_FULL_SUMMARY_FILE }} ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }} ${{ env.TEST_SELINUX_FULL_SUMMARY_FILE }} ${{ env.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }})
+
+            if [[ "$TOTAL" -eq 0 || "$TOTAL" -eq 1 ]]; then
+              echo "::error ::Failed to parse test results from '${{ env.TEST_FULL_SUMMARY_FILE }}'; failing early"
+              exit 1
+            fi
+
+            output="GNU tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / ERROR: $ERROR / SKIP: $SKIP"
+            echo "${output}"
+
+            if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then
+              echo "::warning ::${output}"
+            fi
+
+            jq -n \
+                  --arg date "$(date --rfc-email)" \
+                  --arg sha "$GITHUB_SHA" \
+                  --arg total "$TOTAL" \
+                  --arg pass "$PASS" \
+                  --arg skip "$SKIP" \
+                  --arg fail "$FAIL" \
+                  --arg xpass "$XPASS" \
+                  --arg error "$ERROR" \
+                  '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, xpass: $xpass, error: $error, }}' > '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
+            HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
+            outputs HASH
+          else
+            echo "::error ::Failed to find summary of test results (missing '${{ env.TEST_FULL_SUMMARY_FILE }}'); failing early"
+            exit 1
+          fi
+    - name: Reserve SHA1/ID of 'test-summary'
+      uses: actions/upload-artifact@v4
+      with:
+        name: "${{ steps.summary.outputs.HASH }}"
+        path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
+    - name: Reserve test results summary
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-summary
+        path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
+    - name: Upload aggregated json results
+      uses: actions/upload-artifact@v4
+      with:
+        name: aggregated-result
+        path: ${{ steps.vars.outputs.AGGREGATED_SUMMARY_FILE }}
+    - name: Compare test failures VS reference
+      shell: bash
+      run: |
+        ## Compare test failures VS reference using JSON files
+        REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/aggregated-result/aggregated-result.json'
+        CURRENT_SUMMARY_FILE='${{ steps.vars.outputs.AGGREGATED_SUMMARY_FILE }}'
+        REPO_DEFAULT_BRANCH='${{ steps.vars.outputs.repo_default_branch }}'
+        path_UUTILS='uutils'
+
+        # Path to ignore file for intermittent issues
+        IGNORE_INTERMITTENT="uutils/.github/workflows/ignore-intermittent.txt"
+
+        # Set up comment directory
+        COMMENT_DIR="${{ steps.vars.outputs.path_reference }}/comment"
+        mkdir -p ${COMMENT_DIR}
+        echo ${{ github.event.number }} > ${COMMENT_DIR}/NR
+        COMMENT_LOG="${COMMENT_DIR}/result.txt"
+
+        COMPARISON_RESULT=0
+        if test -f "${CURRENT_SUMMARY_FILE}"; then
+          if test -f "${REF_SUMMARY_FILE}"; then
+            echo "Reference summary SHA1/ID: $(sha1sum -- "${REF_SUMMARY_FILE}")"
+            echo "Current summary SHA1/ID: $(sha1sum -- "${CURRENT_SUMMARY_FILE}")"
+
+            python3 uutils/util/compare_test_results.py \
+              --ignore-file "${IGNORE_INTERMITTENT}" \
+              --output "${COMMENT_LOG}" \
+              "${CURRENT_SUMMARY_FILE}" "${REF_SUMMARY_FILE}"
+
+            COMPARISON_RESULT=$?
+          else
+            echo "::warning ::Skipping test comparison; no prior reference summary is available at '${REF_SUMMARY_FILE}'."
+          fi
+        else
+          echo "::error ::Failed to find summary of test results (missing '${CURRENT_SUMMARY_FILE}'); failing early"
+          exit 1
+        fi
+
+        if [ ${COMPARISON_RESULT} -eq 1 ]; then
+          echo "ONLY_INTERMITTENT=false" >> $GITHUB_ENV
+          echo "::error ::Found new non-intermittent test failures"
+          exit 1
+        else
+          echo "ONLY_INTERMITTENT=true" >> $GITHUB_ENV
+          echo "::notice ::No new test failures detected"
+        fi
+    - name: Upload comparison log (for GnuComment workflow)
+      if: success() || failure() # run regardless of prior step success/failure
+      uses: actions/upload-artifact@v4
+      with:
+        name: comment
+        path: ${{ steps.vars.outputs.path_reference }}/comment/
+    - name: Compare test summary VS reference
+      if: success() || failure() # run regardless of prior step success/failure
+      shell: bash
+      run: |
+        ## Compare test summary VS reference
+        REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/test-summary/gnu-result.json'
+        if test -f "${REF_SUMMARY_FILE}"; then
+          echo "Reference SHA1/ID: $(sha1sum -- "${REF_SUMMARY_FILE}")"
+          mv "${REF_SUMMARY_FILE}" main-gnu-result.json
+          python uutils/util/compare_gnu_result.py
+        else
+          echo "::warning ::Skipping test summary comparison; no prior reference summary is available."
+        fi
