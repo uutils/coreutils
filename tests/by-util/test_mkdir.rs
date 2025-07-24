@@ -11,6 +11,8 @@
 use libc::mode_t;
 #[cfg(not(windows))]
 use std::os::unix::fs::PermissionsExt;
+#[cfg(feature = "feat_selinux")]
+use uucore::selinux::get_getfattr_output;
 #[cfg(not(windows))]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -390,8 +392,6 @@ fn test_empty_argument() {
 #[test]
 #[cfg(feature = "feat_selinux")]
 fn test_selinux() {
-    use std::process::Command;
-
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let dest = "test_dir_a";
@@ -404,25 +404,12 @@ fn test_selinux() {
             .succeeds()
             .stdout_contains("created directory");
 
-        let getfattr_output = Command::new("getfattr")
-            .arg(at.plus_as_string(dest))
-            .arg("-n")
-            .arg("security.selinux")
-            .output()
-            .expect("Failed to run `getfattr` on the destination file");
-
+        let context_value = get_getfattr_output(&at.plus_as_string(dest));
         assert!(
-            getfattr_output.status.success(),
-            "getfattr did not run successfully: {}",
-            String::from_utf8_lossy(&getfattr_output.stderr)
-        );
-
-        let stdout = String::from_utf8_lossy(&getfattr_output.stdout);
-        assert!(
-            stdout.contains("unconfined_u"),
+            context_value.contains("unconfined_u"),
             "Expected '{}' not found in getfattr output:\n{}",
             "unconfined_u",
-            stdout
+            context_value
         );
         at.rmdir(dest);
     }
