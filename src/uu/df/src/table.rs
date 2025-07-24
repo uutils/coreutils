@@ -16,7 +16,8 @@ use crate::{BlockSize, Options};
 use uucore::fsext::{FsUsage, MountInfo};
 use uucore::locale::get_message;
 
-use std::fmt;
+use std::ffi::OsString;
+use std::iter;
 use std::ops::AddAssign;
 
 /// A row in the filesystem usage data table.
@@ -25,7 +26,7 @@ use std::ops::AddAssign;
 /// filesystem device, the mountpoint, the number of bytes used, etc.
 pub(crate) struct Row {
     /// The filename given on the command-line, if given.
-    file: Option<String>,
+    file: Option<OsString>,
 
     /// Name of the device on which the filesystem lives.
     fs_device: String,
@@ -34,7 +35,7 @@ pub(crate) struct Row {
     fs_type: String,
 
     /// Path at which the filesystem is mounted.
-    fs_mount: String,
+    fs_mount: OsString,
 
     /// Total number of bytes in the filesystem regardless of whether they are used.
     bytes: u64,
@@ -191,6 +192,43 @@ impl From<Filesystem> for Row {
     }
 }
 
+/// A `Cell` in the table. We store raw `bytes` as the data (e.g. directory name
+/// may be non-Unicode). We also record the printed `width` for alignment purpose,
+/// as it is easier to compute on the original string.
+struct Cell {
+    bytes: Vec<u8>,
+    width: usize,
+}
+
+impl Cell {
+    /// Create a cell, knowing that s contains only 1-length chars
+    fn from_ascii_string<T: AsRef<str>>(s: T) -> Cell {
+        let s = s.as_ref();
+        Cell {
+            bytes: s.as_bytes().into(),
+            width: s.len(),
+        }
+    }
+
+    /// Create a cell from an unknown origin string that may contain
+    /// wide characters.
+    fn from_string<T: AsRef<str>>(s: T) -> Cell {
+        let s = s.as_ref();
+        Cell {
+            bytes: s.as_bytes().into(),
+            width: UnicodeWidthStr::width(s),
+        }
+    }
+
+    /// Create a cell from an `OsString`
+    fn from_os_string(os: &OsString) -> Cell {
+        Cell {
+            bytes: uucore::os_str_as_bytes(os).unwrap().to_vec(),
+            width: UnicodeWidthStr::width(os.to_string_lossy().as_ref()),
+        }
+    }
+}
+
 /// A formatter for [`Row`].
 ///
 /// The `options` control how the information in the row gets formatted.
@@ -224,47 +262,50 @@ impl<'a> RowFormatter<'a> {
     /// Get a string giving the scaled version of the input number.
     ///
     /// The scaling factor is defined in the `options` field.
-    fn scaled_bytes(&self, size: u64) -> String {
-        if let Some(h) = self.options.human_readable {
+    fn scaled_bytes(&self, size: u64) -> Cell {
+        let s = if let Some(h) = self.options.human_readable {
             to_magnitude_and_suffix(size.into(), SuffixType::HumanReadable(h))
         } else {
             let BlockSize::Bytes(d) = self.options.block_size;
             (size as f64 / d as f64).ceil().to_string()
-        }
+        };
+        Cell::from_ascii_string(s)
     }
 
     /// Get a string giving the scaled version of the input number.
     ///
     /// The scaling factor is defined in the `options` field.
-    fn scaled_inodes(&self, size: u128) -> String {
-        if let Some(h) = self.options.human_readable {
+    fn scaled_inodes(&self, size: u128) -> Cell {
+        let s = if let Some(h) = self.options.human_readable {
             to_magnitude_and_suffix(size, SuffixType::HumanReadable(h))
         } else {
             size.to_string()
-        }
+        };
+        Cell::from_ascii_string(s)
     }
 
     /// Convert a float between 0 and 1 into a percentage string.
     ///
     /// If `None`, return the string `"-"` instead.
-    fn percentage(fraction: Option<f64>) -> String {
-        match fraction {
+    fn percentage(fraction: Option<f64>) -> Cell {
+        let s = match fraction {
             None => "-".to_string(),
             Some(x) => format!("{:.0}%", (100.0 * x).ceil()),
-        }
+        };
+        Cell::from_ascii_string(s)
     }
 
     /// Returns formatted row data.
-    fn get_values(&self) -> Vec<String> {
-        let mut strings = Vec::new();
+    fn get_cells(&self) -> Vec<Cell> {
+        let mut cells = Vec::new();
 
         for column in &self.options.columns {
-            let string = match column {
+            let cell = match column {
                 Column::Source => {
                     if self.is_total_row {
-                        get_message("df-total")
+                        Cell::from_string(get_message("df-total"))
                     } else {
-                        self.row.fs_device.to_string()
+                        Cell::from_string(&self.row.fs_device)
                     }
                 }
                 Column::Size => self.scaled_bytes(self.row.bytes),
@@ -274,26 +315,30 @@ impl<'a> RowFormatter<'a> {
 
                 Column::Target => {
                     if self.is_total_row && !self.options.columns.contains(&Column::Source) {
-                        get_message("df-total")
+                        Cell::from_string(get_message("df-total"))
                     } else {
-                        self.row.fs_mount.to_string()
+                        Cell::from_os_string(&self.row.fs_mount)
                     }
                 }
                 Column::Itotal => self.scaled_inodes(self.row.inodes),
                 Column::Iused => self.scaled_inodes(self.row.inodes_used),
                 Column::Iavail => self.scaled_inodes(self.row.inodes_free),
                 Column::Ipcent => Self::percentage(self.row.inodes_usage),
-                Column::File => self.row.file.as_ref().unwrap_or(&"-".into()).to_string(),
+                Column::File => self
+                    .row
+                    .file
+                    .as_ref()
+                    .map_or(Cell::from_ascii_string("-"), Cell::from_os_string),
 
-                Column::Fstype => self.row.fs_type.to_string(),
+                Column::Fstype => Cell::from_string(&self.row.fs_type),
                 #[cfg(target_os = "macos")]
                 Column::Capacity => Self::percentage(self.row.bytes_capacity),
             };
 
-            strings.push(string);
+            cells.push(cell);
         }
 
-        strings
+        cells
     }
 }
 
@@ -370,7 +415,7 @@ impl Header {
 /// The output table.
 pub(crate) struct Table {
     alignments: Vec<Alignment>,
-    rows: Vec<Vec<String>>,
+    rows: Vec<Vec<Cell>>,
     widths: Vec<usize>,
 }
 
@@ -384,7 +429,7 @@ impl Table {
             .map(|(i, col)| Column::min_width(col).max(headers[i].len()))
             .collect();
 
-        let mut rows = vec![headers];
+        let mut rows = vec![headers.iter().map(Cell::from_string).collect()];
 
         // The running total of filesystem sizes and usage.
         //
@@ -399,7 +444,7 @@ impl Table {
             if options.show_all_fs || filesystem.usage.blocks > 0 {
                 let row = Row::from(filesystem);
                 let fmt = RowFormatter::new(&row, options, false);
-                let values = fmt.get_values();
+                let values = fmt.get_cells();
                 total += row;
 
                 rows.push(values);
@@ -408,15 +453,15 @@ impl Table {
 
         if options.show_total {
             let total_row = RowFormatter::new(&total, options, true);
-            rows.push(total_row.get_values());
+            rows.push(total_row.get_cells());
         }
 
         // extend the column widths (in chars) for long values in rows
         // do it here, after total row was added to the list of rows
         for row in &rows {
             for (i, value) in row.iter().enumerate() {
-                if UnicodeWidthStr::width(value.as_str()) > widths[i] {
-                    widths[i] = UnicodeWidthStr::width(value.as_str());
+                if value.width > widths[i] {
+                    widths[i] = value.width;
                 }
             }
         }
@@ -437,40 +482,37 @@ impl Table {
 
         alignments
     }
-}
 
-impl fmt::Display for Table {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut row_iter = self.rows.iter().peekable();
-        while let Some(row) = row_iter.next() {
+    pub(crate) fn write_to(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
+        for row in &self.rows {
             let mut col_iter = row.iter().enumerate().peekable();
             while let Some((i, elem)) = col_iter.next() {
                 let is_last_col = col_iter.peek().is_none();
 
+                let pad_width = self.widths[i].saturating_sub(elem.width);
                 match self.alignments.get(i) {
                     Some(Alignment::Left) => {
-                        if is_last_col {
-                            // no trailing spaces in last column
-                            write!(f, "{elem}")?;
-                        } else {
-                            write!(f, "{elem:<width$}", width = self.widths[i])?;
+                        writer.write_all(&elem.bytes)?;
+                        // no trailing spaces in last column
+                        if !is_last_col {
+                            writer
+                                .write_all(&iter::repeat_n(b' ', pad_width).collect::<Vec<_>>())?;
                         }
                     }
                     Some(Alignment::Right) => {
-                        write!(f, "{elem:>width$}", width = self.widths[i])?;
+                        writer.write_all(&iter::repeat_n(b' ', pad_width).collect::<Vec<_>>())?;
+                        writer.write_all(&elem.bytes)?;
                     }
                     None => break,
                 }
 
                 if !is_last_col {
                     // column separator
-                    write!(f, " ")?;
+                    writer.write_all(b" ")?;
                 }
             }
 
-            if row_iter.peek().is_some() {
-                writeln!(f)?;
-            }
+            writeln!(writer)?;
         }
 
         Ok(())
@@ -485,7 +527,7 @@ mod tests {
 
     use crate::blocks::HumanReadable;
     use crate::columns::Column;
-    use crate::table::{Header, HeaderMode, Row, RowFormatter, Table};
+    use crate::table::{Cell, Header, HeaderMode, Row, RowFormatter, Table};
     use crate::{BlockSize, Options};
 
     fn init() {
@@ -516,10 +558,10 @@ mod tests {
     impl Default for Row {
         fn default() -> Self {
             Self {
-                file: Some("/path/to/file".to_string()),
+                file: Some("/path/to/file".into()),
                 fs_device: "my_device".to_string(),
                 fs_type: "my_type".to_string(),
-                fs_mount: "my_mount".to_string(),
+                fs_mount: "my_mount".into(),
 
                 bytes: 100,
                 bytes_used: 25,
@@ -669,6 +711,13 @@ mod tests {
         );
     }
 
+    fn compare_cell_content(cells: Vec<Cell>, expected: Vec<&str>) -> bool {
+        cells
+            .into_iter()
+            .zip(expected)
+            .all(|(c, s)| c.bytes == s.as_bytes())
+    }
+
     #[test]
     fn test_row_formatter() {
         init();
@@ -678,7 +727,7 @@ mod tests {
         };
         let row = Row {
             fs_device: "my_device".to_string(),
-            fs_mount: "my_mount".to_string(),
+            fs_mount: "my_mount".into(),
 
             bytes: 100,
             bytes_used: 25,
@@ -688,10 +737,10 @@ mod tests {
             ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options, false);
-        assert_eq!(
-            fmt.get_values(),
+        assert!(compare_cell_content(
+            fmt.get_cells(),
             vec!("my_device", "100", "25", "75", "25%", "my_mount")
-        );
+        ));
     }
 
     #[test]
@@ -705,7 +754,7 @@ mod tests {
         let row = Row {
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
-            fs_mount: "my_mount".to_string(),
+            fs_mount: "my_mount".into(),
 
             bytes: 100,
             bytes_used: 25,
@@ -715,10 +764,10 @@ mod tests {
             ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options, false);
-        assert_eq!(
-            fmt.get_values(),
+        assert!(compare_cell_content(
+            fmt.get_cells(),
             vec!("my_device", "my_type", "100", "25", "75", "25%", "my_mount")
-        );
+        ));
     }
 
     #[test]
@@ -731,7 +780,7 @@ mod tests {
         };
         let row = Row {
             fs_device: "my_device".to_string(),
-            fs_mount: "my_mount".to_string(),
+            fs_mount: "my_mount".into(),
 
             inodes: 10,
             inodes_used: 2,
@@ -741,10 +790,10 @@ mod tests {
             ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options, false);
-        assert_eq!(
-            fmt.get_values(),
+        assert!(compare_cell_content(
+            fmt.get_cells(),
             vec!("my_device", "10", "2", "8", "20%", "my_mount")
-        );
+        ));
     }
 
     #[test]
@@ -761,7 +810,7 @@ mod tests {
             ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options, false);
-        assert_eq!(fmt.get_values(), vec!("1", "10"));
+        assert!(compare_cell_content(fmt.get_cells(), vec!("1", "10")));
     }
 
     #[test]
@@ -775,7 +824,7 @@ mod tests {
         let row = Row {
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
-            fs_mount: "my_mount".to_string(),
+            fs_mount: "my_mount".into(),
 
             bytes: 4000,
             bytes_used: 1000,
@@ -785,10 +834,10 @@ mod tests {
             ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options, false);
-        assert_eq!(
-            fmt.get_values(),
+        assert!(compare_cell_content(
+            fmt.get_cells(),
             vec!("my_device", "my_type", "4k", "1k", "3k", "25%", "my_mount")
-        );
+        ));
     }
 
     #[test]
@@ -802,7 +851,7 @@ mod tests {
         let row = Row {
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
-            fs_mount: "my_mount".to_string(),
+            fs_mount: "my_mount".into(),
 
             bytes: 4096,
             bytes_used: 1024,
@@ -812,10 +861,10 @@ mod tests {
             ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options, false);
-        assert_eq!(
-            fmt.get_values(),
+        assert!(compare_cell_content(
+            fmt.get_cells(),
             vec!("my_device", "my_type", "4K", "1K", "3K", "25%", "my_mount")
-        );
+        ));
     }
 
     #[test]
@@ -830,13 +879,13 @@ mod tests {
             ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options, false);
-        assert_eq!(fmt.get_values(), vec!("26%"));
+        assert!(compare_cell_content(fmt.get_cells(), vec!("26%")));
     }
 
     #[test]
     fn test_row_formatter_with_round_up_byte_values() {
         init();
-        fn get_formatted_values(bytes: u64, bytes_used: u64, bytes_avail: u64) -> Vec<String> {
+        fn get_formatted_values(bytes: u64, bytes_used: u64, bytes_avail: u64) -> Vec<Cell> {
             let options = Options {
                 block_size: BlockSize::Bytes(1000),
                 columns: vec![Column::Size, Column::Used, Column::Avail],
@@ -849,13 +898,25 @@ mod tests {
                 bytes_avail,
                 ..Default::default()
             };
-            RowFormatter::new(&row, &options, false).get_values()
+            RowFormatter::new(&row, &options, false).get_cells()
         }
 
-        assert_eq!(get_formatted_values(100, 100, 0), vec!("1", "1", "0"));
-        assert_eq!(get_formatted_values(100, 99, 1), vec!("1", "1", "1"));
-        assert_eq!(get_formatted_values(1000, 1000, 0), vec!("1", "1", "0"));
-        assert_eq!(get_formatted_values(1001, 1000, 1), vec!("2", "1", "1"));
+        assert!(compare_cell_content(
+            get_formatted_values(100, 100, 0),
+            vec!("1", "1", "0")
+        ));
+        assert!(compare_cell_content(
+            get_formatted_values(100, 99, 1),
+            vec!("1", "1", "1")
+        ));
+        assert!(compare_cell_content(
+            get_formatted_values(1000, 1000, 0),
+            vec!("1", "1", "0")
+        ));
+        assert!(compare_cell_content(
+            get_formatted_values(1001, 1000, 1),
+            vec!("2", "1", "1")
+        ));
     }
 
     #[test]
@@ -868,9 +929,9 @@ mod tests {
                 dev_id: "28".to_string(),
                 dev_name: "none".to_string(),
                 fs_type: "9p".to_string(),
-                mount_dir: "/usr/lib/wsl/drivers".to_string(),
+                mount_dir: "/usr/lib/wsl/drivers".into(),
                 mount_option: "ro,nosuid,nodev,noatime".to_string(),
-                mount_root: "/".to_string(),
+                mount_root: "/".into(),
                 remote: false,
                 dummy: false,
             },
@@ -899,9 +960,9 @@ mod tests {
                 dev_id: "28".to_string(),
                 dev_name: "none".to_string(),
                 fs_type: "9p".to_string(),
-                mount_dir: "/usr/lib/wsl/drivers".to_string(),
+                mount_dir: "/usr/lib/wsl/drivers".into(),
                 mount_option: "ro,nosuid,nodev,noatime".to_string(),
-                mount_root: "/".to_string(),
+                mount_root: "/".into(),
                 remote: false,
                 dummy: false,
             },
@@ -930,22 +991,80 @@ mod tests {
         };
 
         let table_w_total = Table::new(&options, filesystems.clone());
+        let mut data_w_total: Vec<u8> = vec![];
+        table_w_total
+            .write_to(&mut data_w_total)
+            .expect("Write error.");
         assert_eq!(
-            table_w_total.to_string(),
+            String::from_utf8_lossy(&data_w_total),
             "Filesystem           Inodes        IUsed   IFree\n\
              none            99999999999  99999000000  999999\n\
              none            99999999999  99999000000  999999\n\
-             total          199999999998 199998000000 1999998"
+             total          199999999998 199998000000 1999998\n"
         );
 
         options.show_total = false;
 
         let table_w_o_total = Table::new(&options, filesystems);
+        let mut data_w_o_total: Vec<u8> = vec![];
+        table_w_o_total
+            .write_to(&mut data_w_o_total)
+            .expect("Write error.");
         assert_eq!(
-            table_w_o_total.to_string(),
+            String::from_utf8_lossy(&data_w_o_total),
             "Filesystem          Inodes       IUsed  IFree\n\
              none           99999999999 99999000000 999999\n\
-             none           99999999999 99999000000 999999"
+             none           99999999999 99999000000 999999\n"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_table_column_width_non_unicode() {
+        init();
+        let bad_unicode_os_str = uucore::os_str_from_bytes(b"/usr/lib/w\xf3l/drivers")
+            .expect("Only unix platforms can test non-unicode names")
+            .to_os_string();
+        let d1 = crate::Filesystem {
+            file: None,
+            mount_info: crate::MountInfo {
+                dev_id: "28".to_string(),
+                dev_name: "none".to_string(),
+                fs_type: "9p".to_string(),
+                mount_dir: bad_unicode_os_str,
+                mount_option: "ro,nosuid,nodev,noatime".to_string(),
+                mount_root: "/".into(),
+                remote: false,
+                dummy: false,
+            },
+            usage: crate::table::FsUsage {
+                blocksize: 4096,
+                blocks: 244_029_695,
+                bfree: 125_085_030,
+                bavail: 125_085_030,
+                bavail_top_bit_set: false,
+                files: 99_999_999_999,
+                ffree: 999_999,
+            },
+        };
+
+        let filesystems = vec![d1];
+
+        let options = Options {
+            show_total: false,
+            columns: vec![Column::Source, Column::Target, Column::Itotal],
+            ..Default::default()
+        };
+
+        let table = Table::new(&options, filesystems.clone());
+        let mut data: Vec<u8> = vec![];
+        table.write_to(&mut data).expect("Write error.");
+        assert_eq!(
+            data,
+            b"Filesystem     Mounted on                Inodes\n\
+              none           /usr/lib/w\xf3l/drivers 99999999999\n",
+            "Comparison failed, lossy data for reference:\n{}\n",
+            String::from_utf8_lossy(&data)
         );
     }
 

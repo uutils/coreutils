@@ -3977,6 +3977,7 @@ dependencies = [
  "bigdecimal",
  "blake2b_simd",
  "blake3",
+ "bstr",
  "chrono",
  "clap",
  "crc32fast",
