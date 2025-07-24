@@ -325,26 +325,30 @@ jobs:
         # workflow_conclusion: success ## (default); * but, if commit with failed GnuTests is merged into the default branch, future commits will all show regression errors in GnuTests CI until o/w fixed
         workflow_conclusion: completed ## continually recalibrates to last commit of default branch with a successful GnuTests (ie, "self-heals" from GnuTest regressions, but needs more supervision for/of regressions)
         path: "reference"
-    - name: Download selinux json results
-      uses: actions/download-artifact@v4
-      with:
-        name: selinux-gnu-full-result
-        path: ${{ env.TEST_SELINUX_FULL_SUMMARY_FILE }}
-    - name: Download selinux root json results
-      uses: actions/download-artifact@v4
-      with:
-        name: selinux-root-gnu-full-result
-        path: ${{ env.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }}
     - name: Download full json results
       uses: actions/download-artifact@v4
       with:
         name: gnu-full-result
-        path: ${{ env.TEST_FULL_SUMMARY_FILE }}
+        path: results
+        merge-multiple: true
     - name: Download root json results
       uses: actions/download-artifact@v4
       with:
         name: gnu-root-full-result
-        path: ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }}
+        path: results
+        merge-multiple: true
+    - name: Download selinux json results
+      uses: actions/download-artifact@v4
+      with:
+        name: selinux-gnu-full-result
+        path: results
+        merge-multiple: true
+    - name: Download selinux root json results
+      uses: actions/download-artifact@v4
+      with:
+        name: selinux-root-gnu-full-result
+        path: results
+        merge-multiple: true
     - name: Extract/summarize testing info
       id: summary
       shell: bash
@@ -354,40 +358,40 @@ jobs:
 
         path_UUTILS='uutils'
 
-        # Check if the file exists
-        if test -f "${{ env.TEST_FULL_SUMMARY_FILE }}"
-        then
-            # Look at all individual results and summarize
-            eval $(python3 uutils/util/analyze-gnu-results.py -o=${{ steps.vars.outputs.AGGREGATED_SUMMARY_FILE }} ${{ env.TEST_FULL_SUMMARY_FILE }} ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }} ${{ env.TEST_SELINUX_FULL_SUMMARY_FILE }} ${{ env.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }})
+        json_count=$(ls -l results/*.json | wc -l)
+        if [[ "$json_count" -ne 4 ]]; then
+          echo "::error ::Failed to download all results json files (expected 4 files, found $json_count); failing early"
+          ls -lR results || true
+          exit 1
+        fi
 
-            if [[ "$TOTAL" -eq 0 || "$TOTAL" -eq 1 ]]; then
-              echo "::error ::Failed to parse test results from '${{ env.TEST_FULL_SUMMARY_FILE }}'; failing early"
-              exit 1
-            fi
+        # Look at all individual results and summarize
+        eval $(python3 uutils/util/analyze-gnu-results.py -o=${{ steps.vars.outputs.AGGREGATED_SUMMARY_FILE }} results/*.json)
 
-            output="GNU tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / ERROR: $ERROR / SKIP: $SKIP"
-            echo "${output}"
+        if [[ "$TOTAL" -eq 0 || "$TOTAL" -eq 1 ]]; then
+          echo "::error ::Failed to parse test results from '${{ env.TEST_FULL_SUMMARY_FILE }}'; failing early"
+          exit 1
+        fi
 
-            if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then
-              echo "::warning ::${output}"
-            fi
+        output="GNU tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / ERROR: $ERROR / SKIP: $SKIP"
+        echo "${output}"
 
-            jq -n \
-                  --arg date "$(date --rfc-email)" \
-                  --arg sha "$GITHUB_SHA" \
-                  --arg total "$TOTAL" \
-                  --arg pass "$PASS" \
-                  --arg skip "$SKIP" \
-                  --arg fail "$FAIL" \
-                  --arg xpass "$XPASS" \
-                  --arg error "$ERROR" \
-                  '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, xpass: $xpass, error: $error, }}' > '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
-            HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
-            outputs HASH
-          else
-            echo "::error ::Failed to find summary of test results (missing '${{ env.TEST_FULL_SUMMARY_FILE }}'); failing early"
-            exit 1
-          fi
+        if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then
+          echo "::warning ::${output}"
+        fi
+
+        jq -n \
+              --arg date "$(date --rfc-email)" \
+              --arg sha "$GITHUB_SHA" \
+              --arg total "$TOTAL" \
+              --arg pass "$PASS" \
+              --arg skip "$SKIP" \
+              --arg fail "$FAIL" \
+              --arg xpass "$XPASS" \
+              --arg error "$ERROR" \
+              '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, xpass: $xpass, error: $error, }}' > '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
+        HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
+        outputs HASH
     - name: Upload SHA1/ID of 'test-summary'
       uses: actions/upload-artifact@v4
       with:
