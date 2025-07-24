@@ -86,44 +86,6 @@ jobs:
         submodules: false
         persist-credentials: false
 
-    - name: Selinux - Setup Lima
-      uses: lima-vm/lima-actions/setup@v1
-      id: lima-actions-setup
-
-    - name: Selinux - Cache ~/.cache/lima
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/lima
-        key: lima-${{ steps.lima-actions-setup.outputs.version }}
-
-    - name: Selinux - Start Fedora VM with SELinux
-      run: limactl start --plain --name=default --cpus=4 --disk=40 --memory=8 --network=lima:user-v2 template://fedora
-
-    - name: Selinux - Setup SSH
-      uses: lima-vm/lima-actions/ssh@v1
-
-    - name: Selinux - Verify SELinux Status and Configuration
-      run: |
-        lima getenforce
-        lima ls -laZ /etc/selinux
-        lima sudo sestatus
-
-        # Ensure we're running in enforcing mode
-        lima sudo setenforce 1
-        lima getenforce
-
-        # Create test files with SELinux contexts for testing
-        lima sudo mkdir -p /var/test_selinux
-        lima sudo touch /var/test_selinux/test_file
-        lima sudo chcon -t etc_t /var/test_selinux/test_file
-        lima ls -Z /var/test_selinux/test_file  # Verify context
-
-    - name: Selinux - Install dependencies in VM
-      run: |
-        lima sudo dnf -y update
-        lima sudo dnf -y install git autoconf autopoint bison texinfo gperf gcc g++ gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel texinfo-tex wget automake patch quilt
-        lima rustup-init -y --default-toolchain stable
-
     - name: Override submodule URL and initialize submodules
       # Use github instead of upstream git server
       run: |
@@ -170,66 +132,12 @@ jobs:
         echo "After:"
         locale -a
 
-    - name: Selinux - Copy the sources to VM
-      run: |
-        rsync -a -e ssh . lima-default:~/work/
-
     - name: Build binaries
       shell: bash
       run: |
         ## Build binaries
         cd 'uutils'
         bash util/build-gnu.sh --release-build
-
-    - name: Selinux - Generate selinux tests list
-      run: |
-        # Find and list all tests that require SELinux
-        lima bash -c "cd ~/work/gnu/ && grep -l 'require_selinux_' -r tests/ > ~/work/uutils/selinux-tests.txt"
-        lima bash -c "cd ~/work/uutils/ && cat selinux-tests.txt"
-
-        # Count the tests
-        lima bash -c "cd ~/work/uutils/ && echo 'Found SELinux tests:'; wc -l selinux-tests.txt"
-
-    - name: Selinux - Build for selinux tests
-      run: |
-        lima bash -c "cd ~/work/uutils/ && bash util/build-gnu.sh --release-build"
-        lima bash -c "mkdir -p ~/work/gnu/tests-selinux/"
-
-    - name: Selinux - Run selinux tests
-      run: |
-        lima sudo setenforce 1
-        lima getenforce
-        lima cat /proc/filesystems
-        lima bash -c "cd ~/work/uutils/ && bash util/run-gnu-test.sh \$(cat selinux-tests.txt)"
-
-    - name: Selinux - Extract testing info from individual logs into JSON
-      shell: bash
-      run : |
-        lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests > ~/work/gnu/tests-selinux/${{ env.TEST_SELINUX_FULL_SUMMARY_FILE }}"
-
-    - name: Selinux/root - Run selinux tests
-      run: |
-        lima bash -c "cd ~/work/uutils/ && CI=1 bash util/run-gnu-test.sh run-root \$(cat selinux-tests.txt)"
-
-    - name: Selinux/root - Extract testing info from individual logs into JSON
-      shell: bash
-      run : |
-        lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests > ~/work/gnu/tests-selinux/${{ env.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }}"
-
-    - name: Selinux - Collect test logs and test results
-      run: |
-        mkdir -p gnu/tests-selinux
-
-        # Copy the test logs from the Lima VM to the host
-        lima bash -c "cp ~/work/gnu/tests/test-suite.log ~/work/gnu/tests-selinux/ || echo 'No test-suite.log found'"
-        lima bash -c "cp ~/work/gnu/tests/test-suite-root.log ~/work/gnu/tests-selinux/ || echo 'No test-suite-root.log found'"
-        rsync -v -a -e ssh lima-default:~/work/gnu/tests-selinux/ ./gnu/tests-selinux/
-
-        # Copy SELinux logs to the main test directory for integrated processing
-        cp -f gnu/tests-selinux/test-suite.log gnu/tests/selinux-test-suite.log
-        cp -f gnu/tests-selinux/test-suite-root.log gnu/tests/selinux-test-suite-root.log
-        cp -f gnu/tests-selinux/${{ env.TEST_SELINUX_FULL_SUMMARY_FILE }} .
-        cp -f gnu/tests-selinux/${{ env.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }} .
 
     - name: Run GNU tests
       shell: bash
@@ -410,3 +318,129 @@ jobs:
         else
           echo "::warning ::Skipping test summary comparison; no prior reference summary is available."
         fi
+
+  selinux:
+#    permissions:
+#      contents: read  # for actions/checkout to fetch code
+    name: Run SELinux GNU tests
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout code (uutil)
+      uses: actions/checkout@v4
+      with:
+        path: 'uutils'
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+        components: rustfmt
+    - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: "./uutils -> target"
+    - name: Checkout code (GNU coreutils)
+      uses: actions/checkout@v4
+      with:
+        repository: 'coreutils/coreutils'
+        path: 'gnu'
+        ref: ${{ env.REPO_GNU_REF }}
+        submodules: false
+        persist-credentials: false
+    - name: Selinux - Setup Lima
+      uses: lima-vm/lima-actions/setup@v1
+      id: lima-actions-setup
+
+    - name: Selinux - Cache ~/.cache/lima
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/lima
+        key: lima-${{ steps.lima-actions-setup.outputs.version }}
+
+    - name: Selinux - Start Fedora VM with SELinux
+      run: limactl start --plain --name=default --cpus=4 --disk=40 --memory=8 --network=lima:user-v2 template://fedora
+
+    - name: Selinux - Setup SSH
+      uses: lima-vm/lima-actions/ssh@v1
+
+    - name: Selinux - Verify SELinux Status and Configuration
+      run: |
+        lima getenforce
+        lima ls -laZ /etc/selinux
+        lima sudo sestatus
+
+        # Ensure we're running in enforcing mode
+        lima sudo setenforce 1
+        lima getenforce
+
+        # Create test files with SELinux contexts for testing
+        lima sudo mkdir -p /var/test_selinux
+        lima sudo touch /var/test_selinux/test_file
+        lima sudo chcon -t etc_t /var/test_selinux/test_file
+        lima ls -Z /var/test_selinux/test_file  # Verify context
+
+    - name: Selinux - Install dependencies in VM
+      run: |
+        lima sudo dnf -y update
+        lima sudo dnf -y install git autoconf autopoint bison texinfo gperf gcc g++ gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel texinfo-tex wget automake patch quilt
+        lima rustup-init -y --default-toolchain stable
+
+    - name: Override submodule URL and initialize submodules
+      # Use github instead of upstream git server
+      run: |
+        git submodule sync --recursive
+        git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
+        git submodule update --init --recursive --depth 1
+      working-directory: gnu
+
+    - name: Selinux - Copy the sources to VM
+      run: |
+        rsync -a -e ssh . lima-default:~/work/
+
+    - name: Selinux - Generate selinux tests list
+      run: |
+        # Find and list all tests that require SELinux
+        lima bash -c "cd ~/work/gnu/ && grep -l 'require_selinux_' -r tests/ > ~/work/uutils/selinux-tests.txt"
+        lima bash -c "cd ~/work/uutils/ && cat selinux-tests.txt"
+
+        # Count the tests
+        lima bash -c "cd ~/work/uutils/ && echo 'Found SELinux tests:'; wc -l selinux-tests.txt"
+
+    - name: Selinux - Build for selinux tests
+      run: |
+        lima bash -c "cd ~/work/uutils/ && bash util/build-gnu.sh --release-build"
+        lima bash -c "mkdir -p ~/work/gnu/tests-selinux/"
+
+    - name: Selinux - Run selinux tests
+      run: |
+        lima sudo setenforce 1
+        lima getenforce
+        lima cat /proc/filesystems
+        lima bash -c "cd ~/work/uutils/ && bash util/run-gnu-test.sh \$(cat selinux-tests.txt)"
+
+    - name: Selinux - Extract testing info from individual logs into JSON
+      shell: bash
+      run : |
+        lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests > ~/work/gnu/tests-selinux/${{ env.TEST_SELINUX_FULL_SUMMARY_FILE }}"
+
+    - name: Selinux/root - Run selinux tests
+      run: |
+        lima bash -c "cd ~/work/uutils/ && CI=1 bash util/run-gnu-test.sh run-root \$(cat selinux-tests.txt)"
+
+    - name: Selinux/root - Extract testing info from individual logs into JSON
+      shell: bash
+      run : |
+        lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests > ~/work/gnu/tests-selinux/${{ env.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }}"
+
+    - name: Selinux - Collect test logs and test results
+      run: |
+        mkdir -p gnu/tests-selinux
+
+        # Copy the test logs from the Lima VM to the host
+        lima bash -c "cp ~/work/gnu/tests/test-suite.log ~/work/gnu/tests-selinux/ || echo 'No test-suite.log found'"
+        lima bash -c "cp ~/work/gnu/tests/test-suite-root.log ~/work/gnu/tests-selinux/ || echo 'No test-suite-root.log found'"
+        rsync -v -a -e ssh lima-default:~/work/gnu/tests-selinux/ ./gnu/tests-selinux/
+
+        # Copy SELinux logs to the main test directory for integrated processing
+        cp -f gnu/tests-selinux/test-suite.log gnu/tests/selinux-test-suite.log
+        cp -f gnu/tests-selinux/test-suite-root.log gnu/tests/selinux-test-suite-root.log
+        cp -f gnu/tests-selinux/${{ env.TEST_SELINUX_FULL_SUMMARY_FILE }} .
+        cp -f gnu/tests-selinux/${{ env.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }} .
