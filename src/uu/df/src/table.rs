@@ -17,6 +17,7 @@ use uucore::fsext::{FsUsage, MountInfo};
 use uucore::locale::get_message;
 
 use std::ffi::OsString;
+use std::iter;
 use std::ops::AddAssign;
 
 /// A row in the filesystem usage data table.
@@ -486,28 +487,28 @@ impl Table {
         for row in &self.rows {
             let mut col_iter = row.iter().enumerate().peekable();
             while let Some((i, elem)) = col_iter.next() {
-                // TODO: Fix this, and print the bytes directly.
-                let elem = String::from_utf8(elem.bytes.clone()).unwrap_or("meh?".to_string());
                 let is_last_col = col_iter.peek().is_none();
 
+                let pad_width = self.widths[i].saturating_sub(elem.width);
                 match self.alignments.get(i) {
                     Some(Alignment::Left) => {
-                        if is_last_col {
-                            // no trailing spaces in last column
-                            write!(writer, "{elem}")?;
-                        } else {
-                            write!(writer, "{elem:<width$}", width = self.widths[i])?;
+                        writer.write_all(&elem.bytes)?;
+                        // no trailing spaces in last column
+                        if !is_last_col {
+                            writer
+                                .write_all(&iter::repeat_n(b' ', pad_width).collect::<Vec<_>>())?;
                         }
                     }
                     Some(Alignment::Right) => {
-                        write!(writer, "{elem:>width$}", width = self.widths[i])?;
+                        writer.write_all(&iter::repeat_n(b' ', pad_width).collect::<Vec<_>>())?;
+                        writer.write_all(&elem.bytes)?;
                     }
                     None => break,
                 }
 
                 if !is_last_col {
                     // column separator
-                    write!(writer, " ")?;
+                    writer.write_all(b" ")?;
                 }
             }
 
