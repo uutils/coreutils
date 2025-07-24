@@ -33,14 +33,11 @@ env:
 
 jobs:
   native:
-    permissions:
-      actions: read  # for dawidd6/action-download-artifact to query and download artifacts
-      contents: read  # for actions/checkout to fetch code
-      pull-requests: read  # for dawidd6/action-download-artifact to query commit hash
     name: Run GNU tests (native)
     runs-on: ubuntu-24.04
     steps:
-    - name: Checkout code (uutil)
+    #### Get the code, setup cache
+    - name: Checkout code (uutils)
       uses: actions/checkout@v4
       with:
         path: 'uutils'
@@ -60,7 +57,6 @@ jobs:
         ref: ${{ env.REPO_GNU_REF }}
         submodules: false
         persist-credentials: false
-
     - name: Override submodule URL and initialize submodules
       # Use github instead of upstream git server
       run: |
@@ -69,6 +65,7 @@ jobs:
         git submodule update --init --recursive --depth 1
       working-directory: gnu
 
+    #### Build environment setup
     - name: Install dependencies
       shell: bash
       run: |
@@ -97,6 +94,7 @@ jobs:
         echo "After:"
         locale -a
 
+    ### Build
     - name: Build binaries
       shell: bash
       run: |
@@ -104,6 +102,7 @@ jobs:
         cd 'uutils'
         bash util/build-gnu.sh --release-build
 
+    ### Run tests as user
     - name: Run GNU tests
       shell: bash
       run: |
@@ -111,13 +110,13 @@ jobs:
         path_GNU='gnu'
         path_UUTILS='uutils'
         bash "uutils/util/run-gnu-test.sh"
-
     - name: Extract testing info from individual logs into JSON
       shell: bash
       run : |
         path_UUTILS='uutils'
         python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_FULL_SUMMARY_FILE }}
 
+    ### Run tests as root
     - name: Run GNU root tests
       shell: bash
       run: |
@@ -125,13 +124,13 @@ jobs:
         path_GNU='gnu'
         path_UUTILS='uutils'
         bash "uutils/util/run-gnu-test.sh" run-root
-
     - name: Extract testing info from individual logs (run as root) into JSON
       shell: bash
       run : |
         path_UUTILS='uutils'
         python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }}
 
+    ### Upload artifacts
     - name: Upload full json results
       uses: actions/upload-artifact@v4
       with:
@@ -142,7 +141,6 @@ jobs:
       with:
         name: gnu-root-full-result
         path: ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }}
-
     - name: Compress test logs
       shell: bash
       run : |
@@ -158,7 +156,8 @@ jobs:
     name: Run GNU tests (SELinux)
     runs-on: ubuntu-24.04
     steps:
-    - name: Checkout code (uutil)
+    #### Get the code, setup cache
+    - name: Checkout code (uutils)
       uses: actions/checkout@v4
       with:
         path: 'uutils'
@@ -178,23 +177,28 @@ jobs:
         ref: ${{ env.REPO_GNU_REF }}
         submodules: false
         persist-credentials: false
-    - name: Selinux - Setup Lima
+    - name: Override submodule URL and initialize submodules
+      # Use github instead of upstream git server
+      run: |
+        git submodule sync --recursive
+        git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
+        git submodule update --init --recursive --depth 1
+      working-directory: gnu
+
+    #### Lima build environment setup
+    - name: Setup Lima
       uses: lima-vm/lima-actions/setup@v1
       id: lima-actions-setup
-
-    - name: Selinux - Cache ~/.cache/lima
+    - name: Cache ~/.cache/lima
       uses: actions/cache@v4
       with:
         path: ~/.cache/lima
         key: lima-${{ steps.lima-actions-setup.outputs.version }}
-
-    - name: Selinux - Start Fedora VM with SELinux
+    - name: Start Fedora VM with SELinux
       run: limactl start --plain --name=default --cpus=4 --disk=40 --memory=8 --network=lima:user-v2 template://fedora
-
-    - name: Selinux - Setup SSH
+    - name: Setup SSH
       uses: lima-vm/lima-actions/ssh@v1
-
-    - name: Selinux - Verify SELinux Status and Configuration
+    - name: Verify SELinux Status and Configuration
       run: |
         lima getenforce
         lima ls -laZ /etc/selinux
@@ -209,26 +213,23 @@ jobs:
         lima sudo touch /var/test_selinux/test_file
         lima sudo chcon -t etc_t /var/test_selinux/test_file
         lima ls -Z /var/test_selinux/test_file  # Verify context
-
-    - name: Selinux - Install dependencies in VM
+    - name: Install dependencies in VM
       run: |
         lima sudo dnf -y update
         lima sudo dnf -y install git autoconf autopoint bison texinfo gperf gcc g++ gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel texinfo-tex wget automake patch quilt
         lima rustup-init -y --default-toolchain stable
-
-    - name: Override submodule URL and initialize submodules
-      # Use github instead of upstream git server
-      run: |
-        git submodule sync --recursive
-        git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
-        git submodule update --init --recursive --depth 1
-      working-directory: gnu
-
-    - name: Selinux - Copy the sources to VM
+    - name: Copy the sources to VM
       run: |
         rsync -a -e ssh . lima-default:~/work/
 
-    - name: Selinux - Generate selinux tests list
+    ### Build
+    - name: Build binaries
+      run: |
+        lima bash -c "cd ~/work/uutils/ && bash util/build-gnu.sh --release-build"
+        lima bash -c "mkdir -p ~/work/gnu/tests-selinux/"
+
+    ### Run tests as user
+    - name: Generate SELinux tests list
       run: |
         # Find and list all tests that require SELinux
         lima bash -c "cd ~/work/gnu/ && grep -l 'require_selinux_' -r tests/ > ~/work/uutils/selinux-tests.txt"
@@ -236,34 +237,28 @@ jobs:
 
         # Count the tests
         lima bash -c "cd ~/work/uutils/ && echo 'Found SELinux tests:'; wc -l selinux-tests.txt"
-
-    - name: Selinux - Build for selinux tests
-      run: |
-        lima bash -c "cd ~/work/uutils/ && bash util/build-gnu.sh --release-build"
-        lima bash -c "mkdir -p ~/work/gnu/tests-selinux/"
-
-    - name: Selinux - Run selinux tests
+    - name: Run GNU SELinux tests
       run: |
         lima sudo setenforce 1
         lima getenforce
         lima cat /proc/filesystems
         lima bash -c "cd ~/work/uutils/ && bash util/run-gnu-test.sh \$(cat selinux-tests.txt)"
-
-    - name: Selinux - Extract testing info from individual logs into JSON
+    - name: Extract testing info from individual logs into JSON
       shell: bash
       run : |
         lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests > ~/work/gnu/tests-selinux/${{ env.TEST_SELINUX_FULL_SUMMARY_FILE }}"
 
-    - name: Selinux/root - Run selinux tests
+    ### Run tests as root
+    - name: Run GNU SELinux root tests
       run: |
         lima bash -c "cd ~/work/uutils/ && CI=1 bash util/run-gnu-test.sh run-root \$(cat selinux-tests.txt)"
-
-    - name: Selinux/root - Extract testing info from individual logs into JSON
+    - name: Extract testing info from individual logs (run as root) into JSON
       shell: bash
       run : |
         lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests > ~/work/gnu/tests-selinux/${{ env.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }}"
 
-    - name: Selinux - Collect test logs and test results
+    ### Upload artifacts
+    - name: Collect test logs and test results from VM
       run: |
         mkdir -p gnu/tests-selinux
 
@@ -277,30 +272,26 @@ jobs:
         cp -f gnu/tests-selinux/test-suite-root.log gnu/tests/selinux-test-suite-root.log
         cp -f gnu/tests-selinux/${{ env.TEST_SELINUX_FULL_SUMMARY_FILE }} .
         cp -f gnu/tests-selinux/${{ env.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }} .
-
-    - name: Upload selinux json results
+    - name: Upload SELinux json results
       uses: actions/upload-artifact@v4
       with:
         name: selinux-gnu-full-result
         path: ${{ env.TEST_SELINUX_FULL_SUMMARY_FILE }}
-
-    - name: Upload selinux root json results
+    - name: Upload SELinux root json results
       uses: actions/upload-artifact@v4
       with:
         name: selinux-root-gnu-full-result
         path: ${{ env.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }}
-
-    - name: Compress test logs
+    - name: Compress SELinux test logs
       shell: bash
       run : |
         # Compress logs before upload (fails otherwise)
         gzip gnu/tests-selinux/**/*.log
-    - name: Upload test logs
+    - name: Upload SELinux test logs
       uses: actions/upload-artifact@v4
       with:
         name: selinux-test-logs
         path: "gnu/tests-selinux/**/*.log.gz"
-
 
   aggregate:
     needs: [native, selinux]
