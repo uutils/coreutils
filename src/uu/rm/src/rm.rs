@@ -373,10 +373,7 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
 /// `path` must be a directory. If there is an error reading the
 /// contents of the directory, this returns `false`.
 fn is_dir_empty(path: &Path) -> bool {
-    match fs::read_dir(path) {
-        Err(_) => false,
-        Ok(iter) => iter.count() == 0,
-    }
+    fs::read_dir(path).is_ok_and(|mut iter| iter.next().is_none())
 }
 
 #[cfg(unix)]
