@@ -166,12 +166,12 @@ if test -f gnu-built; then
 else
     # Disable useless checks
     sed -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
+    # Change the PATH to test the uutils coreutils instead of the GNU coreutils
+    sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" tests/local.mk
     ./bootstrap --skip-po
     ./configure --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references
     #Add timeout to to protect against hangs
     sed -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
-    # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils
-    sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
     sed -i 's| tr | /usr/bin/tr |' tests/init.sh
     # Use a better diff
     sed -i 's|diff -c|diff -u|g' tests/Coreutils.pm
@@ -200,7 +200,9 @@ else
     touch gnu-built
 fi
 
-grep -rl 'path_prepend_' tests/* | xargs sed -i 's| path_prepend_ ./src||'
+grep -rl 'path_prepend_' tests/* | xargs -r sed -i 's| path_prepend_ ./src||'
+# path_prepend_ sets $abs_path_dir_: set it manually instead.
+grep -rl '\$abs_path_dir_' tests/*/*.sh | xargs -r sed -i "s|\$abs_path_dir_|${UU_BUILD_DIR//\//\\/}|g"
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 sed -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
