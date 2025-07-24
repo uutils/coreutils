@@ -357,6 +357,11 @@ impl CmdResult {
         std::str::from_utf8(&self.stdout).unwrap()
     }
 
+    /// Returns the program's standard output as a string, automatically handling invalid utf8
+    pub fn stdout_str_lossy(self) -> String {
+        String::from_utf8_lossy(&self.stdout).to_string()
+    }
+
     /// Returns the program's standard output as a string
     /// consumes self
     pub fn stdout_move_str(self) -> String {
