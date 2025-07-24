@@ -25,6 +25,11 @@ concurrency:
 
 env:
   DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+  TEST_FULL_SUMMARY_FILE: 'gnu-full-result.json'
+  TEST_ROOT_FULL_SUMMARY_FILE: 'gnu-root-full-result.json'
+  TEST_SELINUX_FULL_SUMMARY_FILE: 'selinux-gnu-full-result.json'
+  TEST_SELINUX_ROOT_FULL_SUMMARY_FILE: 'selinux-root-gnu-full-result.json'
+  REPO_GNU_REF: "v9.7"
 
 jobs:
   gnu:
@@ -42,36 +47,28 @@ jobs:
         ## VARs setup
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # * config
-        path_GNU="gnu"
-        path_GNU_tests="${path_GNU}/tests"
-        path_UUTILS="uutils"
         path_reference="reference"
-        outputs path_GNU path_GNU_tests path_reference path_UUTILS
+        outputs path_reference
         #
         repo_default_branch="$DEFAULT_BRANCH"
-        repo_GNU_ref="v9.7"
         repo_reference_branch="$DEFAULT_BRANCH"
-        outputs repo_default_branch repo_GNU_ref repo_reference_branch
+        outputs repo_default_branch repo_reference_branch
         #
-        SUITE_LOG_FILE="${path_GNU_tests}/test-suite.log"
-        ROOT_SUITE_LOG_FILE="${path_GNU_tests}/test-suite-root.log"
-        SELINUX_SUITE_LOG_FILE="${path_GNU_tests}/selinux-test-suite.log"
-        SELINUX_ROOT_SUITE_LOG_FILE="${path_GNU_tests}/selinux-test-suite-root.log"
-        TEST_LOGS_GLOB="${path_GNU_tests}/**/*.log" ## note: not usable at bash CLI; [why] double globstar not enabled by default b/c MacOS includes only bash v3 which doesn't have double globstar support
+        SUITE_LOG_FILE="gnu/tests/test-suite.log"
+        ROOT_SUITE_LOG_FILE="gnu/tests/test-suite-root.log"
+        SELINUX_SUITE_LOG_FILE="gnu/tests/selinux-test-suite.log"
+        SELINUX_ROOT_SUITE_LOG_FILE="gnu/tests/selinux-test-suite-root.log"
+        TEST_LOGS_GLOB="gnu/tests/**/*.log" ## note: not usable at bash CLI; [why] double globstar not enabled by default b/c MacOS includes only bash v3 which doesn't have double globstar support
         TEST_FILESET_PREFIX='test-fileset-IDs.sha1#'
         TEST_FILESET_SUFFIX='.txt'
         TEST_SUMMARY_FILE='gnu-result.json'
-        TEST_FULL_SUMMARY_FILE='gnu-full-result.json'
-        TEST_ROOT_FULL_SUMMARY_FILE='gnu-root-full-result.json'
-        TEST_SELINUX_FULL_SUMMARY_FILE='selinux-gnu-full-result.json'
-        TEST_SELINUX_ROOT_FULL_SUMMARY_FILE='selinux-root-gnu-full-result.json'
         AGGREGATED_SUMMARY_FILE='aggregated-result.json'
 
-        outputs SUITE_LOG_FILE ROOT_SUITE_LOG_FILE SELINUX_SUITE_LOG_FILE SELINUX_ROOT_SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE TEST_ROOT_FULL_SUMMARY_FILE TEST_SELINUX_FULL_SUMMARY_FILE TEST_SELINUX_ROOT_FULL_SUMMARY_FILE AGGREGATED_SUMMARY_FILE
+        outputs SUITE_LOG_FILE ROOT_SUITE_LOG_FILE SELINUX_SUITE_LOG_FILE SELINUX_ROOT_SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE AGGREGATED_SUMMARY_FILE
     - name: Checkout code (uutil)
       uses: actions/checkout@v4
       with:
-        path: '${{ steps.vars.outputs.path_UUTILS }}'
+        path: 'uutils'
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@master
       with:
@@ -79,13 +76,13 @@ jobs:
         components: rustfmt
     - uses: Swatinem/rust-cache@v2
       with:
-        workspaces: "./${{ steps.vars.outputs.path_UUTILS }} -> target"
+        workspaces: "./uutils -> target"
     - name: Checkout code (GNU coreutils)
       uses: actions/checkout@v4
       with:
         repository: 'coreutils/coreutils'
-        path: '${{ steps.vars.outputs.path_GNU }}'
-        ref: ${{ steps.vars.outputs.repo_GNU_ref }}
+        path: 'gnu'
+        ref: ${{ env.REPO_GNU_REF }}
         submodules: false
         persist-credentials: false
 
@@ -133,7 +130,7 @@ jobs:
         git submodule sync --recursive
         git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
         git submodule update --init --recursive --depth 1
-      working-directory: ${{ steps.vars.outputs.path_GNU }}
+      working-directory: gnu
 
     - name: Retrieve reference artifacts
       uses: dawidd6/action-download-artifact@v11
@@ -181,7 +178,7 @@ jobs:
       shell: bash
       run: |
         ## Build binaries
-        cd '${{ steps.vars.outputs.path_UUTILS }}'
+        cd 'uutils'
         bash util/build-gnu.sh --release-build
 
     - name: Selinux - Generate selinux tests list
@@ -208,7 +205,7 @@ jobs:
     - name: Selinux - Extract testing info from individual logs into JSON
       shell: bash
       run : |
-        lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests > ~/work/gnu/tests-selinux/${{ steps.vars.outputs.TEST_SELINUX_FULL_SUMMARY_FILE }}"
+        lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests > ~/work/gnu/tests-selinux/${{ env.TEST_SELINUX_FULL_SUMMARY_FILE }}"
 
     - name: Selinux/root - Run selinux tests
       run: |
@@ -217,50 +214,50 @@ jobs:
     - name: Selinux/root - Extract testing info from individual logs into JSON
       shell: bash
       run : |
-        lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests > ~/work/gnu/tests-selinux/${{ steps.vars.outputs.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }}"
+        lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests > ~/work/gnu/tests-selinux/${{ env.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }}"
 
     - name: Selinux - Collect test logs and test results
       run: |
-        mkdir -p ${{ steps.vars.outputs.path_GNU_tests }}-selinux
+        mkdir -p gnu/tests-selinux
 
         # Copy the test logs from the Lima VM to the host
         lima bash -c "cp ~/work/gnu/tests/test-suite.log ~/work/gnu/tests-selinux/ || echo 'No test-suite.log found'"
         lima bash -c "cp ~/work/gnu/tests/test-suite-root.log ~/work/gnu/tests-selinux/ || echo 'No test-suite-root.log found'"
-        rsync -v -a -e ssh lima-default:~/work/gnu/tests-selinux/ ./${{ steps.vars.outputs.path_GNU_tests }}-selinux/
+        rsync -v -a -e ssh lima-default:~/work/gnu/tests-selinux/ ./gnu/tests-selinux/
 
         # Copy SELinux logs to the main test directory for integrated processing
-        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/test-suite.log ${{ steps.vars.outputs.path_GNU_tests }}/selinux-test-suite.log
-        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/test-suite-root.log ${{ steps.vars.outputs.path_GNU_tests }}/selinux-test-suite-root.log
-        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/${{ steps.vars.outputs.TEST_SELINUX_FULL_SUMMARY_FILE }} .
-        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/${{ steps.vars.outputs.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }} .
+        cp -f gnu/tests-selinux/test-suite.log gnu/tests/selinux-test-suite.log
+        cp -f gnu/tests-selinux/test-suite-root.log gnu/tests/selinux-test-suite-root.log
+        cp -f gnu/tests-selinux/${{ env.TEST_SELINUX_FULL_SUMMARY_FILE }} .
+        cp -f gnu/tests-selinux/${{ env.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }} .
 
     - name: Run GNU tests
       shell: bash
       run: |
         ## Run GNU tests
-        path_GNU='${{ steps.vars.outputs.path_GNU }}'
-        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
-        bash "${path_UUTILS}/util/run-gnu-test.sh"
+        path_GNU='gnu'
+        path_UUTILS='uutils'
+        bash "uutils/util/run-gnu-test.sh"
 
     - name: Extract testing info from individual logs into JSON
       shell: bash
       run : |
-        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
-        python ${path_UUTILS}/util/gnu-json-result.py ${{ steps.vars.outputs.path_GNU_tests }} > ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
+        path_UUTILS='uutils'
+        python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_FULL_SUMMARY_FILE }}
 
     - name: Run GNU root tests
       shell: bash
       run: |
         ## Run GNU root tests
-        path_GNU='${{ steps.vars.outputs.path_GNU }}'
-        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
-        bash "${path_UUTILS}/util/run-gnu-test.sh" run-root
+        path_GNU='gnu'
+        path_UUTILS='uutils'
+        bash "uutils/util/run-gnu-test.sh" run-root
 
     - name: Extract testing info from individual logs (run as root) into JSON
       shell: bash
       run : |
-        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
-        python ${path_UUTILS}/util/gnu-json-result.py ${{ steps.vars.outputs.path_GNU_tests }} > ${{ steps.vars.outputs.TEST_ROOT_FULL_SUMMARY_FILE }}
+        path_UUTILS='uutils'
+        python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }}
 
     - name: Extract/summarize testing info
       id: summary
@@ -269,16 +266,16 @@ jobs:
         ## Extract/summarize testing info
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
 
-        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
+        path_UUTILS='uutils'
 
         # Check if the file exists
-        if test -f "${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}"
+        if test -f "${{ env.TEST_FULL_SUMMARY_FILE }}"
         then
             # Look at all individual results and summarize
-            eval $(python3 ${path_UUTILS}/util/analyze-gnu-results.py -o=${{ steps.vars.outputs.AGGREGATED_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_ROOT_FULL_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_SELINUX_FULL_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }})
+            eval $(python3 uutils/util/analyze-gnu-results.py -o=${{ steps.vars.outputs.AGGREGATED_SUMMARY_FILE }} ${{ env.TEST_FULL_SUMMARY_FILE }} ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }} ${{ env.TEST_SELINUX_FULL_SUMMARY_FILE }} ${{ env.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }})
 
             if [[ "$TOTAL" -eq 0 || "$TOTAL" -eq 1 ]]; then
-              echo "::error ::Failed to parse test results from '${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}'; failing early"
+              echo "::error ::Failed to parse test results from '${{ env.TEST_FULL_SUMMARY_FILE }}'; failing early"
               exit 1
             fi
 
@@ -302,7 +299,7 @@ jobs:
             HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
             outputs HASH
           else
-            echo "::error ::Failed to find summary of test results (missing '${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}'); failing early"
+            echo "::error ::Failed to find summary of test results (missing '${{ env.TEST_FULL_SUMMARY_FILE }}'); failing early"
             exit 1
           fi
 
@@ -327,22 +324,22 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: gnu-full-result
-        path: ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
+        path: ${{ env.TEST_FULL_SUMMARY_FILE }}
     - name: Upload root json results
       uses: actions/upload-artifact@v4
       with:
         name: gnu-root-full-result
-        path: ${{ steps.vars.outputs.TEST_ROOT_FULL_SUMMARY_FILE }}
+        path: ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }}
     - name: Upload selinux json results
       uses: actions/upload-artifact@v4
       with:
         name: selinux-gnu-full-result
-        path: ${{ steps.vars.outputs.TEST_SELINUX_FULL_SUMMARY_FILE }}
+        path: ${{ env.TEST_SELINUX_FULL_SUMMARY_FILE }}
     - name: Upload selinux root json results
       uses: actions/upload-artifact@v4
       with:
         name: selinux-root-gnu-full-result.json
-        path: ${{ steps.vars.outputs.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }}
+        path: ${{ env.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }}
     - name: Upload aggregated json results
       uses: actions/upload-artifact@v4
       with:
@@ -355,10 +352,10 @@ jobs:
         REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/aggregated-result/aggregated-result.json'
         CURRENT_SUMMARY_FILE='${{ steps.vars.outputs.AGGREGATED_SUMMARY_FILE }}'
         REPO_DEFAULT_BRANCH='${{ steps.vars.outputs.repo_default_branch }}'
-        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
+        path_UUTILS='uutils'
 
         # Path to ignore file for intermittent issues
-        IGNORE_INTERMITTENT="${path_UUTILS}/.github/workflows/ignore-intermittent.txt"
+        IGNORE_INTERMITTENT="uutils/.github/workflows/ignore-intermittent.txt"
 
         # Set up comment directory
         COMMENT_DIR="${{ steps.vars.outputs.path_reference }}/comment"
@@ -372,7 +369,7 @@ jobs:
             echo "Reference summary SHA1/ID: $(sha1sum -- "${REF_SUMMARY_FILE}")"
             echo "Current summary SHA1/ID: $(sha1sum -- "${CURRENT_SUMMARY_FILE}")"
 
-            python3 ${path_UUTILS}/util/compare_test_results.py \
+            python3 uutils/util/compare_test_results.py \
               --ignore-file "${IGNORE_INTERMITTENT}" \
               --output "${COMMENT_LOG}" \
               "${CURRENT_SUMMARY_FILE}" "${REF_SUMMARY_FILE}"
