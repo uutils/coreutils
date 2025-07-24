@@ -200,7 +200,9 @@ else
     touch gnu-built
 fi
 
-grep -rl 'path_prepend_' tests/* | xargs sed -i 's| path_prepend_ ./src||'
+grep -rl 'path_prepend_' tests/* | xargs -r sed -i 's| path_prepend_ ./src||'
+# path_prepend_ sets $abs_path_dir_: set it manually instead.
+grep -rl '\$abs_path_dir_' tests/*/*.sh | xargs -r sed -i "s|\$abs_path_dir_|${UU_BUILD_DIR//\//\\/}|g"
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 sed -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
