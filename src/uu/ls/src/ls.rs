@@ -2993,7 +2993,7 @@ fn display_group(_metadata: &Metadata, _config: &Config, _state: &mut ListState)
     "somegroup"
 }
 
-// The implementations for get_time are separated because some options, such
+// The implementations for get_system_time are separated because some options, such
 // as ctime will not be available
 #[cfg(unix)]
 fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
@@ -3015,25 +3015,37 @@ fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
     }
 }
 
-fn get_time(md: &Metadata, config: &Config) -> Option<Zoned> {
-    let time = get_system_time(md, config)?;
-    time.try_into().ok()
-}
-
 fn display_date(
     metadata: &Metadata,
     config: &Config,
     state: &mut ListState,
     out: &mut Vec<u8>,
 ) -> UResult<()> {
-    match get_time(metadata, config) {
-        // TODO: Some fancier error conversion might be nice.
-        Some(time) => config
+    let Some(time) = get_system_time(metadata, config) else {
+        out.extend(b"???");
+        return Ok(());
+    };
+
+    let zoned: Result<Zoned, _> = time.try_into();
+    match zoned {
+        Ok(time) => config
             .time_style
             .format(time, out, state)
             .map_err(|x| USimpleError::new(1, x.to_string())),
-        None => {
-            out.extend(b"???");
+        Err(_) => {
+            // Assume that if we cannot build a Zoned element, the time is
+            // out of reasonable range, just print it then.
+            // TODO: The range allowed by jiff is different from what GNU accepts,
+            // but it still far enough in the future/past to be unlikely to matter:
+            //  jiff: Year between -9999 to 9999 (UTC) [-377705023201..=253402207200]
+            //  GNU: Year fits in signed 32 bits (timezone dependent)
+            let ts = if time > UNIX_EPOCH {
+                time.duration_since(UNIX_EPOCH).unwrap().as_secs()
+            } else {
+                out.extend(b"-"); // Add negative sign
+                UNIX_EPOCH.duration_since(time).unwrap().as_secs()
+            };
+            out.extend(ts.to_string().as_bytes());
             Ok(())
         }
     }
