@@ -97,6 +97,9 @@ pub struct Options {
 
     /// `--debug`
     pub debug: bool,
+
+    /// `--exchange`
+    pub exchange: bool,
 }
 
 impl Default for Options {
@@ -112,6 +115,7 @@ impl Default for Options {
             strip_slashes: false,
             progress_bar: false,
             debug: false,
+            exchange: false,
         }
     }
 }
@@ -138,6 +142,7 @@ static OPT_VERBOSE: &str = "verbose";
 static OPT_PROGRESS: &str = "progress";
 static ARG_FILES: &str = "files";
 static OPT_DEBUG: &str = "debug";
+static OPT_EXCHANGE: &str = "exchange";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -175,6 +180,34 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
+    // Validate exchange flag
+    if matches.get_flag(OPT_EXCHANGE) {
+        if files.len() != 2 {
+            return Err(UUsageError::new(
+                1,
+                get_message("mv-error-exchange-needs-two-files"),
+            ));
+        }
+        if matches.contains_id(OPT_TARGET_DIRECTORY) {
+            return Err(UUsageError::new(
+                1,
+                get_message("mv-error-exchange-conflicts-with-target-directory"),
+            ));
+        }
+        if backup_mode != BackupMode::None {
+            return Err(UUsageError::new(
+                1,
+                get_message("mv-error-exchange-conflicts-with-backup"),
+            ));
+        }
+        if update_mode != UpdateMode::All {
+            return Err(UUsageError::new(
+                1,
+                get_message("mv-error-exchange-conflicts-with-update"),
+            ));
+        }
+    }
+
     let backup_suffix = backup_control::determine_backup_suffix(&matches);
 
     let target_dir = matches
@@ -198,6 +231,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         strip_slashes: matches.get_flag(OPT_STRIP_TRAILING_SLASHES),
         progress_bar: matches.get_flag(OPT_PROGRESS),
         debug: matches.get_flag(OPT_DEBUG),
+        exchange: matches.get_flag(OPT_EXCHANGE),
     };
 
     mv(&files[..], &opts)
@@ -294,6 +328,12 @@ pub fn uu_app() -> Command {
                 .help(get_message("mv-help-debug"))
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new(OPT_EXCHANGE)
+                .long(OPT_EXCHANGE)
+                .help(get_message("mv-help-exchange"))
+                .action(ArgAction::SetTrue),
+        )
 }
 
 fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
@@ -309,6 +349,73 @@ fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
     } else {
         OverwriteMode::Force
     }
+}
+
+/// Atomically exchange two files using renameat2 with `RENAME_EXCHANGE`
+#[cfg(target_os = "linux")]
+fn exchange_files(path1: &Path, path2: &Path, opts: &Options) -> UResult<()> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    // Convert paths to C strings
+    let c_path1 = CString::new(path1.as_os_str().as_bytes())
+        .map_err(|e| USimpleError::new(1, format!("Invalid path {}: {e}", path1.display())))?;
+    let c_path2 = CString::new(path2.as_os_str().as_bytes())
+        .map_err(|e| USimpleError::new(1, format!("Invalid path {}: {e}", path2.display())))?;
+
+    // RENAME_EXCHANGE flag for renameat2
+    const RENAME_EXCHANGE: libc::c_int = 2;
+
+    // Use renameat2 to atomically exchange the files
+    let result = unsafe {
+        libc::syscall(
+            libc::SYS_renameat2,
+            libc::AT_FDCWD,
+            c_path1.as_ptr(),
+            libc::AT_FDCWD,
+            c_path2.as_ptr(),
+            RENAME_EXCHANGE,
+        )
+    };
+
+    if result == 0 {
+        if opts.verbose {
+            println!("{} <-> {}", path1.display(), path2.display());
+        }
+        Ok(())
+    } else {
+        let errno = unsafe { *libc::__errno_location() };
+        match errno {
+            libc::ENOTSUP | libc::EINVAL => Err(USimpleError::new(
+                1,
+                get_message("mv-error-exchange-not-supported"),
+            )),
+            libc::ENOENT => {
+                let missing_path = if path1.exists() { path2 } else { path1 };
+                Err(MvError::NoSuchFile(missing_path.display().to_string()).into())
+            }
+            libc::EXDEV => Err(USimpleError::new(
+                1,
+                get_message("mv-error-exchange-cross-device"),
+            )),
+            _ => {
+                let error_msg = io::Error::from_raw_os_error(errno);
+                Err(USimpleError::new(
+                    1,
+                    format!("exchange failed: {error_msg}"),
+                ))
+            }
+        }
+    }
+}
+
+/// Fallback exchange implementation for non-Linux systems
+#[cfg(not(target_os = "linux"))]
+fn exchange_files(_path1: &Path, _path2: &Path, _opts: &Options) -> UResult<()> {
+    Err(USimpleError::new(
+        1,
+        get_message("mv-error-exchange-not-supported"),
+    ))
 }
 
 fn parse_paths(files: &[OsString], opts: &Options) -> Vec<PathBuf> {
@@ -535,6 +642,17 @@ fn handle_multiple_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
 /// file or directory, then 'source' will be renamed to 'target'.
 pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
     let paths = parse_paths(files, opts);
+
+    // Handle exchange mode
+    if opts.exchange {
+        if paths.len() != 2 {
+            return Err(USimpleError::new(
+                1,
+                get_message("mv-error-exchange-needs-two-files"),
+            ));
+        }
+        return exchange_files(&paths[0], &paths[1], opts);
+    }
 
     if let Some(ref name) = opts.target_dir {
         return move_files_into_dir(&paths, &PathBuf::from(name), opts);
