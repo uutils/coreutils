@@ -3164,7 +3164,6 @@ dependencies = [
 name = "uu_du"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "clap",
  "glob",
  "thiserror 2.0.12",
