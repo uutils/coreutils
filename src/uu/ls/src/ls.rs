@@ -31,9 +31,6 @@ use clap::{
     builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
 };
 use glob::{MatchOptions, Pattern};
-use jiff::Zoned;
-use jiff::fmt::StdIoWrite;
-use jiff::fmt::strtime::BrokenDownTime;
 use lscolors::LsColors;
 use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
 use thiserror::Error;
@@ -256,14 +253,6 @@ enum Time {
     Access,
     Change,
     Birth,
-}
-
-/// Format the given time according to this time format style.
-fn format_time(date: Zoned, out: &mut Vec<u8>, fmt: &str) -> Result<(), jiff::Error> {
-    let tm = BrokenDownTime::from(&date);
-    let mut out = StdIoWrite(out);
-    let config = jiff::fmt::strtime::Config::new().lenient(true);
-    tm.format_with_config(&config, fmt, &mut out)
 }
 
 fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String>), LsError> {
@@ -3014,26 +3003,8 @@ fn display_date(
         _ => &config.time_format_recent,
     };
 
-    let zoned: Result<Zoned, _> = time.try_into();
-    match zoned {
-        Ok(zoned) => format_time(zoned, out, fmt).map_err(|x| USimpleError::new(1, x.to_string())),
-        Err(_) => {
-            // Assume that if we cannot build a Zoned element, the time is
-            // out of reasonable range, just print it then.
-            // TODO: The range allowed by jiff is different from what GNU accepts,
-            // but it still far enough in the future/past to be unlikely to matter:
-            //  jiff: Year between -9999 to 9999 (UTC) [-377705023201..=253402207200]
-            //  GNU: Year fits in signed 32 bits (timezone dependent)
-            let ts = if time > UNIX_EPOCH {
-                time.duration_since(UNIX_EPOCH).unwrap().as_secs()
-            } else {
-                out.extend(b"-"); // Add negative sign
-                UNIX_EPOCH.duration_since(time).unwrap().as_secs()
-            };
-            out.extend(ts.to_string().as_bytes());
-            Ok(())
-        }
-    }
+    uucore::time::format_system_time(out, time, fmt)
+        .map_err(|x| USimpleError::new(1, x.to_string()))
 }
 
 #[allow(dead_code)]
