@@ -2313,6 +2313,35 @@ fn test_selinux_invalid_args() {
 }
 
 #[test]
+#[cfg(feature = "feat_selinux")]
+fn test_selinux_default_context() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let src = "orig";
+    at.touch(src);
+    let dest = "orig.2";
+
+    let result = new_ucmd!()
+        .arg("-Z")
+        .arg("-v")
+        .arg(at.plus_as_string(src))
+        .arg(at.plus_as_string(dest))
+        .run();
+
+    // Skip test if SELinux is not enabled
+    if result
+        .stderr_str()
+        .contains("SELinux is not enabled on this system")
+    {
+        println!("Skipping SELinux default context test: SELinux is not enabled");
+        return;
+    }
+
+    result.success().stdout_contains("orig' -> '");
+    assert!(at.file_exists(dest));
+}
+
+#[test]
 #[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
 fn test_install_compare_with_mode_bits() {
     let test_cases = [
