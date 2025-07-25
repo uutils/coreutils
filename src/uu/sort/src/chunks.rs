@@ -17,9 +17,7 @@ use memchr::memchr_iter;
 use self_cell::self_cell;
 use uucore::error::{UResult, USimpleError};
 
-use crate::{
-    GeneralBigDecimalParseResult, GlobalSettings, Line, SortError, numeric_str_cmp::NumInfo,
-};
+use crate::{GeneralBigDecimalParseResult, GlobalSettings, Line, numeric_str_cmp::NumInfo};
 
 self_cell!(
     /// The chunk that is passed around between threads.
@@ -41,7 +39,7 @@ pub struct ChunkContents<'a> {
 
 #[derive(Debug)]
 pub struct LineData<'a> {
-    pub selections: Vec<&'a str>,
+    pub selections: Vec<&'a [u8]>,
     pub num_infos: Vec<NumInfo>,
     pub parsed_floats: Vec<GeneralBigDecimalParseResult>,
     pub line_num_floats: Vec<Option<f64>>,
@@ -68,7 +66,7 @@ impl Chunk {
             let selections = unsafe {
                 // SAFETY: (same as above) It is safe to (temporarily) transmute to a vector of &str with a longer lifetime,
                 // because the vector is empty.
-                std::mem::transmute::<Vec<&'_ str>, Vec<&'static str>>(std::mem::take(
+                std::mem::transmute::<Vec<&'_ [u8]>, Vec<&'static [u8]>>(std::mem::take(
                     &mut contents.line_data.selections,
                 ))
             };
@@ -100,7 +98,7 @@ impl Chunk {
 
 pub struct RecycledChunk {
     lines: Vec<Line<'static>>,
-    selections: Vec<&'static str>,
+    selections: Vec<&'static [u8]>,
     num_infos: Vec<NumInfo>,
     parsed_floats: Vec<GeneralBigDecimalParseResult>,
     line_num_floats: Vec<Option<f64>>,
@@ -180,15 +178,14 @@ pub fn read<T: Read>(
             let selections = unsafe {
                 // SAFETY: It is safe to transmute to an empty vector of selections with shorter lifetime.
                 // It was only temporarily transmuted to a Vec<Line<'static>> to make recycling possible.
-                std::mem::transmute::<Vec<&'static str>, Vec<&'_ str>>(selections)
+                std::mem::transmute::<Vec<&'static [u8]>, Vec<&'_ [u8]>>(selections)
             };
             let mut lines = unsafe {
                 // SAFETY: (same as above) It is safe to transmute to a vector of lines with shorter lifetime,
                 // because it was only temporarily transmuted to a Vec<Line<'static>> to make recycling possible.
                 std::mem::transmute::<Vec<Line<'static>>, Vec<Line<'_>>>(lines)
             };
-            let read = std::str::from_utf8(&buffer[..read])
-                .map_err(|error| SortError::Uft8Error { error })?;
+            let read = &buffer[..read];
             let mut line_data = LineData {
                 selections,
                 num_infos,
@@ -205,13 +202,13 @@ pub fn read<T: Read>(
 
 /// Split `read` into `Line`s, and add them to `lines`.
 fn parse_lines<'a>(
-    read: &'a str,
+    read: &'a [u8],
     lines: &mut Vec<Line<'a>>,
     line_data: &mut LineData<'a>,
     separator: u8,
     settings: &GlobalSettings,
 ) {
-    let read = read.strip_suffix(separator as char).unwrap_or(read);
+    let read = read.strip_suffix(&[separator]).unwrap_or(read);
 
     assert!(lines.is_empty());
     assert!(line_data.selections.is_empty());
@@ -220,7 +217,7 @@ fn parse_lines<'a>(
     assert!(line_data.line_num_floats.is_empty());
     let mut token_buffer = vec![];
     lines.extend(
-        read.split(separator as char)
+        read.split(|&c| c == separator)
             .enumerate()
             .map(|(index, line)| Line::create(line, index, line_data, &mut token_buffer, settings)),
     );

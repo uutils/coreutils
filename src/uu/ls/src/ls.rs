@@ -2139,8 +2139,11 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
         Sort::Version => entries.sort_by(|a, b| {
-            version_cmp(&a.p_buf.to_string_lossy(), &b.p_buf.to_string_lossy())
-                .then(a.p_buf.to_string_lossy().cmp(&b.p_buf.to_string_lossy()))
+            version_cmp(
+                os_str_as_bytes_lossy(a.p_buf.as_os_str()).as_ref(),
+                os_str_as_bytes_lossy(b.p_buf.as_os_str()).as_ref(),
+            )
+            .then(a.p_buf.to_string_lossy().cmp(&b.p_buf.to_string_lossy()))
         }),
         Sort::Extension => entries.sort_by(|a, b| {
             a.p_buf
