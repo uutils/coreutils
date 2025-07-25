@@ -26,6 +26,12 @@ mv-error-not-directory = target {$path}: Not a directory
 mv-error-target-not-directory = target directory {$path}: Not a directory
 mv-error-failed-access-not-directory = failed to access {$path}: Not a directory
 mv-error-backup-with-no-clobber = cannot combine --backup with -n/--no-clobber or --update=none-fail
+mv-error-exchange-needs-two-files = --exchange requires exactly two files to exchange
+mv-error-exchange-conflicts-with-target-directory = --exchange conflicts with --target-directory
+mv-error-exchange-conflicts-with-backup = --exchange conflicts with backup options
+mv-error-exchange-conflicts-with-update = --exchange conflicts with update options
+mv-error-exchange-not-supported = --exchange is not supported on this system
+mv-error-exchange-cross-device = --exchange requires both files to be on the same filesystem
 mv-error-extra-operand = mv: extra operand {$operand}
 mv-error-backup-might-destroy-source = backing up {$target} might destroy source;  {$source} not moved
 mv-error-will-not-overwrite-just-created = will not overwrite just-created '{$target}' with '{$source}'
@@ -48,6 +54,7 @@ mv-help-verbose = explain what is being done
 mv-help-progress = Display a progress bar.
   Note: this feature is not supported by GNU coreutils.
 mv-help-debug = explain how a file is copied. Implies -v
+mv-help-exchange = exchange two files atomically (Linux only)
 
 # Verbose messages
 mv-verbose-renamed = renamed {$from} -> {$to}

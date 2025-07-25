@@ -26,6 +26,12 @@ mv-error-not-directory = cible {$path} : N'est pas un répertoire
 mv-error-target-not-directory = répertoire cible {$path} : N'est pas un répertoire
 mv-error-failed-access-not-directory = impossible d'accéder à {$path} : N'est pas un répertoire
 mv-error-backup-with-no-clobber = impossible de combiner --backup avec -n/--no-clobber ou --update=none-fail
+mv-error-exchange-needs-two-files = --exchange nécessite exactement deux fichiers à échanger
+mv-error-exchange-conflicts-with-target-directory = --exchange est en conflit avec --target-directory
+mv-error-exchange-conflicts-with-backup = --exchange est en conflit avec les options de sauvegarde
+mv-error-exchange-conflicts-with-update = --exchange est en conflit avec les options de mise à jour
+mv-error-exchange-not-supported = --exchange n'est pas pris en charge sur ce système
+mv-error-exchange-cross-device = --exchange nécessite que les deux fichiers soient sur le même système de fichiers
 mv-error-extra-operand = mv : opérande supplémentaire {$operand}
 mv-error-backup-might-destroy-source = sauvegarder {$target} pourrait détruire la source ; {$source} non déplacé
 mv-error-will-not-overwrite-just-created = ne va pas écraser le fichier qui vient d'être créé '{$target}' avec '{$source}'
@@ -48,6 +54,7 @@ mv-help-verbose = expliquer ce qui est fait
 mv-help-progress = Afficher une barre de progression.
   Note : cette fonctionnalité n'est pas supportée par GNU coreutils.
 mv-help-debug = expliquer comment un fichier est copié. Implique -v
+mv-help-exchange = échanger deux fichiers de manière atomique (Linux uniquement)
 
 # Messages verbeux
 mv-verbose-renamed = renommé {$from} -> {$to}

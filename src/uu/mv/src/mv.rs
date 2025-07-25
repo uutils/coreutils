@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized
+// spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized renameat FDCWD ENOTSUP
 
 mod error;
 #[cfg(unix)]
@@ -99,6 +99,9 @@ pub struct Options {
 
     /// `--debug`
     pub debug: bool,
+
+    /// `--exchange`
+    pub exchange: bool,
 }
 
 impl Default for Options {
@@ -114,6 +117,7 @@ impl Default for Options {
             strip_slashes: false,
             progress_bar: false,
             debug: false,
+            exchange: false,
         }
     }
 }
@@ -140,6 +144,7 @@ static OPT_VERBOSE: &str = "verbose";
 static OPT_PROGRESS: &str = "progress";
 static ARG_FILES: &str = "files";
 static OPT_DEBUG: &str = "debug";
+static OPT_EXCHANGE: &str = "exchange";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -177,6 +182,34 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
+    // Validate exchange flag
+    if matches.get_flag(OPT_EXCHANGE) {
+        if files.len() != 2 {
+            return Err(UUsageError::new(
+                1,
+                translate!("--exchange requires exactly two files"),
+            ));
+        }
+        if matches.contains_id(OPT_TARGET_DIRECTORY) {
+            return Err(UUsageError::new(
+                1,
+                translate!("--exchange conflicts with --target-directory"),
+            ));
+        }
+        if backup_mode != BackupMode::None {
+            return Err(UUsageError::new(
+                1,
+                translate!("--exchange conflicts with backup options"),
+            ));
+        }
+        if update_mode != UpdateMode::All {
+            return Err(UUsageError::new(
+                1,
+                translate!("--exchange conflicts with update options"),
+            ));
+        }
+    }
+
     let backup_suffix = backup_control::determine_backup_suffix(&matches);
 
     let target_dir = matches
@@ -200,6 +233,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         strip_slashes: matches.get_flag(OPT_STRIP_TRAILING_SLASHES),
         progress_bar: matches.get_flag(OPT_PROGRESS),
         debug: matches.get_flag(OPT_DEBUG),
+        exchange: matches.get_flag(OPT_EXCHANGE),
     };
 
     mv(&files[..], &opts)
@@ -296,6 +330,12 @@ pub fn uu_app() -> Command {
                 .help(translate!("mv-help-debug"))
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new(OPT_EXCHANGE)
+                .long(OPT_EXCHANGE)
+                .help(translate!("exchange two files"))
+                .action(ArgAction::SetTrue),
+        )
 }
 
 fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
@@ -311,6 +351,52 @@ fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
     } else {
         OverwriteMode::Force
     }
+}
+
+/// Atomically exchange two files using renameat2 with `RENAME_EXCHANGE`
+#[cfg(target_os = "linux")]
+fn exchange_files(path1: &Path, path2: &Path, opts: &Options) -> UResult<()> {
+    use nix::fcntl::{AT_FDCWD, RenameFlags, renameat2};
+
+    // Use renameat2 to atomically exchange the files
+    match renameat2(
+        AT_FDCWD,
+        path1,
+        AT_FDCWD,
+        path2,
+        RenameFlags::RENAME_EXCHANGE,
+    ) {
+        Ok(()) => {
+            if opts.verbose {
+                println!("exchanged '{}' <-> '{}'", path1.display(), path2.display());
+            }
+            Ok(())
+        }
+        Err(err) => match err {
+            nix::Error::ENOTSUP | nix::Error::EINVAL => Err(USimpleError::new(
+                1,
+                translate!("--exchange is not supported on this filesystem"),
+            )),
+            nix::Error::ENOENT => {
+                let missing_path = if path1.exists() { path2 } else { path1 };
+                Err(MvError::NoSuchFile(missing_path.display().to_string()).into())
+            }
+            nix::Error::EXDEV => Err(USimpleError::new(
+                1,
+                translate!("--exchange cannot exchange files across different filesystems"),
+            )),
+            _ => Err(USimpleError::new(1, format!("exchange failed: {err}"))),
+        },
+    }
+}
+
+/// Fallback exchange implementation for non-Linux systems
+#[cfg(not(target_os = "linux"))]
+fn exchange_files(_path1: &Path, _path2: &Path, _opts: &Options) -> UResult<()> {
+    Err(USimpleError::new(
+        1,
+        translate!("--exchange is not supported on this system"),
+    ))
 }
 
 fn parse_paths(files: &[OsString], opts: &Options) -> Vec<PathBuf> {
@@ -519,6 +605,17 @@ fn handle_multiple_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
 /// file or directory, then 'source' will be renamed to 'target'.
 pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
     let paths = parse_paths(files, opts);
+
+    // Handle exchange mode
+    if opts.exchange {
+        if paths.len() != 2 {
+            return Err(USimpleError::new(
+                1,
+                translate!("--exchange requires exactly two files"),
+            ));
+        }
+        return exchange_files(&paths[0], &paths[1], opts);
+    }
 
     if let Some(ref name) = opts.target_dir {
         return move_files_into_dir(&paths, &PathBuf::from(name), opts);
