@@ -9,6 +9,8 @@ use icu_locale::{Locale, locale};
 
 #[cfg(feature = "i18n-collator")]
 pub mod collator;
+#[cfg(feature = "i18n-date")]
+pub mod date;
 #[cfg(feature = "i18n-decimal")]
 pub mod decimal;
 
@@ -75,6 +77,13 @@ pub fn get_numeric_locale() -> &'static (Locale, UEncoding) {
     static NUMERIC_LOCALE: OnceLock<(Locale, UEncoding)> = OnceLock::new();
 
     NUMERIC_LOCALE.get_or_init(|| get_locale_from_env("LC_NUMERIC"))
+}
+
+/// Get the time locale from the environment
+pub fn get_time_locale() -> &'static (Locale, UEncoding) {
+    static TIME_LOCALE: OnceLock<(Locale, UEncoding)> = OnceLock::new();
+
+    TIME_LOCALE.get_or_init(|| get_locale_from_env("LC_TIME"))
 }
 
 /// Return the encoding deduced from the locale environment variable.
