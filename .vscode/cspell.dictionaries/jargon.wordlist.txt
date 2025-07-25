@@ -175,3 +175,8 @@ nofield
 # * clippy
 uninlined
 nonminimal
+
+# * mv exchange functionality
+renameat
+FDCWD
+ENOTSUP

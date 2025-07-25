@@ -351,7 +351,7 @@ fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
     }
 }
 
-/// Atomically exchange two files using renameat2 with RENAME_EXCHANGE
+/// Atomically exchange two files using renameat2 with `RENAME_EXCHANGE`
 #[cfg(target_os = "linux")]
 fn exchange_files(path1: &Path, path2: &Path, opts: &Options) -> UResult<()> {
     use std::ffi::CString;
@@ -359,9 +359,9 @@ fn exchange_files(path1: &Path, path2: &Path, opts: &Options) -> UResult<()> {
 
     // Convert paths to C strings
     let c_path1 = CString::new(path1.as_os_str().as_bytes())
-        .map_err(|e| USimpleError::new(1, format!("Invalid path {}: {}", path1.display(), e)))?;
+        .map_err(|e| USimpleError::new(1, format!("Invalid path {}: {e}", path1.display())))?;
     let c_path2 = CString::new(path2.as_os_str().as_bytes())
-        .map_err(|e| USimpleError::new(1, format!("Invalid path {}: {}", path2.display(), e)))?;
+        .map_err(|e| USimpleError::new(1, format!("Invalid path {}: {e}", path2.display())))?;
 
     // RENAME_EXCHANGE flag for renameat2
     const RENAME_EXCHANGE: libc::c_int = 2;
@@ -391,7 +391,7 @@ fn exchange_files(path1: &Path, path2: &Path, opts: &Options) -> UResult<()> {
                 get_message("mv-error-exchange-not-supported"),
             )),
             libc::ENOENT => {
-                let missing_path = if !path1.exists() { path1 } else { path2 };
+                let missing_path = if path1.exists() { path2 } else { path1 };
                 Err(MvError::NoSuchFile(missing_path.display().to_string()).into())
             }
             libc::EXDEV => Err(USimpleError::new(
@@ -399,10 +399,10 @@ fn exchange_files(path1: &Path, path2: &Path, opts: &Options) -> UResult<()> {
                 get_message("mv-error-exchange-cross-device"),
             )),
             _ => {
-                let error_msg = std::io::Error::from_raw_os_error(errno);
+                let error_msg = io::Error::from_raw_os_error(errno);
                 Err(USimpleError::new(
                     1,
-                    format!("exchange failed: {}", error_msg),
+                    format!("exchange failed: {error_msg}"),
                 ))
             }
         }
