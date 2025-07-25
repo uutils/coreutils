@@ -10,22 +10,22 @@
 use jiff::Zoned;
 use jiff::fmt::StdIoWrite;
 use jiff::fmt::strtime::{BrokenDownTime, Config};
+use std::io::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::error::{UResult, USimpleError};
+
 /// Format the given date according to this time format style.
-fn format_zoned(out: &mut Vec<u8>, zoned: Zoned, fmt: &str) -> Result<(), jiff::Error> {
+fn format_zoned<W: Write>(out: &mut W, zoned: Zoned, fmt: &str) -> UResult<()> {
     let tm = BrokenDownTime::from(&zoned);
     let mut out = StdIoWrite(out);
     let config = Config::new().lenient(true);
     tm.format_with_config(&config, fmt, &mut out)
+        .map_err(|x| USimpleError::new(1, x.to_string()))
 }
 
 /// Format a `SystemTime` according to given fmt, and append to vector out.
-pub fn format_system_time(
-    out: &mut Vec<u8>,
-    time: SystemTime,
-    fmt: &str,
-) -> Result<(), jiff::Error> {
+pub fn format_system_time<W: Write>(out: &mut W, time: SystemTime, fmt: &str) -> UResult<()> {
     let zoned: Result<Zoned, _> = time.try_into();
     match zoned {
         Ok(zoned) => format_zoned(out, zoned, fmt),
@@ -39,10 +39,10 @@ pub fn format_system_time(
             let ts = if time > UNIX_EPOCH {
                 time.duration_since(UNIX_EPOCH).unwrap().as_secs()
             } else {
-                out.extend(b"-"); // Add negative sign
+                out.write_all(b"-")?; // Add negative sign
                 UNIX_EPOCH.duration_since(time).unwrap().as_secs()
             };
-            out.extend(ts.to_string().as_bytes());
+            out.write_all(ts.to_string().as_bytes())?;
             Ok(())
         }
     }

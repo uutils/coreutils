@@ -3004,7 +3004,6 @@ fn display_date(
     };
 
     uucore::time::format_system_time(out, time, fmt)
-        .map_err(|x| USimpleError::new(1, x.to_string()))
 }
 
 #[allow(dead_code)]
