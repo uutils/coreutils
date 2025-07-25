@@ -47,3 +47,41 @@ pub fn format_system_time(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::time::format_system_time;
+    use std::time::{Duration, UNIX_EPOCH};
+
+    // Test epoch SystemTime get printed correctly at UTC0, with 2 simple formats.
+    #[test]
+    fn test_simple_system_time() {
+        unsafe { std::env::set_var("TZ", "UTC0") };
+
+        let time = UNIX_EPOCH;
+        let mut out = Vec::new();
+        format_system_time(&mut out, time, "%Y-%m-%d %H:%M").expect("Formatting error.");
+        assert_eq!(String::from_utf8(out).unwrap(), "1970-01-01 00:00");
+
+        let mut out = Vec::new();
+        format_system_time(&mut out, time, "%Y-%m-%d %H:%M:%S.%N %z").expect("Formatting error.");
+        assert_eq!(
+            String::from_utf8(out).unwrap(),
+            "1970-01-01 00:00:00.000000000 +0000"
+        );
+    }
+
+    // Test that very large (positive or negative) lead to just the timestamp being printed.
+    #[test]
+    fn test_large_system_time() {
+        let time = UNIX_EPOCH + Duration::from_secs(67_768_036_191_763_200);
+        let mut out = Vec::new();
+        format_system_time(&mut out, time, "%Y-%m-%d %H:%M").expect("Formatting error.");
+        assert_eq!(String::from_utf8(out).unwrap(), "67768036191763200");
+
+        let time = UNIX_EPOCH - Duration::from_secs(67_768_040_922_076_800);
+        let mut out = Vec::new();
+        format_system_time(&mut out, time, "%Y-%m-%d %H:%M").expect("Formatting error.");
+        assert_eq!(String::from_utf8(out).unwrap(), "-67768040922076800");
+    }
+}
