@@ -113,7 +113,6 @@ struct FileInfo {
 
 struct Stat {
     path: PathBuf,
-    is_dir: bool,
     size: u64,
     blocks: u64,
     inodes: u64,
@@ -145,44 +144,27 @@ impl Stat {
             fs::symlink_metadata(path)
         }?;
 
-        #[cfg(not(windows))]
-        {
-            let file_info = FileInfo {
-                file_id: metadata.ino() as u128,
-                dev_id: metadata.dev(),
-            };
+        let file_info = get_file_info(path, &metadata);
+        let blocks = get_blocks(path, &metadata);
 
-            Ok(Self {
-                path: path.to_path_buf(),
-                is_dir: metadata.is_dir(),
-                size: if metadata.is_dir() { 0 } else { metadata.len() },
-                blocks: metadata.blocks(),
-                inodes: 1,
-                inode: Some(file_info),
-                metadata,
-            })
-        }
-
-        #[cfg(windows)]
-        {
-            let size_on_disk = get_size_on_disk(path);
-            let file_info = get_file_info(path);
-
-            Ok(Self {
-                path: path.to_path_buf(),
-                is_dir: metadata.is_dir(),
-                size: if metadata.is_dir() { 0 } else { metadata.len() },
-                blocks: size_on_disk / 1024 * 2,
-                inodes: 1,
-                inode: file_info,
-                metadata,
-            })
-        }
+        Ok(Self {
+            path: path.to_path_buf(),
+            size: if metadata.is_dir() { 0 } else { metadata.len() },
+            blocks,
+            inodes: 1,
+            inode: file_info,
+            metadata,
+        })
     }
 }
 
+#[cfg(not(windows))]
+fn get_blocks(_path: &Path, metadata: &Metadata) -> u64 {
+    metadata.blocks()
+}
+
 #[cfg(windows)]
-fn get_size_on_disk(path: &Path) -> u64 {
+fn get_blocks(path: &Path, _metadata: &Metadata) -> u64 {
     let mut size_on_disk = 0;
 
     // bind file so it stays in scope until end of function
@@ -207,11 +189,19 @@ fn get_size_on_disk(path: &Path) -> u64 {
         }
     }
 
-    size_on_disk
+    size_on_disk / 1024 * 2
+}
+
+#[cfg(not(windows))]
+fn get_file_info(_path: &Path, metadata: &Metadata) -> Option<FileInfo> {
+    Some(FileInfo {
+        file_id: metadata.ino() as u128,
+        dev_id: metadata.dev(),
+    })
 }
 
 #[cfg(windows)]
-fn get_file_info(path: &Path) -> Option<FileInfo> {
+fn get_file_info(path: &Path, _metadata: &Metadata) -> Option<FileInfo> {
     let mut result = None;
 
     let Ok(file) = File::open(path) else {
@@ -269,7 +259,7 @@ fn du(
     seen_inodes: &mut HashSet<FileInfo>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
-    if my_stat.is_dir {
+    if my_stat.metadata.is_dir() {
         let read = match fs::read_dir(&my_stat.path) {
             Ok(read) => read,
             Err(e) => {
@@ -330,7 +320,7 @@ fn du(
                                 seen_inodes.insert(inode);
                             }
 
-                            if this_stat.is_dir {
+                            if this_stat.metadata.is_dir() {
                                 if options.one_file_system {
                                     if let (Some(this_inode), Some(my_inode)) =
                                         (this_stat.inode, my_stat.inode)
