@@ -5,7 +5,7 @@
 use half::f16;
 use std::num::FpCategory;
 
-use crate::formatteriteminfo::{FormatWriter, FormatterItemInfo};
+use crate::formatter_item_info::{FormatWriter, FormatterItemInfo};
 
 pub static FORMAT_ITEM_F16: FormatterItemInfo = FormatterItemInfo {
     byte_size: 2,
