@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use crate::formatteriteminfo::{FormatWriter, FormatterItemInfo};
+use crate::formatter_item_info::{FormatWriter, FormatterItemInfo};
 
 pub static FORMAT_ITEM_A: FormatterItemInfo = FormatterItemInfo {
     byte_size: 1,

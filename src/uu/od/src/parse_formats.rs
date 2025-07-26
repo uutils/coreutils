@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use uucore::display::Quotable;
 use uucore::locale::{get_message, get_message_with_args};
 
-use crate::formatteriteminfo::FormatterItemInfo;
+use crate::formatter_item_info::FormatterItemInfo;
 use crate::prn_char::*;
 use crate::prn_float::*;
 use crate::prn_int::*;

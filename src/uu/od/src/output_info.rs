@@ -7,7 +7,7 @@
 use std::cmp;
 use std::slice::Iter;
 
-use crate::formatteriteminfo::FormatterItemInfo;
+use crate::formatter_item_info::FormatterItemInfo;
 use crate::parse_formats::ParsedFormatterItemInfo;
 
 /// Size in bytes of the max datatype. ie set to 16 for 128-bit numbers.
