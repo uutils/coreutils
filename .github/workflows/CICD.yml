@@ -1,6 +1,6 @@
 name: CICD
 
-# spell-checker:ignore (abbrev/names) CICD CodeCOV MacOS MinGW MSVC musl taiki
+# spell-checker:ignore (abbrev/names) CACHEDIR CICD CodeCOV MacOS MinGW MSVC musl taiki
 # spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic CARGOFLAGS
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata
 # spell-checker:ignore (people) Peltoche rivy dtolnay Anson dawidd
@@ -278,9 +278,21 @@ jobs:
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: "`make build`"
+        # Also check that target/CACHEDIR.TAG is created on a fresh checkout
       shell: bash
       run: |
+        set -x
+        # Target directory must not exist to start with, otherwise cargo
+        # will not create target/CACHEDIR.TAG.
+        if [[ -d target ]]; then
+          mv -T target target.cache
+        fi
+        # Actually do the build
         make build
+        echo "Check that target directory will be ignored by backup tools"
+        test -f target/CACHEDIR.TAG
+        # Restore cache for target/release (we only did a debug build)
+        mv -t target/ target.cache/release 2>/dev/null || true
     - name: "`make nextest`"
       shell: bash
       run: make nextest CARGOFLAGS="--profile ci --hide-progress-bar"
@@ -289,6 +301,7 @@ jobs:
     - name: "`make install COMPLETIONS=n MANPAGES=n`"
       shell: bash
       run: |
+        set -x
         DESTDIR=/tmp/ make PROFILE=release COMPLETIONS=n MANPAGES=n install
         # Check that the utils are present
         test -f /tmp/usr/local/bin/tty
@@ -303,6 +316,7 @@ jobs:
     - name: "`make install`"
       shell: bash
       run: |
+        set -x
         DESTDIR=/tmp/ make PROFILE=release install
         # Check that the utils are present
         test -f /tmp/usr/local/bin/tty
@@ -317,6 +331,7 @@ jobs:
     - name: "`make uninstall`"
       shell: bash
       run: |
+        set -x
         DESTDIR=/tmp/ make uninstall
         # Check that the utils are not present
         ! test -f /tmp/usr/local/bin/tty
