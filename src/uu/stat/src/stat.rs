@@ -10,13 +10,12 @@ use clap::builder::ValueParser;
 use uucore::display::Quotable;
 use uucore::fs::display_permissions;
 use uucore::fsext::{
-    BirthTime, FsMeta, MetadataTimeField, StatFs, metadata_get_time, pretty_filetype,
-    pretty_fstype, read_fs_list, statfs,
+    FsMeta, MetadataTimeField, StatFs, metadata_get_time, pretty_filetype, pretty_fstype,
+    read_fs_list, statfs,
 };
 use uucore::libc::mode_t;
 use uucore::{entries, format_usage, show_error, show_warning};
 
-use chrono::{DateTime, Local};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
@@ -29,6 +28,7 @@ use std::{env, fs};
 use std::collections::HashMap;
 use thiserror::Error;
 use uucore::locale::{get_message, get_message_with_args};
+use uucore::time::{format_system_time, system_time_to_sec};
 
 #[derive(Debug, Error)]
 enum StatError {
@@ -1030,7 +1030,10 @@ impl Stater {
                     'w' => OutputType::Str(pretty_time(meta, MetadataTimeField::Birth)),
 
                     // time of file birth, seconds since Epoch; 0 if unknown
-                    'W' => OutputType::Unsigned(meta.birth().unwrap_or_default().0),
+                    'W' => OutputType::Integer(
+                        metadata_get_time(meta, MetadataTimeField::Birth)
+                            .map_or(0, |x| system_time_to_sec(x).0),
+                    ),
 
                     // time of last access, human-readable
                     'x' => OutputType::Str(pretty_time(meta, MetadataTimeField::Access)),
@@ -1040,21 +1043,9 @@ impl Stater {
                     'y' => OutputType::Str(pretty_time(meta, MetadataTimeField::Modification)),
                     // time of last data modification, seconds since Epoch
                     'Y' => {
-                        let sec = meta.mtime();
-                        let nsec = meta.mtime_nsec();
-                        let tm = DateTime::from_timestamp(sec, nsec as u32).unwrap_or_default();
-                        let tm: DateTime<Local> = tm.into();
-                        match tm.timestamp_nanos_opt() {
-                            None => {
-                                let micros = tm.timestamp_micros();
-                                let secs = micros as f64 / 1_000_000.0;
-                                OutputType::Float(secs)
-                            }
-                            Some(ns) => {
-                                let secs = ns as f64 / 1_000_000_000.0;
-                                OutputType::Float(secs)
-                            }
-                        }
+                        let (sec, nsec) = metadata_get_time(meta, MetadataTimeField::Modification)
+                            .map_or((0, 0), system_time_to_sec);
+                        OutputType::Float(sec as f64 + nsec as f64 / 1_000_000_000.0)
                     }
                     // time of last status change, human-readable
                     'z' => OutputType::Str(pretty_time(meta, MetadataTimeField::Change)),
@@ -1297,7 +1288,7 @@ const PRETTY_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S.%N %z";
 fn pretty_time(meta: &Metadata, md_time_field: MetadataTimeField) -> String {
     if let Some(time) = metadata_get_time(meta, md_time_field) {
         let mut tmp = Vec::new();
-        if uucore::time::format_system_time(&mut tmp, time, PRETTY_DATETIME_FORMAT, false).is_ok() {
+        if format_system_time(&mut tmp, time, PRETTY_DATETIME_FORMAT, false).is_ok() {
             return String::from_utf8(tmp).unwrap();
         }
     }

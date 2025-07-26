@@ -25,6 +25,17 @@ fn format_zoned<W: Write>(out: &mut W, zoned: Zoned, fmt: &str) -> UResult<()> {
         .map_err(|x| USimpleError::new(1, x.to_string()))
 }
 
+/// Convert a SystemTime` to a number of seconds since UNIX_EPOCH
+pub fn system_time_to_sec(time: SystemTime) -> (i64, u32) {
+    if time > UNIX_EPOCH {
+        let d = time.duration_since(UNIX_EPOCH).unwrap();
+        (d.as_secs() as i64, d.subsec_nanos())
+    } else {
+        let d = UNIX_EPOCH.duration_since(time).unwrap();
+        (-(d.as_secs() as i64), d.subsec_nanos())
+    }
+}
+
 /// Format a `SystemTime` according to given fmt, and append to vector out.
 pub fn format_system_time<W: Write>(
     out: &mut W,
@@ -42,11 +53,7 @@ pub fn format_system_time<W: Write>(
             // but it still far enough in the future/past to be unlikely to matter:
             //  jiff: Year between -9999 to 9999 (UTC) [-377705023201..=253402207200]
             //  GNU: Year fits in signed 32 bits (timezone dependent)
-            let ts: i64 = if time > UNIX_EPOCH {
-                time.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64
-            } else {
-                -(UNIX_EPOCH.duration_since(time).unwrap().as_secs() as i64)
-            };
+            let ts: i64 = system_time_to_sec(time).0;
             let str = ts.to_string();
             if show_error {
                 show_error!("time '{str}' is out of range");

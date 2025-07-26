@@ -3699,7 +3699,6 @@ dependencies = [
 name = "uu_stat"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "clap",
  "thiserror 2.0.12",
  "uucore",

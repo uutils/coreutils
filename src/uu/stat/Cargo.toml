@@ -26,7 +26,6 @@ uucore = { workspace = true, features = [
   "fsext",
   "time",
 ] }
-chrono = { workspace = true }
 thiserror = { workspace = true }
 
 [features]

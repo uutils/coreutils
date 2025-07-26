@@ -69,7 +69,9 @@ use std::io::Error as IOError;
 use std::mem;
 #[cfg(windows)]
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
+#[cfg(not(windows))]
+use std::time::UNIX_EPOCH;
 use std::{borrow::Cow, ffi::OsString};
 
 use std::fs::Metadata;
@@ -113,19 +115,6 @@ pub use libc::statfs as statfs_fn;
     target_os = "redox"
 ))]
 pub use libc::statvfs as statfs_fn;
-
-pub trait BirthTime {
-    fn birth(&self) -> Option<(u64, u32)>;
-}
-
-impl BirthTime for Metadata {
-    fn birth(&self) -> Option<(u64, u32)> {
-        self.created()
-            .ok()
-            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-            .map(|e| (e.as_secs(), e.subsec_nanos()))
-    }
-}
 
 #[derive(Debug, Copy, Clone)]
 pub enum MetadataTimeField {
