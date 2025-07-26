@@ -38,7 +38,7 @@ enum NohupError {
     #[error("{}", get_message("nohup-error-cannot-detach"))]
     CannotDetach,
 
-    #[error("{}", get_message_with_args("nohup-error-cannot-replace", HashMap::from([("name".to_string(), _0.to_string()), ("err".to_string(), _1.to_string())])))]
+    #[error("{}", get_message_with_args("nohup-error-cannot-replace", HashMap::from([("name".to_string(), (*_0).to_string()), ("err".to_string(), _1.to_string())])))]
     CannotReplace(&'static str, #[source] Error),
 
     #[error("{}", get_message_with_args("nohup-error-open-failed", HashMap::from([("path".to_string(), NOHUP_OUT.quote().to_string()), ("err".to_string(), _1.to_string())])))]
@@ -72,7 +72,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if unsafe { !_vprocmgr_detach_from_console(0).is_null() } {
         return Err(NohupError::CannotDetach.into());
-    };
+    }
 
     let cstrs: Vec<CString> = matches
         .get_many::<String>(options::CMD)

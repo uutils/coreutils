@@ -5,8 +5,6 @@
 // spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh econl igpar ispeed ospeed
 
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
@@ -30,6 +28,17 @@ fn print_all() {
     ] {
         res.stdout_contains(flag);
     }
+}
+
+#[test]
+#[ignore = "Fails because cargo test does not run in a tty"]
+fn sane_settings() {
+    new_ucmd!().args(&["intr", "^A"]).succeeds();
+    new_ucmd!().succeeds().stdout_contains("intr = ^A");
+    new_ucmd!()
+        .args(&["sane"])
+        .succeeds()
+        .stdout_str_check(|s| !s.contains("intr = ^A"));
 }
 
 #[test]
@@ -242,4 +251,72 @@ fn row_column_sizes() {
         .args(&["rows"])
         .fails()
         .stderr_contains("missing argument to 'rows'");
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn line() {
+    new_ucmd!()
+        .args(&["line"])
+        .fails()
+        .stderr_contains("missing argument to 'line'");
+
+    new_ucmd!()
+        .args(&["line", "-1"])
+        .fails()
+        .stderr_contains("invalid integer argument: '-1'");
+
+    new_ucmd!()
+        .args(&["line", "256"])
+        .fails()
+        .stderr_contains("invalid integer argument: '256'");
+}
+
+#[test]
+fn min_and_time() {
+    new_ucmd!()
+        .args(&["min"])
+        .fails()
+        .stderr_contains("missing argument to 'min'");
+
+    new_ucmd!()
+        .args(&["time"])
+        .fails()
+        .stderr_contains("missing argument to 'time'");
+
+    new_ucmd!()
+        .args(&["min", "-1"])
+        .fails()
+        .stderr_contains("invalid integer argument: '-1'");
+
+    new_ucmd!()
+        .args(&["time", "-1"])
+        .fails()
+        .stderr_contains("invalid integer argument: '-1'");
+
+    new_ucmd!()
+        .args(&["min", "256"])
+        .fails()
+        .stderr_contains("invalid integer argument: '256': Value too large for defined data type");
+
+    new_ucmd!()
+        .args(&["time", "256"])
+        .fails()
+        .stderr_contains("invalid integer argument: '256': Value too large for defined data type");
+}
+
+#[test]
+fn non_negatable_combo() {
+    new_ucmd!()
+        .args(&["-dec"])
+        .fails()
+        .stderr_contains("invalid argument '-dec'");
+    new_ucmd!()
+        .args(&["-crt"])
+        .fails()
+        .stderr_contains("invalid argument '-crt'");
+    new_ucmd!()
+        .args(&["-ek"])
+        .fails()
+        .stderr_contains("invalid argument '-ek'");
 }

@@ -31,9 +31,6 @@ use clap::{
     builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
 };
 use glob::{MatchOptions, Pattern};
-use jiff::fmt::StdIoWrite;
-use jiff::fmt::strtime::BrokenDownTime;
-use jiff::{Timestamp, Zoned};
 use lscolors::LsColors;
 use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
 use thiserror::Error;
@@ -77,6 +74,7 @@ use uucore::{parser::parse_glob, show, show_error, show_warning};
 mod dired;
 use dired::{DiredOutput, is_dired_arg_present};
 mod colors;
+use crate::options::QUOTING_STYLE;
 use colors::{StyleManager, color_name};
 
 pub mod options {
@@ -172,7 +170,7 @@ const DEFAULT_FILE_SIZE_BLOCK_SIZE: u64 = 1;
 
 #[derive(Error, Debug)]
 enum LsError {
-    #[error("{}", get_message_with_args("ls-error-invalid-line-width", HashMap::from([("width".to_string(), format!("'{}'", _0))])))]
+    #[error("{}", get_message_with_args("ls-error-invalid-line-width", HashMap::from([("width".to_string(), format!("'{_0}'"))])))]
     InvalidLineWidth(String),
 
     #[error("{}", get_message_with_args("ls-error-general-io", HashMap::from([("error".to_string(), _0.to_string())])))]
@@ -195,7 +193,7 @@ enum LsError {
     })]
     IOErrorContext(PathBuf, std::io::Error, bool),
 
-    #[error("{}", get_message_with_args("ls-error-invalid-block-size", HashMap::from([("size".to_string(), format!("'{}'", _0))])))]
+    #[error("{}", get_message_with_args("ls-error-invalid-block-size", HashMap::from([("size".to_string(), format!("'{_0}'"))])))]
     BlockSizeParseError(String),
 
     #[error("{}", get_message("ls-error-dired-and-zero-incompatible"))]
@@ -257,56 +255,30 @@ enum Time {
     Birth,
 }
 
-#[derive(Debug)]
-enum TimeStyle {
-    FullIso,
-    LongIso,
-    Iso,
-    Locale,
-    Format(String),
-}
-
-/// Whether the given date is considered recent (i.e., in the last 6 months).
-fn is_recent(time: Timestamp, state: &mut ListState) -> bool {
-    time > state.recent_time_threshold
-}
-
-impl TimeStyle {
-    /// Format the given time according to this time format style.
-    fn format(
-        &self,
-        date: Zoned,
-        out: &mut Vec<u8>,
-        state: &mut ListState,
-    ) -> Result<(), jiff::Error> {
-        let recent = is_recent(date.timestamp(), state);
-        let tm = BrokenDownTime::from(&date);
-        let mut out = StdIoWrite(out);
-        let config = jiff::fmt::strtime::Config::new().lenient(true);
-
-        let fmt = match (self, recent) {
-            (Self::FullIso, _) => "%Y-%m-%d %H:%M:%S.%f %z",
-            (Self::LongIso, _) => "%Y-%m-%d %H:%M",
-            (Self::Iso, true) => "%m-%d %H:%M",
-            (Self::Iso, false) => "%Y-%m-%d ",
-            // TODO: Using correct locale string is not implemented.
-            (Self::Locale, true) => "%b %e %H:%M",
-            (Self::Locale, false) => "%b %e  %Y",
-            (Self::Format(fmt), _) => fmt,
-        };
-
-        tm.format_with_config(&config, fmt, &mut out)
-    }
-}
-
-fn parse_time_style(options: &clap::ArgMatches) -> Result<TimeStyle, LsError> {
-    let possible_time_styles = vec![
-        "full-iso".to_string(),
-        "long-iso".to_string(),
-        "iso".to_string(),
-        "locale".to_string(),
-        "+FORMAT (e.g., +%H:%M) for a 'date'-style format".to_string(),
+fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String>), LsError> {
+    const TIME_STYLES: [(&str, (&str, Option<&str>)); 4] = [
+        ("full-iso", ("%Y-%m-%d %H:%M:%S.%f %z", None)),
+        ("long-iso", ("%Y-%m-%d %H:%M", None)),
+        ("iso", ("%m-%d %H:%M", Some("%Y-%m-%d "))),
+        // TODO: Using correct locale string is not implemented.
+        ("locale", ("%b %e %H:%M", Some("%b %e  %Y"))),
     ];
+    // A map from a time-style parameter to a length-2 tuple of formats:
+    // the first one is used for recent dates, the second one for older ones (optional).
+    let time_styles = HashMap::from(TIME_STYLES);
+    let possible_time_styles = TIME_STYLES
+        .iter()
+        .map(|(x, _)| *x)
+        .chain(iter::once(
+            "+FORMAT (e.g., +%H:%M) for a 'date'-style format",
+        ))
+        .map(|s| s.to_string());
+
+    // Convert time_styles references to owned String/option.
+    fn ok((recent, older): (&str, Option<&str>)) -> Result<(String, Option<String>), LsError> {
+        Ok((recent.to_string(), older.map(String::from)))
+    }
+
     if let Some(field) = options.get_one::<String>(options::TIME_STYLE) {
         //If both FULL_TIME and TIME_STYLE are present
         //The one added last is dominant
@@ -314,26 +286,23 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<TimeStyle, LsError> {
             && options.indices_of(options::FULL_TIME).unwrap().next_back()
                 > options.indices_of(options::TIME_STYLE).unwrap().next_back()
         {
-            Ok(TimeStyle::FullIso)
+            ok(time_styles["full-iso"])
         } else {
-            match field.as_str() {
-                "full-iso" => Ok(TimeStyle::FullIso),
-                "long-iso" => Ok(TimeStyle::LongIso),
-                "iso" => Ok(TimeStyle::Iso),
-                "locale" => Ok(TimeStyle::Locale),
-                _ => match field.chars().next().unwrap() {
-                    '+' => Ok(TimeStyle::Format(String::from(&field[1..]))),
+            match time_styles.get(field.as_str()) {
+                Some(formats) => ok(*formats),
+                None => match field.chars().next().unwrap() {
+                    '+' => Ok((field[1..].to_string(), None)),
                     _ => Err(LsError::TimeStyleParseError(
                         String::from(field),
-                        possible_time_styles,
+                        possible_time_styles.collect(),
                     )),
                 },
             }
         }
     } else if options.get_flag(options::FULL_TIME) {
-        Ok(TimeStyle::FullIso)
+        ok(time_styles["full-iso"])
     } else {
-        Ok(TimeStyle::Locale)
+        ok(time_styles["locale"])
     }
 }
 
@@ -376,7 +345,8 @@ pub struct Config {
     // Dir and vdir needs access to this field
     pub quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
-    time_style: TimeStyle,
+    time_format_recent: String,        // Time format for recent dates
+    time_format_older: Option<String>, // Time format for older dates (optional, if not present, time_format_recent is used)
     context: bool,
     selinux_supported: bool,
     group_directories_first: bool,
@@ -517,8 +487,8 @@ fn extract_time(options: &clap::ArgMatches) -> Time {
     }
 }
 
-// Some env variables can be passed
-// For now, we are only verifying if empty or not and known for TERM
+/// Some env variables can be passed
+/// For now, we are only verifying if empty or not and known for `TERM`
 fn is_color_compatible_term() -> bool {
     let is_term_set = std::env::var("TERM").is_ok();
     let is_colorterm_set = std::env::var("COLORTERM").is_ok();
@@ -583,12 +553,12 @@ fn extract_hyperlink(options: &clap::ArgMatches) -> bool {
     }
 }
 
-/// Match the argument given to --quoting-style or the QUOTING_STYLE env variable.
+/// Match the argument given to --quoting-style or the [`QUOTING_STYLE`] env variable.
 ///
 /// # Arguments
 ///
 /// * `style`: the actual argument string
-/// * `show_control` - A boolean value representing whether or not to show control characters.
+/// * `show_control` - A boolean value representing whether to show control characters.
 ///
 /// # Returns
 ///
@@ -609,18 +579,18 @@ fn match_quoting_style_name(style: &str, show_control: bool) -> Option<QuotingSt
 
 /// Extracts the quoting style to use based on the options provided.
 /// If no options are given, it looks if a default quoting style is provided
-/// through the QUOTING_STYLE environment variable.
+/// through the [`QUOTING_STYLE`] environment variable.
 ///
 /// # Arguments
 ///
-/// * `options` - A reference to a clap::ArgMatches object containing command line arguments.
+/// * `options` - A reference to a [`clap::ArgMatches`] object containing command line arguments.
 /// * `show_control` - A boolean value representing whether or not to show control characters.
 ///
 /// # Returns
 ///
-/// A QuotingStyle variant representing the quoting style to use.
+/// A [`QuotingStyle`] variant representing the quoting style to use.
 fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> QuotingStyle {
-    let opt_quoting_style = options.get_one::<String>(options::QUOTING_STYLE);
+    let opt_quoting_style = options.get_one::<String>(QUOTING_STYLE);
 
     if let Some(style) = opt_quoting_style {
         match match_quoting_style_name(style, show_control) {
@@ -670,7 +640,7 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> Quot
 ///
 /// # Returns
 ///
-/// An IndicatorStyle variant representing the indicator style to use.
+/// An [`IndicatorStyle`] variant representing the indicator style to use.
 fn extract_indicator_style(options: &clap::ArgMatches) -> IndicatorStyle {
     if let Some(field) = options.get_one::<String>(options::INDICATOR_STYLE) {
         match field.as_str() {
@@ -924,10 +894,10 @@ impl Config {
         let indicator_style = extract_indicator_style(options);
         // Only parse the value to "--time-style" if it will become relevant.
         let dired = options.get_flag(options::DIRED);
-        let time_style = if format == Format::Long || dired {
+        let (time_format_recent, time_format_older) = if format == Format::Long || dired {
             parse_time_style(options)?
         } else {
-            TimeStyle::Iso
+            Default::default()
         };
 
         let mut ignore_patterns: Vec<Pattern> = Vec::new();
@@ -998,7 +968,7 @@ impl Config {
         let zero_colors_opts = [options::COLOR];
         let zero_show_control_opts = [options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS];
         let zero_quoting_style_opts = [
-            options::QUOTING_STYLE,
+            QUOTING_STYLE,
             options::quoting::C,
             options::quoting::ESCAPE,
             options::quoting::LITERAL,
@@ -1113,7 +1083,8 @@ impl Config {
             width,
             quoting_style,
             indicator_style,
-            time_style,
+            time_format_recent,
+            time_format_older,
             context,
             selinux_supported: {
                 #[cfg(feature = "selinux")]
@@ -1159,8 +1130,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let locs = matches
         .get_many::<OsString>(options::PATHS)
-        .map(|v| v.map(Path::new).collect())
-        .unwrap_or_else(|| vec![Path::new(".")]);
+        .map_or_else(|| vec![Path::new(".")], |v| v.map(Path::new).collect());
 
     list(locs, &config)
 }
@@ -1330,8 +1300,8 @@ pub fn uu_app() -> Command {
         )
         // Quoting style
         .arg(
-            Arg::new(options::QUOTING_STYLE)
-                .long(options::QUOTING_STYLE)
+            Arg::new(QUOTING_STYLE)
+                .long(QUOTING_STYLE)
                 .help(get_message("ls-help-set-quoting-style"))
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("literal"),
@@ -1343,7 +1313,7 @@ pub fn uu_app() -> Command {
                     PossibleValue::new("escape"),
                 ]))
                 .overrides_with_all([
-                    options::QUOTING_STYLE,
+                    QUOTING_STYLE,
                     options::quoting::LITERAL,
                     options::quoting::ESCAPE,
                     options::quoting::C,
@@ -1356,7 +1326,7 @@ pub fn uu_app() -> Command {
                 .alias("l")
                 .help(get_message("ls-help-literal-quoting-style"))
                 .overrides_with_all([
-                    options::QUOTING_STYLE,
+                    QUOTING_STYLE,
                     options::quoting::LITERAL,
                     options::quoting::ESCAPE,
                     options::quoting::C,
@@ -1369,7 +1339,7 @@ pub fn uu_app() -> Command {
                 .long(options::quoting::ESCAPE)
                 .help(get_message("ls-help-escape-quoting-style"))
                 .overrides_with_all([
-                    options::QUOTING_STYLE,
+                    QUOTING_STYLE,
                     options::quoting::LITERAL,
                     options::quoting::ESCAPE,
                     options::quoting::C,
@@ -1382,7 +1352,7 @@ pub fn uu_app() -> Command {
                 .long(options::quoting::C)
                 .help(get_message("ls-help-c-quoting-style"))
                 .overrides_with_all([
-                    options::QUOTING_STYLE,
+                    QUOTING_STYLE,
                     options::quoting::LITERAL,
                     options::quoting::ESCAPE,
                     options::quoting::C,
@@ -1900,11 +1870,7 @@ impl PathData {
             None => OnceCell::new(),
         };
 
-        let security_context = if config.context {
-            get_security_context(config, &p_buf, must_dereference)
-        } else {
-            String::new()
-        };
+        let security_context = get_security_context(config, &p_buf, must_dereference);
 
         Self {
             md: OnceCell::new(),
@@ -2006,7 +1972,7 @@ struct ListState<'a> {
     uid_cache: HashMap<u32, String>,
     #[cfg(unix)]
     gid_cache: HashMap<u32, String>,
-    recent_time_threshold: Timestamp,
+    recent_time_threshold: SystemTime,
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -2024,7 +1990,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         #[cfg(unix)]
         gid_cache: HashMap::new(),
         // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-        recent_time_threshold: Timestamp::now() - Duration::new(31_556_952 / 2, 0),
+        recent_time_threshold: SystemTime::now() - Duration::new(31_556_952 / 2, 0),
     };
 
     for loc in locs {
@@ -2138,13 +2104,16 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
             )
         }),
         Sort::Size => {
-            entries.sort_by_key(|k| Reverse(k.get_metadata(out).map(|md| md.len()).unwrap_or(0)));
+            entries.sort_by_key(|k| Reverse(k.get_metadata(out).map_or(0, |md| md.len())));
         }
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
         Sort::Version => entries.sort_by(|a, b| {
-            version_cmp(&a.p_buf.to_string_lossy(), &b.p_buf.to_string_lossy())
-                .then(a.p_buf.to_string_lossy().cmp(&b.p_buf.to_string_lossy()))
+            version_cmp(
+                os_str_as_bytes_lossy(a.p_buf.as_os_str()).as_ref(),
+                os_str_as_bytes_lossy(b.p_buf.as_os_str()).as_ref(),
+            )
+            .then(a.p_buf.to_string_lossy().cmp(&b.p_buf.to_string_lossy()))
         }),
         Sort::Extension => entries.sort_by(|a, b| {
             a.p_buf
@@ -2197,8 +2166,7 @@ fn is_hidden(file_path: &DirEntry) -> bool {
         file_path
             .file_name()
             .to_str()
-            .map(|res| res.starts_with('.'))
-            .unwrap_or(false)
+            .is_some_and(|res| res.starts_with('.'))
     }
 }
 
@@ -2277,7 +2245,7 @@ fn enter_directory(
             let entry_path_data =
                 PathData::new(dir_entry.path(), Some(Ok(dir_entry)), None, config, false);
             entries.push(entry_path_data);
-        };
+        }
     }
 
     sort_entries(&mut entries, config, &mut state.out);
@@ -2465,7 +2433,7 @@ fn display_additional_leading_info(
             write!(result, "{s} ").unwrap();
         } else {
             write!(result, "{} ", pad_left(&s, padding.block_size)).unwrap();
-        };
+        }
     }
     Ok(result)
 }
@@ -2599,7 +2567,7 @@ fn display_items(
                     write!(state.out, "{}", config.line_ending)?;
                 }
             }
-        };
+        }
     }
 
     Ok(())
@@ -2707,7 +2675,7 @@ fn display_grid(
     Ok(())
 }
 
-/// This writes to the BufWriter state.out a single string of the output of `ls -l`.
+/// This writes to the [`BufWriter`] `state.out` a single string of the output of `ls -l`.
 ///
 /// It writes the following keys, in order:
 /// * `inode` ([`get_inode`], config-optional)
@@ -2721,8 +2689,8 @@ fn display_grid(
 /// * `item_name` ([`display_item_name`])
 ///
 /// This function needs to display information in columns:
-/// * permissions and system_time are already guaranteed to be pre-formatted in fixed length.
-/// * item_name is the last column and is left-aligned.
+/// * permissions and `system_time` are already guaranteed to be pre-formatted in fixed length.
+/// * `item_name` is the last column and is left-aligned.
 /// * Everything else needs to be padded using [`pad_left`].
 ///
 /// That's why we have the parameters:
@@ -2819,7 +2787,7 @@ fn display_item_long(
                     padding.minor,
                 );
             }
-        };
+        }
 
         output_display.extend(b" ");
         display_date(md, config, state, &mut output_display)?;
@@ -2995,7 +2963,7 @@ fn display_group(_metadata: &Metadata, _config: &Config, _state: &mut ListState)
     "somegroup"
 }
 
-// The implementations for get_time are separated because some options, such
+// The implementations for get_system_time are separated because some options, such
 // as ctime will not be available
 #[cfg(unix)]
 fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
@@ -3017,28 +2985,25 @@ fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
     }
 }
 
-fn get_time(md: &Metadata, config: &Config) -> Option<Zoned> {
-    let time = get_system_time(md, config)?;
-    time.try_into().ok()
-}
-
 fn display_date(
     metadata: &Metadata,
     config: &Config,
     state: &mut ListState,
     out: &mut Vec<u8>,
 ) -> UResult<()> {
-    match get_time(metadata, config) {
-        // TODO: Some fancier error conversion might be nice.
-        Some(time) => config
-            .time_style
-            .format(time, out, state)
-            .map_err(|x| USimpleError::new(1, x.to_string())),
-        None => {
-            out.extend(b"???");
-            Ok(())
-        }
-    }
+    let Some(time) = get_system_time(metadata, config) else {
+        out.extend(b"???");
+        return Ok(());
+    };
+
+    // Use "recent" format if the given date is considered recent (i.e., in the last 6 months),
+    // or if no "older" format is available.
+    let fmt = match &config.time_format_older {
+        Some(time_format_older) if time <= state.recent_time_threshold => time_format_older,
+        _ => &config.time_format_recent,
+    };
+
+    uucore::time::format_system_time(out, time, fmt, false)
 }
 
 #[allow(dead_code)]
@@ -3327,8 +3292,8 @@ fn display_inode(metadata: &Metadata) -> String {
     get_inode(metadata)
 }
 
-// This returns the SELinux security context as UTF8 `String`.
-// In the long term this should be changed to `OsStr`, see discussions at #2621/#2656
+/// This returns the `SELinux` security context as UTF8 `String`.
+/// In the long term this should be changed to [`OsStr`], see discussions at #2621/#2656
 fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -> String {
     let substitute_string = "?".to_string();
     // If we must dereference, ensure that the symlink is actually valid even if the system
@@ -3339,7 +3304,10 @@ fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -
             Err(err) => {
                 // The Path couldn't be dereferenced, so return early and set exit code 1
                 // to indicate a minor error
-                show!(LsError::IOErrorContext(p_buf.to_path_buf(), err, false));
+                // Only show error when context display is requested to avoid duplicate messages
+                if config.context {
+                    show!(LsError::IOErrorContext(p_buf.to_path_buf(), err, false));
+                }
                 return substitute_string;
             }
             Ok(_md) => (),

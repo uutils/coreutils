@@ -303,7 +303,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                             ])
                         )
                     );
-                };
+                }
             }
             #[cfg(windows)]
             if target_dir.is_dir() {
@@ -321,7 +321,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                             ])
                         )
                     );
-                };
+                }
             }
             target_dir.to_path_buf()
         } else {
@@ -433,17 +433,17 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
                     return Err(LnError::SomeLinksFailed.into());
                 }
 
-                if fs::remove_file(dst).is_ok() {};
+                if fs::remove_file(dst).is_ok() {}
                 // In case of error, don't do anything
             }
             OverwriteMode::Force => {
                 if !dst.is_symlink() && paths_refer_to_same_file(src, dst, true) {
                     return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
                 }
-                if fs::remove_file(dst).is_ok() {};
+                if fs::remove_file(dst).is_ok() {}
                 // In case of error, don't do anything
             }
-        };
+        }
     }
 
     if settings.symbolic {

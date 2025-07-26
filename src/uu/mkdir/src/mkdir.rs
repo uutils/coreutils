@@ -42,10 +42,10 @@ pub struct Config<'a> {
     /// Print message for each created directory.
     pub verbose: bool,
 
-    /// Set SELinux security context.
+    /// Set `SELinux` security context.
     pub set_selinux_context: bool,
 
-    /// Specific SELinux context.
+    /// Specific `SELinux` context.
     pub context: Option<&'a String>,
 }
 
@@ -81,22 +81,40 @@ fn get_mode(matches: &ArgMatches, mode_had_minus_prefix: bool) -> Result<u32, St
 }
 
 #[cfg(windows)]
-fn strip_minus_from_mode(_args: &mut [String]) -> bool {
-    false
+fn strip_minus_from_mode(_args: &mut [OsString]) -> UResult<bool> {
+    Ok(false)
 }
 
+// Iterate 'args' and delete the first occurrence
+// of a prefix '-' if it's associated with MODE
+// e.g. "chmod -v -xw -R FILE" -> "chmod -v xw -R FILE"
 #[cfg(not(windows))]
-fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
-    mode::strip_minus_from_mode(args)
+fn strip_minus_from_mode(args: &mut Vec<OsString>) -> UResult<bool> {
+    for arg in args {
+        if arg == "--" {
+            break;
+        }
+        let bytes = uucore::os_str_as_bytes(arg)?;
+        if let Some(b'-') = bytes.first() {
+            if let Some(
+                b'r' | b'w' | b'x' | b'X' | b's' | b't' | b'u' | b'g' | b'o' | b'0'..=b'7',
+            ) = bytes.get(1)
+            {
+                *arg = uucore::os_str_from_bytes(&bytes[1..])?.into_owned();
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut args = args.collect_lossy();
+    let mut args: Vec<OsString> = args.collect();
 
     // Before we can parse 'args' with clap (and previously getopts),
     // a possible MODE prefix '-' needs to be removed (e.g. "chmod -x FILE").
-    let mode_had_minus_prefix = strip_minus_from_mode(&mut args);
+    let mode_had_minus_prefix = strip_minus_from_mode(&mut args)?;
 
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +

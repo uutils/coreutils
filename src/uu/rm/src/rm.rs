@@ -373,10 +373,7 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
 /// `path` must be a directory. If there is an error reading the
 /// contents of the directory, this returns `false`.
 fn is_dir_empty(path: &Path) -> bool {
-    match fs::read_dir(path) {
-        Err(_) => false,
-        Ok(iter) => iter.count() == 0,
-    }
+    fs::read_dir(path).is_ok_and(|mut iter| iter.next().is_none())
 }
 
 #[cfg(unix)]
@@ -429,6 +426,25 @@ fn is_writable(_path: &Path) -> bool {
 /// directory itself. In case of an error, print the error message to
 /// `stderr` and return `true`. If there were no errors, return `false`.
 fn remove_dir_recursive(path: &Path, options: &Options) -> bool {
+    // Base case 1: this is a file or a symbolic link.
+    //
+    // The symbolic link case is important because it could be a link to
+    // a directory and we don't want to recurse. In particular, this
+    // avoids an infinite recursion in the case of a link to the current
+    // directory, like `ln -s . link`.
+    if !path.is_dir() || path.is_symlink() {
+        return remove_file(path, options);
+    }
+
+    // Base case 2: this is a non-empty directory, but the user
+    // doesn't want to descend into it.
+    if options.interactive == InteractiveMode::Always
+        && !is_dir_empty(path)
+        && !prompt_descend(path)
+    {
+        return false;
+    }
+
     // Special case: if we cannot access the metadata because the
     // filename is too long, fall back to try
     // `fs::remove_dir_all()`.
@@ -454,25 +470,6 @@ fn remove_dir_recursive(path: &Path, options: &Options) -> bool {
                 }
             }
         }
-    }
-
-    // Base case 1: this is a file or a symbolic link.
-    //
-    // The symbolic link case is important because it could be a link to
-    // a directory and we don't want to recurse. In particular, this
-    // avoids an infinite recursion in the case of a link to the current
-    // directory, like `ln -s . link`.
-    if !path.is_dir() || path.is_symlink() {
-        return remove_file(path, options);
-    }
-
-    // Base case 2: this is a non-empty directory, but the user
-    // doesn't want to descend into it.
-    if options.interactive == InteractiveMode::Always
-        && !is_dir_empty(path)
-        && !prompt_descend(path)
-    {
-        return false;
     }
 
     // Recursive case: this is a directory.

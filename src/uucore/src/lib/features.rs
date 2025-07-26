@@ -26,7 +26,7 @@ pub mod format;
 pub mod fs;
 #[cfg(feature = "fsext")]
 pub mod fsext;
-#[cfg(feature = "i18n")]
+#[cfg(feature = "i18n-common")]
 pub mod i18n;
 #[cfg(feature = "lines")]
 pub mod lines;
@@ -40,6 +40,8 @@ pub mod ranges;
 pub mod ringbuffer;
 #[cfg(feature = "sum")]
 pub mod sum;
+#[cfg(feature = "time")]
+pub mod time;
 #[cfg(feature = "update-control")]
 pub mod update_control;
 #[cfg(feature = "uptime")]

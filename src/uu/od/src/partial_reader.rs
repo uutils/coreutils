@@ -2,13 +2,14 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore mockstream abcdefgh bcdefgh
+
+// spell-checker:ignore mockstream abcdefgh bcdefgh multifile
 
 use std::cmp;
 use std::io;
 use std::io::Read;
 
-use crate::multifilereader::HasError;
+use crate::multifile_reader::HasError;
 use uucore::locale::get_message;
 
 /// When a large number of bytes must be skipped, it will be read into a

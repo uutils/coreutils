@@ -12,6 +12,7 @@
     clippy::missing_errors_doc
 )]
 
+use core::str;
 #[cfg(unix)]
 use libc::mode_t;
 #[cfg(unix)]
@@ -356,6 +357,11 @@ impl CmdResult {
         std::str::from_utf8(&self.stdout).unwrap()
     }
 
+    /// Returns the program's standard output as a string, automatically handling invalid utf8
+    pub fn stdout_str_lossy(self) -> String {
+        String::from_utf8_lossy(&self.stdout).to_string()
+    }
+
     /// Returns the program's standard output as a string
     /// consumes self
     pub fn stdout_move_str(self) -> String {
@@ -694,7 +700,11 @@ impl CmdResult {
     #[track_caller]
     pub fn fails_silently(&self) -> &Self {
         assert!(!self.succeeded());
-        assert!(self.stderr.is_empty());
+        assert!(
+            self.stderr.is_empty(),
+            "Expected stderr to be empty, but it's:\n{}",
+            self.stderr_str()
+        );
         self
     }
 
@@ -758,6 +768,29 @@ impl CmdResult {
         self
     }
 
+    /// Verify if stdout contains a byte sequence
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// new_ucmd!()
+    /// .arg("--help")
+    /// .succeeds()
+    /// .stdout_contains_bytes(b"hello \xff");
+    /// ```
+    #[track_caller]
+    pub fn stdout_contains_bytes<T: AsRef<[u8]>>(&self, cmp: T) -> &Self {
+        assert!(
+            self.stdout()
+                .windows(cmp.as_ref().len())
+                .any(|sub| sub == cmp.as_ref()),
+            "'{:?}'\ndoes not contain\n'{:?}'",
+            self.stdout(),
+            cmp.as_ref()
+        );
+        self
+    }
+
     /// Verify if stderr contains a specific string
     ///
     /// # Examples
@@ -775,6 +808,29 @@ impl CmdResult {
             self.stderr_str().contains(cmp.as_ref()),
             "'{}' does not contain '{}'",
             self.stderr_str(),
+            cmp.as_ref()
+        );
+        self
+    }
+
+    /// Verify if stderr contains a byte sequence
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// new_ucmd!()
+    /// .arg("--help")
+    /// .succeeds()
+    /// .stdout_contains_bytes(b"hello \xff");
+    /// ```
+    #[track_caller]
+    pub fn stderr_contains_bytes<T: AsRef<[u8]>>(&self, cmp: T) -> &Self {
+        assert!(
+            self.stderr()
+                .windows(cmp.as_ref().len())
+                .any(|sub| sub == cmp.as_ref()),
+            "'{:?}'\ndoes not contain\n'{:?}'",
+            self.stderr(),
             cmp.as_ref()
         );
         self
@@ -1192,14 +1248,14 @@ impl AtPath {
     }
 
     /// Decide whether the named symbolic link exists in the test directory.
-    pub fn symlink_exists(&self, path: &str) -> bool {
+    pub fn symlink_exists<P: AsRef<Path>>(&self, path: P) -> bool {
         match fs::symlink_metadata(self.plus(path)) {
             Ok(m) => m.file_type().is_symlink(),
             Err(_) => false,
         }
     }
 
-    pub fn dir_exists(&self, path: &str) -> bool {
+    pub fn dir_exists<P: AsRef<Path>>(&self, path: P) -> bool {
         match fs::metadata(self.plus(path)) {
             Ok(m) => m.is_dir(),
             Err(_) => false,

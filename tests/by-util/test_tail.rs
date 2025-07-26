@@ -147,12 +147,11 @@ fn test_stdin_redirect_file_follow() {
     // foo
     //
 
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
+
     at.write("f", "foo");
 
-    let mut p = ts
-        .ucmd()
+    let mut p = ucmd
         .arg("-f")
         .set_stdin(File::open(at.plus("f")).unwrap())
         .run_no_wait();
@@ -169,14 +168,13 @@ fn test_stdin_redirect_file_follow() {
 fn test_stdin_redirect_offset() {
     // inspired by: "gnu/tests/tail-2/start-middle.sh"
 
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
 
     at.write("k", "1\n2\n");
     let mut fh = File::open(at.plus("k")).unwrap();
     fh.seek(SeekFrom::Start(2)).unwrap();
 
-    ts.ucmd().set_stdin(fh).succeeds().stdout_only("2\n");
+    ucmd.set_stdin(fh).succeeds().stdout_only("2\n");
 }
 
 #[test]
@@ -184,8 +182,7 @@ fn test_stdin_redirect_offset() {
 fn test_stdin_redirect_offset2() {
     // like test_stdin_redirect_offset but with multiple files
 
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
 
     at.write("k", "1\n2\n");
     at.write("l", "3\n4\n");
@@ -193,8 +190,7 @@ fn test_stdin_redirect_offset2() {
     let mut fh = File::open(at.plus("k")).unwrap();
     fh.seek(SeekFrom::Start(2)).unwrap();
 
-    ts.ucmd()
-        .set_stdin(fh)
+    ucmd.set_stdin(fh)
         .args(&["k", "-", "l", "m"])
         .succeeds()
         .stdout_only(
@@ -260,8 +256,7 @@ fn test_permission_denied() {
 fn test_permission_denied_multiple() {
     use std::os::unix::fs::PermissionsExt;
 
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("file1");
     at.touch("file2");
@@ -270,8 +265,7 @@ fn test_permission_denied_multiple() {
         .set_permissions(PermissionsExt::from_mode(0o000))
         .unwrap();
 
-    ts.ucmd()
-        .args(&["file1", "unreadable", "file2"])
+    ucmd.args(&["file1", "unreadable", "file2"])
         .fails_with_code(1)
         .stderr_is("tail: cannot open 'unreadable' for reading: Permission denied\n")
         .stdout_is("==> file1 <==\n\n==> file2 <==\n");
@@ -4904,6 +4898,20 @@ fn test_when_piped_input_then_no_broken_pipe() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_when_output_closed_then_no_broken_pie() {
+    let mut cmd = new_ucmd!();
+    let mut child = cmd
+        .args(&["-c", "100000", "/dev/zero"])
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+    // Dropping the stdout should not lead to an error.
+    // The "Broken pipe" error should be silently ignored.
+    child.close_stdout();
+    child.wait().unwrap().fails_silently();
+}
+
+#[test]
 fn test_child_when_run_with_stderr_to_stdout() {
     let ts = TestScenario::new("tail");
     let at = &ts.fixtures;
@@ -4928,4 +4936,13 @@ fn test_failed_write_is_reported() {
         .set_stdout(std::fs::File::create("/dev/full").unwrap())
         .fails()
         .stderr_is("tail: No space left on device\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_dev_zero() {
+    new_ucmd!()
+        .args(&["-c", "1", "/dev/zero"])
+        .succeeds()
+        .stdout_only("\0");
 }

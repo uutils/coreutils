@@ -4,8 +4,6 @@
 // file that was distributed with this source code.
 use uucore::display::Quotable;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 // spell-checker:ignore (ToDO) taaaa tbbbb tcccc
 
 #[test]

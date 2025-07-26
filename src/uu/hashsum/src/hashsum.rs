@@ -57,7 +57,7 @@ struct Options<'a> {
 ///
 /// # Returns
 ///
-/// Returns a UResult of a tuple containing the algorithm name, the hasher instance, and
+/// Returns a [`UResult`] of a tuple containing the algorithm name, the hasher instance, and
 /// the output length in bits or an Err if multiple hash algorithms are specified or if a
 /// required flag is missing.
 #[allow(clippy::cognitive_complexity)]
@@ -136,7 +136,7 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
                 bits: *bits,
             })?,
             None => return Err(ChecksumError::BitsRequiredForShake128.into()),
-        };
+        }
     }
     if matches.get_flag("shake256") {
         match matches.get_one::<usize>("bits") {
@@ -146,7 +146,7 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
                 bits: *bits,
             })?,
             None => return Err(ChecksumError::BitsRequiredForShake256.into()),
-        };
+        }
     }
 
     if alg.is_none() {
@@ -492,8 +492,8 @@ pub fn uu_app_custom() -> Command {
     command
 }
 
-// hashsum is handled differently in build.rs, therefore this is not the same
-// as in other utilities.
+/// hashsum is handled differently in build.rs
+/// therefore, this is different from other utilities.
 fn uu_app(binary_name: &str) -> (Command, bool) {
     match binary_name {
         // These all support the same options.

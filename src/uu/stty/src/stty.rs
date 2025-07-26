@@ -4,24 +4,33 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore clocal erange tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort vmin vtime cflag lflag ispeed ospeed
+// spell-checker:ignore parenb parodd cmspar hupcl cstopb cread clocal crtscts CSIZE
+// spell-checker:ignore ignbrk brkint ignpar parmrk inpck istrip inlcr igncr icrnl ixoff ixon iuclc ixany imaxbel iutf
+// spell-checker:ignore opost olcuc ocrnl onlcr onocr onlret ofdel nldly crdly tabdly bsdly vtdly ffdly ofill
+// spell-checker:ignore isig icanon iexten echoe crterase echok echonl noflsh xcase tostop echoprt prterase echoctl ctlecho echoke crtkill flusho extproc
+// spell-checker:ignore lnext rprnt susp swtch vdiscard veof veol verase vintr vkill vlnext vquit vreprint vstart vstop vsusp vswtc vwerase werase
+// spell-checker:ignore sigquit sigtstp
+// spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain
 
 mod flags;
 
 use crate::flags::AllFlags;
+use crate::flags::COMBINATION_SETTINGS;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
 use nix::sys::termios::{
-    ControlFlags, InputFlags, LocalFlags, OutputFlags, SpecialCharacterIndices, Termios,
-    cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
+    ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices as S,
+    Termios, cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, Stdout, stdout};
+use std::num::IntErrorKind;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, RawFd};
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UError, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::locale::{get_message, get_message_with_args};
 
@@ -37,6 +46,22 @@ use flags::BAUD_RATES;
 use flags::{CONTROL_CHARS, CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
 
 const ASCII_DEL: u8 = 127;
+
+// Sane defaults for control characters.
+const SANE_CONTROL_CHARS: [(S, u8); 12] = [
+    (S::VINTR, 3),     // ^C
+    (S::VQUIT, 28),    // ^\
+    (S::VERASE, 127),  // DEL
+    (S::VKILL, 21),    // ^U
+    (S::VEOF, 4),      // ^D
+    (S::VSTART, 17),   // ^Q
+    (S::VSTOP, 19),    // ^S
+    (S::VSUSP, 26),    // ^Z
+    (S::VREPRINT, 18), // ^R
+    (S::VWERASE, 23),  // ^W
+    (S::VLNEXT, 22),   // ^V
+    (S::VDISCARD, 15), // ^O
+];
 
 #[derive(Clone, Copy, Debug)]
 pub struct Flag<T> {
@@ -104,6 +129,7 @@ enum Device {
     Stdout(Stdout),
 }
 
+#[derive(Debug)]
 enum ControlCharMappingError {
     IntOutOfRange(String),
     MultipleChars(String),
@@ -112,6 +138,7 @@ enum ControlCharMappingError {
 enum SpecialSetting {
     Rows(u16),
     Cols(u16),
+    Line(u8),
 }
 
 enum PrintSetting {
@@ -120,7 +147,7 @@ enum PrintSetting {
 
 enum ArgOptions<'a> {
     Flags(AllFlags<'a>),
-    Mapping((SpecialCharacterIndices, u8)),
+    Mapping((S, u8)),
     Special(SpecialSetting),
     Print(PrintSetting),
 }
@@ -238,41 +265,14 @@ fn stty(opts: &Options) -> UResult<()> {
         ));
     }
 
+    let mut set_arg = SetArg::TCSADRAIN;
     let mut valid_args: Vec<ArgOptions> = Vec::new();
 
     if let Some(args) = &opts.settings {
         let mut args_iter = args.iter();
-        // iterate over args: skip to next arg if current one is a control char
-        while let Some(arg) = args_iter.next() {
-            // control char
-            if let Some(char_index) = cc_to_index(arg) {
-                if let Some(mapping) = args_iter.next() {
-                    let cc_mapping = string_to_control_char(mapping).map_err(|e| {
-                        let message = match e {
-                            ControlCharMappingError::IntOutOfRange(val) => get_message_with_args(
-                                "stty-error-invalid-integer-argument-value-too-large",
-                                HashMap::from([("value".to_string(), format!("'{}'", val))]),
-                            ),
-                            ControlCharMappingError::MultipleChars(val) => get_message_with_args(
-                                "stty-error-invalid-integer-argument",
-                                HashMap::from([("value".to_string(), format!("'{}'", val))]),
-                            ),
-                        };
-                        USimpleError::new(1, message)
-                    })?;
-                    valid_args.push(ArgOptions::Mapping((char_index, cc_mapping)));
-                } else {
-                    return Err(USimpleError::new(
-                        1,
-                        get_message_with_args(
-                            "stty-error-missing-argument",
-                            HashMap::from([("arg".to_string(), arg.to_string())]),
-                        ),
-                    ));
-                }
-            // ispeed/ospeed baud rate setting
-            } else if *arg == "ispeed" || *arg == "ospeed" {
-                match args_iter.next() {
+        while let Some(&arg) = args_iter.next() {
+            match arg {
+                "ispeed" | "ospeed" => match args_iter.next() {
                     Some(speed) => {
                         if let Some(baud_flag) = string_to_baud(speed) {
                             valid_args.push(ArgOptions::Flags(baud_flag));
@@ -282,100 +282,133 @@ fn stty(opts: &Options) -> UResult<()> {
                                 get_message_with_args(
                                     "stty-error-invalid-speed",
                                     HashMap::from([
-                                        ("arg".to_string(), arg.to_string()),
-                                        ("speed".to_string(), speed.to_string()),
+                                        ("arg".to_string(), (*arg).to_string()),
+                                        ("speed".to_string(), (*speed).to_string()),
                                     ]),
                                 ),
                             ));
                         }
                     }
                     None => {
-                        return Err(USimpleError::new(
-                            1,
-                            get_message_with_args(
-                                "stty-error-missing-argument",
-                                HashMap::from([("arg".to_string(), arg.to_string())]),
-                            ),
-                        ));
+                        return missing_arg(arg);
                     }
-                }
-            // baud rate setting
-            } else if let Some(baud_flag) = string_to_baud(arg) {
-                valid_args.push(ArgOptions::Flags(baud_flag));
-            // non control char flag
-            } else if let Some(flag) = string_to_flag(arg) {
-                let remove_group = match flag {
-                    AllFlags::Baud(_) => false,
-                    AllFlags::ControlFlags((flag, remove)) => check_flag_group(flag, remove),
-                    AllFlags::InputFlags((flag, remove)) => check_flag_group(flag, remove),
-                    AllFlags::LocalFlags((flag, remove)) => check_flag_group(flag, remove),
-                    AllFlags::OutputFlags((flag, remove)) => check_flag_group(flag, remove),
-                };
-                if remove_group {
-                    return Err(USimpleError::new(
-                        1,
-                        get_message_with_args(
-                            "stty-error-invalid-argument",
-                            HashMap::from([("arg".to_string(), arg.to_string())]),
-                        ),
-                    ));
-                }
-                valid_args.push(flag.into());
-            } else if *arg == "rows" {
-                if let Some(rows) = args_iter.next() {
-                    if let Some(n) = parse_rows_cols(rows) {
-                        valid_args.push(ArgOptions::Special(SpecialSetting::Rows(n)));
+                },
+                "line" => match args_iter.next() {
+                    Some(line) => match parse_u8_or_err(line) {
+                        Ok(n) => valid_args.push(ArgOptions::Special(SpecialSetting::Line(n))),
+                        Err(e) => return Err(USimpleError::new(1, e)),
+                    },
+                    None => {
+                        return missing_arg(arg);
+                    }
+                },
+                "min" => match args_iter.next() {
+                    Some(min) => match parse_u8_or_err(min) {
+                        Ok(n) => {
+                            valid_args.push(ArgOptions::Mapping((S::VMIN, n)));
+                        }
+                        Err(e) => return Err(USimpleError::new(1, e)),
+                    },
+                    None => {
+                        return missing_arg(arg);
+                    }
+                },
+                "time" => match args_iter.next() {
+                    Some(time) => match parse_u8_or_err(time) {
+                        Ok(n) => valid_args.push(ArgOptions::Mapping((S::VTIME, n))),
+                        Err(e) => return Err(USimpleError::new(1, e)),
+                    },
+                    None => {
+                        return missing_arg(arg);
+                    }
+                },
+                "rows" => {
+                    if let Some(rows) = args_iter.next() {
+                        if let Some(n) = parse_rows_cols(rows) {
+                            valid_args.push(ArgOptions::Special(SpecialSetting::Rows(n)));
+                        } else {
+                            return invalid_integer_arg(rows);
+                        }
                     } else {
-                        return Err(USimpleError::new(
-                            1,
-                            get_message_with_args(
-                                "stty-error-invalid-integer-argument",
-                                HashMap::from([("value".to_string(), format!("'{}'", rows))]),
-                            ),
-                        ));
+                        return missing_arg(arg);
                     }
-                } else {
-                    return Err(USimpleError::new(
-                        1,
-                        get_message_with_args(
-                            "stty-error-missing-argument",
-                            HashMap::from([("arg".to_string(), arg.to_string())]),
-                        ),
-                    ));
                 }
-            } else if *arg == "columns" || *arg == "cols" {
-                if let Some(cols) = args_iter.next() {
-                    if let Some(n) = parse_rows_cols(cols) {
-                        valid_args.push(ArgOptions::Special(SpecialSetting::Cols(n)));
+                "columns" | "cols" => {
+                    if let Some(cols) = args_iter.next() {
+                        if let Some(n) = parse_rows_cols(cols) {
+                            valid_args.push(ArgOptions::Special(SpecialSetting::Cols(n)));
+                        } else {
+                            return invalid_integer_arg(cols);
+                        }
                     } else {
-                        return Err(USimpleError::new(
-                            1,
-                            get_message_with_args(
-                                "stty-error-invalid-integer-argument",
-                                HashMap::from([("value".to_string(), format!("'{}'", cols))]),
-                            ),
-                        ));
+                        return missing_arg(arg);
                     }
-                } else {
-                    return Err(USimpleError::new(
-                        1,
-                        get_message_with_args(
-                            "stty-error-missing-argument",
-                            HashMap::from([("arg".to_string(), arg.to_string())]),
-                        ),
-                    ));
                 }
-            } else if *arg == "size" {
-                valid_args.push(ArgOptions::Print(PrintSetting::Size));
-            // not a valid option
-            } else {
-                return Err(USimpleError::new(
-                    1,
-                    get_message_with_args(
-                        "stty-error-invalid-argument",
-                        HashMap::from([("arg".to_string(), arg.to_string())]),
-                    ),
-                ));
+                "drain" => {
+                    set_arg = SetArg::TCSADRAIN;
+                }
+                "-drain" => {
+                    set_arg = SetArg::TCSANOW;
+                }
+                "size" => {
+                    valid_args.push(ArgOptions::Print(PrintSetting::Size));
+                }
+                _ => {
+                    // control char
+                    if let Some(char_index) = cc_to_index(arg) {
+                        if let Some(mapping) = args_iter.next() {
+                            let cc_mapping = string_to_control_char(mapping).map_err(|e| {
+                                let message = match e {
+                                    ControlCharMappingError::IntOutOfRange(val) => {
+                                        get_message_with_args(
+                                            "stty-error-invalid-integer-argument-value-too-large",
+                                            HashMap::from([(
+                                                "value".to_string(),
+                                                format!("'{val}'"),
+                                            )]),
+                                        )
+                                    }
+                                    ControlCharMappingError::MultipleChars(val) => {
+                                        get_message_with_args(
+                                            "stty-error-invalid-integer-argument",
+                                            HashMap::from([(
+                                                "value".to_string(),
+                                                format!("'{val}'"),
+                                            )]),
+                                        )
+                                    }
+                                };
+                                USimpleError::new(1, message)
+                            })?;
+                            valid_args.push(ArgOptions::Mapping((char_index, cc_mapping)));
+                        } else {
+                            return missing_arg(arg);
+                        }
+                    // baud rate
+                    } else if let Some(baud_flag) = string_to_baud(arg) {
+                        valid_args.push(ArgOptions::Flags(baud_flag));
+                    // non control char flag
+                    } else if let Some(flag) = string_to_flag(arg) {
+                        let remove_group = match flag {
+                            AllFlags::Baud(_) => false,
+                            AllFlags::ControlFlags((flag, remove)) => {
+                                check_flag_group(flag, remove)
+                            }
+                            AllFlags::InputFlags((flag, remove)) => check_flag_group(flag, remove),
+                            AllFlags::LocalFlags((flag, remove)) => check_flag_group(flag, remove),
+                            AllFlags::OutputFlags((flag, remove)) => check_flag_group(flag, remove),
+                        };
+                        if remove_group {
+                            return invalid_arg(arg);
+                        }
+                        valid_args.push(flag.into());
+                    // combination setting
+                    } else if let Some(combo) = string_to_combo(arg) {
+                        valid_args.append(&mut combo_to_flags(combo));
+                    } else {
+                        return invalid_arg(arg);
+                    }
+                }
             }
         }
 
@@ -388,19 +421,15 @@ fn stty(opts: &Options) -> UResult<()> {
                 ArgOptions::Mapping(mapping) => apply_char_mapping(&mut termios, mapping),
                 ArgOptions::Flags(flag) => apply_setting(&mut termios, flag),
                 ArgOptions::Special(setting) => {
-                    apply_special_setting(setting, opts.file.as_raw_fd())?;
+                    apply_special_setting(&mut termios, setting, opts.file.as_raw_fd())?;
                 }
                 ArgOptions::Print(setting) => {
                     print_special_setting(setting, opts.file.as_raw_fd())?;
                 }
             }
         }
-        tcsetattr(
-            opts.file.as_fd(),
-            nix::sys::termios::SetArg::TCSANOW,
-            &termios,
-        )
-        .expect("Could not write terminal attributes");
+        tcsetattr(opts.file.as_fd(), set_arg, &termios)
+            .expect("Could not write terminal attributes");
     } else {
         // TODO: Figure out the right error message for when tcgetattr fails
         let termios = tcgetattr(opts.file.as_fd()).expect("Could not get terminal attributes");
@@ -409,8 +438,53 @@ fn stty(opts: &Options) -> UResult<()> {
     Ok(())
 }
 
-// GNU uses an unsigned 32 bit integer for row/col sizes, but then wraps around 16 bits
-// this function returns Some(n), where n is a u16 row/col size, or None if the string arg cannot be parsed as a u32
+fn missing_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
+    Err::<T, Box<dyn UError>>(USimpleError::new(
+        1,
+        get_message_with_args(
+            "stty-error-missing-argument",
+            HashMap::from([("arg".to_string(), (*arg).to_string())]),
+        ),
+    ))
+}
+
+fn invalid_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
+    Err::<T, Box<dyn UError>>(USimpleError::new(
+        1,
+        get_message_with_args(
+            "stty-error-invalid-argument",
+            HashMap::from([("arg".to_string(), (*arg).to_string())]),
+        ),
+    ))
+}
+
+fn invalid_integer_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
+    Err::<T, Box<dyn UError>>(USimpleError::new(
+        1,
+        get_message_with_args(
+            "stty-error-invalid-integer-argument",
+            HashMap::from([("value".to_string(), format!("'{arg}'"))]),
+        ),
+    ))
+}
+
+/// GNU uses different error messages if values overflow or underflow a u8,
+/// this function returns the appropriate error message in the case of overflow or underflow, or u8 on success
+fn parse_u8_or_err(arg: &str) -> Result<u8, String> {
+    arg.parse::<u8>().map_err(|e| match e.kind() {
+        IntErrorKind::PosOverflow => get_message_with_args(
+            "stty-error-invalid-integer-argument-value-too-large",
+            HashMap::from([("value".to_string(), format!("'{arg}'"))]),
+        ),
+        _ => get_message_with_args(
+            "stty-error-invalid-integer-argument",
+            HashMap::from([("value".to_string(), format!("'{arg}'"))]),
+        ),
+    })
+}
+
+/// GNU uses an unsigned 32-bit integer for row/col sizes, but then wraps around 16 bits
+/// this function returns Some(n), where n is a u16 row/col size, or None if the string arg cannot be parsed as a u32
 fn parse_rows_cols(arg: &str) -> Option<u16> {
     if let Ok(n) = arg.parse::<u32>() {
         return Some((n % (u16::MAX as u32 + 1)) as u16);
@@ -469,7 +543,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
                 "{} ",
                 get_message_with_args(
                     "stty-output-speed",
-                    HashMap::from([("speed".to_string(), text.to_string())])
+                    HashMap::from([("speed".to_string(), (*text).to_string())])
                 )
             );
             break;
@@ -510,13 +584,22 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
     Ok(())
 }
 
-fn cc_to_index(option: &str) -> Option<SpecialCharacterIndices> {
+fn cc_to_index(option: &str) -> Option<S> {
     for cc in CONTROL_CHARS {
         if option == cc.0 {
             return Some(cc.1);
         }
     }
     None
+}
+
+fn string_to_combo(arg: &str) -> Option<&str> {
+    let is_negated = arg.starts_with('-');
+    let name = arg.trim_start_matches('-');
+    COMBINATION_SETTINGS
+        .iter()
+        .find(|&&(combo_name, is_negatable)| name == combo_name && (!is_negated || is_negatable))
+        .map(|_| arg)
 }
 
 fn string_to_baud(arg: &str) -> Option<AllFlags> {
@@ -549,7 +632,7 @@ fn string_to_baud(arg: &str) -> Option<AllFlags> {
     None
 }
 
-// return Some(flag) if the input is a valid flag, None if not
+/// return `Some(flag)` if the input is a valid flag, `None` if not
 fn string_to_flag(option: &str) -> Option<AllFlags> {
     let remove = option.starts_with('-');
     let name = option.trim_start_matches('-');
@@ -605,7 +688,21 @@ fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
 
 fn print_control_chars(termios: &Termios, opts: &Options) -> nix::Result<()> {
     if !opts.all {
-        // TODO: this branch should print values that differ from defaults
+        // Print only control chars that differ from sane defaults
+        let mut printed = false;
+        for (text, cc_index) in CONTROL_CHARS {
+            let current_val = termios.control_chars[*cc_index as usize];
+            let sane_val = get_sane_control_char(*cc_index);
+
+            if current_val != sane_val {
+                print!("{text} = {}; ", control_char_to_string(current_val)?);
+                printed = true;
+            }
+        }
+
+        if printed {
+            println!();
+        }
         return Ok(());
     }
 
@@ -622,11 +719,11 @@ fn print_control_chars(termios: &Termios, opts: &Options) -> nix::Result<()> {
             HashMap::from([
                 (
                     "min".to_string(),
-                    termios.control_chars[SpecialCharacterIndices::VMIN as usize].to_string()
+                    termios.control_chars[S::VMIN as usize].to_string()
                 ),
                 (
                     "time".to_string(),
-                    termios.control_chars[SpecialCharacterIndices::VTIME as usize].to_string()
+                    termios.control_chars[S::VTIME as usize].to_string()
                 )
             ])
         )
@@ -741,30 +838,41 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) {
     }
 }
 
-fn apply_char_mapping(termios: &mut Termios, mapping: &(SpecialCharacterIndices, u8)) {
+fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
     termios.control_chars[mapping.0 as usize] = mapping.1;
 }
 
-fn apply_special_setting(setting: &SpecialSetting, fd: i32) -> nix::Result<()> {
+fn apply_special_setting(
+    _termios: &mut Termios,
+    setting: &SpecialSetting,
+    fd: i32,
+) -> nix::Result<()> {
     let mut size = TermSize::default();
     unsafe { tiocgwinsz(fd, &raw mut size)? };
     match setting {
         SpecialSetting::Rows(n) => size.rows = *n,
         SpecialSetting::Cols(n) => size.columns = *n,
+        SpecialSetting::Line(_n) => {
+            // nix only defines Termios's `line_discipline` field on these platforms
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            {
+                _termios.line_discipline = *_n;
+            }
+        }
     }
     unsafe { tiocswinsz(fd, &raw mut size)? };
     Ok(())
 }
 
-// GNU stty defines some valid values for the control character mappings
-// 1. Standard character, can be a a single char (ie 'C') or hat notation (ie '^C')
-// 2. Integer
-//      a. hexadecimal, prefixed by '0x'
-//      b. octal, prefixed by '0'
-//      c. decimal, no prefix
-// 3. Disabling the control character: '^-' or 'undef'
-//
-// This function returns the ascii value of valid control chars, or ControlCharMappingError if invalid
+/// GNU stty defines some valid values for the control character mappings
+/// 1. Standard character, can be a a single char (ie 'C') or hat notation (ie '^C')
+/// 2. Integer
+///    a. hexadecimal, prefixed by '0x'
+///    b. octal, prefixed by '0'
+///    c. decimal, no prefix
+/// 3. Disabling the control character: '^-' or 'undef'
+///
+/// This function returns the ascii value of valid control chars, or [`ControlCharMappingError`] if invalid
 fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
     if s == "undef" || s == "^-" || s.is_empty() {
         return Ok(0);
@@ -786,9 +894,8 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
     if let Some(val) = ascii_num {
         if val > 255 {
             return Err(ControlCharMappingError::IntOutOfRange(s.to_string()));
-        } else {
-            return Ok(val as u8);
         }
+        return Ok(val as u8);
     }
     // try to parse ^<char> or just <char>
     let mut chars = s.chars();
@@ -804,6 +911,142 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
         (Some(c), None) => Ok(c as u8),
         (Some(_), Some(_)) => Err(ControlCharMappingError::MultipleChars(s.to_string())),
         _ => unreachable!("No arguments provided: must have been caught earlier"),
+    }
+}
+
+// decomposes a combination argument into a vec of corresponding flags
+fn combo_to_flags(combo: &str) -> Vec<ArgOptions> {
+    let mut flags = Vec::new();
+    let mut ccs = Vec::new();
+    match combo {
+        "lcase" | "LCASE" => {
+            flags = vec!["xcase", "iuclc", "olcuc"];
+        }
+        "-lcase" | "-LCASE" => {
+            flags = vec!["-xcase", "-iuclc", "-olcuc"];
+        }
+        "cbreak" => {
+            flags = vec!["-icanon"];
+        }
+        "-cbreak" => {
+            flags = vec!["icanon"];
+        }
+        "cooked" | "-raw" => {
+            flags = vec![
+                "brkint", "ignpar", "istrip", "icrnl", "ixon", "opost", "isig", "icanon",
+            ];
+            ccs = vec![(S::VEOF, "^D"), (S::VEOL, "")];
+        }
+        "crt" => {
+            flags = vec!["echoe", "echoctl", "echoke"];
+        }
+        "dec" => {
+            flags = vec!["echoe", "echoctl", "echoke", "-ixany"];
+            ccs = vec![(S::VINTR, "^C"), (S::VERASE, "^?"), (S::VKILL, "^U")];
+        }
+        "decctlq" => {
+            flags = vec!["ixany"];
+        }
+        "-decctlq" => {
+            flags = vec!["-ixany"];
+        }
+        "ek" => {
+            ccs = vec![(S::VERASE, "^?"), (S::VKILL, "^U")];
+        }
+        "evenp" | "parity" => {
+            flags = vec!["parenb", "-parodd", "cs7"];
+        }
+        "-evenp" | "-parity" => {
+            flags = vec!["-parenb", "cs8"];
+        }
+        "litout" => {
+            flags = vec!["-parenb", "-istrip", "-opost", "cs8"];
+        }
+        "-litout" => {
+            flags = vec!["parenb", "istrip", "opost", "cs7"];
+        }
+        "nl" => {
+            flags = vec!["-icrnl", "-onlcr"];
+        }
+        "-nl" => {
+            flags = vec!["icrnl", "-inlcr", "-igncr", "onlcr", "-ocrnl", "-onlret"];
+        }
+        "oddp" => {
+            flags = vec!["parenb", "parodd", "cs7"];
+        }
+        "-oddp" => {
+            flags = vec!["-parenb", "cs8"];
+        }
+        "pass8" => {
+            flags = vec!["-parenb", "-istrip", "cs8"];
+        }
+        "-pass8" => {
+            flags = vec!["parenb", "istrip", "cs7"];
+        }
+        "raw" | "-cooked" => {
+            flags = vec![
+                "-ignbrk", "-brkint", "-ignpar", "-parmrk", "-inpck", "-istrip", "-inlcr",
+                "-igncr", "-icrnl", "-ixon", "-ixoff", "-icanon", "-opost", "-isig", "-iuclc",
+                "-xcase", "-ixany", "-imaxbel",
+            ];
+            ccs = vec![(S::VMIN, "1"), (S::VTIME, "0")];
+        }
+        "sane" => {
+            flags = vec![
+                "cread", "-ignbrk", "brkint", "-inlcr", "-igncr", "icrnl", "icanon", "iexten",
+                "echo", "echoe", "echok", "-echonl", "-noflsh", "-ixoff", "-iutf8", "-iuclc",
+                "-xcase", "-ixany", "imaxbel", "-olcuc", "-ocrnl", "opost", "-ofill", "onlcr",
+                "-onocr", "-onlret", "nl0", "cr0", "tab0", "bs0", "vt0", "ff0", "isig", "-tostop",
+                "-ofdel", "-echoprt", "echoctl", "echoke", "-extproc", "-flusho",
+            ];
+            ccs = vec![
+                (S::VINTR, "^C"),
+                (S::VQUIT, "^\\"),
+                (S::VERASE, "^?"),
+                (S::VKILL, "^U"),
+                (S::VEOF, "^D"),
+                (S::VEOL, ""),
+                (S::VEOL2, ""),
+                #[cfg(target_os = "linux")]
+                (S::VSWTC, ""),
+                (S::VSTART, "^Q"),
+                (S::VSTOP, "^S"),
+                (S::VSUSP, "^Z"),
+                (S::VREPRINT, "^R"),
+                (S::VWERASE, "^W"),
+                (S::VLNEXT, "^V"),
+                (S::VDISCARD, "^O"),
+            ];
+        }
+        _ => unreachable!("invalid combination setting: must have been caught earlier"),
+    }
+    let mut flags = flags
+        .iter()
+        .filter_map(|f| string_to_flag(f).map(ArgOptions::Flags))
+        .collect::<Vec<ArgOptions>>();
+    let mut ccs = ccs
+        .iter()
+        .map(|cc| ArgOptions::Mapping((cc.0, string_to_control_char(cc.1).unwrap())))
+        .collect::<Vec<ArgOptions>>();
+    flags.append(&mut ccs);
+    flags
+}
+
+fn get_sane_control_char(cc_index: S) -> u8 {
+    for (sane_index, sane_val) in SANE_CONTROL_CHARS {
+        if sane_index == cc_index {
+            return sane_val;
+        }
+    }
+    // Default values for control chars not in the sane list
+    match cc_index {
+        S::VEOL => 0,
+        S::VEOL2 => 0,
+        S::VMIN => 1,
+        S::VTIME => 0,
+        #[cfg(target_os = "linux")]
+        S::VSWTC => 0,
+        _ => 0,
     }
 }
 

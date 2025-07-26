@@ -512,7 +512,7 @@ fn handle_extract_obs_skip_chars(
     }
 }
 
-/// Maps Clap errors to USimpleError and overrides 3 specific ones
+/// Maps Clap errors to [`USimpleError`] and overrides 3 specific ones
 /// to meet requirements of GNU tests for `uniq`.
 /// Unfortunately these overrides are necessary, since several GNU tests
 /// for `uniq` hardcode and require the exact wording of the error message

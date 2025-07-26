@@ -48,11 +48,11 @@ mod platform;
 
 #[derive(Debug, Error)]
 pub enum CpError {
-    /// Simple io::Error wrapper
+    /// Simple [`io::Error`] wrapper
     #[error("{0}")]
     IoErr(#[from] io::Error),
 
-    /// Wrapper for io::Error with path context
+    /// Wrapper for [`io::Error`] with path context
     #[error("{1}: {0}")]
     IoErrContext(io::Error, String),
 
@@ -65,11 +65,11 @@ pub enum CpError {
     #[error("{}", get_message("cp-error-not-all-files-copied"))]
     NotAllFilesCopied,
 
-    /// Simple walkdir::Error wrapper
+    /// Simple [`walkdir::Error`] wrapper
     #[error("{0}")]
     WalkDirErr(#[from] walkdir::Error),
 
-    /// Simple std::path::StripPrefixError wrapper
+    /// Simple [`StripPrefixError`] wrapper
     #[error(transparent)]
     StripPrefixError(#[from] StripPrefixError),
 
@@ -84,9 +84,9 @@ pub enum CpError {
     #[error("{0}")]
     InvalidArgument(String),
 
-    /// All standard options are included as an an implementation
+    /// All standard options are included as an implementation
     /// path, but those that are not implemented yet should return
-    /// a NotImplemented error.
+    /// a `NotImplemented` error.
     #[error("{}", get_message_with_args("cp-error-option-not-implemented", HashMap::from([("option".to_string(), 0.to_string())])))]
     NotImplemented(String),
 
@@ -429,7 +429,7 @@ impl Display for OffloadReflinkDebug {
             Self::Unsupported => get_message("cp-debug-enum-unsupported"),
             Self::Unknown => get_message("cp-debug-enum-unknown"),
         };
-        write!(f, "{}", msg)
+        write!(f, "{msg}")
     }
 }
 
@@ -443,7 +443,7 @@ impl Display for SparseDebug {
             Self::Unsupported => get_message("cp-debug-enum-unsupported"),
             Self::Unknown => get_message("cp-debug-enum-unknown"),
         };
-        write!(f, "{}", msg)
+        write!(f, "{msg}")
     }
 }
 
@@ -819,7 +819,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             CpError::NotAllFilesCopied => {}
             // Else we caught a fatal bubbled-up error, log it to stderr
             _ => show_error!("{error}"),
-        };
+        }
         set_exit_code(EXIT_ERR);
     }
 
@@ -931,8 +931,8 @@ impl Attributes {
         }
     }
 
-    /// Set the field to Preserve::NO { explicit: true } if the corresponding field
-    /// in other is set to Preserve::Yes { .. }.
+    /// Set the field to `Preserve::No { explicit: true }` if the corresponding field
+    /// in other is set to `Preserve::Yes { .. }`.
     pub fn diff(self, other: &Self) -> Self {
         fn update_preserve_field(current: Preserve, other: Preserve) -> Preserve {
             if matches!(other, Preserve::Yes { .. }) {
@@ -1046,7 +1046,7 @@ impl Options {
             if !dir.is_dir() {
                 return Err(CpError::NotADirectory(dir.clone()));
             }
-        };
+        }
         // cp follows POSIX conventions for overriding options such as "-a",
         // "-d", "--preserve", and "--no-preserve". We can use clap's
         // override-all behavior to achieve this, but there's a challenge: when
@@ -1254,7 +1254,7 @@ impl Options {
 }
 
 impl TargetType {
-    /// Return TargetType required for `target`.
+    /// Return [`TargetType`] required for `target`.
     ///
     /// Treat target as a dir if we have multiple sources or the target
     /// exists and already is a directory
@@ -1399,7 +1399,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                     ("source".to_string(), source.quote().to_string()),
                 ]),
             );
-            show_warning!("{}", msg);
+            show_warning!("{msg}");
         } else {
             let dest = construct_dest_path(source, target, target_type, options)
                 .unwrap_or_else(|_| target.to_path_buf());
@@ -1502,7 +1502,7 @@ fn copy_source(
     copied_files: &mut HashMap<FileInformation, PathBuf>,
 ) -> CopyResult<()> {
     let source_path = Path::new(&source);
-    if source_path.is_dir() {
+    if source_path.is_dir() && (options.dereference || !source_path.is_symlink()) {
         // Copy as directory
         copy_directory(
             progress_bar,
@@ -1614,13 +1614,13 @@ impl OverwriteMode {
                         "cp-prompt-overwrite-with-mode",
                         HashMap::from([("path".to_string(), path.quote().to_string())]),
                     );
-                    prompt_yes!("{} {octal} ({human_readable})?", prompt_msg)
+                    prompt_yes!("{prompt_msg} {octal} ({human_readable})?")
                 } else {
                     let prompt_msg = get_message_with_args(
                         "cp-prompt-overwrite",
                         HashMap::from([("path".to_string(), path.quote().to_string())]),
                     );
-                    prompt_yes!("{}", prompt_msg)
+                    prompt_yes!("{prompt_msg}")
                 };
 
                 if prompt_yes_result {
@@ -1648,7 +1648,7 @@ fn handle_preserve<F: Fn() -> CopyResult<()>>(p: &Preserve, f: F) -> CopyResult<
                 show_error_if_needed(&error);
             }
         }
-    };
+    }
     Ok(())
 }
 
@@ -1708,20 +1708,30 @@ pub(crate) fn copy_attributes(
 
         let dest_uid = source_metadata.uid();
         let dest_gid = source_metadata.gid();
-        // gnu compatibility: cp doesn't report an error if it fails to set the ownership.
-        let _ = wrap_chown(
-            dest,
-            &dest
-                .symlink_metadata()
-                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?,
-            Some(dest_uid),
-            Some(dest_gid),
-            false,
-            Verbosity {
-                groups_only: false,
-                level: VerbosityLevel::Silent,
-            },
-        );
+        let meta = &dest
+            .symlink_metadata()
+            .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+
+        let try_chown = {
+            |uid| {
+                wrap_chown(
+                    dest,
+                    meta,
+                    uid,
+                    Some(dest_gid),
+                    false,
+                    Verbosity {
+                        groups_only: false,
+                        level: VerbosityLevel::Silent,
+                    },
+                )
+            }
+        };
+        // gnu compatibility: cp doesn't report an error if it fails to set the ownership,
+        // and will fall back to changing only the gid if possible.
+        if try_chown(Some(dest_uid)).is_err() {
+            let _ = try_chown(None);
+        }
         Ok(())
     })?;
 
@@ -1875,7 +1885,7 @@ fn context_for(src: &Path, dest: &Path) -> String {
 }
 
 /// Implements a simple backup copy for the destination file .
-/// if is_dest_symlink flag is set to true dest will be renamed to backup_path
+/// if `is_dest_symlink` flag is set to true dest will be renamed to `backup_path`
 /// TODO: for the backup, should this function be replaced by `copy_file(...)`?
 fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyResult<PathBuf> {
     if is_dest_symlink {
@@ -2314,7 +2324,7 @@ fn handle_copy_mode(
                 .open(dest)
                 .unwrap();
         }
-    };
+    }
 
     Ok(PerformedAction::Copied)
 }
@@ -2513,7 +2523,7 @@ fn copy_file(
             }
 
             return Ok(());
-        };
+        }
     }
 
     // Calculate the context upfront before canonicalizing the path
@@ -2545,12 +2555,7 @@ fn copy_file(
     #[cfg(not(unix))]
     let source_is_fifo = false;
 
-    #[cfg(unix)]
-    let source_is_stream = source_is_fifo
-        || source_metadata.file_type().is_char_device()
-        || source_metadata.file_type().is_block_device();
-    #[cfg(not(unix))]
-    let source_is_stream = false;
+    let source_is_stream = is_stream(&source_metadata);
 
     let performed_action = handle_copy_mode(
         source,
@@ -2620,6 +2625,19 @@ fn copy_file(
     Ok(())
 }
 
+fn is_stream(metadata: &Metadata) -> bool {
+    #[cfg(unix)]
+    {
+        let file_type = metadata.file_type();
+        file_type.is_fifo() || file_type.is_char_device() || file_type.is_block_device()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = metadata;
+        false
+    }
+}
+
 #[cfg(unix)]
 fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
     let (is_preserve_mode, is_explicit_no_preserve_mode) = options.preserve_mode();
@@ -2654,10 +2672,10 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
             const MODE_RW_UGO: u32 =
                 (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
             const S_IRWXUGO: u32 = (S_IRWXU | S_IRWXG | S_IRWXO) as u32;
-            if is_explicit_no_preserve_mode {
-                return MODE_RW_UGO;
+            return if is_explicit_no_preserve_mode {
+                MODE_RW_UGO
             } else {
-                return org_mode & S_IRWXUGO;
+                org_mode & S_IRWXUGO
             };
         }
     }
@@ -2699,8 +2717,6 @@ fn copy_helper(
             options.reflink_mode,
             options.sparse_mode,
             context,
-            #[cfg(unix)]
-            source_is_fifo,
             #[cfg(unix)]
             source_is_stream,
         )?;

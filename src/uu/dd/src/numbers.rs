@@ -37,7 +37,7 @@ const SI_BASES: [u128; 10] = [
 
 const SI_SUFFIXES: [&str; 9] = ["B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
 
-/// A SuffixType determines whether the suffixes are 1000 or 1024 based.
+/// A `SuffixType` determines whether the suffixes are 1000 or 1024 based.
 #[derive(Clone, Copy)]
 pub(crate) enum SuffixType {
     Iec,

@@ -21,6 +21,7 @@ path = "src/stat.rs"
 clap = { workspace = true }
 uucore = { workspace = true, features = ["entries", "libc", "fs", "fsext"] }
 chrono = { workspace = true }
+thiserror = { workspace = true }
 
 [features]
 selinux = ["uucore/selinux"]

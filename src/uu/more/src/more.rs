@@ -570,7 +570,7 @@ impl<'a> Pager<'a> {
     fn handle_pattern_search(&mut self) -> UResult<()> {
         if self.pattern.is_none() {
             return Ok(());
-        };
+        }
         match self.search_pattern_in_file() {
             Some(line) => self.upper_mark = line,
             None => {
@@ -769,7 +769,7 @@ impl<'a> Pager<'a> {
     fn page_resize(&mut self, _col: u16, row: u16, option_line: Option<u16>) {
         if option_line.is_none() {
             self.content_rows = row.saturating_sub(1) as usize;
-        };
+        }
     }
 
     fn draw(&mut self, wrong_key: Option<char>) -> UResult<()> {
@@ -808,7 +808,7 @@ impl<'a> Pager<'a> {
                     pattern,
                     &format!("{}{pattern}{}", Attribute::Reverse, Attribute::Reset),
                 );
-            };
+            }
             self.stdout.write_all(format!("\r{line}\n").as_bytes())?;
             lines_printed += 1;
             index += 1;

@@ -33,7 +33,7 @@ od-after-help = Affiche les données dans divers formats lisibles par l'homme. S
       u[TAILLE] pour décimal non signé
       x[TAILLE] pour hexadécimal
   TAILLE est le nombre d'octets qui peut être le nombre 1, 2, 4, 8 ou 16,
-      ou C, I, S, L pour 1, 2, 4, 8 octets pour les types entiers,
+      ou C, S, I, L pour 1, 2, 4, 8 octets pour les types entiers,
       ou F, D, L pour 4, 8, 16 octets pour les virgules flottantes.
   Toute spécification de type peut avoir un suffixe "z", qui ajoutera un dump ASCII
       à la fin de la ligne.

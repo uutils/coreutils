@@ -26,7 +26,7 @@ use args::{FilterMode, Settings, Signum, parse_args};
 use chunks::ReverseChunks;
 use follow::Observer;
 use memchr::{memchr_iter, memrchr_iter};
-use paths::{FileExtTail, HeaderPrinter, Input, InputKind, MetadataExtTail};
+use paths::{FileExtTail, HeaderPrinter, Input, InputKind};
 use same_file::Handle;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -40,6 +40,15 @@ use uucore::{show, show_error};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // When we receive a SIGPIPE signal, we want to terminate the process so
+    // that we don't print any error messages to stderr. Rust ignores SIGPIPE
+    // (see https://github.com/rust-lang/rust/issues/62569), so we restore it's
+    // default action here.
+    #[cfg(not(target_os = "windows"))]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+
     let settings = parse_args(args)?;
 
     settings.check_warnings();
@@ -168,15 +177,16 @@ fn tail_file(
             return Ok(());
         }
         observer.add_bad_path(path, input.display_name.as_str(), false)?;
-    } else if input.is_tailable() {
-        let metadata = path.metadata().ok();
+    } else {
         match File::open(path) {
             Ok(mut file) => {
+                let st = file.metadata()?;
+                let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
                 header_printer.print_input(input);
                 let mut reader;
                 if !settings.presume_input_pipe
                     && file.is_seekable(if input.is_stdin() { offset } else { 0 })
-                    && metadata.as_ref().unwrap().get_block_size() > 0
+                    && (!st.is_file() || st.len() > blksize_limit)
                 {
                     bounded_tail(&mut file, settings);
                     reader = BufReader::new(file);
@@ -184,12 +194,16 @@ fn tail_file(
                     reader = BufReader::new(file);
                     unbounded_tail(&mut reader, settings)?;
                 }
-                observer.add_path(
-                    path,
-                    input.display_name.as_str(),
-                    Some(Box::new(reader)),
-                    true,
-                )?;
+                if input.is_tailable() {
+                    observer.add_path(
+                        path,
+                        input.display_name.as_str(),
+                        Some(Box::new(reader)),
+                        true,
+                    )?;
+                } else {
+                    observer.add_bad_path(path, input.display_name.as_str(), false)?;
+                }
             }
             Err(e) if e.kind() == ErrorKind::PermissionDenied => {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
@@ -210,8 +224,6 @@ fn tail_file(
                 }));
             }
         }
-    } else {
-        observer.add_bad_path(path, input.display_name.as_str(), false)?;
     }
 
     Ok(())
@@ -309,7 +321,7 @@ fn tail_stdin(
                 observer.add_stdin(input.display_name.as_str(), Some(Box::new(reader)), true)?;
             }
         }
-    };
+    }
 
     Ok(())
 }
@@ -448,6 +460,7 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
 /// being a nice performance win for very large files.
 fn bounded_tail(file: &mut File, settings: &Settings) {
     debug_assert!(!settings.presume_input_pipe);
+    let mut limit = None;
 
     // Find the position in the file to start printing from.
     match &settings.mode {
@@ -462,9 +475,8 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
             return;
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
-            let len = file.seek(SeekFrom::End(0)).unwrap();
-            file.seek(SeekFrom::End(-((*count).min(len) as i64)))
-                .unwrap();
+            file.seek(SeekFrom::End(-(*count as i64))).unwrap();
+            limit = Some(*count);
         }
         FilterMode::Bytes(Signum::Positive(count)) if count > &1 => {
             // GNU `tail` seems to index bytes and lines starting at 1, not
@@ -477,10 +489,7 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
         _ => {}
     }
 
-    // Print the target section of the file.
-    let stdout = stdout();
-    let mut stdout = stdout.lock();
-    io::copy(file, &mut stdout).unwrap();
+    print_target_section(file, limit);
 }
 
 fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
@@ -543,8 +552,32 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         }
         _ => {}
     }
+    #[cfg(not(target_os = "windows"))]
     writer.flush()?;
+
+    // SIGPIPE is not available on Windows.
+    #[cfg(target_os = "windows")]
+    writer.flush().inspect_err(|err| {
+        if err.kind() == ErrorKind::BrokenPipe {
+            std::process::exit(13);
+        }
+    })?;
     Ok(())
+}
+
+fn print_target_section<R>(file: &mut R, limit: Option<u64>)
+where
+    R: Read + ?Sized,
+{
+    // Print the target section of the file.
+    let stdout = stdout();
+    let mut stdout = stdout.lock();
+    if let Some(limit) = limit {
+        let mut reader = file.take(limit);
+        io::copy(&mut reader, &mut stdout).unwrap();
+    } else {
+        io::copy(file, &mut stdout).unwrap();
+    }
 }
 
 #[cfg(test)]

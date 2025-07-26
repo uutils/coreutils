@@ -3,7 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use chrono::{DateTime, Local};
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::Pattern;
 use std::collections::{HashMap, HashSet};
@@ -11,7 +10,7 @@ use std::env;
 #[cfg(not(windows))]
 use std::fs::Metadata;
 use std::fs::{self, DirEntry, File};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, stdout};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
@@ -92,6 +91,7 @@ struct StatPrinter {
     time_format: String,
     line_ending: LineEnding,
     summarize: bool,
+    total_text: String,
 }
 
 #[derive(PartialEq, Clone)]
@@ -198,9 +198,9 @@ impl Stat {
 }
 
 #[cfg(windows)]
-// https://doc.rust-lang.org/std/os/windows/fs/trait.MetadataExt.html#tymethod.last_access_time
-// "The returned 64-bit value [...] which represents the number of 100-nanosecond intervals since January 1, 1601 (UTC)."
-// "If the underlying filesystem does not support last access time, the returned value is 0."
+/// <https://doc.rust-lang.org/std/os/windows/fs/trait.MetadataExt.html#tymethod.last_access_time>
+/// "The returned 64-bit value [...] which represents the number of 100-nanosecond intervals since January 1, 1601 (UTC)."
+/// "If the underlying filesystem does not support last access time, the returned value is 0."
 fn windows_time_to_unix_time(win_time: u64) -> u64 {
     (win_time / 10_000_000).saturating_sub(11_644_473_600)
 }
@@ -454,7 +454,7 @@ impl UError for DuError {
     }
 }
 
-// Read a file and return each line in a vector of String
+/// Read a file and return each line in a vector of String
 fn file_as_vec(filename: impl AsRef<Path>) -> Vec<String> {
     let file = File::open(filename).expect("no such file");
     let buf = BufReader::new(file);
@@ -464,8 +464,8 @@ fn file_as_vec(filename: impl AsRef<Path>) -> Vec<String> {
         .collect()
 }
 
-// Given the --exclude-from and/or --exclude arguments, returns the globset lists
-// to ignore the files
+/// Given the `--exclude-from` and/or `--exclude` arguments, returns the globset lists
+/// to ignore the files
 fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
     let exclude_from_iterator = matches
         .get_many::<String>(options::EXCLUDE_FROM)
@@ -546,11 +546,7 @@ impl StatPrinter {
         }
 
         if self.total {
-            print!(
-                "{}\t{}",
-                self.convert_size(grand_total),
-                get_message("du-total")
-            );
+            print!("{}\t{}", self.convert_size(grand_total), self.total_text);
             print!("{}", self.line_ending);
         }
 
@@ -579,13 +575,13 @@ impl StatPrinter {
     }
 
     fn print_stat(&self, stat: &Stat, size: u64) -> UResult<()> {
+        print!("{}\t", self.convert_size(size));
+
         if let Some(time) = self.time {
             let secs = get_time_secs(time, stat)?;
-            let tm = DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs));
-            let time_str = tm.format(&self.time_format).to_string();
-            print!("{}\t{time_str}\t", self.convert_size(size));
-        } else {
-            print!("{}\t", self.convert_size(size));
+            let time = UNIX_EPOCH + Duration::from_secs(secs);
+            uucore::time::format_system_time(&mut stdout(), time, &self.time_format, true)?;
+            print!("\t");
         }
 
         print_verbatim(&stat.path).unwrap();
@@ -595,7 +591,7 @@ impl StatPrinter {
     }
 }
 
-// Read file paths from the specified file, separated by null characters
+/// Read file paths from the specified file, separated by null characters
 fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
     let reader: Box<dyn BufRead> = if file_name == "-" {
         // Read from standard input
@@ -779,6 +775,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         time,
         time_format,
         line_ending: LineEnding::from_zero_flag(matches.get_flag(options::NULL)),
+        total_text: get_message("du-total"),
     };
 
     if stat_printer.inodes

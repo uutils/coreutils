@@ -182,26 +182,6 @@ pub fn get_umask() -> u32 {
     return mask as u32;
 }
 
-// Iterate 'args' and delete the first occurrence
-// of a prefix '-' if it's associated with MODE
-// e.g. "chmod -v -xw -R FILE" -> "chmod -v xw -R FILE"
-pub fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
-    for arg in args {
-        if arg == "--" {
-            break;
-        }
-        if let Some(arg_stripped) = arg.strip_prefix('-') {
-            if let Some('r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0'..='7') =
-                arg.chars().nth(1)
-            {
-                *arg = arg_stripped.to_string();
-                return true;
-            }
-        }
-    }
-    false
-}
-
 #[cfg(test)]
 mod test {
 

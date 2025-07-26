@@ -294,7 +294,7 @@ pub fn uu_app() -> Command {
 pub trait StrUtils {
     /// Remove comments and trim whitespace
     fn purify(&self) -> &Self;
-    /// Like split_whitespace() but only produce 2 components
+    /// Like `split_whitespace()` but only produce 2 parts
     fn split_two(&self) -> (&str, &str);
     fn fnmatch(&self, pattern: &str) -> bool;
 }

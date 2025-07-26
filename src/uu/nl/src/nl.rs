@@ -123,8 +123,8 @@ impl<T: AsRef<str>> From<T> for NumberFormat {
 }
 
 impl NumberFormat {
-    // Turns a line number into a `String` with at least `min_width` chars,
-    // formatted according to the `NumberFormat`s variant.
+    /// Turns a line number into a `String` with at least `min_width` chars,
+    /// formatted according to the `NumberFormat`s variant.
     fn format(&self, number: i64, min_width: usize) -> String {
         match self {
             Self::Left => format!("{number:<min_width$}"),
@@ -142,8 +142,8 @@ enum SectionDelimiter {
 }
 
 impl SectionDelimiter {
-    // A valid section delimiter contains the pattern one to three times,
-    // and nothing else.
+    /// A valid section delimiter contains the pattern one to three times,
+    /// and nothing else.
     fn parse(s: &str, pattern: &str) -> Option<Self> {
         if s.is_empty() || pattern.is_empty() {
             return None;
@@ -335,7 +335,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-// nl implements the main functionality for an individual buffer.
+/// `nl` implements the main functionality for an individual buffer.
 fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings) -> UResult<()> {
     let mut current_numbering_style = &settings.body_numbering;
 
@@ -346,7 +346,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
             stats.consecutive_empty_lines += 1;
         } else {
             stats.consecutive_empty_lines = 0;
-        };
+        }
 
         let new_numbering_style = match SectionDelimiter::parse(&line, &settings.section_delimiter)
         {

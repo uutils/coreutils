@@ -802,13 +802,13 @@ fn root_dev_ino_warn(dir_name: &Path) {
     }
 }
 
-// When fts_read returns FTS_DC to indicate a directory cycle, it may or may not indicate
-// a real problem.
-// When a program like chgrp performs a recursive traversal that requires traversing symbolic links,
-// it is *not* a problem.
-// However, when invoked with "-P -R", it deserves a warning.
-// The fts_options parameter records the options that control this aspect of fts behavior,
-// so test that.
+/// When `fts_read` returns [`fts_sys::FTS_DC`] to indicate a directory cycle, it may or may not indicate
+/// a real problem.
+/// When a program like chgrp performs a recursive traversal that requires traversing symbolic links,
+/// it is *not* a problem.
+/// However, when invoked with "-P -R", it deserves a warning.
+/// The `fts_options` parameter records the options that control this aspect of fts behavior,
+/// so test that.
 fn cycle_warning_required(fts_options: c_int, entry: &fts::EntryRef) -> bool {
     // When dereferencing no symlinks, or when dereferencing only those listed on the command line
     // and we're not processing a command-line argument, then a cycle is a serious problem.

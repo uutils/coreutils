@@ -52,7 +52,7 @@ struct Options {
 /// # Arguments
 ///
 /// * `options` - CLI options for the assigning checksum algorithm
-/// * `files` - A iterator of OsStr which is a bunch of files that are using for calculating checksum
+/// * `files` - A iterator of [`OsStr`] which is a bunch of files that are using for calculating checksum
 #[allow(clippy::cognitive_complexity)]
 fn cksum<'a, I>(mut options: Options, files: I) -> UResult<()>
 where
@@ -338,7 +338,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     match matches.get_many::<OsString>(options::FILE) {
         Some(files) => cksum(opts, files.map(OsStr::new))?,
         None => cksum(opts, iter::once(OsStr::new("-")))?,
-    };
+    }
 
     Ok(())
 }

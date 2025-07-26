@@ -581,7 +581,7 @@ impl Sequence {
 pub trait SymbolTranslator {
     fn translate(&mut self, current: u8) -> Option<u8>;
 
-    /// Takes two SymbolTranslators and creates a new SymbolTranslator over both in sequence.
+    /// Takes two [`SymbolTranslator`]s and creates a new [`SymbolTranslator`] over both in sequence.
     ///
     /// This behaves pretty much identical to [`Iterator::chain`].
     fn chain<T>(self, other: T) -> ChainedSymbolTranslator<Self, T>
@@ -708,9 +708,20 @@ where
         let filtered = buf.iter().filter_map(|&c| translator.translate(c));
         output_buf.extend(filtered);
 
+        #[cfg(not(target_os = "windows"))]
         output
             .write_all(&output_buf)
             .map_err_context(|| get_message("tr-error-write-error"))?;
+
+        // SIGPIPE is not available on Windows.
+        #[cfg(target_os = "windows")]
+        if let Err(err) = output.write_all(&output_buf) {
+            if err.kind() == std::io::ErrorKind::BrokenPipe {
+                std::process::exit(13);
+            } else {
+                return Err(err.map_err_context(|| get_message("tr-error-write-error")));
+            }
+        }
 
         buf.clear();
         output_buf.clear();

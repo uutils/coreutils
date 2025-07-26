@@ -222,6 +222,62 @@ fn test_f16() {
 }
 
 #[test]
+fn test_fh() {
+    let input: [u8; 14] = [
+        0x00, 0x3c, // 0x3C00 1.0
+        0x00, 0x00, // 0x0000 0.0
+        0x00, 0x80, // 0x8000 -0.0
+        0x00, 0x7c, // 0x7C00 Inf
+        0x00, 0xfc, // 0xFC00 -Inf
+        0x00, 0xfe, // 0xFE00 NaN
+        0x00, 0x84,
+    ]; // 0x8400 -6.104e-5
+    let expected_output = unindent(
+        "
+            0000000     1.000         0        -0       inf
+            0000010      -inf       NaN -6.104e-5
+            0000016
+        ",
+    );
+    new_ucmd!()
+        .arg("--endian=little")
+        .arg("-tfH")
+        .arg("-w8")
+        .run_piped_stdin(&input[..])
+        .success()
+        .no_stderr()
+        .stdout_is(expected_output);
+}
+
+#[test]
+fn test_fb() {
+    let input: [u8; 14] = [
+        0x80, 0x3f, // 1.0
+        0x00, 0x00, // 0.0
+        0x00, 0x80, // -0.0
+        0x80, 0x7f, // Inf
+        0x80, 0xff, // -Inf
+        0xc0, 0x7f, // NaN
+        0x80, 0xb8,
+    ]; // -6.1035156e-5
+    let expected_output = unindent(
+        "
+            0000000      1.0000000              0             -0            inf
+            0000010           -inf            NaN  -6.1035156e-5
+            0000016
+        ",
+    );
+    new_ucmd!()
+        .arg("--endian=little")
+        .arg("-tfB")
+        .arg("-w8")
+        .run_piped_stdin(&input[..])
+        .success()
+        .no_stderr()
+        .stdout_is(expected_output);
+}
+
+#[test]
 fn test_f32() {
     let input: [u8; 28] = [
         0x52, 0x06, 0x9e, 0xbf, // 0xbf9e0652 -1.2345679
@@ -234,7 +290,7 @@ fn test_f32() {
     ]; // 0x807f0000 -1.1663108E-38
     let expected_output = unindent(
         "
-            0000000     -1.2345679       12345678  -9.8765427e37             -0
+            0000000     -1.2345679       12345678 -9.8765427e+37             -0
             0000020            NaN          1e-40 -1.1663108e-38
             0000034
             ",

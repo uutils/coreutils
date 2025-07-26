@@ -365,10 +365,18 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         return Err(1.into());
     }
 
+    // Check if compare is used with non-permission mode bits
+    if compare && specified_mode.is_some() {
+        let mode = specified_mode.unwrap();
+        let non_permission_bits = 0o7000; // setuid, setgid, sticky bits
+        if mode & non_permission_bits != 0 {
+            show_error!("{}", get_message("install-warning-compare-ignored"));
+        }
+    }
+
     let owner = matches
         .get_one::<String>(OPT_OWNER)
-        .map(|s| s.as_str())
-        .unwrap_or("")
+        .map_or("", |s| s.as_str())
         .to_string();
 
     let owner_id = if owner.is_empty() {
@@ -382,8 +390,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     let group = matches
         .get_one::<String>(OPT_GROUP)
-        .map(|s| s.as_str())
-        .unwrap_or("")
+        .map_or("", |s| s.as_str())
         .to_string();
 
     let group_id = if group.is_empty() {
@@ -411,8 +418,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         strip_program: String::from(
             matches
                 .get_one::<String>(OPT_STRIP_PROGRAM)
-                .map(|s| s.as_str())
-                .unwrap_or(DEFAULT_STRIP_PROGRAM),
+                .map_or(DEFAULT_STRIP_PROGRAM, |s| s.as_str()),
         ),
         create_leading: matches.get_flag(OPT_CREATE_LEADING),
         target_dir,
@@ -494,8 +500,7 @@ fn directory(paths: &[String], b: &Behavior) -> UResult<()> {
 /// created immediately
 fn is_new_file_path(path: &Path) -> bool {
     !path.exists()
-        && (path.parent().map(Path::is_dir).unwrap_or(true)
-            || path.parent().unwrap().as_os_str().is_empty()) // In case of a simple file
+        && (path.parent().is_none_or(Path::is_dir) || path.parent().unwrap().as_os_str().is_empty()) // In case of a simple file
 }
 
 /// Test if the path is an existing directory or ends with a trailing separator.
@@ -646,8 +651,8 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
 ///
 /// # Parameters
 ///
-/// _files_ must all exist as non-directories.
-/// _target_dir_ must be a directory.
+/// `files` must all exist as non-directories.
+/// `target_dir` must be a directory.
 ///
 fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UResult<()> {
     if !target_dir.is_dir() {
@@ -759,7 +764,7 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
     }
 }
 
-/// Copy a non-special file using std::fs::copy.
+/// Copy a non-special file using [`fs::copy`].
 ///
 /// # Parameters
 /// * `from` - The source file path.
@@ -947,7 +952,7 @@ fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
 /// If the copy system call fails, we print a verbose error and return an empty error value.
 ///
 fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
-    if b.compare && !need_copy(from, to, b)? {
+    if b.compare && !need_copy(from, to, b) {
         return Ok(());
     }
     // Declare the path here as we may need it for the verbose output below.
@@ -1000,6 +1005,29 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
     Ok(())
 }
 
+/// Check if a file needs to be copied due to ownership differences when no explicit group is specified.
+/// Returns true if the destination file's ownership would differ from what it should be after installation.
+fn needs_copy_for_ownership(to: &Path, to_meta: &fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    // Check if the destination file's owner differs from the effective user ID
+    if to_meta.uid() != geteuid() {
+        return true;
+    }
+
+    // For group, we need to determine what the group would be after installation
+    // If no group is specified, the behavior depends on the directory:
+    // - If the directory has setgid bit, the file inherits the directory's group
+    // - Otherwise, the file gets the user's effective group
+    let expected_gid = to
+        .parent()
+        .and_then(|parent| metadata(parent).ok())
+        .filter(|parent_meta| parent_meta.mode() & 0o2000 != 0)
+        .map_or(getegid(), |parent_meta| parent_meta.gid());
+
+    to_meta.gid() != expected_gid
+}
+
 /// Return true if a file is necessary to copy. This is the case when:
 ///
 /// - _from_ or _to_ is nonexistent;
@@ -1017,18 +1045,25 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
 ///
 /// Crashes the program if a nonexistent owner or group is specified in _b_.
 ///
-fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
+fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     // Attempt to retrieve metadata for the source file.
     // If this fails, assume the file needs to be copied.
     let Ok(from_meta) = metadata(from) else {
-        return Ok(true);
+        return true;
     };
 
     // Attempt to retrieve metadata for the destination file.
     // If this fails, assume the file needs to be copied.
     let Ok(to_meta) = metadata(to) else {
-        return Ok(true);
+        return true;
     };
+
+    // Check if the destination is a symlink (should always be replaced)
+    if let Ok(to_symlink_meta) = fs::symlink_metadata(to) {
+        if to_symlink_meta.file_type().is_symlink() {
+            return true;
+        }
+    }
 
     // Define special file mode bits (setuid, setgid, sticky).
     let extra_mode: u32 = 0o7000;
@@ -1038,31 +1073,31 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
 
     // Check if any special mode bits are set in the specified mode,
     // source file mode, or destination file mode.
-    if b.specified_mode.unwrap_or(0) & extra_mode != 0
+    if b.mode() & extra_mode != 0
         || from_meta.mode() & extra_mode != 0
         || to_meta.mode() & extra_mode != 0
     {
-        return Ok(true);
+        return true;
     }
 
     // Check if the mode of the destination file differs from the specified mode.
     if b.mode() != to_meta.mode() & all_modes {
-        return Ok(true);
+        return true;
     }
 
     // Check if either the source or destination is not a file.
     if !from_meta.is_file() || !to_meta.is_file() {
-        return Ok(true);
+        return true;
     }
 
     // Check if the file sizes differ.
     if from_meta.len() != to_meta.len() {
-        return Ok(true);
+        return true;
     }
 
     #[cfg(feature = "selinux")]
     if b.preserve_context && contexts_differ(from, to) {
-        return Ok(true);
+        return true;
     }
 
     // TODO: if -P (#1809) and from/to contexts mismatch, return true.
@@ -1070,30 +1105,25 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
     // Check if the owner ID is specified and differs from the destination file's owner.
     if let Some(owner_id) = b.owner_id {
         if owner_id != to_meta.uid() {
-            return Ok(true);
+            return true;
         }
     }
 
     // Check if the group ID is specified and differs from the destination file's group.
     if let Some(group_id) = b.group_id {
         if group_id != to_meta.gid() {
-            return Ok(true);
+            return true;
         }
-    } else {
-        #[cfg(not(target_os = "windows"))]
-        // Check if the destination file's owner or group
-        // differs from the effective user/group ID of the process.
-        if to_meta.uid() != geteuid() || to_meta.gid() != getegid() {
-            return Ok(true);
-        }
+    } else if needs_copy_for_ownership(to, &to_meta) {
+        return true;
     }
 
     // Check if the contents of the source and destination files differ.
     if !diff(from.to_str().unwrap(), to.to_str().unwrap()) {
-        return Ok(true);
+        return true;
     }
 
-    Ok(false)
+    false
 }
 
 #[cfg(feature = "selinux")]

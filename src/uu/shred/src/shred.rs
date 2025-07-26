@@ -102,7 +102,7 @@ enum RemoveMethod {
     WipeSync, // The same as 'Wipe' sync the file name changes
 }
 
-/// Iterates over all possible filenames of a certain length using NAME_CHARSET as an alphabet
+/// Iterates over all possible filenames of a certain length using [`NAME_CHARSET`] as an alphabet
 struct FilenameIter {
     // Store the indices of the letters of our filename in NAME_CHARSET
     name_charset_indices: Vec<usize>,
@@ -156,7 +156,7 @@ enum RandomSource {
     Read(File),
 }
 
-/// Used to generate blocks of bytes of size <= BLOCK_SIZE based on either a give pattern
+/// Used to generate blocks of bytes of size <= [`BLOCK_SIZE`] based on either a give pattern
 /// or randomness
 // The lint warns about a large difference because StdRng is big, but the buffers are much
 // larger anyway, so it's fine.
@@ -170,7 +170,7 @@ enum BytesWriter<'a> {
         rng_file: &'a File,
         buffer: [u8; BLOCK_SIZE],
     },
-    // To write patterns we only write to the buffer once. To be able to do
+    // To write patterns, we only write to the buffer once. To be able to do
     // this, we need to extend the buffer with 2 bytes. We can then easily
     // obtain a buffer starting with any character of the pattern that we
     // want with an offset of either 0, 1 or 2.
@@ -178,7 +178,7 @@ enum BytesWriter<'a> {
     // For example, if we have the pattern ABC, but we want to write a block
     // of BLOCK_SIZE starting with B, we just pick the slice [1..BLOCK_SIZE+1]
     // This means that we only have to fill the buffer once and can just reuse
-    // it afterwards.
+    // it afterward.
     Pattern {
         offset: usize,
         buffer: [u8; PATTERN_BUFFER_SIZE],
@@ -557,8 +557,7 @@ fn wipe_file(
                 HashMap::from([("file".to_string(), path.maybe_quote().to_string())]),
             );
             show_error!(
-                "{} {}/{total_passes} ({pass_name})...",
-                msg,
+                "{msg} {}/{total_passes} ({pass_name})...",
                 (i + 1).to_string()
             );
         }
@@ -630,8 +629,8 @@ fn do_pass(
     Ok(())
 }
 
-// Repeatedly renames the file with strings of decreasing length (most likely all 0s)
-// Return the path of the file after its last renaming or None if error
+/// Repeatedly renames the file with strings of decreasing length (most likely all 0s)
+/// Return the path of the file after its last renaming or None in case of an error
 fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Option<PathBuf> {
     let file_name_len = orig_path.file_name().unwrap().to_str().unwrap().len();
 
@@ -679,7 +678,7 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Op
                             ("error".to_string(), e.to_string()),
                         ]),
                     );
-                    show_error!("{}", msg);
+                    show_error!("{msg}");
                     // TODO: replace with our error management
                     std::process::exit(1);
                 }

@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
+use std::sync::atomic::{self, AtomicBool};
 use std::time::Duration;
 use uucore::display::Quotable;
 use uucore::error::{UClapError, UResult, USimpleError, UUsageError};
@@ -185,6 +186,23 @@ fn unblock_sigchld() {
     }
 }
 
+/// We should terminate child process when receiving TERM signal.
+static SIGNALED: AtomicBool = AtomicBool::new(false);
+
+fn catch_sigterm() {
+    use nix::sys::signal;
+
+    extern "C" fn handle_sigterm(signal: libc::c_int) {
+        let signal = signal::Signal::try_from(signal).unwrap();
+        if signal == signal::Signal::SIGTERM {
+            SIGNALED.store(true, atomic::Ordering::Relaxed);
+        }
+    }
+
+    let handler = signal::SigHandler::Handler(handle_sigterm);
+    unsafe { signal::signal(signal::Signal::SIGTERM, handler) }.unwrap();
+}
+
 /// Report that a signal is being sent if the verbose flag is set.
 fn report_if_verbose(signal: usize, cmd: &str, verbose: bool) {
     if verbose {
@@ -246,7 +264,8 @@ fn wait_or_kill_process(
     foreground: bool,
     verbose: bool,
 ) -> std::io::Result<i32> {
-    match process.wait_or_timeout(duration) {
+    // ignore `SIGTERM` here
+    match process.wait_or_timeout(duration, None) {
         Ok(Some(status)) => {
             if preserve_status {
                 Ok(status.code().unwrap_or_else(|| status.signal().unwrap()))
@@ -330,6 +349,7 @@ fn timeout(
             )
         })?;
     unblock_sigchld();
+    catch_sigterm();
     // Wait for the child process for the specified time period.
     //
     // If the process exits within the specified time period (the
@@ -341,7 +361,7 @@ fn timeout(
     // TODO The structure of this block is extremely similar to the
     // structure of `wait_or_kill_process()`. They can probably be
     // refactored into some common function.
-    match process.wait_or_timeout(duration) {
+    match process.wait_or_timeout(duration, Some(&SIGNALED)) {
         Ok(Some(status)) => Err(status
             .code()
             .unwrap_or_else(|| preserve_signal_info(status.signal().unwrap()))
@@ -352,7 +372,9 @@ fn timeout(
             match kill_after {
                 None => {
                     let status = process.wait()?;
-                    if preserve_status {
+                    if SIGNALED.load(atomic::Ordering::Relaxed) {
+                        Err(ExitStatus::Terminated.into())
+                    } else if preserve_status {
                         if let Some(ec) = status.code() {
                             Err(ec.into())
                         } else if let Some(sc) = status.signal() {

@@ -9,42 +9,53 @@ mod unit_tests;
 
 use super::{ConversionMode, IConvFlags, IFlags, Num, OConvFlags, OFlags, Settings, StatusLevel};
 use crate::conversion_tables::ConversionTable;
+use std::collections::HashMap;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
+use uucore::locale::{get_message, get_message_with_args};
 use uucore::parser::parse_size::{ParseSizeError, Parser as SizeParser};
 use uucore::show_warning;
 
 /// Parser Errors describe errors with parser input
 #[derive(Debug, PartialEq, Eq, Error)]
 pub enum ParseError {
-    #[error("Unrecognized operand '{0}'")]
+    #[error("{}", get_message_with_args("dd-error-unrecognized-operand",
+        HashMap::from([("operand".to_string(), .0.clone())])))]
     UnrecognizedOperand(String),
-    #[error("Only one of conv=ascii conv=ebcdic or conv=ibm may be specified")]
+    #[error("{}", get_message("dd-error-multiple-format-table"))]
     MultipleFmtTable,
-    #[error("Only one of conv=lcase or conv=ucase may be specified")]
+    #[error("{}", get_message("dd-error-multiple-case"))]
     MultipleUCaseLCase,
-    #[error("Only one of conv=block or conv=unblock may be specified")]
+    #[error("{}", get_message("dd-error-multiple-block"))]
     MultipleBlockUnblock,
-    #[error("Only one ov conv=excl or conv=nocreat may be specified")]
+    #[error("{}", get_message("dd-error-multiple-excl"))]
     MultipleExclNoCreate,
-    #[error("invalid input flag: ‘{}’\nTry '{} --help' for more information.", .0, uucore::execution_phrase())]
+    #[error("{}", get_message_with_args("dd-error-invalid-flag",
+        HashMap::from([("flag".to_string(), .0.clone()),("cmd".to_string(),  uucore::execution_phrase().to_string())])))]
     FlagNoMatch(String),
-    #[error("Unrecognized conv=CONV -> {0}")]
+    #[error("{}", get_message_with_args("dd-error-conv-flag-no-match",
+        HashMap::from([("flag".to_string(), .0.clone())])))]
     ConvFlagNoMatch(String),
-    #[error("invalid number: ‘{0}’")]
+    #[error("{}", get_message_with_args("dd-error-multiplier-parse-failure",
+        HashMap::from([("input".to_string(), .0.clone())])))]
     MultiplierStringParseFailure(String),
-    #[error("Multiplier string would overflow on current system -> {0}")]
+    #[error("{}", get_message_with_args("dd-error-multiplier-overflow",
+        HashMap::from([("input".to_string(), .0.clone())])))]
     MultiplierStringOverflow(String),
-    #[error("conv=block or conv=unblock specified without cbs=N")]
+    #[error("{}", get_message("dd-error-block-without-cbs"))]
     BlockUnblockWithoutCBS,
-    #[error("status=LEVEL not recognized -> {0}")]
+    #[error("{}", get_message_with_args("dd-error-status-not-recognized",
+        HashMap::from([("level".to_string(), .0.clone())])))]
     StatusLevelNotRecognized(String),
-    #[error("feature not implemented on this system -> {0}")]
+    #[error("{}", get_message_with_args("dd-error-unimplemented",
+        HashMap::from([("feature".to_string(), .0.clone())])))]
     Unimplemented(String),
-    #[error("{0}=N cannot fit into memory")]
+    #[error("{}", get_message_with_args("dd-error-bs-out-of-range",
+        HashMap::from([("param".to_string(), .0.clone())])))]
     BsOutOfRange(String),
-    #[error("invalid number: ‘{0}’")]
+    #[error("{}", get_message_with_args("dd-error-invalid-number",
+        HashMap::from([("input".to_string(), .0.clone())])))]
     InvalidNumber(String),
 }
 
@@ -424,13 +435,18 @@ impl UError for ParseError {
 
 fn show_zero_multiplier_warning() {
     show_warning!(
-        "{} is a zero multiplier; use {} if that is intended",
-        "0x".quote(),
-        "00x".quote()
+        "{}",
+        get_message_with_args(
+            "dd-warning-zero-multiplier",
+            HashMap::from([
+                ("zero".to_string(), "0x".quote().to_string()),
+                ("alternative".to_string(), "00x".quote().to_string())
+            ])
+        )
     );
 }
 
-/// Parse bytes using str::parse, then map error if needed.
+/// Parse bytes using [`str::parse`], then map error if needed.
 fn parse_bytes_only(s: &str, i: usize) -> Result<u64, ParseError> {
     s[..i]
         .parse()
@@ -486,7 +502,7 @@ fn parse_bytes_no_x(full: &str, s: &str) -> Result<u64, ParseError> {
 }
 
 /// Parse byte and multiplier like 512, 5KiB, or 1G.
-/// Uses uucore::parse_size, and adds the 'w' and 'c' suffixes which are mentioned
+/// Uses [`uucore::parser::parse_size`], and adds the 'w' and 'c' suffixes which are mentioned
 /// in dd's info page.
 pub fn parse_bytes_with_opt_multiplier(s: &str) -> Result<u64, ParseError> {
     // TODO On my Linux system, there seems to be a maximum block size of 4096 bytes:

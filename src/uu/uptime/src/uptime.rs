@@ -3,9 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore getloadavg behaviour loadavg uptime upsecs updays upmins uphours boottime nusers utmpxname gettime clockid
+// spell-checker:ignore getloadavg behaviour loadavg uptime upsecs updays upmins uphours boottime nusers utmpxname gettime clockid couldnt
 
 use chrono::{Local, TimeZone, Utc};
+use std::collections::HashMap;
 #[cfg(unix)]
 use std::ffi::OsString;
 use std::io;
@@ -17,8 +18,8 @@ use uucore::uptime::*;
 use clap::{Arg, ArgAction, Command, ValueHint, builder::ValueParser};
 
 use uucore::format_usage;
-use uucore::locale::get_message;
 
+use uucore::locale::{get_message, get_message_with_args};
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
 use uucore::utmpx::*;
@@ -31,11 +32,11 @@ pub mod options {
 #[derive(Debug, Error)]
 pub enum UptimeError {
     // io::Error wrapper
-    #[error("couldn't get boot time: {0}")]
+    #[error("{}", get_message_with_args("uptime-error-io", HashMap::from([("error".to_string(), format!("{}", .0))])))]
     IoErr(#[from] io::Error),
-    #[error("couldn't get boot time: Is a directory")]
+    #[error("{}", get_message("uptime-error-target-is-dir"))]
     TargetIsDir,
-    #[error("couldn't get boot time: Illegal seek")]
+    #[error("{}", get_message("uptime-error-target-is-fifo"))]
     TargetIsFifo,
 }
 
@@ -78,13 +79,13 @@ pub fn uu_app() -> Command {
             Arg::new(options::SINCE)
                 .short('s')
                 .long(options::SINCE)
-                .help("system up since")
+                .help(get_message("uptime-help-since"))
                 .action(ArgAction::SetTrue),
         );
     #[cfg(unix)]
     cmd.arg(
         Arg::new(options::PATH)
-            .help("file to search boot time from")
+            .help(get_message("uptime-help-path"))
             .action(ArgAction::Set)
             .num_args(0..=1)
             .value_parser(ValueParser::os_string())
@@ -130,9 +131,9 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
         let bytes = file_path.as_os_str().as_bytes();
 
         if bytes[bytes.len() - 1] != b'x' {
-            show_error!("couldn't get boot time");
+            show_error!("{}", get_message("uptime-error-couldnt-get-boot-time"));
             print_time();
-            print!("up ???? days ??:??,");
+            print!("{}", get_message("uptime-output-unknown-uptime"));
             print_nusers(Some(0));
             print_loadavg();
             set_exit_code(1);
@@ -142,7 +143,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
 
     if non_fatal_error {
         print_time();
-        print!("up ???? days ??:??,");
+        print!("{}", get_message("uptime-output-unknown-uptime"));
         print_nusers(Some(0));
         print_loadavg();
         return Ok(());
@@ -157,10 +158,10 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
         if let Some(time) = boot_time {
             print_uptime(Some(time))?;
         } else {
-            show_error!("couldn't get boot time");
+            show_error!("{}", get_message("uptime-error-couldnt-get-boot-time"));
             set_exit_code(1);
 
-            print!("up ???? days ??:??,");
+            print!("{}", get_message("uptime-output-unknown-uptime"));
         }
         user_count = count;
     }
@@ -171,10 +172,10 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
         if upsecs >= 0 {
             print_uptime(Some(upsecs))?;
         } else {
-            show_error!("couldn't get boot time");
+            show_error!("{}", get_message("uptime-error-couldnt-get-boot-time"));
             set_exit_code(1);
 
-            print!("up ???? days ??:??,");
+            print!("{}", get_message("uptime-output-unknown-uptime"));
         }
         user_count = get_nusers(file_path.to_str().expect("invalid utmp path file"));
     }
@@ -241,7 +242,7 @@ fn process_utmpx(file: Option<&OsString>) -> (Option<time_t>, usize) {
                     boot_time = Some(dt.unix_timestamp() as time_t);
                 }
             }
-            _ => continue,
+            _ => (),
         }
     }
     (boot_time, nusers)

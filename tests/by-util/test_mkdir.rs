@@ -34,6 +34,18 @@ fn test_mkdir_mkdir() {
     new_ucmd!().arg("test_dir").succeeds();
 }
 
+#[cfg(feature = "test_risky_names")]
+#[test]
+fn test_mkdir_non_unicode() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let target = uucore::os_str_from_bytes(b"some-\xc0-dir-\xf3")
+        .expect("Only unix platforms can test non-unicode names");
+    ucmd.arg(&target).succeeds();
+
+    assert!(at.dir_exists(target));
+}
+
 #[test]
 fn test_mkdir_verbose() {
     let expected = "mkdir: created directory 'test_dir'\n";
@@ -326,6 +338,22 @@ fn test_mkdir_trailing_dot() {
         .arg("test_dir_b/..")
         .succeeds()
         .stdout_contains("created directory 'test_dir_b'");
+
+    let scene = TestScenario::new("ls");
+    let result = scene.ucmd().arg("-al").run();
+    println!("ls dest {}", result.stdout_str());
+}
+
+#[test]
+fn test_mkdir_trailing_dot_and_slash() {
+    new_ucmd!().arg("-p").arg("-v").arg("test_dir").succeeds();
+
+    new_ucmd!()
+        .arg("-p")
+        .arg("-v")
+        .arg("test_dir_a/./")
+        .succeeds()
+        .stdout_contains("created directory 'test_dir_a'");
 
     let scene = TestScenario::new("ls");
     let result = scene.ucmd().arg("-al").run();

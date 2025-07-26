@@ -101,7 +101,7 @@ impl OrderChecker {
             return true;
         }
 
-        let is_ordered = current_line >= &self.last_line;
+        let is_ordered = *current_line >= *self.last_line;
         if !is_ordered && !self.has_error {
             eprintln!(
                 "{}",

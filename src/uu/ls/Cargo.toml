@@ -21,17 +21,10 @@ path = "src/ls.rs"
 
 [dependencies]
 ansi-width = { workspace = true }
-chrono = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 glob = { workspace = true }
 hostname = { workspace = true }
-jiff = { workspace = true, features = [
-  "tzdb-bundle-platform",
-  "tzdb-zoneinfo",
-  "tzdb-concatenated",
-] }
 lscolors = { workspace = true }
-number_prefix = { workspace = true }
 selinux = { workspace = true, optional = true }
 terminal_size = { workspace = true }
 thiserror = { workspace = true }
@@ -43,6 +36,7 @@ uucore = { workspace = true, features = [
   "fsxattr",
   "parser",
   "quoting-style",
+  "time",
   "version-cmp",
 ] }
 uutils_term_grid = { workspace = true }
@@ -52,4 +46,4 @@ name = "ls"
 path = "src/main.rs"
 
 [features]
-feat_selinux = ["selinux"]
+feat_selinux = ["selinux", "uucore/selinux"]

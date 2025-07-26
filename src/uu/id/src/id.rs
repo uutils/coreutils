@@ -217,9 +217,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     set_exit_code(1);
                     if i + 1 >= users.len() {
                         break;
-                    } else {
-                        continue;
                     }
+
+                    continue;
                 }
             }
         } else {
@@ -231,7 +231,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // BSD's `id` ignores all but the first specified user
             pline(possible_pw.as_ref().map(|v| v.uid));
             return Ok(());
-        };
+        }
         if matches.get_flag(options::OPT_HUMAN_READABLE) {
             // BSD's `id` ignores all but the first specified user
             pretty(possible_pw);
@@ -243,14 +243,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             return Ok(());
         }
 
-        let (uid, gid) = possible_pw.as_ref().map(|p| (p.uid, p.gid)).unwrap_or({
-            let use_effective = !state.rflag && (state.uflag || state.gflag || state.gsflag);
-            if use_effective {
-                (geteuid(), getegid())
-            } else {
-                (getuid(), getgid())
-            }
-        });
+        let (uid, gid) = possible_pw.as_ref().map_or(
+            {
+                let use_effective = !state.rflag && (state.uflag || state.gflag || state.gsflag);
+                if use_effective {
+                    (geteuid(), getegid())
+                } else {
+                    (getuid(), getgid())
+                }
+            },
+            |p| (p.uid, p.gid),
+        );
         state.ids = Some(Ids {
             uid,
             gid,

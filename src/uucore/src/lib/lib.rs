@@ -51,7 +51,7 @@ pub use crate::features::fast_inc;
 pub use crate::features::format;
 #[cfg(feature = "fs")]
 pub use crate::features::fs;
-#[cfg(feature = "i18n")]
+#[cfg(feature = "i18n-common")]
 pub use crate::features::i18n;
 #[cfg(feature = "lines")]
 pub use crate::features::lines;
@@ -65,6 +65,8 @@ pub use crate::features::ranges;
 pub use crate::features::ringbuffer;
 #[cfg(feature = "sum")]
 pub use crate::features::sum;
+#[cfg(feature = "time")]
+pub use crate::features::time;
 #[cfg(feature = "update-control")]
 pub use crate::features::update_control;
 #[cfg(feature = "uptime")]
@@ -124,6 +126,7 @@ use std::iter;
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::str;
+use std::str::Utf8Chunk;
 use std::sync::{LazyLock, atomic::Ordering};
 
 /// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
@@ -204,18 +207,10 @@ macro_rules! bin {
 ///
 /// The generated string has the format `(<project name>) <version>`, for
 /// example: "(uutils coreutils) 0.30.0". clap will then prefix it with the util name.
-///
-/// To use this macro, you have to add `PROJECT_NAME_FOR_VERSION_STRING = "<project name>"` to the
-/// `[env]` section in `.cargo/config.toml`.
 #[macro_export]
 macro_rules! crate_version {
     () => {
-        concat!(
-            "(",
-            env!("PROJECT_NAME_FOR_VERSION_STRING"),
-            ") ",
-            env!("CARGO_PKG_VERSION")
-        )
+        concat!("(uutils coreutils) ", env!("CARGO_PKG_VERSION"))
     };
 }
 
@@ -310,23 +305,39 @@ pub fn read_yes() -> bool {
     }
 }
 
+#[derive(Debug)]
+pub struct NonUtf8OsStrError {
+    input_lossy_string: String,
+}
+
+impl std::fmt::Display for NonUtf8OsStrError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use os_display::Quotable;
+        let quoted = self.input_lossy_string.quote();
+        f.write_fmt(format_args!(
+            "invalid UTF-8 input {quoted} encountered when converting to bytes on a platform that doesn't expose byte arguments",
+        ))
+    }
+}
+
+impl std::error::Error for NonUtf8OsStrError {}
+impl error::UError for NonUtf8OsStrError {}
+
 /// Converts an `OsStr` to a UTF-8 `&[u8]`.
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the string can't be coerced to UTF-8.
-pub fn os_str_as_bytes(os_string: &OsStr) -> mods::error::UResult<&[u8]> {
+pub fn os_str_as_bytes(os_string: &OsStr) -> Result<&[u8], NonUtf8OsStrError> {
     #[cfg(unix)]
-    let bytes = os_string.as_bytes();
+    return Ok(os_string.as_bytes());
 
     #[cfg(not(unix))]
-    let bytes = os_string
+    os_string
         .to_str()
-        .ok_or_else(|| {
-            mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
-        })?
-        .as_bytes();
-
-    Ok(bytes)
+        .ok_or_else(|| NonUtf8OsStrError {
+            input_lossy_string: os_string.to_string_lossy().into_owned(),
+        })
+        .map(|s| s.as_bytes())
 }
 
 /// Performs a potentially lossy conversion from `OsStr` to UTF-8 bytes.
@@ -335,15 +346,13 @@ pub fn os_str_as_bytes(os_string: &OsStr) -> mods::error::UResult<&[u8]> {
 /// and wraps [`OsStr::to_string_lossy`] on non-unix platforms.
 pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<[u8]> {
     #[cfg(unix)]
-    let bytes = Cow::from(os_string.as_bytes());
+    return Cow::from(os_string.as_bytes());
 
     #[cfg(not(unix))]
-    let bytes = match os_string.to_string_lossy() {
+    match os_string.to_string_lossy() {
         Cow::Borrowed(slice) => Cow::from(slice.as_bytes()),
         Cow::Owned(owned) => Cow::from(owned.into_bytes()),
-    };
-
-    bytes
+    }
 }
 
 /// Converts a `&[u8]` to an `&OsStr`,
@@ -353,13 +362,12 @@ pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<[u8]> {
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
 pub fn os_str_from_bytes(bytes: &[u8]) -> mods::error::UResult<Cow<'_, OsStr>> {
     #[cfg(unix)]
-    let os_str = Cow::Borrowed(OsStr::from_bytes(bytes));
-    #[cfg(not(unix))]
-    let os_str = Cow::Owned(OsString::from(str::from_utf8(bytes).map_err(|_| {
-        mods::error::UUsageError::new(1, "Unable to transform bytes into OsStr")
-    })?));
+    return Ok(Cow::Borrowed(OsStr::from_bytes(bytes)));
 
-    Ok(os_str)
+    #[cfg(not(unix))]
+    Ok(Cow::Owned(OsString::from(str::from_utf8(bytes).map_err(
+        |_| mods::error::UUsageError::new(1, "Unable to transform bytes into OsStr"),
+    )?)))
 }
 
 /// Converts a `Vec<u8>` into an `OsString`, parsing as UTF-8 on non-unix platforms.
@@ -368,13 +376,30 @@ pub fn os_str_from_bytes(bytes: &[u8]) -> mods::error::UResult<Cow<'_, OsStr>> {
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
 pub fn os_string_from_vec(vec: Vec<u8>) -> mods::error::UResult<OsString> {
     #[cfg(unix)]
-    let s = OsString::from_vec(vec);
-    #[cfg(not(unix))]
-    let s = OsString::from(String::from_utf8(vec).map_err(|_| {
-        mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
-    })?);
+    return Ok(OsString::from_vec(vec));
 
-    Ok(s)
+    #[cfg(not(unix))]
+    Ok(OsString::from(String::from_utf8(vec).map_err(|_| {
+        mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
+    })?))
+}
+
+/// Converts an `OsString` into a `Vec<u8>`, parsing as UTF-8 on non-unix platforms.
+///
+/// This always succeeds on unix platforms,
+/// and fails on other platforms if the bytes can't be parsed as UTF-8.
+pub fn os_string_to_vec(s: OsString) -> mods::error::UResult<Vec<u8>> {
+    #[cfg(unix)]
+    let v = s.into_vec();
+    #[cfg(not(unix))]
+    let v = s
+        .into_string()
+        .map_err(|_| {
+            mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
+        })?
+        .into();
+
+    Ok(v)
 }
 
 /// Equivalent to `std::BufRead::lines` which outputs each line as a `Vec<u8>`,
@@ -442,6 +467,91 @@ macro_rules! prompt_yes(
         uucore::read_yes()
     })
 );
+
+/// Represent either a character or a byte.
+/// Used to iterate on partially valid UTF-8 data
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CharByte {
+    Char(char),
+    Byte(u8),
+}
+
+impl From<char> for CharByte {
+    fn from(value: char) -> Self {
+        CharByte::Char(value)
+    }
+}
+
+impl From<u8> for CharByte {
+    fn from(value: u8) -> Self {
+        CharByte::Byte(value)
+    }
+}
+
+impl From<&u8> for CharByte {
+    fn from(value: &u8) -> Self {
+        CharByte::Byte(*value)
+    }
+}
+
+struct Utf8ChunkIterator<'a> {
+    iter: Box<dyn Iterator<Item = CharByte> + 'a>,
+}
+
+impl Iterator for Utf8ChunkIterator<'_> {
+    type Item = CharByte;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
+impl<'a> From<Utf8Chunk<'a>> for Utf8ChunkIterator<'a> {
+    fn from(chk: Utf8Chunk<'a>) -> Utf8ChunkIterator<'a> {
+        Self {
+            iter: Box::new(
+                chk.valid()
+                    .chars()
+                    .map(CharByte::from)
+                    .chain(chk.invalid().iter().map(CharByte::from)),
+            ),
+        }
+    }
+}
+
+/// Iterates on the valid and invalid parts of a byte sequence with regard to
+/// the UTF-8 encoding.
+pub struct CharByteIterator<'a> {
+    iter: Box<dyn Iterator<Item = CharByte> + 'a>,
+}
+
+impl<'a> CharByteIterator<'a> {
+    /// Make a `CharByteIterator` from a byte slice.
+    /// [`CharByteIterator`]
+    pub fn new(input: &'a [u8]) -> CharByteIterator<'a> {
+        Self {
+            iter: Box::new(input.utf8_chunks().flat_map(Utf8ChunkIterator::from)),
+        }
+    }
+}
+
+impl Iterator for CharByteIterator<'_> {
+    type Item = CharByte;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
+pub trait IntoCharByteIterator<'a> {
+    fn iter_char_bytes(self) -> CharByteIterator<'a>;
+}
+
+impl<'a> IntoCharByteIterator<'a> for &'a [u8] {
+    fn iter_char_bytes(self) -> CharByteIterator<'a> {
+        CharByteIterator::new(self)
+    }
+}
 
 #[cfg(test)]
 mod tests {

@@ -395,7 +395,7 @@ where
                     assert_eq!(lines, 0);
                     lines = 1;
                 }
-            };
+            }
         }
 
         for separator_offset in memrchr_iter(separator, &buffer[..]) {
@@ -425,7 +425,7 @@ fn head_backwards_file(input: &mut File, options: &HeadOptions) -> io::Result<u6
     let st = input.metadata()?;
     let seekable = is_seekable(input);
     let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
-    if !seekable || st.len() <= blksize_limit {
+    if !seekable || st.len() <= blksize_limit || options.presume_input_pipe {
         head_backwards_without_seek_file(input, options)
     } else {
         head_backwards_on_seekable_file(input, options)
@@ -474,8 +474,8 @@ fn head_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
 fn uu_head(options: &HeadOptions) -> UResult<()> {
     let mut first = true;
     for file in &options.files {
-        let res = match (file.as_str(), options.presume_input_pipe) {
-            (_, true) | ("-", false) => {
+        let res = match file.as_str() {
+            "-" => {
                 if (options.files.len() > 1 && !options.quiet) || options.verbose {
                     if !first {
                         println!();
@@ -519,7 +519,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
 
                 Ok(())
             }
-            (name, false) => {
+            name => {
                 let mut file = match File::open(name) {
                     Ok(f) => f,
                     Err(err) => {

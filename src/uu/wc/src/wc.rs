@@ -162,8 +162,8 @@ impl<'a> Inputs<'a> {
         }
     }
 
-    // Creates an iterator which yields values borrowed from the command line arguments.
-    // Returns an error if the file specified in --files0-from cannot be opened.
+    /// Creates an iterator which yields values borrowed from the command line arguments.
+    /// Returns an error if the file specified in --files0-from cannot be opened.
     fn try_iter(
         &'a self,
         settings: &'a Settings<'a>,
@@ -198,7 +198,7 @@ impl<'a> Inputs<'a> {
 
 #[derive(Clone, Copy, Debug)]
 enum StdinKind {
-    /// Specified on command-line with "-" (STDIN_REPR)
+    /// Specified on command-line with "-" ([`STDIN_REPR`])
     Explicit,
     /// Implied by the lack of any arguments
     Implicit,
@@ -234,7 +234,7 @@ impl<'a, T: AsRef<Path> + ?Sized> From<&'a T> for Input<'a> {
 }
 
 impl<'a> Input<'a> {
-    /// Translates Path(Cow::Owned(_)) to Path(Cow::Borrowed(_)).
+    /// Translates `Path(Cow::Owned(_))` to `Path(Cow::Borrowed(_))`.
     fn as_borrowed(&'a self) -> Self {
         match self {
             Self::Path(p) => Self::Path(Cow::Borrowed(p.borrow())),
@@ -271,7 +271,7 @@ impl<'a> Input<'a> {
 
     /// When given --files0-from, we may be given a path or stdin. Either may be a stream or
     /// a regular file. If given a file less than 10 MiB, it will be consumed and turned into
-    /// a Vec of Input::Paths which can be scanned to determine the widths of the columns that
+    /// a Vec of [`Input::Path`] which can be scanned to determine the widths of the columns that
     /// will ultimately be printed.
     fn try_as_files0(&self) -> UResult<Option<Vec<Input<'static>>>> {
         match self {
@@ -300,8 +300,8 @@ fn is_stdin_small_file() -> bool {
 }
 
 #[cfg(not(unix))]
-// Windows presents a piped stdin as a "normal file" with a length equal to however many bytes
-// have been buffered at the time it's checked. To be safe, we must never assume it's a file.
+/// Windows presents a piped stdin as a "normal file" with a length equal to however many bytes
+/// have been buffered at the time it's checked. To be safe, we must never assume it's a file.
 fn is_stdin_small_file() -> bool {
     false
 }
@@ -657,11 +657,11 @@ enum CountResult {
     Failure(io::Error),
 }
 
-/// If we fail opening a file, we only show the error. If we fail reading the
+/// If we fail to open a file, we only show the error. If we fail reading the
 /// file, we show a count for what we managed to read.
 ///
 /// Therefore, the reading implementations always return a total and sometimes
-/// return an error: (WordCount, Option<io::Error>).
+/// return an error: ([`WordCount`], `Option<io::Error>`).
 fn word_count_from_input(input: &Input<'_>, settings: &Settings) -> CountResult {
     let (total, maybe_err) = match input {
         Input::Stdin(_) => word_count_from_reader(io::stdin().lock(), settings),
@@ -734,7 +734,7 @@ fn compute_number_width(inputs: &Inputs, settings: &Settings) -> usize {
 
 type InputIterItem<'a> = Result<Input<'a>, Box<dyn UError>>;
 
-/// To be used with `--files0-from=-`, this applies a filter on the results of files0_iter to
+/// To be used with `--files0-from=-`, this applies a filter on the results of [`files0_iter`] to
 /// translate '-' into the appropriate error.
 fn files0_iter_stdin<'a>() -> impl Iterator<Item = InputIterItem<'a>> {
     files0_iter(io::stdin().lock(), STDIN_REPR.into()).map(|i| match i {

@@ -534,12 +534,12 @@ pub fn display_permissions_unix(mode: mode_t, display_file_type: bool) -> String
     result
 }
 
-/// For some programs like install or mkdir, dir/. can be provided
+/// For some programs like install or mkdir, dir/. or dir/./ can be provided
 /// Special case to match GNU's behavior:
-/// install -d foo/. should work and just create foo/
+/// install -d foo/. (and foo/./) should work and just create foo/
 /// std::fs::create_dir("foo/."); fails in pure Rust
 pub fn dir_strip_dot_for_creation(path: &Path) -> PathBuf {
-    if path.to_string_lossy().ends_with("/.") {
+    if path.to_string_lossy().ends_with("/.") || path.to_string_lossy().ends_with("/./") {
         // Do a simple dance to strip the "/."
         Path::new(&path).components().collect::<PathBuf>()
     } else {
@@ -720,7 +720,9 @@ pub fn is_stdin_directory(stdin: &Stdin) -> bool {
     {
         use nix::sys::stat::fstat;
         let mode = fstat(stdin.as_fd()).unwrap().st_mode as mode_t;
-        has!(mode, S_IFDIR)
+        // We use the S_IFMT mask ala S_ISDIR() to avoid mistaking
+        // sockets for directories.
+        mode & S_IFMT == S_IFDIR
     }
 
     #[cfg(windows)]

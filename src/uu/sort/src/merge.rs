@@ -370,7 +370,7 @@ impl Compare<MergeableFile> for FileComparator<'_> {
     }
 }
 
-// Wait for the child to exit and check its exit code.
+/// Wait for the child to exit and check its exit code.
 fn check_child_success(mut child: Child, program: &str) -> UResult<()> {
     if matches!(child.wait().map(|e| e.code()), Ok(Some(0) | None) | Err(_)) {
         Ok(())

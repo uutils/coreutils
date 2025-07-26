@@ -20,6 +20,7 @@ use uucore::{format_usage, show};
 use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 
 use std::ffi::OsString;
+use std::io::stdout;
 use std::path::Path;
 use thiserror::Error;
 
@@ -431,7 +432,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let opt = Options::from(&matches).map_err(DfError::OptionsError)?;
     // Get the list of filesystems to display in the output table.
-    let filesystems: Vec<Filesystem> = match matches.get_many::<String>(OPT_PATHS) {
+    let filesystems: Vec<Filesystem> = match matches.get_many::<OsString>(OPT_PATHS) {
         None => {
             let filesystems = get_all_filesystems(&opt).map_err(|e| {
                 let context = get_message("df-error-cannot-read-table-of-mounted-filesystems");
@@ -464,7 +465,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    println!("{}", Table::new(&opt, filesystems));
+    Table::new(&opt, filesystems).write_to(&mut stdout())?;
 
     Ok(())
 }
@@ -611,6 +612,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_PATHS)
                 .action(ArgAction::Append)
+                .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }
@@ -629,9 +631,9 @@ mod tests {
                 dev_id: String::new(),
                 dev_name: String::from(dev_name),
                 fs_type: String::new(),
-                mount_dir: String::from(mount_dir),
+                mount_dir: mount_dir.into(),
                 mount_option: String::new(),
-                mount_root: String::from(mount_root),
+                mount_root: mount_root.into(),
                 remote: false,
                 dummy: false,
             }
@@ -679,9 +681,9 @@ mod tests {
                 dev_id: String::from(dev_id),
                 dev_name: String::new(),
                 fs_type: String::new(),
-                mount_dir: String::from(mount_dir),
+                mount_dir: mount_dir.into(),
                 mount_option: String::new(),
-                mount_root: String::new(),
+                mount_root: "/".into(),
                 remote: false,
                 dummy: false,
             }
@@ -724,9 +726,9 @@ mod tests {
                 dev_id: String::new(),
                 dev_name: String::new(),
                 fs_type: String::from(fs_type),
-                mount_dir: String::from(mount_dir),
+                mount_dir: mount_dir.into(),
                 mount_option: String::new(),
-                mount_root: String::new(),
+                mount_root: "/".into(),
                 remote,
                 dummy,
             }

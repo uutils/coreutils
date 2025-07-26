@@ -127,7 +127,7 @@ fn test_mkfifo_selinux() {
             .arg("security.selinux")
             .output()
             .expect("Failed to run `getfattr` on the destination file");
-        println!("{:?}", getfattr_output);
+        println!("{getfattr_output:?}");
         assert!(
             getfattr_output.status.success(),
             "getfattr did not run successfully: {}",
