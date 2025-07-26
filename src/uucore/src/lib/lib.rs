@@ -65,6 +65,8 @@ pub use crate::features::ranges;
 pub use crate::features::ringbuffer;
 #[cfg(feature = "sum")]
 pub use crate::features::sum;
+#[cfg(feature = "time")]
+pub use crate::features::time;
 #[cfg(feature = "update-control")]
 pub use crate::features::update_control;
 #[cfg(feature = "uptime")]

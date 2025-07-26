@@ -31,9 +31,6 @@ use clap::{
     builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
 };
 use glob::{MatchOptions, Pattern};
-use jiff::fmt::StdIoWrite;
-use jiff::fmt::strtime::BrokenDownTime;
-use jiff::{Timestamp, Zoned};
 use lscolors::LsColors;
 use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
 use thiserror::Error;
@@ -258,56 +255,30 @@ enum Time {
     Birth,
 }
 
-#[derive(Debug)]
-enum TimeStyle {
-    FullIso,
-    LongIso,
-    Iso,
-    Locale,
-    Format(String),
-}
-
-/// Whether the given date is considered recent (i.e., in the last 6 months).
-fn is_recent(time: Timestamp, state: &mut ListState) -> bool {
-    time > state.recent_time_threshold
-}
-
-impl TimeStyle {
-    /// Format the given time according to this time format style.
-    fn format(
-        &self,
-        date: Zoned,
-        out: &mut Vec<u8>,
-        state: &mut ListState,
-    ) -> Result<(), jiff::Error> {
-        let recent = is_recent(date.timestamp(), state);
-        let tm = BrokenDownTime::from(&date);
-        let mut out = StdIoWrite(out);
-        let config = jiff::fmt::strtime::Config::new().lenient(true);
-
-        let fmt = match (self, recent) {
-            (Self::FullIso, _) => "%Y-%m-%d %H:%M:%S.%f %z",
-            (Self::LongIso, _) => "%Y-%m-%d %H:%M",
-            (Self::Iso, true) => "%m-%d %H:%M",
-            (Self::Iso, false) => "%Y-%m-%d ",
-            // TODO: Using correct locale string is not implemented.
-            (Self::Locale, true) => "%b %e %H:%M",
-            (Self::Locale, false) => "%b %e  %Y",
-            (Self::Format(fmt), _) => fmt,
-        };
-
-        tm.format_with_config(&config, fmt, &mut out)
-    }
-}
-
-fn parse_time_style(options: &clap::ArgMatches) -> Result<TimeStyle, LsError> {
-    let possible_time_styles = vec![
-        "full-iso".to_string(),
-        "long-iso".to_string(),
-        "iso".to_string(),
-        "locale".to_string(),
-        "+FORMAT (e.g., +%H:%M) for a 'date'-style format".to_string(),
+fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String>), LsError> {
+    const TIME_STYLES: [(&str, (&str, Option<&str>)); 4] = [
+        ("full-iso", ("%Y-%m-%d %H:%M:%S.%f %z", None)),
+        ("long-iso", ("%Y-%m-%d %H:%M", None)),
+        ("iso", ("%m-%d %H:%M", Some("%Y-%m-%d "))),
+        // TODO: Using correct locale string is not implemented.
+        ("locale", ("%b %e %H:%M", Some("%b %e  %Y"))),
     ];
+    // A map from a time-style parameter to a length-2 tuple of formats:
+    // the first one is used for recent dates, the second one for older ones (optional).
+    let time_styles = HashMap::from(TIME_STYLES);
+    let possible_time_styles = TIME_STYLES
+        .iter()
+        .map(|(x, _)| *x)
+        .chain(iter::once(
+            "+FORMAT (e.g., +%H:%M) for a 'date'-style format",
+        ))
+        .map(|s| s.to_string());
+
+    // Convert time_styles references to owned String/option.
+    fn ok((recent, older): (&str, Option<&str>)) -> Result<(String, Option<String>), LsError> {
+        Ok((recent.to_string(), older.map(String::from)))
+    }
+
     if let Some(field) = options.get_one::<String>(options::TIME_STYLE) {
         //If both FULL_TIME and TIME_STYLE are present
         //The one added last is dominant
@@ -315,26 +286,23 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<TimeStyle, LsError> {
             && options.indices_of(options::FULL_TIME).unwrap().next_back()
                 > options.indices_of(options::TIME_STYLE).unwrap().next_back()
         {
-            Ok(TimeStyle::FullIso)
+            ok(time_styles["full-iso"])
         } else {
-            match field.as_str() {
-                "full-iso" => Ok(TimeStyle::FullIso),
-                "long-iso" => Ok(TimeStyle::LongIso),
-                "iso" => Ok(TimeStyle::Iso),
-                "locale" => Ok(TimeStyle::Locale),
-                _ => match field.chars().next().unwrap() {
-                    '+' => Ok(TimeStyle::Format(String::from(&field[1..]))),
+            match time_styles.get(field.as_str()) {
+                Some(formats) => ok(*formats),
+                None => match field.chars().next().unwrap() {
+                    '+' => Ok((field[1..].to_string(), None)),
                     _ => Err(LsError::TimeStyleParseError(
                         String::from(field),
-                        possible_time_styles,
+                        possible_time_styles.collect(),
                     )),
                 },
             }
         }
     } else if options.get_flag(options::FULL_TIME) {
-        Ok(TimeStyle::FullIso)
+        ok(time_styles["full-iso"])
     } else {
-        Ok(TimeStyle::Locale)
+        ok(time_styles["locale"])
     }
 }
 
@@ -377,7 +345,8 @@ pub struct Config {
     // Dir and vdir needs access to this field
     pub quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
-    time_style: TimeStyle,
+    time_format_recent: String,        // Time format for recent dates
+    time_format_older: Option<String>, // Time format for older dates (optional, if not present, time_format_recent is used)
     context: bool,
     selinux_supported: bool,
     group_directories_first: bool,
@@ -925,10 +894,10 @@ impl Config {
         let indicator_style = extract_indicator_style(options);
         // Only parse the value to "--time-style" if it will become relevant.
         let dired = options.get_flag(options::DIRED);
-        let time_style = if format == Format::Long || dired {
+        let (time_format_recent, time_format_older) = if format == Format::Long || dired {
             parse_time_style(options)?
         } else {
-            TimeStyle::Iso
+            Default::default()
         };
 
         let mut ignore_patterns: Vec<Pattern> = Vec::new();
@@ -1114,7 +1083,8 @@ impl Config {
             width,
             quoting_style,
             indicator_style,
-            time_style,
+            time_format_recent,
+            time_format_older,
             context,
             selinux_supported: {
                 #[cfg(feature = "selinux")]
@@ -2002,7 +1972,7 @@ struct ListState<'a> {
     uid_cache: HashMap<u32, String>,
     #[cfg(unix)]
     gid_cache: HashMap<u32, String>,
-    recent_time_threshold: Timestamp,
+    recent_time_threshold: SystemTime,
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -2020,7 +1990,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         #[cfg(unix)]
         gid_cache: HashMap::new(),
         // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-        recent_time_threshold: Timestamp::now() - Duration::new(31_556_952 / 2, 0),
+        recent_time_threshold: SystemTime::now() - Duration::new(31_556_952 / 2, 0),
     };
 
     for loc in locs {
@@ -2993,7 +2963,7 @@ fn display_group(_metadata: &Metadata, _config: &Config, _state: &mut ListState)
     "somegroup"
 }
 
-// The implementations for get_time are separated because some options, such
+// The implementations for get_system_time are separated because some options, such
 // as ctime will not be available
 #[cfg(unix)]
 fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
@@ -3015,28 +2985,25 @@ fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
     }
 }
 
-fn get_time(md: &Metadata, config: &Config) -> Option<Zoned> {
-    let time = get_system_time(md, config)?;
-    time.try_into().ok()
-}
-
 fn display_date(
     metadata: &Metadata,
     config: &Config,
     state: &mut ListState,
     out: &mut Vec<u8>,
 ) -> UResult<()> {
-    match get_time(metadata, config) {
-        // TODO: Some fancier error conversion might be nice.
-        Some(time) => config
-            .time_style
-            .format(time, out, state)
-            .map_err(|x| USimpleError::new(1, x.to_string())),
-        None => {
-            out.extend(b"???");
-            Ok(())
-        }
-    }
+    let Some(time) = get_system_time(metadata, config) else {
+        out.extend(b"???");
+        return Ok(());
+    };
+
+    // Use "recent" format if the given date is considered recent (i.e., in the last 6 months),
+    // or if no "older" format is available.
+    let fmt = match &config.time_format_older {
+        Some(time_format_older) if time <= state.recent_time_threshold => time_format_older,
+        _ => &config.time_format_recent,
+    };
+
+    uucore::time::format_system_time(out, time, fmt, false)
 }
 
 #[allow(dead_code)]

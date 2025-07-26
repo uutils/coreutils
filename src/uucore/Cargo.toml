@@ -1,4 +1,4 @@
-# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal
+# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal tzdb zoneinfo
 
 [package]
 name = "uucore"
@@ -29,6 +29,11 @@ dunce = { version = "1.0.4", optional = true }
 wild = "2.2.1"
 glob = { workspace = true, optional = true }
 itertools = { workspace = true, optional = true }
+jiff = { workspace = true, optional = true, features = [
+  "tzdb-bundle-platform",
+  "tzdb-zoneinfo",
+  "tzdb-concatenated",
+] }
 time = { workspace = true, optional = true, features = [
   "formatting",
   "local-offset",
@@ -150,4 +155,5 @@ utmpx = ["time", "time/macros", "libc", "dns-lookup"]
 version-cmp = []
 wide = []
 tty = []
+time = ["jiff"]
 uptime = ["chrono", "libc", "windows-sys", "utmpx", "utmp-classic"]
