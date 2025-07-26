@@ -8,18 +8,18 @@
 // spell-checker:ignore Anone bfloat
 
 mod byteorder_io;
-mod formatteriteminfo;
-mod inputdecoder;
-mod inputoffset;
+mod formatter_item_info;
+mod input_decoder;
+mod input_offset;
 #[cfg(test)]
 mod mockstream;
-mod multifilereader;
+mod multifile_reader;
 mod output_info;
 mod parse_formats;
 mod parse_inputs;
 mod parse_nrofbytes;
-mod partialreader;
-mod peekreader;
+mod partial_reader;
+mod peek_reader;
 mod prn_char;
 mod prn_float;
 mod prn_int;
@@ -30,16 +30,16 @@ use std::fmt::Write;
 use std::io::BufReader;
 
 use crate::byteorder_io::ByteOrder;
-use crate::formatteriteminfo::FormatWriter;
-use crate::inputdecoder::{InputDecoder, MemoryDecoder};
-use crate::inputoffset::{InputOffset, Radix};
-use crate::multifilereader::{HasError, InputSource, MultifileReader};
+use crate::formatter_item_info::FormatWriter;
+use crate::input_decoder::{InputDecoder, MemoryDecoder};
+use crate::input_offset::{InputOffset, Radix};
+use crate::multifile_reader::{HasError, InputSource, MultifileReader};
 use crate::output_info::OutputInfo;
 use crate::parse_formats::{ParsedFormatterItemInfo, parse_format_flags};
 use crate::parse_inputs::{CommandLineInputs, parse_inputs};
 use crate::parse_nrofbytes::parse_number_of_bytes;
-use crate::partialreader::PartialReader;
-use crate::peekreader::{PeekRead, PeekReader};
+use crate::partial_reader::PartialReader;
+use crate::peek_reader::{PeekRead, PeekReader};
 use crate::prn_char::format_ascii_dump;
 use clap::ArgAction;
 use clap::{Arg, ArgMatches, Command, parser::ValueSource};
