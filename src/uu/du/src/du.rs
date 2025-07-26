@@ -580,7 +580,7 @@ impl StatPrinter {
         if let Some(time) = self.time {
             let secs = get_time_secs(time, stat)?;
             let time = UNIX_EPOCH + Duration::from_secs(secs);
-            uucore::time::format_system_time(&mut stdout(), time, &self.time_format)?;
+            uucore::time::format_system_time(&mut stdout(), time, &self.time_format, true)?;
             print!("\t");
         }
 

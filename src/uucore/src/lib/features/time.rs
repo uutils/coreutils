@@ -14,6 +14,7 @@ use std::io::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{UResult, USimpleError};
+use crate::show_error;
 
 /// Format the given date according to this time format style.
 fn format_zoned<W: Write>(out: &mut W, zoned: Zoned, fmt: &str) -> UResult<()> {
@@ -25,7 +26,12 @@ fn format_zoned<W: Write>(out: &mut W, zoned: Zoned, fmt: &str) -> UResult<()> {
 }
 
 /// Format a `SystemTime` according to given fmt, and append to vector out.
-pub fn format_system_time<W: Write>(out: &mut W, time: SystemTime, fmt: &str) -> UResult<()> {
+pub fn format_system_time<W: Write>(
+    out: &mut W,
+    time: SystemTime,
+    fmt: &str,
+    show_error: bool,
+) -> UResult<()> {
     let zoned: Result<Zoned, _> = time.try_into();
     match zoned {
         Ok(zoned) => format_zoned(out, zoned, fmt),
@@ -36,13 +42,16 @@ pub fn format_system_time<W: Write>(out: &mut W, time: SystemTime, fmt: &str) ->
             // but it still far enough in the future/past to be unlikely to matter:
             //  jiff: Year between -9999 to 9999 (UTC) [-377705023201..=253402207200]
             //  GNU: Year fits in signed 32 bits (timezone dependent)
-            let ts = if time > UNIX_EPOCH {
-                time.duration_since(UNIX_EPOCH).unwrap().as_secs()
+            let ts: i64 = if time > UNIX_EPOCH {
+                time.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64
             } else {
-                out.write_all(b"-")?; // Add negative sign
-                UNIX_EPOCH.duration_since(time).unwrap().as_secs()
+                -(UNIX_EPOCH.duration_since(time).unwrap().as_secs() as i64)
             };
-            out.write_all(ts.to_string().as_bytes())?;
+            let str = ts.to_string();
+            if show_error {
+                show_error!("time '{str}' is out of range");
+            }
+            out.write_all(str.as_bytes())?;
             Ok(())
         }
     }
@@ -60,11 +69,12 @@ mod tests {
 
         let time = UNIX_EPOCH;
         let mut out = Vec::new();
-        format_system_time(&mut out, time, "%Y-%m-%d %H:%M").expect("Formatting error.");
+        format_system_time(&mut out, time, "%Y-%m-%d %H:%M", false).expect("Formatting error.");
         assert_eq!(String::from_utf8(out).unwrap(), "1970-01-01 00:00");
 
         let mut out = Vec::new();
-        format_system_time(&mut out, time, "%Y-%m-%d %H:%M:%S.%N %z").expect("Formatting error.");
+        format_system_time(&mut out, time, "%Y-%m-%d %H:%M:%S.%N %z", false)
+            .expect("Formatting error.");
         assert_eq!(
             String::from_utf8(out).unwrap(),
             "1970-01-01 00:00:00.000000000 +0000"
@@ -76,12 +86,12 @@ mod tests {
     fn test_large_system_time() {
         let time = UNIX_EPOCH + Duration::from_secs(67_768_036_191_763_200);
         let mut out = Vec::new();
-        format_system_time(&mut out, time, "%Y-%m-%d %H:%M").expect("Formatting error.");
+        format_system_time(&mut out, time, "%Y-%m-%d %H:%M", false).expect("Formatting error.");
         assert_eq!(String::from_utf8(out).unwrap(), "67768036191763200");
 
         let time = UNIX_EPOCH - Duration::from_secs(67_768_040_922_076_800);
         let mut out = Vec::new();
-        format_system_time(&mut out, time, "%Y-%m-%d %H:%M").expect("Formatting error.");
+        format_system_time(&mut out, time, "%Y-%m-%d %H:%M", false).expect("Formatting error.");
         assert_eq!(String::from_utf8(out).unwrap(), "-67768040922076800");
     }
 }

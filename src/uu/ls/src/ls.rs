@@ -3003,7 +3003,7 @@ fn display_date(
         _ => &config.time_format_recent,
     };
 
-    uucore::time::format_system_time(out, time, fmt)
+    uucore::time::format_system_time(out, time, fmt, false)
 }
 
 #[allow(dead_code)]
