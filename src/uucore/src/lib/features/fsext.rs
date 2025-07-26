@@ -69,8 +69,14 @@ use std::io::Error as IOError;
 use std::mem;
 #[cfg(windows)]
 use std::path::Path;
-use std::time::UNIX_EPOCH;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::{borrow::Cow, ffi::OsString};
+
+use std::fs::Metadata;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+#[cfg(unix)]
+use std::time::Duration;
 
 #[cfg(any(
     target_os = "linux",
@@ -112,13 +118,45 @@ pub trait BirthTime {
     fn birth(&self) -> Option<(u64, u32)>;
 }
 
-use std::fs::Metadata;
 impl BirthTime for Metadata {
     fn birth(&self) -> Option<(u64, u32)> {
         self.created()
             .ok()
             .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
             .map(|e| (e.as_secs(), e.subsec_nanos()))
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum MetadataTimeField {
+    Modification,
+    Access,
+    Change,
+    Birth,
+}
+
+// The implementations for get_system_time are separated because some options, such
+// as ctime will not be available
+#[cfg(unix)]
+pub fn metadata_get_time(md: &Metadata, md_time: MetadataTimeField) -> Option<SystemTime> {
+    match md_time {
+        MetadataTimeField::Change => {
+            // TODO: This is incorrect for negative timestamps.
+            Some(UNIX_EPOCH + Duration::new(md.ctime() as u64, md.ctime_nsec() as u32))
+        }
+        MetadataTimeField::Modification => md.modified().ok(),
+        MetadataTimeField::Access => md.accessed().ok(),
+        MetadataTimeField::Birth => md.created().ok(),
+    }
+}
+
+#[cfg(not(unix))]
+pub fn metadata_get_time(md: &Metadata, md_time: MetadataTimeField) -> Option<SystemTime> {
+    match md_time {
+        MetadataTimeField::Modification => md.modified().ok(),
+        MetadataTimeField::Access => md.accessed().ok(),
+        MetadataTimeField::Birth => md.created().ok(),
+        MetadataTimeField::Change => None,
     }
 }
 

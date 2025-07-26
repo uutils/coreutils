@@ -39,6 +39,7 @@ use uucore::entries;
 use uucore::error::USimpleError;
 use uucore::format::human::{SizeFormat, human_readable};
 use uucore::fs::FileInformation;
+use uucore::fsext::{MetadataTimeField, metadata_get_time};
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 use uucore::fsxattr::has_acl;
 #[cfg(unix)]
@@ -248,13 +249,6 @@ enum Files {
     Normal,
 }
 
-enum Time {
-    Modification,
-    Access,
-    Change,
-    Birth,
-}
-
 fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String>), LsError> {
     const TIME_STYLES: [(&str, (&str, Option<&str>)); 4] = [
         ("full-iso", ("%Y-%m-%d %H:%M:%S.%f %z", None)),
@@ -332,7 +326,7 @@ pub struct Config {
     ignore_patterns: Vec<Pattern>,
     size_format: SizeFormat,
     directory: bool,
-    time: Time,
+    time: MetadataTimeField,
     #[cfg(unix)]
     inode: bool,
     color: Option<LsColors>,
@@ -467,23 +461,23 @@ fn extract_sort(options: &clap::ArgMatches) -> Sort {
 ///
 /// # Returns
 ///
-/// A Time variant representing the time to use.
-fn extract_time(options: &clap::ArgMatches) -> Time {
+/// A `MetadataTimeField` variant representing the time to use.
+fn extract_time(options: &clap::ArgMatches) -> MetadataTimeField {
     if let Some(field) = options.get_one::<String>(options::TIME) {
         match field.as_str() {
-            "ctime" | "status" => Time::Change,
-            "access" | "atime" | "use" => Time::Access,
-            "mtime" | "modification" => Time::Modification,
-            "birth" | "creation" => Time::Birth,
+            "ctime" | "status" => MetadataTimeField::Change,
+            "access" | "atime" | "use" => MetadataTimeField::Access,
+            "mtime" | "modification" => MetadataTimeField::Modification,
+            "birth" | "creation" => MetadataTimeField::Birth,
             // below should never happen as clap already restricts the values.
             _ => unreachable!("Invalid field for --time"),
         }
     } else if options.get_flag(options::time::ACCESS) {
-        Time::Access
+        MetadataTimeField::Access
     } else if options.get_flag(options::time::CHANGE) {
-        Time::Change
+        MetadataTimeField::Change
     } else {
-        Time::Modification
+        MetadataTimeField::Modification
     }
 }
 
@@ -2099,7 +2093,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
                 k.get_metadata(out)
-                    .and_then(|md| get_system_time(md, config))
+                    .and_then(|md| metadata_get_time(md, config.time))
                     .unwrap_or(UNIX_EPOCH),
             )
         }),
@@ -2685,7 +2679,7 @@ fn display_grid(
 /// * `group` ([`display_group`], config-optional)
 /// * `author` ([`display_uname`], config-optional)
 /// * `size / rdev` ([`display_len_or_rdev`])
-/// * `system_time` ([`get_system_time`])
+/// * `system_time` ([`display_date`])
 /// * `item_name` ([`display_item_name`])
 ///
 /// This function needs to display information in columns:
@@ -2963,35 +2957,13 @@ fn display_group(_metadata: &Metadata, _config: &Config, _state: &mut ListState)
     "somegroup"
 }
 
-// The implementations for get_system_time are separated because some options, such
-// as ctime will not be available
-#[cfg(unix)]
-fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
-    match config.time {
-        Time::Change => Some(UNIX_EPOCH + Duration::new(md.ctime() as u64, md.ctime_nsec() as u32)),
-        Time::Modification => md.modified().ok(),
-        Time::Access => md.accessed().ok(),
-        Time::Birth => md.created().ok(),
-    }
-}
-
-#[cfg(not(unix))]
-fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
-    match config.time {
-        Time::Modification => md.modified().ok(),
-        Time::Access => md.accessed().ok(),
-        Time::Birth => md.created().ok(),
-        Time::Change => None,
-    }
-}
-
 fn display_date(
     metadata: &Metadata,
     config: &Config,
     state: &mut ListState,
     out: &mut Vec<u8>,
 ) -> UResult<()> {
-    let Some(time) = get_system_time(metadata, config) else {
+    let Some(time) = metadata_get_time(metadata, config.time) else {
         out.extend(b"???");
         return Ok(());
     };
