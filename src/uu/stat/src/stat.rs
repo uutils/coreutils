@@ -28,7 +28,7 @@ use std::{env, fs};
 use std::collections::HashMap;
 use thiserror::Error;
 use uucore::locale::{get_message, get_message_with_args};
-use uucore::time::{format_system_time, system_time_to_sec};
+use uucore::time::{FormatSystemTimeFallback, format_system_time, system_time_to_sec};
 
 #[derive(Debug, Error)]
 enum StatError {
@@ -1288,7 +1288,14 @@ const PRETTY_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S.%N %z";
 fn pretty_time(meta: &Metadata, md_time_field: MetadataTimeField) -> String {
     if let Some(time) = metadata_get_time(meta, md_time_field) {
         let mut tmp = Vec::new();
-        if format_system_time(&mut tmp, time, PRETTY_DATETIME_FORMAT, false).is_ok() {
+        if format_system_time(
+            &mut tmp,
+            time,
+            PRETTY_DATETIME_FORMAT,
+            FormatSystemTimeFallback::Float,
+        )
+        .is_ok()
+        {
             return String::from_utf8(tmp).unwrap();
         }
     }
