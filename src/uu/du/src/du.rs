@@ -3,7 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use chrono::{DateTime, Local};
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::Pattern;
 use std::collections::{HashMap, HashSet};
@@ -11,7 +10,7 @@ use std::env;
 #[cfg(not(windows))]
 use std::fs::Metadata;
 use std::fs::{self, DirEntry, File};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, stdout};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
@@ -576,13 +575,13 @@ impl StatPrinter {
     }
 
     fn print_stat(&self, stat: &Stat, size: u64) -> UResult<()> {
+        print!("{}\t", self.convert_size(size));
+
         if let Some(time) = self.time {
             let secs = get_time_secs(time, stat)?;
-            let tm = DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs));
-            let time_str = tm.format(&self.time_format).to_string();
-            print!("{}\t{time_str}\t", self.convert_size(size));
-        } else {
-            print!("{}\t", self.convert_size(size));
+            let time = UNIX_EPOCH + Duration::from_secs(secs);
+            uucore::time::format_system_time(&mut stdout(), time, &self.time_format, true)?;
+            print!("\t");
         }
 
         print_verbatim(&stat.path).unwrap();

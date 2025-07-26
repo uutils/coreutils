@@ -3164,7 +3164,6 @@ dependencies = [
 name = "uu_du"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "clap",
  "glob",
  "thiserror 2.0.12",
@@ -3381,7 +3380,6 @@ dependencies = [
  "clap",
  "glob",
  "hostname",
- "jiff",
  "lscolors",
  "selinux",
  "terminal_size",
@@ -3995,6 +3993,7 @@ dependencies = [
  "icu_locale",
  "icu_provider",
  "itertools 0.14.0",
+ "jiff",
  "libc",
  "md-5",
  "memchr",
