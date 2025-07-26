@@ -10,7 +10,8 @@ use clap::builder::ValueParser;
 use uucore::display::Quotable;
 use uucore::fs::display_permissions;
 use uucore::fsext::{
-    BirthTime, FsMeta, StatFs, pretty_filetype, pretty_fstype, read_fs_list, statfs,
+    BirthTime, FsMeta, MetadataTimeField, StatFs, metadata_get_time, pretty_filetype,
+    pretty_fstype, read_fs_list, statfs,
 };
 use uucore::libc::mode_t;
 use uucore::{entries, format_usage, show_error, show_warning};
@@ -1026,21 +1027,17 @@ impl Stater {
                     }
 
                     // time of file birth, human-readable; - if unknown
-                    'w' => {
-                        OutputType::Str(meta.birth().map_or(String::from("-"), |(sec, nsec)| {
-                            pretty_time(sec as i64, nsec as i64)
-                        }))
-                    }
+                    'w' => OutputType::Str(pretty_time(meta, MetadataTimeField::Birth)),
 
                     // time of file birth, seconds since Epoch; 0 if unknown
                     'W' => OutputType::Unsigned(meta.birth().unwrap_or_default().0),
 
                     // time of last access, human-readable
-                    'x' => OutputType::Str(pretty_time(meta.atime(), meta.atime_nsec())),
+                    'x' => OutputType::Str(pretty_time(meta, MetadataTimeField::Access)),
                     // time of last access, seconds since Epoch
                     'X' => OutputType::Integer(meta.atime()),
                     // time of last data modification, human-readable
-                    'y' => OutputType::Str(pretty_time(meta.mtime(), meta.mtime_nsec())),
+                    'y' => OutputType::Str(pretty_time(meta, MetadataTimeField::Modification)),
                     // time of last data modification, seconds since Epoch
                     'Y' => {
                         let sec = meta.mtime();
@@ -1060,7 +1057,7 @@ impl Stater {
                         }
                     }
                     // time of last status change, human-readable
-                    'z' => OutputType::Str(pretty_time(meta.ctime(), meta.ctime_nsec())),
+                    'z' => OutputType::Str(pretty_time(meta, MetadataTimeField::Change)),
                     // time of last status change, seconds since Epoch
                     'Z' => OutputType::Integer(meta.ctime()),
                     'R' => {
@@ -1295,14 +1292,16 @@ pub fn uu_app() -> Command {
         )
 }
 
-const PRETTY_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S.%f %z";
+const PRETTY_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S.%N %z";
 
-fn pretty_time(sec: i64, nsec: i64) -> String {
-    // Return the date in UTC
-    let tm = DateTime::from_timestamp(sec, nsec as u32).unwrap_or_default();
-    let tm: DateTime<Local> = tm.into();
-
-    tm.format(PRETTY_DATETIME_FORMAT).to_string()
+fn pretty_time(meta: &Metadata, md_time_field: MetadataTimeField) -> String {
+    if let Some(time) = metadata_get_time(meta, md_time_field) {
+        let mut tmp = Vec::new();
+        if uucore::time::format_system_time(&mut tmp, time, PRETTY_DATETIME_FORMAT, false).is_ok() {
+            return String::from_utf8(tmp).unwrap();
+        }
+    }
+    "-".to_string()
 }
 
 #[cfg(test)]
