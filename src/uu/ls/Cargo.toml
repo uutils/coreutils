@@ -33,6 +33,7 @@ uucore = { workspace = true, features = [
   "entries",
   "format",
   "fs",
+  "fsext",
   "fsxattr",
   "parser",
   "quoting-style",

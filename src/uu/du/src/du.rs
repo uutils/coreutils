@@ -7,24 +7,21 @@ use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::Pattern;
 use std::collections::{HashMap, HashSet};
 use std::env;
-#[cfg(not(windows))]
 use std::fs::Metadata;
 use std::fs::{self, DirEntry, File};
 use std::io::{BufRead, BufReader, stdout};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
-use std::os::windows::fs::MetadataExt;
-#[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::mpsc;
 use std::thread;
-use std::time::{Duration, UNIX_EPOCH};
 use thiserror::Error;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
+use uucore::fsext::{MetadataTimeField, metadata_get_time};
 use uucore::line_ending::LineEnding;
 use uucore::locale::{get_message, get_message_with_args};
 use uucore::parser::parse_glob;
@@ -87,7 +84,7 @@ struct StatPrinter {
     threshold: Option<Threshold>,
     apparent_size: bool,
     size_format: SizeFormat,
-    time: Option<Time>,
+    time: Option<MetadataTimeField>,
     time_format: String,
     line_ending: LineEnding,
     summarize: bool,
@@ -99,13 +96,6 @@ enum Deref {
     All,
     Args(Vec<PathBuf>),
     None,
-}
-
-#[derive(Clone, Copy)]
-enum Time {
-    Accessed,
-    Modified,
-    Created,
 }
 
 #[derive(Clone)]
@@ -123,14 +113,11 @@ struct FileInfo {
 
 struct Stat {
     path: PathBuf,
-    is_dir: bool,
     size: u64,
     blocks: u64,
     inodes: u64,
     inode: Option<FileInfo>,
-    created: Option<u64>,
-    accessed: u64,
-    modified: u64,
+    metadata: Metadata,
 }
 
 impl Stat {
@@ -157,69 +144,27 @@ impl Stat {
             fs::symlink_metadata(path)
         }?;
 
-        #[cfg(not(windows))]
-        {
-            let file_info = FileInfo {
-                file_id: metadata.ino() as u128,
-                dev_id: metadata.dev(),
-            };
+        let file_info = get_file_info(path, &metadata);
+        let blocks = get_blocks(path, &metadata);
 
-            Ok(Self {
-                path: path.to_path_buf(),
-                is_dir: metadata.is_dir(),
-                size: if metadata.is_dir() { 0 } else { metadata.len() },
-                blocks: metadata.blocks(),
-                inodes: 1,
-                inode: Some(file_info),
-                created: birth_u64(&metadata),
-                accessed: metadata.atime() as u64,
-                modified: metadata.mtime() as u64,
-            })
-        }
-
-        #[cfg(windows)]
-        {
-            let size_on_disk = get_size_on_disk(path);
-            let file_info = get_file_info(path);
-
-            Ok(Self {
-                path: path.to_path_buf(),
-                is_dir: metadata.is_dir(),
-                size: if metadata.is_dir() { 0 } else { metadata.len() },
-                blocks: size_on_disk / 1024 * 2,
-                inodes: 1,
-                inode: file_info,
-                created: windows_creation_time_to_unix_time(metadata.creation_time()),
-                accessed: windows_time_to_unix_time(metadata.last_access_time()),
-                modified: windows_time_to_unix_time(metadata.last_write_time()),
-            })
-        }
+        Ok(Self {
+            path: path.to_path_buf(),
+            size: if metadata.is_dir() { 0 } else { metadata.len() },
+            blocks,
+            inodes: 1,
+            inode: file_info,
+            metadata,
+        })
     }
 }
 
-#[cfg(windows)]
-/// <https://doc.rust-lang.org/std/os/windows/fs/trait.MetadataExt.html#tymethod.last_access_time>
-/// "The returned 64-bit value [...] which represents the number of 100-nanosecond intervals since January 1, 1601 (UTC)."
-/// "If the underlying filesystem does not support last access time, the returned value is 0."
-fn windows_time_to_unix_time(win_time: u64) -> u64 {
-    (win_time / 10_000_000).saturating_sub(11_644_473_600)
-}
-
-#[cfg(windows)]
-fn windows_creation_time_to_unix_time(win_time: u64) -> Option<u64> {
-    (win_time / 10_000_000).checked_sub(11_644_473_600)
-}
-
 #[cfg(not(windows))]
-fn birth_u64(meta: &Metadata) -> Option<u64> {
-    meta.created()
-        .ok()
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|e| e.as_secs())
+fn get_blocks(_path: &Path, metadata: &Metadata) -> u64 {
+    metadata.blocks()
 }
 
 #[cfg(windows)]
-fn get_size_on_disk(path: &Path) -> u64 {
+fn get_blocks(path: &Path, _metadata: &Metadata) -> u64 {
     let mut size_on_disk = 0;
 
     // bind file so it stays in scope until end of function
@@ -244,11 +189,19 @@ fn get_size_on_disk(path: &Path) -> u64 {
         }
     }
 
-    size_on_disk
+    size_on_disk / 1024 * 2
+}
+
+#[cfg(not(windows))]
+fn get_file_info(_path: &Path, metadata: &Metadata) -> Option<FileInfo> {
+    Some(FileInfo {
+        file_id: metadata.ino() as u128,
+        dev_id: metadata.dev(),
+    })
 }
 
 #[cfg(windows)]
-fn get_file_info(path: &Path) -> Option<FileInfo> {
+fn get_file_info(path: &Path, _metadata: &Metadata) -> Option<FileInfo> {
     let mut result = None;
 
     let Ok(file) = File::open(path) else {
@@ -306,7 +259,7 @@ fn du(
     seen_inodes: &mut HashSet<FileInfo>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
-    if my_stat.is_dir {
+    if my_stat.metadata.is_dir() {
         let read = match fs::read_dir(&my_stat.path) {
             Ok(read) => read,
             Err(e) => {
@@ -367,7 +320,7 @@ fn du(
                                 seen_inodes.insert(inode);
                             }
 
-                            if this_stat.is_dir {
+                            if this_stat.metadata.is_dir() {
                                 if options.one_file_system {
                                     if let (Some(this_inode), Some(my_inode)) =
                                         (this_stat.inode, my_stat.inode)
@@ -435,9 +388,6 @@ enum DuError {
     ])))]
     InvalidTimeStyleArg(String),
 
-    #[error("{}", get_message("du-error-invalid-time-arg"))]
-    InvalidTimeArg,
-
     #[error("{}", get_message_with_args("du-error-invalid-glob", HashMap::from([("error".to_string(), _0.to_string())])))]
     InvalidGlob(String),
 }
@@ -448,7 +398,6 @@ impl UError for DuError {
             Self::InvalidMaxDepthArg(_)
             | Self::SummarizeDepthConflict(_)
             | Self::InvalidTimeStyleArg(_)
-            | Self::InvalidTimeArg
             | Self::InvalidGlob(_) => 1,
         }
     }
@@ -577,11 +526,13 @@ impl StatPrinter {
     fn print_stat(&self, stat: &Stat, size: u64) -> UResult<()> {
         print!("{}\t", self.convert_size(size));
 
-        if let Some(time) = self.time {
-            let secs = get_time_secs(time, stat)?;
-            let time = UNIX_EPOCH + Duration::from_secs(secs);
-            uucore::time::format_system_time(&mut stdout(), time, &self.time_format, true)?;
-            print!("\t");
+        if let Some(md_time) = &self.time {
+            if let Some(time) = metadata_get_time(&stat.metadata, *md_time) {
+                uucore::time::format_system_time(&mut stdout(), time, &self.time_format, true)?;
+                print!("\t");
+            } else {
+                print!("???\t");
+            }
         }
 
         print_verbatim(&stat.path).unwrap();
@@ -697,12 +648,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let time = matches.contains_id(options::TIME).then(|| {
-        match matches.get_one::<String>(options::TIME).map(AsRef::as_ref) {
-            None | Some("ctime" | "status") => Time::Modified,
-            Some("access" | "atime" | "use") => Time::Accessed,
-            Some("birth" | "creation") => Time::Created,
-            _ => unreachable!("should be caught by clap"),
-        }
+        matches
+            .get_one::<String>(options::TIME)
+            .map_or(MetadataTimeField::Modification, |s| s.as_str().into())
     });
 
     let size_format = if matches.get_flag(options::HUMAN_READABLE) {
@@ -851,14 +799,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map_err(|_| USimpleError::new(1, get_message("du-error-printing-thread-panicked")))??;
 
     Ok(())
-}
-
-fn get_time_secs(time: Time, stat: &Stat) -> Result<u64, DuError> {
-    match time {
-        Time::Modified => Ok(stat.modified),
-        Time::Accessed => Ok(stat.accessed),
-        Time::Created => stat.created.ok_or(DuError::InvalidTimeArg),
-    }
 }
 
 fn parse_time_style(s: Option<&str>) -> UResult<&str> {

@@ -21,7 +21,7 @@ path = "src/du.rs"
 # For the --exclude & --exclude-from options
 glob = { workspace = true }
 clap = { workspace = true }
-uucore = { workspace = true, features = ["format", "parser", "time"] }
+uucore = { workspace = true, features = ["format", "fsext", "parser", "time"] }
 thiserror = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
