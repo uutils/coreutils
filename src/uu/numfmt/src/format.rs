@@ -3,9 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore powf
-use std::collections::HashMap;
 use uucore::display::Quotable;
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 use crate::options::{NumfmtOptions, RoundMethod, TransformOptions};
 use crate::units::{DisplayableSuffix, IEC_BASES, RawSuffix, Result, SI_BASES, Suffix, Unit};
@@ -65,7 +64,7 @@ impl<'a> Iterator for WhitespaceSplitter<'a> {
 
 fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
     if s.is_empty() {
-        return Err(get_message("numfmt-error-invalid-number-empty"));
+        return Err(translate!("numfmt-error-invalid-number-empty"));
     }
 
     let with_i = s.ends_with('i');
@@ -84,10 +83,7 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
         Some('Y') => Some((RawSuffix::Y, with_i)),
         Some('0'..='9') if !with_i => None,
         _ => {
-            return Err(get_message_with_args(
-                "numfmt-error-invalid-suffix",
-                HashMap::from([("input".to_string(), s.quote().to_string())]),
-            ));
+            return Err(translate!("numfmt-error-invalid-suffix", "input" => s.quote()));
         }
     };
 
@@ -97,12 +93,9 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
         Some((_, true)) => 2,
     };
 
-    let number = s[..s.len() - suffix_len].parse::<f64>().map_err(|_| {
-        get_message_with_args(
-            "numfmt-error-invalid-number",
-            HashMap::from([("input".to_string(), s.quote().to_string())]),
-        )
-    })?;
+    let number = s[..s.len() - suffix_len]
+        .parse::<f64>()
+        .map_err(|_| translate!("numfmt-error-invalid-number", "input" => s.quote()))?;
 
     Ok((number, suffix))
 }
@@ -142,25 +135,14 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
             RawSuffix::Z => Ok(i * IEC_BASES[7]),
             RawSuffix::Y => Ok(i * IEC_BASES[8]),
         },
-        (Some((raw_suffix, false)), &Unit::Iec(true)) => Err(get_message_with_args(
-            "numfmt-error-missing-i-suffix",
-            HashMap::from([
-                ("number".to_string(), i.to_string()),
-                ("suffix".to_string(), format!("{raw_suffix:?}")),
-            ]),
-        )),
-        (Some((raw_suffix, with_i)), &Unit::None) => Err(get_message_with_args(
-            "numfmt-error-rejecting-suffix",
-            HashMap::from([
-                ("number".to_string(), i.to_string()),
-                (
-                    "suffix".to_string(),
-                    format!("{raw_suffix:?}{}", if with_i { "i" } else { "" }),
-                ),
-            ]),
-        )),
+        (Some((raw_suffix, false)), &Unit::Iec(true)) => Err(
+            translate!("numfmt-error-missing-i-suffix", "number" => i, "suffix" => format!("{raw_suffix:?}")),
+        ),
+        (Some((raw_suffix, with_i)), &Unit::None) => Err(
+            translate!("numfmt-error-rejecting-suffix", "number" => i, "suffix" => format!("{raw_suffix:?}{}", if with_i { "i" } else { "" })),
+        ),
         (None, _) => Ok(i),
-        (_, _) => Err(get_message("numfmt-error-suffix-unsupported-for-unit")),
+        (_, _) => Err(translate!("numfmt-error-suffix-unsupported-for-unit")),
     }
 }
 
@@ -238,7 +220,7 @@ fn consider_suffix(
     let (bases, with_i) = match *u {
         Unit::Si => (&SI_BASES, false),
         Unit::Iec(with_i) => (&IEC_BASES, with_i),
-        Unit::Auto => return Err(get_message("numfmt-error-unit-auto-not-supported-with-to")),
+        Unit::Auto => return Err(translate!("numfmt-error-unit-auto-not-supported-with-to")),
         Unit::None => return Ok((n, None)),
     };
 
@@ -252,7 +234,7 @@ fn consider_suffix(
         _ if abs_n < bases[7] => 6,
         _ if abs_n < bases[8] => 7,
         _ if abs_n < bases[9] => 8,
-        _ => return Err(get_message("numfmt-error-number-too-big")),
+        _ => return Err(translate!("numfmt-error-number-too-big")),
     };
 
     let v = if precision > 0 {

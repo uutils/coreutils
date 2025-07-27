@@ -23,6 +23,7 @@ num-traits = { workspace = true }
 uucore = { workspace = true }
 num-bigint = { workspace = true }
 num-prime = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "factor"

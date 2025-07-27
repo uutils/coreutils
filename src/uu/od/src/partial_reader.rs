@@ -10,7 +10,7 @@ use std::io;
 use std::io::Read;
 
 use crate::multifile_reader::HasError;
-use uucore::locale::get_message;
+use uucore::translate;
 
 /// When a large number of bytes must be skipped, it will be read into a
 /// dynamically allocated buffer. The buffer will be limited to this size.
@@ -47,7 +47,7 @@ impl<R: Read> Read for PartialReader<R> {
                         // this is an error as we still have more to skip
                         return Err(io::Error::new(
                             io::ErrorKind::UnexpectedEof,
-                            get_message("od-error-skip-past-end"),
+                            translate!("od-error-skip-past-end"),
                         ));
                     }
                     n => self.skip -= n as u64,

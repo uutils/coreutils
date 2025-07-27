@@ -8,12 +8,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use std::collections::HashMap;
 use tempfile::TempDir;
 use uucore::{
     error::{UResult, USimpleError},
-    locale::get_message_with_args,
-    show_error,
+    show_error, translate,
 };
 
 use crate::SortError;
@@ -62,9 +60,9 @@ impl TmpDirWrapper {
             if let Err(e) = remove_tmp_dir(&path) {
                 show_error!(
                     "{}",
-                    get_message_with_args(
+                    translate!(
                         "sort-failed-to-delete-temporary-directory",
-                        HashMap::from([("error".to_string(), e.to_string())])
+                        "error" => e
                     )
                 );
             }
@@ -73,9 +71,9 @@ impl TmpDirWrapper {
         .map_err(|e| {
             USimpleError::new(
                 2,
-                get_message_with_args(
+                translate!(
                     "sort-failed-to-set-up-signal-handler",
-                    HashMap::from([("error".to_string(), e.to_string())]),
+                    "error" => e
                 ),
             )
         })

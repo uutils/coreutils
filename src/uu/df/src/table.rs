@@ -14,7 +14,7 @@ use crate::columns::{Alignment, Column};
 use crate::filesystem::Filesystem;
 use crate::{BlockSize, Options};
 use uucore::fsext::{FsUsage, MountInfo};
-use uucore::locale::get_message;
+use uucore::translate;
 
 use std::ffi::OsString;
 use std::iter;
@@ -108,7 +108,7 @@ impl AddAssign for Row {
         let inodes_used = self.inodes_used + rhs.inodes_used;
         *self = Self {
             file: None,
-            fs_device: get_message("df-total"),
+            fs_device: translate!("df-total"),
             fs_type: "-".into(),
             fs_mount: "-".into(),
             bytes,
@@ -303,7 +303,7 @@ impl<'a> RowFormatter<'a> {
             let cell = match column {
                 Column::Source => {
                     if self.is_total_row {
-                        Cell::from_string(get_message("df-total"))
+                        Cell::from_string(translate!("df-total"))
                     } else {
                         Cell::from_string(&self.row.fs_device)
                     }
@@ -315,7 +315,7 @@ impl<'a> RowFormatter<'a> {
 
                 Column::Target => {
                     if self.is_total_row && !self.options.columns.contains(&Column::Source) {
-                        Cell::from_string(get_message("df-total"))
+                        Cell::from_string(translate!("df-total"))
                     } else {
                         Cell::from_os_string(&self.row.fs_mount)
                     }
@@ -371,38 +371,38 @@ impl Header {
 
         for column in &options.columns {
             let header = match column {
-                Column::Source => get_message("df-header-filesystem"),
+                Column::Source => translate!("df-header-filesystem"),
                 Column::Size => match options.header_mode {
-                    HeaderMode::HumanReadable => get_message("df-header-size"),
+                    HeaderMode::HumanReadable => translate!("df-header-size"),
                     HeaderMode::PosixPortability => {
                         format!(
                             "{}{}",
                             options.block_size.as_u64(),
-                            get_message("df-blocks-suffix")
+                            translate!("df-blocks-suffix")
                         )
                     }
-                    _ => format!("{}{}", options.block_size, get_message("df-blocks-suffix")),
+                    _ => format!("{}{}", options.block_size, translate!("df-blocks-suffix")),
                 },
-                Column::Used => get_message("df-header-used"),
+                Column::Used => translate!("df-header-used"),
                 Column::Avail => match options.header_mode {
                     HeaderMode::HumanReadable | HeaderMode::Output => {
-                        get_message("df-header-avail")
+                        translate!("df-header-avail")
                     }
-                    _ => get_message("df-header-available"),
+                    _ => translate!("df-header-available"),
                 },
                 Column::Pcent => match options.header_mode {
-                    HeaderMode::PosixPortability => get_message("df-header-capacity"),
-                    _ => get_message("df-header-use-percent"),
+                    HeaderMode::PosixPortability => translate!("df-header-capacity"),
+                    _ => translate!("df-header-use-percent"),
                 },
-                Column::Target => get_message("df-header-mounted-on"),
-                Column::Itotal => get_message("df-header-inodes"),
-                Column::Iused => get_message("df-header-iused"),
-                Column::Iavail => get_message("df-header-iavail"),
-                Column::Ipcent => get_message("df-header-iuse-percent"),
-                Column::File => get_message("df-header-file"),
-                Column::Fstype => get_message("df-header-type"),
+                Column::Target => translate!("df-header-mounted-on"),
+                Column::Itotal => translate!("df-header-inodes"),
+                Column::Iused => translate!("df-header-iused"),
+                Column::Iavail => translate!("df-header-iavail"),
+                Column::Ipcent => translate!("df-header-iuse-percent"),
+                Column::File => translate!("df-header-file"),
+                Column::Fstype => translate!("df-header-type"),
                 #[cfg(target_os = "macos")]
-                Column::Capacity => get_message("df-header-capacity"),
+                Column::Capacity => translate!("df-header-capacity"),
             };
 
             headers.push(header);
@@ -435,7 +435,7 @@ impl Table {
         //
         // This accumulator is computed in case we need to display the
         // total counts in the last row of the table.
-        let mut total = Row::new(&get_message("df-total"));
+        let mut total = Row::new(&translate!("df-total"));
 
         for filesystem in filesystems {
             // If the filesystem is not empty, or if the options require

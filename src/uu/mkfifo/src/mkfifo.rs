@@ -5,13 +5,13 @@
 
 use clap::{Arg, ArgAction, Command, value_parser};
 use libc::mkfifo;
-use std::collections::HashMap;
 use std::ffi::CString;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
+
 use uucore::{format_usage, show};
 
 mod options {
@@ -32,10 +32,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Err(e) => {
                 return Err(USimpleError::new(
                     1,
-                    get_message_with_args(
-                        "mkfifo-error-invalid-mode",
-                        HashMap::from([("error".to_string(), e.to_string())]),
-                    ),
+                    translate!("mkfifo-error-invalid-mode", "error" => e),
                 ));
             }
         },
@@ -48,7 +45,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => {
             return Err(USimpleError::new(
                 1,
-                get_message("mkfifo-error-missing-operand"),
+                translate!("mkfifo-error-missing-operand"),
             ));
         }
     };
@@ -61,10 +58,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if err == -1 {
             show!(USimpleError::new(
                 1,
-                get_message_with_args(
-                    "mkfifo-error-cannot-create-fifo",
-                    HashMap::from([("path".to_string(), f.quote().to_string())]),
-                ),
+                translate!("mkfifo-error-cannot-create-fifo", "path" => f.quote()),
             ));
         }
 
@@ -72,13 +66,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if let Err(e) = fs::set_permissions(&f, fs::Permissions::from_mode(mode as u32)) {
             return Err(USimpleError::new(
                 1,
-                get_message_with_args(
-                    "mkfifo-error-cannot-set-permissions",
-                    HashMap::from([
-                        ("path".to_string(), f.quote().to_string()),
-                        ("error".to_string(), e.to_string()),
-                    ]),
-                ),
+                translate!("mkfifo-error-cannot-set-permissions", "path" => f.quote(), "error" => e),
             ));
         }
 
@@ -107,20 +95,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("mkfifo-usage")))
-        .about(get_message("mkfifo-about"))
+        .override_usage(format_usage(&translate!("mkfifo-usage")))
+        .about(translate!("mkfifo-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::MODE)
                 .short('m')
                 .long(options::MODE)
-                .help(get_message("mkfifo-help-mode"))
+                .help(translate!("mkfifo-help-mode"))
                 .value_name("MODE"),
         )
         .arg(
             Arg::new(options::SELINUX)
                 .short('Z')
-                .help(get_message("mkfifo-help-selinux"))
+                .help(translate!("mkfifo-help-selinux"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -130,7 +118,7 @@ pub fn uu_app() -> Command {
                 .value_parser(value_parser!(String))
                 .num_args(0..=1)
                 .require_equals(true)
-                .help(get_message("mkfifo-help-context")),
+                .help(translate!("mkfifo-help-context")),
         )
         .arg(
             Arg::new(options::FIFO)

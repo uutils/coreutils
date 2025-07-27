@@ -22,6 +22,7 @@ clap = { workspace = true }
 libc = { workspace = true }
 uucore = { workspace = true, features = ["process"] }
 thiserror = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "test"

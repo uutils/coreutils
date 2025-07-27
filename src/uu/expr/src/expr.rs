@@ -4,12 +4,11 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command};
-use std::collections::HashMap;
 use std::io::Write;
 use syntax_tree::{AstNode, is_truthy};
 use thiserror::Error;
-use uucore::locale::{get_message, get_message_with_args};
 use uucore::os_string_to_vec;
+use uucore::translate;
 use uucore::{
     display::Quotable,
     error::{UError, UResult},
@@ -29,35 +28,35 @@ pub type ExprResult<T> = Result<T, ExprError>;
 
 #[derive(Error, Clone, Debug, PartialEq, Eq)]
 pub enum ExprError {
-    #[error("{}", get_message_with_args("expr-error-unexpected-argument", HashMap::from([("arg".to_string(), _0.quote().to_string())])))]
+    #[error("{}", translate!("expr-error-unexpected-argument", "arg" => _0.quote()))]
     UnexpectedArgument(String),
-    #[error("{}", get_message_with_args("expr-error-missing-argument", HashMap::from([("arg".to_string(), _0.quote().to_string())])))]
+    #[error("{}", translate!("expr-error-missing-argument", "arg" => _0.quote()))]
     MissingArgument(String),
-    #[error("{}", get_message("expr-error-non-integer-argument"))]
+    #[error("{}", translate!("expr-error-non-integer-argument"))]
     NonIntegerArgument,
-    #[error("{}", get_message("expr-error-missing-operand"))]
+    #[error("{}", translate!("expr-error-missing-operand"))]
     MissingOperand,
-    #[error("{}", get_message("expr-error-division-by-zero"))]
+    #[error("{}", translate!("expr-error-division-by-zero"))]
     DivisionByZero,
-    #[error("{}", get_message("expr-error-invalid-regex-expression"))]
+    #[error("{}", translate!("expr-error-invalid-regex-expression"))]
     InvalidRegexExpression,
-    #[error("{}", get_message_with_args("expr-error-expected-closing-brace-after", HashMap::from([("arg".to_string(), _0.quote().to_string())])))]
+    #[error("{}", translate!("expr-error-expected-closing-brace-after", "arg" => _0.quote()))]
     ExpectedClosingBraceAfter(String),
-    #[error("{}", get_message_with_args("expr-error-expected-closing-brace-instead-of", HashMap::from([("arg".to_string(), _0.quote().to_string())])))]
+    #[error("{}", translate!("expr-error-expected-closing-brace-instead-of", "arg" => _0.quote()))]
     ExpectedClosingBraceInsteadOf(String),
-    #[error("{}", get_message("expr-error-unmatched-opening-parenthesis"))]
+    #[error("{}", translate!("expr-error-unmatched-opening-parenthesis"))]
     UnmatchedOpeningParenthesis,
-    #[error("{}", get_message("expr-error-unmatched-closing-parenthesis"))]
+    #[error("{}", translate!("expr-error-unmatched-closing-parenthesis"))]
     UnmatchedClosingParenthesis,
-    #[error("{}", get_message("expr-error-unmatched-opening-brace"))]
+    #[error("{}", translate!("expr-error-unmatched-opening-brace"))]
     UnmatchedOpeningBrace,
-    #[error("{}", get_message("expr-error-invalid-bracket-content"))]
+    #[error("{}", translate!("expr-error-invalid-bracket-content"))]
     InvalidBracketContent,
-    #[error("{}", get_message("expr-error-trailing-backslash"))]
+    #[error("{}", translate!("expr-error-trailing-backslash"))]
     TrailingBackslash,
-    #[error("{}", get_message("expr-error-too-big-range-quantifier-index"))]
+    #[error("{}", translate!("expr-error-too-big-range-quantifier-index"))]
     TooBigRangeQuantifierIndex,
-    #[error("{}", get_message_with_args("expr-error-match-utf8", HashMap::from([("arg".to_string(), _0.quote().to_string())])))]
+    #[error("{}", translate!("expr-error-match-utf8", "arg" => _0.quote()))]
     UnsupportedNonUtf8Match(String),
 }
 
@@ -74,22 +73,22 @@ impl UError for ExprError {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("expr-about"))
-        .override_usage(format_usage(&get_message("expr-usage")))
-        .after_help(get_message("expr-after-help"))
+        .about(translate!("expr-about"))
+        .override_usage(format_usage(&translate!("expr-usage")))
+        .after_help(translate!("expr-after-help"))
         .infer_long_args(true)
         .disable_help_flag(true)
         .disable_version_flag(true)
         .arg(
             Arg::new(options::VERSION)
                 .long(options::VERSION)
-                .help(get_message("expr-help-version"))
+                .help(translate!("expr-help-version"))
                 .action(ArgAction::Version),
         )
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help(get_message("expr-help-help"))
+                .help(translate!("expr-help-help"))
                 .action(ArgAction::Help),
         )
         .arg(

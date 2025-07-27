@@ -11,21 +11,18 @@ use crate::uu_app;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
 use uucore::libc::{S_IWGRP, STDIN_FILENO, ttyname};
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
+
 use uucore::utmpx::{self, Utmpx, time};
 
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::ffi::CStr;
 use std::fmt::Write;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 
 fn get_long_usage() -> String {
-    get_message_with_args(
-        "who-long-usage",
-        HashMap::from([("default_file".to_string(), utmpx::DEFAULT_FILE.to_string())]),
-    )
+    translate!("who-long-usage", "default_file" => utmpx::DEFAULT_FILE)
 }
 
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -159,7 +156,7 @@ fn idle_string<'a>(when: i64, boottime: i64) -> Cow<'a, str> {
                 .into()
             }
         } else {
-            get_message("who-idle-old").into()
+            translate!("who-idle-old").into()
         }
     })
 }
@@ -209,13 +206,7 @@ impl Who {
                 .map(|ut| ut.user())
                 .collect::<Vec<_>>();
             println!("{}", users.join(" "));
-            println!(
-                "{}",
-                get_message_with_args(
-                    "who-user-count",
-                    HashMap::from([("count".to_string(), users.len().to_string())])
-                )
-            );
+            println!("{}", translate!("who-user-count", "count" => users.len()));
         } else {
             let records = Utmpx::iter_all_records_from(f);
 
@@ -259,17 +250,9 @@ impl Who {
     fn print_runlevel(&self, ut: &Utmpx) {
         let last = (ut.pid() / 256) as u8 as char;
         let curr = (ut.pid() % 256) as u8 as char;
-        let runlvline = get_message_with_args(
-            "who-runlevel",
-            HashMap::from([("level".to_string(), curr.to_string())]),
-        );
-        let comment = get_message_with_args(
-            "who-runlevel-last",
-            HashMap::from([(
-                "last".to_string(),
-                (if last == 'N' { 'S' } else { 'N' }).to_string(),
-            )]),
-        );
+        let runlvline = translate!("who-runlevel", "level" => curr);
+        let comment =
+            translate!("who-runlevel-last", "last" => (if last == 'N' { 'S' } else { 'N' }));
 
         self.print_line(
             "",
@@ -288,7 +271,7 @@ impl Who {
         self.print_line(
             "",
             ' ',
-            &get_message("who-clock-change"),
+            &translate!("who-clock-change"),
             &time_string(ut),
             "",
             "",
@@ -299,13 +282,10 @@ impl Who {
 
     #[inline]
     fn print_login(&self, ut: &Utmpx) {
-        let comment = get_message_with_args(
-            "who-login-id",
-            HashMap::from([("id".to_string(), ut.terminal_suffix().to_string())]),
-        );
+        let comment = translate!("who-login-id", "id" => ut.terminal_suffix());
         let pidstr = format!("{}", ut.pid());
         self.print_line(
-            &get_message("who-login"),
+            &translate!("who-login"),
             ' ',
             &ut.tty_device(),
             &time_string(ut),
@@ -318,19 +298,10 @@ impl Who {
 
     #[inline]
     fn print_deadprocs(&self, ut: &Utmpx) {
-        let comment = get_message_with_args(
-            "who-login-id",
-            HashMap::from([("id".to_string(), ut.terminal_suffix().to_string())]),
-        );
+        let comment = translate!("who-login-id", "id" => ut.terminal_suffix());
         let pidstr = format!("{}", ut.pid());
         let e = ut.exit_status();
-        let exitstr = get_message_with_args(
-            "who-dead-exit-status",
-            HashMap::from([
-                ("term".to_string(), e.0.to_string()),
-                ("exit".to_string(), e.1.to_string()),
-            ]),
-        );
+        let exitstr = translate!("who-dead-exit-status", "term" => e.0, "exit" => e.1);
         self.print_line(
             "",
             ' ',
@@ -345,10 +316,7 @@ impl Who {
 
     #[inline]
     fn print_initspawn(&self, ut: &Utmpx) {
-        let comment = get_message_with_args(
-            "who-login-id",
-            HashMap::from([("id".to_string(), ut.terminal_suffix().to_string())]),
-        );
+        let comment = translate!("who-login-id", "id" => ut.terminal_suffix());
         let pidstr = format!("{}", ut.pid());
         self.print_line(
             "",
@@ -367,7 +335,7 @@ impl Who {
         self.print_line(
             "",
             ' ',
-            &get_message("who-system-boot"),
+            &translate!("who-system-boot"),
             &time_string(ut),
             "",
             "",
@@ -401,7 +369,7 @@ impl Who {
         }
 
         let idle = if last_change == 0 {
-            get_message("who-idle-unknown").into()
+            translate!("who-idle-unknown").into()
         } else {
             idle_string(last_change, 0)
         };
@@ -409,13 +377,7 @@ impl Who {
         let s = if self.do_lookup {
             ut.canon_host().map_err_context(|| {
                 let host = ut.host();
-                get_message_with_args(
-                    "who-canonicalize-error",
-                    HashMap::from([(
-                        "host".to_string(),
-                        host.split(':').next().unwrap_or(&host).quote().to_string(),
-                    )]),
-                )
+                translate!("who-canonicalize-error", "host" => host.split(':').next().unwrap_or(&host).quote())
                 .to_string()
             })?
         } else {
@@ -477,14 +439,14 @@ impl Who {
     #[inline]
     fn print_heading(&self) {
         self.print_line(
-            &get_message("who-heading-name"),
+            &translate!("who-heading-name"),
             ' ',
-            &get_message("who-heading-line"),
-            &get_message("who-heading-time"),
-            &get_message("who-heading-idle"),
-            &get_message("who-heading-pid"),
-            &get_message("who-heading-comment"),
-            &get_message("who-heading-exit"),
+            &translate!("who-heading-line"),
+            &translate!("who-heading-time"),
+            &translate!("who-heading-idle"),
+            &translate!("who-heading-pid"),
+            &translate!("who-heading-comment"),
+            &translate!("who-heading-exit"),
         );
     }
 }

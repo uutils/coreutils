@@ -24,6 +24,7 @@ libstdbuf = { package = "uu_stdbuf_libstdbuf", path = "src/libstdbuf" }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["parser"] }
 thiserror = { workspace = true }
+fluent = { workspace = true }
 
 # "feat_external_libstdbuf": use an external libstdbuf.so for stdbuf instead of embedding it into
 # the stdbuf binary.
@@ -41,6 +42,7 @@ thiserror = { workspace = true }
 #    debian. In this case, libstdbuf.so should be installed separately to its
 #    correct location and the environment variable LIBSTDBUF_DIR configures the
 #    installation directory during the build. E.g. LIBSTDBUF_DIR="/usr/lib"
+
 [features]
 feat_external_libstdbuf = []
 

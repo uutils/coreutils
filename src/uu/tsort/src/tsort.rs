@@ -11,7 +11,7 @@ use uucore::display::Quotable;
 use uucore::error::{UError, UResult};
 use uucore::{format_usage, show};
 
-use uucore::locale::get_message;
+use uucore::translate;
 
 mod options {
     pub const FILE: &str = "file";
@@ -20,18 +20,18 @@ mod options {
 #[derive(Debug, Error)]
 enum TsortError {
     /// The input file is actually a directory.
-    #[error("{input}: {message}", input = .0, message = get_message("tsort-error-is-dir"))]
+    #[error("{input}: {message}", input = .0, message = translate!("tsort-error-is-dir"))]
     IsDir(String),
 
     /// The number of tokens in the input data is odd.
     ///
     /// The list of edges must be even because each edge has two
     /// components: a source node and a target node.
-    #[error("{input}: {message}", input = .0.maybe_quote(), message = get_message("tsort-error-odd"))]
+    #[error("{input}: {message}", input = .0.maybe_quote(), message = translate!("tsort-error-odd"))]
     NumTokensOdd(String),
 
     /// The graph contains a cycle.
-    #[error("{input}: {message}", input = .0, message = get_message("tsort-error-loop"))]
+    #[error("{input}: {message}", input = .0, message = translate!("tsort-error-loop"))]
     Loop(String),
 
     /// A particular node in a cycle. (This is mainly used for printing.)
@@ -76,8 +76,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("tsort-usage")))
-        .about(get_message("tsort-about"))
+        .override_usage(format_usage(&translate!("tsort-usage")))
+        .about(translate!("tsort-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE)

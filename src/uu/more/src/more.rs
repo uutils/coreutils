@@ -4,7 +4,6 @@
 // file that was distributed with this source code.
 
 use std::{
-    collections::HashMap,
     fs::File,
     io::{BufRead, BufReader, Stdin, Stdout, Write, stdin, stdout},
     panic::set_hook,
@@ -27,7 +26,7 @@ use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::{display::Quotable, show};
 
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 #[derive(Debug)]
 enum MoreError {
@@ -44,9 +43,9 @@ impl std::fmt::Display for MoreError {
                 write!(
                     f,
                     "{}",
-                    get_message_with_args(
+                    translate!(
                         "more-error-is-directory",
-                        HashMap::from([("path".to_string(), path.quote().to_string())])
+                        "path" => path.quote()
                     )
                 )
             }
@@ -54,9 +53,9 @@ impl std::fmt::Display for MoreError {
                 write!(
                     f,
                     "{}",
-                    get_message_with_args(
+                    translate!(
                         "more-error-cannot-open-no-such-file",
-                        HashMap::from([("path".to_string(), path.quote().to_string())])
+                        "path" => path.quote()
                     )
                 )
             }
@@ -64,17 +63,15 @@ impl std::fmt::Display for MoreError {
                 write!(
                     f,
                     "{}",
-                    get_message_with_args(
-                        "more-error-cannot-open-io-error",
-                        HashMap::from([
-                            ("path".to_string(), path.quote().to_string()),
-                            ("error".to_string(), error.to_string())
-                        ])
+                    translate!(
+                    "more-error-cannot-open-io-error",
+                    "path" => path.quote(),
+                    "error" => error
                     )
                 )
             }
             MoreError::BadUsage => {
-                write!(f, "{}", get_message("more-error-bad-usage"))
+                write!(f, "{}", translate!("more-error-bad-usage"))
             }
         }
     }
@@ -212,8 +209,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about(get_message("more-about"))
-        .override_usage(format_usage(&get_message("more-usage")))
+        .about(translate!("more-about"))
+        .override_usage(format_usage(&translate!("more-usage")))
         .version(uucore::crate_version!())
         .infer_long_args(true)
         .arg(
@@ -221,49 +218,49 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(options::SILENT)
                 .action(ArgAction::SetTrue)
-                .help(get_message("more-help-silent")),
+                .help(translate!("more-help-silent")),
         )
         .arg(
             Arg::new(options::LOGICAL)
                 .short('l')
                 .long(options::LOGICAL)
                 .action(ArgAction::SetTrue)
-                .help(get_message("more-help-logical")),
+                .help(translate!("more-help-logical")),
         )
         .arg(
             Arg::new(options::EXIT_ON_EOF)
                 .short('e')
                 .long(options::EXIT_ON_EOF)
                 .action(ArgAction::SetTrue)
-                .help(get_message("more-help-exit-on-eof")),
+                .help(translate!("more-help-exit-on-eof")),
         )
         .arg(
             Arg::new(options::NO_PAUSE)
                 .short('f')
                 .long(options::NO_PAUSE)
                 .action(ArgAction::SetTrue)
-                .help(get_message("more-help-no-pause")),
+                .help(translate!("more-help-no-pause")),
         )
         .arg(
             Arg::new(options::PRINT_OVER)
                 .short('p')
                 .long(options::PRINT_OVER)
                 .action(ArgAction::SetTrue)
-                .help(get_message("more-help-print-over")),
+                .help(translate!("more-help-print-over")),
         )
         .arg(
             Arg::new(options::CLEAN_PRINT)
                 .short('c')
                 .long(options::CLEAN_PRINT)
                 .action(ArgAction::SetTrue)
-                .help(get_message("more-help-clean-print")),
+                .help(translate!("more-help-clean-print")),
         )
         .arg(
             Arg::new(options::SQUEEZE)
                 .short('s')
                 .long(options::SQUEEZE)
                 .action(ArgAction::SetTrue)
-                .help(get_message("more-help-squeeze")),
+                .help(translate!("more-help-squeeze")),
         )
         .arg(
             Arg::new(options::PLAIN)
@@ -271,7 +268,7 @@ pub fn uu_app() -> Command {
                 .long(options::PLAIN)
                 .action(ArgAction::SetTrue)
                 .hide(true)
-                .help(get_message("more-help-plain")),
+                .help(translate!("more-help-plain")),
         )
         .arg(
             Arg::new(options::LINES)
@@ -280,14 +277,14 @@ pub fn uu_app() -> Command {
                 .value_name("number")
                 .num_args(1)
                 .value_parser(value_parser!(u16).range(0..))
-                .help(get_message("more-help-lines")),
+                .help(translate!("more-help-lines")),
         )
         .arg(
             Arg::new(options::NUMBER)
                 .long(options::NUMBER)
                 .num_args(1)
                 .value_parser(value_parser!(u16).range(0..))
-                .help(get_message("more-help-number")),
+                .help(translate!("more-help-number")),
         )
         .arg(
             Arg::new(options::FROM_LINE)
@@ -296,7 +293,7 @@ pub fn uu_app() -> Command {
                 .num_args(1)
                 .value_name("number")
                 .value_parser(value_parser!(usize))
-                .help(get_message("more-help-from-line")),
+                .help(translate!("more-help-from-line")),
         )
         .arg(
             Arg::new(options::PATTERN)
@@ -305,13 +302,13 @@ pub fn uu_app() -> Command {
                 .allow_hyphen_values(true)
                 .required(false)
                 .value_name("pattern")
-                .help(get_message("more-help-pattern")),
+                .help(translate!("more-help-pattern")),
         )
         .arg(
             Arg::new(options::FILES)
                 .required(false)
                 .action(ArgAction::Append)
-                .help(get_message("more-help-files"))
+                .help(translate!("more-help-files"))
                 .value_hint(clap::ValueHint::FilePath),
         )
 }
@@ -514,11 +511,11 @@ impl<'a> Pager<'a> {
                 self.stdout,
                 "\r{}{} ({}){}",
                 Attribute::Reverse,
-                get_message_with_args(
+                translate!(
                     "more-error-cannot-seek-to-line",
-                    HashMap::from([("line".to_string(), (self.upper_mark + 1).to_string())])
+                    "line" => (self.upper_mark + 1)
                 ),
-                get_message("more-press-return"),
+                translate!("more-press-return"),
                 Attribute::Reset,
             )?;
             self.stdout.flush()?;
@@ -579,8 +576,8 @@ impl<'a> Pager<'a> {
                     self.stdout,
                     "\r{}{} ({}){}",
                     Attribute::Reverse,
-                    get_message("more-error-pattern-not-found"),
-                    get_message("more-press-return"),
+                    translate!("more-error-pattern-not-found"),
+                    translate!("more-press-return"),
                     Attribute::Reset,
                 )?;
                 self.stdout.flush()?;
@@ -872,12 +869,12 @@ impl<'a> Pager<'a> {
         let banner = match (self.silent, wrong_key) {
             (true, Some(key)) => format!(
                 "{status}[{}]",
-                get_message_with_args(
+                translate!(
                     "more-error-unknown-key",
-                    HashMap::from([("key".to_string(), key.to_string())])
+                    "key" => key,
                 )
             ),
-            (true, None) => format!("{status}{}", get_message("more-help-message")),
+            (true, None) => format!("{status}{}", translate!("more-help-message")),
             (false, Some(_)) => format!("{status}{BELL}"),
             (false, None) => status,
         };
@@ -1075,7 +1072,7 @@ mod tests {
             .build();
         pager.draw_status_bar(None);
         let stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(stdout.contains(&get_message("more-help-message")));
+        assert!(stdout.contains(&translate!("more-help-message")));
     }
 
     #[test]
@@ -1148,9 +1145,9 @@ mod tests {
         assert!(pager.handle_from_line().is_ok());
         assert_eq!(pager.upper_mark, 0);
         let stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(stdout.contains(&get_message_with_args(
+        assert!(stdout.contains(&translate!(
             "more-error-cannot-seek-to-line",
-            HashMap::from([("line".to_string(), "100".to_string())])
+            "line" => "100"
         )));
     }
 
@@ -1172,7 +1169,7 @@ mod tests {
         let mut pager = TestPagerBuilder::new(content).pattern("qux").build();
         assert!(pager.handle_pattern_search().is_ok());
         let stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(stdout.contains(&get_message("more-error-pattern-not-found")));
+        assert!(stdout.contains(&translate!("more-error-pattern-not-found")));
         assert_eq!(pager.pattern, None);
         assert_eq!(pager.upper_mark, 0);
     }
@@ -1182,9 +1179,9 @@ mod tests {
         let mut pager = TestPagerBuilder::default().silent().build();
         pager.draw_status_bar(Some('x'));
         let stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(stdout.contains(&get_message_with_args(
+        assert!(stdout.contains(&translate!(
             "more-error-unknown-key",
-            HashMap::from([("key".to_string(), "x".to_string())])
+            "key" => "x"
         )));
 
         pager = TestPagerBuilder::default().build();
