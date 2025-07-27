@@ -135,6 +135,22 @@ pub enum MetadataTimeField {
     Birth,
 }
 
+impl From<&str> for MetadataTimeField {
+    /// Get a `MetadataTimeField` from a string, we expect the value
+    /// to come from clap, and be constrained there (e.g. if Modification is
+    /// not supported), and the default branch should not be reached.
+    fn from(value: &str) -> Self {
+        match value {
+            "ctime" | "status" => MetadataTimeField::Change,
+            "access" | "atime" | "use" => MetadataTimeField::Access,
+            "mtime" | "modification" => MetadataTimeField::Modification,
+            "birth" | "creation" => MetadataTimeField::Birth,
+            // below should never happen as clap already restricts the values.
+            _ => unreachable!("Invalid metadata time field."),
+        }
+    }
+}
+
 // The implementations for get_system_time are separated because some options, such
 // as ctime will not be available
 #[cfg(unix)]

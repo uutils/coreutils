@@ -464,14 +464,7 @@ fn extract_sort(options: &clap::ArgMatches) -> Sort {
 /// A `MetadataTimeField` variant representing the time to use.
 fn extract_time(options: &clap::ArgMatches) -> MetadataTimeField {
     if let Some(field) = options.get_one::<String>(options::TIME) {
-        match field.as_str() {
-            "ctime" | "status" => MetadataTimeField::Change,
-            "access" | "atime" | "use" => MetadataTimeField::Access,
-            "mtime" | "modification" => MetadataTimeField::Modification,
-            "birth" | "creation" => MetadataTimeField::Birth,
-            // below should never happen as clap already restricts the values.
-            _ => unreachable!("Invalid field for --time"),
-        }
+        field.as_str().into()
     } else if options.get_flag(options::time::ACCESS) {
         MetadataTimeField::Access
     } else if options.get_flag(options::time::CHANGE) {

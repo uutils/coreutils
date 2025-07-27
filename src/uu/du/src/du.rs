@@ -648,12 +648,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let time = matches.contains_id(options::TIME).then(|| {
-        match matches.get_one::<String>(options::TIME).map(AsRef::as_ref) {
-            None | Some("ctime" | "status") => MetadataTimeField::Modification,
-            Some("access" | "atime" | "use") => MetadataTimeField::Access,
-            Some("birth" | "creation") => MetadataTimeField::Birth,
-            _ => unreachable!("should be caught by clap"),
-        }
+        matches
+            .get_one::<String>(options::TIME)
+            .map_or(MetadataTimeField::Modification, |s| s.as_str().into())
     });
 
     let size_format = if matches.get_flag(options::HUMAN_READABLE) {
