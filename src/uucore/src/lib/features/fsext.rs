@@ -151,28 +151,24 @@ impl From<&str> for MetadataTimeField {
     }
 }
 
-// The implementations for get_system_time are separated because some options, such
-// as ctime will not be available
 #[cfg(unix)]
-pub fn metadata_get_time(md: &Metadata, md_time: MetadataTimeField) -> Option<SystemTime> {
-    match md_time {
-        MetadataTimeField::Change => {
-            // TODO: This is incorrect for negative timestamps.
-            Some(UNIX_EPOCH + Duration::new(md.ctime() as u64, md.ctime_nsec() as u32))
-        }
-        MetadataTimeField::Modification => md.modified().ok(),
-        MetadataTimeField::Access => md.accessed().ok(),
-        MetadataTimeField::Birth => md.created().ok(),
-    }
+fn metadata_get_change_time(md: &Metadata) -> Option<SystemTime> {
+    // TODO: This is incorrect for negative timestamps.
+    Some(UNIX_EPOCH + Duration::new(md.ctime() as u64, md.ctime_nsec() as u32))
 }
 
 #[cfg(not(unix))]
+fn metadata_get_change_time(_md: &Metadata) -> Option<SystemTime> {
+    // Not available.
+    None
+}
+
 pub fn metadata_get_time(md: &Metadata, md_time: MetadataTimeField) -> Option<SystemTime> {
     match md_time {
+        MetadataTimeField::Change => metadata_get_change_time(md),
         MetadataTimeField::Modification => md.modified().ok(),
         MetadataTimeField::Access => md.accessed().ok(),
         MetadataTimeField::Birth => md.created().ok(),
-        MetadataTimeField::Change => None,
     }
 }
 
