@@ -531,7 +531,7 @@ impl StatPrinter {
                 uucore::time::format_system_time(&mut stdout(), time, &self.time_format, true)?;
                 print!("\t");
             } else {
-                println!("???\t");
+                print!("???\t");
             }
         }
 

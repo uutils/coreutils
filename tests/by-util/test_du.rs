@@ -640,6 +640,9 @@ fn test_du_time() {
     let re_change_birth =
         Regex::new(r"0\t[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}\tdate_test").unwrap();
     let result = ts.ucmd().arg("--time=ctime").arg("date_test").succeeds();
+    #[cfg(windows)]
+    result.stdout_only("0\t???\tdate_test\n"); // ctime not supported on Windows
+    #[cfg(not(windows))]
     result.stdout_matches(&re_change_birth);
 
     if birth_supported() {
