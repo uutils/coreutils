@@ -594,6 +594,8 @@ fn test_du_h_precision() {
 #[cfg(feature = "touch")]
 #[test]
 fn test_du_time() {
+    use regex::Regex;
+
     let ts = TestScenario::new(util_name!());
 
     // du --time formats the timestamp according to the local timezone. We set the TZ
@@ -634,21 +636,15 @@ fn test_du_time() {
         result.stdout_only("0\t2015-05-15 00:00\tdate_test\n");
     }
 
-    let result = ts
-        .ucmd()
-        .env("TZ", "UTC")
-        .arg("--time=ctime")
-        .arg("date_test")
-        .succeeds();
-    result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
+    // Change (and birth) times can't be easily modified, so we just do a regex
+    let re_change_birth =
+        Regex::new(r"0\t[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}\tdate_test").unwrap();
+    let result = ts.ucmd().arg("--time=ctime").arg("date_test").succeeds();
+    result.stdout_matches(&re_change_birth);
 
     if birth_supported() {
-        use regex::Regex;
-
-        let re_birth =
-            Regex::new(r"0\t[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}\tdate_test").unwrap();
         let result = ts.ucmd().arg("--time=birth").arg("date_test").succeeds();
-        result.stdout_matches(&re_birth);
+        result.stdout_matches(&re_change_birth);
     }
 }
 
