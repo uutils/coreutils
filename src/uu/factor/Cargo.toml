@@ -21,6 +21,7 @@ num-traits = { workspace = true } # used in src/numerics.rs, which is included b
 clap = { workspace = true }
 num-traits = { workspace = true }
 uucore = { workspace = true }
+machine-factor = { workspace = true }
 num-bigint = { workspace = true }
 num-prime = { workspace = true }
 
