@@ -6,7 +6,6 @@
 
 // spell-checker:ignore (ToDO) adFfmprt, kmerge
 
-use chrono::{DateTime, Local};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
 use regex::Regex;
@@ -14,12 +13,14 @@ use std::fs::{File, metadata};
 use std::io::{BufRead, BufReader, Lines, Read, Write, stdin, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
+use std::time::SystemTime;
 use thiserror::Error;
 
 use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::format_usage;
 use uucore::translate;
+use uucore::time::{FormatSystemTimeFallback, format_system_time};
 
 const TAB: char = '\t';
 const LINES_PER_PAGE: usize = 66;
@@ -487,11 +488,26 @@ fn build_options(
 
     let line_separator = "\n".to_string();
 
-    let last_modified_time = if is_merge_mode || paths[0].eq(FILE_STDIN) {
-        let date_time = Local::now();
-        date_time.format(DATE_TIME_FORMAT).to_string()
-    } else {
-        file_last_modified_time(paths.first().unwrap())
+    let last_modified_time = {
+        let mut v = Vec::new();
+        let time = if is_merge_mode || paths[0].eq(FILE_STDIN) {
+            Some(SystemTime::now())
+        } else {
+            metadata(paths.first().unwrap())
+                .ok()
+                .and_then(|i| i.modified().ok())
+        };
+        time.and_then(|time| {
+            format_system_time(
+                &mut v,
+                time,
+                DATE_TIME_FORMAT,
+                FormatSystemTimeFallback::Integer,
+            )
+            .ok()
+        })
+        .map(|()| String::from_utf8_lossy(&v).to_string())
+        .unwrap_or_default()
     };
 
     // +page option is less priority than --pages
@@ -1124,19 +1140,6 @@ fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
     } else {
         Vec::new()
     }
-}
-
-fn file_last_modified_time(path: &str) -> String {
-    metadata(path)
-        .map(|i| {
-            i.modified()
-                .map(|x| {
-                    let date_time: DateTime<Local> = x.into();
-                    date_time.format(DATE_TIME_FORMAT).to_string()
-                })
-                .unwrap_or_default()
-        })
-        .unwrap_or_default()
 }
 
 /// Returns five empty lines as trailer content if displaying trailer
