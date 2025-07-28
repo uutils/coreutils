@@ -920,6 +920,7 @@ impl Stater {
         ret
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn process_token_files(
         &self,
         t: &Token,
@@ -928,6 +929,7 @@ impl Stater {
         file: &OsString,
         file_type: &FileType,
         from_user: bool,
+        _follow_symbolic_links: bool,
     ) -> Result<(), i32> {
         match *t {
             Token::Byte(byte) => write_raw_byte(byte),
@@ -956,8 +958,10 @@ impl Stater {
                         #[cfg(feature = "selinux")]
                         {
                             if uucore::selinux::is_selinux_enabled() {
-                                match uucore::selinux::get_selinux_security_context(Path::new(file))
-                                {
+                                match uucore::selinux::get_selinux_security_context(
+                                    Path::new(file),
+                                    _follow_symbolic_links,
+                                ) {
                                     Ok(ctx) => OutputType::Str(ctx),
                                     Err(_) => OutputType::Str(get_message(
                                         "stat-selinux-failed-get-context",
@@ -1113,7 +1117,8 @@ impl Stater {
                 }
             }
         } else {
-            let result = if self.follow || stdin_is_fifo && display_name == "-" {
+            let follow_symbolic_links = self.follow || stdin_is_fifo && display_name == "-";
+            let result = if follow_symbolic_links {
                 fs::metadata(&file)
             } else {
                 fs::symlink_metadata(&file)
@@ -1137,6 +1142,7 @@ impl Stater {
                             &file,
                             &file_type,
                             self.from_user,
+                            follow_symbolic_links,
                         ) {
                             return code;
                         }
