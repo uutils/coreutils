@@ -626,6 +626,56 @@ fn test_du_time() {
         .succeeds();
     result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
 
+    // long-iso (same as default)
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("--time-style=long-iso")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
+
+    // full-iso
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("--time-style=full-iso")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016-06-16 00:00:00.000000000 +0000\tdate_test\n");
+
+    // iso
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("--time-style=iso")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016-06-16\tdate_test\n");
+
+    // custom +FORMAT
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("--time-style=+%Y__%H")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016__00\tdate_test\n");
+
+    // ls has special handling for new line in format, du doesn't.
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("--time-style=+%Y_\n_%H")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016_\n_00\tdate_test\n");
+
     for argument in ["--time=atime", "--time=atim", "--time=a"] {
         let result = ts
             .ucmd()

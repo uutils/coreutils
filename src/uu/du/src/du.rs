@@ -761,7 +761,10 @@ fn parse_time_style(s: Option<&str>) -> UResult<&str> {
             "full-iso" => Ok("%Y-%m-%d %H:%M:%S.%f %z"),
             "long-iso" => Ok("%Y-%m-%d %H:%M"),
             "iso" => Ok("%Y-%m-%d"),
-            _ => Err(DuError::InvalidTimeStyleArg(s.into()).into()),
+            _ => match s.chars().next().unwrap() {
+                '+' => Ok(&s[1..]),
+                _ => Err(DuError::InvalidTimeStyleArg(s.into()).into()),
+            },
         },
         None => Ok("%Y-%m-%d %H:%M"),
     }
