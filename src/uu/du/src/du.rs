@@ -666,7 +666,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let time_format = if time.is_some() {
-        parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?.to_string()
+        parse_time_style(matches.get_one::<String>("time-style"))?
     } else {
         format::LONG_ISO.to_string()
     };
@@ -755,18 +755,40 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-fn parse_time_style(s: Option<&str>) -> UResult<&str> {
+// Parse --time-style argument, falling back to environment variable if necessary.
+fn parse_time_style(s: Option<&String>) -> UResult<String> {
+    let s = match s {
+        Some(s) => Some(s.into()),
+        None => {
+            match env::var("TIME_STYLE") {
+                // Per GNU manual, strip `posix-` if present, ignore anything after a newline if
+                // the string starts with +, and ignore "locale".
+                Ok(s) => {
+                    let s = s.strip_prefix("posix-").unwrap_or(s.as_str());
+                    let s = match s.chars().next().unwrap() {
+                        '+' => s.split('\n').next().unwrap(),
+                        _ => s,
+                    };
+                    match s {
+                        "locale" => None,
+                        _ => Some(s.to_string()),
+                    }
+                }
+                Err(_) => None,
+            }
+        }
+    };
     match s {
-        Some(s) => match s {
-            "full-iso" => Ok(format::FULL_ISO),
-            "long-iso" => Ok(format::LONG_ISO),
-            "iso" => Ok(format::ISO),
+        Some(s) => match s.as_ref() {
+            "full-iso" => Ok(format::FULL_ISO.to_string()),
+            "long-iso" => Ok(format::LONG_ISO.to_string()),
+            "iso" => Ok(format::ISO.to_string()),
             _ => match s.chars().next().unwrap() {
-                '+' => Ok(&s[1..]),
-                _ => Err(DuError::InvalidTimeStyleArg(s.into()).into()),
+                '+' => Ok(s[1..].to_string()),
+                _ => Err(DuError::InvalidTimeStyleArg(s).into()),
             },
         },
-        None => Ok(format::LONG_ISO),
+        None => Ok(format::LONG_ISO.to_string()),
     }
 }
 
