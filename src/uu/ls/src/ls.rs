@@ -203,8 +203,8 @@ enum LsError {
     #[error("{}", translate!("ls-error-not-listing-already-listed", "path" => .0.to_string_lossy()))]
     AlreadyListedError(PathBuf),
 
-    #[error("{}", translate!("ls-error-invalid-time-style", "style" => .0.quote(), "values" => format!("{:?}", .1)))]
-    TimeStyleParseError(String, Vec<String>),
+    #[error("{}", translate!("ls-error-invalid-time-style", "style" => .0.quote()))]
+    TimeStyleParseError(String),
 }
 
 impl UError for LsError {
@@ -217,7 +217,7 @@ impl UError for LsError {
             Self::BlockSizeParseError(_) => 2,
             Self::DiredAndZeroAreIncompatible => 2,
             Self::AlreadyListedError(_) => 2,
-            Self::TimeStyleParseError(_, _) => 2,
+            Self::TimeStyleParseError(_) => 2,
         }
     }
 }
@@ -260,13 +260,6 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
     // A map from a time-style parameter to a length-2 tuple of formats:
     // the first one is used for recent dates, the second one for older ones (optional).
     let time_styles = HashMap::from(TIME_STYLES);
-    let possible_time_styles = TIME_STYLES
-        .iter()
-        .map(|(x, _)| *x)
-        .chain(iter::once(
-            "+FORMAT (e.g., +%H:%M) for a 'date'-style format",
-        ))
-        .map(|s| s.to_string());
 
     // Convert time_styles references to owned String/option.
     fn ok((recent, older): (&str, Option<&str>)) -> Result<(String, Option<String>), LsError> {
@@ -282,14 +275,26 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
         {
             ok(time_styles["full-iso"])
         } else {
-            match time_styles.get(field.as_str()) {
+            let field = if let Some(field) = field.strip_prefix("posix-") {
+                // See GNU documentation, set format to "locale" if LC_TIME="POSIX",
+                // else just strip the prefix and continue (even "posix+FORMAT" is
+                // supported).
+                // TODO: This needs to be moved to uucore and handled by icu?
+                if std::env::var("LC_TIME").unwrap_or_default() == "POSIX"
+                    || std::env::var("LC_ALL").unwrap_or_default() == "POSIX"
+                {
+                    return ok(time_styles["locale"]);
+                }
+                field
+            } else {
+                field
+            };
+
+            match time_styles.get(field) {
                 Some(formats) => ok(*formats),
                 None => match field.chars().next().unwrap() {
                     '+' => Ok((field[1..].to_string(), None)),
-                    _ => Err(LsError::TimeStyleParseError(
-                        String::from(field),
-                        possible_time_styles.collect(),
-                    )),
+                    _ => Err(LsError::TimeStyleParseError(String::from(field))),
                 },
             }
         }

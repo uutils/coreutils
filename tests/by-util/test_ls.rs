@@ -1971,6 +1971,44 @@ fn test_ls_styles() {
         .succeeds()
         .stdout_matches(&re_locale);
 
+    //posix-full-iso
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=posix-full-iso")
+        .succeeds()
+        .stdout_matches(&re_full);
+    //posix-long-iso
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=posix-long-iso")
+        .succeeds()
+        .stdout_matches(&re_long);
+    //posix-iso
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=posix-iso")
+        .succeeds()
+        .stdout_matches(&re_iso);
+
+    //posix-* with LC_TIME/LC_ALL=POSIX is equivalent to locale
+    scene
+        .ucmd()
+        .env("LC_TIME", "POSIX")
+        .arg("-l")
+        .arg("--time-style=posix-full-iso")
+        .succeeds()
+        .stdout_matches(&re_locale);
+    scene
+        .ucmd()
+        .env("LC_ALL", "POSIX")
+        .arg("-l")
+        .arg("--time-style=posix-iso")
+        .succeeds()
+        .stdout_matches(&re_locale);
+
     //+FORMAT
     scene
         .ucmd()
