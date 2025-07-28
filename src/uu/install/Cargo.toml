@@ -21,6 +21,7 @@ path = "src/install.rs"
 clap = { workspace = true }
 filetime = { workspace = true }
 file_diff = { workspace = true }
+selinux = { workspace = true, optional = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "backup-control",
@@ -33,7 +34,7 @@ uucore = { workspace = true, features = [
 ] }
 
 [features]
-selinux = ["uucore/selinux"]
+selinux = ["dep:selinux", "uucore/selinux"]
 
 [[bin]]
 name = "install"

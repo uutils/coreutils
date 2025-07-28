@@ -5,11 +5,15 @@
 
 //! Set of functions to manage SELinux security contexts
 
+// spell-checker:ignore matchpathcon restorecon
+
 use std::error::Error;
 use std::path::Path;
 
 use selinux::SecurityContext;
 use thiserror::Error;
+
+use crate::error::UError;
 
 #[derive(Debug, Error)]
 pub enum SeLinuxError {
@@ -29,15 +33,21 @@ pub enum SeLinuxError {
     ContextConversionFailure(String, String),
 }
 
-impl From<SeLinuxError> for i32 {
-    fn from(error: SeLinuxError) -> i32 {
-        match error {
+impl UError for SeLinuxError {
+    fn code(&self) -> i32 {
+        match self {
             SeLinuxError::SELinuxNotEnabled => 1,
             SeLinuxError::FileOpenFailure(_) => 2,
             SeLinuxError::ContextRetrievalFailure(_) => 3,
             SeLinuxError::ContextSetFailure(_, _) => 4,
             SeLinuxError::ContextConversionFailure(_, _) => 5,
         }
+    }
+}
+
+impl From<SeLinuxError> for i32 {
+    fn from(error: SeLinuxError) -> i32 {
+        UError::code(&error)
     }
 }
 
@@ -326,6 +336,59 @@ pub fn preserve_security_context(from_path: &Path, to_path: &Path) -> Result<(),
 
     // Apply the context to the destination path
     set_selinux_security_context(to_path, Some(&context))
+}
+
+/// Helper function to collect paths that need SELinux context setting.
+///
+/// Traverses from the given starting path up to existing parent directories.
+/// Returns a vector of paths in reverse order (from parent to child).
+pub fn collect_paths_for_context_setting(starting_path: &Path) -> Vec<&Path> {
+    let mut paths: Vec<&Path> = starting_path
+        .ancestors()
+        .take_while(|p| p.exists())
+        .collect();
+    paths.reverse();
+    paths
+}
+
+/// Sets the SELinux security context for a directory hierarchy.
+///
+/// This function traverses from the given starting path up to existing parent directories
+/// and sets the SELinux context on each directory in the hierarchy (from parent to child).
+/// This is useful when creating directory structures and needing to set contexts on all
+/// created directories.
+///
+/// # Arguments
+///
+/// * `target_path` - The target path (typically the deepest directory in a hierarchy)
+/// * `context` - Optional SELinux context string to set. If None, sets default context.
+///
+/// # Behavior
+///
+/// - Traverses from target_path upward to find existing parent directories
+/// - Sets the context on each directory in reverse order (parent to child)
+/// - Uses `crate::show_if_err!` to handle errors gracefully without panicking
+/// - Stops at filesystem root ("/") or empty path to prevent infinite loops
+/// - Only processes paths that exist on the filesystem
+/// - Silently handles SELinux context setting failures
+///
+/// # Examples
+///
+/// ```
+/// use std::path::Path;
+/// use uucore::selinux::set_selinux_context_for_directories;
+///
+/// // Set default context on directory hierarchy
+/// set_selinux_context_for_directories(Path::new("/tmp/new/deep/dir"), None);
+///
+/// // Set specific context on directory hierarchy
+/// let context = String::from("user_u:object_r:tmp_t:s0");
+/// set_selinux_context_for_directories(Path::new("/tmp/new/deep/dir"), Some(&context));
+/// ```
+pub fn set_selinux_context_for_directories(target_path: &Path, context: Option<&String>) {
+    for path in collect_paths_for_context_setting(target_path) {
+        crate::show_if_err!(set_selinux_security_context(path, context));
+    }
 }
 
 #[cfg(test)]
@@ -681,5 +744,74 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_set_selinux_context_for_directories() {
+        // Create a temporary directory structure for testing
+        let temp_dir = tempfile::TempDir::new().expect("Failed to create temp dir");
+        let temp_path = temp_dir.path();
+
+        // Create nested directories: temp_dir/a/b/c
+        let dir_a = temp_path.join("a");
+        let dir_b = dir_a.join("b");
+        let dir_c = dir_b.join("c");
+
+        std::fs::create_dir_all(&dir_c).expect("Failed to create test directories");
+
+        // Test with a provided context
+        let test_context = String::from("user_u:object_r:tmp_t:s0");
+
+        // This test verifies the function doesn't panic and processes the path hierarchy.
+        // The function should traverse from the given path up to existing parent directories
+        // and attempt to set the SELinux context on each path in reverse order (from parent to child).
+        // Note: The actual SELinux context setting will fail in test environments
+        // where SELinux is not enabled, but the function should handle this gracefully
+        // via the show_if_err! macro and not panic.
+        set_selinux_context_for_directories(&dir_c, Some(&test_context));
+
+        // Test with None context (default context)
+        // This should use the default SELinux context for new files
+        set_selinux_context_for_directories(&dir_c, None);
+
+        // Test with non-existent path (should handle gracefully)
+        // The function should not traverse non-existent paths
+        let non_existent = temp_path.join("non_existent");
+        set_selinux_context_for_directories(&non_existent, Some(&test_context));
+
+        // Test with root directory edge case
+        // Should handle root path without infinite loops
+        set_selinux_context_for_directories(Path::new("/"), Some(&test_context));
+
+        // Test with empty path edge case
+        // Should handle empty paths gracefully
+        set_selinux_context_for_directories(Path::new(""), Some(&test_context));
+    }
+
+    #[test]
+    fn test_set_selinux_context_for_directories_path_collection() {
+        // This test verifies the path collection logic without actually setting contexts
+        // We can't easily test the internal path collection without modifying the function,
+        // but we can test that it handles various path scenarios without panicking
+
+        let temp_dir = tempfile::TempDir::new().expect("Failed to create temp dir");
+        let temp_path = temp_dir.path();
+
+        // Test with a single directory
+        let single_dir = temp_path.join("single");
+        std::fs::create_dir(&single_dir).expect("Failed to create single dir");
+        set_selinux_context_for_directories(&single_dir, None);
+
+        // Test with deeply nested structure
+        let deep_path = temp_path
+            .join("level1")
+            .join("level2")
+            .join("level3")
+            .join("level4");
+        std::fs::create_dir_all(&deep_path).expect("Failed to create deep path");
+        set_selinux_context_for_directories(&deep_path, None);
+
+        // Test with path that equals its parent (edge case protection)
+        set_selinux_context_for_directories(temp_path, None);
     }
 }

@@ -3322,6 +3322,7 @@ dependencies = [
  "clap",
  "file_diff",
  "filetime",
+ "selinux",
  "thiserror 2.0.12",
  "uucore",
 ]
