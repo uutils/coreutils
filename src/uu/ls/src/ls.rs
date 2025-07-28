@@ -297,7 +297,16 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
             match time_styles.get(field) {
                 Some(formats) => ok(*formats),
                 None => match field.chars().next().unwrap() {
-                    '+' => Ok((field[1..].to_string(), None)),
+                    '+' => {
+                        // recent/older formats are (optionally) separated by a newline
+                        let mut it = field[1..].split('\n');
+                        let recent = it.next().unwrap_or_default();
+                        let older = it.next();
+                        match it.next() {
+                            None => ok((recent, older)),
+                            Some(_) => Err(LsError::TimeStyleParseError(String::from(field))),
+                        }
+                    }
                     _ => Err(LsError::TimeStyleParseError(String::from(field))),
                 },
             }

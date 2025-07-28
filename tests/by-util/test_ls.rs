@@ -19,11 +19,11 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStrExt;
-use std::path::Path;
 #[cfg(not(windows))]
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
+use std::{path::Path, time::SystemTime};
 use uutests::new_ucmd;
 #[cfg(unix)]
 use uutests::unwrap_or_return;
@@ -1923,24 +1923,38 @@ fn test_ls_order_birthtime() {
 }
 
 #[test]
-fn test_ls_styles() {
+fn test_ls_time_styles() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
+    // Create a recent and old (<6 months) file, as format can be different.
     at.touch("test");
+    let f3 = at.make_file("test-old");
+    f3.set_modified(SystemTime::now() - Duration::from_secs(3600 * 24 * 365))
+        .unwrap();
 
-    let re_full = Regex::new(
+    let re_full_recent = Regex::new(
         r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d* (\+|\-)\d{4} test\n",
     )
     .unwrap();
-    let re_long =
+    let re_long_recent =
         Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
-    let re_iso =
+    let re_iso_recent =
         Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
-    let re_locale =
+    let re_locale_recent =
         Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* [A-Z][a-z]{2} ( |\d)\d \d{2}:\d{2} test\n")
             .unwrap();
-    let re_custom_format =
-        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}__\d{2} test\n").unwrap();
+    let re_full_old = Regex::new(
+            r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d* (\+|\-)\d{4} test-old\n",
+        )
+        .unwrap();
+    let re_long_old =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2} test-old\n")
+            .unwrap();
+    let re_iso_old =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}-\d{2}-\d{2}  test-old\n").unwrap();
+    let re_locale_old =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* [A-Z][a-z]{2} ( |\d)\d  \d{4} test-old\n")
+            .unwrap();
 
     //full-iso
     scene
@@ -1948,28 +1962,32 @@ fn test_ls_styles() {
         .arg("-l")
         .arg("--time-style=full-iso")
         .succeeds()
-        .stdout_matches(&re_full);
+        .stdout_matches(&re_full_recent)
+        .stdout_matches(&re_full_old);
     //long-iso
     scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=long-iso")
         .succeeds()
-        .stdout_matches(&re_long);
+        .stdout_matches(&re_long_recent)
+        .stdout_matches(&re_long_old);
     //iso
     scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=iso")
         .succeeds()
-        .stdout_matches(&re_iso);
+        .stdout_matches(&re_iso_recent)
+        .stdout_matches(&re_iso_old);
     //locale
     scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=locale")
         .succeeds()
-        .stdout_matches(&re_locale);
+        .stdout_matches(&re_locale_recent)
+        .stdout_matches(&re_locale_old);
 
     //posix-full-iso
     scene
@@ -1977,21 +1995,24 @@ fn test_ls_styles() {
         .arg("-l")
         .arg("--time-style=posix-full-iso")
         .succeeds()
-        .stdout_matches(&re_full);
+        .stdout_matches(&re_full_recent)
+        .stdout_matches(&re_full_old);
     //posix-long-iso
     scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=posix-long-iso")
         .succeeds()
-        .stdout_matches(&re_long);
+        .stdout_matches(&re_long_recent)
+        .stdout_matches(&re_long_old);
     //posix-iso
     scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=posix-iso")
         .succeeds()
-        .stdout_matches(&re_iso);
+        .stdout_matches(&re_iso_recent)
+        .stdout_matches(&re_iso_old);
 
     //posix-* with LC_TIME/LC_ALL=POSIX is equivalent to locale
     scene
@@ -2000,28 +2021,53 @@ fn test_ls_styles() {
         .arg("-l")
         .arg("--time-style=posix-full-iso")
         .succeeds()
-        .stdout_matches(&re_locale);
+        .stdout_matches(&re_locale_recent)
+        .stdout_matches(&re_locale_old);
     scene
         .ucmd()
         .env("LC_ALL", "POSIX")
         .arg("-l")
         .arg("--time-style=posix-iso")
         .succeeds()
-        .stdout_matches(&re_locale);
+        .stdout_matches(&re_locale_recent)
+        .stdout_matches(&re_locale_old);
 
     //+FORMAT
+    let re_custom_format_recent =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}__\d{2} test\n").unwrap();
+    let re_custom_format_old =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}__\d{2} test-old\n").unwrap();
     scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=+%Y__%M")
         .succeeds()
-        .stdout_matches(&re_custom_format);
+        .stdout_matches(&re_custom_format_recent)
+        .stdout_matches(&re_custom_format_old);
+
+    //+FORMAT_RECENT\nFORMAT_OLD
+    let re_custom_format_old =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}--\d{2} test-old\n").unwrap();
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=+%Y__%M\n%Y--%M")
+        .succeeds()
+        .stdout_matches(&re_custom_format_recent)
+        .stdout_matches(&re_custom_format_old);
 
     // Also fails due to not having full clap support for time_styles
     scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=invalid")
+        .fails_with_code(2);
+
+    // Cannot have 2 new lines in custom format
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=+%Y__%M\n%Y--%M\n")
         .fails_with_code(2);
 
     //Overwrite options tests
@@ -2031,19 +2077,19 @@ fn test_ls_styles() {
         .arg("--time-style=long-iso")
         .arg("--time-style=iso")
         .succeeds()
-        .stdout_matches(&re_iso);
+        .stdout_matches(&re_iso_recent);
     scene
         .ucmd()
         .arg("--time-style=iso")
         .arg("--full-time")
         .succeeds()
-        .stdout_matches(&re_full);
+        .stdout_matches(&re_full_recent);
     scene
         .ucmd()
         .arg("--full-time")
         .arg("--time-style=iso")
         .succeeds()
-        .stdout_matches(&re_iso);
+        .stdout_matches(&re_iso_recent);
 
     scene
         .ucmd()
@@ -2051,7 +2097,7 @@ fn test_ls_styles() {
         .arg("--time-style=iso")
         .arg("--full-time")
         .succeeds()
-        .stdout_matches(&re_full);
+        .stdout_matches(&re_full_recent);
 
     scene
         .ucmd()
@@ -2059,15 +2105,14 @@ fn test_ls_styles() {
         .arg("-x")
         .arg("-l")
         .succeeds()
-        .stdout_matches(&re_full);
+        .stdout_matches(&re_full_recent);
 
-    at.touch("test2");
     scene
         .ucmd()
         .arg("--full-time")
         .arg("-x")
         .succeeds()
-        .stdout_is("test  test2\n");
+        .stdout_is("test  test-old\n");
 
     // Time style can also be setup from environment
     scene
@@ -2075,7 +2120,7 @@ fn test_ls_styles() {
         .env("TIME_STYLE", "full-iso")
         .arg("-l")
         .succeeds()
-        .stdout_matches(&re_full);
+        .stdout_matches(&re_full_recent);
 
     // ... but option takes precedence
     scene
@@ -2084,7 +2129,7 @@ fn test_ls_styles() {
         .arg("-l")
         .arg("--time-style=long-iso")
         .succeeds()
-        .stdout_matches(&re_long);
+        .stdout_matches(&re_long_recent);
 }
 
 #[test]
