@@ -28,7 +28,7 @@ use uucore::translate;
 use uucore::parser::parse_glob;
 use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
-use uucore::time::{FormatSystemTimeFallback, format_system_time};
+use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
 use uucore::{format_usage, show, show_error, show_warning};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
@@ -668,7 +668,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let time_format = if time.is_some() {
         parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?.to_string()
     } else {
-        "%Y-%m-%d %H:%M".to_string()
+        format::LONG_ISO.to_string()
     };
 
     let stat_printer = StatPrinter {
@@ -758,15 +758,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 fn parse_time_style(s: Option<&str>) -> UResult<&str> {
     match s {
         Some(s) => match s {
-            "full-iso" => Ok("%Y-%m-%d %H:%M:%S.%f %z"),
-            "long-iso" => Ok("%Y-%m-%d %H:%M"),
-            "iso" => Ok("%Y-%m-%d"),
+            "full-iso" => Ok(format::FULL_ISO),
+            "long-iso" => Ok(format::LONG_ISO),
+            "iso" => Ok(format::ISO),
             _ => match s.chars().next().unwrap() {
                 '+' => Ok(&s[1..]),
                 _ => Err(DuError::InvalidTimeStyleArg(s.into()).into()),
             },
         },
-        None => Ok("%Y-%m-%d %H:%M"),
+        None => Ok(format::LONG_ISO),
     }
 }
 

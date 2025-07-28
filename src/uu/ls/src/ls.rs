@@ -60,7 +60,7 @@ use uucore::line_ending::LineEnding;
 use uucore::translate;
 
 use uucore::quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name};
-use uucore::time::{FormatSystemTimeFallback, format_system_time};
+use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
 use uucore::{
     display::Quotable,
     error::{UError, UResult, set_exit_code},
@@ -251,16 +251,8 @@ enum Files {
 }
 
 fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String>), LsError> {
-    const TIME_STYLES: [(&str, (&str, Option<&str>)); 4] = [
-        ("full-iso", ("%Y-%m-%d %H:%M:%S.%f %z", None)),
-        ("long-iso", ("%Y-%m-%d %H:%M", None)),
-        ("iso", ("%m-%d %H:%M", Some("%Y-%m-%d "))),
-        // TODO: Using correct locale string is not implemented.
-        ("locale", ("%b %e %H:%M", Some("%b %e  %Y"))),
-    ];
-    // A map from a time-style parameter to a length-2 tuple of formats:
-    // the first one is used for recent dates, the second one for older ones (optional).
-    let time_styles = HashMap::from(TIME_STYLES);
+    // TODO: Using correct locale string is not implemented.
+    const LOCALE_FORMAT: (&str, Option<&str>) = ("%b %e %H:%M", Some("%b %e  %Y"));
 
     // Convert time_styles references to owned String/option.
     fn ok((recent, older): (&str, Option<&str>)) -> Result<(String, Option<String>), LsError> {
@@ -278,7 +270,7 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
             && options.indices_of(options::FULL_TIME).unwrap().next_back()
                 > options.indices_of(options::TIME_STYLE).unwrap().next_back()
         {
-            ok(time_styles["full-iso"])
+            ok((format::FULL_ISO, None))
         } else {
             let field = if let Some(field) = field.strip_prefix("posix-") {
                 // See GNU documentation, set format to "locale" if LC_TIME="POSIX",
@@ -288,16 +280,23 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                 if std::env::var("LC_TIME").unwrap_or_default() == "POSIX"
                     || std::env::var("LC_ALL").unwrap_or_default() == "POSIX"
                 {
-                    return ok(time_styles["locale"]);
+                    return ok(LOCALE_FORMAT);
                 }
                 field
             } else {
                 &field
             };
 
-            match time_styles.get(field) {
-                Some(formats) => ok(*formats),
-                None => match field.chars().next().unwrap() {
+            match field {
+                "full-iso" => ok((format::FULL_ISO, None)),
+                "long-iso" => ok((format::LONG_ISO, None)),
+                // ISO older format needs extra padding.
+                "iso" => Ok((
+                    "%m-%d %H:%M".to_string(),
+                    Some(format::ISO.to_string() + " "),
+                )),
+                "locale" => ok(LOCALE_FORMAT),
+                _ => match field.chars().next().unwrap() {
                     '+' => {
                         // recent/older formats are (optionally) separated by a newline
                         let mut it = field[1..].split('\n');
@@ -313,9 +312,9 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
             }
         }
     } else if options.get_flag(options::FULL_TIME) {
-        ok(time_styles["full-iso"])
+        ok((format::FULL_ISO, None))
     } else {
-        ok(time_styles["locale"])
+        ok(LOCALE_FORMAT)
     }
 }
 
