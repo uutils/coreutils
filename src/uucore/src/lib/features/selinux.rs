@@ -182,7 +182,7 @@ pub fn set_selinux_security_context(
 /// use uucore::selinux::{get_selinux_security_context, SeLinuxError};
 ///
 /// // Get the SELinux context for a file
-/// match get_selinux_security_context(Path::new("/path/to/file")) {
+/// match get_selinux_security_context(Path::new("/path/to/file"), false) {
 ///     Ok(context) => {
 ///         if context.is_empty() {
 ///             println!("No SELinux context found for the file");
@@ -197,16 +197,16 @@ pub fn set_selinux_security_context(
 ///     Err(SeLinuxError::ContextSetFailure(ctx, e)) => println!("Failed to set context '{ctx}': {e}"),
 /// }
 /// ```
-pub fn get_selinux_security_context(path: &Path) -> Result<String, SeLinuxError> {
+pub fn get_selinux_security_context(
+    path: &Path,
+    follow_symbolic_links: bool,
+) -> Result<String, SeLinuxError> {
     if !is_selinux_enabled() {
         return Err(SeLinuxError::SELinuxNotEnabled);
     }
 
-    let f = std::fs::File::open(path)
-        .map_err(|e| SeLinuxError::FileOpenFailure(selinux_error_description(&e)))?;
-
     // Get the security context of the file
-    let context = match SecurityContext::of_file(&f, false) {
+    let context = match SecurityContext::of_path(path, follow_symbolic_links, false) {
         Ok(Some(ctx)) => ctx,
         Ok(None) => return Ok(String::new()), // No context found, return empty string
         Err(e) => {
@@ -317,7 +317,7 @@ pub fn preserve_security_context(from_path: &Path, to_path: &Path) -> Result<(),
     }
 
     // Get context from the source path
-    let context = get_selinux_security_context(from_path)?;
+    let context = get_selinux_security_context(from_path, false)?;
 
     // If no context was found, just return success (nothing to preserve)
     if context.is_empty() {
@@ -357,7 +357,7 @@ mod tests {
             default_result.err()
         );
 
-        let context = get_selinux_security_context(path).expect("Failed to get context");
+        let context = get_selinux_security_context(path, false).expect("Failed to get context");
         assert!(
             !context.is_empty(),
             "Expected non-empty context after setting default context"
@@ -367,7 +367,7 @@ mod tests {
         let explicit_result = set_selinux_security_context(path, Some(&test_context));
 
         if explicit_result.is_ok() {
-            let new_context = get_selinux_security_context(path)
+            let new_context = get_selinux_security_context(path, false)
                 .expect("Failed to get context after setting explicit context");
 
             assert!(
@@ -420,7 +420,7 @@ mod tests {
         }
         std::fs::write(path, b"test content").expect("Failed to write to tempfile");
 
-        let result = get_selinux_security_context(path);
+        let result = get_selinux_security_context(path, false);
 
         if result.is_ok() {
             let context = result.unwrap();
@@ -484,7 +484,7 @@ mod tests {
             println!("test skipped: Kernel has no support for SElinux context");
             return;
         }
-        let result = get_selinux_security_context(path);
+        let result = get_selinux_security_context(path, false);
 
         assert!(result.is_err());
     }
