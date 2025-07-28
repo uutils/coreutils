@@ -2133,6 +2133,84 @@ fn test_ls_time_styles() {
 }
 
 #[test]
+fn test_ls_time_recent_future() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let f = at.make_file("test");
+
+    let re_iso_recent =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
+    let re_iso_old =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}-\d{2}-\d{2}  test\n").unwrap();
+
+    // `test` has just been created, so it's recent
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=iso")
+        .succeeds()
+        .stdout_matches(&re_iso_recent);
+
+    // 100 days ago is still recent (<0.5 years)
+    f.set_modified(SystemTime::now() - Duration::from_secs(3600 * 24 * 100))
+        .unwrap();
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=iso")
+        .succeeds()
+        .stdout_matches(&re_iso_recent);
+
+    // 200 days ago is not recent
+    f.set_modified(SystemTime::now() - Duration::from_secs(3600 * 24 * 200))
+        .unwrap();
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=iso")
+        .succeeds()
+        .stdout_matches(&re_iso_old);
+
+    // A timestamp in the future (even just a minute), is not considered "recent"
+    f.set_modified(SystemTime::now() + Duration::from_secs(60))
+        .unwrap();
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=iso")
+        .succeeds()
+        .stdout_matches(&re_iso_old);
+
+    // Also test that we can set a format that varies for recent of older files.
+    //+FORMAT_RECENT\nFORMAT_OLD
+    f.set_modified(SystemTime::now()).unwrap();
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=+RECENT\nOLD")
+        .succeeds()
+        .stdout_contains("RECENT");
+
+    // Old file
+    f.set_modified(SystemTime::now() - Duration::from_secs(3600 * 24 * 200))
+        .unwrap();
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=+RECENT\nOLD")
+        .succeeds()
+        .stdout_contains("OLD");
+
+    // RECENT format is still used if no "OLD" one provided.
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=+RECENT")
+        .succeeds()
+        .stdout_contains("RECENT");
+}
+
+#[test]
 fn test_ls_order_time() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

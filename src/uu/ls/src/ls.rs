@@ -7,6 +7,7 @@
 
 use std::collections::HashMap;
 use std::iter;
+use std::ops::RangeInclusive;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
@@ -1959,7 +1960,7 @@ struct ListState<'a> {
     uid_cache: HashMap<u32, String>,
     #[cfg(unix)]
     gid_cache: HashMap<u32, String>,
-    recent_time_threshold: SystemTime,
+    recent_time_range: RangeInclusive<SystemTime>,
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -1976,8 +1977,11 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         uid_cache: HashMap::new(),
         #[cfg(unix)]
         gid_cache: HashMap::new(),
+        // Time range for which to use the "recent" format. Anything from 0.5 year in the past to now
+        // (files with modification time in the future use "old" format).
         // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-        recent_time_threshold: SystemTime::now() - Duration::new(31_556_952 / 2, 0),
+        recent_time_range: (SystemTime::now() - Duration::new(31_556_952 / 2, 0))
+            ..=SystemTime::now(),
     };
 
     for loc in locs {
@@ -2961,7 +2965,7 @@ fn display_date(
     // Use "recent" format if the given date is considered recent (i.e., in the last 6 months),
     // or if no "older" format is available.
     let fmt = match &config.time_format_older {
-        Some(time_format_older) if time <= state.recent_time_threshold => time_format_older,
+        Some(time_format_older) if !state.recent_time_range.contains(&time) => time_format_older,
         _ => &config.time_format_recent,
     };
 
