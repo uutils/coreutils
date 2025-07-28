@@ -490,6 +490,65 @@ mod tests {
     }
 
     #[test]
+    fn test_get_selinux_context_symlink() {
+        use std::os::unix::fs::symlink;
+        use tempfile::tempdir;
+
+        if !is_selinux_enabled() {
+            println!("test skipped: Kernel has no support for SElinux context");
+            return;
+        }
+
+        let tmp_dir = tempdir().expect("Failed to create temporary directory");
+        let dir_path = tmp_dir.path();
+
+        // Create a normal file
+        let file_path = dir_path.join("file");
+        std::fs::File::create(&file_path).expect("Failed to create file");
+
+        // Create a symlink to the file
+        let symlink_path = dir_path.join("symlink");
+        symlink(&file_path, &symlink_path).expect("Failed to create symlink");
+
+        // Set a different context for the file (but not the symlink)
+        let file_context = String::from("system_u:object_r:user_tmp_t:s0");
+        set_selinux_security_context(&file_path, Some(&file_context))
+            .expect("Failed to set security context.");
+
+        // Context must be different if we don't follow the link
+        let file_context = get_selinux_security_context(&file_path, false)
+            .expect("Failed to get security context.");
+        let symlink_context = get_selinux_security_context(&symlink_path, false)
+            .expect("Failed to get security context.");
+        assert_ne!(file_context.to_string(), symlink_context.to_string());
+
+        // Context must be the same if we follow the link
+        let symlink_follow_context = get_selinux_security_context(&symlink_path, true)
+            .expect("Failed to get security context.");
+        assert_eq!(file_context.to_string(), symlink_follow_context.to_string());
+    }
+
+    #[test]
+    fn test_get_selinux_context_fifo() {
+        use tempfile::tempdir;
+
+        if !is_selinux_enabled() {
+            println!("test skipped: Kernel has no support for SElinux context");
+            return;
+        }
+
+        let tmp_dir = tempdir().expect("Failed to create temporary directory");
+        let dir_path = tmp_dir.path();
+
+        // Create a FIFO (pipe)
+        let fifo_path = dir_path.join("my_fifo");
+        crate::fs::make_fifo(&fifo_path).expect("Failed to create FIFO");
+
+        // Just getting a context is good enough
+        get_selinux_security_context(&fifo_path, false).expect("Cannot get fifo context");
+    }
+
+    #[test]
     fn test_contexts_differ() {
         let file1 = NamedTempFile::new().expect("Failed to create first tempfile");
         let file2 = NamedTempFile::new().expect("Failed to create second tempfile");
