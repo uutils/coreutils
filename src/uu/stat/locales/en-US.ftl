@@ -54,6 +54,7 @@ stat-after-help = Valid format sequences for files (without `--file-system`):
   for details about the options it supports.
 
 ## Error messages
+
 stat-error-invalid-quoting-style = Invalid quoting style: {$style}
 stat-error-missing-operand = missing operand
   Try 'stat --help' for more information.
@@ -64,12 +65,14 @@ stat-error-cannot-read-filesystem-info = cannot read file system information for
 stat-error-cannot-stat = cannot stat {$file}: {$error}
 
 ## Warning messages
+
 stat-warning-backslash-end-format = backslash at end of format
 stat-warning-unrecognized-escape-x = unrecognized escape '\x'
 stat-warning-incomplete-hex-escape = incomplete hex escape '\x'
 stat-warning-unrecognized-escape = unrecognized escape '\{$escape}'
 
 ## Help messages
+
 stat-help-dereference = follow links
 stat-help-file-system = display file system status instead of file status
 stat-help-terse = print the information in terse form
@@ -80,6 +83,7 @@ stat-help-printf = like --format, but interpret backslash escapes,
   if you want a newline, include \n in FORMAT
 
 ## Word translations
+
 stat-word-file = File
 stat-word-id = ID
 stat-word-namelen = Namelen
@@ -105,6 +109,7 @@ stat-word-change = Change
 stat-word-birth = Birth
 
 ## SELinux context messages
+
 stat-selinux-failed-get-context = failed to get security context
 stat-selinux-unsupported-system = unsupported on this system
 stat-selinux-unsupported-os = unsupported for this operating system
