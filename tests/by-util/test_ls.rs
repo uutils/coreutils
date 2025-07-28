@@ -2068,6 +2068,23 @@ fn test_ls_styles() {
         .arg("-x")
         .succeeds()
         .stdout_is("test  test2\n");
+
+    // Time style can also be setup from environment
+    scene
+        .ucmd()
+        .env("TIME_STYLE", "full-iso")
+        .arg("-l")
+        .succeeds()
+        .stdout_matches(&re_full);
+
+    // ... but option takes precedence
+    scene
+        .ucmd()
+        .env("TIME_STYLE", "full-iso")
+        .arg("-l")
+        .arg("--time-style=long-iso")
+        .succeeds()
+        .stdout_matches(&re_long);
 }
 
 #[test]

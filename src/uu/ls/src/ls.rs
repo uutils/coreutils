@@ -266,7 +266,11 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
         Ok((recent.to_string(), older.map(String::from)))
     }
 
-    if let Some(field) = options.get_one::<String>(options::TIME_STYLE) {
+    if let Some(field) = options
+        .get_one::<String>(options::TIME_STYLE)
+        .map(|s| s.to_owned())
+        .or_else(|| std::env::var("TIME_STYLE").ok())
+    {
         //If both FULL_TIME and TIME_STYLE are present
         //The one added last is dominant
         if options.get_flag(options::FULL_TIME)
@@ -287,7 +291,7 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                 }
                 field
             } else {
-                field
+                &field
             };
 
             match time_styles.get(field) {
