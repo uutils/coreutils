@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker: ignore: AEDT AEST EEST NZDT NZST
+// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata
 
 use chrono::{DateTime, Datelike, Duration, NaiveTime, Utc}; // spell-checker:disable-line
 use regex::Regex;
@@ -601,8 +601,8 @@ fn test_date_tz() {
     test_tz("Australia/Sydney", JAN2, "2024-01-02 23:00:00 AEDT\n");
     test_tz("Australia/Sydney", JUL2, "2024-07-02 22:00:00 AEST\n"); // Shifts the other way.
     test_tz("Pacific/Tahiti", JAN2, "2024-01-02 02:00:00 -10\n"); // No abbreviation.
-    test_tz("Antarctica/South_Pole", JAN2, "2024-01-03 01:00:00 NZDT\n");
-    test_tz("Antarctica/South_Pole", JUL2, "2024-07-03 00:00:00 NZST\n");
+    test_tz("Pacific/Auckland", JAN2, "2024-01-03 01:00:00 NZDT\n");
+    test_tz("Pacific/Auckland", JUL2, "2024-07-03 00:00:00 NZST\n");
 }
 
 #[test]
@@ -634,7 +634,7 @@ fn test_date_tz_various_formats() {
         "-0800 -08:00 -08:00:00 -08 PST\n",
     );
     // Half-hour timezone
-    test_tz("Asia/Calcutta", JAN2, "+0530 +05:30 +05:30:00 +05:30 IST\n");
+    test_tz("Asia/Kolkata", JAN2, "+0530 +05:30 +05:30:00 +05:30 IST\n");
     test_tz("Europe/Berlin", JAN2, "+0100 +01:00 +01:00:00 +01 CET\n");
     test_tz(
         "Australia/Sydney",
