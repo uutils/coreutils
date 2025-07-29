@@ -19,19 +19,20 @@ const OPT_PHYSICAL: &str = "physical";
 
 fn physical_path() -> io::Result<PathBuf> {
     // std::env::current_dir() is a thin wrapper around libc::getcwd().
+    let path = env::current_dir()?;
 
     // On Unix, getcwd() must return the physical path:
     // https://pubs.opengroup.org/onlinepubs/9699919799/functions/getcwd.html
     #[cfg(unix)]
     {
-        env::current_dir()
+        Ok(path)
     }
 
     // On Windows we have to resolve it.
     // On other systems we also resolve it, just in case.
     #[cfg(not(unix))]
     {
-        env::current_dir().and_then(|path| path.canonicalize())
+        path.canonicalize()
     }
 }
 
