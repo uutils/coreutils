@@ -50,12 +50,12 @@ pub struct Config<'a> {
 }
 
 #[cfg(windows)]
-fn get_mode(_matches: &ArgMatches, _mode_had_minus_prefix: bool) -> Result<u32, String> {
+fn get_mode(_matches: &ArgMatches) -> Result<u32, String> {
     Ok(DEFAULT_PERM)
 }
 
 #[cfg(not(windows))]
-fn get_mode(matches: &ArgMatches, mode_had_minus_prefix: bool) -> Result<u32, String> {
+fn get_mode(matches: &ArgMatches) -> Result<u32, String> {
     // Not tested on Windows
     let mut new_mode = DEFAULT_PERM;
 
@@ -64,13 +64,7 @@ fn get_mode(matches: &ArgMatches, mode_had_minus_prefix: bool) -> Result<u32, St
             if mode.chars().any(|c| c.is_ascii_digit()) {
                 new_mode = mode::parse_numeric(new_mode, m, true)?;
             } else {
-                let cmode = if mode_had_minus_prefix {
-                    // clap parsing is finished, now put prefix back
-                    format!("-{mode}")
-                } else {
-                    mode.to_string()
-                };
-                new_mode = mode::parse_symbolic(new_mode, &cmode, mode::get_umask(), true)?;
+                new_mode = mode::parse_symbolic(new_mode, mode, mode::get_umask(), true)?;
             }
         }
         Ok(new_mode)
@@ -80,42 +74,8 @@ fn get_mode(matches: &ArgMatches, mode_had_minus_prefix: bool) -> Result<u32, St
     }
 }
 
-#[cfg(windows)]
-fn strip_minus_from_mode(_args: &mut [OsString]) -> UResult<bool> {
-    Ok(false)
-}
-
-// Iterate 'args' and delete the first occurrence
-// of a prefix '-' if it's associated with MODE
-// e.g. "chmod -v -xw -R FILE" -> "chmod -v xw -R FILE"
-#[cfg(not(windows))]
-fn strip_minus_from_mode(args: &mut Vec<OsString>) -> UResult<bool> {
-    for arg in args {
-        if arg == "--" {
-            break;
-        }
-        let bytes = uucore::os_str_as_bytes(arg)?;
-        if let Some(b'-') = bytes.first() {
-            if let Some(
-                b'r' | b'w' | b'x' | b'X' | b's' | b't' | b'u' | b'g' | b'o' | b'0'..=b'7',
-            ) = bytes.get(1)
-            {
-                *arg = uucore::os_str_from_bytes(&bytes[1..])?.into_owned();
-                return Ok(true);
-            }
-        }
-    }
-    Ok(false)
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut args: Vec<OsString> = args.collect();
-
-    // Before we can parse 'args' with clap (and previously getopts),
-    // a possible MODE prefix '-' needs to be removed (e.g. "chmod -x FILE").
-    let mode_had_minus_prefix = strip_minus_from_mode(&mut args)?;
-
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
@@ -133,7 +93,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let set_selinux_context = matches.get_flag(options::SELINUX);
     let context = matches.get_one::<String>(options::CONTEXT);
 
-    match get_mode(&matches, mode_had_minus_prefix) {
+    match get_mode(&matches) {
         Ok(mode) => {
             let config = Config {
                 recursive,
@@ -158,7 +118,9 @@ pub fn uu_app() -> Command {
             Arg::new(options::MODE)
                 .short('m')
                 .long(options::MODE)
-                .help(translate!("mkdir-help-mode")),
+                .help(translate!("mkdir-help-mode"))
+                .allow_hyphen_values(true)
+                .num_args(1),
         )
         .arg(
             Arg::new(options::PARENTS)
