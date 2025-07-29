@@ -1094,10 +1094,7 @@ fn rename_file_fallback(
 }
 
 fn is_empty_dir(path: &Path) -> bool {
-    match fs::read_dir(path) {
-        Ok(contents) => contents.peekable().peek().is_none(),
-        Err(_e) => false,
-    }
+    fs::read_dir(path).is_ok_and(|mut contents| contents.next().is_none())
 }
 
 /// Checks if a file can be deleted by attempting to open it with delete permissions.
