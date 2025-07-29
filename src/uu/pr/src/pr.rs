@@ -20,7 +20,7 @@ use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::format_usage;
 use uucore::translate;
-use uucore::time::{FormatSystemTimeFallback, format_system_time};
+use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
 
 const TAB: char = '\t';
 const LINES_PER_PAGE: usize = 66;
@@ -33,7 +33,6 @@ const DEFAULT_COLUMN_WIDTH: usize = 72;
 const DEFAULT_COLUMN_WIDTH_WITH_S_OPTION: usize = 512;
 const DEFAULT_COLUMN_SEPARATOR: &char = &TAB;
 const FF: u8 = 0x0C_u8;
-const DATE_TIME_FORMAT: &str = "%b %d %H:%M %Y";
 
 mod options {
     pub const HEADER: &str = "header";
@@ -402,6 +401,20 @@ fn parse_usize(matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>
         .map(from_parse_error_to_pr_error)
 }
 
+fn get_date_format() -> String {
+    // Replicate behavior from GNU manual.
+    if std::env::var("POSIXLY_CORRECT").is_ok()
+        // TODO: This needs to be moved to uucore and handled by icu?
+        && (std::env::var("LC_TIME").unwrap_or_default() == "POSIX"
+            || std::env::var("LC_ALL").unwrap_or_default() == "POSIX")
+    {
+        "%b %e %H:%M %Y"
+    } else {
+        format::LONG_ISO
+    }
+    .to_string()
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn build_options(
     matches: &ArgMatches,
@@ -501,7 +514,7 @@ fn build_options(
             format_system_time(
                 &mut v,
                 time,
-                DATE_TIME_FORMAT,
+                &get_date_format(),
                 FormatSystemTimeFallback::Integer,
             )
             .ok()
