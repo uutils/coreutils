@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime
 
+use std::collections::HashMap;
 use std::iter;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
@@ -20,10 +21,7 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use std::{
-    collections::{HashMap, HashSet},
-    io::IsTerminal,
-};
+use std::{collections::HashSet, io::IsTerminal};
 
 use ansi_width::ansi_width;
 use clap::{
@@ -58,7 +56,8 @@ use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 ))]
 use uucore::libc::{dev_t, major, minor};
 use uucore::line_ending::LineEnding;
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
+
 use uucore::quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name};
 use uucore::{
     display::Quotable,
@@ -171,39 +170,39 @@ const DEFAULT_FILE_SIZE_BLOCK_SIZE: u64 = 1;
 
 #[derive(Error, Debug)]
 enum LsError {
-    #[error("{}", get_message_with_args("ls-error-invalid-line-width", HashMap::from([("width".to_string(), format!("'{_0}'"))])))]
+    #[error("{}", translate!("ls-error-invalid-line-width", "width" => format!("'{_0}'")))]
     InvalidLineWidth(String),
 
-    #[error("{}", get_message_with_args("ls-error-general-io", HashMap::from([("error".to_string(), _0.to_string())])))]
+    #[error("{}", translate!("ls-error-general-io", "error" => _0))]
     IOError(#[from] std::io::Error),
 
     #[error("{}", match .1.kind() {
-        ErrorKind::NotFound => get_message_with_args("ls-error-cannot-access-no-such-file", HashMap::from([("path".to_string(), .0.to_string_lossy().to_string())])),
+        ErrorKind::NotFound => translate!("ls-error-cannot-access-no-such-file", "path" => .0.to_string_lossy()),
         ErrorKind::PermissionDenied => match .1.raw_os_error().unwrap_or(1) {
-            1 => get_message_with_args("ls-error-cannot-access-operation-not-permitted", HashMap::from([("path".to_string(), .0.to_string_lossy().to_string())])),
+            1 => translate!("ls-error-cannot-access-operation-not-permitted", "path" => .0.to_string_lossy()),
             _ => if .0.is_dir() {
-                get_message_with_args("ls-error-cannot-open-directory-permission-denied", HashMap::from([("path".to_string(), .0.to_string_lossy().to_string())]))
+                translate!("ls-error-cannot-open-directory-permission-denied", "path" => .0.to_string_lossy())
             } else {
-                get_message_with_args("ls-error-cannot-open-file-permission-denied", HashMap::from([("path".to_string(), .0.to_string_lossy().to_string())]))
+                translate!("ls-error-cannot-open-file-permission-denied", "path" => .0.to_string_lossy())
             },
         },
         _ => match .1.raw_os_error().unwrap_or(1) {
-            9 => get_message_with_args("ls-error-cannot-open-directory-bad-descriptor", HashMap::from([("path".to_string(), .0.to_string_lossy().to_string())])),
-            _ => get_message_with_args("ls-error-unknown-io-error", HashMap::from([("path".to_string(), .0.to_string_lossy().to_string()), ("error".to_string(), format!("{:?}", .1))])),
+            9 => translate!("ls-error-cannot-open-directory-bad-descriptor", "path" => .0.to_string_lossy()),
+            _ => translate!("ls-error-unknown-io-error", "path" => .0.to_string_lossy(), "error" => format!("{:?}", .1)),
         },
     })]
     IOErrorContext(PathBuf, std::io::Error, bool),
 
-    #[error("{}", get_message_with_args("ls-error-invalid-block-size", HashMap::from([("size".to_string(), format!("'{_0}'"))])))]
+    #[error("{}", translate!("ls-error-invalid-block-size", "size" => format!("'{_0}'")))]
     BlockSizeParseError(String),
 
-    #[error("{}", get_message("ls-error-dired-and-zero-incompatible"))]
+    #[error("{}", translate!("ls-error-dired-and-zero-incompatible"))]
     DiredAndZeroAreIncompatible,
 
-    #[error("{}", get_message_with_args("ls-error-not-listing-already-listed", HashMap::from([("path".to_string(), .0.to_string_lossy().to_string())])))]
+    #[error("{}", translate!("ls-error-not-listing-already-listed", "path" => .0.to_string_lossy()))]
     AlreadyListedError(PathBuf),
 
-    #[error("{}", get_message_with_args("ls-error-invalid-time-style", HashMap::from([("style".to_string(), .0.quote().to_string()), ("values".to_string(), format!("{:?}", .1))])))]
+    #[error("{}", translate!("ls-error-invalid-time-style", "style" => .0.quote(), "values" => format!("{:?}", .1)))]
     TimeStyleParseError(String, Vec<String>),
 }
 
@@ -599,16 +598,7 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> Quot
                 Some(qs) => return qs,
                 None => eprintln!(
                     "{}",
-                    get_message_with_args(
-                        "ls-invalid-quoting-style",
-                        HashMap::from([
-                            (
-                                "program".to_string(),
-                                std::env::args().next().unwrap_or_else(|| "ls".to_string())
-                            ),
-                            ("style".to_string(), style.clone())
-                        ])
-                    )
+                    translate!("ls-invalid-quoting-style", "program" => std::env::args().next().unwrap_or_else(|| "ls".to_string()), "style" => style.clone())
                 ),
             }
         }
@@ -682,10 +672,7 @@ fn parse_width(width_match: Option<&String>) -> Result<u16, LsError> {
             None => {
                 show_error!(
                     "{}",
-                    get_message_with_args(
-                        "ls-invalid-columns-width",
-                        HashMap::from([("width".to_string(), columns.quote().to_string())])
-                    )
+                    translate!("ls-invalid-columns-width", "width" => columns.quote())
                 );
                 DEFAULT_TERM_WIDTH
             }
@@ -905,10 +892,7 @@ impl Config {
                 }
                 Err(_) => show_warning!(
                     "{}",
-                    get_message_with_args(
-                        "ls-invalid-ignore-pattern",
-                        HashMap::from([("pattern".to_string(), pattern.quote().to_string())])
-                    )
+                    translate!("ls-invalid-ignore-pattern", "pattern" => pattern.quote())
                 ),
             }
         }
@@ -925,10 +909,7 @@ impl Config {
                     }
                     Err(_) => show_warning!(
                         "{}",
-                        get_message_with_args(
-                            "ls-invalid-hide-pattern",
-                            HashMap::from([("pattern".to_string(), pattern.quote().to_string())])
-                        )
+                        translate!("ls-invalid-hide-pattern", "pattern" => pattern.quote())
                     ),
                 }
             }
@@ -1125,22 +1106,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("ls-usage")))
-        .about(get_message("ls-about"))
+        .override_usage(format_usage(&translate!("ls-usage")))
+        .about(translate!("ls-about"))
         .infer_long_args(true)
         .disable_help_flag(true)
         .args_override_self(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help(get_message("ls-help-print-help"))
+                .help(translate!("ls-help-print-help"))
                 .action(ArgAction::Help),
         )
         // Format arguments
         .arg(
             Arg::new(options::FORMAT)
                 .long(options::FORMAT)
-                .help(get_message("ls-help-set-display-format"))
+                .help(translate!("ls-help-set-display-format"))
                 .value_parser(ShortcutValueParser::new([
                     "long",
                     "verbose",
@@ -1165,7 +1146,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::format::COLUMNS)
                 .short('C')
-                .help(get_message("ls-help-display-files-columns"))
+                .help(translate!("ls-help-display-files-columns"))
                 .overrides_with_all([
                     options::FORMAT,
                     options::format::COLUMNS,
@@ -1179,7 +1160,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::format::LONG)
                 .short('l')
                 .long(options::format::LONG)
-                .help(get_message("ls-help-display-detailed-info"))
+                .help(translate!("ls-help-display-detailed-info"))
                 .overrides_with_all([
                     options::FORMAT,
                     options::format::COLUMNS,
@@ -1192,7 +1173,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::format::ACROSS)
                 .short('x')
-                .help(get_message("ls-help-list-entries-rows"))
+                .help(translate!("ls-help-list-entries-rows"))
                 .overrides_with_all([
                     options::FORMAT,
                     options::format::COLUMNS,
@@ -1208,12 +1189,12 @@ pub fn uu_app() -> Command {
                 .long(options::format::TAB_SIZE)
                 .env("TABSIZE")
                 .value_name("COLS")
-                .help(get_message("ls-help-assume-tab-stops")),
+                .help(translate!("ls-help-assume-tab-stops")),
         )
         .arg(
             Arg::new(options::format::COMMAS)
                 .short('m')
-                .help(get_message("ls-help-list-entries-commas"))
+                .help(translate!("ls-help-list-entries-commas"))
                 .overrides_with_all([
                     options::FORMAT,
                     options::format::COLUMNS,
@@ -1227,21 +1208,21 @@ pub fn uu_app() -> Command {
             Arg::new(options::ZERO)
                 .long(options::ZERO)
                 .overrides_with(options::ZERO)
-                .help(get_message("ls-help-list-entries-nul"))
+                .help(translate!("ls-help-list-entries-nul"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DIRED)
                 .long(options::DIRED)
                 .short('D')
-                .help(get_message("ls-help-generate-dired-output"))
+                .help(translate!("ls-help-generate-dired-output"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::HYPERLINK),
         )
         .arg(
             Arg::new(options::HYPERLINK)
                 .long(options::HYPERLINK)
-                .help(get_message("ls-help-hyperlink-filenames"))
+                .help(translate!("ls-help-hyperlink-filenames"))
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("always").alias("yes").alias("force"),
                     PossibleValue::new("auto").alias("tty").alias("if-tty"),
@@ -1263,33 +1244,33 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::format::ONE_LINE)
                 .short('1')
-                .help(get_message("ls-help-list-one-file-per-line"))
+                .help(translate!("ls-help-list-one-file-per-line"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::format::LONG_NO_GROUP)
                 .short('o')
-                .help(get_message("ls-help-long-format-no-group"))
+                .help(translate!("ls-help-long-format-no-group"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::format::LONG_NO_OWNER)
                 .short('g')
-                .help(get_message("ls-help-long-no-owner"))
+                .help(translate!("ls-help-long-no-owner"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::format::LONG_NUMERIC_UID_GID)
                 .short('n')
                 .long(options::format::LONG_NUMERIC_UID_GID)
-                .help(get_message("ls-help-long-numeric-uid-gid"))
+                .help(translate!("ls-help-long-numeric-uid-gid"))
                 .action(ArgAction::SetTrue),
         )
         // Quoting style
         .arg(
             Arg::new(QUOTING_STYLE)
                 .long(QUOTING_STYLE)
-                .help(get_message("ls-help-set-quoting-style"))
+                .help(translate!("ls-help-set-quoting-style"))
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("literal"),
                     PossibleValue::new("shell"),
@@ -1311,7 +1292,7 @@ pub fn uu_app() -> Command {
                 .short('N')
                 .long(options::quoting::LITERAL)
                 .alias("l")
-                .help(get_message("ls-help-literal-quoting-style"))
+                .help(translate!("ls-help-literal-quoting-style"))
                 .overrides_with_all([
                     QUOTING_STYLE,
                     options::quoting::LITERAL,
@@ -1324,7 +1305,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::quoting::ESCAPE)
                 .short('b')
                 .long(options::quoting::ESCAPE)
-                .help(get_message("ls-help-escape-quoting-style"))
+                .help(translate!("ls-help-escape-quoting-style"))
                 .overrides_with_all([
                     QUOTING_STYLE,
                     options::quoting::LITERAL,
@@ -1337,7 +1318,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::quoting::C)
                 .short('Q')
                 .long(options::quoting::C)
-                .help(get_message("ls-help-c-quoting-style"))
+                .help(translate!("ls-help-c-quoting-style"))
                 .overrides_with_all([
                     QUOTING_STYLE,
                     options::quoting::LITERAL,
@@ -1351,14 +1332,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::HIDE_CONTROL_CHARS)
                 .short('q')
                 .long(options::HIDE_CONTROL_CHARS)
-                .help(get_message("ls-help-replace-control-chars"))
+                .help(translate!("ls-help-replace-control-chars"))
                 .overrides_with_all([options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS])
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHOW_CONTROL_CHARS)
                 .long(options::SHOW_CONTROL_CHARS)
-                .help(get_message("ls-help-show-control-chars"))
+                .help(translate!("ls-help-show-control-chars"))
                 .overrides_with_all([options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS])
                 .action(ArgAction::SetTrue),
         )
@@ -1366,7 +1347,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::TIME)
                 .long(options::TIME)
-                .help(get_message("ls-help-show-time-field"))
+                .help(translate!("ls-help-show-time-field"))
                 .value_name("field")
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("atime").alias("access").alias("use"),
@@ -1381,14 +1362,14 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::time::CHANGE)
                 .short('c')
-                .help(get_message("ls-help-time-change"))
+                .help(translate!("ls-help-time-change"))
                 .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::time::ACCESS)
                 .short('u')
-                .help(get_message("ls-help-time-access"))
+                .help(translate!("ls-help-time-access"))
                 .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE])
                 .action(ArgAction::SetTrue),
         )
@@ -1398,7 +1379,7 @@ pub fn uu_app() -> Command {
                 .long(options::HIDE)
                 .action(ArgAction::Append)
                 .value_name("PATTERN")
-                .help(get_message("ls-help-hide-pattern")),
+                .help(translate!("ls-help-hide-pattern")),
         )
         .arg(
             Arg::new(options::IGNORE)
@@ -1406,20 +1387,20 @@ pub fn uu_app() -> Command {
                 .long(options::IGNORE)
                 .action(ArgAction::Append)
                 .value_name("PATTERN")
-                .help(get_message("ls-help-ignore-pattern")),
+                .help(translate!("ls-help-ignore-pattern")),
         )
         .arg(
             Arg::new(options::IGNORE_BACKUPS)
                 .short('B')
                 .long(options::IGNORE_BACKUPS)
-                .help(get_message("ls-help-ignore-backups"))
+                .help(translate!("ls-help-ignore-backups"))
                 .action(ArgAction::SetTrue),
         )
         // Sort arguments
         .arg(
             Arg::new(options::SORT)
                 .long(options::SORT)
-                .help(get_message("ls-help-sort-by-field"))
+                .help(translate!("ls-help-sort-by-field"))
                 .value_name("field")
                 .value_parser(ShortcutValueParser::new([
                     "name",
@@ -1443,7 +1424,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::sort::SIZE)
                 .short('S')
-                .help(get_message("ls-help-sort-by-size"))
+                .help(translate!("ls-help-sort-by-size"))
                 .overrides_with_all([
                     options::SORT,
                     options::sort::SIZE,
@@ -1457,7 +1438,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::sort::TIME)
                 .short('t')
-                .help(get_message("ls-help-sort-by-time"))
+                .help(translate!("ls-help-sort-by-time"))
                 .overrides_with_all([
                     options::SORT,
                     options::sort::SIZE,
@@ -1471,7 +1452,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::sort::VERSION)
                 .short('v')
-                .help(get_message("ls-help-sort-by-version"))
+                .help(translate!("ls-help-sort-by-version"))
                 .overrides_with_all([
                     options::SORT,
                     options::sort::SIZE,
@@ -1485,7 +1466,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::sort::EXTENSION)
                 .short('X')
-                .help(get_message("ls-help-sort-by-extension"))
+                .help(translate!("ls-help-sort-by-extension"))
                 .overrides_with_all([
                     options::SORT,
                     options::sort::SIZE,
@@ -1499,7 +1480,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::sort::NONE)
                 .short('U')
-                .help(get_message("ls-help-sort-none"))
+                .help(translate!("ls-help-sort-none"))
                 .overrides_with_all([
                     options::SORT,
                     options::sort::SIZE,
@@ -1515,7 +1496,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::dereference::ALL)
                 .short('L')
                 .long(options::dereference::ALL)
-                .help(get_message("ls-help-dereference-all"))
+                .help(translate!("ls-help-dereference-all"))
                 .overrides_with_all([
                     options::dereference::ALL,
                     options::dereference::DIR_ARGS,
@@ -1526,7 +1507,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::dereference::DIR_ARGS)
                 .long(options::dereference::DIR_ARGS)
-                .help(get_message("ls-help-dereference-dir-args"))
+                .help(translate!("ls-help-dereference-dir-args"))
                 .overrides_with_all([
                     options::dereference::ALL,
                     options::dereference::DIR_ARGS,
@@ -1538,7 +1519,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::dereference::ARGS)
                 .short('H')
                 .long(options::dereference::ARGS)
-                .help(get_message("ls-help-dereference-args"))
+                .help(translate!("ls-help-dereference-args"))
                 .overrides_with_all([
                     options::dereference::ALL,
                     options::dereference::DIR_ARGS,
@@ -1551,13 +1532,13 @@ pub fn uu_app() -> Command {
             Arg::new(options::NO_GROUP)
                 .long(options::NO_GROUP)
                 .short('G')
-                .help(get_message("ls-help-no-group"))
+                .help(translate!("ls-help-no-group"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::AUTHOR)
                 .long(options::AUTHOR)
-                .help(get_message("ls-help-author"))
+                .help(translate!("ls-help-author"))
                 .action(ArgAction::SetTrue),
         )
         // Other Flags
@@ -1567,7 +1548,7 @@ pub fn uu_app() -> Command {
                 .long(options::files::ALL)
                 // Overrides -A (as the order matters)
                 .overrides_with_all([options::files::ALL, options::files::ALMOST_ALL])
-                .help(get_message("ls-help-all-files"))
+                .help(translate!("ls-help-all-files"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -1576,21 +1557,21 @@ pub fn uu_app() -> Command {
                 .long(options::files::ALMOST_ALL)
                 // Overrides -a (as the order matters)
                 .overrides_with_all([options::files::ALL, options::files::ALMOST_ALL])
-                .help(get_message("ls-help-almost-all"))
+                .help(translate!("ls-help-almost-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DIRECTORY)
                 .short('d')
                 .long(options::DIRECTORY)
-                .help(get_message("ls-help-directory"))
+                .help(translate!("ls-help-directory"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::size::HUMAN_READABLE)
                 .short('h')
                 .long(options::size::HUMAN_READABLE)
-                .help(get_message("ls-help-human-readable"))
+                .help(translate!("ls-help-human-readable"))
                 .overrides_with_all([options::size::BLOCK_SIZE, options::size::SI])
                 .action(ArgAction::SetTrue),
         )
@@ -1598,13 +1579,13 @@ pub fn uu_app() -> Command {
             Arg::new(options::size::KIBIBYTES)
                 .short('k')
                 .long(options::size::KIBIBYTES)
-                .help(get_message("ls-help-kibibytes"))
+                .help(translate!("ls-help-kibibytes"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::size::SI)
                 .long(options::size::SI)
-                .help(get_message("ls-help-si"))
+                .help(translate!("ls-help-si"))
                 .overrides_with_all([options::size::BLOCK_SIZE, options::size::HUMAN_READABLE])
                 .action(ArgAction::SetTrue),
         )
@@ -1613,48 +1594,48 @@ pub fn uu_app() -> Command {
                 .long(options::size::BLOCK_SIZE)
                 .require_equals(true)
                 .value_name("BLOCK_SIZE")
-                .help(get_message("ls-help-block-size"))
+                .help(translate!("ls-help-block-size"))
                 .overrides_with_all([options::size::SI, options::size::HUMAN_READABLE]),
         )
         .arg(
             Arg::new(options::INODE)
                 .short('i')
                 .long(options::INODE)
-                .help(get_message("ls-help-print-inode"))
+                .help(translate!("ls-help-print-inode"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::REVERSE)
                 .short('r')
                 .long(options::REVERSE)
-                .help(get_message("ls-help-reverse-sort"))
+                .help(translate!("ls-help-reverse-sort"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::RECURSIVE)
                 .short('R')
                 .long(options::RECURSIVE)
-                .help(get_message("ls-help-recursive"))
+                .help(translate!("ls-help-recursive"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::WIDTH)
                 .long(options::WIDTH)
                 .short('w')
-                .help(get_message("ls-help-terminal-width"))
+                .help(translate!("ls-help-terminal-width"))
                 .value_name("COLS"),
         )
         .arg(
             Arg::new(options::size::ALLOCATION_SIZE)
                 .short('s')
                 .long(options::size::ALLOCATION_SIZE)
-                .help(get_message("ls-help-allocation-size"))
+                .help(translate!("ls-help-allocation-size"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COLOR)
                 .long(options::COLOR)
-                .help(get_message("ls-help-color-output"))
+                .help(translate!("ls-help-color-output"))
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("always").alias("yes").alias("force"),
                     PossibleValue::new("auto").alias("tty").alias("if-tty"),
@@ -1666,7 +1647,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::INDICATOR_STYLE)
                 .long(options::INDICATOR_STYLE)
-                .help(get_message("ls-help-indicator-style"))
+                .help(translate!("ls-help-indicator-style"))
                 .value_parser(ShortcutValueParser::new([
                     "none",
                     "slash",
@@ -1689,7 +1670,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::indicator_style::CLASSIFY)
                 .short('F')
                 .long(options::indicator_style::CLASSIFY)
-                .help(get_message("ls-help-classify"))
+                .help(translate!("ls-help-classify"))
                 .value_name("when")
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("always").alias("yes").alias("force"),
@@ -1709,7 +1690,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::indicator_style::FILE_TYPE)
                 .long(options::indicator_style::FILE_TYPE)
-                .help(get_message("ls-help-file-type"))
+                .help(translate!("ls-help-file-type"))
                 .overrides_with_all([
                     options::indicator_style::FILE_TYPE,
                     options::indicator_style::SLASH,
@@ -1721,7 +1702,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::indicator_style::SLASH)
                 .short('p')
-                .help(get_message("ls-help-slash-directories"))
+                .help(translate!("ls-help-slash-directories"))
                 .overrides_with_all([
                     options::indicator_style::FILE_TYPE,
                     options::indicator_style::SLASH,
@@ -1734,7 +1715,7 @@ pub fn uu_app() -> Command {
             //This still needs support for posix-*
             Arg::new(options::TIME_STYLE)
                 .long(options::TIME_STYLE)
-                .help(get_message("ls-help-time-style"))
+                .help(translate!("ls-help-time-style"))
                 .value_name("TIME_STYLE")
                 .env("TIME_STYLE")
                 .value_parser(NonEmptyStringValueParser::new())
@@ -1744,20 +1725,20 @@ pub fn uu_app() -> Command {
             Arg::new(options::FULL_TIME)
                 .long(options::FULL_TIME)
                 .overrides_with(options::FULL_TIME)
-                .help(get_message("ls-help-full-time"))
+                .help(translate!("ls-help-full-time"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CONTEXT)
                 .short('Z')
                 .long(options::CONTEXT)
-                .help(get_message("ls-help-context"))
+                .help(translate!("ls-help-context"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::GROUP_DIRECTORIES_FIRST)
                 .long(options::GROUP_DIRECTORIES_FIRST)
-                .help(get_message("ls-help-group-directories-first"))
+                .help(translate!("ls-help-group-directories-first"))
                 .action(ArgAction::SetTrue),
         )
         // Positional arguments
@@ -1767,7 +1748,7 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::AnyPath)
                 .value_parser(ValueParser::os_string()),
         )
-        .after_help(get_message("ls-after-help"))
+        .after_help(translate!("ls-after-help"))
 }
 
 /// Represents a Path along with it's associated data.
@@ -2382,10 +2363,7 @@ fn return_total(
     }
     Ok(format!(
         "{}{}",
-        get_message_with_args(
-            "ls-total",
-            HashMap::from([("size".to_string(), display_size(total_size, config))])
-        ),
+        translate!("ls-total", "size" => display_size(total_size, config)),
         config.line_ending
     ))
 }

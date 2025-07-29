@@ -4,94 +4,66 @@
 // file that was distributed with this source code.
 // spell-checker:ignore NEWROOT Userspec userspec
 //! Errors returned by chroot.
-use std::collections::HashMap;
 use std::io::Error;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
 use uucore::libc;
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 /// Errors that can happen while executing chroot.
 #[derive(Debug, Error)]
 pub enum ChrootError {
     /// Failed to enter the specified directory.
-    #[error("{}", get_message_with_args("chroot-error-cannot-enter", HashMap::from([
-        ("dir".to_string(), _0.quote().to_string()),
-        ("err".to_string(), _1.to_string())
-    ])))]
+    #[error("{}", translate!("chroot-error-cannot-enter", "dir" => _0.quote(), "err" => _1))]
     CannotEnter(String, #[source] Error),
 
     /// Failed to execute the specified command.
-    #[error("{}", get_message_with_args("chroot-error-command-failed", HashMap::from([
-        ("cmd".to_string(), _0.to_string().quote().to_string()),
-        ("err".to_string(), _1.to_string())
-    ])))]
+    #[error("{}", translate!("chroot-error-command-failed", "cmd" => _0.quote(), "err" => _1))]
     CommandFailed(String, #[source] Error),
 
     /// Failed to find the specified command.
-    #[error("{}", get_message_with_args("chroot-error-command-not-found", HashMap::from([
-        ("cmd".to_string(), _0.to_string().quote().to_string()),
-        ("err".to_string(), _1.to_string())
-    ])))]
+    #[error("{}", translate!("chroot-error-command-not-found", "cmd" => _0.quote(), "err" => _1))]
     CommandNotFound(String, #[source] Error),
 
-    #[error("{}", get_message("chroot-error-groups-parsing-failed"))]
+    #[error("{}", translate!("chroot-error-groups-parsing-failed"))]
     GroupsParsingFailed,
 
-    #[error("{}", get_message_with_args("chroot-error-invalid-group", HashMap::from([
-        ("group".to_string(), _0.quote().to_string())
-    ])))]
+    #[error("{}", translate!("chroot-error-invalid-group", "group" => _0.quote()))]
     InvalidGroup(String),
 
-    #[error("{}", get_message_with_args("chroot-error-invalid-group-list", HashMap::from([
-        ("list".to_string(), _0.quote().to_string())
-    ])))]
+    #[error("{}", translate!("chroot-error-invalid-group-list", "list" => _0.quote()))]
     InvalidGroupList(String),
 
     /// The new root directory was not given.
-    #[error("{}", get_message_with_args("chroot-error-missing-newroot", HashMap::from([
-        ("util_name".to_string(), uucore::execution_phrase().to_string())
-    ])))]
+    #[error("{}", translate!("chroot-error-missing-newroot", "util_name" => uucore::execution_phrase()))]
     MissingNewRoot,
 
-    #[error("{}", get_message_with_args("chroot-error-no-group-specified", HashMap::from([
-        ("uid".to_string(), _0.to_string())
-    ])))]
+    #[error("{}", translate!("chroot-error-no-group-specified", "uid" => _0))]
     NoGroupSpecified(libc::uid_t),
 
     /// Failed to find the specified user.
-    #[error("{}", get_message("chroot-error-no-such-user"))]
+    #[error("{}", translate!("chroot-error-no-such-user"))]
     NoSuchUser,
 
     /// Failed to find the specified group.
-    #[error("{}", get_message("chroot-error-no-such-group"))]
+    #[error("{}", translate!("chroot-error-no-such-group"))]
     NoSuchGroup,
 
     /// The given directory does not exist.
-    #[error("{}", get_message_with_args("chroot-error-no-such-directory", HashMap::from([
-        ("dir".to_string(), _0.quote().to_string())
-    ])))]
+    #[error("{}", translate!("chroot-error-no-such-directory", "dir" => _0.quote()))]
     NoSuchDirectory(String),
 
     /// The call to `setgid()` failed.
-    #[error("{}", get_message_with_args("chroot-error-set-gid-failed", HashMap::from([
-        ("gid".to_string(), _0.to_string()),
-        ("err".to_string(), _1.to_string())
-    ])))]
+    #[error("{}", translate!("chroot-error-set-gid-failed", "gid" => _0, "err" => _1))]
     SetGidFailed(String, #[source] Error),
 
     /// The call to `setgroups()` failed.
-    #[error("{}", get_message_with_args("chroot-error-set-groups-failed", HashMap::from([
-        ("err".to_string(), _0.to_string())
-    ])))]
+    #[error("{}", translate!("chroot-error-set-groups-failed", "err" => _0))]
     SetGroupsFailed(Error),
 
     /// The call to `setuid()` failed.
-    #[error("{}", get_message_with_args("chroot-error-set-user-failed", HashMap::from([
-        ("user".to_string(), _0.maybe_quote().to_string()),
-        ("err".to_string(), _1.to_string())
-    ])))]
+    #[error("{}", translate!("chroot-error-set-user-failed", "user" => _0.maybe_quote(), "err" => _1))]
     SetUserFailed(String, #[source] Error),
 }
 

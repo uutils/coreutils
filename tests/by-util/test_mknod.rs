@@ -5,8 +5,11 @@
 
 // spell-checker:ignore nconfined
 
+use std::os::unix::fs::PermissionsExt;
+
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
+use uutests::util::run_ucmd_as_root;
 use uutests::util_name;
 
 #[test]
@@ -118,6 +121,35 @@ fn test_mknod_invalid_mode() {
         .no_stdout()
         .code_is(1)
         .stderr_contains("invalid mode");
+}
+
+#[test]
+fn test_mknod_mode_permissions() {
+    for test_mode in [0o0666, 0o0000, 0o0444, 0o0004, 0o0040, 0o0400, 0o0644] {
+        let ts = TestScenario::new(util_name!());
+        let filename = format!("null_file-{test_mode:04o}");
+
+        if let Ok(result) = run_ucmd_as_root(
+            &ts,
+            &[
+                "--mode",
+                &format!("{test_mode:04o}"),
+                &filename,
+                "c",
+                "1",
+                "3",
+            ],
+        ) {
+            result.success().no_stdout();
+        } else {
+            print!("Test skipped; `mknod c 1 3` for null char dev requires root user");
+            break;
+        }
+
+        assert!(ts.fixtures.is_char_device(&filename));
+        let permissions = ts.fixtures.metadata(&filename).permissions();
+        assert_eq!(test_mode, PermissionsExt::mode(&permissions) & 0o777);
+    }
 }
 
 #[test]

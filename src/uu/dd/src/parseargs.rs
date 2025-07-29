@@ -9,53 +9,43 @@ mod unit_tests;
 
 use super::{ConversionMode, IConvFlags, IFlags, Num, OConvFlags, OFlags, Settings, StatusLevel};
 use crate::conversion_tables::ConversionTable;
-use std::collections::HashMap;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
-use uucore::locale::{get_message, get_message_with_args};
 use uucore::parser::parse_size::{ParseSizeError, Parser as SizeParser};
 use uucore::show_warning;
+use uucore::translate;
 
 /// Parser Errors describe errors with parser input
 #[derive(Debug, PartialEq, Eq, Error)]
 pub enum ParseError {
-    #[error("{}", get_message_with_args("dd-error-unrecognized-operand",
-        HashMap::from([("operand".to_string(), .0.clone())])))]
+    #[error("{}", translate!("dd-error-unrecognized-operand", "operand" => .0.clone()))]
     UnrecognizedOperand(String),
-    #[error("{}", get_message("dd-error-multiple-format-table"))]
+    #[error("{}", translate!("dd-error-multiple-format-table"))]
     MultipleFmtTable,
-    #[error("{}", get_message("dd-error-multiple-case"))]
+    #[error("{}", translate!("dd-error-multiple-case"))]
     MultipleUCaseLCase,
-    #[error("{}", get_message("dd-error-multiple-block"))]
+    #[error("{}", translate!("dd-error-multiple-block"))]
     MultipleBlockUnblock,
-    #[error("{}", get_message("dd-error-multiple-excl"))]
+    #[error("{}", translate!("dd-error-multiple-excl"))]
     MultipleExclNoCreate,
-    #[error("{}", get_message_with_args("dd-error-invalid-flag",
-        HashMap::from([("flag".to_string(), .0.clone()),("cmd".to_string(),  uucore::execution_phrase().to_string())])))]
+    #[error("{}", translate!("dd-error-invalid-flag", "flag" => .0.clone(), "cmd" => uucore::execution_phrase()))]
     FlagNoMatch(String),
-    #[error("{}", get_message_with_args("dd-error-conv-flag-no-match",
-        HashMap::from([("flag".to_string(), .0.clone())])))]
+    #[error("{}", translate!("dd-error-conv-flag-no-match", "flag" => .0.clone()))]
     ConvFlagNoMatch(String),
-    #[error("{}", get_message_with_args("dd-error-multiplier-parse-failure",
-        HashMap::from([("input".to_string(), .0.clone())])))]
+    #[error("{}", translate!("dd-error-multiplier-parse-failure", "input" => .0.clone()))]
     MultiplierStringParseFailure(String),
-    #[error("{}", get_message_with_args("dd-error-multiplier-overflow",
-        HashMap::from([("input".to_string(), .0.clone())])))]
+    #[error("{}", translate!("dd-error-multiplier-overflow", "input" => .0.clone()))]
     MultiplierStringOverflow(String),
-    #[error("{}", get_message("dd-error-block-without-cbs"))]
+    #[error("{}", translate!("dd-error-block-without-cbs"))]
     BlockUnblockWithoutCBS,
-    #[error("{}", get_message_with_args("dd-error-status-not-recognized",
-        HashMap::from([("level".to_string(), .0.clone())])))]
+    #[error("{}", translate!("dd-error-status-not-recognized", "level" => .0.clone()))]
     StatusLevelNotRecognized(String),
-    #[error("{}", get_message_with_args("dd-error-unimplemented",
-        HashMap::from([("feature".to_string(), .0.clone())])))]
+    #[error("{}", translate!("dd-error-unimplemented", "feature" => .0.clone()))]
     Unimplemented(String),
-    #[error("{}", get_message_with_args("dd-error-bs-out-of-range",
-        HashMap::from([("param".to_string(), .0.clone())])))]
+    #[error("{}", translate!("dd-error-bs-out-of-range", "param" => .0.clone()))]
     BsOutOfRange(String),
-    #[error("{}", get_message_with_args("dd-error-invalid-number",
-        HashMap::from([("input".to_string(), .0.clone())])))]
+    #[error("{}", translate!("dd-error-invalid-number", "input" => .0.clone()))]
     InvalidNumber(String),
 }
 
@@ -436,13 +426,7 @@ impl UError for ParseError {
 fn show_zero_multiplier_warning() {
     show_warning!(
         "{}",
-        get_message_with_args(
-            "dd-warning-zero-multiplier",
-            HashMap::from([
-                ("zero".to_string(), "0x".quote().to_string()),
-                ("alternative".to_string(), "00x".quote().to_string())
-            ])
-        )
+        translate!("dd-warning-zero-multiplier", "zero" => "0x".quote(), "alternative" => "00x".quote())
     );
 }
 

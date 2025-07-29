@@ -7,7 +7,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use uucore::format_usage;
-use uucore::locale::get_message;
+use uucore::translate;
 
 mod platform;
 
@@ -30,69 +30,69 @@ use platform::uumain;
 
 pub fn uu_app() -> Command {
     #[cfg(not(target_env = "musl"))]
-    let about = get_message("pinky-about");
+    let about = translate!("pinky-about");
     #[cfg(target_env = "musl")]
-    let about = get_message("pinky-about") + &get_message("pinky-about-musl-warning");
+    let about = translate!("pinky-about") + &translate!("pinky-about-musl-warning");
 
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .about(about)
-        .override_usage(format_usage(&get_message("pinky-usage")))
+        .override_usage(format_usage(&translate!("pinky-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(
             Arg::new(options::LONG_FORMAT)
                 .short('l')
                 .requires(options::USER)
-                .help(get_message("pinky-help-long-format"))
+                .help(translate!("pinky-help-long-format"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OMIT_HOME_DIR)
                 .short('b')
-                .help(get_message("pinky-help-omit-home-dir"))
+                .help(translate!("pinky-help-omit-home-dir"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OMIT_PROJECT_FILE)
                 .short('h')
-                .help(get_message("pinky-help-omit-project-file"))
+                .help(translate!("pinky-help-omit-project-file"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OMIT_PLAN_FILE)
                 .short('p')
-                .help(get_message("pinky-help-omit-plan-file"))
+                .help(translate!("pinky-help-omit-plan-file"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHORT_FORMAT)
                 .short('s')
-                .help(get_message("pinky-help-short-format"))
+                .help(translate!("pinky-help-short-format"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OMIT_HEADINGS)
                 .short('f')
-                .help(get_message("pinky-help-omit-headings"))
+                .help(translate!("pinky-help-omit-headings"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OMIT_NAME)
                 .short('w')
-                .help(get_message("pinky-help-omit-name"))
+                .help(translate!("pinky-help-omit-name"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OMIT_NAME_HOST)
                 .short('i')
-                .help(get_message("pinky-help-omit-name-host"))
+                .help(translate!("pinky-help-omit-name-host"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OMIT_NAME_HOST_TIME)
                 .short('q')
-                .help(get_message("pinky-help-omit-name-host-time"))
+                .help(translate!("pinky-help-omit-name-host-time"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -105,7 +105,7 @@ pub fn uu_app() -> Command {
             // since that conflicts with omit_project_file.
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help(get_message("pinky-help-help"))
+                .help(translate!("pinky-help-help"))
                 .action(ArgAction::Help),
         )
 }
