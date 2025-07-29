@@ -45,18 +45,15 @@ pub type HardlinkResult<T> = Result<T, HardlinkError>;
 #[derive(Debug)]
 pub enum HardlinkError {
     Io(io::Error),
-    Scan(String),
     Preservation { source: PathBuf, target: PathBuf },
     Metadata { path: PathBuf, error: io::Error },
+    ScanReadDir { path: PathBuf, error: io::Error },
 }
 
 impl std::fmt::Display for HardlinkError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             HardlinkError::Io(e) => write!(f, "I/O error during hardlink operation: {e}"),
-            HardlinkError::Scan(msg) => {
-                write!(f, "Failed to scan files for hardlinks: {msg}")
-            }
             HardlinkError::Preservation { source, target } => {
                 write!(
                     f,
@@ -67,6 +64,14 @@ impl std::fmt::Display for HardlinkError {
             }
             HardlinkError::Metadata { path, error } => {
                 write!(f, "Metadata access error for {}: {}", path.display(), error)
+            }
+            HardlinkError::ScanReadDir { path, error } => {
+                write!(
+                    f,
+                    "Failed to read directory during scan {}: {}",
+                    path.display(),
+                    error
+                )
             }
         }
     }
@@ -92,15 +97,18 @@ impl From<HardlinkError> for io::Error {
     fn from(error: HardlinkError) -> Self {
         match error {
             HardlinkError::Io(e) => e,
-            HardlinkError::Scan(msg) => io::Error::other(msg),
             HardlinkError::Preservation { source, target } => io::Error::other(format!(
                 "Failed to preserve hardlink: {} -> {}",
                 source.display(),
                 target.display()
             )),
-
             HardlinkError::Metadata { path, error } => io::Error::other(format!(
                 "Metadata access error for {}: {}",
+                path.display(),
+                error
+            )),
+            HardlinkError::ScanReadDir { path, error } => io::Error::other(format!(
+                "Failed to read directory during scan {}: {}",
                 path.display(),
                 error
             )),
@@ -234,18 +242,24 @@ impl HardlinkGroupScanner {
     }
 
     /// Recursively scan a directory for hardlinked files
-    fn scan_directory_recursive(&mut self, dir: &Path) -> io::Result<()> {
+    fn scan_directory_recursive(&mut self, dir: &Path) -> Result<(), HardlinkError> {
         use std::os::unix::fs::MetadataExt;
 
-        let entries = std::fs::read_dir(dir)?;
+        let entries = std::fs::read_dir(dir).map_err(|e| HardlinkError::ScanReadDir {
+            path: dir.to_path_buf(),
+            error: e,
+        })?;
         for entry in entries {
-            let entry = entry?;
+            let entry = entry.map_err(HardlinkError::Io)?;
             let path = entry.path();
 
             if path.is_dir() {
                 self.scan_directory_recursive(&path)?;
             } else {
-                let metadata = path.metadata()?;
+                let metadata = path.metadata().map_err(|e| HardlinkError::Metadata {
+                    path: path.clone(),
+                    error: e,
+                })?;
                 if metadata.nlink() > 1 {
                     let key = (metadata.dev(), metadata.ino());
                     self.hardlink_groups.entry(key).or_default().push(path);
