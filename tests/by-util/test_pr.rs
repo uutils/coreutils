@@ -404,6 +404,50 @@ fn test_with_offset_space_option() {
 
 #[test]
 fn test_with_date_format() {
+    let test_file_path = "test_one_page.log";
+    let expected_test_file_path = "test_one_page.log.expected";
+    let mut scenario = new_ucmd!();
+    let value = file_last_modified_time_format(&scenario, test_file_path, "%Y__%s");
+    scenario
+        .args(&[test_file_path, "-D", "%Y__%s"])
+        .succeeds()
+        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
+
+    // "Format" doesn't need to contain any replaceable token.
+    let mut scenario = new_ucmd!();
+    scenario
+        .args(&[test_file_path, "-D", "Hello!"])
+        .succeeds()
+        .stdout_is_templated_fixture(
+            expected_test_file_path,
+            &[("{last_modified_time}", "Hello!")],
+        );
+
+    // Long option also works
+    let mut scenario = new_ucmd!();
+    scenario
+        .args(&[test_file_path, "--date-format=Hello!"])
+        .succeeds()
+        .stdout_is_templated_fixture(
+            expected_test_file_path,
+            &[("{last_modified_time}", "Hello!")],
+        );
+
+    // Option takes precedence over environment variables
+    let mut scenario = new_ucmd!();
+    scenario
+        .env("POSIXLY_CORRECT", "1")
+        .env("LC_TIME", "POSIX")
+        .args(&[test_file_path, "-D", "Hello!"])
+        .succeeds()
+        .stdout_is_templated_fixture(
+            expected_test_file_path,
+            &[("{last_modified_time}", "Hello!")],
+        );
+}
+
+#[test]
+fn test_with_date_format_env() {
     const POSIXLY_FORMAT: &str = "%b %e %H:%M %Y";
 
     // POSIXLY_CORRECT + LC_ALL/TIME=POSIX uses "%b %e %H:%M %Y" date format

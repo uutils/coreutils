@@ -19,8 +19,8 @@ use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::format_usage;
-use uucore::translate;
 use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
+use uucore::translate;
 
 const TAB: char = '\t';
 const LINES_PER_PAGE: usize = 66;
@@ -36,6 +36,7 @@ const FF: u8 = 0x0C_u8;
 
 mod options {
     pub const HEADER: &str = "header";
+    pub const DATE_FORMAT: &str = "date-format";
     pub const DOUBLE_SPACE: &str = "double-space";
     pub const NUMBER_LINES: &str = "number-lines";
     pub const FIRST_LINE_NUMBER: &str = "first-line-number";
@@ -175,6 +176,13 @@ pub fn uu_app() -> Command {
                 .long(options::HEADER)
                 .help(translate!("pr-help-header"))
                 .value_name("STRING"),
+        )
+        .arg(
+            Arg::new(options::DATE_FORMAT)
+                .short('D')
+                .long(options::DATE_FORMAT)
+                .value_name("FORMAT")
+                .help(translate!("pr-help-date-format")),
         )
         .arg(
             Arg::new(options::DOUBLE_SPACE)
@@ -401,16 +409,21 @@ fn parse_usize(matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>
         .map(from_parse_error_to_pr_error)
 }
 
-fn get_date_format() -> String {
-    // Replicate behavior from GNU manual.
-    if std::env::var("POSIXLY_CORRECT").is_ok()
-        // TODO: This needs to be moved to uucore and handled by icu?
-        && (std::env::var("LC_TIME").unwrap_or_default() == "POSIX"
-            || std::env::var("LC_ALL").unwrap_or_default() == "POSIX")
-    {
-        "%b %e %H:%M %Y"
-    } else {
-        format::LONG_ISO
+fn get_date_format(matches: &ArgMatches) -> String {
+    match matches.get_one::<String>(options::DATE_FORMAT) {
+        Some(format) => format,
+        None => {
+            // Replicate behavior from GNU manual.
+            if std::env::var("POSIXLY_CORRECT").is_ok()
+                // TODO: This needs to be moved to uucore and handled by icu?
+                && (std::env::var("LC_TIME").unwrap_or_default() == "POSIX"
+                    || std::env::var("LC_ALL").unwrap_or_default() == "POSIX")
+            {
+                "%b %e %H:%M %Y"
+            } else {
+                format::LONG_ISO
+            }
+        }
     }
     .to_string()
 }
@@ -514,7 +527,7 @@ fn build_options(
             format_system_time(
                 &mut v,
                 time,
-                &get_date_format(),
+                &get_date_format(matches),
                 FormatSystemTimeFallback::Integer,
             )
             .ok()
