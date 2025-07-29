@@ -29,13 +29,13 @@ use memchr::{memchr_iter, memrchr_iter};
 use paths::{FileExtTail, HeaderPrinter, Input, InputKind};
 use same_file::Handle;
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin, stdout};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, get_exit_code, set_exit_code};
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
+
 use uucore::{show, show_error};
 
 #[uucore::main]
@@ -57,10 +57,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         args::VerificationResult::CannotFollowStdinByName => {
             return Err(USimpleError::new(
                 1,
-                get_message_with_args(
-                    "tail-error-cannot-follow-stdin-by-name",
-                    HashMap::from([("stdin".to_string(), text::DASH.quote().to_string())]),
-                ),
+                translate!("tail-error-cannot-follow-stdin-by-name", "stdin" => text::DASH.quote()),
             ));
         }
         // Exit early if we do not output anything. Note, that this may break a pipe
@@ -109,7 +106,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
     }
 
     if get_exit_code() > 0 && paths::stdin_is_bad_fd() {
-        show_error!("{}: {}", text::DASH, get_message("tail-bad-fd"));
+        show_error!("{}: {}", text::DASH, translate!("tail-bad-fd"));
     }
 
     Ok(())
@@ -127,49 +124,28 @@ fn tail_file(
         set_exit_code(1);
         show_error!(
             "{}",
-            get_message_with_args(
-                "tail-error-cannot-open-no-such-file",
-                HashMap::from([
-                    ("file".to_string(), input.display_name.clone()),
-                    (
-                        "error".to_string(),
-                        get_message("tail-no-such-file-or-directory")
-                    )
-                ])
-            )
+            translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name.clone(), "error" => translate!("tail-no-such-file-or-directory"))
         );
         observer.add_bad_path(path, input.display_name.as_str(), false)?;
     } else if path.is_dir() {
         set_exit_code(1);
 
         header_printer.print_input(input);
-        let err_msg = get_message("tail-is-a-directory");
+        let err_msg = translate!("tail-is-a-directory");
 
         show_error!(
             "{}",
-            get_message_with_args(
-                "tail-error-reading-file",
-                HashMap::from([
-                    ("file".to_string(), input.display_name.clone()),
-                    ("error".to_string(), err_msg)
-                ])
-            )
+            translate!("tail-error-reading-file", "file" => input.display_name.clone(), "error" => err_msg)
         );
         if settings.follow.is_some() {
             let msg = if settings.retry {
                 ""
             } else {
-                &get_message("tail-giving-up-on-this-name")
+                &translate!("tail-giving-up-on-this-name")
             };
             show_error!(
                 "{}",
-                get_message_with_args(
-                    "tail-error-cannot-follow-file-type",
-                    HashMap::from([
-                        ("file".to_string(), input.display_name.clone()),
-                        ("msg".to_string(), msg.to_string())
-                    ])
-                )
+                translate!("tail-error-cannot-follow-file-type", "file" => input.display_name.clone(), "msg" => msg)
             );
         }
         if !observer.follow_name_retry() {
@@ -208,19 +184,13 @@ fn tail_file(
             Err(e) if e.kind() == ErrorKind::PermissionDenied => {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 show!(e.map_err_context(|| {
-                    get_message_with_args(
-                        "tail-error-cannot-open-for-reading",
-                        HashMap::from([("file".to_string(), input.display_name.clone())]),
-                    )
+                    translate!("tail-error-cannot-open-for-reading", "file" => input.display_name.clone())
                 }));
             }
             Err(e) => {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 return Err(e.map_err_context(|| {
-                    get_message_with_args(
-                        "tail-error-cannot-open-for-reading",
-                        HashMap::from([("file".to_string(), input.display_name.clone())]),
-                    )
+                    translate!("tail-error-cannot-open-for-reading", "file" => input.display_name.clone())
                 }));
             }
         }
@@ -249,16 +219,7 @@ fn tail_stdin(
                     set_exit_code(1);
                     show_error!(
                         "{}",
-                        get_message_with_args(
-                            "tail-error-cannot-open-no-such-file",
-                            HashMap::from([
-                                ("file".to_string(), input.display_name.clone()),
-                                (
-                                    "error".to_string(),
-                                    get_message("tail-no-such-file-or-directory")
-                                )
-                            ])
-                        )
+                        translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name.clone(), "error" => translate!("tail-no-such-file-or-directory"))
                     );
                     return Ok(());
                 }
@@ -295,24 +256,12 @@ fn tail_stdin(
                 set_exit_code(1);
                 show_error!(
                     "{}",
-                    get_message_with_args(
-                        "tail-error-cannot-fstat",
-                        HashMap::from([
-                            ("file".to_string(), get_message("tail-stdin-header")),
-                            ("error".to_string(), get_message("tail-bad-fd"))
-                        ])
-                    )
+                    translate!("tail-error-cannot-fstat", "file" => translate!("tail-stdin-header"), "error" => translate!("tail-bad-fd"))
                 );
                 if settings.follow.is_some() {
                     show_error!(
                         "{}",
-                        get_message_with_args(
-                            "tail-error-reading-file",
-                            HashMap::from([
-                                ("file".to_string(), get_message("tail-stdin-header")),
-                                ("error".to_string(), get_message("tail-bad-fd"))
-                            ])
-                        )
+                        translate!("tail-error-reading-file", "file" => translate!("tail-stdin-header"), "error" => translate!("tail-bad-fd"))
                     );
                 }
             } else {

@@ -21,6 +21,7 @@ path = "src/kill.rs"
 clap = { workspace = true }
 nix = { workspace = true, features = ["signal"] }
 uucore = { workspace = true, features = ["signals"] }
+fluent = { workspace = true }
 
 [[bin]]
 name = "kill"

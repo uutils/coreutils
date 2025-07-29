@@ -6,13 +6,12 @@
 
 // spell-checker:ignore (ToDO) lstat
 use clap::{Arg, ArgAction, Command};
-use std::collections::HashMap;
 use std::fs;
 use std::io::{ErrorKind, Write};
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError, set_exit_code};
 use uucore::format_usage;
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 // operating mode
 enum Mode {
@@ -57,7 +56,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if paths.is_none() {
         return Err(UUsageError::new(
             1,
-            get_message("pathchk-error-missing-operand"),
+            translate!("pathchk-error-missing-operand"),
         ));
     }
 
@@ -82,25 +81,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("pathchk-about"))
-        .override_usage(format_usage(&get_message("pathchk-usage")))
+        .about(translate!("pathchk-about"))
+        .override_usage(format_usage(&translate!("pathchk-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::POSIX)
                 .short('p')
-                .help(get_message("pathchk-help-posix"))
+                .help(translate!("pathchk-help-posix"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::POSIX_SPECIAL)
                 .short('P')
-                .help(get_message("pathchk-help-posix-special"))
+                .help(translate!("pathchk-help-posix-special"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PORTABILITY)
                 .long(options::PORTABILITY)
-                .help(get_message("pathchk-help-portability"))
+                .help(translate!("pathchk-help-portability"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -130,21 +129,14 @@ fn check_basic(path: &[String]) -> bool {
         writeln!(
             std::io::stderr(),
             "{}",
-            get_message_with_args(
-                "pathchk-error-posix-path-length-exceeded",
-                HashMap::from([
-                    ("limit".to_string(), POSIX_PATH_MAX.to_string()),
-                    ("length".to_string(), total_len.to_string()),
-                    ("path".to_string(), joined_path),
-                ])
-            )
+            translate!("pathchk-error-posix-path-length-exceeded", "limit" => POSIX_PATH_MAX, "length" => total_len, "path" => joined_path)
         );
         return false;
     } else if total_len == 0 {
         writeln!(
             std::io::stderr(),
             "{}",
-            get_message("pathchk-error-empty-file-name")
+            translate!("pathchk-error-empty-file-name")
         );
         return false;
     }
@@ -155,14 +147,7 @@ fn check_basic(path: &[String]) -> bool {
             writeln!(
                 std::io::stderr(),
                 "{}",
-                get_message_with_args(
-                    "pathchk-error-posix-name-length-exceeded",
-                    HashMap::from([
-                        ("limit".to_string(), POSIX_NAME_MAX.to_string()),
-                        ("length".to_string(), component_len.to_string()),
-                        ("component".to_string(), p.quote().to_string()),
-                    ])
-                )
+                translate!("pathchk-error-posix-name-length-exceeded", "limit" => POSIX_NAME_MAX, "length" => component_len, "component" => p.quote())
             );
             return false;
         }
@@ -182,10 +167,7 @@ fn check_extra(path: &[String]) -> bool {
             writeln!(
                 std::io::stderr(),
                 "{}",
-                get_message_with_args(
-                    "pathchk-error-leading-hyphen",
-                    HashMap::from([("component".to_string(), p.quote().to_string())])
-                )
+                translate!("pathchk-error-leading-hyphen", "component" => p.quote())
             );
             return false;
         }
@@ -195,7 +177,7 @@ fn check_extra(path: &[String]) -> bool {
         writeln!(
             std::io::stderr(),
             "{}",
-            get_message("pathchk-error-empty-file-name")
+            translate!("pathchk-error-empty-file-name")
         );
         return false;
     }
@@ -211,14 +193,7 @@ fn check_default(path: &[String]) -> bool {
         writeln!(
             std::io::stderr(),
             "{}",
-            get_message_with_args(
-                "pathchk-error-path-length-exceeded",
-                HashMap::from([
-                    ("limit".to_string(), libc::PATH_MAX.to_string()),
-                    ("length".to_string(), total_len.to_string()),
-                    ("path".to_string(), joined_path.quote().to_string()),
-                ])
-            )
+            translate!("pathchk-error-path-length-exceeded", "limit" => libc::PATH_MAX, "length" => total_len, "path" => joined_path.quote())
         );
         return false;
     }
@@ -231,7 +206,7 @@ fn check_default(path: &[String]) -> bool {
             writeln!(
                 std::io::stderr(),
                 "{}",
-                get_message("pathchk-error-empty-path-not-found")
+                translate!("pathchk-error-empty-path-not-found")
             );
             return false;
         }
@@ -244,14 +219,7 @@ fn check_default(path: &[String]) -> bool {
             writeln!(
                 std::io::stderr(),
                 "{}",
-                get_message_with_args(
-                    "pathchk-error-name-length-exceeded",
-                    HashMap::from([
-                        ("limit".to_string(), libc::FILENAME_MAX.to_string()),
-                        ("length".to_string(), component_len.to_string()),
-                        ("component".to_string(), p.quote().to_string()),
-                    ])
-                )
+                translate!("pathchk-error-name-length-exceeded", "limit" => libc::FILENAME_MAX, "length" => component_len, "component" => p.quote())
             );
             return false;
         }
@@ -285,13 +253,7 @@ fn check_portable_chars(path_segment: &str) -> bool {
             writeln!(
                 std::io::stderr(),
                 "{}",
-                get_message_with_args(
-                    "pathchk-error-nonportable-character",
-                    HashMap::from([
-                        ("character".to_string(), invalid.to_string()),
-                        ("component".to_string(), path_segment.quote().to_string()),
-                    ])
-                )
+                translate!("pathchk-error-nonportable-character", "character" => invalid, "component" => path_segment.quote())
             );
             return false;
         }

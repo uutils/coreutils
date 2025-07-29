@@ -20,6 +20,7 @@ path = "src/pwd.rs"
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "pwd"

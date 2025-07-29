@@ -20,6 +20,7 @@ path = "src/pinky.rs"
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["utmpx", "entries"] }
+fluent = { workspace = true }
 
 [[bin]]
 name = "pinky"

@@ -6,7 +6,6 @@
 // spell-checker:ignore (path) eacces inacc rm-r4
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser, parser::ValueSource};
-use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, Metadata};
 use std::io::{IsTerminal, stdin};
@@ -20,30 +19,27 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
+
 use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
 
 #[derive(Debug, Error)]
 enum RmError {
-    #[error("{}", get_message_with_args("rm-error-missing-operand",
-                                        HashMap::from([
-                                            ("util_name".to_string(),
-                                             uucore::execution_phrase().to_string())
-                                        ])))]
+    #[error("{}", translate!("rm-error-missing-operand", "util_name" => uucore::execution_phrase()))]
     MissingOperand,
-    #[error("{}", get_message_with_args("rm-error-invalid-interactive-argument", HashMap::from([("arg".to_string(), _0.clone())])))]
+    #[error("{}", translate!("rm-error-invalid-interactive-argument", "arg" => _0.clone()))]
     InvalidInteractiveArgument(String),
-    #[error("{}", get_message_with_args("rm-error-cannot-remove-no-such-file", HashMap::from([("file".to_string(), _0.quote().to_string())])))]
+    #[error("{}", translate!("rm-error-cannot-remove-no-such-file", "file" => _0.quote()))]
     CannotRemoveNoSuchFile(String),
-    #[error("{}", get_message_with_args("rm-error-cannot-remove-permission-denied", HashMap::from([("file".to_string(), _0.quote().to_string())])))]
+    #[error("{}", translate!("rm-error-cannot-remove-permission-denied", "file" => _0.quote()))]
     CannotRemovePermissionDenied(String),
-    #[error("{}", get_message_with_args("rm-error-cannot-remove-is-directory", HashMap::from([("file".to_string(), _0.quote().to_string())])))]
+    #[error("{}", translate!("rm-error-cannot-remove-is-directory", "file" => _0.quote()))]
     CannotRemoveIsDirectory(String),
-    #[error("{}", get_message("rm-error-dangerous-recursive-operation"))]
+    #[error("{}", translate!("rm-error-dangerous-recursive-operation"))]
     DangerousRecursiveOperation,
-    #[error("{}", get_message("rm-error-use-no-preserve-root"))]
+    #[error("{}", translate!("rm-error-use-no-preserve-root"))]
     UseNoPreserveRoot,
-    #[error("{}", get_message_with_args("rm-error-refusing-to-remove-directory", HashMap::from([("path".to_string(), _0.to_string())])))]
+    #[error("{}", translate!("rm-error-refusing-to-remove-directory", "path" => _0))]
     RefusingToRemoveDirectory(String),
 }
 
@@ -222,36 +218,36 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("rm-about"))
-        .override_usage(format_usage(&get_message("rm-usage")))
-        .after_help(get_message("rm-after-help"))
+        .about(translate!("rm-about"))
+        .override_usage(format_usage(&translate!("rm-usage")))
+        .after_help(translate!("rm-after-help"))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
             Arg::new(OPT_FORCE)
                 .short('f')
                 .long(OPT_FORCE)
-                .help(get_message("rm-help-force"))
+                .help(translate!("rm-help-force"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_PROMPT_ALWAYS)
                 .short('i')
-                .help(get_message("rm-help-prompt-always"))
+                .help(translate!("rm-help-prompt-always"))
                 .overrides_with_all([OPT_PROMPT_ONCE, OPT_INTERACTIVE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_PROMPT_ONCE)
                 .short('I')
-                .help(get_message("rm-help-prompt-once"))
+                .help(translate!("rm-help-prompt-once"))
                 .overrides_with_all([OPT_PROMPT_ALWAYS, OPT_INTERACTIVE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_INTERACTIVE)
                 .long(OPT_INTERACTIVE)
-                .help(get_message("rm-help-interactive"))
+                .help(translate!("rm-help-interactive"))
                 .value_name("WHEN")
                 .num_args(0..=1)
                 .require_equals(true)
@@ -261,19 +257,19 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_ONE_FILE_SYSTEM)
                 .long(OPT_ONE_FILE_SYSTEM)
-                .help(get_message("rm-help-one-file-system"))
+                .help(translate!("rm-help-one-file-system"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_NO_PRESERVE_ROOT)
                 .long(OPT_NO_PRESERVE_ROOT)
-                .help(get_message("rm-help-no-preserve-root"))
+                .help(translate!("rm-help-no-preserve-root"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_PRESERVE_ROOT)
                 .long(OPT_PRESERVE_ROOT)
-                .help(get_message("rm-help-preserve-root"))
+                .help(translate!("rm-help-preserve-root"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -281,21 +277,21 @@ pub fn uu_app() -> Command {
                 .short('r')
                 .visible_short_alias('R')
                 .long(OPT_RECURSIVE)
-                .help(get_message("rm-help-recursive"))
+                .help(translate!("rm-help-recursive"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_DIR)
                 .short('d')
                 .long(OPT_DIR)
-                .help(get_message("rm-help-dir"))
+                .help(translate!("rm-help-dir"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
                 .short('v')
                 .long(OPT_VERBOSE)
-                .help(get_message("rm-help-verbose"))
+                .help(translate!("rm-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         // From the GNU source code:
@@ -459,12 +455,9 @@ fn remove_dir_recursive(path: &Path, options: &Options) -> bool {
             match fs::remove_dir_all(path) {
                 Ok(_) => return false,
                 Err(e) => {
-                    let e = e.map_err_context(|| {
-                        get_message_with_args(
-                            "rm-error-cannot-remove",
-                            HashMap::from([("file".to_string(), path.quote().to_string())]),
-                        )
-                    });
+                    let e = e.map_err_context(
+                        || translate!("rm-error-cannot-remove", "file" => path.quote()),
+                    );
                     show_error!("{e}");
                     return true;
                 }
@@ -507,12 +500,8 @@ fn remove_dir_recursive(path: &Path, options: &Options) -> bool {
             error = true;
         }
         Err(e) if !error => {
-            let e = e.map_err_context(|| {
-                get_message_with_args(
-                    "rm-error-cannot-remove",
-                    HashMap::from([("file".to_string(), path.quote().to_string())]),
-                )
-            });
+            let e =
+                e.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
             show_error!("{e}");
             error = true;
         }
@@ -524,10 +513,7 @@ fn remove_dir_recursive(path: &Path, options: &Options) -> bool {
         }
         Ok(_) if options.verbose => println!(
             "{}",
-            get_message_with_args(
-                "rm-verbose-removed-directory",
-                HashMap::from([("file".to_string(), normalize(path).quote().to_string())])
-            )
+            translate!("rm-verbose-removed-directory", "file" => normalize(path).quote())
         ),
         Ok(_) => {}
     }
@@ -591,21 +577,14 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
             if options.verbose {
                 println!(
                     "{}",
-                    get_message_with_args(
-                        "rm-verbose-removed-directory",
-                        HashMap::from([("file".to_string(), normalize(path).quote().to_string())])
-                    )
+                    translate!("rm-verbose-removed-directory", "file" => normalize(path).quote())
                 );
             }
             false
         }
         Err(e) => {
-            let e = e.map_err_context(|| {
-                get_message_with_args(
-                    "rm-error-cannot-remove",
-                    HashMap::from([("file".to_string(), path.quote().to_string())]),
-                )
-            });
+            let e =
+                e.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
             show_error!("{e}");
             true
         }
@@ -619,13 +598,7 @@ fn remove_file(path: &Path, options: &Options) -> bool {
                 if options.verbose {
                     println!(
                         "{}",
-                        get_message_with_args(
-                            "rm-verbose-removed",
-                            HashMap::from([(
-                                "file".to_string(),
-                                normalize(path).quote().to_string()
-                            )])
-                        )
+                        translate!("rm-verbose-removed", "file" => normalize(path).quote())
                     );
                 }
             }

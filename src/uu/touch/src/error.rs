@@ -5,28 +5,27 @@
 
 // spell-checker:ignore (misc) uioerror
 use filetime::FileTime;
-use std::collections::HashMap;
 use std::path::PathBuf;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, UIoError};
-use uucore::locale::get_message_with_args;
+use uucore::translate;
 
 #[derive(Debug, Error)]
 pub enum TouchError {
-    #[error("{}", get_message_with_args("touch-error-unable-to-parse-date", HashMap::from([("date".to_string(), .0.clone())])))]
+    #[error("{}", translate!("touch-error-unable-to-parse-date", "date" => .0.clone()))]
     InvalidDateFormat(String),
 
     /// The source time couldn't be converted to a [`chrono::DateTime`]
-    #[error("{}", get_message_with_args("touch-error-invalid-filetime", HashMap::from([("time".to_string(), .0.to_string())])))]
+    #[error("{}", translate!("touch-error-invalid-filetime", "time" => .0))]
     InvalidFiletime(FileTime),
 
     /// The reference file's attributes could not be found or read
-    #[error("{}", get_message_with_args("touch-error-reference-file-inaccessible", HashMap::from([("path".to_string(), .0.quote().to_string()), ("error".to_string(), to_uioerror(.1).to_string())])))]
+    #[error("{}", translate!("touch-error-reference-file-inaccessible", "path" => .0.quote(), "error" => to_uioerror(.1)))]
     ReferenceFileInaccessible(PathBuf, std::io::Error),
 
     /// An error getting a path to stdout on Windows
-    #[error("{}", get_message_with_args("touch-error-windows-stdout-path-failed", HashMap::from([("code".to_string(), .0.clone())])))]
+    #[error("{}", translate!("touch-error-windows-stdout-path-failed", "code" => .0.clone()))]
     WindowsStdoutPathError(String),
 
     /// An error encountered on a specific file

@@ -10,13 +10,13 @@ use crate::follow::files::{FileHandling, PathData};
 use crate::paths::{Input, InputKind, MetadataExtTail, PathExtTail};
 use crate::{platform, text};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
-use std::collections::HashMap;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, channel};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, set_exit_code};
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
+
 use uucore::show_error;
 
 pub struct WatcherRx {
@@ -58,10 +58,7 @@ impl WatcherRx {
             } else {
                 return Err(USimpleError::new(
                     1,
-                    get_message_with_args(
-                        "tail-error-cannot-watch-parent-directory",
-                        HashMap::from([("path".to_string(), path.display().to_string())]),
-                    ),
+                    translate!("tail-error-cannot-watch-parent-directory", "path" => path.display()),
                 ));
             }
         }
@@ -245,10 +242,7 @@ impl Observer {
                     */
                     show_error!(
                         "{}",
-                        get_message_with_args(
-                            "tail-error-backend-cannot-be-used-too-many-files",
-                            HashMap::from([("backend".to_string(), text::BACKEND.to_string())])
-                        )
+                        translate!("tail-error-backend-cannot-be-used-too-many-files", "backend" => text::BACKEND)
                     );
                     set_exit_code(1);
                     self.use_polling = true;
@@ -339,38 +333,26 @@ impl Observer {
                             if !old_md.is_tailable() {
                                 show_error!(
                                     "{}",
-                                    get_message_with_args(
-                                        "tail-status-has-become-accessible",
-                                        HashMap::from([("file".to_string(), display_name.quote().to_string())])
-                                    )
+                                    translate!("tail-status-has-become-accessible", "file" => display_name.quote())
                                 );
                                 self.files.update_reader(event_path)?;
                             } else if pd.reader.is_none() {
                                 show_error!(
                                     "{}",
-                                    get_message_with_args(
-                                        "tail-status-has-appeared-following-new-file",
-                                        HashMap::from([("file".to_string(), display_name.quote().to_string())])
-                                    )
+                                    translate!("tail-status-has-appeared-following-new-file", "file" => display_name.quote())
                                 );
                                 self.files.update_reader(event_path)?;
                             } else if event.kind == EventKind::Modify(ModifyKind::Name(RenameMode::To))
                             || (self.use_polling && !old_md.file_id_eq(&new_md)) {
                                 show_error!(
                                     "{}",
-                                    get_message_with_args(
-                                        "tail-status-has-been-replaced-following-new-file",
-                                        HashMap::from([("file".to_string(), display_name.quote().to_string())])
-                                    )
+                                    translate!("tail-status-has-been-replaced-following-new-file", "file" => display_name.quote())
                                 );
                                 self.files.update_reader(event_path)?;
                             } else if old_md.got_truncated(&new_md)? {
                                 show_error!(
                                     "{}",
-                                    get_message_with_args(
-                                        "tail-status-file-truncated",
-                                        HashMap::from([("file".to_string(), display_name)])
-                                    )
+                                    translate!("tail-status-file-truncated", "file" => display_name)
                                 );
                                 self.files.update_reader(event_path)?;
                             }
@@ -381,20 +363,14 @@ impl Observer {
                             } else {
                                 show_error!(
                                     "{}",
-                                    get_message_with_args(
-                                        "tail-status-replaced-with-untailable-file",
-                                        HashMap::from([("file".to_string(), display_name.quote().to_string())])
-                                    )
+                                    translate!("tail-status-replaced-with-untailable-file", "file" => display_name.quote())
                                 );
                             }
                         }
                     } else if is_tailable {
                         show_error!(
                             "{}",
-                            get_message_with_args(
-                                "tail-status-has-appeared-following-new-file",
-                                HashMap::from([("file".to_string(), display_name.quote().to_string())])
-                            )
+                            translate!("tail-status-has-appeared-following-new-file", "file" => display_name.quote())
                         );
                         self.files.update_reader(event_path)?;
                         paths.push(event_path.clone());
@@ -402,23 +378,17 @@ impl Observer {
                         if self.follow_descriptor() {
                             show_error!(
                                 "{}",
-                                get_message_with_args(
-                                    "tail-status-replaced-with-untailable-file-giving-up",
-                                    HashMap::from([("file".to_string(), display_name.quote().to_string())])
-                                )
+                                translate!("tail-status-replaced-with-untailable-file-giving-up", "file" => display_name.quote())
                             );
                             let _ = self.watcher_rx.as_mut().unwrap().watcher.unwatch(event_path);
                             self.files.remove(event_path);
                             if self.files.no_files_remaining(settings) {
-                                return Err(USimpleError::new(1, get_message("tail-no-files-remaining")));
+                                return Err(USimpleError::new(1, translate!("tail-no-files-remaining")));
                             }
                         } else {
                             show_error!(
                                 "{}",
-                                get_message_with_args(
-                                    "tail-status-replaced-with-untailable-file",
-                                    HashMap::from([("file".to_string(), display_name.quote().to_string())])
-                                )
+                                translate!("tail-status-replaced-with-untailable-file", "file" => display_name.quote())
                             );
                         }
                     }
@@ -435,25 +405,15 @@ impl Observer {
                             if old_md.is_tailable() && self.files.get(event_path).reader.is_some() {
                                 show_error!(
                                     "{}",
-                                    get_message_with_args(
-                                        "tail-status-file-became-inaccessible",
-                                        HashMap::from([
-                                            ("file".to_string(), display_name.quote().to_string()),
-                                            ("become_inaccessible".to_string(), get_message("tail-become-inaccessible")),
-                                            ("no_such_file".to_string(), get_message("tail-no-such-file-or-directory"))
-                                        ])
-                                    )
+                                    translate!("tail-status-file-became-inaccessible", "file" => display_name.quote(), "become_inaccessible" => translate!("tail-become-inaccessible"), "no_such_file" => translate!("tail-no-such-file-or-directory"))
                                 );
                             }
                         }
                         if event_path.is_orphan() && !self.orphans.contains(event_path) {
-                            show_error!("{}", get_message("tail-status-directory-containing-watched-file-removed"));
+                            show_error!("{}", translate!("tail-status-directory-containing-watched-file-removed"));
                             show_error!(
                                 "{}",
-                                get_message_with_args(
-                                    "tail-status-backend-cannot-be-used-reverting-to-polling",
-                                    HashMap::from([("backend".to_string(), text::BACKEND.to_string())])
-                                )
+                                translate!("tail-status-backend-cannot-be-used-reverting-to-polling", "backend" => text::BACKEND)
                             );
                             self.orphans.push(event_path.clone());
                             let _ = self.watcher_rx.as_mut().unwrap().unwatch(event_path);
@@ -461,17 +421,11 @@ impl Observer {
                     } else {
                         show_error!(
                             "{}",
-                            get_message_with_args(
-                                "tail-status-file-no-such-file",
-                                HashMap::from([
-                                    ("file".to_string(), display_name),
-                                    ("no_such_file".to_string(), get_message("tail-no-such-file-or-directory"))
-                                ])
-                            )
+                            translate!("tail-status-file-no-such-file", "file" => display_name, "no_such_file" => translate!("tail-no-such-file-or-directory"))
                         );
                         if !self.files.files_remaining() && self.use_polling {
                             // NOTE: GNU's tail exits here for `---disable-inotify`
-                            return Err(USimpleError::new(1, get_message("tail-no-files-remaining")));
+                            return Err(USimpleError::new(1, translate!("tail-no-files-remaining")));
                         }
                     }
                     self.files.reset_reader(event_path);
@@ -535,7 +489,7 @@ impl Observer {
 #[allow(clippy::cognitive_complexity)]
 pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
     if observer.files.no_files_remaining(settings) && !observer.files.only_stdin_remaining() {
-        return Err(USimpleError::new(1, get_message("tail-no-files-remaining")));
+        return Err(USimpleError::new(1, translate!("tail-no-files-remaining")));
     }
 
     let mut process = platform::ProcessChecker::new(observer.pid);
@@ -565,13 +519,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                     if md.is_tailable() && pd.reader.is_none() {
                         show_error!(
                             "{}",
-                            get_message_with_args(
-                                "tail-status-has-appeared-following-new-file",
-                                HashMap::from([(
-                                    "file".to_string(),
-                                    pd.display_name.quote().to_string()
-                                )])
-                            )
+                            translate!("tail-status-has-appeared-following-new-file", "file" => pd.display_name.quote())
                         );
                         observer.files.update_metadata(new_path, Some(md));
                         observer.files.update_reader(new_path)?;
@@ -630,19 +578,13 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
             })) => {
                 return Err(USimpleError::new(
                     1,
-                    get_message_with_args(
-                        "tail-error-backend-resources-exhausted",
-                        HashMap::from([("backend".to_string(), text::BACKEND.to_string())]),
-                    ),
+                    translate!("tail-error-backend-resources-exhausted", "backend" => text::BACKEND),
                 ));
             }
             Ok(Err(e)) => {
                 return Err(USimpleError::new(
                     1,
-                    get_message_with_args(
-                        "tail-error-notify-error",
-                        HashMap::from([("error".to_string(), e.to_string())]),
-                    ),
+                    translate!("tail-error-notify-error", "error" => e),
                 ));
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
@@ -651,10 +593,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
             Err(e) => {
                 return Err(USimpleError::new(
                     1,
-                    get_message_with_args(
-                        "tail-error-recv-timeout-error",
-                        HashMap::from([("error".to_string(), e.to_string())]),
-                    ),
+                    translate!("tail-error-recv-timeout-error", "error" => e),
                 ));
             }
         }

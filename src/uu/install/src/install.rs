@@ -10,7 +10,6 @@ mod mode;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use file_diff::diff;
 use filetime::{FileTime, set_file_times};
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs::File;
 use std::fs::{self, metadata};
@@ -28,13 +27,13 @@ use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 use uucore::process::{getegid, geteuid};
 #[cfg(feature = "selinux")]
 use uucore::selinux::{contexts_differ, set_selinux_security_context};
+use uucore::translate;
 use uucore::{format_usage, show, show_error, show_if_err};
 
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(unix)]
 use std::os::unix::prelude::OsStrExt;
-use uucore::locale::{get_message, get_message_with_args};
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
@@ -61,55 +60,55 @@ pub struct Behavior {
 
 #[derive(Error, Debug)]
 enum InstallError {
-    #[error("{}", get_message_with_args("install-error-dir-needs-arg", HashMap::from([("util_name".to_string(), uucore::util_name().to_string())])))]
+    #[error("{}", translate!("install-error-dir-needs-arg", "util_name" => uucore::util_name()))]
     DirNeedsArg,
 
-    #[error("{}", get_message_with_args("install-error-create-dir-failed", HashMap::from([("path".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("install-error-create-dir-failed", "path" => .0.quote()))]
     CreateDirFailed(PathBuf, #[source] std::io::Error),
 
-    #[error("{}", get_message_with_args("install-error-chmod-failed", HashMap::from([("path".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("install-error-chmod-failed", "path" => .0.quote()))]
     ChmodFailed(PathBuf),
 
-    #[error("{}", get_message_with_args("install-error-chown-failed", HashMap::from([("path".to_string(), .0.quote().to_string()), ("error".to_string(), .1.clone())])))]
+    #[error("{}", translate!("install-error-chown-failed", "path" => .0.quote(), "error" => .1.clone()))]
     ChownFailed(PathBuf, String),
 
-    #[error("{}", get_message_with_args("install-error-invalid-target", HashMap::from([("path".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("install-error-invalid-target", "path" => .0.quote()))]
     InvalidTarget(PathBuf),
 
-    #[error("{}", get_message_with_args("install-error-target-not-dir", HashMap::from([("path".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("install-error-target-not-dir", "path" => .0.quote()))]
     TargetDirIsntDir(PathBuf),
 
-    #[error("{}", get_message_with_args("install-error-backup-failed", HashMap::from([("from".to_string(), .0.to_string_lossy().to_string()), ("to".to_string(), .1.to_string_lossy().to_string())])))]
+    #[error("{}", translate!("install-error-backup-failed", "from" => .0.to_string_lossy(), "to" => .1.to_string_lossy()))]
     BackupFailed(PathBuf, PathBuf, #[source] std::io::Error),
 
-    #[error("{}", get_message_with_args("install-error-install-failed", HashMap::from([("from".to_string(), .0.to_string_lossy().to_string()), ("to".to_string(), .1.to_string_lossy().to_string())])))]
+    #[error("{}", translate!("install-error-install-failed", "from" => .0.to_string_lossy(), "to" => .1.to_string_lossy()))]
     InstallFailed(PathBuf, PathBuf, #[source] std::io::Error),
 
-    #[error("{}", get_message_with_args("install-error-strip-failed", HashMap::from([("error".to_string(), .0.clone())])))]
+    #[error("{}", translate!("install-error-strip-failed", "error" => .0.clone()))]
     StripProgramFailed(String),
 
-    #[error("{}", get_message("install-error-metadata-failed"))]
+    #[error("{}", translate!("install-error-metadata-failed"))]
     MetadataFailed(#[source] std::io::Error),
 
-    #[error("{}", get_message_with_args("install-error-invalid-user", HashMap::from([("user".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("install-error-invalid-user", "user" => .0.quote()))]
     InvalidUser(String),
 
-    #[error("{}", get_message_with_args("install-error-invalid-group", HashMap::from([("group".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("install-error-invalid-group", "group" => .0.quote()))]
     InvalidGroup(String),
 
-    #[error("{}", get_message_with_args("install-error-omitting-directory", HashMap::from([("path".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("install-error-omitting-directory", "path" => .0.quote()))]
     OmittingDirectory(PathBuf),
 
-    #[error("{}", get_message_with_args("install-error-not-a-directory", HashMap::from([("path".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("install-error-not-a-directory", "path" => .0.quote()))]
     NotADirectory(PathBuf),
 
-    #[error("{}", get_message_with_args("install-error-override-directory-failed", HashMap::from([("dir".to_string(), .0.quote().to_string()), ("file".to_string(), .1.quote().to_string())])))]
+    #[error("{}", translate!("install-error-override-directory-failed", "dir" => .0.quote(), "file" => .1.quote()))]
     OverrideDirectoryFailed(PathBuf, PathBuf),
 
-    #[error("{}", get_message_with_args("install-error-same-file", HashMap::from([("file1".to_string(), .0.to_string_lossy().to_string()), ("file2".to_string(), .1.to_string_lossy().to_string())])))]
+    #[error("{}", translate!("install-error-same-file", "file1" => .0.to_string_lossy(), "file2" => .1.to_string_lossy()))]
     SameFile(PathBuf, PathBuf),
 
-    #[error("{}", get_message_with_args("install-error-extra-operand", HashMap::from([("operand".to_string(), .0.quote().to_string()), ("usage".to_string(), .1.clone())])))]
+    #[error("{}", translate!("install-error-extra-operand", "operand" => .0.quote(), "usage" => .1.clone()))]
     ExtraOperand(String, String),
 
     #[cfg(feature = "selinux")]
@@ -184,8 +183,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("install-about"))
-        .override_usage(format_usage(&get_message("install-usage")))
+        .about(translate!("install-about"))
+        .override_usage(format_usage(&translate!("install-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(backup_control::arguments::backup())
@@ -193,48 +192,48 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_IGNORED)
                 .short('c')
-                .help(get_message("install-help-ignored"))
+                .help(translate!("install-help-ignored"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_COMPARE)
                 .short('C')
                 .long(OPT_COMPARE)
-                .help(get_message("install-help-compare"))
+                .help(translate!("install-help-compare"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_DIRECTORY)
                 .short('d')
                 .long(OPT_DIRECTORY)
-                .help(get_message("install-help-directory"))
+                .help(translate!("install-help-directory"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_CREATE_LEADING)
                 .short('D')
-                .help(get_message("install-help-create-leading"))
+                .help(translate!("install-help-create-leading"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_GROUP)
                 .short('g')
                 .long(OPT_GROUP)
-                .help(get_message("install-help-group"))
+                .help(translate!("install-help-group"))
                 .value_name("GROUP"),
         )
         .arg(
             Arg::new(OPT_MODE)
                 .short('m')
                 .long(OPT_MODE)
-                .help(get_message("install-help-mode"))
+                .help(translate!("install-help-mode"))
                 .value_name("MODE"),
         )
         .arg(
             Arg::new(OPT_OWNER)
                 .short('o')
                 .long(OPT_OWNER)
-                .help(get_message("install-help-owner"))
+                .help(translate!("install-help-owner"))
                 .value_name("OWNER")
                 .value_hint(clap::ValueHint::Username),
         )
@@ -242,20 +241,20 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_PRESERVE_TIMESTAMPS)
                 .short('p')
                 .long(OPT_PRESERVE_TIMESTAMPS)
-                .help(get_message("install-help-preserve-timestamps"))
+                .help(translate!("install-help-preserve-timestamps"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_STRIP)
                 .short('s')
                 .long(OPT_STRIP)
-                .help(get_message("install-help-strip"))
+                .help(translate!("install-help-strip"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_STRIP_PROGRAM)
                 .long(OPT_STRIP_PROGRAM)
-                .help(get_message("install-help-strip-program"))
+                .help(translate!("install-help-strip-program"))
                 .value_name("PROGRAM")
                 .value_hint(clap::ValueHint::CommandName),
         )
@@ -264,7 +263,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_TARGET_DIRECTORY)
                 .short('t')
                 .long(OPT_TARGET_DIRECTORY)
-                .help(get_message("install-help-target-directory"))
+                .help(translate!("install-help-target-directory"))
                 .value_name("DIRECTORY")
                 .value_hint(clap::ValueHint::DirPath),
         )
@@ -272,28 +271,28 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_NO_TARGET_DIRECTORY)
                 .short('T')
                 .long(OPT_NO_TARGET_DIRECTORY)
-                .help(get_message("install-help-no-target-directory"))
+                .help(translate!("install-help-no-target-directory"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
                 .short('v')
                 .long(OPT_VERBOSE)
-                .help(get_message("install-help-verbose"))
+                .help(translate!("install-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_PRESERVE_CONTEXT)
                 .short('P')
                 .long(OPT_PRESERVE_CONTEXT)
-                .help(get_message("install-help-preserve-context"))
+                .help(translate!("install-help-preserve-context"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_CONTEXT)
                 .short('Z')
                 .long(OPT_CONTEXT)
-                .help(get_message("install-help-context"))
+                .help(translate!("install-help-context"))
                 .value_name("CONTEXT")
                 .value_parser(clap::value_parser!(String))
                 .num_args(0..=1),
@@ -328,10 +327,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         Some(mode::parse(x, considering_dir, get_umask()).map_err(|err| {
             show_error!(
                 "{}",
-                get_message_with_args(
-                    "install-error-invalid-mode",
-                    HashMap::from([("error".to_string(), err)])
-                )
+                translate!("install-error-invalid-mode", "error" => err)
             );
             1
         })?)
@@ -343,7 +339,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let target_dir = matches.get_one::<String>(OPT_TARGET_DIRECTORY).cloned();
     let no_target_dir = matches.get_flag(OPT_NO_TARGET_DIRECTORY);
     if target_dir.is_some() && no_target_dir {
-        show_error!("{}", get_message("install-error-mutually-exclusive-target"));
+        show_error!("{}", translate!("install-error-mutually-exclusive-target"));
         return Err(1.into());
     }
 
@@ -353,14 +349,14 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     if preserve_timestamps && compare {
         show_error!(
             "{}",
-            get_message("install-error-mutually-exclusive-compare-preserve")
+            translate!("install-error-mutually-exclusive-compare-preserve")
         );
         return Err(1.into());
     }
     if compare && strip {
         show_error!(
             "{}",
-            get_message("install-error-mutually-exclusive-compare-strip")
+            translate!("install-error-mutually-exclusive-compare-strip")
         );
         return Err(1.into());
     }
@@ -370,7 +366,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         let mode = specified_mode.unwrap();
         let non_permission_bits = 0o7000; // setuid, setgid, sticky bits
         if mode & non_permission_bits != 0 {
-            show_error!("{}", get_message("install-warning-compare-ignored"));
+            show_error!("{}", translate!("install-warning-compare-ignored"));
         }
     }
 
@@ -466,13 +462,7 @@ fn directory(paths: &[String], b: &Behavior) -> UResult<()> {
                 if b.verbose {
                     println!(
                         "{}",
-                        get_message_with_args(
-                            "install-verbose-creating-directory",
-                            HashMap::from([(
-                                "path".to_string(),
-                                path_to_create.quote().to_string()
-                            )])
-                        )
+                        translate!("install-verbose-creating-directory", "path" => path_to_create.quote())
                     );
                 }
             }
@@ -529,13 +519,13 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
     if paths.is_empty() {
         return Err(UUsageError::new(
             1,
-            get_message("install-error-missing-file-operand"),
+            translate!("install-error-missing-file-operand"),
         ));
     }
     if b.no_target_dir && paths.len() > 2 {
         return Err(InstallError::ExtraOperand(
             paths[2].clone(),
-            format_usage(&get_message("install-usage")),
+            format_usage(&translate!("install-usage")),
         )
         .into());
     }
@@ -550,10 +540,7 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
         if paths.is_empty() {
             return Err(UUsageError::new(
                 1,
-                get_message_with_args(
-                    "install-error-missing-destination-operand",
-                    HashMap::from([("path".to_string(), last_path.to_str().unwrap().to_string())]),
-                ),
+                translate!("install-error-missing-destination-operand", "path" => last_path.to_str().unwrap()),
             ));
         }
 
@@ -591,13 +578,7 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
                             // Don't display when the directory already exists
                             println!(
                                 "{}",
-                                get_message_with_args(
-                                    "install-verbose-creating-directory-step",
-                                    HashMap::from([(
-                                        "path".to_string(),
-                                        result.quote().to_string()
-                                    )])
-                                )
+                                translate!("install-verbose-creating-directory-step", "path" => result.quote())
                             );
                         }
                     }
@@ -746,10 +727,7 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
         if b.verbose {
             println!(
                 "{}",
-                get_message_with_args(
-                    "install-verbose-removed",
-                    HashMap::from([("path".to_string(), to.quote().to_string())])
-                )
+                translate!("install-verbose-removed", "path" => to.quote())
             );
         }
         let backup_path = backup_control::get_backup_path(b.backup_mode, to, &b.suffix);
@@ -812,13 +790,7 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         if e.kind() != std::io::ErrorKind::NotFound {
             show_error!(
                 "{}",
-                get_message_with_args(
-                    "install-error-failed-to-remove",
-                    HashMap::from([
-                        ("path".to_string(), to.display().to_string()),
-                        ("error".to_string(), format!("{e:?}"))
-                    ])
-                )
+                translate!("install-error-failed-to-remove", "path" => to.display(), "error" => format!("{e:?}"))
             );
         }
     }
@@ -872,10 +844,9 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
             if !status.success() {
                 // Follow GNU's behavior: if strip fails, removes the target
                 let _ = fs::remove_file(to);
-                return Err(InstallError::StripProgramFailed(get_message_with_args(
-                    "install-error-strip-abnormal",
-                    HashMap::from([("code".to_string(), status.code().unwrap().to_string())]),
-                ))
+                return Err(InstallError::StripProgramFailed(
+                    translate!("install-error-strip-abnormal", "code" => status.code().unwrap()),
+                )
                 .into());
             }
         }
@@ -982,21 +953,12 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
     if b.verbose {
         print!(
             "{}",
-            get_message_with_args(
-                "install-verbose-copy",
-                HashMap::from([
-                    ("from".to_string(), from.quote().to_string()),
-                    ("to".to_string(), to.quote().to_string())
-                ])
-            )
+            translate!("install-verbose-copy", "from" => from.quote(), "to" => to.quote())
         );
         match backup_path {
             Some(path) => println!(
                 " {}",
-                get_message_with_args(
-                    "install-verbose-backup",
-                    HashMap::from([("backup".to_string(), path.quote().to_string())])
-                )
+                translate!("install-verbose-backup", "backup" => path.quote())
             ),
             None => println!(),
         }

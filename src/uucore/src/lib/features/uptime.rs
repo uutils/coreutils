@@ -13,21 +13,20 @@
 // See https://github.com/uutils/coreutils/pull/7289 for discussion.
 
 use crate::error::{UError, UResult};
-use crate::locale::{get_message, get_message_with_args};
+use crate::translate;
 use chrono::Local;
 use libc::time_t;
-use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum UptimeError {
-    #[error("{}", get_message("uptime-lib-error-system-uptime"))]
+    #[error("{}", translate!("uptime-lib-error-system-uptime"))]
     SystemUptime,
-    #[error("{}", get_message("uptime-lib-error-system-loadavg"))]
+    #[error("{}", translate!("uptime-lib-error-system-loadavg"))]
     SystemLoadavg,
-    #[error("{}", get_message("uptime-lib-error-windows-loadavg"))]
+    #[error("{}", translate!("uptime-lib-error-windows-loadavg"))]
     WindowsLoadavg,
-    #[error("{}", get_message("uptime-lib-error-boot-time"))]
+    #[error("{}", translate!("uptime-lib-error-boot-time"))]
     BootTime,
 }
 
@@ -177,12 +176,10 @@ pub fn get_formatted_uptime(boot_time: Option<time_t>) -> UResult<String> {
     let up_hours = (up_secs - (up_days * 86400)) / 3600;
     let up_mins = (up_secs - (up_days * 86400) - (up_hours * 3600)) / 60;
 
-    Ok(get_message_with_args(
+    Ok(translate!(
         "uptime-format",
-        HashMap::from([
-            ("days".to_string(), up_days.to_string()),
-            ("time".to_string(), format!("{up_hours:02}:{up_mins:02}")),
-        ]),
+        "days" => up_days,
+        "time" => format!("{up_hours:02}:{up_mins:02}")
     ))
 }
 
@@ -310,9 +307,9 @@ pub fn get_nusers() -> usize {
 /// e.g. "0 users", "1 user", "2 users"
 #[inline]
 pub fn format_nusers(n: usize) -> String {
-    get_message_with_args(
+    translate!(
         "uptime-user-count",
-        HashMap::from([("count".to_string(), n.to_string())]),
+        "count" => n
     )
 }
 
@@ -372,13 +369,11 @@ pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
 #[inline]
 pub fn get_formatted_loadavg() -> UResult<String> {
     let loadavg = get_loadavg()?;
-    Ok(get_message_with_args(
+    Ok(translate!(
         "uptime-lib-format-loadavg",
-        HashMap::from([
-            ("avg1".to_string(), format!("{:.2}", loadavg.0)),
-            ("avg5".to_string(), format!("{:.2}", loadavg.1)),
-            ("avg15".to_string(), format!("{:.2}", loadavg.2)),
-        ]),
+        "avg1" => format!("{:.2}", loadavg.0),
+        "avg5" => format!("{:.2}", loadavg.1),
+        "avg15" => format!("{:.2}", loadavg.2),
     ))
 }
 
