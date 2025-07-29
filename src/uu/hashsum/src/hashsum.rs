@@ -495,7 +495,7 @@ pub fn uu_app_custom() -> Command {
 /// hashsum is handled differently in build.rs
 /// therefore, this is different from other utilities.
 fn uu_app(binary_name: &str) -> (Command, bool) {
-    match binary_name {
+    let (mut command, is_hashsum_bin) = match binary_name {
         // These all support the same options.
         "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" => {
             (uu_app_common(), false)
@@ -513,7 +513,12 @@ fn uu_app(binary_name: &str) -> (Command, bool) {
         "b3sum" => (uu_app_b3sum(), false),
         // We're probably just being called as `hashsum`, so give them everything.
         _ => (uu_app_custom(), true),
+    };
+    if binary_name != "hashsum" {
+        let correct_usage = format_usage(USAGE).replace("--<digest> ", "");
+        command = command.override_usage(correct_usage);
     }
+    (command, is_hashsum_bin)
 }
 
 #[allow(clippy::cognitive_complexity)]
