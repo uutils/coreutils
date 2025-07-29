@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ttyname hostnames runlevel mesg wtmp statted boottime deadprocs initspawn clockchange curr runlvline pidstr exitstr hoststr
+// spell-checker:ignore (ToDO) ttyname hostnames runlevel mesg wtmp statted boottime deadprocs initspawn clockchange curr pidstr exitstr hoststr
 
 use crate::options;
 use crate::uu_app;
@@ -250,14 +250,14 @@ impl Who {
     fn print_runlevel(&self, ut: &Utmpx) {
         let last = (ut.pid() / 256) as u8 as char;
         let curr = (ut.pid() % 256) as u8 as char;
-        let runlvline = translate!("who-runlevel", "level" => curr);
+        let runlevel_line = translate!("who-runlevel", "level" => curr);
         let comment =
             translate!("who-runlevel-last", "last" => (if last == 'N' { 'S' } else { 'N' }));
 
         self.print_line(
             "",
             ' ',
-            &runlvline,
+            &runlevel_line,
             &time_string(ut),
             "",
             "",
