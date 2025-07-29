@@ -18,12 +18,12 @@ workspace = true
 path = "src/du.rs"
 
 [dependencies]
-chrono = { workspace = true }
 # For the --exclude & --exclude-from options
 glob = { workspace = true }
 clap = { workspace = true }
-uucore = { workspace = true, features = ["format", "parser"] }
+uucore = { workspace = true, features = ["format", "fsext", "parser", "time"] }
 thiserror = { workspace = true }
+fluent = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true, features = [

@@ -5,6 +5,7 @@
 // spell-checker:ignore datetime
 
 use uucore::error::{UError, UResult, USimpleError};
+use uucore::translate;
 
 use clap::builder::ValueParser;
 use uucore::display::Quotable;
@@ -25,25 +26,23 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::Path;
 use std::{env, fs};
 
-use std::collections::HashMap;
 use thiserror::Error;
-use uucore::locale::{get_message, get_message_with_args};
 
 #[derive(Debug, Error)]
 enum StatError {
-    #[error("{}", get_message_with_args("stat-error-invalid-quoting-style", HashMap::from([("style".to_string(), style.clone())])))]
+    #[error("{}", translate!("stat-error-invalid-quoting-style", "style" => style.clone()))]
     InvalidQuotingStyle { style: String },
-    #[error("{}", get_message("stat-error-missing-operand"))]
+    #[error("{}", translate!("stat-error-missing-operand"))]
     MissingOperand,
-    #[error("{}", get_message_with_args("stat-error-invalid-directive", HashMap::from([("directive".to_string(), directive.clone())])))]
+    #[error("{}", translate!("stat-error-invalid-directive", "directive" => directive.clone()))]
     InvalidDirective { directive: String },
-    #[error("{}", get_message_with_args("stat-error-cannot-read-filesystem", HashMap::from([("error".to_string(), error.clone())])))]
+    #[error("{}", translate!("stat-error-cannot-read-filesystem", "error" => error.clone()))]
     CannotReadFilesystem { error: String },
-    #[error("{}", get_message("stat-error-stdin-filesystem-mode"))]
+    #[error("{}", translate!("stat-error-stdin-filesystem-mode"))]
     StdinFilesystemMode,
-    #[error("{}", get_message_with_args("stat-error-cannot-read-filesystem-info", HashMap::from([("file".to_string(), file.clone()), ("error".to_string(), error.clone())])))]
+    #[error("{}", translate!("stat-error-cannot-read-filesystem-info", "file" => file.clone(), "error" => error.clone()))]
     CannotReadFilesystemInfo { file: String, error: String },
-    #[error("{}", get_message_with_args("stat-error-cannot-stat", HashMap::from([("file".to_string(), file.clone()), ("error".to_string(), error.clone())])))]
+    #[error("{}", translate!("stat-error-cannot-stat", "file" => file.clone(), "error" => error.clone()))]
     CannotStat { file: String, error: String },
 }
 
@@ -740,7 +739,7 @@ impl Stater {
     ) -> Token {
         *i += 1;
         if *i >= bound {
-            show_warning!("{}", get_message("stat-warning-backslash-end-format"));
+            show_warning!("{}", translate!("stat-warning-backslash-end-format"));
             return Token::Char('\\');
         }
         match chars[*i] {
@@ -778,21 +777,18 @@ impl Stater {
                         *i += offset;
                         Token::Byte(c as u8)
                     } else {
-                        show_warning!("{}", get_message("stat-warning-unrecognized-escape-x"));
+                        show_warning!("{}", translate!("stat-warning-unrecognized-escape-x"));
                         Token::Byte(b'x')
                     }
                 } else {
-                    show_warning!("{}", get_message("stat-warning-incomplete-hex-escape"));
+                    show_warning!("{}", translate!("stat-warning-incomplete-hex-escape"));
                     Token::Byte(b'x')
                 }
             }
             other => {
                 show_warning!(
                     "{}",
-                    get_message_with_args(
-                        "stat-warning-unrecognized-escape",
-                        HashMap::from([("escape".to_string(), other.to_string())])
-                    )
+                    translate!("stat-warning-unrecognized-escape", "escape" => other)
                 );
                 Token::Byte(other as u8)
             }
@@ -920,6 +916,7 @@ impl Stater {
         ret
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn process_token_files(
         &self,
         t: &Token,
@@ -928,6 +925,7 @@ impl Stater {
         file: &OsString,
         file_type: &FileType,
         from_user: bool,
+        _follow_symbolic_links: bool,
     ) -> Result<(), i32> {
         match *t {
             Token::Byte(byte) => write_raw_byte(byte),
@@ -956,20 +954,22 @@ impl Stater {
                         #[cfg(feature = "selinux")]
                         {
                             if uucore::selinux::is_selinux_enabled() {
-                                match uucore::selinux::get_selinux_security_context(Path::new(file))
-                                {
+                                match uucore::selinux::get_selinux_security_context(
+                                    Path::new(file),
+                                    _follow_symbolic_links,
+                                ) {
                                     Ok(ctx) => OutputType::Str(ctx),
-                                    Err(_) => OutputType::Str(get_message(
-                                        "stat-selinux-failed-get-context",
+                                    Err(_) => OutputType::Str(translate!(
+                                        "stat-selinux-failed-get-context"
                                     )),
                                 }
                             } else {
-                                OutputType::Str(get_message("stat-selinux-unsupported-system"))
+                                OutputType::Str(translate!("stat-selinux-unsupported-system"))
                             }
                         }
                         #[cfg(not(feature = "selinux"))]
                         {
-                            OutputType::Str(get_message("stat-selinux-unsupported-os"))
+                            OutputType::Str(translate!("stat-selinux-unsupported-os"))
                         }
                     }
                     // device number in decimal
@@ -1113,7 +1113,8 @@ impl Stater {
                 }
             }
         } else {
-            let result = if self.follow || stdin_is_fifo && display_name == "-" {
+            let follow_symbolic_links = self.follow || stdin_is_fifo && display_name == "-";
+            let result = if follow_symbolic_links {
                 fs::metadata(&file)
             } else {
                 fs::symlink_metadata(&file)
@@ -1137,6 +1138,7 @@ impl Stater {
                             &file,
                             &file_type,
                             self.from_user,
+                            follow_symbolic_links,
                         ) {
                             return code;
                         }
@@ -1168,21 +1170,21 @@ impl Stater {
                     "  {}: \"%n\"\n    {}: %-8i {}: %-7l {}: %T\n{} \
                          {}: %-10s {} {}: %S\n{}: {}: %-10b \
                          {}: %-10f {}: %a\n{}: {}: %-10c {}: %d\n",
-                    get_message("stat-word-file"),
-                    get_message("stat-word-id"),
-                    get_message("stat-word-namelen"),
-                    get_message("stat-word-type"),
-                    get_message("stat-word-block"),
-                    get_message("stat-word-size"),
-                    get_message("stat-word-fundamental"),
-                    get_message("stat-word-block-size"),
-                    get_message("stat-word-blocks"),
-                    get_message("stat-word-total"),
-                    get_message("stat-word-free"),
-                    get_message("stat-word-available"),
-                    get_message("stat-word-inodes"),
-                    get_message("stat-word-total"),
-                    get_message("stat-word-free")
+                    translate!("stat-word-file"),
+                    translate!("stat-word-id"),
+                    translate!("stat-word-namelen"),
+                    translate!("stat-word-type"),
+                    translate!("stat-word-block"),
+                    translate!("stat-word-size"),
+                    translate!("stat-word-fundamental"),
+                    translate!("stat-word-block-size"),
+                    translate!("stat-word-blocks"),
+                    translate!("stat-word-total"),
+                    translate!("stat-word-free"),
+                    translate!("stat-word-available"),
+                    translate!("stat-word-inodes"),
+                    translate!("stat-word-total"),
+                    translate!("stat-word-free")
                 )
             }
         } else if terse {
@@ -1191,36 +1193,36 @@ impl Stater {
             let device_line = if show_dev_type {
                 format!(
                     "{}: %Dh/%dd\t{}: %-10i  {}: %-5h {} {}: %t,%T\n",
-                    get_message("stat-word-device"),
-                    get_message("stat-word-inode"),
-                    get_message("stat-word-links"),
-                    get_message("stat-word-device"),
-                    get_message("stat-word-type")
+                    translate!("stat-word-device"),
+                    translate!("stat-word-inode"),
+                    translate!("stat-word-links"),
+                    translate!("stat-word-device"),
+                    translate!("stat-word-type")
                 )
             } else {
                 format!(
                     "{}: %Dh/%dd\t{}: %-10i  {}: %h\n",
-                    get_message("stat-word-device"),
-                    get_message("stat-word-inode"),
-                    get_message("stat-word-links")
+                    translate!("stat-word-device"),
+                    translate!("stat-word-inode"),
+                    translate!("stat-word-links")
                 )
             };
 
             format!(
                 "  {}: %N\n  {}: %-10s\t{}: %-10b {} {}: %-6o %F\n{}{}: (%04a/%10.10A)  {}: (%5u/%8U)   {}: (%5g/%8G)\n{}: %x\n{}: %y\n{}: %z\n {}: %w\n",
-                get_message("stat-word-file"),
-                get_message("stat-word-size"),
-                get_message("stat-word-blocks"),
-                get_message("stat-word-io"),
-                get_message("stat-word-block"),
+                translate!("stat-word-file"),
+                translate!("stat-word-size"),
+                translate!("stat-word-blocks"),
+                translate!("stat-word-io"),
+                translate!("stat-word-block"),
                 device_line,
-                get_message("stat-word-access"),
-                get_message("stat-word-uid"),
-                get_message("stat-word-gid"),
-                get_message("stat-word-access"),
-                get_message("stat-word-modify"),
-                get_message("stat-word-change"),
-                get_message("stat-word-birth")
+                translate!("stat-word-access"),
+                translate!("stat-word-uid"),
+                translate!("stat-word-gid"),
+                translate!("stat-word-access"),
+                translate!("stat-word-modify"),
+                translate!("stat-word-change"),
+                translate!("stat-word-birth")
             )
         }
     }
@@ -1229,7 +1231,7 @@ impl Stater {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app()
-        .after_help(get_message("stat-after-help"))
+        .after_help(translate!("stat-after-help"))
         .try_get_matches_from(args)?;
 
     let stater = Stater::new(&matches)?;
@@ -1244,42 +1246,42 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("stat-about"))
-        .override_usage(format_usage(&get_message("stat-usage")))
+        .about(translate!("stat-about"))
+        .override_usage(format_usage(&translate!("stat-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::DEREFERENCE)
                 .short('L')
                 .long(options::DEREFERENCE)
-                .help(get_message("stat-help-dereference"))
+                .help(translate!("stat-help-dereference"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILE_SYSTEM)
                 .short('f')
                 .long(options::FILE_SYSTEM)
-                .help(get_message("stat-help-file-system"))
+                .help(translate!("stat-help-file-system"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TERSE)
                 .short('t')
                 .long(options::TERSE)
-                .help(get_message("stat-help-terse"))
+                .help(translate!("stat-help-terse"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FORMAT)
                 .short('c')
                 .long(options::FORMAT)
-                .help(get_message("stat-help-format"))
+                .help(translate!("stat-help-format"))
                 .value_name("FORMAT"),
         )
         .arg(
             Arg::new(options::PRINTF)
                 .long(options::PRINTF)
                 .value_name("FORMAT")
-                .help(get_message("stat-help-printf")),
+                .help(translate!("stat-help-printf")),
         )
         .arg(
             Arg::new(options::FILES)

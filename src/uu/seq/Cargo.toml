@@ -28,6 +28,7 @@ uucore = { workspace = true, features = [
   "parser",
   "quoting-style",
 ] }
+fluent = { workspace = true }
 
 [[bin]]
 name = "seq"

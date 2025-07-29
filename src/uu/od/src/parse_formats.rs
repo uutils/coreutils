@@ -4,11 +4,10 @@
 // file that was distributed with this source code.
 // spell-checker:ignore formatteriteminfo docopt fvox fvoxw vals acdx
 
-use std::collections::HashMap;
 use uucore::display::Quotable;
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
-use crate::formatteriteminfo::FormatterItemInfo;
+use crate::formatter_item_info::FormatterItemInfo;
 use crate::prn_char::*;
 use crate::prn_float::*;
 use crate::prn_int::*;
@@ -152,7 +151,7 @@ pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo
         }
     }
     if expect_type_string {
-        return Err(get_message("od-error-missing-format-spec"));
+        return Err(translate!("od-error-missing-format-spec"));
     }
 
     if formats.is_empty() {
@@ -279,13 +278,7 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
 
     while let Some(type_char) = ch {
         let type_char = format_type(type_char).ok_or_else(|| {
-            get_message_with_args(
-                "od-error-unexpected-char",
-                HashMap::from([
-                    ("char".to_string(), type_char.to_string()),
-                    ("spec".to_string(), params.quote().to_string()),
-                ]),
-            )
+            translate!("od-error-unexpected-char", "char" => type_char, "spec" => params.quote())
         })?;
 
         let type_cat = format_type_category(type_char);
@@ -320,12 +313,10 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
                         }
                         if !decimal_size.is_empty() {
                             byte_size = decimal_size.parse().map_err(|_| {
-                                get_message_with_args(
+                                translate!(
                                     "od-error-invalid-number",
-                                    HashMap::from([
-                                        ("number".to_string(), decimal_size.quote().to_string()),
-                                        ("spec".to_string(), params.quote().to_string()),
-                                    ]),
+                                    "number" => decimal_size.quote(),
+                                    "spec" => params.quote()
                                 )
                             })?;
                         }
@@ -341,13 +332,7 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
             }
             if !decimal_size.is_empty() {
                 byte_size = decimal_size.parse().map_err(|_| {
-                    get_message_with_args(
-                        "od-error-invalid-number",
-                        HashMap::from([
-                            ("number".to_string(), decimal_size.quote().to_string()),
-                            ("spec".to_string(), params.quote().to_string()),
-                        ]),
-                    )
+                    translate!("od-error-invalid-number", "number" => decimal_size.quote(), "spec" => params.quote())
                 })?;
             }
         }
@@ -363,12 +348,10 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
             }
         } else {
             od_format_type(type_char, byte_size).ok_or_else(|| {
-                get_message_with_args(
+                translate!(
                     "od-error-invalid-size",
-                    HashMap::from([
-                        ("size".to_string(), byte_size.to_string()),
-                        ("spec".to_string(), params.quote().to_string()),
-                    ]),
+                    "size" => byte_size,
+                    "spec" => params.quote()
                 )
             })?
         };

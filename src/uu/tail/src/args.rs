@@ -9,7 +9,6 @@ use crate::paths::Input;
 use crate::{Quotable, parse, platform};
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use same_file::Handle;
-use std::collections::HashMap;
 use std::ffi::OsString;
 use std::io::IsTerminal;
 use std::time::Duration;
@@ -17,9 +16,8 @@ use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
 use uucore::parser::parse_time;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+use uucore::translate;
 use uucore::{format_usage, show_warning};
-
-use uucore::locale::{get_message, get_message_with_args};
 
 pub mod options {
     pub mod verbosity {
@@ -79,10 +77,7 @@ impl FilterMode {
                 Err(e) => {
                     return Err(USimpleError::new(
                         1,
-                        get_message_with_args(
-                            "tail-error-invalid-number-of-bytes",
-                            HashMap::from([("arg".to_string(), format!("'{e}'"))]),
-                        ),
+                        translate!("tail-error-invalid-number-of-bytes", "arg" => format!("'{e}'")),
                     ));
                 }
             }
@@ -95,10 +90,7 @@ impl FilterMode {
                 Err(_) => {
                     return Err(USimpleError::new(
                         1,
-                        get_message_with_args(
-                            "tail-error-invalid-number-of-lines",
-                            HashMap::from([("arg".to_string(), arg.quote().to_string())]),
-                        ),
+                        translate!("tail-error-invalid-number-of-lines", "arg" => arg.quote()),
                     ));
                 }
             }
@@ -237,10 +229,7 @@ impl Settings {
             settings.sleep_sec = parse_time::from_str(source, false).map_err(|_| {
                 UUsageError::new(
                     1,
-                    get_message_with_args(
-                        "tail-error-invalid-number-of-seconds",
-                        HashMap::from([("source".to_string(), source.clone())]),
-                    ),
+                    translate!("tail-error-invalid-number-of-seconds", "source" => source.clone()),
                 )
             })?;
         }
@@ -251,10 +240,7 @@ impl Settings {
                 Err(_) => {
                     return Err(UUsageError::new(
                         1,
-                        get_message_with_args(
-                            "tail-error-invalid-max-unchanged-stats",
-                            HashMap::from([("value".to_string(), s.quote().to_string())]),
-                        ),
+                        translate!("tail-error-invalid-max-unchanged-stats", "value" => s.quote()),
                     ));
                 }
             }
@@ -269,10 +255,7 @@ impl Settings {
                         // NOTE: tail only accepts an unsigned pid
                         return Err(USimpleError::new(
                             1,
-                            get_message_with_args(
-                                "tail-error-invalid-pid",
-                                HashMap::from([("pid".to_string(), pid_str.quote().to_string())]),
-                            ),
+                            translate!("tail-error-invalid-pid", "pid" => pid_str.quote()),
                         ));
                     }
 
@@ -281,13 +264,7 @@ impl Settings {
                 Err(e) => {
                     return Err(USimpleError::new(
                         1,
-                        get_message_with_args(
-                            "tail-error-invalid-pid-with-error",
-                            HashMap::from([
-                                ("pid".to_string(), pid_str.quote().to_string()),
-                                ("error".to_string(), e.to_string()),
-                            ]),
-                        ),
+                        translate!("tail-error-invalid-pid-with-error", "pid" => pid_str.quote(), "error" => e),
                     ));
                 }
             }
@@ -321,17 +298,17 @@ impl Settings {
     pub fn check_warnings(&self) {
         if self.retry {
             if self.follow.is_none() {
-                show_warning!("{}", get_message("tail-warning-retry-ignored"));
+                show_warning!("{}", translate!("tail-warning-retry-ignored"));
             } else if self.follow == Some(FollowMode::Descriptor) {
-                show_warning!("{}", get_message("tail-warning-retry-only-effective"));
+                show_warning!("{}", translate!("tail-warning-retry-only-effective"));
             }
         }
 
         if self.pid != 0 {
             if self.follow.is_none() {
-                show_warning!("{}", get_message("tail-warning-pid-ignored"));
+                show_warning!("{}", translate!("tail-warning-pid-ignored"));
             } else if !platform::supports_pid_checks(self.pid) {
-                show_warning!("{}", get_message("tail-warning-pid-not-supported"));
+                show_warning!("{}", translate!("tail-warning-pid-not-supported"));
             }
         }
 
@@ -351,10 +328,7 @@ impl Settings {
                 });
 
             if !blocking_stdin && std::io::stdin().is_terminal() {
-                show_warning!(
-                    "{}",
-                    get_message("tail-warning-following-stdin-ineffective")
-                );
+                show_warning!("{}", translate!("tail-warning-following-stdin-ineffective"));
             }
         }
     }
@@ -392,26 +366,19 @@ pub fn parse_obsolete(arg: &OsString, input: Option<&OsString>) -> UResult<Optio
             Err(USimpleError::new(
                 1,
                 match e {
-                    parse::ParseError::OutOfRange => get_message_with_args(
-                        "tail-error-invalid-number-out-of-range",
-                        HashMap::from([("arg".to_string(), arg_str.quote().to_string())]),
-                    ),
-                    parse::ParseError::Overflow => get_message_with_args(
-                        "tail-error-invalid-number-overflow",
-                        HashMap::from([("arg".to_string(), arg_str.quote().to_string())]),
-                    ),
+                    parse::ParseError::OutOfRange => {
+                        translate!("tail-error-invalid-number-out-of-range", "arg" => arg_str.quote())
+                    }
+                    parse::ParseError::Overflow => {
+                        translate!("tail-error-invalid-number-overflow", "arg" => arg_str.quote())
+                    }
                     // this ensures compatibility to GNU's error message (as tested in misc/tail)
-                    parse::ParseError::Context => get_message_with_args(
-                        "tail-error-option-used-in-invalid-context",
-                        HashMap::from([(
-                            "option".to_string(),
-                            arg_str.chars().nth(1).unwrap_or_default().to_string(),
-                        )]),
-                    ),
-                    parse::ParseError::InvalidEncoding => get_message_with_args(
-                        "tail-error-bad-argument-encoding",
-                        HashMap::from([("arg".to_string(), arg_str.to_string())]),
-                    ),
+                    parse::ParseError::Context => {
+                        translate!("tail-error-option-used-in-invalid-context", "option" => arg_str.chars().nth(1).unwrap_or_default())
+                    }
+                    parse::ParseError::InvalidEncoding => {
+                        translate!("tail-error-bad-argument-encoding", "arg" => arg_str)
+                    }
                 },
             ))
         }
@@ -486,16 +453,16 @@ pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
 
 pub fn uu_app() -> Command {
     #[cfg(target_os = "linux")]
-    let polling_help = get_message("tail-help-polling-linux");
+    let polling_help = translate!("tail-help-polling-linux");
     #[cfg(all(unix, not(target_os = "linux")))]
-    let polling_help = get_message("tail-help-polling-unix");
+    let polling_help = translate!("tail-help-polling-unix");
     #[cfg(target_os = "windows")]
-    let polling_help = get_message("tail-help-polling-windows");
+    let polling_help = translate!("tail-help-polling-windows");
 
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("tail-about"))
-        .override_usage(format_usage(&get_message("tail-usage")))
+        .about(translate!("tail-about"))
+        .override_usage(format_usage(&translate!("tail-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::BYTES)
@@ -503,7 +470,7 @@ pub fn uu_app() -> Command {
                 .long(options::BYTES)
                 .allow_hyphen_values(true)
                 .overrides_with_all([options::BYTES, options::LINES])
-                .help(get_message("tail-help-bytes")),
+                .help(translate!("tail-help-bytes")),
         )
         .arg(
             Arg::new(options::FOLLOW)
@@ -514,7 +481,7 @@ pub fn uu_app() -> Command {
                 .require_equals(true)
                 .value_parser(ShortcutValueParser::new(["descriptor", "name"]))
                 .overrides_with(options::FOLLOW)
-                .help(get_message("tail-help-follow")),
+                .help(translate!("tail-help-follow")),
         )
         .arg(
             Arg::new(options::LINES)
@@ -522,13 +489,13 @@ pub fn uu_app() -> Command {
                 .long(options::LINES)
                 .allow_hyphen_values(true)
                 .overrides_with_all([options::BYTES, options::LINES])
-                .help(get_message("tail-help-lines")),
+                .help(translate!("tail-help-lines")),
         )
         .arg(
             Arg::new(options::PID)
                 .long(options::PID)
                 .value_name("PID")
-                .help(get_message("tail-help-pid"))
+                .help(translate!("tail-help-pid"))
                 .overrides_with(options::PID),
         )
         .arg(
@@ -537,7 +504,7 @@ pub fn uu_app() -> Command {
                 .long(options::verbosity::QUIET)
                 .visible_alias("silent")
                 .overrides_with_all([options::verbosity::QUIET, options::verbosity::VERBOSE])
-                .help(get_message("tail-help-quiet"))
+                .help(translate!("tail-help-quiet"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -545,27 +512,27 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .value_name("N")
                 .long(options::SLEEP_INT)
-                .help(get_message("tail-help-sleep-interval")),
+                .help(translate!("tail-help-sleep-interval")),
         )
         .arg(
             Arg::new(options::MAX_UNCHANGED_STATS)
                 .value_name("N")
                 .long(options::MAX_UNCHANGED_STATS)
-                .help(get_message("tail-help-max-unchanged-stats")),
+                .help(translate!("tail-help-max-unchanged-stats")),
         )
         .arg(
             Arg::new(options::verbosity::VERBOSE)
                 .short('v')
                 .long(options::verbosity::VERBOSE)
                 .overrides_with_all([options::verbosity::QUIET, options::verbosity::VERBOSE])
-                .help(get_message("tail-help-verbose"))
+                .help(translate!("tail-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ZERO_TERM)
                 .short('z')
                 .long(options::ZERO_TERM)
-                .help(get_message("tail-help-zero-terminated"))
+                .help(translate!("tail-help-zero-terminated"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -579,14 +546,14 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::RETRY)
                 .long(options::RETRY)
-                .help(get_message("tail-help-retry"))
+                .help(translate!("tail-help-retry"))
                 .overrides_with(options::RETRY)
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FOLLOW_RETRY)
                 .short('F')
-                .help(get_message("tail-help-follow-retry"))
+                .help(translate!("tail-help-follow-retry"))
                 .overrides_with(options::FOLLOW_RETRY)
                 .action(ArgAction::SetTrue),
         )

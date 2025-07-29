@@ -2,13 +2,15 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore bfloat
+
+// spell-checker:ignore bfloat multifile
+
 use half::{bf16, f16};
 use std::io;
 
 use crate::byteorder_io::ByteOrder;
-use crate::multifilereader::HasError;
-use crate::peekreader::PeekRead;
+use crate::multifile_reader::HasError;
+use crate::peek_reader::PeekRead;
 
 /// Processes an input and provides access to the data read in various formats
 ///
@@ -169,7 +171,7 @@ impl MemoryDecoder<'_> {
 mod tests {
     use super::*;
     use crate::byteorder_io::ByteOrder;
-    use crate::peekreader::PeekReader;
+    use crate::peek_reader::PeekReader;
     use std::io::Cursor;
 
     #[test]

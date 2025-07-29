@@ -4,7 +4,6 @@
 // file that was distributed with this source code.
 #![cfg(target_os = "linux")]
 
-use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fmt::{Display, Formatter, Write};
 use std::io;
@@ -12,7 +11,7 @@ use std::str::Utf8Error;
 
 use uucore::display::Quotable;
 use uucore::error::UError;
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 pub(crate) type Result<T> = std::result::Result<T, Error>;
 
@@ -27,10 +26,10 @@ pub(crate) mod error_exit_status {
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum Error {
-    #[error("{}", get_message("runcon-error-no-command"))]
+    #[error("{}", translate!("runcon-error-no-command"))]
     MissingCommand,
 
-    #[error("{}", get_message("runcon-error-selinux-not-enabled"))]
+    #[error("{}", translate!("runcon-error-selinux-not-enabled"))]
     SELinuxNotEnabled,
 
     #[error(transparent)]
@@ -39,19 +38,19 @@ pub(crate) enum Error {
     #[error(transparent)]
     CommandLine(#[from] clap::Error),
 
-    #[error("{}", get_message_with_args("runcon-error-operation-failed", HashMap::from([("operation".to_string(), get_message(.operation))])))]
+    #[error("{}", translate!("runcon-error-operation-failed", "operation" => .operation))]
     SELinux {
         operation: &'static str,
         source: selinux::errors::Error,
     },
 
-    #[error("{}", get_message_with_args("runcon-error-operation-failed", HashMap::from([("operation".to_string(), get_message(.operation))])))]
+    #[error("{}", translate!("runcon-error-operation-failed", "operation" => .operation))]
     Io {
         operation: &'static str,
         source: io::Error,
     },
 
-    #[error("{}", get_message_with_args("runcon-error-operation-failed-on", HashMap::from([("operation".to_string(), get_message(.operation)), ("operand".to_string(), .operand1.quote().to_string())])))]
+    #[error("{}", translate!("runcon-error-operation-failed-on", "operation" => .operation, "operand" => .operand1.quote()))]
     Io1 {
         operation: &'static str,
         operand1: OsString,

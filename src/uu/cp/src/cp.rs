@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf, StripPrefixError};
 use std::{fmt, io};
 #[cfg(all(unix, not(target_os = "android")))]
 use uucore::fsxattr::copy_xattrs;
+use uucore::translate;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_parser};
 use filetime::FileTime;
@@ -41,7 +42,6 @@ use uucore::{
 };
 
 use crate::copydir::copy_directory;
-use uucore::locale::{get_message, get_message_with_args};
 
 mod copydir;
 mod platform;
@@ -62,7 +62,7 @@ pub enum CpError {
 
     /// Represents the state when a non-fatal error has occurred
     /// and not all files were copied.
-    #[error("{}", get_message("cp-error-not-all-files-copied"))]
+    #[error("{}", translate!("cp-error-not-all-files-copied"))]
     NotAllFilesCopied,
 
     /// Simple [`walkdir::Error`] wrapper
@@ -87,14 +87,14 @@ pub enum CpError {
     /// All standard options are included as an implementation
     /// path, but those that are not implemented yet should return
     /// a `NotImplemented` error.
-    #[error("{}", get_message_with_args("cp-error-option-not-implemented", HashMap::from([("option".to_string(), 0.to_string())])))]
+    #[error("{}", translate!("cp-error-option-not-implemented", "option" => 0))]
     NotImplemented(String),
 
     /// Invalid arguments to backup
     #[error(transparent)]
     Backup(#[from] BackupError),
 
-    #[error("{}", get_message_with_args("cp-error-not-a-directory", HashMap::from([("path".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("cp-error-not-a-directory", "path" => .0.quote()))]
     NotADirectory(PathBuf),
 }
 
@@ -119,13 +119,7 @@ impl Display for BackupError {
         write!(
             f,
             "{}",
-            get_message_with_args(
-                "cp-error-backup-format",
-                HashMap::from([
-                    ("error".to_string(), self.0.clone()),
-                    ("exec".to_string(), uucore::execution_phrase().to_string())
-                ])
-            )
+            translate!("cp-error-backup-format", "error" => self.0.clone(), "exec" => uucore::execution_phrase())
         )
     }
 }
@@ -423,11 +417,11 @@ struct CopyDebug {
 impl Display for OffloadReflinkDebug {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let msg = match self {
-            Self::No => get_message("cp-debug-enum-no"),
-            Self::Yes => get_message("cp-debug-enum-yes"),
-            Self::Avoided => get_message("cp-debug-enum-avoided"),
-            Self::Unsupported => get_message("cp-debug-enum-unsupported"),
-            Self::Unknown => get_message("cp-debug-enum-unknown"),
+            Self::No => translate!("cp-debug-enum-no"),
+            Self::Yes => translate!("cp-debug-enum-yes"),
+            Self::Avoided => translate!("cp-debug-enum-avoided"),
+            Self::Unsupported => translate!("cp-debug-enum-unsupported"),
+            Self::Unknown => translate!("cp-debug-enum-unknown"),
         };
         write!(f, "{msg}")
     }
@@ -436,12 +430,12 @@ impl Display for OffloadReflinkDebug {
 impl Display for SparseDebug {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let msg = match self {
-            Self::No => get_message("cp-debug-enum-no"),
-            Self::Zeros => get_message("cp-debug-enum-zeros"),
-            Self::SeekHole => get_message("cp-debug-enum-seek-hole"),
-            Self::SeekHoleZeros => get_message("cp-debug-enum-seek-hole-zeros"),
-            Self::Unsupported => get_message("cp-debug-enum-unsupported"),
-            Self::Unknown => get_message("cp-debug-enum-unknown"),
+            Self::No => translate!("cp-debug-enum-no"),
+            Self::Zeros => translate!("cp-debug-enum-zeros"),
+            Self::SeekHole => translate!("cp-debug-enum-seek-hole"),
+            Self::SeekHoleZeros => translate!("cp-debug-enum-seek-hole-zeros"),
+            Self::Unsupported => translate!("cp-debug-enum-unsupported"),
+            Self::Unknown => translate!("cp-debug-enum-unknown"),
         };
         write!(f, "{msg}")
     }
@@ -453,17 +447,7 @@ impl Display for SparseDebug {
 fn show_debug(copy_debug: &CopyDebug) {
     println!(
         "{}",
-        get_message_with_args(
-            "cp-debug-copy-offload",
-            HashMap::from([
-                ("offload".to_string(), copy_debug.offload.to_string()),
-                ("reflink".to_string(), copy_debug.reflink.to_string()),
-                (
-                    "sparse".to_string(),
-                    copy_debug.sparse_detection.to_string()
-                ),
-            ])
-        )
+        translate!("cp-debug-copy-offload", "offload" => copy_debug.offload, "reflink" => copy_debug.reflink, "sparse" => copy_debug.sparse_detection)
     );
 }
 
@@ -535,11 +519,11 @@ pub fn uu_app() -> Command {
     ];
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("cp-about"))
-        .override_usage(format_usage(&get_message("cp-usage")))
+        .about(translate!("cp-about"))
+        .override_usage(format_usage(&translate!("cp-usage")))
         .after_help(format!(
             "{}\n\n{}",
-            get_message("cp-after-help"),
+            translate!("cp-after-help"),
             backup_control::BACKUP_CONTROL_LONG_HELP
         ))
         .infer_long_args(true)
@@ -552,14 +536,14 @@ pub fn uu_app() -> Command {
                 .value_name(options::TARGET_DIRECTORY)
                 .value_hint(clap::ValueHint::DirPath)
                 .value_parser(ValueParser::path_buf())
-                .help(get_message("cp-help-target-directory")),
+                .help(translate!("cp-help-target-directory")),
         )
         .arg(
             Arg::new(options::NO_TARGET_DIRECTORY)
                 .short('T')
                 .long(options::NO_TARGET_DIRECTORY)
                 .conflicts_with(options::TARGET_DIRECTORY)
-                .help(get_message("cp-help-no-target-directory"))
+                .help(translate!("cp-help-no-target-directory"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -567,7 +551,7 @@ pub fn uu_app() -> Command {
                 .short('i')
                 .long(options::INTERACTIVE)
                 .overrides_with(options::NO_CLOBBER)
-                .help(get_message("cp-help-interactive"))
+                .help(translate!("cp-help-interactive"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -575,7 +559,7 @@ pub fn uu_app() -> Command {
                 .short('l')
                 .long(options::LINK)
                 .overrides_with_all(MODE_ARGS)
-                .help(get_message("cp-help-link"))
+                .help(translate!("cp-help-link"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -583,7 +567,7 @@ pub fn uu_app() -> Command {
                 .short('n')
                 .long(options::NO_CLOBBER)
                 .overrides_with(options::INTERACTIVE)
-                .help(get_message("cp-help-no-clobber"))
+                .help(translate!("cp-help-no-clobber"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -592,26 +576,26 @@ pub fn uu_app() -> Command {
                 .visible_short_alias('r')
                 .long(options::RECURSIVE)
                 // --archive sets this option
-                .help(get_message("cp-help-recursive"))
+                .help(translate!("cp-help-recursive"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::STRIP_TRAILING_SLASHES)
                 .long(options::STRIP_TRAILING_SLASHES)
-                .help(get_message("cp-help-strip-trailing-slashes"))
+                .help(translate!("cp-help-strip-trailing-slashes"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DEBUG)
                 .long(options::DEBUG)
-                .help(get_message("cp-help-debug"))
+                .help(translate!("cp-help-debug"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::VERBOSE)
                 .short('v')
                 .long(options::VERBOSE)
-                .help(get_message("cp-help-verbose"))
+                .help(translate!("cp-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -619,21 +603,21 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(options::SYMBOLIC_LINK)
                 .overrides_with_all(MODE_ARGS)
-                .help(get_message("cp-help-symbolic-link"))
+                .help(translate!("cp-help-symbolic-link"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FORCE)
                 .short('f')
                 .long(options::FORCE)
-                .help(get_message("cp-help-force"))
+                .help(translate!("cp-help-force"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::REMOVE_DESTINATION)
                 .long(options::REMOVE_DESTINATION)
                 .overrides_with(options::FORCE)
-                .help(get_message("cp-help-remove-destination"))
+                .help(translate!("cp-help-remove-destination"))
                 .action(ArgAction::SetTrue),
         )
         .arg(backup_control::arguments::backup())
@@ -650,13 +634,13 @@ pub fn uu_app() -> Command {
                 .default_missing_value("always")
                 .value_parser(ShortcutValueParser::new(["auto", "always", "never"]))
                 .num_args(0..=1)
-                .help(get_message("cp-help-reflink")),
+                .help(translate!("cp-help-reflink")),
         )
         .arg(
             Arg::new(options::ATTRIBUTES_ONLY)
                 .long(options::ATTRIBUTES_ONLY)
                 .overrides_with_all(MODE_ARGS)
-                .help(get_message("cp-help-attributes-only"))
+                .help(translate!("cp-help-attributes-only"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -671,13 +655,13 @@ pub fn uu_app() -> Command {
                 .default_missing_value(PRESERVE_DEFAULT_VALUES)
                 // -d sets this option
                 // --archive sets this option
-                .help(get_message("cp-help-preserve")),
+                .help(translate!("cp-help-preserve")),
         )
         .arg(
             Arg::new(options::PRESERVE_DEFAULT_ATTRIBUTES)
                 .short('p')
                 .long(options::PRESERVE_DEFAULT_ATTRIBUTES)
-                .help(get_message("cp-help-preserve-default"))
+                .help(translate!("cp-help-preserve-default"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -689,13 +673,13 @@ pub fn uu_app() -> Command {
                 .num_args(0..)
                 .require_equals(true)
                 .value_name("ATTR_LIST")
-                .help(get_message("cp-help-no-preserve")),
+                .help(translate!("cp-help-no-preserve")),
         )
         .arg(
             Arg::new(options::PARENTS)
                 .long(options::PARENTS)
                 .alias(options::PARENT)
-                .help(get_message("cp-help-parents"))
+                .help(translate!("cp-help-parents"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -704,7 +688,7 @@ pub fn uu_app() -> Command {
                 .long(options::NO_DEREFERENCE)
                 .overrides_with(options::DEREFERENCE)
                 // -d sets this option
-                .help(get_message("cp-help-no-dereference"))
+                .help(translate!("cp-help-no-dereference"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -712,33 +696,33 @@ pub fn uu_app() -> Command {
                 .short('L')
                 .long(options::DEREFERENCE)
                 .overrides_with(options::NO_DEREFERENCE)
-                .help(get_message("cp-help-dereference"))
+                .help(translate!("cp-help-dereference"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CLI_SYMBOLIC_LINKS)
                 .short('H')
-                .help(get_message("cp-help-cli-symbolic-links"))
+                .help(translate!("cp-help-cli-symbolic-links"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ARCHIVE)
                 .short('a')
                 .long(options::ARCHIVE)
-                .help(get_message("cp-help-archive"))
+                .help(translate!("cp-help-archive"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_DEREFERENCE_PRESERVE_LINKS)
                 .short('d')
-                .help(get_message("cp-help-no-dereference-preserve-links"))
+                .help(translate!("cp-help-no-dereference-preserve-links"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ONE_FILE_SYSTEM)
                 .short('x')
                 .long(options::ONE_FILE_SYSTEM)
-                .help(get_message("cp-help-one-file-system"))
+                .help(translate!("cp-help-one-file-system"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -746,12 +730,12 @@ pub fn uu_app() -> Command {
                 .long(options::SPARSE)
                 .value_name("WHEN")
                 .value_parser(ShortcutValueParser::new(["never", "auto", "always"]))
-                .help(get_message("cp-help-sparse")),
+                .help(translate!("cp-help-sparse")),
         )
         .arg(
             Arg::new(options::SELINUX)
                 .short('Z')
-                .help(get_message("cp-help-selinux"))
+                .help(translate!("cp-help-selinux"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -759,7 +743,7 @@ pub fn uu_app() -> Command {
                 .long(options::CONTEXT)
                 .value_name("CTX")
                 .value_parser(value_parser!(String))
-                .help(get_message("cp-help-context"))
+                .help(translate!("cp-help-context"))
                 .num_args(0..=1)
                 .require_equals(true)
                 .default_missing_value(""),
@@ -771,14 +755,14 @@ pub fn uu_app() -> Command {
                 .long(options::PROGRESS_BAR)
                 .short('g')
                 .action(ArgAction::SetTrue)
-                .help(get_message("cp-help-progress")),
+                .help(translate!("cp-help-progress")),
         )
         // TODO: implement the following args
         .arg(
             Arg::new(options::COPY_CONTENTS)
                 .long(options::COPY_CONTENTS)
                 .overrides_with(options::ATTRIBUTES_ONLY)
-                .help(get_message("cp-help-copy-contents"))
+                .help(translate!("cp-help-copy-contents"))
                 .action(ArgAction::SetTrue),
         )
         // END TODO
@@ -801,7 +785,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if options.overwrite == OverwriteMode::NoClobber && options.backup != BackupMode::None {
         return Err(UUsageError::new(
             EXIT_ERR,
-            get_message("cp-error-backup-mutually-exclusive"),
+            translate!("cp-error-backup-mutually-exclusive"),
         ));
     }
 
@@ -982,10 +966,9 @@ impl Attributes {
             "link" | "links" => &mut new.links,
             "xattr" => &mut new.xattr,
             _ => {
-                return Err(CpError::InvalidArgument(get_message_with_args(
-                    "cp-error-invalid-attribute",
-                    HashMap::from([("value".to_string(), value.quote().to_string())]),
-                )));
+                return Err(CpError::InvalidArgument(
+                    translate!("cp-error-invalid-attribute", "value" => value.quote()),
+                ));
             }
         };
 
@@ -1028,7 +1011,7 @@ impl Options {
                 .is_some_and(|v| v == "none" || v == "none-fail")
         {
             return Err(CpError::InvalidArgument(
-                get_message("cp-error-invalid-backup-argument").to_string(),
+                translate!("cp-error-invalid-backup-argument").to_string(),
             ));
         }
 
@@ -1131,8 +1114,7 @@ impl Options {
 
         #[cfg(not(feature = "selinux"))]
         if let Preserve::Yes { required } = attributes.context {
-            let selinux_disabled_error =
-                CpError::Error(get_message("cp-error-selinux-not-enabled"));
+            let selinux_disabled_error = CpError::Error(translate!("cp-error-selinux-not-enabled"));
             if required {
                 return Err(selinux_disabled_error);
             }
@@ -1174,13 +1156,9 @@ impl Options {
                         "auto" => ReflinkMode::Auto,
                         "never" => ReflinkMode::Never,
                         value => {
-                            return Err(CpError::InvalidArgument(get_message_with_args(
-                                "cp-error-invalid-argument",
-                                HashMap::from([
-                                    ("arg".to_string(), value.quote().to_string()),
-                                    ("option".to_string(), "reflink".to_string()),
-                                ]),
-                            )));
+                            return Err(CpError::InvalidArgument(
+                                translate!("cp-error-invalid-argument", "arg" => value.quote(), "option" => "reflink"),
+                            ));
                         }
                     }
                 } else {
@@ -1194,13 +1172,9 @@ impl Options {
                         "auto" => SparseMode::Auto,
                         "never" => SparseMode::Never,
                         _ => {
-                            return Err(CpError::InvalidArgument(get_message_with_args(
-                                "cp-error-invalid-argument",
-                                HashMap::from([
-                                    ("arg".to_string(), val.to_string()),
-                                    ("option".to_string(), "sparse".to_string()),
-                                ]),
-                            )));
+                            return Err(CpError::InvalidArgument(
+                                translate!("cp-error-invalid-argument", "arg" => val, "option" => "sparse"),
+                            ));
                         }
                     }
                 } else {
@@ -1274,29 +1248,19 @@ fn parse_path_args(
 ) -> CopyResult<(Vec<PathBuf>, PathBuf)> {
     if paths.is_empty() {
         // No files specified
-        return Err(get_message("cp-error-missing-file-operand").into());
+        return Err(translate!("cp-error-missing-file-operand").into());
     } else if paths.len() == 1 && options.target_dir.is_none() {
         // Only one file specified
-        return Err(get_message_with_args(
-            "cp-error-missing-destination-operand",
-            HashMap::from([(
-                "source".to_string(),
-                paths[0].display().to_string().quote().to_string(),
-            )]),
-        )
+        return Err(translate!("cp-error-missing-destination-operand",
+                       "source" => paths[0].quote())
         .into());
     }
 
     // Return an error if the user requested to copy more than one
     // file source to a file target
     if options.no_target_dir && options.target_dir.is_none() && paths.len() > 2 {
-        return Err(get_message_with_args(
-            "cp-error-extra-operand",
-            HashMap::from([(
-                "operand".to_string(),
-                paths[2].display().to_string().quote().to_string(),
-            )]),
-        )
+        return Err(translate!("cp-error-extra-operand",
+                              "operand" => paths[2].quote())
         .into());
     }
 
@@ -1392,13 +1356,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
             } else {
                 "file"
             };
-            let msg = get_message_with_args(
-                "cp-warning-source-specified-more-than-once",
-                HashMap::from([
-                    ("file_type".to_string(), file_type.to_string()),
-                    ("source".to_string(), source.quote().to_string()),
-                ]),
-            );
+            let msg = translate!("cp-warning-source-specified-more-than-once", "file_type" => file_type, "source" => source.quote());
             show_warning!("{msg}");
         } else {
             let dest = construct_dest_path(source, target, target_type, options)
@@ -1414,13 +1372,9 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 // There is already a file and it isn't a symlink (managed in a different place)
                 if copied_destinations.contains(&dest) && options.backup != BackupMode::Numbered {
                     // If the target file was already created in this cp call, do not overwrite
-                    return Err(CpError::Error(get_message_with_args(
-                        "cp-error-will-not-overwrite-just-created",
-                        HashMap::from([
-                            ("dest".to_string(), dest.quote().to_string()),
-                            ("source".to_string(), source.quote().to_string()),
-                        ]),
-                    )));
+                    return Err(CpError::Error(
+                        translate!("cp-error-will-not-overwrite-just-created", "dest" => dest.quote(), "source" => source.quote()),
+                    ));
                 }
             }
 
@@ -1463,15 +1417,15 @@ fn construct_dest_path(
     options: &Options,
 ) -> CopyResult<PathBuf> {
     if options.no_target_dir && target.is_dir() {
-        return Err(get_message_with_args(
-            "cp-error-cannot-overwrite-directory-with-non-directory",
-            HashMap::from([("dir".to_string(), target.quote().to_string())]),
-        )
-        .into());
+        return Err(
+            translate!("cp-error-cannot-overwrite-directory-with-non-directory",
+                              "dir" => target.quote())
+            .into(),
+        );
     }
 
     if options.parents && !target.is_dir() {
-        return Err(get_message("cp-error-with-parents-dest-must-be-dir").into());
+        return Err(translate!("cp-error-with-parents-dest-must-be-dir").into());
     }
 
     Ok(match target_type {
@@ -1596,13 +1550,7 @@ impl OverwriteMode {
         match *self {
             Self::NoClobber => {
                 if debug {
-                    println!(
-                        "{}",
-                        get_message_with_args(
-                            "cp-debug-skipped",
-                            HashMap::from([("path".to_string(), path.quote().to_string())])
-                        )
-                    );
+                    println!("{}", translate!("cp-debug-skipped", "path" => path.quote()));
                 }
                 Err(CpError::Skipped(false))
             }
@@ -1610,16 +1558,11 @@ impl OverwriteMode {
                 let prompt_yes_result = if let Some((octal, human_readable)) =
                     file_mode_for_interactive_overwrite(path)
                 {
-                    let prompt_msg = get_message_with_args(
-                        "cp-prompt-overwrite-with-mode",
-                        HashMap::from([("path".to_string(), path.quote().to_string())]),
-                    );
+                    let prompt_msg =
+                        translate!("cp-prompt-overwrite-with-mode", "path" => path.quote());
                     prompt_yes!("{prompt_msg} {octal} ({human_readable})?")
                 } else {
-                    let prompt_msg = get_message_with_args(
-                        "cp-prompt-overwrite",
-                        HashMap::from([("path".to_string(), path.quote().to_string())]),
-                    );
+                    let prompt_msg = translate!("cp-prompt-overwrite", "path" => path.quote());
                     prompt_yes!("{prompt_msg}")
                 };
 
@@ -1708,20 +1651,30 @@ pub(crate) fn copy_attributes(
 
         let dest_uid = source_metadata.uid();
         let dest_gid = source_metadata.gid();
-        // gnu compatibility: cp doesn't report an error if it fails to set the ownership.
-        let _ = wrap_chown(
-            dest,
-            &dest
-                .symlink_metadata()
-                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?,
-            Some(dest_uid),
-            Some(dest_gid),
-            false,
-            Verbosity {
-                groups_only: false,
-                level: VerbosityLevel::Silent,
-            },
-        );
+        let meta = &dest
+            .symlink_metadata()
+            .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+
+        let try_chown = {
+            |uid| {
+                wrap_chown(
+                    dest,
+                    meta,
+                    uid,
+                    Some(dest_gid),
+                    false,
+                    Verbosity {
+                        groups_only: false,
+                        level: VerbosityLevel::Silent,
+                    },
+                )
+            }
+        };
+        // gnu compatibility: cp doesn't report an error if it fails to set the ownership,
+        // and will fall back to changing only the gid if possible.
+        if try_chown(Some(dest_uid)).is_err() {
+            let _ = try_chown(None);
+        }
         Ok(())
     })?;
 
@@ -1762,20 +1715,15 @@ pub(crate) fn copy_attributes(
         if let Ok(context) = selinux::SecurityContext::of_path(source, false, false) {
             if let Some(context) = context {
                 if let Err(e) = context.set_for_path(dest, false, false) {
-                    return Err(CpError::Error(get_message_with_args(
-                        "cp-error-selinux-set-context",
-                        HashMap::from([
-                            ("path".to_string(), dest.display().to_string()),
-                            ("error".to_string(), e.to_string()),
-                        ]),
-                    )));
+                    return Err(CpError::Error(
+                        translate!("cp-error-selinux-set-context", "path" => dest.display(), "error" => e),
+                    ));
                 }
             }
         } else {
-            return Err(CpError::Error(get_message_with_args(
-                "cp-error-selinux-get-context",
-                HashMap::from([("path".to_string(), source.display().to_string())]),
-            )));
+            return Err(CpError::Error(
+                translate!("cp-error-selinux-get-context", "path" => source.display()),
+            ));
         }
         Ok(())
     })?;
@@ -1815,25 +1763,9 @@ fn symlink_file(
         std::os::unix::fs::symlink(source, dest).map_err(|e| {
             CpError::IoErrContext(
                 e,
-                get_message_with_args(
-                    "cp-error-cannot-create-symlink",
-                    HashMap::from([
-                        (
-                            "dest".to_string(),
-                            get_filename(dest)
-                                .unwrap_or("invalid file name")
-                                .quote()
-                                .to_string(),
-                        ),
-                        (
-                            "source".to_string(),
-                            get_filename(source)
-                                .unwrap_or("invalid file name")
-                                .quote()
-                                .to_string(),
-                        ),
-                    ]),
-                ),
+                translate!("cp-error-cannot-create-symlink",
+                           "dest" => get_filename(dest).unwrap_or("?").quote(),
+                           "source" => get_filename(source).unwrap_or("?").quote()),
             )
         })?;
     }
@@ -1842,25 +1774,9 @@ fn symlink_file(
         std::os::windows::fs::symlink_file(source, dest).map_err(|e| {
             CpError::IoErrContext(
                 e,
-                get_message_with_args(
-                    "cp-error-cannot-create-symlink",
-                    HashMap::from([
-                        (
-                            "dest".to_string(),
-                            get_filename(dest)
-                                .unwrap_or("invalid file name")
-                                .quote()
-                                .to_string(),
-                        ),
-                        (
-                            "source".to_string(),
-                            get_filename(source)
-                                .unwrap_or("invalid file name")
-                                .quote()
-                                .to_string(),
-                        ),
-                    ]),
-                ),
+                translate!("cp-error-cannot-create-symlink",
+                           "dest" => get_filename(dest).unwrap_or("?").quote(),
+                           "source" => get_filename(source).unwrap_or("?").quote()),
             )
         })?;
     }
@@ -1950,13 +1866,9 @@ fn handle_existing_dest(
     // Disallow copying a file to itself, unless `--force` and
     // `--backup` are both specified.
     if is_forbidden_to_copy_to_same_file(source, dest, options, source_in_command_line) {
-        return Err(get_message_with_args(
-            "cp-error-same-file",
-            HashMap::from([
-                ("source".to_string(), source.quote().to_string()),
-                ("dest".to_string(), dest.quote().to_string()),
-            ]),
-        )
+        return Err(translate!("cp-error-same-file",
+                       "source" => source.quote(),
+                       "dest" => dest.quote())
         .into());
     }
 
@@ -1975,13 +1887,7 @@ fn handle_existing_dest(
     let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
     if let Some(backup_path) = backup_path {
         if paths_refer_to_same_file(source, &backup_path, true) {
-            return Err(get_message_with_args(
-                "cp-error-backing-up-destroy-source",
-                HashMap::from([
-                    ("dest".to_string(), dest.quote().to_string()),
-                    ("source".to_string(), source.quote().to_string()),
-                ]),
-            )
+            return Err(translate!("cp-error-backing-up-destroy-source", "dest" => dest.quote(), "source" => source.quote())
             .into());
         }
         is_dest_removed = dest.is_symlink();
@@ -2137,13 +2043,7 @@ fn print_paths(parents: bool, source: &Path, dest: &Path) {
         for (x, y) in aligned_ancestors(source, dest) {
             println!(
                 "{}",
-                get_message_with_args(
-                    "cp-verbose-created-directory",
-                    HashMap::from([
-                        ("source".to_string(), x.display().to_string()),
-                        ("dest".to_string(), y.display().to_string())
-                    ])
-                )
+                translate!("cp-verbose-created-directory", "source" => x.display(), "dest" => y.display())
             );
         }
     }
@@ -2198,25 +2098,7 @@ fn handle_copy_mode(
             .map_err(|e| {
                 CpError::IoErrContext(
                     e,
-                    get_message_with_args(
-                        "cp-error-cannot-create-hard-link",
-                        HashMap::from([
-                            (
-                                "dest".to_string(),
-                                get_filename(dest)
-                                    .unwrap_or("invalid file name")
-                                    .quote()
-                                    .to_string(),
-                            ),
-                            (
-                                "source".to_string(),
-                                get_filename(source)
-                                    .unwrap_or("invalid file name")
-                                    .quote()
-                                    .to_string(),
-                            ),
-                        ]),
-                    ),
+                    translate!("cp-error-cannot-create-hard-link", "dest" => get_filename(dest).unwrap_or("?").quote(), "source" => get_filename(source).unwrap_or("?").quote())
                 )
             })?;
         }
@@ -2263,10 +2145,9 @@ fn handle_copy_mode(
                         return Ok(PerformedAction::Skipped);
                     }
                     UpdateMode::NoneFail => {
-                        return Err(CpError::Error(get_message_with_args(
-                            "cp-error-not-replacing",
-                            HashMap::from([("file".to_string(), dest.quote().to_string())]),
-                        )));
+                        return Err(CpError::Error(
+                            translate!("cp-error-not-replacing", "file" => dest.quote()),
+                        ));
                     }
                     UpdateMode::IfOlder => {
                         let dest_metadata = fs::symlink_metadata(dest)?;
@@ -2391,25 +2272,17 @@ fn copy_file(
             .map(|info| symlinked_files.contains(&info))
             .unwrap_or(false)
         {
-            return Err(CpError::Error(get_message_with_args(
-                "cp-error-will-not-copy-through-symlink",
-                HashMap::from([
-                    ("source".to_string(), source.quote().to_string()),
-                    ("dest".to_string(), dest.quote().to_string()),
-                ]),
-            )));
+            return Err(CpError::Error(
+                translate!("cp-error-will-not-copy-through-symlink", "source" => source.quote(), "dest" => dest.quote()),
+            ));
         }
         // Fail if cp tries to copy two sources of the same name into a single symlink
         // Example: "cp file1 dir1/file1 tmp" where "tmp" is a directory containing a symlink "file1" pointing to a file named "foo".
         // foo will contain the contents of "file1" and "dir1/file1" will not be copied over to "tmp/file1"
         if copied_destinations.contains(dest) {
-            return Err(CpError::Error(get_message_with_args(
-                "cp-error-will-not-copy-through-symlink",
-                HashMap::from([
-                    ("source".to_string(), source.quote().to_string()),
-                    ("dest".to_string(), dest.quote().to_string()),
-                ]),
-            )));
+            return Err(CpError::Error(
+                translate!("cp-error-will-not-copy-through-symlink", "source" => source.quote(), "dest" => dest.quote()),
+            ));
         }
 
         let copy_contents = options.dereference(source_in_command_line) || !source_is_symlink;
@@ -2422,10 +2295,9 @@ fn copy_file(
             && !is_symlink_loop(dest)
             && std::env::var_os("POSIXLY_CORRECT").is_none()
         {
-            return Err(CpError::Error(get_message_with_args(
-                "cp-error-not-writing-dangling-symlink",
-                HashMap::from([("dest".to_string(), dest.quote().to_string())]),
-            )));
+            return Err(CpError::Error(
+                translate!("cp-error-not-writing-dangling-symlink", "dest" => dest.quote()),
+            ));
         }
         if paths_refer_to_same_file(source, dest, true)
             && matches!(
@@ -2491,11 +2363,7 @@ fn copy_file(
             OverwriteMode::Clobber(ClobberMode::RemoveDestination)
         )
     {
-        return Err(get_message_with_args(
-            "cp-error-cannot-change-attribute",
-            HashMap::from([("dest".to_string(), dest.quote().to_string())]),
-        )
-        .into());
+        return Err(translate!("cp-error-cannot-change-attribute", "dest" => dest.quote()).into());
     }
 
     if options.preserve_hard_links() {
@@ -2529,10 +2397,7 @@ fn copy_file(
         // this is just for gnu tests compatibility
         result.map_err(|err| {
             if err.to_string().contains("No such file or directory") {
-                return get_message_with_args(
-                    "cp-error-cannot-stat",
-                    HashMap::from([("source".to_string(), source.quote().to_string())]),
-                );
+                return translate!("cp-error-cannot-stat", "source" => source.quote());
             }
             err.to_string()
         })?
@@ -2596,10 +2461,9 @@ fn copy_file(
         if let Err(e) =
             uucore::selinux::set_selinux_security_context(dest, options.context.as_ref())
         {
-            return Err(CpError::Error(get_message_with_args(
-                "cp-error-selinux-error",
-                HashMap::from([("error".to_string(), e.to_string())]),
-            )));
+            return Err(CpError::Error(
+                translate!("cp-error-selinux-error", "error" => e),
+            ));
         }
     }
 
@@ -2728,13 +2592,8 @@ fn copy_fifo(dest: &Path, overwrite: OverwriteMode, debug: bool) -> CopyResult<(
         fs::remove_file(dest)?;
     }
 
-    make_fifo(dest).map_err(|_| {
-        get_message_with_args(
-            "cp-error-cannot-create-fifo",
-            HashMap::from([("path".to_string(), dest.quote().to_string())]),
-        )
-        .into()
-    })
+    make_fifo(dest)
+        .map_err(|_| translate!("cp-error-cannot-create-fifo", "path" => dest.quote()).into())
 }
 
 fn copy_link(
@@ -2755,15 +2614,9 @@ fn copy_link(
 /// Generate an error message if `target` is not the correct `target_type`
 pub fn verify_target_type(target: &Path, target_type: &TargetType) -> CopyResult<()> {
     match (target_type, target.is_dir()) {
-        (&TargetType::Directory, false) => Err(get_message_with_args(
-            "cp-error-target-not-directory",
-            HashMap::from([("target".to_string(), target.quote().to_string())]),
-        )
+        (&TargetType::Directory, false) => Err(translate!("cp-error-target-not-directory", "target" => target.quote())
         .into()),
-        (&TargetType::File, true) => Err(get_message_with_args(
-            "cp-error-cannot-overwrite-directory-with-non-directory",
-            HashMap::from([("dir".to_string(), target.quote().to_string())]),
-        )
+        (&TargetType::File, true) => Err(translate!("cp-error-cannot-overwrite-directory-with-non-directory", "dir" => target.quote())
         .into()),
         _ => Ok(()),
     }

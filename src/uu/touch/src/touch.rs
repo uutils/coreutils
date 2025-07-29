@@ -16,7 +16,6 @@ use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
 use filetime::{FileTime, set_file_times, set_symlink_file_times};
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::{self, File};
 use std::io::{Error, ErrorKind};
@@ -24,10 +23,10 @@ use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+use uucore::translate;
 use uucore::{format_usage, show};
 
 use crate::error::TouchError;
-use uucore::locale::{get_message, get_message_with_args};
 
 /// Options contains all the possible behaviors and flags for touch.
 ///
@@ -194,13 +193,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .ok_or_else(|| {
             USimpleError::new(
                 1,
-                get_message_with_args(
-                    "touch-error-missing-file-operand",
-                    HashMap::from([(
-                        "help_command".to_string(),
-                        uucore::execution_phrase().to_string(),
-                    )]),
-                ),
+                translate!("touch-error-missing-file-operand", "help_command" => uucore::execution_phrase().to_string(),),
             )
         })?
         .collect();
@@ -261,26 +254,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("touch-about"))
-        .override_usage(format_usage(&get_message("touch-usage")))
+        .about(translate!("touch-about"))
+        .override_usage(format_usage(&translate!("touch-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help(get_message("touch-help-help"))
+                .help(translate!("touch-help-help"))
                 .action(ArgAction::Help),
         )
         .arg(
             Arg::new(options::ACCESS)
                 .short('a')
-                .help(get_message("touch-help-access"))
+                .help(translate!("touch-help-access"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::sources::TIMESTAMP)
                 .short('t')
-                .help(get_message("touch-help-timestamp"))
+                .help(translate!("touch-help-timestamp"))
                 .value_name("STAMP"),
         )
         .arg(
@@ -288,7 +281,7 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(options::sources::DATE)
                 .allow_hyphen_values(true)
-                .help(get_message("touch-help-date"))
+                .help(translate!("touch-help-date"))
                 .value_name("STRING")
                 .conflicts_with(options::sources::TIMESTAMP),
         )
@@ -302,28 +295,28 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::MODIFICATION)
                 .short('m')
-                .help(get_message("touch-help-modification"))
+                .help(translate!("touch-help-modification"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_CREATE)
                 .short('c')
                 .long(options::NO_CREATE)
-                .help(get_message("touch-help-no-create"))
+                .help(translate!("touch-help-no-create"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_DEREF)
                 .short('h')
                 .long(options::NO_DEREF)
-                .help(get_message("touch-help-no-deref"))
+                .help(translate!("touch-help-no-deref"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::sources::REFERENCE)
                 .short('r')
                 .long(options::sources::REFERENCE)
-                .help(get_message("touch-help-reference"))
+                .help(translate!("touch-help-reference"))
                 .value_name("FILE")
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath)
@@ -332,7 +325,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::TIME)
                 .long(options::TIME)
-                .help(get_message("touch-help-time"))
+                .help(translate!("touch-help-time"))
                 .value_name("WORD")
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("atime").alias("access").alias("use"),
@@ -447,12 +440,9 @@ fn touch_file(
 
     if let Err(e) = metadata_result {
         if e.kind() != ErrorKind::NotFound {
-            return Err(e.map_err_context(|| {
-                get_message_with_args(
-                    "touch-error-setting-times-of",
-                    HashMap::from([("filename".to_string(), filename.quote().to_string())]),
-                )
-            }));
+            return Err(e.map_err_context(
+                || translate!("touch-error-setting-times-of", "filename" => filename.quote()),
+            ));
         }
 
         if opts.no_create {
@@ -462,10 +452,7 @@ fn touch_file(
         if opts.no_deref {
             let e = USimpleError::new(
                 1,
-                get_message_with_args(
-                    "touch-error-setting-times-no-such-file",
-                    HashMap::from([("filename".to_string(), filename.quote().to_string())]),
-                ),
+                translate!("touch-error-setting-times-no-such-file", "filename" => filename.quote()),
             );
             if opts.strict {
                 return Err(e);
@@ -485,20 +472,14 @@ fn touch_file(
                 false
             };
             if is_directory {
-                let custom_err = Error::other(get_message("touch-error-no-such-file-or-directory"));
-                return Err(custom_err.map_err_context(|| {
-                    get_message_with_args(
-                        "touch-error-cannot-touch",
-                        HashMap::from([("filename".to_string(), filename.quote().to_string())]),
-                    )
-                }));
+                let custom_err = Error::other(translate!("touch-error-no-such-file-or-directory"));
+                return Err(custom_err.map_err_context(
+                    || translate!("touch-error-cannot-touch", "filename" => filename.quote()),
+                ));
             }
-            let e = e.map_err_context(|| {
-                get_message_with_args(
-                    "touch-error-cannot-touch",
-                    HashMap::from([("filename".to_string(), path.quote().to_string())]),
-                )
-            });
+            let e = e.map_err_context(
+                || translate!("touch-error-cannot-touch", "filename" => path.quote()),
+            );
             if opts.strict {
                 return Err(e);
             }
@@ -561,22 +542,16 @@ fn update_times(
         ChangeTimes::AtimeOnly => (
             atime,
             stat(path, !opts.no_deref)
-                .map_err_context(|| {
-                    get_message_with_args(
-                        "touch-error-failed-to-get-attributes",
-                        HashMap::from([("path".to_string(), path.quote().to_string())]),
-                    )
-                })?
+                .map_err_context(
+                    || translate!("touch-error-failed-to-get-attributes", "path" => path.quote()),
+                )?
                 .1,
         ),
         ChangeTimes::MtimeOnly => (
             stat(path, !opts.no_deref)
-                .map_err_context(|| {
-                    get_message_with_args(
-                        "touch-error-failed-to-get-attributes",
-                        HashMap::from([("path".to_string(), path.quote().to_string())]),
-                    )
-                })?
+                .map_err_context(
+                    || translate!("touch-error-failed-to-get-attributes", "path" => path.quote()),
+                )?
                 .0,
             mtime,
         ),
@@ -591,12 +566,7 @@ fn update_times(
     } else {
         set_file_times(path, atime, mtime)
     }
-    .map_err_context(|| {
-        get_message_with_args(
-            "touch-error-setting-times-of-path",
-            HashMap::from([("path".to_string(), path.quote().to_string())]),
-        )
-    })
+    .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
 }
 
 /// Get metadata of the provided path
@@ -681,10 +651,7 @@ fn prepend_century(s: &str) -> UResult<String> {
     let first_two_digits = s[..2].parse::<u32>().map_err(|_| {
         USimpleError::new(
             1,
-            get_message_with_args(
-                "touch-error-invalid-date-ts-format",
-                HashMap::from([("date".to_string(), s.quote().to_string())]),
-            ),
+            translate!("touch-error-invalid-date-ts-format", "date" => s.quote()),
         )
     })?;
     Ok(format!(
@@ -717,10 +684,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
         _ => {
             return Err(USimpleError::new(
                 1,
-                get_message_with_args(
-                    "touch-error-invalid-date-format",
-                    HashMap::from([("date".to_string(), s.quote().to_string())]),
-                ),
+                translate!("touch-error-invalid-date-format", "date" => s.quote()),
             ));
         }
     };
@@ -728,19 +692,13 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
     let local = NaiveDateTime::parse_from_str(&ts, format).map_err(|_| {
         USimpleError::new(
             1,
-            get_message_with_args(
-                "touch-error-invalid-date-ts-format",
-                HashMap::from([("date".to_string(), ts.quote().to_string())]),
-            ),
+            translate!("touch-error-invalid-date-ts-format", "date" => ts.quote()),
         )
     })?;
     let LocalResult::Single(mut local) = Local.from_local_datetime(&local) else {
         return Err(USimpleError::new(
             1,
-            get_message_with_args(
-                "touch-error-invalid-date-ts-format",
-                HashMap::from([("date".to_string(), ts.quote().to_string())]),
-            ),
+            translate!("touch-error-invalid-date-ts-format", "date" => ts.quote()),
         ));
     };
 
@@ -761,10 +719,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
     if local.hour() != local2.hour() {
         return Err(USimpleError::new(
             1,
-            get_message_with_args(
-                "touch-error-invalid-date-format",
-                HashMap::from([("date".to_string(), s.quote().to_string())]),
-            ),
+            translate!("touch-error-invalid-date-format", "date" => s.quote()),
         ));
     }
 
@@ -818,22 +773,19 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
 
         let buffer_size = match ret {
             ERROR_PATH_NOT_FOUND | ERROR_NOT_ENOUGH_MEMORY | ERROR_INVALID_PARAMETER => {
-                return Err(TouchError::WindowsStdoutPathError(get_message_with_args(
-                    "touch-error-windows-stdout-path-failed",
-                    HashMap::from([("code".to_string(), ret.to_string())]),
-                )));
+                return Err(TouchError::WindowsStdoutPathError(
+                    translate!("touch-error-windows-stdout-path-failed", "code" => ret),
+                ));
             }
             0 => {
-                return Err(TouchError::WindowsStdoutPathError(get_message_with_args(
-                    "touch-error-windows-stdout-path-failed",
-                    HashMap::from([(
-                        "code".to_string(),
-                        format!(
-                            "{}",
-                            // SAFETY: GetLastError is thread-safe and has no documented memory unsafety.
-                            unsafe { GetLastError() }
-                        ),
-                    )]),
+                return Err(TouchError::WindowsStdoutPathError(translate!(
+                "touch-error-windows-stdout-path-failed",
+                    "code".to_string() =>
+                    format!(
+                        "{}",
+                        // SAFETY: GetLastError is thread-safe and has no documented memory unsafety.
+                        unsafe { GetLastError() }
+                    ),
                 )));
             }
             e => e as usize,

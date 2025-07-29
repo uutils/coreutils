@@ -21,6 +21,7 @@ path = "src/stty.rs"
 clap = { workspace = true }
 uucore = { workspace = true }
 nix = { workspace = true, features = ["term", "ioctl"] }
+fluent = { workspace = true }
 
 [[bin]]
 name = "stty"

@@ -10,35 +10,34 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::translate;
 
 use uucore::format_usage;
 
 use linebreak::break_lines;
 use parasplit::ParagraphStream;
-use std::collections::HashMap;
 use thiserror::Error;
-use uucore::locale::{get_message, get_message_with_args};
 
 mod linebreak;
 mod parasplit;
 
 #[derive(Debug, Error)]
 enum FmtError {
-    #[error("{}", get_message_with_args("fmt-error-invalid-goal", HashMap::from([("goal".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("fmt-error-invalid-goal", "goal" => .0.quote()))]
     InvalidGoal(String),
-    #[error("{}", get_message("fmt-error-goal-greater-than-width"))]
+    #[error("{}", translate!("fmt-error-goal-greater-than-width"))]
     GoalGreaterThanWidth,
-    #[error("{}", get_message_with_args("fmt-error-invalid-width", HashMap::from([("width".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("fmt-error-invalid-width", "width" => .0.quote()))]
     InvalidWidth(String),
-    #[error("{}", get_message_with_args("fmt-error-width-out-of-range", HashMap::from([("width".to_string(), .0.to_string())])))]
+    #[error("{}", translate!("fmt-error-width-out-of-range", "width" => .0))]
     WidthOutOfRange(usize),
-    #[error("{}", get_message_with_args("fmt-error-invalid-tabwidth", HashMap::from([("tabwidth".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("fmt-error-invalid-tabwidth", "tabwidth" => .0.quote()))]
     InvalidTabWidth(String),
-    #[error("{}", get_message_with_args("fmt-error-first-option-width", HashMap::from([("option".to_string(), .0.to_string())])))]
+    #[error("{}", translate!("fmt-error-first-option-width", "option" => .0))]
     FirstOptionWidth(char),
-    #[error("{}", get_message("fmt-error-read"))]
+    #[error("{}", translate!("fmt-error-read"))]
     ReadError,
-    #[error("{}", get_message_with_args("fmt-error-invalid-width-malformed", HashMap::from([("width".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("fmt-error-invalid-width-malformed", "width" => .0.quote()))]
     InvalidWidthMalformed(String),
 }
 
@@ -212,19 +211,13 @@ fn process_file(
     let mut fp = BufReader::new(match file_name {
         "-" => Box::new(stdin()) as Box<dyn Read + 'static>,
         _ => {
-            let f = File::open(file_name).map_err_context(|| {
-                get_message_with_args(
-                    "fmt-error-cannot-open-for-reading",
-                    HashMap::from([("file".to_string(), file_name.quote().to_string())]),
-                )
-            })?;
+            let f = File::open(file_name).map_err_context(
+                || translate!("fmt-error-cannot-open-for-reading", "file" => file_name.quote()),
+            )?;
             if f.metadata()
-                .map_err_context(|| {
-                    get_message_with_args(
-                        "fmt-error-cannot-get-metadata",
-                        HashMap::from([("file".to_string(), file_name.quote().to_string())]),
-                    )
-                })?
+                .map_err_context(
+                    || translate!("fmt-error-cannot-get-metadata", "file" => file_name.quote()),
+                )?
                 .is_dir()
             {
                 return Err(FmtError::ReadError.into());
@@ -240,20 +233,20 @@ fn process_file(
             Err(s) => {
                 ostream
                     .write_all(s.as_bytes())
-                    .map_err_context(|| get_message("fmt-error-failed-to-write-output"))?;
+                    .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?;
                 ostream
                     .write_all(b"\n")
-                    .map_err_context(|| get_message("fmt-error-failed-to-write-output"))?;
+                    .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?;
             }
             Ok(para) => break_lines(&para, fmt_opts, ostream)
-                .map_err_context(|| get_message("fmt-error-failed-to-write-output"))?,
+                .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?,
         }
     }
 
     // flush the output after each file
     ostream
         .flush()
-        .map_err_context(|| get_message("fmt-error-failed-to-write-output"))?;
+        .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?;
 
     Ok(())
 }
@@ -359,78 +352,78 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("fmt-about"))
-        .override_usage(format_usage(&get_message("fmt-usage")))
+        .about(translate!("fmt-about"))
+        .override_usage(format_usage(&translate!("fmt-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
             Arg::new(options::CROWN_MARGIN)
                 .short('c')
                 .long(options::CROWN_MARGIN)
-                .help(get_message("fmt-crown-margin-help"))
+                .help(translate!("fmt-crown-margin-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TAGGED_PARAGRAPH)
                 .short('t')
                 .long("tagged-paragraph")
-                .help(get_message("fmt-tagged-paragraph-help"))
+                .help(translate!("fmt-tagged-paragraph-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PRESERVE_HEADERS)
                 .short('m')
                 .long("preserve-headers")
-                .help(get_message("fmt-preserve-headers-help"))
+                .help(translate!("fmt-preserve-headers-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SPLIT_ONLY)
                 .short('s')
                 .long("split-only")
-                .help(get_message("fmt-split-only-help"))
+                .help(translate!("fmt-split-only-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::UNIFORM_SPACING)
                 .short('u')
                 .long("uniform-spacing")
-                .help(get_message("fmt-uniform-spacing-help"))
+                .help(translate!("fmt-uniform-spacing-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PREFIX)
                 .short('p')
                 .long("prefix")
-                .help(get_message("fmt-prefix-help"))
+                .help(translate!("fmt-prefix-help"))
                 .value_name("PREFIX"),
         )
         .arg(
             Arg::new(options::SKIP_PREFIX)
                 .short('P')
                 .long("skip-prefix")
-                .help(get_message("fmt-skip-prefix-help"))
+                .help(translate!("fmt-skip-prefix-help"))
                 .value_name("PSKIP"),
         )
         .arg(
             Arg::new(options::EXACT_PREFIX)
                 .short('x')
                 .long("exact-prefix")
-                .help(get_message("fmt-exact-prefix-help"))
+                .help(translate!("fmt-exact-prefix-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::EXACT_SKIP_PREFIX)
                 .short('X')
                 .long("exact-skip-prefix")
-                .help(get_message("fmt-exact-skip-prefix-help"))
+                .help(translate!("fmt-exact-skip-prefix-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::WIDTH)
                 .short('w')
                 .long("width")
-                .help(get_message("fmt-width-help"))
+                .help(translate!("fmt-width-help"))
                 // We must accept invalid values if they are overridden later. This is not supported by clap, so accept all strings instead.
                 .value_name("WIDTH"),
         )
@@ -438,7 +431,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::GOAL)
                 .short('g')
                 .long("goal")
-                .help(get_message("fmt-goal-help"))
+                .help(translate!("fmt-goal-help"))
                 // We must accept invalid values if they are overridden later. This is not supported by clap, so accept all strings instead.
                 .value_name("GOAL"),
         )
@@ -446,14 +439,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::QUICK)
                 .short('q')
                 .long("quick")
-                .help(get_message("fmt-quick-help"))
+                .help(translate!("fmt-quick-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TAB_WIDTH)
                 .short('T')
                 .long("tab-width")
-                .help(get_message("fmt-tab-width-help"))
+                .help(translate!("fmt-tab-width-help"))
                 .value_name("TABWIDTH"),
         )
         .arg(

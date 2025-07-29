@@ -24,7 +24,8 @@ use std::{
     ops::Not,
 };
 use uucore::error::{FromIo, UError, UResult};
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
+
 use uucore::show_warning;
 
 #[derive(Debug, Clone)]
@@ -47,64 +48,57 @@ impl Display for BadSequence {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::MissingCharClassName => {
-                write!(f, "{}", get_message("tr-error-missing-char-class-name"))
+                write!(f, "{}", translate!("tr-error-missing-char-class-name"))
             }
             Self::MissingEquivalentClassChar => {
                 write!(
                     f,
                     "{}",
-                    get_message("tr-error-missing-equivalence-class-char")
+                    translate!("tr-error-missing-equivalence-class-char")
                 )
             }
             Self::MultipleCharRepeatInSet2 => {
-                write!(
-                    f,
-                    "{}",
-                    get_message("tr-error-multiple-char-repeat-in-set2")
-                )
+                write!(f, "{}", translate!("tr-error-multiple-char-repeat-in-set2"))
             }
             Self::CharRepeatInSet1 => {
-                write!(f, "{}", get_message("tr-error-char-repeat-in-set1"))
+                write!(f, "{}", translate!("tr-error-char-repeat-in-set1"))
             }
             Self::InvalidRepeatCount(count) => {
                 write!(
                     f,
                     "{}",
-                    get_message_with_args(
-                        "tr-error-invalid-repeat-count",
-                        HashMap::from([("count".to_string(), format!("'{count}'"))])
-                    )
+                    translate!("tr-error-invalid-repeat-count", "count" => format!("'{count}'"))
                 )
             }
             Self::EmptySet2WhenNotTruncatingSet1 => {
                 write!(
                     f,
                     "{}",
-                    get_message("tr-error-empty-set2-when-not-truncating")
+                    translate!("tr-error-empty-set2-when-not-truncating")
                 )
             }
             Self::ClassExceptLowerUpperInSet2 => {
                 write!(
                     f,
                     "{}",
-                    get_message("tr-error-class-except-lower-upper-in-set2")
+                    translate!("tr-error-class-except-lower-upper-in-set2")
                 )
             }
             Self::ClassInSet2NotMatchedBySet1 => {
-                write!(f, "{}", get_message("tr-error-class-in-set2-not-matched"))
+                write!(f, "{}", translate!("tr-error-class-in-set2-not-matched"))
             }
             Self::Set1LongerSet2EndsInClass => {
                 write!(
                     f,
                     "{}",
-                    get_message("tr-error-set1-longer-set2-ends-in-class")
+                    translate!("tr-error-set1-longer-set2-ends-in-class")
                 )
             }
             Self::ComplementMoreThanOneUniqueInSet2 => {
                 write!(
                     f,
                     "{}",
-                    get_message("tr-error-complement-more-than-one-unique")
+                    translate!("tr-error-complement-more-than-one-unique")
                 )
             }
             Self::BackwardsRange { end, start } => {
@@ -119,22 +113,13 @@ impl Display for BadSequence {
                 write!(
                     f,
                     "{}",
-                    get_message_with_args(
-                        "tr-error-backwards-range",
-                        HashMap::from([
-                            ("start".to_string(), end_or_start_to_string(start)),
-                            ("end".to_string(), end_or_start_to_string(end))
-                        ])
-                    )
+                    translate!("tr-error-backwards-range", "start" => end_or_start_to_string(start), "end" => end_or_start_to_string(end))
                 )
             }
             Self::MultipleCharInEquivalence(s) => write!(
                 f,
                 "{}",
-                get_message_with_args(
-                    "tr-error-multiple-char-in-equivalence",
-                    HashMap::from([("chars".to_string(), s.clone())])
-                )
+                translate!("tr-error-multiple-char-in-equivalence", "chars" => s.clone())
             ),
         }
     }
@@ -396,17 +381,7 @@ impl Sequence {
                     let outstand_char: char = char::from_u32(input[2] as u32).unwrap();
                     show_warning!(
                         "{}",
-                        get_message_with_args(
-                            "tr-warning-ambiguous-octal-escape",
-                            HashMap::from([
-                                ("origin_octal".to_string(), origin_octal.to_string()),
-                                (
-                                    "actual_octal_tail".to_string(),
-                                    actual_octal_tail.to_string()
-                                ),
-                                ("outstand_char".to_string(), outstand_char.to_string())
-                            ])
-                        )
+                        translate!("tr-warning-ambiguous-octal-escape", "origin_octal" => origin_octal, "actual_octal_tail" => actual_octal_tail, "outstand_char" => outstand_char)
                     );
                 }
                 result
@@ -711,7 +686,7 @@ where
         #[cfg(not(target_os = "windows"))]
         output
             .write_all(&output_buf)
-            .map_err_context(|| get_message("tr-error-write-error"))?;
+            .map_err_context(|| translate!("tr-error-write-error"))?;
 
         // SIGPIPE is not available on Windows.
         #[cfg(target_os = "windows")]
@@ -719,7 +694,7 @@ where
             if err.kind() == std::io::ErrorKind::BrokenPipe {
                 std::process::exit(13);
             } else {
-                return Err(err.map_err_context(|| get_message("tr-error-write-error")));
+                return Err(err.map_err_context(|| translate!("tr-error-write-error")));
             }
         }
 

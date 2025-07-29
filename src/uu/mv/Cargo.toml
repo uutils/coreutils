@@ -29,6 +29,7 @@ uucore = { workspace = true, features = [
   "fsxattr",
   "update-control",
 ] }
+fluent = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [

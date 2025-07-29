@@ -2,14 +2,15 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) tempbuffer abcdefgh abcdefghij
+
+// spell-checker:ignore (ToDO) tempbuffer abcdefgh abcdefghij multifile
 
 //! Contains the trait `PeekRead` and type `PeekReader` implementing it.
 
 use std::io;
 use std::io::{Read, Write};
 
-use crate::multifilereader::HasError;
+use crate::multifile_reader::HasError;
 
 /// A trait which supplies a function to peek into a stream without
 /// actually reading it.
