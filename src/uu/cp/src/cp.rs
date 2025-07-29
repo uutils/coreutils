@@ -2446,7 +2446,7 @@ fn copy_file(
                 copy_attributes(&src, dest, &options.attributes)?;
             }
         }
-    } else if source_is_stream && source.exists() {
+    } else if source_is_stream && !source.exists() {
         // Some stream files may not exist after we have copied it,
         // like anonymous pipes. Thus, we can't really copy its
         // attributes. However, this is already handled in the stream
