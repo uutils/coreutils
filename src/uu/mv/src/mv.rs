@@ -28,7 +28,7 @@ use std::path::{Path, PathBuf, absolute};
 
 #[cfg(unix)]
 use crate::hardlink::{
-    HardlinkGroupScanner, HardlinkOptions, HardlinkTracker, create_hardlink_context,
+    HardlinkError, HardlinkGroupScanner, HardlinkOptions, HardlinkTracker, create_hardlink_context,
     with_optional_hardlink_context,
 };
 use uucore::backup_control::{self, source_is_target_backup};
@@ -337,12 +337,18 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         )
         .into());
     }
-    if source.symlink_metadata().is_err() {
-        return Err(if path_ends_with_terminator(source) {
-            MvError::CannotStatNotADirectory(source.quote().to_string()).into()
-        } else {
-            MvError::NoSuchFile(source.quote().to_string()).into()
-        });
+
+    let source_metadata_result = source.symlink_metadata();
+    if let Err(e) = source_metadata_result {
+        if e.kind() == io::ErrorKind::NotFound && !source.is_symlink() {
+            return Err(if path_ends_with_terminator(source) {
+                MvError::CannotStatNotADirectory(source.quote().to_string()).into()
+            } else {
+                MvError::NoSuchFile(source.quote().to_string()).into()
+            });
+        } else if e.kind() == io::ErrorKind::NotADirectory && path_ends_with_terminator(source) {
+            return Err(MvError::CannotStatNotADirectory(source.quote().to_string()).into());
+        }
     }
 
     let target_is_dir = target.is_dir();
@@ -560,21 +566,17 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
             verbose: options.verbose || options.debug,
         };
 
-        // Pre-scan files if needed
+        // Pre-scan files if needed and apply failing fast
         if let Err(e) = scanner.scan_files(files, &hardlink_options) {
-            if hardlink_options.verbose {
-                eprintln!("mv: warning: failed to scan files for hardlinks: {e}");
-                eprintln!("mv: continuing without hardlink preservation");
-            } else {
-                // Show warning in non-verbose mode for serious errors
-                eprintln!(
-                    "mv: warning: hardlink scanning failed, continuing without hardlink preservation"
-                );
+            match e {
+                HardlinkError::Metadata { path, error }
+                    if error.kind() == io::ErrorKind::NotFound =>
+                {
+                    return Err(MvError::NoSuchFile(path.quote().to_string()).into());
+                }
+                e => return Err(USimpleError::new(1, e.to_string())),
             }
-            // Continue without hardlink tracking on scan failure
-            // This provides graceful degradation rather than failing completely
         }
-
         (tracker, scanner)
     };
 
@@ -605,9 +607,21 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
     };
 
     for sourcepath in files {
-        if sourcepath.symlink_metadata().is_err() {
-            show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
-            continue;
+        let source_metadata_result = sourcepath.symlink_metadata();
+        if let Err(e) = source_metadata_result {
+            if e.kind() == io::ErrorKind::NotFound && !sourcepath.is_symlink() {
+                show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
+                set_exit_code(1);
+                continue;
+            } else if e.kind() == io::ErrorKind::NotADirectory
+                && path_ends_with_terminator(sourcepath)
+            {
+                show!(MvError::CannotStatNotADirectory(
+                    sourcepath.quote().to_string()
+                ));
+                set_exit_code(1);
+                continue;
+            }
         }
 
         if let Some(ref pb) = count_progress {
@@ -619,6 +633,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
             Some(name) => target_dir.join(name),
             None => {
                 show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
+                set_exit_code(1);
                 continue;
             }
         };
@@ -642,6 +657,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         // And generate an error if this is the case
         if let Err(e) = assert_not_same_file(sourcepath, target_dir, true, options) {
             show!(e);
+            set_exit_code(1);
             continue;
         }
 

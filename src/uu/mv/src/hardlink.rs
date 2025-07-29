@@ -82,7 +82,8 @@ impl std::error::Error for HardlinkError {
         match self {
             HardlinkError::Io(e) => Some(e),
             HardlinkError::Metadata { error, .. } => Some(error),
-            _ => None,
+            HardlinkError::ScanReadDir { error, .. } => Some(error),
+            HardlinkError::Preservation { .. } => None,
         }
     }
 }
@@ -142,7 +143,10 @@ impl HardlinkTracker {
                         e
                     );
                 }
-                return Ok(None);
+                return Err(HardlinkError::Metadata {
+                    path: source.to_path_buf(),
+                    error: e,
+                });
             }
         };
 
@@ -194,16 +198,7 @@ impl HardlinkGroupScanner {
         self.source_files = files.to_vec();
 
         for file in files {
-            if let Err(e) = self.scan_single_path(file) {
-                if options.verbose {
-                    // Only show warnings for verbose mode
-                    eprintln!("warning: failed to scan {}: {}", file.display(), e);
-                }
-                // For non-verbose mode, silently continue for missing files
-                // This provides graceful degradation - we'll lose hardlink info for this file
-                // but can still preserve hardlinks for other files
-                continue;
-            }
+            self.scan_single_path(file)?;
         }
 
         self.scanned = true;
@@ -222,14 +217,23 @@ impl HardlinkGroupScanner {
     }
 
     /// Scan a single path (file or directory)
-    fn scan_single_path(&mut self, path: &Path) -> io::Result<()> {
+    fn scan_single_path(&mut self, path: &Path) -> Result<(), HardlinkError> {
         use std::os::unix::fs::MetadataExt;
 
         if path.is_dir() {
             // Recursively scan directory contents
             self.scan_directory_recursive(path)?;
         } else {
-            let metadata = path.metadata()?;
+            let metadata = match path.metadata() {
+                Ok(meta) => meta,
+                Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+                Err(e) => {
+                    return Err(HardlinkError::Metadata {
+                        path: path.to_path_buf(),
+                        error: e,
+                    });
+                }
+            };
             if metadata.nlink() > 1 {
                 let key = (metadata.dev(), metadata.ino());
                 self.hardlink_groups
@@ -256,10 +260,16 @@ impl HardlinkGroupScanner {
             if path.is_dir() {
                 self.scan_directory_recursive(&path)?;
             } else {
-                let metadata = path.metadata().map_err(|e| HardlinkError::Metadata {
-                    path: path.clone(),
-                    error: e,
-                })?;
+                let metadata = match path.metadata() {
+                    Ok(meta) => meta,
+                    Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
+                    Err(e) => {
+                        return Err(HardlinkError::Metadata {
+                            path: path.clone(),
+                            error: e,
+                        });
+                    }
+                };
                 if metadata.nlink() > 1 {
                     let key = (metadata.dev(), metadata.ino());
                     self.hardlink_groups.entry(key).or_default().push(path);
