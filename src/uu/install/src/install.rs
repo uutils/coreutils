@@ -607,7 +607,7 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
             return Err(InstallError::OmittingDirectory(source.clone()).into());
         }
 
-        if b.no_target_dir && target.exists() {
+        if b.no_target_dir && target.is_dir() {
             return Err(
                 InstallError::OverrideDirectoryFailed(target.clone(), source.clone()).into(),
             );

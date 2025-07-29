@@ -2083,6 +2083,20 @@ fn test_install_no_target_directory_failing_cannot_overwrite() {
 }
 
 #[test]
+fn test_install_no_target_directory_overwrite_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file = "file";
+    let dest = "dest";
+
+    at.touch(file);
+    scene.ucmd().arg("-T").arg(file).arg(dest).succeeds();
+    scene.ucmd().arg("-T").arg(file).arg(dest).succeeds();
+
+    assert!(!at.dir_exists("dir/file"));
+}
+
+#[test]
 fn test_install_no_target_directory_failing_omitting_directory() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
