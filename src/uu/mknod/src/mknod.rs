@@ -49,9 +49,13 @@ impl FileType {
     }
 }
 
-/// Configuration for directory creation.
+/// Configuration for special inode creation.
 pub struct Config<'a> {
+    /// bitmask of inode mode (permissions and file type)
     pub mode: mode_t,
+
+    /// when false, the exact mode bits will be set
+    pub use_umask: bool,
 
     pub dev: dev_t,
 
@@ -65,18 +69,19 @@ pub struct Config<'a> {
 fn mknod(file_name: &str, config: Config) -> i32 {
     let c_str = CString::new(file_name).expect("Failed to convert to CString");
 
-    // the user supplied a mode
-    let set_umask = config.mode & MODE_RW_UGO != MODE_RW_UGO;
-
     unsafe {
-        // store prev umask
-        let last_umask = if set_umask { libc::umask(0) } else { 0 };
+        // set umask to 0 and store previous umask
+        let have_prev_umask = if config.use_umask {
+            None
+        } else {
+            Some(libc::umask(0))
+        };
 
         let errno = libc::mknod(c_str.as_ptr(), config.mode, config.dev);
 
         // set umask back to original value
-        if set_umask {
-            libc::umask(last_umask);
+        if let Some(prev_umask) = have_prev_umask {
+            libc::umask(prev_umask);
         }
 
         if errno == -1 {
@@ -109,8 +114,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
     let file_type = matches.get_one::<FileType>("type").unwrap();
-    let mode = get_mode(matches.get_one::<String>("mode")).map_err(|e| USimpleError::new(1, e))?
-        | file_type.as_mode();
+
+    let mut use_umask = true;
+    let mode_permissions = match matches.get_one::<String>("mode") {
+        None => MODE_RW_UGO,
+        Some(str_mode) => {
+            use_umask = false;
+            parse_mode(str_mode).map_err(|e| USimpleError::new(1, e))?
+        }
+    };
+    let mode = mode_permissions | file_type.as_mode();
 
     let file_name = matches
         .get_one::<String>("name")
@@ -143,6 +156,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let config = Config {
         mode,
+        use_umask,
         dev,
         set_selinux_context: set_selinux_context || context.is_some(),
         context,
@@ -210,19 +224,21 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn get_mode(str_mode: Option<&String>) -> Result<mode_t, String> {
-    match str_mode {
-        None => Ok(MODE_RW_UGO),
-        Some(str_mode) => uucore::mode::parse_mode(str_mode)
-            .map_err(|e| translate!("mknod-error-invalid-mode", "error" => e))
-            .and_then(|mode| {
-                if mode > 0o777 {
-                    Err(translate!("mknod-error-mode-permission-bits-only"))
-                } else {
-                    Ok(mode)
-                }
-            }),
-    }
+fn parse_mode(str_mode: &str) -> Result<mode_t, String> {
+    uucore::mode::parse_mode(str_mode)
+        .map_err(|e| {
+            translate!(
+                "mknod-error-invalid-mode",
+                "error" => e
+            )
+        })
+        .and_then(|mode| {
+            if mode > 0o777 {
+                Err(translate!("mknod-error-mode-permission-bits-only"))
+            } else {
+                Ok(mode)
+            }
+        })
 }
 
 fn parse_type(tpe: &str) -> Result<FileType, String> {
