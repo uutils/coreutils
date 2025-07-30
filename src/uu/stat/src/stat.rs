@@ -29,7 +29,6 @@ use std::{env, fs};
 use thiserror::Error;
 use uucore::time::{FormatSystemTimeFallback, format_system_time, system_time_to_sec};
 
-
 #[derive(Debug, Error)]
 enum StatError {
     #[error("{}", translate!("stat-error-invalid-quoting-style", "style" => style.clone()))]
