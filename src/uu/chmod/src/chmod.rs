@@ -6,7 +6,6 @@
 // spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's
 
 use clap::{Arg, ArgAction, Command};
-use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -21,21 +20,21 @@ use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
 use uucore::{format_usage, show, show_error};
 
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 #[derive(Debug, Error)]
 enum ChmodError {
-    #[error("{}", get_message_with_args("chmod-error-cannot-stat", HashMap::from([("file".to_string(), _0.quote().to_string())])))]
+    #[error("{}", translate!("chmod-error-cannot-stat", "file" => _0.quote()))]
     CannotStat(String),
-    #[error("{}", get_message_with_args("chmod-error-dangling-symlink", HashMap::from([("file".to_string(), _0.quote().to_string())])))]
+    #[error("{}", translate!("chmod-error-dangling-symlink", "file" => _0.quote()))]
     DanglingSymlink(String),
-    #[error("{}", get_message_with_args("chmod-error-no-such-file", HashMap::from([("file".to_string(), _0.quote().to_string())])))]
+    #[error("{}", translate!("chmod-error-no-such-file", "file" => _0.quote()))]
     NoSuchFile(String),
-    #[error("{}", get_message_with_args("chmod-error-preserve-root", HashMap::from([("file".to_string(), _0.quote().to_string())])))]
+    #[error("{}", translate!("chmod-error-preserve-root", "file" => _0.quote()))]
     PreserveRoot(String),
-    #[error("{}", get_message_with_args("chmod-error-permission-denied", HashMap::from([("file".to_string(), _0.quote().to_string())])))]
+    #[error("{}", translate!("chmod-error-permission-denied", "file" => _0.quote()))]
     PermissionDenied(String),
-    #[error("{}", get_message_with_args("chmod-error-new-permissions", HashMap::from([("file".to_string(), _0.clone()), ("actual".to_string(), _1.clone()), ("expected".to_string(), _2.clone())])))]
+    #[error("{}", translate!("chmod-error-new-permissions", "file" => _0.clone(), "actual" => _1.clone(), "expected" => _2.clone()))]
     NewPermissions(String, String, String),
 }
 
@@ -113,7 +112,7 @@ fn extract_negative_modes(mut args: impl uucore::Args) -> (Option<String>, Vec<O
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (parsed_cmode, args) = extract_negative_modes(args.skip(1)); // skip binary name
     let matches = uu_app()
-        .after_help(get_message("chmod-after-help"))
+        .after_help(translate!("chmod-after-help"))
         .try_get_matches_from(args)?;
 
     let changes = matches.get_flag(options::CHANGES);
@@ -154,7 +153,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if files.is_empty() {
         return Err(UUsageError::new(
             1,
-            get_message("chmod-error-missing-operand"),
+            translate!("chmod-error-missing-operand"),
         ));
     }
 
@@ -179,8 +178,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("chmod-about"))
-        .override_usage(format_usage(&get_message("chmod-usage")))
+        .about(translate!("chmod-about"))
+        .override_usage(format_usage(&translate!("chmod-usage")))
         .args_override_self(true)
         .infer_long_args(true)
         .no_binary_name(true)
@@ -188,14 +187,14 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help(get_message("chmod-help-print-help"))
+                .help(translate!("chmod-help-print-help"))
                 .action(ArgAction::Help),
         )
         .arg(
             Arg::new(options::CHANGES)
                 .long(options::CHANGES)
                 .short('c')
-                .help(get_message("chmod-help-changes"))
+                .help(translate!("chmod-help-changes"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -203,40 +202,40 @@ pub fn uu_app() -> Command {
                 .long(options::QUIET)
                 .visible_alias("silent")
                 .short('f')
-                .help(get_message("chmod-help-quiet"))
+                .help(translate!("chmod-help-quiet"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::VERBOSE)
                 .long(options::VERBOSE)
                 .short('v')
-                .help(get_message("chmod-help-verbose"))
+                .help(translate!("chmod-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_PRESERVE_ROOT)
                 .long(options::NO_PRESERVE_ROOT)
-                .help(get_message("chmod-help-no-preserve-root"))
+                .help(translate!("chmod-help-no-preserve-root"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PRESERVE_ROOT)
                 .long(options::PRESERVE_ROOT)
-                .help(get_message("chmod-help-preserve-root"))
+                .help(translate!("chmod-help-preserve-root"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::RECURSIVE)
                 .long(options::RECURSIVE)
                 .short('R')
-                .help(get_message("chmod-help-recursive"))
+                .help(translate!("chmod-help-recursive"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::REFERENCE)
                 .long("reference")
                 .value_hint(clap::ValueHint::FilePath)
-                .help(get_message("chmod-help-reference")),
+                .help(translate!("chmod-help-reference")),
         )
         .arg(
             Arg::new(options::MODE).required_unless_present(options::REFERENCE),
@@ -292,10 +291,7 @@ impl Chmoder {
                     if self.verbose {
                         println!(
                             "{}",
-                            get_message_with_args(
-                                "chmod-verbose-failed-dangling",
-                                HashMap::from([("file".to_string(), filename.quote().to_string())])
-                            )
+                            translate!("chmod-verbose-failed-dangling", "file" => filename.quote())
                         );
                     }
                 } else if !self.quiet {

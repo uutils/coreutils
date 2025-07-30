@@ -31,6 +31,7 @@ uucore = { workspace = true, features = [
   "entries",
   "process",
 ] }
+fluent = { workspace = true }
 
 [features]
 selinux = ["uucore/selinux"]

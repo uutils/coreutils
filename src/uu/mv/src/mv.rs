@@ -13,7 +13,9 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, error::ErrorKind};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
-use std::collections::{HashMap, HashSet};
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -42,6 +44,7 @@ use uucore::fs::{
 };
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
 use uucore::fsxattr;
+use uucore::translate;
 use uucore::update_control;
 
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
@@ -52,7 +55,6 @@ use uucore::{format_usage, prompt_yes, show};
 use fs_extra::dir::get_size as dir_get_size;
 
 use crate::error::MvError;
-use uucore::locale::{get_message, get_message_with_args};
 
 /// Options contains all the possible behaviors and flags for mv.
 ///
@@ -171,7 +173,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     {
         return Err(UUsageError::new(
             1,
-            get_message("mv-error-backup-with-no-clobber"),
+            translate!("mv-error-backup-with-no-clobber"),
         ));
     }
 
@@ -206,11 +208,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("mv-about"))
-        .override_usage(format_usage(&get_message("mv-usage")))
+        .about(translate!("mv-about"))
+        .override_usage(format_usage(&translate!("mv-usage")))
         .after_help(format!(
             "{}\n\n{}",
-            get_message("mv-after-help"),
+            translate!("mv-after-help"),
             backup_control::BACKUP_CONTROL_LONG_HELP
         ))
         .infer_long_args(true)
@@ -218,7 +220,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_FORCE)
                 .short('f')
                 .long(OPT_FORCE)
-                .help(get_message("mv-help-force"))
+                .help(translate!("mv-help-force"))
                 .overrides_with_all([OPT_INTERACTIVE, OPT_NO_CLOBBER])
                 .action(ArgAction::SetTrue),
         )
@@ -226,7 +228,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_INTERACTIVE)
                 .short('i')
                 .long(OPT_INTERACTIVE)
-                .help(get_message("mv-help-interactive"))
+                .help(translate!("mv-help-interactive"))
                 .overrides_with_all([OPT_FORCE, OPT_NO_CLOBBER])
                 .action(ArgAction::SetTrue),
         )
@@ -234,14 +236,14 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_NO_CLOBBER)
                 .short('n')
                 .long(OPT_NO_CLOBBER)
-                .help(get_message("mv-help-no-clobber"))
+                .help(translate!("mv-help-no-clobber"))
                 .overrides_with_all([OPT_FORCE, OPT_INTERACTIVE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_STRIP_TRAILING_SLASHES)
                 .long(OPT_STRIP_TRAILING_SLASHES)
-                .help(get_message("mv-help-strip-trailing-slashes"))
+                .help(translate!("mv-help-strip-trailing-slashes"))
                 .action(ArgAction::SetTrue),
         )
         .arg(backup_control::arguments::backup())
@@ -253,7 +255,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_TARGET_DIRECTORY)
                 .short('t')
                 .long(OPT_TARGET_DIRECTORY)
-                .help(get_message("mv-help-target-directory"))
+                .help(translate!("mv-help-target-directory"))
                 .value_name("DIRECTORY")
                 .value_hint(clap::ValueHint::DirPath)
                 .conflicts_with(OPT_NO_TARGET_DIRECTORY)
@@ -263,21 +265,21 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_NO_TARGET_DIRECTORY)
                 .short('T')
                 .long(OPT_NO_TARGET_DIRECTORY)
-                .help(get_message("mv-help-no-target-directory"))
+                .help(translate!("mv-help-no-target-directory"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
                 .short('v')
                 .long(OPT_VERBOSE)
-                .help(get_message("mv-help-verbose"))
+                .help(translate!("mv-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_PROGRESS)
                 .short('g')
                 .long(OPT_PROGRESS)
-                .help(get_message("mv-help-progress"))
+                .help(translate!("mv-help-progress"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -291,7 +293,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_DEBUG)
                 .long(OPT_DEBUG)
-                .help(get_message("mv-help-debug"))
+                .help(translate!("mv-help-debug"))
                 .action(ArgAction::SetTrue),
         )
 }
@@ -327,13 +329,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
     if opts.backup == BackupMode::Simple && source_is_target_backup(source, target, &opts.suffix) {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
-            get_message_with_args(
-                "mv-error-backup-might-destroy-source",
-                HashMap::from([
-                    ("target".to_string(), target.quote().to_string()),
-                    ("source".to_string(), source.quote().to_string()),
-                ]),
-            ),
+            translate!("mv-error-backup-might-destroy-source", "target" => target.quote(), "source" => source.quote()),
         )
         .into());
     }
@@ -377,13 +373,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
                     hardlink_params.1,
                 )
                 .map_err_context(|| {
-                    get_message_with_args(
-                        "mv-error-cannot-move",
-                        HashMap::from([
-                            ("source".to_string(), source.quote().to_string()),
-                            ("target".to_string(), target.quote().to_string()),
-                        ]),
-                    )
+                    translate!("mv-error-cannot-move", "source" => source.quote(), "target" => target.quote())
                 })
             } else {
                 Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
@@ -397,10 +387,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
             OverwriteMode::Interactive => {
                 if !prompt_yes!(
                     "{}",
-                    get_message_with_args(
-                        "mv-prompt-overwrite",
-                        HashMap::from([("target".to_string(), target.quote().to_string())]),
-                    )
+                    translate!("mv-prompt-overwrite", "target" => target.quote())
                 ) {
                     return Err(io::Error::other("").into());
                 }
@@ -518,10 +505,7 @@ fn handle_multiple_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
     if opts.no_target_dir {
         return Err(UUsageError::new(
             1,
-            get_message_with_args(
-                "mv-error-extra-operand",
-                HashMap::from([("operand".to_string(), paths[2].quote().to_string())]),
-            ),
+            translate!("mv-error-extra-operand", "operand" => paths.last().unwrap().quote()),
         ));
     }
     let target_dir = paths.last().unwrap();
@@ -591,7 +575,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
                     ProgressBar::new(files.len().try_into().unwrap()).with_style(
                         ProgressStyle::with_template(&format!(
                             "{} {{msg}} {{wide_bar}} {{pos}}/{{len}}",
-                            get_message("mv-progress-moving")
+                            translate!("mv-progress-moving")
                         ))
                         .unwrap(),
                     ),
@@ -627,13 +611,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
             // If the target file was already created in this mv call, do not overwrite
             show!(USimpleError::new(
                 1,
-                get_message_with_args(
-                    "mv-error-will-not-overwrite-just-created",
-                    HashMap::from([
-                        ("target".to_string(), targetpath.display().to_string()),
-                        ("source".to_string(), sourcepath.display().to_string())
-                    ])
-                ),
+                translate!("mv-error-will-not-overwrite-just-created", "target" => targetpath.display(), "source" => sourcepath.display()),
             ));
             continue;
         }
@@ -661,13 +639,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
                 let e = e.map_err_context(|| {
-                    get_message_with_args(
-                        "mv-error-cannot-move",
-                        HashMap::from([
-                            ("source".to_string(), sourcepath.quote().to_string()),
-                            ("target".to_string(), targetpath.quote().to_string()),
-                        ]),
-                    )
+                    translate!("mv-error-cannot-move", "source" => sourcepath.quote(), "target" => targetpath.quote())
                 });
                 match multi_progress {
                     Some(ref pb) => pb.suspend(|| show!(e)),
@@ -699,13 +671,7 @@ fn rename(
     if to.exists() {
         if opts.update == UpdateMode::None {
             if opts.debug {
-                println!(
-                    "{}",
-                    get_message_with_args(
-                        "mv-debug-skipped",
-                        HashMap::from([("target".to_string(), to.quote().to_string())])
-                    )
-                );
+                println!("{}", translate!("mv-debug-skipped", "target" => to.quote()));
             }
             return Ok(());
         }
@@ -717,33 +683,21 @@ fn rename(
         }
 
         if opts.update == UpdateMode::NoneFail {
-            let err_msg = get_message_with_args(
-                "mv-error-not-replacing",
-                HashMap::from([("target".to_string(), to.quote().to_string())]),
-            );
+            let err_msg = translate!("mv-error-not-replacing", "target" => to.quote());
             return Err(io::Error::other(err_msg));
         }
 
         match opts.overwrite {
             OverwriteMode::NoClobber => {
                 if opts.debug {
-                    println!(
-                        "{}",
-                        get_message_with_args(
-                            "mv-debug-skipped",
-                            HashMap::from([("target".to_string(), to.quote().to_string())])
-                        )
-                    );
+                    println!("{}", translate!("mv-debug-skipped", "target" => to.quote()));
                 }
                 return Ok(());
             }
             OverwriteMode::Interactive => {
                 if !prompt_yes!(
                     "{}",
-                    get_message_with_args(
-                        "mv-prompt-overwrite",
-                        HashMap::from([("target".to_string(), to.quote().to_string())]),
-                    )
+                    translate!("mv-prompt-overwrite", "target" => to.quote())
                 ) {
                     return Err(io::Error::other(""));
                 }
@@ -765,9 +719,7 @@ fn rename(
             if is_empty_dir(to) {
                 fs::remove_dir(to)?;
             } else {
-                return Err(io::Error::other(get_message(
-                    "mv-error-directory-not-empty",
-                )));
+                return Err(io::Error::other(translate!("mv-error-directory-not-empty")));
             }
         }
     }
@@ -783,21 +735,10 @@ fn rename(
 
     if opts.verbose {
         let message = match backup_path {
-            Some(path) => get_message_with_args(
-                "mv-verbose-renamed-with-backup",
-                HashMap::from([
-                    ("from".to_string(), from.quote().to_string()),
-                    ("to".to_string(), to.quote().to_string()),
-                    ("backup".to_string(), path.quote().to_string()),
-                ]),
-            ),
-            None => get_message_with_args(
-                "mv-verbose-renamed",
-                HashMap::from([
-                    ("from".to_string(), from.quote().to_string()),
-                    ("to".to_string(), to.quote().to_string()),
-                ]),
-            ),
+            Some(path) => {
+                translate!("mv-verbose-renamed-with-backup", "from" => from.quote(), "to" => to.quote(), "backup" => path.quote())
+            }
+            None => translate!("mv-verbose-renamed", "from" => from.quote(), "to" => to.quote()),
         };
 
         match multi_progress {
@@ -920,7 +861,7 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     } else {
         Err(io::Error::new(
             io::ErrorKind::NotFound,
-            get_message("mv-error-dangling-symlink"),
+            translate!("mv-error-dangling-symlink"),
         ))
     }
 }
@@ -930,7 +871,7 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     let path_symlink_points_to = fs::read_link(from)?;
     Err(io::Error::new(
         io::ErrorKind::Other,
-        get_message("mv-error-no-symlink-support"),
+        translate!("mv-error-no-symlink-support"),
     ))
 }
 
@@ -1114,14 +1055,7 @@ fn rename_file_fallback(
     // Remove existing target file if it exists
     if to.is_symlink() {
         fs::remove_file(to).map_err(|err| {
-            let inter_device_msg = get_message_with_args(
-                "mv-error-inter-device-move-failed",
-                HashMap::from([
-                    ("from".to_string(), from.display().to_string()),
-                    ("to".to_string(), to.display().to_string()),
-                    ("err".to_string(), err.to_string()),
-                ]),
-            );
+            let inter_device_msg = translate!("mv-error-inter-device-move-failed", "from" => from.display(), "to" => to.display(), "err" => err);
             io::Error::new(err.kind(), inter_device_msg)
         })?;
     } else if to.exists() {
@@ -1151,19 +1085,16 @@ fn rename_file_fallback(
     fs::copy(from, to)
         .and_then(|_| fsxattr::copy_xattrs(&from, &to))
         .and_then(|_| fs::remove_file(from))
-        .map_err(|err| io::Error::new(err.kind(), get_message("mv-error-permission-denied")))?;
+        .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
     #[cfg(any(target_os = "macos", target_os = "redox", not(unix)))]
     fs::copy(from, to)
         .and_then(|_| fs::remove_file(from))
-        .map_err(|err| io::Error::new(err.kind(), get_message("mv-error-permission-denied")))?;
+        .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
     Ok(())
 }
 
 fn is_empty_dir(path: &Path) -> bool {
-    match fs::read_dir(path) {
-        Ok(contents) => contents.peekable().peek().is_none(),
-        Err(_e) => false,
-    }
+    fs::read_dir(path).is_ok_and(|mut contents| contents.next().is_none())
 }
 
 /// Checks if a file can be deleted by attempting to open it with delete permissions.

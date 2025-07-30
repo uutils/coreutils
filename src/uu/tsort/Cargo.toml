@@ -21,6 +21,7 @@ path = "src/tsort.rs"
 clap = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "tsort"

@@ -25,7 +25,7 @@ mod split_name;
 use crate::csplit_error::CsplitError;
 use crate::split_name::SplitName;
 
-use uucore::locale::get_message;
+use uucore::translate;
 
 mod options {
     pub const SUFFIX_FORMAT: &str = "suffix-format";
@@ -85,10 +85,7 @@ impl<T: BufRead> Iterator for LinesWithNewlines<T> {
     fn next(&mut self) -> Option<Self::Item> {
         fn ret(v: Vec<u8>) -> io::Result<String> {
             String::from_utf8(v).map_err(|_| {
-                io::Error::new(
-                    ErrorKind::InvalidData,
-                    get_message("csplit-stream-not-utf8"),
-                )
+                io::Error::new(ErrorKind::InvalidData, translate!("csplit-stream-not-utf8"))
             })
         }
 
@@ -118,7 +115,7 @@ where
     T: BufRead,
 {
     let enumerated_input_lines = LinesWithNewlines::new(input)
-        .map(|line| line.map_err_context(|| get_message("csplit-read-error")))
+        .map(|line| line.map_err_context(|| translate!("csplit-read-error")))
         .enumerate();
     let mut input_iter = InputSplitter::new(enumerated_input_lines);
     let mut split_writer = SplitWriter::new(options);
@@ -286,7 +283,7 @@ impl SplitWriter<'_> {
                     current_writer.write_all(bytes)?;
                     self.size += bytes.len();
                 }
-                None => panic!("{}", get_message("csplit-write-split-not-created")),
+                None => panic!("{}", translate!("csplit-write-split-not-created")),
             }
         }
         Ok(())
@@ -632,8 +629,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("csplit-about"))
-        .override_usage(format_usage(&get_message("csplit-usage")))
+        .about(translate!("csplit-about"))
+        .override_usage(format_usage(&translate!("csplit-usage")))
         .args_override_self(true)
         .infer_long_args(true)
         .arg(
@@ -641,26 +638,26 @@ pub fn uu_app() -> Command {
                 .short('b')
                 .long(options::SUFFIX_FORMAT)
                 .value_name("FORMAT")
-                .help(get_message("csplit-help-suffix-format")),
+                .help(translate!("csplit-help-suffix-format")),
         )
         .arg(
             Arg::new(options::PREFIX)
                 .short('f')
                 .long(options::PREFIX)
                 .value_name("PREFIX")
-                .help(get_message("csplit-help-prefix")),
+                .help(translate!("csplit-help-prefix")),
         )
         .arg(
             Arg::new(options::KEEP_FILES)
                 .short('k')
                 .long(options::KEEP_FILES)
-                .help(get_message("csplit-help-keep-files"))
+                .help(translate!("csplit-help-keep-files"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SUPPRESS_MATCHED)
                 .long(options::SUPPRESS_MATCHED)
-                .help(get_message("csplit-help-suppress-matched"))
+                .help(translate!("csplit-help-suppress-matched"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -668,7 +665,7 @@ pub fn uu_app() -> Command {
                 .short('n')
                 .long(options::DIGITS)
                 .value_name("DIGITS")
-                .help(get_message("csplit-help-digits")),
+                .help(translate!("csplit-help-digits")),
         )
         .arg(
             Arg::new(options::QUIET)
@@ -676,14 +673,14 @@ pub fn uu_app() -> Command {
                 .long(options::QUIET)
                 .visible_short_alias('s')
                 .visible_alias("silent")
-                .help(get_message("csplit-help-quiet"))
+                .help(translate!("csplit-help-quiet"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ELIDE_EMPTY_FILES)
                 .short('z')
                 .long(options::ELIDE_EMPTY_FILES)
-                .help(get_message("csplit-help-elide-empty-files"))
+                .help(translate!("csplit-help-elide-empty-files"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -698,7 +695,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Append)
                 .required(true),
         )
-        .after_help(get_message("csplit-after-help"))
+        .after_help(translate!("csplit-after-help"))
 }
 
 #[cfg(test)]

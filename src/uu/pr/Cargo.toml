@@ -24,6 +24,7 @@ itertools = { workspace = true }
 regex = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "pr"

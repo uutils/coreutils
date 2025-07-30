@@ -24,6 +24,7 @@ selinux = { workspace = true }
 thiserror = { workspace = true }
 libc = { workspace = true }
 fts-sys = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "chcon"

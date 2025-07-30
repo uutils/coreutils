@@ -1145,6 +1145,19 @@ impl AtPath {
         }
     }
 
+    #[cfg(not(windows))]
+    pub fn is_char_device(&self, char_dev: &str) -> bool {
+        unsafe {
+            let name = CString::new(self.plus_as_string(char_dev)).unwrap();
+            let mut stat: libc::stat = std::mem::zeroed();
+            if libc::stat(name.as_ptr(), &mut stat) >= 0 {
+                libc::S_IFCHR & stat.st_mode as libc::mode_t != 0
+            } else {
+                false
+            }
+        }
+    }
+
     pub fn hard_link(&self, original: &str, link: &str) {
         log_info(
             "hard_link",

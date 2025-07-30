@@ -27,6 +27,7 @@ uucore = { workspace = true, features = [
   "time",
 ] }
 thiserror = { workspace = true }
+fluent = { workspace = true }
 
 [features]
 selinux = ["uucore/selinux"]

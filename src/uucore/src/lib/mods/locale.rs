@@ -7,7 +7,6 @@
 use crate::error::UError;
 use fluent::{FluentArgs, FluentBundle, FluentResource};
 use fluent_syntax::parser::ParserError;
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -238,32 +237,18 @@ pub fn get_message(id: &str) -> String {
 ///
 /// ```
 /// use uucore::locale::get_message_with_args;
-/// use std::collections::HashMap;
+/// use fluent::FluentArgs;
 ///
 /// // For a Fluent message like: "Hello, { $name }! You have { $count } notifications."
-/// let mut args = HashMap::new();
-/// args.insert("name".to_string(), "Alice".to_string());
-/// args.insert("count".to_string(), "3".to_string());
+/// let mut args = FluentArgs::new();
+/// args.set("name".to_string(), "Alice".to_string());
+/// args.set("count".to_string(), 3);
 ///
 /// let message = get_message_with_args("notification", args);
 /// println!("{message}");
 /// ```
-pub fn get_message_with_args(id: &str, ftl_args: HashMap<String, String>) -> String {
-    let mut args = FluentArgs::new();
-
-    for (key, value) in ftl_args {
-        // Try to parse as number first for proper pluralization support
-        if let Ok(num_val) = value.parse::<i64>() {
-            args.set(key, num_val);
-        } else if let Ok(float_val) = value.parse::<f64>() {
-            args.set(key, float_val);
-        } else {
-            // Keep as string if not a number
-            args.set(key, value);
-        }
-    }
-
-    get_message_internal(id, Some(args))
+pub fn get_message_with_args(id: &str, ftl_args: FluentArgs) -> String {
+    get_message_internal(id, Some(ftl_args))
 }
 
 /// Function to detect system locale from environment variables
@@ -401,10 +386,72 @@ fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
     }
 }
 
+/// Macro for retrieving localized messages with optional arguments.
+///
+/// This macro provides a unified interface for both simple message retrieval
+/// and message retrieval with variable substitution. It accepts a message ID
+/// and optionally key-value pairs using the `"key" => value` syntax.
+///
+/// # Arguments
+///
+/// * `$id` - The message identifier string
+/// * Optional key-value pairs in the format `"key" => value`
+///
+/// # Examples
+///
+/// ```
+/// use uucore::translate;
+/// use fluent::FluentArgs;
+///
+/// // Simple message without arguments
+/// let greeting = translate!("greeting");
+///
+/// // Message with one argument
+/// let welcome = translate!("welcome", "name" => "Alice");
+///
+/// // Message with multiple arguments
+/// let username = "user name";
+/// let item_count = 2;
+/// let notification = translate!(
+///     "user-stats",
+///     "name" => username,
+///     "count" => item_count,
+///     "status" => "active"
+/// );
+/// ```
+#[macro_export]
+macro_rules! translate {
+    // Case 1: Message ID only (no arguments)
+    ($id:expr) => {
+        $crate::locale::get_message($id)
+    };
+
+    // Case 2: Message ID with key-value arguments
+    ($id:expr, $($key:expr => $value:expr),+ $(,)?) => {
+        {
+            let mut args = fluent::FluentArgs::new();
+            $(
+                let value_str = $value.to_string();
+                if let Ok(num_val) = value_str.parse::<i64>() {
+                    args.set($key, num_val);
+                } else if let Ok(float_val) = value_str.parse::<f64>() {
+                    args.set($key, float_val);
+                } else {
+                    // Keep as string if not a number
+                    args.set($key, value_str);
+                }
+            )+
+            $crate::locale::get_message_with_args($id, args)
+        }
+    };
+}
+
+// Re-export the macro for easier access
+pub use translate;
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
     use std::env;
     use std::fs;
     use std::path::PathBuf;
@@ -724,8 +771,8 @@ invalid-syntax = This is { $missing
 
             init_localization(&locale, temp_dir.path()).unwrap();
 
-            let mut args = HashMap::new();
-            args.insert("name".to_string(), "Bob".to_string());
+            let mut args = FluentArgs::new();
+            args.set("name".to_string(), "Bob".to_string());
 
             let message = get_message_with_args("welcome", args);
             assert_eq!(message, "Welcome, Bob!");
@@ -743,14 +790,14 @@ invalid-syntax = This is { $missing
             init_localization(&locale, temp_dir.path()).unwrap();
 
             // Test singular
-            let mut args1 = HashMap::new();
-            args1.insert("count".to_string(), "1".to_string());
+            let mut args1 = FluentArgs::new();
+            args1.set("count", 1);
             let message1 = get_message_with_args("count-items", args1);
             assert_eq!(message1, "You have 1 item");
 
             // Test plural
-            let mut args2 = HashMap::new();
-            args2.insert("count".to_string(), "5".to_string());
+            let mut args2 = FluentArgs::new();
+            args2.set("count", 5);
             let message2 = get_message_with_args("count-items", args2);
             assert_eq!(message2, "You have 5 items");
         })
@@ -954,14 +1001,14 @@ invalid-syntax = This is { $missing
             assert_eq!(message, "こんにちは、世界！");
 
             // Test Japanese with arguments
-            let mut args = HashMap::new();
-            args.insert("name".to_string(), "田中".to_string());
+            let mut args = FluentArgs::new();
+            args.set("name".to_string(), "田中".to_string());
             let welcome = get_message_with_args("welcome", args);
             assert_eq!(welcome, "ようこそ、田中さん！");
 
             // Test Japanese count (no pluralization)
-            let mut count_args = HashMap::new();
-            count_args.insert("count".to_string(), "5".to_string());
+            let mut count_args = FluentArgs::new();
+            count_args.set("count".to_string(), "5".to_string());
             let count_message = get_message_with_args("count-items", count_args);
             assert_eq!(count_message, "5個のアイテムがあります");
         })
@@ -983,40 +1030,82 @@ invalid-syntax = This is { $missing
             assert_eq!(message, "أهلاً بالعالم！");
 
             // Test Arabic with arguments
-            let mut args = HashMap::new();
-            args.insert("name".to_string(), "أحمد".to_string());
+            let mut args = FluentArgs::new();
+            args.set("name", "أحمد".to_string());
             let welcome = get_message_with_args("welcome", args);
 
             assert_eq!(welcome, "أهلاً وسهلاً، أحمد！");
 
             // Test Arabic pluralization (zero case)
-            let mut args_zero = HashMap::new();
-            args_zero.insert("count".to_string(), "0".to_string());
+            let mut args_zero = FluentArgs::new();
+            args_zero.set("count", 0);
             let message_zero = get_message_with_args("count-items", args_zero);
             assert_eq!(message_zero, "لديك لا عناصر");
 
             // Test Arabic pluralization (one case)
-            let mut args_one = HashMap::new();
-            args_one.insert("count".to_string(), "1".to_string());
+            let mut args_one = FluentArgs::new();
+            args_one.set("count", 1);
             let message_one = get_message_with_args("count-items", args_one);
             assert_eq!(message_one, "لديك عنصر واحد");
 
             // Test Arabic pluralization (two case)
-            let mut args_two = HashMap::new();
-            args_two.insert("count".to_string(), "2".to_string());
+            let mut args_two = FluentArgs::new();
+            args_two.set("count", 2);
             let message_two = get_message_with_args("count-items", args_two);
             assert_eq!(message_two, "لديك عنصران");
 
             // Test Arabic pluralization (few case - 3-10)
-            let mut args_few = HashMap::new();
-            args_few.insert("count".to_string(), "5".to_string());
+            let mut args_few = FluentArgs::new();
+            args_few.set("count", 5);
             let message_few = get_message_with_args("count-items", args_few);
             assert_eq!(message_few, "لديك 5 عناصر");
 
             // Test Arabic pluralization (other case - 11+)
-            let mut args_many = HashMap::new();
-            args_many.insert("count".to_string(), "15".to_string());
+            let mut args_many = FluentArgs::new();
+            args_many.set("count", 15);
             let message_many = get_message_with_args("count-items", args_many);
+            assert_eq!(message_many, "لديك 15 عنصر");
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn test_arabic_localization_with_macro() {
+        std::thread::spawn(|| {
+            use self::translate;
+            let temp_dir = create_test_locales_dir();
+            let locale = LanguageIdentifier::from_str("ar-SA").unwrap();
+
+            let result = init_localization(&locale, temp_dir.path());
+            assert!(result.is_ok());
+
+            // Test Arabic greeting (RTL text)
+            let message = translate!("greeting");
+            assert_eq!(message, "أهلاً بالعالم！");
+
+            // Test Arabic with arguments
+            let welcome = translate!("welcome", "name" => "أحمد");
+            assert_eq!(welcome, "أهلاً وسهلاً، أحمد！");
+
+            // Test Arabic pluralization (zero case)
+            let message_zero = translate!("count-items", "count" => 0);
+            assert_eq!(message_zero, "لديك لا عناصر");
+
+            // Test Arabic pluralization (one case)
+            let message_one = translate!("count-items", "count" => 1);
+            assert_eq!(message_one, "لديك عنصر واحد");
+
+            // Test Arabic pluralization (two case)
+            let message_two = translate!("count-items", "count" => 2);
+            assert_eq!(message_two, "لديك عنصران");
+
+            // Test Arabic pluralization (few case - 3-10)
+            let message_few = translate!("count-items", "count" => 5);
+            assert_eq!(message_few, "لديك 5 عناصر");
+
+            // Test Arabic pluralization (other case - 11+)
+            let message_many = translate!("count-items", "count" => 15);
             assert_eq!(message_many, "لديك 15 عنصر");
         })
         .join()
@@ -1053,8 +1142,8 @@ invalid-syntax = This is { $missing
 
             // Test that Latin script names are NOT isolated in RTL context
             // since we disabled Unicode directional isolation
-            let mut args = HashMap::new();
-            args.insert("name".to_string(), "John Smith".to_string());
+            let mut args = FluentArgs::new();
+            args.set("name".to_string(), "John Smith".to_string());
             let message = get_message_with_args("welcome", args);
 
             // The Latin name should NOT be wrapped in directional isolate characters
