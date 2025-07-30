@@ -8,8 +8,7 @@
 
 #[cfg(not(any(windows, target_os = "openbsd", target_os = "freebsd")))]
 use uutests::at_and_ucmd;
-use uutests::util::TestScenario;
-use uutests::{new_ucmd, util_name};
+use uutests::new_ucmd;
 
 use regex::Regex;
 
@@ -52,6 +51,7 @@ fn test_uptime_for_file_without_utmpx_records() {
 #[test]
 #[cfg(all(unix, feature = "cp"))]
 fn test_uptime_with_fifo() {
+    use uutests::{util::TestScenario, util_name};
     // This test can go on forever in the CI in some cases, might need aborting
     // Sometimes writing to the pipe is broken
     let ts = TestScenario::new(util_name!());
