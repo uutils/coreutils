@@ -2563,7 +2563,7 @@ fn copy_helper(
         #[cfg(unix)]
         copy_fifo(dest, options.overwrite, options.debug)?;
     } else if source_is_symlink {
-        copy_link(source, dest, symlinked_files)?;
+        copy_link(source, dest, symlinked_files, options)?;
     } else {
         let copy_debug = copy_on_write(
             source,
@@ -2600,6 +2600,7 @@ fn copy_link(
     source: &Path,
     dest: &Path,
     symlinked_files: &mut HashSet<FileInformation>,
+    options: &Options,
 ) -> CopyResult<()> {
     // Here, we will copy the symlink itself (actually, just recreate it)
     let link = fs::read_link(source)?;
@@ -2608,7 +2609,8 @@ fn copy_link(
     if dest.is_symlink() || dest.is_file() {
         fs::remove_file(dest)?;
     }
-    symlink_file(&link, dest, symlinked_files)
+    symlink_file(&link, dest, symlinked_files)?;
+    copy_attributes(source, dest, &options.attributes)
 }
 
 /// Generate an error message if `target` is not the correct `target_type`
