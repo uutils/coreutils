@@ -3103,8 +3103,7 @@ fn test_cp_fifo() {
     assert_eq!(permission, "prwx-wx--x".to_string());
 }
 
-#[cfg(unix)]
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 fn find_other_group(current: u32) -> Option<u32> {
     // Get the first group that doesn't match current
     nix::unistd::getgroups().ok()?.iter().find_map(|group| {
