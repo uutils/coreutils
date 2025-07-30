@@ -7,23 +7,24 @@
 
 #[cfg(unix)]
 use std::collections::HashMap;
-use std::iter;
-use std::ops::RangeInclusive;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
-use std::{cell::LazyCell, cell::OnceCell, num::IntErrorKind};
 use std::{
+    cell::{LazyCell, OnceCell},
     cmp::Reverse,
+    collections::HashSet,
     ffi::{OsStr, OsString},
     fmt::Write as FmtWrite,
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
-    io::{BufWriter, ErrorKind, Stdout, Write, stdout},
+    io::{BufWriter, ErrorKind, IsTerminal, Stdout, Write, stdout},
+    iter,
+    num::IntErrorKind,
+    ops::RangeInclusive,
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use std::{collections::HashSet, io::IsTerminal};
 
 use ansi_width::ansi_width;
 use clap::{
@@ -34,12 +35,9 @@ use glob::{MatchOptions, Pattern};
 use lscolors::LsColors;
 use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
 use thiserror::Error;
+
 #[cfg(unix)]
 use uucore::entries;
-use uucore::error::USimpleError;
-use uucore::format::human::{SizeFormat, human_readable};
-use uucore::fs::FileInformation;
-use uucore::fsext::{MetadataTimeField, metadata_get_time};
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 use uucore::fsxattr::has_acl;
 #[cfg(unix)]
@@ -57,22 +55,25 @@ use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
     target_os = "solaris"
 ))]
 use uucore::libc::{dev_t, major, minor};
-use uucore::line_ending::LineEnding;
-use uucore::translate;
-
-use uucore::quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name};
-use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
 use uucore::{
     display::Quotable,
-    error::{UError, UResult, set_exit_code},
+    error::{UError, UResult, USimpleError, set_exit_code},
+    format::human::{SizeFormat, human_readable},
     format_usage,
+    fs::FileInformation,
     fs::display_permissions,
+    fsext::{MetadataTimeField, metadata_get_time},
+    line_ending::LineEnding,
     os_str_as_bytes_lossy,
+    parser::parse_glob,
     parser::parse_size::parse_size_u64,
     parser::shortcut_value_parser::ShortcutValueParser,
+    quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
+    show, show_error, show_warning,
+    time::{FormatSystemTimeFallback, format, format_system_time},
+    translate,
     version_cmp::version_cmp,
 };
-use uucore::{parser::parse_glob, show, show_error, show_warning};
 
 mod dired;
 use dired::{DiredOutput, is_dired_arg_present};
