@@ -59,6 +59,7 @@ use uucore::line_ending::LineEnding;
 use uucore::translate;
 
 use uucore::quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name};
+use uucore::time::{FormatSystemTimeFallback, format_system_time};
 use uucore::{
     display::Quotable,
     error::{UError, UResult, set_exit_code},
@@ -2946,7 +2947,7 @@ fn display_date(
         _ => &config.time_format_recent,
     };
 
-    uucore::time::format_system_time(out, time, fmt, false)
+    format_system_time(out, time, fmt, FormatSystemTimeFallback::Integer)
 }
 
 #[allow(dead_code)]

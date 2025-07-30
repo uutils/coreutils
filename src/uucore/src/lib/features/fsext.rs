@@ -69,7 +69,9 @@ use std::io::Error as IOError;
 use std::mem;
 #[cfg(windows)]
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
+#[cfg(not(windows))]
+use std::time::UNIX_EPOCH;
 use std::{borrow::Cow, ffi::OsString};
 
 use std::fs::Metadata;
@@ -114,19 +116,6 @@ pub use libc::statfs as statfs_fn;
 ))]
 pub use libc::statvfs as statfs_fn;
 
-pub trait BirthTime {
-    fn birth(&self) -> Option<(u64, u32)>;
-}
-
-impl BirthTime for Metadata {
-    fn birth(&self) -> Option<(u64, u32)> {
-        self.created()
-            .ok()
-            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-            .map(|e| (e.as_secs(), e.subsec_nanos()))
-    }
-}
-
 #[derive(Debug, Copy, Clone)]
 pub enum MetadataTimeField {
     Modification,
@@ -153,8 +142,20 @@ impl From<&str> for MetadataTimeField {
 
 #[cfg(unix)]
 fn metadata_get_change_time(md: &Metadata) -> Option<SystemTime> {
-    // TODO: This is incorrect for negative timestamps.
-    Some(UNIX_EPOCH + Duration::new(md.ctime() as u64, md.ctime_nsec() as u32))
+    let mut st = UNIX_EPOCH;
+    let (secs, nsecs) = (md.ctime(), md.ctime_nsec());
+    if secs >= 0 {
+        st += Duration::from_secs(secs as u64);
+    } else {
+        st -= Duration::from_secs(-secs as u64);
+    }
+    if nsecs >= 0 {
+        st += Duration::from_nanos(nsecs as u64);
+    } else {
+        // Probably never the case, but cover just in case.
+        st -= Duration::from_nanos(-nsecs as u64);
+    }
+    Some(st)
 }
 
 #[cfg(not(unix))]

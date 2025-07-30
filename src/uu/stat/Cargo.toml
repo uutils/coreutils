@@ -19,8 +19,13 @@ path = "src/stat.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["entries", "libc", "fs", "fsext"] }
-chrono = { workspace = true }
+uucore = { workspace = true, features = [
+  "entries",
+  "libc",
+  "fs",
+  "fsext",
+  "time",
+] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 

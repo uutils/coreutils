@@ -28,6 +28,7 @@ use uucore::translate;
 use uucore::parser::parse_glob;
 use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+use uucore::time::{FormatSystemTimeFallback, format_system_time};
 use uucore::{format_usage, show, show_error, show_warning};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
@@ -508,7 +509,12 @@ impl StatPrinter {
 
         if let Some(md_time) = &self.time {
             if let Some(time) = metadata_get_time(&stat.metadata, *md_time) {
-                uucore::time::format_system_time(&mut stdout(), time, &self.time_format, true)?;
+                format_system_time(
+                    &mut stdout(),
+                    time,
+                    &self.time_format,
+                    FormatSystemTimeFallback::IntegerError,
+                )?;
                 print!("\t");
             } else {
                 print!("???\t");
