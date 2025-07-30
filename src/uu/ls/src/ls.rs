@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime
 
+#[cfg(unix)]
 use std::collections::HashMap;
 use std::iter;
 use std::ops::RangeInclusive;
