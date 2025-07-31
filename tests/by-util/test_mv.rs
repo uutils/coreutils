@@ -1662,12 +1662,12 @@ fn test_mv_dir_into_file_where_both_are_files() {
     let at = &scene.fixtures;
     at.touch("a");
     at.touch("b");
-    scene
-        .ucmd()
-        .arg("a/")
-        .arg("b")
-        .fails()
-        .stderr_contains("mv: cannot stat 'a/': Not a directory");
+    scene.ucmd().arg("a/").arg("b").fails().stderr_contains(
+        #[cfg(unix)]
+        "mv: cannot stat 'a/': Not a directory",
+        #[cfg(windows)]
+        "mv: The filename, directory name, or volume label syntax is incorrect. (os error 123)",
+    );
 }
 
 #[test]
@@ -2487,4 +2487,26 @@ fn test_mv_cross_device_permission_denied() {
 
     set_permissions(other_fs_tempdir.path(), PermissionsExt::from_mode(0o755))
         .expect("Unable to restore directory permissions");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_mv_hardlink_permission_error() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let unreadable_dir = "src/unreadable_dir";
+    let dest_dir = "dest";
+    at.mkdir_all(unreadable_dir);
+    at.mkdir(dest_dir);
+    at.set_mode(unreadable_dir, 0o333);
+
+    scene
+        .ucmd()
+        .arg(unreadable_dir)
+        .arg(dest_dir)
+        .fails()
+        .stderr_contains("mv: Failed to read directory during scan")
+        .stderr_contains("Permission denied");
+
+    at.set_mode(unreadable_dir, 0o755);
 }
