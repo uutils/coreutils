@@ -4083,6 +4083,7 @@ dependencies = [
  "dns-lookup",
  "dunce",
  "fluent",
+ "fluent-bundle",
  "fluent-syntax",
  "glob",
  "hex",
