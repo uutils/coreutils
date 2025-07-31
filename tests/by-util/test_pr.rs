@@ -414,8 +414,7 @@ fn test_with_date_format() {
         .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
 
     // "Format" doesn't need to contain any replaceable token.
-    let mut scenario = new_ucmd!();
-    scenario
+    new_ucmd!()
         .args(&[test_file_path, "-D", "Hello!"])
         .succeeds()
         .stdout_is_templated_fixture(
@@ -424,8 +423,7 @@ fn test_with_date_format() {
         );
 
     // Long option also works
-    let mut scenario = new_ucmd!();
-    scenario
+    new_ucmd!()
         .args(&[test_file_path, "--date-format=Hello!"])
         .succeeds()
         .stdout_is_templated_fixture(
@@ -434,8 +432,7 @@ fn test_with_date_format() {
         );
 
     // Option takes precedence over environment variables
-    let mut scenario = new_ucmd!();
-    scenario
+    new_ucmd!()
         .env("POSIXLY_CORRECT", "1")
         .env("LC_TIME", "POSIX")
         .args(&[test_file_path, "-D", "Hello!"])
