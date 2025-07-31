@@ -5,7 +5,8 @@
 
 // spell-checker:ignore (path) eacces inacc rm-r4
 
-use clap::{Arg, ArgAction, Command, builder::ValueParser, parser::ValueSource};
+use clap::builder::{PossibleValue, ValueParser};
+use clap::{Arg, ArgAction, Command, parser::ValueSource};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, Metadata};
 use std::io::{IsTerminal, stdin};
@@ -19,6 +20,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
 
 use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
@@ -249,6 +251,11 @@ pub fn uu_app() -> Command {
                 .long(OPT_INTERACTIVE)
                 .help(translate!("rm-help-interactive"))
                 .value_name("WHEN")
+                .value_parser(ShortcutValueParser::new([
+                    PossibleValue::new("always").alias("yes"),
+                    PossibleValue::new("once"),
+                    PossibleValue::new("never").alias("no").alias("none"),
+                ]))
                 .num_args(0..=1)
                 .require_equals(true)
                 .default_missing_value("always")
