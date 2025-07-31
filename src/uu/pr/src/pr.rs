@@ -6,7 +6,6 @@
 
 // spell-checker:ignore (ToDO) adFfmprt, kmerge
 
-use chrono::{DateTime, Local};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
 use regex::Regex;
@@ -14,11 +13,13 @@ use std::fs::{File, metadata};
 use std::io::{BufRead, BufReader, Lines, Read, Write, stdin, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
+use std::time::SystemTime;
 use thiserror::Error;
 
 use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::format_usage;
+use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
 use uucore::translate;
 
 const TAB: char = '\t';
@@ -32,10 +33,10 @@ const DEFAULT_COLUMN_WIDTH: usize = 72;
 const DEFAULT_COLUMN_WIDTH_WITH_S_OPTION: usize = 512;
 const DEFAULT_COLUMN_SEPARATOR: &char = &TAB;
 const FF: u8 = 0x0C_u8;
-const DATE_TIME_FORMAT: &str = "%b %d %H:%M %Y";
 
 mod options {
     pub const HEADER: &str = "header";
+    pub const DATE_FORMAT: &str = "date-format";
     pub const DOUBLE_SPACE: &str = "double-space";
     pub const NUMBER_LINES: &str = "number-lines";
     pub const FIRST_LINE_NUMBER: &str = "first-line-number";
@@ -175,6 +176,13 @@ pub fn uu_app() -> Command {
                 .long(options::HEADER)
                 .help(translate!("pr-help-header"))
                 .value_name("STRING"),
+        )
+        .arg(
+            Arg::new(options::DATE_FORMAT)
+                .short('D')
+                .long(options::DATE_FORMAT)
+                .value_name("FORMAT")
+                .help(translate!("pr-help-date-format")),
         )
         .arg(
             Arg::new(options::DOUBLE_SPACE)
@@ -401,6 +409,25 @@ fn parse_usize(matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>
         .map(from_parse_error_to_pr_error)
 }
 
+fn get_date_format(matches: &ArgMatches) -> String {
+    match matches.get_one::<String>(options::DATE_FORMAT) {
+        Some(format) => format,
+        None => {
+            // Replicate behavior from GNU manual.
+            if std::env::var("POSIXLY_CORRECT").is_ok()
+                // TODO: This needs to be moved to uucore and handled by icu?
+                && (std::env::var("LC_TIME").unwrap_or_default() == "POSIX"
+                    || std::env::var("LC_ALL").unwrap_or_default() == "POSIX")
+            {
+                "%b %e %H:%M %Y"
+            } else {
+                format::LONG_ISO
+            }
+        }
+    }
+    .to_string()
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn build_options(
     matches: &ArgMatches,
@@ -487,11 +514,26 @@ fn build_options(
 
     let line_separator = "\n".to_string();
 
-    let last_modified_time = if is_merge_mode || paths[0].eq(FILE_STDIN) {
-        let date_time = Local::now();
-        date_time.format(DATE_TIME_FORMAT).to_string()
-    } else {
-        file_last_modified_time(paths.first().unwrap())
+    let last_modified_time = {
+        let time = if is_merge_mode || paths[0].eq(FILE_STDIN) {
+            Some(SystemTime::now())
+        } else {
+            metadata(paths.first().unwrap())
+                .ok()
+                .and_then(|i| i.modified().ok())
+        };
+        time.and_then(|time| {
+            let mut v = Vec::new();
+            format_system_time(
+                &mut v,
+                time,
+                &get_date_format(matches),
+                FormatSystemTimeFallback::Integer,
+            )
+            .ok()
+            .map(|()| String::from_utf8_lossy(&v).to_string())
+        })
+        .unwrap_or_default()
     };
 
     // +page option is less priority than --pages
@@ -1124,19 +1166,6 @@ fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
     } else {
         Vec::new()
     }
-}
-
-fn file_last_modified_time(path: &str) -> String {
-    metadata(path)
-        .map(|i| {
-            i.modified()
-                .map(|x| {
-                    let date_time: DateTime<Local> = x.into();
-                    date_time.format(DATE_TIME_FORMAT).to_string()
-                })
-                .unwrap_or_default()
-        })
-        .unwrap_or_default()
 }
 
 /// Returns five empty lines as trailer content if displaying trailer
