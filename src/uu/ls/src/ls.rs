@@ -472,6 +472,13 @@ fn extract_sort(options: &clap::ArgMatches) -> Sort {
         Sort::Version
     } else if options.get_flag(options::sort::EXTENSION) {
         Sort::Extension
+    } else if !options.get_flag(options::format::LONG)
+        && (options.get_flag(options::time::ACCESS)
+            || options.get_flag(options::time::CHANGE)
+            || options.get_one::<String>(options::TIME).is_some())
+    {
+        // If -l is not specified, -u/-c/--time controls sorting.
+        Sort::Time
     } else {
         Sort::Name
     }

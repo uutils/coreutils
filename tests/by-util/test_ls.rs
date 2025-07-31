@@ -2254,24 +2254,29 @@ fn test_ls_order_time() {
     let result = scene.ucmd().arg("--sort=time").arg("-r").succeeds();
     result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
 
+    let args: [&[&str]; 10] = [
+        &["-t", "-u"],
+        &["-u"], //-t is optional: when -l is not set -u/--time controls sorting
+        &["-t", "--time=atime"],
+        &["--time=atime"],
+        &["--time=atim"], // spell-checker:disable-line
+        &["--time=a"],
+        &["-t", "--time=access"],
+        &["--time=access"],
+        &["-t", "--time=use"],
+        &["--time=use"],
+    ];
     // 3 was accessed last in the read
     // So the order should be 2 3 4 1
-    for arg in [
-        "-u",
-        "--time=atime",
-        "--time=atim", // spell-checker:disable-line
-        "--time=a",
-        "--time=access",
-        "--time=use",
-    ] {
-        let result = scene.ucmd().arg("-t").arg(arg).succeeds();
+    for args in args {
+        let result = scene.ucmd().args(args).succeeds();
         at.open("test-3").metadata().unwrap().accessed().unwrap();
         at.open("test-4").metadata().unwrap().accessed().unwrap();
 
         // It seems to be dependent on the platform whether the access time is actually set
         #[cfg(unix)]
         {
-            let expected = unwrap_or_return!(expected_result(&scene, &["-t", arg]));
+            let expected = unwrap_or_return!(expected_result(&scene, args));
             at.open("test-3").metadata().unwrap().accessed().unwrap();
             at.open("test-4").metadata().unwrap().accessed().unwrap();
 
@@ -2286,6 +2291,10 @@ fn test_ls_order_time() {
     #[cfg(unix)]
     {
         let result = scene.ucmd().arg("-tc").succeeds();
+        result.stdout_only("test-2\ntest-4\ntest-3\ntest-1\n");
+
+        // When -l is not set, -c also controls sorting
+        let result = scene.ucmd().arg("-c").succeeds();
         result.stdout_only("test-2\ntest-4\ntest-3\ntest-1\n");
     }
 }
