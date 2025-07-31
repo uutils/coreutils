@@ -2,8 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+// spell-checker:ignore (ToDO) extendedbigdecimal
+
 use half::f16;
 use std::num::FpCategory;
+use uucore::extendedbigdecimal::ExtendedBigDecimal;
 
 use crate::formatter_item_info::{FormatWriter, FormatterItemInfo};
 
@@ -31,6 +34,12 @@ pub static FORMAT_ITEM_BF16: FormatterItemInfo = FormatterItemInfo {
     formatter: FormatWriter::BFloatWriter(format_item_bf16),
 };
 
+pub static FORMAT_ITEM_F128: FormatterItemInfo = FormatterItemInfo {
+    byte_size: 16,
+    print_width: 25, //TODO
+    formatter: FormatWriter::ExtendedBigDecimalWriter(format_item_f128),
+};
+
 pub fn format_item_f16(f: f64) -> String {
     format!(" {}", format_f16(f16::from_f64(f)))
 }
@@ -41,6 +50,10 @@ pub fn format_item_f32(f: f64) -> String {
 
 pub fn format_item_f64(f: f64) -> String {
     format!(" {}", format_f64(f))
+}
+
+pub fn format_item_f128(ebd: &ExtendedBigDecimal) -> String {
+    format!(" {}", format_f128(ebd))
 }
 
 fn format_f32_exp(f: f32, width: usize) -> String {
@@ -122,6 +135,10 @@ fn format_float(f: f64, width: usize, precision: usize) -> String {
     } else {
         format_f64_exp_precision(f, width, precision - 1) // subnormal numbers
     }
+}
+
+fn format_f128(_ebd: &ExtendedBigDecimal) -> String {
+    "TODO".to_string()
 }
 
 #[test]
