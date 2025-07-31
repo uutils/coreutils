@@ -378,6 +378,7 @@ digest = "0.10.7"
 
 # Fluent dependencies
 fluent = "0.17.0"
+fluent-bundle = "0.16.0"
 unic-langid = "0.9.6"
 fluent-syntax = "0.12.0"
 
