@@ -5,23 +5,26 @@
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime
 
+#[cfg(unix)]
 use std::collections::HashMap;
-use std::iter;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
-use std::{cell::LazyCell, cell::OnceCell, num::IntErrorKind};
 use std::{
+    cell::{LazyCell, OnceCell},
     cmp::Reverse,
+    collections::HashSet,
     ffi::{OsStr, OsString},
     fmt::Write as FmtWrite,
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
-    io::{BufWriter, ErrorKind, Stdout, Write, stdout},
+    io::{BufWriter, ErrorKind, IsTerminal, Stdout, Write, stdout},
+    iter,
+    num::IntErrorKind,
+    ops::RangeInclusive,
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use std::{collections::HashSet, io::IsTerminal};
 
 use ansi_width::ansi_width;
 use clap::{
@@ -32,12 +35,9 @@ use glob::{MatchOptions, Pattern};
 use lscolors::LsColors;
 use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
 use thiserror::Error;
+
 #[cfg(unix)]
 use uucore::entries;
-use uucore::error::USimpleError;
-use uucore::format::human::{SizeFormat, human_readable};
-use uucore::fs::FileInformation;
-use uucore::fsext::{MetadataTimeField, metadata_get_time};
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 use uucore::fsxattr::has_acl;
 #[cfg(unix)]
@@ -55,22 +55,25 @@ use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
     target_os = "solaris"
 ))]
 use uucore::libc::{dev_t, major, minor};
-use uucore::line_ending::LineEnding;
-use uucore::translate;
-
-use uucore::quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name};
-use uucore::time::{FormatSystemTimeFallback, format_system_time};
 use uucore::{
     display::Quotable,
-    error::{UError, UResult, set_exit_code},
+    error::{UError, UResult, USimpleError, set_exit_code},
+    format::human::{SizeFormat, human_readable},
     format_usage,
+    fs::FileInformation,
     fs::display_permissions,
+    fsext::{MetadataTimeField, metadata_get_time},
+    line_ending::LineEnding,
     os_str_as_bytes_lossy,
+    parser::parse_glob,
     parser::parse_size::parse_size_u64,
     parser::shortcut_value_parser::ShortcutValueParser,
+    quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
+    show, show_error, show_warning,
+    time::{FormatSystemTimeFallback, format, format_system_time},
+    translate,
     version_cmp::version_cmp,
 };
-use uucore::{parser::parse_glob, show, show_error, show_warning};
 
 mod dired;
 use dired::{DiredOutput, is_dired_arg_present};
@@ -203,8 +206,8 @@ enum LsError {
     #[error("{}", translate!("ls-error-not-listing-already-listed", "path" => .0.to_string_lossy()))]
     AlreadyListedError(PathBuf),
 
-    #[error("{}", translate!("ls-error-invalid-time-style", "style" => .0.quote(), "values" => format!("{:?}", .1)))]
-    TimeStyleParseError(String, Vec<String>),
+    #[error("{}", translate!("ls-error-invalid-time-style", "style" => .0.quote()))]
+    TimeStyleParseError(String),
 }
 
 impl UError for LsError {
@@ -217,7 +220,7 @@ impl UError for LsError {
             Self::BlockSizeParseError(_) => 2,
             Self::DiredAndZeroAreIncompatible => 2,
             Self::AlreadyListedError(_) => 2,
-            Self::TimeStyleParseError(_, _) => 2,
+            Self::TimeStyleParseError(_) => 2,
         }
     }
 }
@@ -250,53 +253,70 @@ enum Files {
 }
 
 fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String>), LsError> {
-    const TIME_STYLES: [(&str, (&str, Option<&str>)); 4] = [
-        ("full-iso", ("%Y-%m-%d %H:%M:%S.%f %z", None)),
-        ("long-iso", ("%Y-%m-%d %H:%M", None)),
-        ("iso", ("%m-%d %H:%M", Some("%Y-%m-%d "))),
-        // TODO: Using correct locale string is not implemented.
-        ("locale", ("%b %e %H:%M", Some("%b %e  %Y"))),
-    ];
-    // A map from a time-style parameter to a length-2 tuple of formats:
-    // the first one is used for recent dates, the second one for older ones (optional).
-    let time_styles = HashMap::from(TIME_STYLES);
-    let possible_time_styles = TIME_STYLES
-        .iter()
-        .map(|(x, _)| *x)
-        .chain(iter::once(
-            "+FORMAT (e.g., +%H:%M) for a 'date'-style format",
-        ))
-        .map(|s| s.to_string());
+    // TODO: Using correct locale string is not implemented.
+    const LOCALE_FORMAT: (&str, Option<&str>) = ("%b %e %H:%M", Some("%b %e  %Y"));
 
     // Convert time_styles references to owned String/option.
     fn ok((recent, older): (&str, Option<&str>)) -> Result<(String, Option<String>), LsError> {
         Ok((recent.to_string(), older.map(String::from)))
     }
 
-    if let Some(field) = options.get_one::<String>(options::TIME_STYLE) {
+    if let Some(field) = options
+        .get_one::<String>(options::TIME_STYLE)
+        .map(|s| s.to_owned())
+        .or_else(|| std::env::var("TIME_STYLE").ok())
+    {
         //If both FULL_TIME and TIME_STYLE are present
         //The one added last is dominant
         if options.get_flag(options::FULL_TIME)
             && options.indices_of(options::FULL_TIME).unwrap().next_back()
                 > options.indices_of(options::TIME_STYLE).unwrap().next_back()
         {
-            ok(time_styles["full-iso"])
+            ok((format::FULL_ISO, None))
         } else {
-            match time_styles.get(field.as_str()) {
-                Some(formats) => ok(*formats),
-                None => match field.chars().next().unwrap() {
-                    '+' => Ok((field[1..].to_string(), None)),
-                    _ => Err(LsError::TimeStyleParseError(
-                        String::from(field),
-                        possible_time_styles.collect(),
-                    )),
+            let field = if let Some(field) = field.strip_prefix("posix-") {
+                // See GNU documentation, set format to "locale" if LC_TIME="POSIX",
+                // else just strip the prefix and continue (even "posix+FORMAT" is
+                // supported).
+                // TODO: This needs to be moved to uucore and handled by icu?
+                if std::env::var("LC_TIME").unwrap_or_default() == "POSIX"
+                    || std::env::var("LC_ALL").unwrap_or_default() == "POSIX"
+                {
+                    return ok(LOCALE_FORMAT);
+                }
+                field
+            } else {
+                &field
+            };
+
+            match field {
+                "full-iso" => ok((format::FULL_ISO, None)),
+                "long-iso" => ok((format::LONG_ISO, None)),
+                // ISO older format needs extra padding.
+                "iso" => Ok((
+                    "%m-%d %H:%M".to_string(),
+                    Some(format::ISO.to_string() + " "),
+                )),
+                "locale" => ok(LOCALE_FORMAT),
+                _ => match field.chars().next().unwrap() {
+                    '+' => {
+                        // recent/older formats are (optionally) separated by a newline
+                        let mut it = field[1..].split('\n');
+                        let recent = it.next().unwrap_or_default();
+                        let older = it.next();
+                        match it.next() {
+                            None => ok((recent, older)),
+                            Some(_) => Err(LsError::TimeStyleParseError(String::from(field))),
+                        }
+                    }
+                    _ => Err(LsError::TimeStyleParseError(String::from(field))),
                 },
             }
         }
     } else if options.get_flag(options::FULL_TIME) {
-        ok(time_styles["full-iso"])
+        ok((format::FULL_ISO, None))
     } else {
-        ok(time_styles["locale"])
+        ok(LOCALE_FORMAT)
     }
 }
 
@@ -1941,7 +1961,7 @@ struct ListState<'a> {
     uid_cache: HashMap<u32, String>,
     #[cfg(unix)]
     gid_cache: HashMap<u32, String>,
-    recent_time_threshold: SystemTime,
+    recent_time_range: RangeInclusive<SystemTime>,
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -1958,8 +1978,11 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         uid_cache: HashMap::new(),
         #[cfg(unix)]
         gid_cache: HashMap::new(),
+        // Time range for which to use the "recent" format. Anything from 0.5 year in the past to now
+        // (files with modification time in the future use "old" format).
         // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-        recent_time_threshold: SystemTime::now() - Duration::new(31_556_952 / 2, 0),
+        recent_time_range: (SystemTime::now() - Duration::new(31_556_952 / 2, 0))
+            ..=SystemTime::now(),
     };
 
     for loc in locs {
@@ -2943,7 +2966,7 @@ fn display_date(
     // Use "recent" format if the given date is considered recent (i.e., in the last 6 months),
     // or if no "older" format is available.
     let fmt = match &config.time_format_older {
-        Some(time_format_older) if time <= state.recent_time_threshold => time_format_older,
+        Some(time_format_older) if !state.recent_time_range.contains(&time) => time_format_older,
         _ => &config.time_format_recent,
     };
 

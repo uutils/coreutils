@@ -16,7 +16,12 @@ ls-error-invalid-block-size = argument --block-size invalide {$size}
 ls-error-dired-and-zero-incompatible = --dired et --zero sont incompatibles
 ls-error-not-listing-already-listed = {$path} : ne liste pas un répertoire déjà listé
 ls-error-invalid-time-style = argument --time-style invalide {$style}
-  Les valeurs possibles sont : {$values}
+  Les valeurs possibles sont :
+    - [posix-]full-iso
+    - [posix-]long-iso
+    - [posix-]iso
+    - [posix-]locale
+    - +FORMAT (e.g., +%H:%M) pour un format de type 'date'
 
   Pour plus d'informations, essayez --help
 

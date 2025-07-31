@@ -36,6 +36,12 @@ pub fn system_time_to_sec(time: SystemTime) -> (i64, u32) {
     }
 }
 
+pub mod format {
+    pub static FULL_ISO: &str = "%Y-%m-%d %H:%M:%S.%N %z";
+    pub static LONG_ISO: &str = "%Y-%m-%d %H:%M";
+    pub static ISO: &str = "%Y-%m-%d";
+}
+
 /// Sets how `format_system_time` behaves if the time cannot be converted.
 pub enum FormatSystemTimeFallback {
     Integer,      // Just print seconds since epoch (`ls`)

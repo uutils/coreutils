@@ -591,6 +591,7 @@ fn test_du_h_precision() {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 #[cfg(feature = "touch")]
 #[test]
 fn test_du_time() {
@@ -625,6 +626,107 @@ fn test_du_time() {
         .arg("date_test")
         .succeeds();
     result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
+
+    // long-iso (same as default)
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("--time-style=long-iso")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
+
+    // full-iso
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("--time-style=full-iso")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016-06-16 00:00:00.000000000 +0000\tdate_test\n");
+
+    // iso
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("--time-style=iso")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016-06-16\tdate_test\n");
+
+    // custom +FORMAT
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("--time-style=+%Y__%H")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016__00\tdate_test\n");
+
+    // ls has special handling for new line in format, du doesn't.
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("--time-style=+%Y_\n_%H")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016_\n_00\tdate_test\n");
+
+    // Time style can also be setup from environment
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .env("TIME_STYLE", "full-iso")
+        .arg("--time")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016-06-16 00:00:00.000000000 +0000\tdate_test\n");
+
+    // For compatibility reason, we also allow posix- prefix.
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .env("TIME_STYLE", "posix-full-iso")
+        .arg("--time")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016-06-16 00:00:00.000000000 +0000\tdate_test\n");
+
+    // ... and we strip content after a new line
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .env("TIME_STYLE", "+XXX\nYYY")
+        .arg("--time")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\tXXX\tdate_test\n");
+
+    // ... and we ignore "locale", fall back to full-iso.
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .env("TIME_STYLE", "locale")
+        .arg("--time")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
+
+    // Command line option takes precedence
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .env("TIME_STYLE", "full-iso")
+        .arg("--time")
+        .arg("--time-style=iso")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016-06-16\tdate_test\n");
 
     for argument in ["--time=atime", "--time=atim", "--time=a"] {
         let result = ts
