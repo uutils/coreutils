@@ -3,10 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore bfloat multifile
+// spell-checker:ignore bfloat bigdecimal extendedbigdecimal multifile
 
+use bigdecimal::BigDecimal;
 use half::{bf16, f16};
 use std::io;
+use uucore::extendedbigdecimal::ExtendedBigDecimal;
 
 use crate::byteorder_io::ByteOrder;
 use crate::multifile_reader::HasError;
@@ -164,6 +166,14 @@ impl MemoryDecoder<'_> {
         let bits = self.byte_order.read_u16(&self.data[start..start + 2]);
         let val = f32::from(bf16::from_bits(bits));
         f64::from(val)
+    }
+
+    /// Returns an `ExtendedBigDecimal` from the internal buffer at position `start`.
+    /// Only able to parse 16-bytes padded "f80", at least for now
+    pub fn read_extended_big_decimal(&self, start: usize, byte_size: usize) -> ExtendedBigDecimal {
+        assert!(byte_size == 16, "Invalid byte_size: {byte_size}");
+        let _data = self.byte_order.read_u128(&self.data[start..start + 16]);
+        ExtendedBigDecimal::BigDecimal(BigDecimal::default())
     }
 }
 
