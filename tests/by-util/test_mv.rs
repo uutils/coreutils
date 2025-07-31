@@ -2488,3 +2488,163 @@ fn test_mv_cross_device_permission_denied() {
     set_permissions(other_fs_tempdir.path(), PermissionsExt::from_mode(0o755))
         .expect("Unable to restore directory permissions");
 }
+
+// Tests for --exchange flag
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_exchange_basic() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("file1", "content1");
+    at.write("file2", "content2");
+
+    ucmd.arg("--exchange").arg("file1").arg("file2").succeeds();
+
+    // After exchange, file1 should have content2 and file2 should have content1
+    assert_eq!(at.read("file1"), "content2");
+    assert_eq!(at.read("file2"), "content1");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_exchange_verbose() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("file1", "content1");
+    at.write("file2", "content2");
+
+    ucmd.arg("--exchange")
+        .arg("--verbose")
+        .arg("file1")
+        .arg("file2")
+        .succeeds()
+        .stdout_contains("exchanged 'file1' <-> 'file2'");
+}
+
+#[test]
+fn test_mv_exchange_wrong_number_of_args() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("file1", "content1");
+
+    ucmd.arg("--exchange")
+        .arg("file1")
+        .fails()
+        .stderr_contains("requires at least 2 values");
+}
+
+#[test]
+fn test_mv_exchange_three_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("file1", "content1");
+    at.write("file2", "content2");
+    at.write("file3", "content3");
+
+    ucmd.arg("--exchange")
+        .arg("file1")
+        .arg("file2")
+        .arg("file3")
+        .fails()
+        .stderr_contains("--exchange requires exactly two files");
+}
+
+#[test]
+fn test_mv_exchange_conflicts_with_target_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("file1", "content1");
+    at.write("file2", "content2");
+    at.mkdir("dir");
+
+    ucmd.arg("--exchange")
+        .arg("--target-directory")
+        .arg("dir")
+        .arg("file1")
+        .arg("file2")
+        .fails()
+        .stderr_contains("--exchange conflicts with --target-directory");
+}
+
+#[test]
+fn test_mv_exchange_conflicts_with_backup() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("file1", "content1");
+    at.write("file2", "content2");
+
+    ucmd.arg("--exchange")
+        .arg("--backup")
+        .arg("file1")
+        .arg("file2")
+        .fails()
+        .stderr_contains("--exchange conflicts with backup options");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_exchange_missing_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("file1", "content1");
+    // file2 doesn't exist
+
+    ucmd.arg("--exchange")
+        .arg("file1")
+        .arg("file2")
+        .fails()
+        .stderr_contains("cannot stat file2: No such file or directory");
+}
+
+#[test]
+#[cfg(not(target_os = "linux"))]
+fn test_mv_exchange_missing_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("file1", "content1");
+    // file2 doesn't exist
+
+    ucmd.arg("--exchange")
+        .arg("file1")
+        .arg("file2")
+        .fails()
+        .stderr_contains("--exchange is not supported on this system");
+}
+
+#[test]
+#[cfg(not(target_os = "linux"))]
+fn test_mv_exchange_not_supported() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("file1", "content1");
+    at.write("file2", "content2");
+
+    ucmd.arg("--exchange")
+        .arg("file1")
+        .arg("file2")
+        .fails()
+        .stderr_contains("--exchange is not supported on this system");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_exchange_with_no_target_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("d1");
+    at.mkdir("d2");
+    at.write("d1/file1", "content1");
+    at.write("d2/file2", "content2");
+
+    ucmd.arg("-T")
+        .arg("--exchange")
+        .arg("d1")
+        .arg("d2")
+        .succeeds();
+
+    // after exchange, d1 should contain file2 and d2 should contain file1
+    assert_eq!(at.read("d1/file2"), "content2");
+    assert_eq!(at.read("d2/file1"), "content1");
+    assert!(!at.file_exists("d1/file1"));
+    assert!(!at.file_exists("d2/file2"));
+}
