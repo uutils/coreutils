@@ -515,7 +515,6 @@ fn build_options(
     let line_separator = "\n".to_string();
 
     let last_modified_time = {
-        let mut v = Vec::new();
         let time = if is_merge_mode || paths[0].eq(FILE_STDIN) {
             Some(SystemTime::now())
         } else {
@@ -524,6 +523,7 @@ fn build_options(
                 .and_then(|i| i.modified().ok())
         };
         time.and_then(|time| {
+            let mut v = Vec::new();
             format_system_time(
                 &mut v,
                 time,
@@ -531,8 +531,8 @@ fn build_options(
                 FormatSystemTimeFallback::Integer,
             )
             .ok()
+            .map(|()| String::from_utf8_lossy(&v).to_string())
         })
-        .map(|()| String::from_utf8_lossy(&v).to_string())
         .unwrap_or_default()
     };
 
