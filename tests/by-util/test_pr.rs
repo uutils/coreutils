@@ -13,15 +13,11 @@ const DATE_TIME_FORMAT_DEFAULT: &str = "%Y-%m-%d %H:%M";
 
 fn file_last_modified_time_format(ucmd: &UCommand, path: &str, format: &str) -> String {
     let tmp_dir_path = ucmd.get_full_fixture_path(path);
-    let file_metadata = metadata(tmp_dir_path);
-    file_metadata
-        .map(|i| {
-            i.modified()
-                .map(|x| {
-                    let date_time: DateTime<Utc> = x.into();
-                    date_time.format(format).to_string()
-                })
-                .unwrap_or_default()
+    metadata(tmp_dir_path)
+        .and_then(|meta| meta.modified())
+        .map(|mtime| {
+            let dt: DateTime<Utc> = mtime.into();
+            dt.format(format).to_string()
         })
         .unwrap_or_default()
 }
