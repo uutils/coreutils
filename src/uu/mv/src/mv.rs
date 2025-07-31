@@ -356,37 +356,56 @@ fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
 /// Atomically exchange two files using renameat2 with `RENAME_EXCHANGE`
 #[cfg(target_os = "linux")]
 fn exchange_files(path1: &Path, path2: &Path, opts: &Options) -> UResult<()> {
-    use nix::fcntl::{AT_FDCWD, RenameFlags, renameat2};
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    // Convert paths to C strings
+    let c_path1 = CString::new(path1.as_os_str().as_bytes()).unwrap();
+    let c_path2 = CString::new(path2.as_os_str().as_bytes()).unwrap();
+
+    // RENAME_EXCHANGE flag for renameat2
+    const RENAME_EXCHANGE: libc::c_int = 2;
 
     // Use renameat2 to atomically exchange the files
-    match renameat2(
-        AT_FDCWD,
-        path1,
-        AT_FDCWD,
-        path2,
-        RenameFlags::RENAME_EXCHANGE,
-    ) {
-        Ok(()) => {
-            if opts.verbose {
-                println!("exchanged '{}' <-> '{}'", path1.display(), path2.display());
-            }
-            Ok(())
+    let result = unsafe {
+        libc::syscall(
+            libc::SYS_renameat2,
+            libc::AT_FDCWD,
+            c_path1.as_ptr(),
+            libc::AT_FDCWD,
+            c_path2.as_ptr(),
+            RENAME_EXCHANGE,
+        )
+    };
+
+    if result == 0 {
+        if opts.verbose {
+            println!("exchanged '{}' <-> '{}'", path1.display(), path2.display());
         }
-        Err(err) => match err {
-            nix::Error::ENOTSUP | nix::Error::EINVAL => Err(USimpleError::new(
+        Ok(())
+    } else {
+        let errno = unsafe { *libc::__errno_location() };
+        match errno {
+            libc::ENOTSUP | libc::EINVAL => Err(USimpleError::new(
                 1,
                 translate!("--exchange is not supported on this filesystem"),
             )),
-            nix::Error::ENOENT => {
+            libc::ENOENT => {
                 let missing_path = if path1.exists() { path2 } else { path1 };
                 Err(MvError::NoSuchFile(missing_path.display().to_string()).into())
             }
-            nix::Error::EXDEV => Err(USimpleError::new(
+            libc::EXDEV => Err(USimpleError::new(
                 1,
                 translate!("--exchange cannot exchange files across different filesystems"),
             )),
-            _ => Err(USimpleError::new(1, format!("exchange failed: {err}"))),
-        },
+            _ => {
+                let error_msg = io::Error::from_raw_os_error(errno);
+                Err(USimpleError::new(
+                    1,
+                    format!("exchange failed: {error_msg}"),
+                ))
+            }
+        }
     }
 }
 

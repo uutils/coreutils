@@ -40,7 +40,6 @@ windows-sys = { workspace = true, features = [
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
-nix = { workspace = true, features = ["fs"] }
 
 [[bin]]
 name = "mv"
