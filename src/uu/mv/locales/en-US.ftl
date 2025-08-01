@@ -48,6 +48,8 @@ mv-help-verbose = explain what is being done
 mv-help-progress = Display a progress bar.
   Note: this feature is not supported by GNU coreutils.
 mv-help-debug = explain how a file is copied. Implies -v
+mv-help-selinux = set SELinux security context of destination file to default type
+mv-help-context = like -Z, or if CTX is specified then set the SELinux security context to CTX
 
 # Verbose messages
 mv-verbose-renamed = renamed {$from} -> {$to}

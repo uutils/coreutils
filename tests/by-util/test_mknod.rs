@@ -7,6 +7,8 @@
 
 use std::os::unix::fs::PermissionsExt;
 
+#[cfg(feature = "feat_selinux")]
+use uucore::selinux::get_getfattr_output;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util::run_ucmd_as_root;
@@ -155,7 +157,6 @@ fn test_mknod_mode_permissions() {
 #[test]
 #[cfg(feature = "feat_selinux")]
 fn test_mknod_selinux() {
-    use std::process::Command;
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     let dest = "test_file";
@@ -175,25 +176,10 @@ fn test_mknod_selinux() {
         assert!(ts.fixtures.is_fifo("test_file"));
         assert!(ts.fixtures.metadata("test_file").permissions().readonly());
 
-        let getfattr_output = Command::new("getfattr")
-            .arg(at.plus_as_string(dest))
-            .arg("-n")
-            .arg("security.selinux")
-            .output()
-            .expect("Failed to run `getfattr` on the destination file");
-        println!("{getfattr_output:?}");
+        let context_value = get_getfattr_output(&at.plus_as_string(dest));
         assert!(
-            getfattr_output.status.success(),
-            "getfattr did not run successfully: {}",
-            String::from_utf8_lossy(&getfattr_output.stderr)
-        );
-
-        let stdout = String::from_utf8_lossy(&getfattr_output.stdout);
-        assert!(
-            stdout.contains("unconfined_u"),
-            "Expected '{}' not found in getfattr output:\n{}",
-            "foo",
-            stdout
+            context_value.contains("unconfined_u"),
+            "Expected 'unconfined_u' not found in getfattr output:\n{context_value}"
         );
         at.remove(&at.plus_as_string(dest));
     }
