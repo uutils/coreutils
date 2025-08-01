@@ -113,14 +113,18 @@ fn init_localization(
     locales_dir: &Path,
     util_name: &str,
 ) -> Result<(), LocalizationError> {
-    let en_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
+    let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
         .expect("Default locale should always be valid");
 
-    // Try to load English from filesystem, fall back to embedded if that fails
-    let english_bundle = create_bundle(&default_locale, locales_dir).or_else(|_| {
-        // Try embedded English as fallback
-        create_bundle_from_embedded(&default_locale, util_name)
-    })?;
+    // Try to load English from embedded resources first, then fall back to filesystem.
+    // This ensures consistent behavior and faster loading since embedded resources
+    // are immediately available. The filesystem fallback allows for development
+    // and testing scenarios where locale files might be present in the filesystem.
+    let english_bundle =
+        create_english_bundle_from_embedded(&default_locale, util_name).or_else(|_| {
+            // Try filesystem as fallback (useful for development/testing)
+            create_bundle(&default_locale, locales_dir)
+        })?;
 
     let loc = if locale == &default_locale {
         // If requesting English, just use English as primary (no fallback needed)
@@ -189,8 +193,8 @@ fn create_bundle(
     Ok(bundle)
 }
 
-/// Create a bundle from embedded locale files
-fn create_bundle_from_embedded(
+/// Create a bundle from embedded English locale files
+fn create_english_bundle_from_embedded(
     locale: &LanguageIdentifier,
     util_name: &str,
 ) -> Result<FluentBundle<FluentResource>, LocalizationError> {
@@ -209,16 +213,20 @@ fn create_bundle_from_embedded(
     })?;
 
     let resource = FluentResource::try_new(ftl_content.to_string()).map_err(
-        |(_partial_resource, mut errs): (FluentResource, Vec<ParserError>)| {
-            let first_err = errs.remove(0);
-            let snippet = if let Some(range) = first_err.slice.clone() {
-                ftl_content.get(range).unwrap_or("").to_string()
+        |(_partial_resource, errs): (FluentResource, Vec<ParserError>)| {
+            if let Some(first_err) = errs.into_iter().next() {
+                let snippet = first_err
+                    .slice
+                    .clone()
+                    .and_then(|range| ftl_content.get(range))
+                    .unwrap_or("")
+                    .to_string();
+                LocalizationError::ParseResource {
+                    error: first_err,
+                    snippet,
+                }
             } else {
-                String::new()
-            };
-            LocalizationError::ParseResource {
-                error: first_err,
-                snippet,
+                LocalizationError::LocalesDirNotFound("Parse error without details".to_string())
             }
         },
     )?;
@@ -360,14 +368,16 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
         LanguageIdentifier::from_str(DEFAULT_LOCALE).expect("Default locale should always be valid")
     });
 
-    // Try to get locales from filesystem first
+    // Try to find the locales directory. If found, use init_localization which
+    // will prioritize embedded resources but can also load from filesystem.
+    // If no locales directory exists, directly use embedded English resources.
     match get_locales_dir(p) {
         Ok(locales_dir) => init_localization(&locale, &locales_dir, p),
         Err(_) => {
-            // Fallback to embedded English locales
+            // No locales directory found, use embedded English directly
             let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
                 .expect("Default locale should always be valid");
-            let english_bundle = create_bundle_from_embedded(&default_locale, p)?;
+            let english_bundle = create_english_bundle_from_embedded(&default_locale, p)?;
             let localizer = Localizer::new(english_bundle);
 
             LOCALIZER.with(|lock| {
@@ -377,10 +387,6 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
             Ok(())
         }
     }
-}
-
-pub fn setup_localization_with_common(util_name: &str) -> Result<(), LocalizationError> {
-    setup_localization(util_name)
 }
 
 #[cfg(not(debug_assertions))]
