@@ -65,6 +65,9 @@ selinux = { workspace = true, optional = true }
 icu_collator = { workspace = true, optional = true, features = [
   "compiled_data",
 ] }
+icu_datetime = { workspace = true, optional = true, features = [
+  "compiled_data",
+] }
 icu_decimal = { workspace = true, optional = true, features = [
   "compiled_data",
 ] }
@@ -120,8 +123,9 @@ format = [
   "num-traits",
   "quoting-style",
 ]
-i18n-all = ["i18n-collator", "i18n-decimal"]
+i18n-all = ["i18n-date", "i18n-collator", "i18n-decimal"]
 i18n-common = ["icu_locale"]
+i18n-date = ["i18n-common", "icu_datetime", "icu_provider"]
 i18n-collator = ["i18n-common", "icu_collator"]
 i18n-decimal = ["i18n-common", "icu_decimal", "icu_provider"]
 mode = ["libc"]

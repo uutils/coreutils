@@ -390,3 +390,9 @@ sed -i 's/echo "changing security context/echo "chcon: changing security context
 # * the selinux crate is handling errors
 # * the test says "maybe we should not fail when no context available"
 sed -i -e "s|returns_ 1||g" tests/cp/no-ctx.sh
+
+# There is a discrepancy between GNU localization and ICU (ours) when it comes
+# to the abbreviated month of april in the French locale:
+# GNU is 'avril'
+# ICU is 'avr.'
+# sed -i -e 's|\(LC_ALL=$LOC locale abmon 2>/dev/null\)|\1 \| sed s/avril/avr./|' tests/sort/sort-month.sh
