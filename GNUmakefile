@@ -418,25 +418,29 @@ endif
 
 ifeq ($(LOCALES),y)
 locales:
-	$(foreach prog, $(INSTALLEES), \
-		if [ -d "$(BASEDIR)/src/uu/$(prog)/locales" ]; then \
-			mkdir -p "$(BUILDDIR)/locales/$(prog)"; \
-			for locale_file in "$(BASEDIR)"/src/uu/$(prog)/locales/*.ftl; do \
-				$(INSTALL) -v "$$locale_file" "$(BUILDDIR)/locales/$(prog)/"; \
+	@for prog in $(INSTALLEES); do \
+		if [ -d "$(BASEDIR)/src/uu/$$prog/locales" ]; then \
+			mkdir -p "$(BUILDDIR)/locales/$$prog"; \
+			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
+				if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
+					$(INSTALL) -v "$$locale_file" "$(BUILDDIR)/locales/$$prog/"; \
+				fi; \
 			done; \
-		fi $(newline) \
-	)
+		fi; \
+	done
 
 
 install-locales:
-	$(foreach prog, $(INSTALLEES), \
-		if [ -d "$(BASEDIR)/src/uu/$(prog)/locales" ]; then \
-			mkdir -p "$(DESTDIR)$(DATAROOTDIR)/locales/$(prog)"; \
-			for locale_file in "$(BASEDIR)"/src/uu/$(prog)/locales/*.ftl; do \
-				$(INSTALL) -v "$$locale_file" "$(DESTDIR)$(DATAROOTDIR)/locales/$(prog)/"; \
+	@for prog in $(INSTALLEES); do \
+		if [ -d "$(BASEDIR)/src/uu/$$prog/locales" ]; then \
+			mkdir -p "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog"; \
+			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
+				if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
+					$(INSTALL) -v "$$locale_file" "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog/"; \
+				fi; \
 			done; \
-		fi $(newline) \
-	)
+		fi; \
+	done
 else
 install-locales:
 endif
