@@ -113,7 +113,7 @@ fn init_localization(
     locales_dir: &Path,
     util_name: &str,
 ) -> Result<(), LocalizationError> {
-    let en_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
+    let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
         .expect("Default locale should always be valid");
 
     // Try to load English from filesystem, fall back to embedded if that fails
@@ -209,16 +209,20 @@ fn create_bundle_from_embedded(
     })?;
 
     let resource = FluentResource::try_new(ftl_content.to_string()).map_err(
-        |(_partial_resource, mut errs): (FluentResource, Vec<ParserError>)| {
-            let first_err = errs.remove(0);
-            let snippet = if let Some(range) = first_err.slice.clone() {
-                ftl_content.get(range).unwrap_or("").to_string()
+        |(_partial_resource, errs): (FluentResource, Vec<ParserError>)| {
+            if let Some(first_err) = errs.into_iter().next() {
+                let snippet = first_err
+                    .slice
+                    .clone()
+                    .and_then(|range| ftl_content.get(range))
+                    .unwrap_or("")
+                    .to_string();
+                LocalizationError::ParseResource {
+                    error: first_err,
+                    snippet,
+                }
             } else {
-                String::new()
-            };
-            LocalizationError::ParseResource {
-                error: first_err,
-                snippet,
+                LocalizationError::LocalesDirNotFound("Parse error without details".to_string())
             }
         },
     )?;
