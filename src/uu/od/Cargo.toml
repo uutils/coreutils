@@ -24,7 +24,11 @@ bigdecimal = { workspace = true }
 byteorder = { workspace = true }
 clap = { workspace = true }
 half = { workspace = true }
-uucore = { workspace = true, features = ["extendedbigdecimal", "parser"] }
+uucore = { workspace = true, features = [
+  "extendedbigdecimal",
+  "format",
+  "parser",
+] }
 fluent = { workspace = true }
 
 [[bin]]
