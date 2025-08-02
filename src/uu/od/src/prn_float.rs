@@ -2,11 +2,13 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) extendedbigdecimal
+// spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal
 
 use half::f16;
 use std::num::FpCategory;
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
+use uucore::format::num_format;
+use uucore::format::num_format::Formatter;
 
 use crate::formatter_item_info::{FormatWriter, FormatterItemInfo};
 
@@ -36,7 +38,7 @@ pub static FORMAT_ITEM_BF16: FormatterItemInfo = FormatterItemInfo {
 
 pub static FORMAT_ITEM_F128: FormatterItemInfo = FormatterItemInfo {
     byte_size: 16,
-    print_width: 25, //TODO
+    print_width: 30,
     formatter: FormatWriter::ExtendedBigDecimalWriter(format_item_f128),
 };
 
@@ -137,8 +139,22 @@ fn format_float(f: f64, width: usize, precision: usize) -> String {
     }
 }
 
-fn format_f128(_ebd: &ExtendedBigDecimal) -> String {
-    "TODO".to_string()
+fn format_f128(ebd: &ExtendedBigDecimal) -> String {
+    format_extended_big_decimal(ebd, 29, 20)
+}
+
+fn format_extended_big_decimal(ebd: &ExtendedBigDecimal, width: usize, precision: usize) -> String {
+    let float = num_format::Float {
+        variant: num_format::FloatVariant::Shortest,
+        width,
+        alignment: num_format::NumberAlignment::RightSpace,
+        precision: Some(precision),
+        ..Default::default()
+    };
+    // TODO: For performance, it'd be best if `od` directly collected and printed Vec<u8>.
+    let mut v = Vec::new();
+    float.fmt(&mut v, ebd).unwrap();
+    String::from_utf8(v).unwrap()
 }
 
 #[test]
@@ -276,4 +292,93 @@ fn test_format_f16() {
     assert_eq!(format_f16(f16::NEG_INFINITY), "           -inf");
     assert_eq!(format_f16(f16::NEG_ZERO), "             -0");
     assert_eq!(format_f16(f16::ZERO), "              0");
+}
+
+#[test]
+#[allow(clippy::cognitive_complexity)]
+fn test_format_f128() {
+    use bigdecimal::BigDecimal;
+
+    // Note: These tests print exact ExtendedBigDecimal values, so the results
+    // maybe be different from an end-to-end test with a "native" f80/f128 input.
+    // Padding and format is tested, though.
+
+    assert_eq!(format_f128(&1.0.into()), "                            1");
+    assert_eq!(format_f128(&10.0.into()), "                           10");
+    assert_eq!(
+        format_f128(&1_000_000_000_000_000.0.into()),
+        "             1000000000000000"
+    );
+    assert_eq!(
+        format_f128(&10_000_000_000_000_000.0.into()),
+        "            10000000000000000"
+    );
+    // BigDecimal scale is -exponent
+    assert_eq!(
+        format_f128(&ExtendedBigDecimal::BigDecimal(BigDecimal::new(
+            1.into(),
+            -100
+        ))),
+        "                       1e+100"
+    );
+
+    assert_eq!(
+        format_f128(&ExtendedBigDecimal::BigDecimal(BigDecimal::new(
+            (-10_000_000_000_000_000_001i128).into(),
+            20
+        ))),
+        "      -0.10000000000000000001"
+    );
+    assert_eq!(
+        format_f128(&ExtendedBigDecimal::BigDecimal(BigDecimal::new(
+            (-100_000_000_000_000_000_001i128).into(),
+            21
+        ))),
+        "                         -0.1"
+    );
+
+    // BigDecimal scale is -exponent
+    assert_eq!(
+        format_f128(&ExtendedBigDecimal::BigDecimal(BigDecimal::new(
+            12_345_678_901_234_567_890u128.into(),
+            0
+        ))),
+        "         12345678901234567890"
+    );
+    assert_eq!(
+        format_f128(&ExtendedBigDecimal::BigDecimal(BigDecimal::new(
+            12_345_678_901_234_567_890u128.into(),
+            1100
+        ))),
+        "   1.234567890123456789e-1081"
+    );
+    assert_eq!(
+        format_f128(&ExtendedBigDecimal::BigDecimal(BigDecimal::new(
+            12_345_678_901_234_567_890u128.into(),
+            -1100
+        ))),
+        "   1.234567890123456789e+1119"
+    );
+
+    assert_eq!(
+        format_f128(&ExtendedBigDecimal::BigDecimal(BigDecimal::new(
+            4.into(),
+            320
+        ))),
+        "                       4e-320"
+    );
+    assert_eq!(
+        format_f128(&f64::NAN.into()),
+        "                          nan"
+    );
+    assert_eq!(
+        format_f128(&f64::INFINITY.into()),
+        "                          inf"
+    );
+    assert_eq!(
+        format_f128(&f64::NEG_INFINITY.into()),
+        "                         -inf"
+    );
+    assert_eq!(format_f128(&(-0.0).into()), "                           -0");
+    assert_eq!(format_f128(&0.0.into()), "                            0");
 }
