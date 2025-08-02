@@ -693,6 +693,8 @@ fn strip_source_file() -> &'static str {
 
 #[test]
 #[cfg(not(windows))]
+// FIXME test runs in a timeout with macos-latest on x86_64 in the CI
+#[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
 fn test_install_and_strip() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -716,6 +718,8 @@ fn test_install_and_strip() {
 
 #[test]
 #[cfg(not(windows))]
+// FIXME test runs in a timeout with macos-latest on x86_64 in the CI
+#[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
 fn test_install_and_strip_with_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
