@@ -771,7 +771,11 @@ fn test_read_backwards_bytes_proc_fs_modules() {
 
     let args = ["-c", "-1", "/proc/modules"];
     let result = ts.ucmd().args(&args).succeeds();
-    assert!(!result.stdout().is_empty());
+
+    // Only expect output if the file is not empty, e.g. it is empty in default WSL2.
+    if !ts.fixtures.read("/proc/modules").is_empty() {
+        assert!(!result.stdout().is_empty());
+    }
 }
 
 #[cfg(all(
@@ -787,7 +791,11 @@ fn test_read_backwards_lines_proc_fs_modules() {
 
     let args = ["--lines", "-1", "/proc/modules"];
     let result = ts.ucmd().args(&args).succeeds();
-    assert!(!result.stdout().is_empty());
+
+    // Only expect output if the file is not empty, e.g. it is empty in default WSL2.
+    if !ts.fixtures.read("/proc/modules").is_empty() {
+        assert!(!result.stdout().is_empty());
+    }
 }
 
 #[cfg(all(
@@ -800,7 +808,11 @@ fn test_read_backwards_lines_proc_fs_modules() {
 #[test]
 fn test_read_backwards_bytes_sys_kernel_profiling() {
     let ts = TestScenario::new(util_name!());
-
+    // in case the kernel was not built with profiling support, e.g. WSL
+    if !ts.fixtures.file_exists("/sys/kernel/profiling") {
+        println!("test skipped: /sys/kernel/profiling does not exist");
+        return;
+    }
     let args = ["-c", "-1", "/sys/kernel/profiling"];
     let result = ts.ucmd().args(&args).succeeds();
     let stdout_str = result.stdout_str();
