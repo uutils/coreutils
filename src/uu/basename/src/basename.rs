@@ -5,15 +5,17 @@
 
 // spell-checker:ignore (ToDO) fullname
 
+use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
-use std::collections::HashMap;
-use std::path::{PathBuf, is_separator};
+use std::ffi::OsString;
+use std::io::{Write, stdout};
+use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError};
 use uucore::format_usage;
 use uucore::line_ending::LineEnding;
 
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 pub mod options {
     pub static MULTIPLE: &str = "multiple";
@@ -24,8 +26,6 @@ pub mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_lossy();
-
     //
     // Argument parsing
     //
@@ -34,35 +34,33 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
     let mut name_args = matches
-        .get_many::<String>(options::NAME)
+        .get_many::<OsString>(options::NAME)
         .unwrap_or_default()
         .collect::<Vec<_>>();
     if name_args.is_empty() {
         return Err(UUsageError::new(
             1,
-            get_message("basename-error-missing-operand"),
+            translate!("basename-error-missing-operand"),
         ));
     }
-    let multiple_paths =
-        matches.get_one::<String>(options::SUFFIX).is_some() || matches.get_flag(options::MULTIPLE);
+    let multiple_paths = matches.get_one::<OsString>(options::SUFFIX).is_some()
+        || matches.get_flag(options::MULTIPLE);
     let suffix = if multiple_paths {
         matches
-            .get_one::<String>(options::SUFFIX)
+            .get_one::<OsString>(options::SUFFIX)
             .cloned()
             .unwrap_or_default()
     } else {
         // "simple format"
         match name_args.len() {
             0 => panic!("already checked"),
-            1 => String::default(),
+            1 => OsString::default(),
             2 => name_args.pop().unwrap().clone(),
             _ => {
                 return Err(UUsageError::new(
                     1,
-                    get_message_with_args(
-                        "basename-error-extra-operand",
-                        HashMap::from([("operand".to_string(), name_args[2].quote().to_string())]),
-                    ),
+                    translate!("basename-error-extra-operand",
+                               "operand" => name_args[2].quote()),
                 ));
             }
         }
@@ -73,7 +71,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     //
 
     for path in name_args {
-        print!("{}{line_ending}", basename(path, &suffix));
+        stdout().write_all(&basename(path, &suffix)?)?;
+        print!("{line_ending}");
     }
 
     Ok(())
@@ -82,20 +81,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("basename-about"))
-        .override_usage(format_usage(&get_message("basename-usage")))
+        .about(translate!("basename-about"))
+        .override_usage(format_usage(&translate!("basename-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::MULTIPLE)
                 .short('a')
                 .long(options::MULTIPLE)
-                .help(get_message("basename-help-multiple"))
+                .help(translate!("basename-help-multiple"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::MULTIPLE),
         )
         .arg(
             Arg::new(options::NAME)
                 .action(ArgAction::Append)
+                .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath)
                 .hide(true)
                 .trailing_var_arg(true),
@@ -105,38 +105,44 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(options::SUFFIX)
                 .value_name("SUFFIX")
-                .help(get_message("basename-help-suffix"))
+                .value_parser(ValueParser::os_string())
+                .help(translate!("basename-help-suffix"))
                 .overrides_with(options::SUFFIX),
         )
         .arg(
             Arg::new(options::ZERO)
                 .short('z')
                 .long(options::ZERO)
-                .help(get_message("basename-help-zero"))
+                .help(translate!("basename-help-zero"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::ZERO),
         )
 }
 
-fn basename(fullname: &str, suffix: &str) -> String {
-    // Remove all platform-specific path separators from the end.
-    let path = fullname.trim_end_matches(is_separator);
+// We return a Vec<u8>. Returning a seemingly more proper `OsString` would
+// require back and forth conversions as we need a &[u8] for printing anyway.
+fn basename(fullname: &OsString, suffix: &OsString) -> UResult<Vec<u8>> {
+    let fullname_bytes = uucore::os_str_as_bytes(fullname)?;
 
-    // If the path contained *only* suffix characters (for example, if
-    // `fullname` were "///" and `suffix` were "/"), then `path` would
-    // be left with the empty string. In that case, we set `path` to be
-    // the original `fullname` to avoid returning the empty path.
-    let path = if path.is_empty() { fullname } else { path };
+    // Handle special case where path ends with /.
+    if fullname_bytes.ends_with(b"/.") {
+        return Ok(b".".into());
+    }
 
     // Convert to path buffer and get last path component
-    let pb = PathBuf::from(path);
+    let pb = PathBuf::from(fullname);
 
-    pb.components().next_back().map_or_else(String::new, |c| {
-        let name = c.as_os_str().to_str().unwrap();
+    pb.components().next_back().map_or(Ok([].into()), |c| {
+        let name = c.as_os_str();
+        let name_bytes = uucore::os_str_as_bytes(name)?;
         if name == suffix {
-            name.to_string()
+            Ok(name_bytes.into())
         } else {
-            name.strip_suffix(suffix).unwrap_or(name).to_string()
+            let suffix_bytes = uucore::os_str_as_bytes(suffix)?;
+            Ok(name_bytes
+                .strip_suffix(suffix_bytes)
+                .unwrap_or(name_bytes)
+                .into())
         }
     })
 }

@@ -5,47 +5,47 @@
 
 // spell-checker:ignore (clap) dont
 // spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset mockstream nrofbytes partialreader odfunc multifile exitcode
-// spell-checker:ignore Anone
+// spell-checker:ignore Anone bfloat
 
 mod byteorder_io;
-mod formatteriteminfo;
-mod inputdecoder;
-mod inputoffset;
+mod formatter_item_info;
+mod input_decoder;
+mod input_offset;
 #[cfg(test)]
 mod mockstream;
-mod multifilereader;
+mod multifile_reader;
 mod output_info;
 mod parse_formats;
 mod parse_inputs;
 mod parse_nrofbytes;
-mod partialreader;
-mod peekreader;
+mod partial_reader;
+mod peek_reader;
 mod prn_char;
 mod prn_float;
 mod prn_int;
 
 use std::cmp;
-use std::collections::HashMap;
 use std::fmt::Write;
 use std::io::BufReader;
 
 use crate::byteorder_io::ByteOrder;
-use crate::formatteriteminfo::FormatWriter;
-use crate::inputdecoder::{InputDecoder, MemoryDecoder};
-use crate::inputoffset::{InputOffset, Radix};
-use crate::multifilereader::{HasError, InputSource, MultifileReader};
+use crate::formatter_item_info::FormatWriter;
+use crate::input_decoder::{InputDecoder, MemoryDecoder};
+use crate::input_offset::{InputOffset, Radix};
+use crate::multifile_reader::{HasError, InputSource, MultifileReader};
 use crate::output_info::OutputInfo;
 use crate::parse_formats::{ParsedFormatterItemInfo, parse_format_flags};
 use crate::parse_inputs::{CommandLineInputs, parse_inputs};
 use crate::parse_nrofbytes::parse_number_of_bytes;
-use crate::partialreader::PartialReader;
-use crate::peekreader::{PeekRead, PeekReader};
+use crate::partial_reader::PartialReader;
+use crate::peek_reader::{PeekRead, PeekReader};
 use crate::prn_char::format_ascii_dump;
 use clap::ArgAction;
 use clap::{Arg, ArgMatches, Command, parser::ValueSource};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
+
 use uucore::parser::parse_size::ParseSizeError;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, show_error, show_warning};
@@ -87,10 +87,7 @@ impl OdOptions {
                 _ => {
                     return Err(USimpleError::new(
                         1,
-                        get_message_with_args(
-                            "od-error-invalid-endian",
-                            HashMap::from([("endian".to_string(), s.to_string())]),
-                        ),
+                        translate!("od-error-invalid-endian", "endian" => s),
                     ));
                 }
             }
@@ -113,15 +110,8 @@ impl OdOptions {
 
         let mut label: Option<u64> = None;
 
-        let parsed_input = parse_inputs(matches).map_err(|e| {
-            USimpleError::new(
-                1,
-                get_message_with_args(
-                    "od-error-invalid-inputs",
-                    HashMap::from([("msg".to_string(), e.to_string())]),
-                ),
-            )
-        })?;
+        let parsed_input = parse_inputs(matches)
+            .map_err(|e| USimpleError::new(1, translate!("od-error-invalid-inputs", "msg" => e)))?;
         let input_strings = match parsed_input {
             CommandLineInputs::FileNames(v) => v,
             CommandLineInputs::FileAndOffset((f, s, l)) => {
@@ -159,13 +149,7 @@ impl OdOptions {
         if line_bytes == 0 || line_bytes % min_bytes != 0 {
             show_warning!(
                 "{}",
-                get_message_with_args(
-                    "od-error-invalid-width",
-                    HashMap::from([
-                        ("width".to_string(), line_bytes.to_string()),
-                        ("min".to_string(), min_bytes.to_string())
-                    ])
-                )
+                translate!("od-error-invalid-width", "width" => line_bytes, "min" => min_bytes)
             );
             line_bytes = min_bytes;
         }
@@ -203,16 +187,13 @@ impl OdOptions {
                         _ => {
                             return Err(USimpleError::new(
                                 1,
-                                get_message_with_args(
-                                    "od-error-radix-invalid",
-                                    HashMap::from([("radix".to_string(), s.to_string())]),
-                                ),
+                                translate!("od-error-radix-invalid", "radix" => s),
                             ));
                         }
                     }
                 } else {
                     // Return an error instead of panicking when `od -A ''` is executed.
-                    return Err(USimpleError::new(1, get_message("od-error-radix-empty")));
+                    return Err(USimpleError::new(1, translate!("od-error-radix-empty")));
                 }
             }
         };
@@ -270,9 +251,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("od-about"))
-        .override_usage(format_usage(&get_message("od-usage")))
-        .after_help(get_message("od-after-help"))
+        .about(translate!("od-about"))
+        .override_usage(format_usage(&translate!("od-usage")))
+        .after_help(translate!("od-after-help"))
         .trailing_var_arg(true)
         .dont_delimit_trailing_values(true)
         .infer_long_args(true)
@@ -281,34 +262,34 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help(get_message("od-help-help"))
+                .help(translate!("od-help-help"))
                 .action(ArgAction::Help)
         )
         .arg(
             Arg::new(options::ADDRESS_RADIX)
                 .short('A')
                 .long(options::ADDRESS_RADIX)
-                .help(get_message("od-help-address-radix"))
+                .help(translate!("od-help-address-radix"))
                 .value_name("RADIX"),
         )
         .arg(
             Arg::new(options::SKIP_BYTES)
                 .short('j')
                 .long(options::SKIP_BYTES)
-                .help(get_message("od-help-skip-bytes"))
+                .help(translate!("od-help-skip-bytes"))
                 .value_name("BYTES"),
         )
         .arg(
             Arg::new(options::READ_BYTES)
                 .short('N')
                 .long(options::READ_BYTES)
-                .help(get_message("od-help-read-bytes"))
+                .help(translate!("od-help-read-bytes"))
                 .value_name("BYTES"),
         )
         .arg(
             Arg::new(options::ENDIAN)
                 .long(options::ENDIAN)
-                .help(get_message("od-help-endian"))
+                .help(translate!("od-help-endian"))
                 .value_parser(ShortcutValueParser::new(["big", "little"]))
                 .value_name("big|little"),
         )
@@ -326,31 +307,31 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new("a")
                 .short('a')
-                .help(get_message("od-help-a"))
+                .help(translate!("od-help-a"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("b")
                 .short('b')
-                .help(get_message("od-help-b"))
+                .help(translate!("od-help-b"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("c")
                 .short('c')
-                .help(get_message("od-help-c"))
+                .help(translate!("od-help-c"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("d")
                 .short('d')
-                .help(get_message("od-help-d"))
+                .help(translate!("od-help-d"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("D")
                 .short('D')
-                .help(get_message("od-help-d4"))
+                .help(translate!("od-help-d4"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -441,7 +422,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::FORMAT)
                 .short('t')
                 .long("format")
-                .help(get_message("od-help-format"))
+                .help(translate!("od-help-format"))
                 .action(ArgAction::Append)
                 .num_args(1)
                 .value_name("TYPE"),
@@ -450,14 +431,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::OUTPUT_DUPLICATES)
                 .short('v')
                 .long(options::OUTPUT_DUPLICATES)
-                .help(get_message("od-help-output-duplicates"))
+                .help(translate!("od-help-output-duplicates"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::WIDTH)
                 .short('w')
                 .long(options::WIDTH)
-                .help(get_message("od-help-width"))
+                .help(translate!("od-help-width"))
                 .default_missing_value("32")
                 .value_name("BYTES")
                 .num_args(..=1),
@@ -465,7 +446,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::TRADITIONAL)
                 .long(options::TRADITIONAL)
-                .help(get_message("od-help-traditional"))
+                .help(translate!("od-help-traditional"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -576,6 +557,10 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
                     let p = input_decoder.read_float(b, f.formatter_item_info.byte_size);
                     output_text.push_str(&func(p));
                 }
+                FormatWriter::BFloatWriter(func) => {
+                    let p = input_decoder.read_bfloat(b);
+                    output_text.push_str(&func(p));
+                }
                 FormatWriter::MultibyteWriter(func) => {
                     output_text.push_str(&func(input_decoder.get_full_buffer(b)));
                 }
@@ -648,26 +633,14 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
     // NOTE:
     // GNU's od echos affected flag, -N or --read-bytes (-j or --skip-bytes, etc.), depending user's selection
     match error {
-        ParseSizeError::InvalidSuffix(_) => get_message_with_args(
-            "od-error-invalid-suffix",
-            HashMap::from([
-                ("option".to_string(), option.to_string()),
-                ("value".to_string(), s.quote().to_string()),
-            ]),
-        ),
-        ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => get_message_with_args(
-            "od-error-invalid-argument",
-            HashMap::from([
-                ("option".to_string(), option.to_string()),
-                ("value".to_string(), s.quote().to_string()),
-            ]),
-        ),
-        ParseSizeError::SizeTooBig(_) => get_message_with_args(
-            "od-error-argument-too-large",
-            HashMap::from([
-                ("option".to_string(), option.to_string()),
-                ("value".to_string(), s.quote().to_string()),
-            ]),
-        ),
+        ParseSizeError::InvalidSuffix(_) => {
+            translate!("od-error-invalid-suffix", "option" => option, "value" => s.quote())
+        }
+        ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
+            translate!("od-error-invalid-argument", "option" => option, "value" => s.quote())
+        }
+        ParseSizeError::SizeTooBig(_) => {
+            translate!("od-error-argument-too-large", "option" => option, "value" => s.quote())
+        }
     }
 }

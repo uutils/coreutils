@@ -3,13 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use clap::{Arg, ArgAction, Command};
-use std::collections::HashMap;
 use std::ffi::OsString;
 use std::io::stdout;
 use std::ops::ControlFlow;
 use uucore::error::{UResult, UUsageError};
 use uucore::format::{FormatArgument, FormatArguments, FormatItem, parse_spec_and_escape};
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 use uucore::{format_usage, os_str_as_bytes, show_warning};
 
 const VERSION: &str = "version";
@@ -26,7 +25,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let format = matches
         .get_one::<OsString>(options::FORMAT)
-        .ok_or_else(|| UUsageError::new(1, get_message("printf-error-missing-operand")))?;
+        .ok_or_else(|| UUsageError::new(1, translate!("printf-error-missing-operand")))?;
     let format = os_str_as_bytes(format)?;
 
     let values: Vec<_> = match matches.get_many::<OsString>(options::ARGUMENT) {
@@ -59,9 +58,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             };
             show_warning!(
                 "{}",
-                get_message_with_args(
+                translate!(
                     "printf-warning-ignoring-excess-arguments",
-                    HashMap::from([("arg".to_string(), arg_str.to_string_lossy().to_string())])
+                    "arg" => arg_str.to_string_lossy()
                 )
             );
         }
@@ -85,21 +84,21 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .allow_hyphen_values(true)
         .version(uucore::crate_version!())
-        .about(get_message("printf-about"))
-        .after_help(get_message("printf-after-help"))
-        .override_usage(format_usage(&get_message("printf-usage")))
+        .about(translate!("printf-about"))
+        .after_help(translate!("printf-after-help"))
+        .override_usage(format_usage(&translate!("printf-usage")))
         .disable_help_flag(true)
         .disable_version_flag(true)
         .arg(
             Arg::new(HELP)
                 .long(HELP)
-                .help(get_message("printf-help-help"))
+                .help(translate!("printf-help-help"))
                 .action(ArgAction::Help),
         )
         .arg(
             Arg::new(VERSION)
                 .long(VERSION)
-                .help(get_message("printf-help-version"))
+                .help(translate!("printf-help-version"))
                 .action(ArgAction::Version),
         )
         .arg(Arg::new(options::FORMAT).value_parser(clap::value_parser!(OsString)))

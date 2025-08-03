@@ -1556,3 +1556,15 @@ fn test_g_arbitrary() {
         .succeeds()
         .stdout_is(output);
 }
+
+#[test]
+// Test hexadecimal numbers (and hex floats)
+fn test_g_float_hex() {
+    let input = "0x123\n0x0\n0x2p10\n0x9p-10\n";
+    let output = "0x0\n0x9p-10\n0x123\n0x2p10\n";
+    new_ucmd!()
+        .args(&["-g"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(output);
+}

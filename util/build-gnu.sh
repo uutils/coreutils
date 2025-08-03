@@ -60,6 +60,13 @@ elif [ -x /usr/local/bin/timeout ]; then
     SYSTEM_TIMEOUT="/usr/local/bin/timeout"
 fi
 
+SYSTEM_YES="yes"
+if [ -x /usr/bin/yes ]; then
+    SYSTEM_YES="/usr/bin/yes"
+elif [ -x /usr/local/bin/yes ]; then
+    SYSTEM_YES="/usr/local/bin/yes"
+fi
+
 ###
 
 release_tag_GNU="v9.7"
@@ -159,12 +166,12 @@ if test -f gnu-built; then
 else
     # Disable useless checks
     sed -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
+    # Change the PATH to test the uutils coreutils instead of the GNU coreutils
+    sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" tests/local.mk
     ./bootstrap --skip-po
     ./configure --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references
     #Add timeout to to protect against hangs
     sed -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
-    # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils
-    sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
     sed -i 's| tr | /usr/bin/tr |' tests/init.sh
     # Use a better diff
     sed -i 's|diff -c|diff -u|g' tests/Coreutils.pm
@@ -193,7 +200,9 @@ else
     touch gnu-built
 fi
 
-grep -rl 'path_prepend_' tests/* | xargs sed -i 's| path_prepend_ ./src||'
+grep -rl 'path_prepend_' tests/* | xargs -r sed -i 's| path_prepend_ ./src||'
+# path_prepend_ sets $abs_path_dir_: set it manually instead.
+grep -rl '\$abs_path_dir_' tests/*/*.sh | xargs -r sed -i "s|\$abs_path_dir_|${UU_BUILD_DIR//\//\\/}|g"
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 sed -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
@@ -211,6 +220,11 @@ sed -i "s|cannot create regular file 'no-such/': Not a directory|'no-such/' is n
 sed -i "s|warning: unrecognized escape|warning: incomplete hex escape|" tests/stat/stat-printf.pl
 
 sed -i 's|timeout |'"${SYSTEM_TIMEOUT}"' |' tests/tail/follow-stdin.sh
+
+# trap_sigpipe_or_skip_ fails with uutils tools because of a bug in
+# timeout/yes (https://github.com/uutils/coreutils/issues/7252), so we use
+# system's yes/timeout to make sure the tests run (instead of being skipped).
+sed -i 's|\(trap .* \)timeout\( .* \)yes|'"\1${SYSTEM_TIMEOUT}\2${SYSTEM_YES}"'|' init.cfg
 
 # Remove dup of /usr/bin/ and /usr/local/bin/ when executed several times
 grep -rlE '/usr/bin/\s?/usr/bin' init.cfg tests/* | xargs -r sed -Ei 's|/usr/bin/\s?/usr/bin/|/usr/bin/|g'
@@ -315,8 +329,10 @@ sed -i -e "s|44 45|48 49|" tests/ls/stat-failed.sh
 
 # small difference in the error message
 # Use GNU sed for /c command
-"${SED}" -i -e "/ls: invalid argument 'XX' for 'time style'/,/Try 'ls --help' for more information\./c\
-ls: invalid --time-style argument 'XX'\nPossible values are: [\"full-iso\", \"long-iso\", \"iso\", \"locale\", \"+FORMAT (e.g., +%H:%M) for a 'date'-style format\"]\n\nFor more information try --help" tests/ls/time-style-diag.sh
+"${SED}" -i -e "s/ls: invalid argument 'XX' for 'time style'/ls: invalid --time-style argument 'XX'/" \
+    -e "s/Valid arguments are:/Possible values are:/" \
+    -e "s/Try 'ls --help' for more information./\nFor more information try --help/" \
+    tests/ls/time-style-diag.sh
 
 # disable two kind of tests:
 # "hostid BEFORE --help" doesn't fail for GNU. we fail. we are probably doing better

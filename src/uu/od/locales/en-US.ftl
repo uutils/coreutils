@@ -32,7 +32,7 @@ od-after-help = Displays data in various human-readable formats. If multiple for
       u[SIZE] for unsigned decimal
       x[SIZE] for hexadecimal
   SIZE is the number of bytes which can be the number 1, 2, 4, 8 or 16,
-      or C, I, S, L for 1, 2, 4, 8 bytes for integer types,
+      or C, S, I, L for 1, 2, 4, 8 bytes for integer types,
       or F, D, L for 4, 8, 16 bytes for floating point.
   Any type specification can have a "z" suffix, which will add a ASCII dump at
       the end of the line.

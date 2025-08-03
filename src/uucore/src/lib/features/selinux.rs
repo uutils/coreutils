@@ -182,7 +182,7 @@ pub fn set_selinux_security_context(
 /// use uucore::selinux::{get_selinux_security_context, SeLinuxError};
 ///
 /// // Get the SELinux context for a file
-/// match get_selinux_security_context(Path::new("/path/to/file")) {
+/// match get_selinux_security_context(Path::new("/path/to/file"), false) {
 ///     Ok(context) => {
 ///         if context.is_empty() {
 ///             println!("No SELinux context found for the file");
@@ -197,16 +197,16 @@ pub fn set_selinux_security_context(
 ///     Err(SeLinuxError::ContextSetFailure(ctx, e)) => println!("Failed to set context '{ctx}': {e}"),
 /// }
 /// ```
-pub fn get_selinux_security_context(path: &Path) -> Result<String, SeLinuxError> {
+pub fn get_selinux_security_context(
+    path: &Path,
+    follow_symbolic_links: bool,
+) -> Result<String, SeLinuxError> {
     if !is_selinux_enabled() {
         return Err(SeLinuxError::SELinuxNotEnabled);
     }
 
-    let f = std::fs::File::open(path)
-        .map_err(|e| SeLinuxError::FileOpenFailure(selinux_error_description(&e)))?;
-
     // Get the security context of the file
-    let context = match SecurityContext::of_file(&f, false) {
+    let context = match SecurityContext::of_path(path, follow_symbolic_links, false) {
         Ok(Some(ctx)) => ctx,
         Ok(None) => return Ok(String::new()), // No context found, return empty string
         Err(e) => {
@@ -317,7 +317,7 @@ pub fn preserve_security_context(from_path: &Path, to_path: &Path) -> Result<(),
     }
 
     // Get context from the source path
-    let context = get_selinux_security_context(from_path)?;
+    let context = get_selinux_security_context(from_path, false)?;
 
     // If no context was found, just return success (nothing to preserve)
     if context.is_empty() {
@@ -326,6 +326,58 @@ pub fn preserve_security_context(from_path: &Path, to_path: &Path) -> Result<(),
 
     // Apply the context to the destination path
     set_selinux_security_context(to_path, Some(&context))
+}
+
+/// Gets the SELinux security context for a file using getfattr.
+///
+/// This function is primarily used for testing purposes to verify that SELinux
+/// contexts have been properly set on files. It uses the `getfattr` command
+/// to retrieve the security.selinux extended attribute.
+///
+/// # Arguments
+///
+/// * `f` - The file path as a string.
+///
+/// # Returns
+///
+/// Returns the SELinux context string extracted from the getfattr output.
+/// If the context cannot be retrieved, the function will panic.
+///
+/// # Panics
+///
+/// This function will panic if:
+/// - The `getfattr` command fails to execute
+/// - The `getfattr` command returns a non-zero exit status
+///
+/// # Examples
+///
+/// ```no_run
+/// use uucore::selinux::get_getfattr_output;
+///
+/// let context = get_getfattr_output("/path/to/file");
+/// println!("SELinux context: {}", context);
+/// ```
+pub fn get_getfattr_output(f: &str) -> String {
+    use std::process::Command;
+
+    let getfattr_output = Command::new("getfattr")
+        .arg(f)
+        .arg("-n")
+        .arg("security.selinux")
+        .output()
+        .expect("Failed to run `getfattr` on the destination file");
+    println!("{getfattr_output:?}");
+    assert!(
+        getfattr_output.status.success(),
+        "getfattr did not run successfully: {}",
+        String::from_utf8_lossy(&getfattr_output.stderr)
+    );
+
+    String::from_utf8_lossy(&getfattr_output.stdout)
+        .split('"')
+        .nth(1)
+        .unwrap_or("")
+        .to_string()
 }
 
 #[cfg(test)]
@@ -357,7 +409,7 @@ mod tests {
             default_result.err()
         );
 
-        let context = get_selinux_security_context(path).expect("Failed to get context");
+        let context = get_selinux_security_context(path, false).expect("Failed to get context");
         assert!(
             !context.is_empty(),
             "Expected non-empty context after setting default context"
@@ -367,7 +419,7 @@ mod tests {
         let explicit_result = set_selinux_security_context(path, Some(&test_context));
 
         if explicit_result.is_ok() {
-            let new_context = get_selinux_security_context(path)
+            let new_context = get_selinux_security_context(path, false)
                 .expect("Failed to get context after setting explicit context");
 
             assert!(
@@ -420,7 +472,7 @@ mod tests {
         }
         std::fs::write(path, b"test content").expect("Failed to write to tempfile");
 
-        let result = get_selinux_security_context(path);
+        let result = get_selinux_security_context(path, false);
 
         if result.is_ok() {
             let context = result.unwrap();
@@ -484,9 +536,68 @@ mod tests {
             println!("test skipped: Kernel has no support for SElinux context");
             return;
         }
-        let result = get_selinux_security_context(path);
+        let result = get_selinux_security_context(path, false);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_selinux_context_symlink() {
+        use std::os::unix::fs::symlink;
+        use tempfile::tempdir;
+
+        if !is_selinux_enabled() {
+            println!("test skipped: Kernel has no support for SElinux context");
+            return;
+        }
+
+        let tmp_dir = tempdir().expect("Failed to create temporary directory");
+        let dir_path = tmp_dir.path();
+
+        // Create a normal file
+        let file_path = dir_path.join("file");
+        std::fs::File::create(&file_path).expect("Failed to create file");
+
+        // Create a symlink to the file
+        let symlink_path = dir_path.join("symlink");
+        symlink(&file_path, &symlink_path).expect("Failed to create symlink");
+
+        // Set a different context for the file (but not the symlink)
+        let file_context = String::from("system_u:object_r:user_tmp_t:s0");
+        set_selinux_security_context(&file_path, Some(&file_context))
+            .expect("Failed to set security context.");
+
+        // Context must be different if we don't follow the link
+        let file_context = get_selinux_security_context(&file_path, false)
+            .expect("Failed to get security context.");
+        let symlink_context = get_selinux_security_context(&symlink_path, false)
+            .expect("Failed to get security context.");
+        assert_ne!(file_context.to_string(), symlink_context.to_string());
+
+        // Context must be the same if we follow the link
+        let symlink_follow_context = get_selinux_security_context(&symlink_path, true)
+            .expect("Failed to get security context.");
+        assert_eq!(file_context.to_string(), symlink_follow_context.to_string());
+    }
+
+    #[test]
+    fn test_get_selinux_context_fifo() {
+        use tempfile::tempdir;
+
+        if !is_selinux_enabled() {
+            println!("test skipped: Kernel has no support for SElinux context");
+            return;
+        }
+
+        let tmp_dir = tempdir().expect("Failed to create temporary directory");
+        let dir_path = tmp_dir.path();
+
+        // Create a FIFO (pipe)
+        let fifo_path = dir_path.join("my_fifo");
+        crate::fs::make_fifo(&fifo_path).expect("Failed to create FIFO");
+
+        // Just getting a context is good enough
+        get_selinux_security_context(&fifo_path, false).expect("Cannot get fifo context");
     }
 
     #[test]

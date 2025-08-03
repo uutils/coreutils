@@ -13,6 +13,8 @@ pr-help-pages = Commencer et arrêter l'impression à la page PREMIÈRE_PAGE[:DE
 pr-help-header =
   Utiliser la chaîne d'en-tête pour remplacer le nom de fichier
                   dans la ligne d'en-tête.
+pr-help-date-format =
+  Utiliser le FORMAT de style 'date' pour la date dans la ligne d'en-tête.
 pr-help-double-space =
   Produire une sortie avec double espacement. Un caractère <saut de ligne>
                   supplémentaire est affiché après chaque <saut de ligne> trouvé dans l'entrée.

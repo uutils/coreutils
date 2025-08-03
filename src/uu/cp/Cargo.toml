@@ -37,6 +37,7 @@ uucore = { workspace = true, features = [
 walkdir = { workspace = true }
 indicatif = { workspace = true }
 thiserror = { workspace = true }
+fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 xattr = { workspace = true }

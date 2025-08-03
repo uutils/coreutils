@@ -6,17 +6,15 @@
 // spell-checker:ignore (ToDO) delim mkdelim pairable
 
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::fs::{File, metadata};
 use std::io::{self, BufRead, BufReader, Read, Stdin, stdin};
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::fs::paths_refer_to_same_file;
 use uucore::line_ending::LineEnding;
+use uucore::translate;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-
-use uucore::locale::{get_message, get_message_with_args};
 
 mod options {
     pub const COLUMN_1: &str = "1";
@@ -101,14 +99,11 @@ impl OrderChecker {
             return true;
         }
 
-        let is_ordered = current_line >= &self.last_line;
+        let is_ordered = *current_line >= *self.last_line;
         if !is_ordered && !self.has_error {
             eprintln!(
                 "{}",
-                get_message_with_args(
-                    "comm-error-file-not-sorted",
-                    HashMap::from([("file_num".to_string(), self.file_num.as_str().to_string())])
-                )
+                translate!("comm-error-file-not-sorted", "file_num" => self.file_num.as_str())
             );
             self.has_error = true;
         }
@@ -253,14 +248,14 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
         let line_ending = LineEnding::from_zero_flag(opts.get_flag(options::ZERO_TERMINATED));
         print!(
             "{total_col_1}{delim}{total_col_2}{delim}{total_col_3}{delim}{}{line_ending}",
-            get_message("comm-total")
+            translate!("comm-total")
         );
     }
 
     if should_check_order && (checker1.has_error || checker2.has_error) {
         // Print the input error message once at the end
         if input_error {
-            eprintln!("{}", get_message("comm-error-input-not-sorted"));
+            eprintln!("{}", translate!("comm-error-input-not-sorted"));
         }
         Err(USimpleError::new(1, ""))
     } else {
@@ -273,7 +268,7 @@ fn open_file(name: &str, line_ending: LineEnding) -> io::Result<LineReader> {
         Ok(LineReader::new(Input::Stdin(stdin()), line_ending))
     } else {
         if metadata(name)?.is_dir() {
-            return Err(io::Error::other(get_message("comm-error-is-directory")));
+            return Err(io::Error::other(translate!("comm-error-is-directory")));
         }
         let f = File::open(name)?;
         Ok(LineReader::new(
@@ -305,7 +300,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // Note: This intentionally deviate from the GNU error message by inserting the word "conflicting".
             return Err(USimpleError::new(
                 1,
-                get_message("comm-error-multiple-conflicting-delimiters"),
+                translate!("comm-error-multiple-conflicting-delimiters"),
             ));
         }
     }
@@ -320,32 +315,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("comm-about"))
-        .override_usage(format_usage(&get_message("comm-usage")))
+        .about(translate!("comm-about"))
+        .override_usage(format_usage(&translate!("comm-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
             Arg::new(options::COLUMN_1)
                 .short('1')
-                .help(get_message("comm-help-column-1"))
+                .help(translate!("comm-help-column-1"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COLUMN_2)
                 .short('2')
-                .help(get_message("comm-help-column-2"))
+                .help(translate!("comm-help-column-2"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COLUMN_3)
                 .short('3')
-                .help(get_message("comm-help-column-3"))
+                .help(translate!("comm-help-column-3"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DELIMITER)
                 .long(options::DELIMITER)
-                .help(get_message("comm-help-delimiter"))
+                .help(translate!("comm-help-delimiter"))
                 .value_name("STR")
                 .default_value(options::DELIMITER_DEFAULT)
                 .allow_hyphen_values(true)
@@ -357,7 +352,7 @@ pub fn uu_app() -> Command {
                 .long(options::ZERO_TERMINATED)
                 .short('z')
                 .overrides_with(options::ZERO_TERMINATED)
-                .help(get_message("comm-help-zero-terminated"))
+                .help(translate!("comm-help-zero-terminated"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -373,19 +368,19 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::TOTAL)
                 .long(options::TOTAL)
-                .help(get_message("comm-help-total"))
+                .help(translate!("comm-help-total"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CHECK_ORDER)
                 .long(options::CHECK_ORDER)
-                .help(get_message("comm-help-check-order"))
+                .help(translate!("comm-help-check-order"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_CHECK_ORDER)
                 .long(options::NO_CHECK_ORDER)
-                .help(get_message("comm-help-no-check-order"))
+                .help(translate!("comm-help-no-check-order"))
                 .action(ArgAction::SetTrue)
                 .conflicts_with(options::CHECK_ORDER),
         )

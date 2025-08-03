@@ -8,7 +8,6 @@
 use clap::{Arg, ArgAction, Command};
 use libc::{SIG_IGN, SIGHUP};
 use libc::{c_char, dup2, execvp, signal};
-use std::collections::HashMap;
 use std::env;
 use std::ffi::CString;
 use std::fs::{File, OpenOptions};
@@ -18,9 +17,8 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UClapError, UError, UResult, set_exit_code};
+use uucore::translate;
 use uucore::{format_usage, show_error};
-
-use uucore::locale::{get_message, get_message_with_args};
 
 static NOHUP_OUT: &str = "nohup.out";
 // exit codes that match the GNU implementation
@@ -35,21 +33,16 @@ mod options {
 
 #[derive(Debug, Error)]
 enum NohupError {
-    #[error("{}", get_message("nohup-error-cannot-detach"))]
+    #[error("{}", translate!("nohup-error-cannot-detach"))]
     CannotDetach,
 
-    #[error("{}", get_message_with_args("nohup-error-cannot-replace", HashMap::from([("name".to_string(), (*_0).to_string()), ("err".to_string(), _1.to_string())])))]
+    #[error("{}", translate!("nohup-error-cannot-replace", "name" => (*_0), "err" => _1))]
     CannotReplace(&'static str, #[source] Error),
 
-    #[error("{}", get_message_with_args("nohup-error-open-failed", HashMap::from([("path".to_string(), NOHUP_OUT.quote().to_string()), ("err".to_string(), _1.to_string())])))]
+    #[error("{}", translate!("nohup-error-open-failed", "path" => NOHUP_OUT.quote(), "err" => _1))]
     OpenFailed(i32, #[source] Error),
 
-    #[error("{}", get_message_with_args("nohup-error-open-failed-both", HashMap::from([
-        ("first_path".to_string(), NOHUP_OUT.quote().to_string()),
-        ("first_err".to_string(), _1.to_string()),
-        ("second_path".to_string(), _2.quote().to_string()),
-        ("second_err".to_string(), _3.to_string())
-    ])))]
+    #[error("{}", translate!("nohup-error-open-failed-both", "first_path" => NOHUP_OUT.quote(), "first_err" => _1, "second_path" => _2.quote(), "second_err" => _3))]
     OpenFailed2(i32, #[source] Error, String, Error),
 }
 
@@ -93,9 +86,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("nohup-about"))
-        .after_help(get_message("nohup-after-help"))
-        .override_usage(format_usage(&get_message("nohup-usage")))
+        .about(translate!("nohup-about"))
+        .after_help(translate!("nohup-after-help"))
+        .override_usage(format_usage(&translate!("nohup-usage")))
         .arg(
             Arg::new(options::CMD)
                 .hide(true)
@@ -145,10 +138,7 @@ fn find_stdout() -> UResult<File> {
         Ok(t) => {
             show_error!(
                 "{}",
-                get_message_with_args(
-                    "nohup-ignoring-input-appending-output",
-                    HashMap::from([("path".to_string(), NOHUP_OUT.quote().to_string())])
-                )
+                translate!("nohup-ignoring-input-appending-output", "path" => NOHUP_OUT.quote())
             );
             Ok(t)
         }
@@ -164,10 +154,7 @@ fn find_stdout() -> UResult<File> {
                 Ok(t) => {
                     show_error!(
                         "{}",
-                        get_message_with_args(
-                            "nohup-ignoring-input-appending-output",
-                            HashMap::from([("path".to_string(), homeout_str.quote().to_string())])
-                        )
+                        translate!("nohup-ignoring-input-appending-output", "path" => homeout_str.quote())
                     );
                     Ok(t)
                 }

@@ -6,7 +6,6 @@
 // spell-checker:ignore (ToDO) ctype cwidth iflag nbytes nspaces nums tspaces uflag Preprocess
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
@@ -17,9 +16,8 @@ use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
+use uucore::translate;
 use uucore::{format_usage, show_error};
-
-use uucore::locale::{get_message, get_message_with_args};
 
 pub mod options {
     pub static TABS: &str = "tabs";
@@ -62,17 +60,17 @@ fn is_digit_or_comma(c: char) -> bool {
 /// Errors that can occur when parsing a `--tabs` argument.
 #[derive(Debug, Error)]
 enum ParseError {
-    #[error("{}", get_message_with_args("expand-error-invalid-character", HashMap::from([("char".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("expand-error-invalid-character", "char" => .0.quote()))]
     InvalidCharacter(String),
-    #[error("{}", get_message_with_args("expand-error-specifier-not-at-start", HashMap::from([("specifier".to_string(), .0.quote().to_string()), ("number".to_string(), .1.quote().to_string())])))]
+    #[error("{}", translate!("expand-error-specifier-not-at-start", "specifier" => .0.quote(), "number" => .1.quote()))]
     SpecifierNotAtStartOfNumber(String, String),
-    #[error("{}", get_message_with_args("expand-error-specifier-only-allowed-with-last", HashMap::from([("specifier".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("expand-error-specifier-only-allowed-with-last", "specifier" => .0.quote()))]
     SpecifierOnlyAllowedWithLastValue(String),
-    #[error("{}", get_message("expand-error-tab-size-cannot-be-zero"))]
+    #[error("{}", translate!("expand-error-tab-size-cannot-be-zero"))]
     TabSizeCannotBeZero,
-    #[error("{}", get_message_with_args("expand-error-tab-size-too-large", HashMap::from([("size".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("expand-error-tab-size-too-large", "size" => .0.quote()))]
     TabSizeTooLarge(String),
-    #[error("{}", get_message("expand-error-tab-sizes-must-be-ascending"))]
+    #[error("{}", translate!("expand-error-tab-sizes-must-be-ascending"))]
     TabSizesMustBeAscending,
 }
 
@@ -253,16 +251,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("expand-about"))
+        .about(translate!("expand-about"))
         .after_help(LONG_HELP)
-        .override_usage(format_usage(&get_message("expand-usage")))
+        .override_usage(format_usage(&translate!("expand-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
             Arg::new(options::INITIAL)
                 .long(options::INITIAL)
                 .short('i')
-                .help(get_message("expand-help-initial"))
+                .help(translate!("expand-help-initial"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -271,13 +269,13 @@ pub fn uu_app() -> Command {
                 .short('t')
                 .value_name("N, LIST")
                 .action(ArgAction::Append)
-                .help(get_message("expand-help-tabs")),
+                .help(translate!("expand-help-tabs")),
         )
         .arg(
             Arg::new(options::NO_UTF8)
                 .long(options::NO_UTF8)
                 .short('U')
-                .help(get_message("expand-help-no-utf8"))
+                .help(translate!("expand-help-no-utf8"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -447,10 +445,7 @@ fn expand(options: &Options) -> UResult<()> {
         if Path::new(file).is_dir() {
             show_error!(
                 "{}",
-                get_message_with_args(
-                    "expand-error-is-directory",
-                    HashMap::from([("file".to_string(), file.to_string())])
-                )
+                translate!("expand-error-is-directory", "file" => file)
             );
             set_exit_code(1);
             continue;
@@ -462,7 +457,7 @@ fn expand(options: &Options) -> UResult<()> {
                     Err(_) => buf.is_empty(),
                 } {
                     expand_line(&mut buf, &mut output, ts, options)
-                        .map_err_context(|| get_message("expand-error-failed-to-write-output"))?;
+                        .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
                 }
             }
             Err(e) => {

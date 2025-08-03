@@ -47,7 +47,13 @@ du-help-time-style = montrer les heures en utilisant le style STYLE : full-iso, 
 # Messages d'erreur
 du-error-invalid-max-depth = profondeur maximale invalide { $depth }
 du-error-summarize-depth-conflict = la synthèse entre en conflit avec --max-depth={ $depth }
-du-error-invalid-time-style = argument invalide { $style } pour 'style de temps'\nLes arguments valides sont :\n- 'full-iso'\n- 'long-iso'\n- 'iso'\nEssayez '{ $help }' pour plus d'informations.
+du-error-invalid-time-style = argument invalide { $style } pour 'style de temps'
+  Les arguments valides sont :
+    - 'full-iso'
+    - 'long-iso'
+    - 'iso'
+    - +FORMAT (e.g., +%H:%M) pour un format de type 'date'
+  Essayez '{ $help }' pour plus d'informations.
 du-error-invalid-time-arg = les arguments 'birth' et 'creation' pour --time ne sont pas supportés sur cette plateforme.
 du-error-invalid-glob = Syntaxe d'exclusion invalide : { $error }
 du-error-cannot-read-directory = impossible de lire le répertoire { $path }
@@ -55,7 +61,8 @@ du-error-cannot-access = impossible d'accéder à { $path }
 du-error-read-error-is-directory = { $file } : erreur de lecture : C'est un répertoire
 du-error-cannot-open-for-reading = impossible d'ouvrir '{ $file }' en lecture : Aucun fichier ou répertoire de ce type
 du-error-invalid-zero-length-file-name = { $file }:{ $line } : nom de fichier de longueur zéro invalide
-du-error-extra-operand-with-files0-from = opérande supplémentaire { $file }\nles opérandes de fichier ne peuvent pas être combinées avec --files0-from
+du-error-extra-operand-with-files0-from = opérande supplémentaire { $file }
+  les opérandes de fichier ne peuvent pas être combinées avec --files0-from
 du-error-invalid-block-size-argument = argument --{ $option } invalide { $value }
 du-error-cannot-access-no-such-file = impossible d'accéder à { $path } : Aucun fichier ou répertoire de ce type
 du-error-printing-thread-panicked = Le thread d'affichage a paniqué.

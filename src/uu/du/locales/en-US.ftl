@@ -47,7 +47,13 @@ du-help-time-style = show times using style STYLE: full-iso, long-iso, iso, +FOR
 # Error messages
 du-error-invalid-max-depth = invalid maximum depth { $depth }
 du-error-summarize-depth-conflict = summarizing conflicts with --max-depth={ $depth }
-du-error-invalid-time-style = invalid argument { $style } for 'time style'\nValid arguments are:\n- 'full-iso'\n- 'long-iso'\n- 'iso'\nTry '{ $help }' for more information.
+du-error-invalid-time-style = invalid argument { $style } for 'time style'
+  Valid arguments are:
+    - 'full-iso'
+    - 'long-iso'
+    - 'iso'
+    - +FORMAT (e.g., +%H:%M) for a 'date'-style format
+  Try '{ $help }' for more information.
 du-error-invalid-time-arg = 'birth' and 'creation' arguments for --time are not supported on this platform.
 du-error-invalid-glob = Invalid exclude syntax: { $error }
 du-error-cannot-read-directory = cannot read directory { $path }
@@ -55,7 +61,8 @@ du-error-cannot-access = cannot access { $path }
 du-error-read-error-is-directory = { $file }: read error: Is a directory
 du-error-cannot-open-for-reading = cannot open '{ $file }' for reading: No such file or directory
 du-error-invalid-zero-length-file-name = { $file }:{ $line }: invalid zero-length file name
-du-error-extra-operand-with-files0-from = extra operand { $file }\nfile operands cannot be combined with --files0-from
+du-error-extra-operand-with-files0-from = extra operand { $file }
+  file operands cannot be combined with --files0-from
 du-error-invalid-block-size-argument = invalid --{ $option } argument { $value }
 du-error-cannot-access-no-such-file = cannot access { $path }: No such file or directory
 du-error-printing-thread-panicked = Printing thread panicked.

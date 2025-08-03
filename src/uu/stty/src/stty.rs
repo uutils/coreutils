@@ -23,16 +23,15 @@ use nix::sys::termios::{
     Termios, cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, Stdout, stdout};
 use std::num::IntErrorKind;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, RawFd};
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UError, UResult, USimpleError};
 use uucore::format_usage;
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 #[cfg(not(any(
     target_os = "freebsd",
@@ -254,14 +253,14 @@ fn stty(opts: &Options) -> UResult<()> {
     if opts.save && opts.all {
         return Err(USimpleError::new(
             1,
-            get_message("stty-error-options-mutually-exclusive"),
+            translate!("stty-error-options-mutually-exclusive"),
         ));
     }
 
     if opts.settings.is_some() && (opts.save || opts.all) {
         return Err(USimpleError::new(
             1,
-            get_message("stty-error-output-style-no-modes"),
+            translate!("stty-error-output-style-no-modes"),
         ));
     }
 
@@ -270,81 +269,37 @@ fn stty(opts: &Options) -> UResult<()> {
 
     if let Some(args) = &opts.settings {
         let mut args_iter = args.iter();
-        // iterate over args: skip to next arg if current one is a control char
         while let Some(&arg) = args_iter.next() {
-            // control char
-            if let Some(char_index) = cc_to_index(arg) {
-                if let Some(mapping) = args_iter.next() {
-                    let cc_mapping = string_to_control_char(mapping).map_err(|e| {
-                        let message = match e {
-                            ControlCharMappingError::IntOutOfRange(val) => get_message_with_args(
-                                "stty-error-invalid-integer-argument-value-too-large",
-                                HashMap::from([("value".to_string(), format!("'{val}'"))]),
-                            ),
-                            ControlCharMappingError::MultipleChars(val) => get_message_with_args(
-                                "stty-error-invalid-integer-argument",
-                                HashMap::from([("value".to_string(), format!("'{val}'"))]),
-                            ),
-                        };
-                        USimpleError::new(1, message)
-                    })?;
-                    valid_args.push(ArgOptions::Mapping((char_index, cc_mapping)));
-                } else {
-                    return Err(USimpleError::new(
-                        1,
-                        get_message_with_args(
-                            "stty-error-missing-argument",
-                            HashMap::from([("arg".to_string(), (*arg).to_string())]),
-                        ),
-                    ));
-                }
-            // ispeed/ospeed baud rate setting
-            } else if arg == "ispeed" || arg == "ospeed" {
-                match args_iter.next() {
+            match arg {
+                "ispeed" | "ospeed" => match args_iter.next() {
                     Some(speed) => {
                         if let Some(baud_flag) = string_to_baud(speed) {
                             valid_args.push(ArgOptions::Flags(baud_flag));
                         } else {
                             return Err(USimpleError::new(
                                 1,
-                                get_message_with_args(
+                                translate!(
                                     "stty-error-invalid-speed",
-                                    HashMap::from([
-                                        ("arg".to_string(), (*arg).to_string()),
-                                        ("speed".to_string(), (*speed).to_string()),
-                                    ]),
+                                    "arg" => *arg,
+                                    "speed" => *speed,
                                 ),
                             ));
                         }
                     }
                     None => {
-                        return Err(USimpleError::new(
-                            1,
-                            get_message_with_args(
-                                "stty-error-missing-argument",
-                                HashMap::from([("arg".to_string(), (*arg).to_string())]),
-                            ),
-                        ));
+                        return missing_arg(arg);
                     }
-                }
-            } else if arg == "line" {
-                match args_iter.next() {
+                },
+                "line" => match args_iter.next() {
                     Some(line) => match parse_u8_or_err(line) {
                         Ok(n) => valid_args.push(ArgOptions::Special(SpecialSetting::Line(n))),
                         Err(e) => return Err(USimpleError::new(1, e)),
                     },
                     None => {
-                        return Err(USimpleError::new(
-                            1,
-                            get_message_with_args(
-                                "stty-error-missing-argument",
-                                HashMap::from([("arg".to_string(), arg.to_string())]),
-                            ),
-                        ));
+                        return missing_arg(arg);
                     }
-                }
-            } else if arg == "min" {
-                match args_iter.next() {
+                },
+                "min" => match args_iter.next() {
                     Some(min) => match parse_u8_or_err(min) {
                         Ok(n) => {
                             valid_args.push(ArgOptions::Mapping((S::VMIN, n)));
@@ -352,115 +307,99 @@ fn stty(opts: &Options) -> UResult<()> {
                         Err(e) => return Err(USimpleError::new(1, e)),
                     },
                     None => {
-                        return Err(USimpleError::new(
-                            1,
-                            get_message_with_args(
-                                "stty-error-missing-argument",
-                                HashMap::from([("arg".to_string(), arg.to_string())]),
-                            ),
-                        ));
+                        return missing_arg(arg);
                     }
-                }
-            } else if arg == "time" {
-                match args_iter.next() {
+                },
+                "time" => match args_iter.next() {
                     Some(time) => match parse_u8_or_err(time) {
                         Ok(n) => valid_args.push(ArgOptions::Mapping((S::VTIME, n))),
                         Err(e) => return Err(USimpleError::new(1, e)),
                     },
                     None => {
-                        return Err(USimpleError::new(
-                            1,
-                            get_message_with_args(
-                                "stty-error-missing-argument",
-                                HashMap::from([("arg".to_string(), arg.to_string())]),
-                            ),
-                        ));
+                        return missing_arg(arg);
                     }
-                }
-                // baud rate setting
-            } else if let Some(baud_flag) = string_to_baud(arg) {
-                valid_args.push(ArgOptions::Flags(baud_flag));
-            // non control char flag
-            } else if let Some(flag) = string_to_flag(arg) {
-                let remove_group = match flag {
-                    AllFlags::Baud(_) => false,
-                    AllFlags::ControlFlags((flag, remove)) => check_flag_group(flag, remove),
-                    AllFlags::InputFlags((flag, remove)) => check_flag_group(flag, remove),
-                    AllFlags::LocalFlags((flag, remove)) => check_flag_group(flag, remove),
-                    AllFlags::OutputFlags((flag, remove)) => check_flag_group(flag, remove),
-                };
-                if remove_group {
-                    return Err(USimpleError::new(
-                        1,
-                        get_message_with_args(
-                            "stty-error-invalid-argument",
-                            HashMap::from([("arg".to_string(), (*arg).to_string())]),
-                        ),
-                    ));
-                }
-                valid_args.push(flag.into());
-            // combination setting
-            } else if let Some(combo) = string_to_combo(arg) {
-                valid_args.append(&mut combo_to_flags(combo));
-            } else if arg == "rows" {
-                if let Some(rows) = args_iter.next() {
-                    if let Some(n) = parse_rows_cols(rows) {
-                        valid_args.push(ArgOptions::Special(SpecialSetting::Rows(n)));
+                },
+                "rows" => {
+                    if let Some(rows) = args_iter.next() {
+                        if let Some(n) = parse_rows_cols(rows) {
+                            valid_args.push(ArgOptions::Special(SpecialSetting::Rows(n)));
+                        } else {
+                            return invalid_integer_arg(rows);
+                        }
                     } else {
-                        return Err(USimpleError::new(
-                            1,
-                            get_message_with_args(
-                                "stty-error-invalid-integer-argument",
-                                HashMap::from([("value".to_string(), format!("'{rows}'"))]),
-                            ),
-                        ));
+                        return missing_arg(arg);
                     }
-                } else {
-                    return Err(USimpleError::new(
-                        1,
-                        get_message_with_args(
-                            "stty-error-missing-argument",
-                            HashMap::from([("arg".to_string(), (*arg).to_string())]),
-                        ),
-                    ));
                 }
-            } else if arg == "columns" || arg == "cols" {
-                if let Some(cols) = args_iter.next() {
-                    if let Some(n) = parse_rows_cols(cols) {
-                        valid_args.push(ArgOptions::Special(SpecialSetting::Cols(n)));
+                "columns" | "cols" => {
+                    if let Some(cols) = args_iter.next() {
+                        if let Some(n) = parse_rows_cols(cols) {
+                            valid_args.push(ArgOptions::Special(SpecialSetting::Cols(n)));
+                        } else {
+                            return invalid_integer_arg(cols);
+                        }
                     } else {
-                        return Err(USimpleError::new(
-                            1,
-                            get_message_with_args(
-                                "stty-error-invalid-integer-argument",
-                                HashMap::from([("value".to_string(), format!("'{cols}'"))]),
-                            ),
-                        ));
+                        return missing_arg(arg);
                     }
-                } else {
-                    return Err(USimpleError::new(
-                        1,
-                        get_message_with_args(
-                            "stty-error-missing-argument",
-                            HashMap::from([("arg".to_string(), (*arg).to_string())]),
-                        ),
-                    ));
                 }
-            } else if arg == "drain" {
-                set_arg = SetArg::TCSADRAIN;
-            } else if arg == "-drain" {
-                set_arg = SetArg::TCSANOW;
-            } else if arg == "size" {
-                valid_args.push(ArgOptions::Print(PrintSetting::Size));
-            // not a valid option
-            } else {
-                return Err(USimpleError::new(
-                    1,
-                    get_message_with_args(
-                        "stty-error-invalid-argument",
-                        HashMap::from([("arg".to_string(), (*arg).to_string())]),
-                    ),
-                ));
+                "drain" => {
+                    set_arg = SetArg::TCSADRAIN;
+                }
+                "-drain" => {
+                    set_arg = SetArg::TCSANOW;
+                }
+                "size" => {
+                    valid_args.push(ArgOptions::Print(PrintSetting::Size));
+                }
+                _ => {
+                    // control char
+                    if let Some(char_index) = cc_to_index(arg) {
+                        if let Some(mapping) = args_iter.next() {
+                            let cc_mapping = string_to_control_char(mapping).map_err(|e| {
+                                let message = match e {
+                                    ControlCharMappingError::IntOutOfRange(val) => {
+                                        translate!(
+                                            "stty-error-invalid-integer-argument-value-too-large",
+                                            "value" => format!("'{val}'")
+                                        )
+                                    }
+                                    ControlCharMappingError::MultipleChars(val) => {
+                                        translate!(
+                                            "stty-error-invalid-integer-argument",
+                                            "value" => format!("'{val}'")
+                                        )
+                                    }
+                                };
+                                USimpleError::new(1, message)
+                            })?;
+                            valid_args.push(ArgOptions::Mapping((char_index, cc_mapping)));
+                        } else {
+                            return missing_arg(arg);
+                        }
+                    // baud rate
+                    } else if let Some(baud_flag) = string_to_baud(arg) {
+                        valid_args.push(ArgOptions::Flags(baud_flag));
+                    // non control char flag
+                    } else if let Some(flag) = string_to_flag(arg) {
+                        let remove_group = match flag {
+                            AllFlags::Baud(_) => false,
+                            AllFlags::ControlFlags((flag, remove)) => {
+                                check_flag_group(flag, remove)
+                            }
+                            AllFlags::InputFlags((flag, remove)) => check_flag_group(flag, remove),
+                            AllFlags::LocalFlags((flag, remove)) => check_flag_group(flag, remove),
+                            AllFlags::OutputFlags((flag, remove)) => check_flag_group(flag, remove),
+                        };
+                        if remove_group {
+                            return invalid_arg(arg);
+                        }
+                        valid_args.push(flag.into());
+                    // combination setting
+                    } else if let Some(combo) = string_to_combo(arg) {
+                        valid_args.append(&mut combo_to_flags(combo));
+                    } else {
+                        return invalid_arg(arg);
+                    }
+                }
             }
         }
 
@@ -490,18 +429,43 @@ fn stty(opts: &Options) -> UResult<()> {
     Ok(())
 }
 
+fn missing_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
+    Err::<T, Box<dyn UError>>(USimpleError::new(
+        1,
+        translate!(
+            "stty-error-missing-argument",
+            "arg" => *arg
+        ),
+    ))
+}
+
+fn invalid_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
+    Err::<T, Box<dyn UError>>(USimpleError::new(
+        1,
+        translate!(
+            "stty-error-invalid-argument",
+            "arg" => *arg
+        ),
+    ))
+}
+
+fn invalid_integer_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
+    Err::<T, Box<dyn UError>>(USimpleError::new(
+        1,
+        translate!(
+            "stty-error-invalid-integer-argument",
+            "value" => format!("'{arg}'")
+        ),
+    ))
+}
+
 /// GNU uses different error messages if values overflow or underflow a u8,
 /// this function returns the appropriate error message in the case of overflow or underflow, or u8 on success
 fn parse_u8_or_err(arg: &str) -> Result<u8, String> {
     arg.parse::<u8>().map_err(|e| match e.kind() {
-        IntErrorKind::PosOverflow => get_message_with_args(
-            "stty-error-invalid-integer-argument-value-too-large",
-            HashMap::from([("value".to_string(), format!("'{arg}'"))]),
-        ),
-        _ => get_message_with_args(
-            "stty-error-invalid-integer-argument",
-            HashMap::from([("value".to_string(), format!("'{arg}'"))]),
-        ),
+        IntErrorKind::PosOverflow => translate!("stty-error-invalid-integer-argument-value-too-large", "value" => format!("'{arg}'")),
+        _ => translate!("stty-error-invalid-integer-argument",
+                        "value" => format!("'{arg}'")),
     })
 }
 
@@ -541,13 +505,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
-    print!(
-        "{} ",
-        get_message_with_args(
-            "stty-output-speed",
-            HashMap::from([("speed".to_string(), speed.to_string())])
-        )
-    );
+    print!("{} ", translate!("stty-output-speed", "speed" => speed));
 
     // Other platforms need to use the baud rate enum, so printing the right value
     // becomes slightly more complicated.
@@ -561,13 +519,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
     )))]
     for (text, baud_rate) in BAUD_RATES {
         if *baud_rate == speed {
-            print!(
-                "{} ",
-                get_message_with_args(
-                    "stty-output-speed",
-                    HashMap::from([("speed".to_string(), (*text).to_string())])
-                )
-            );
+            print!("{} ", translate!("stty-output-speed", "speed" => (*text)));
             break;
         }
     }
@@ -577,13 +529,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
         unsafe { tiocgwinsz(opts.file.as_raw_fd(), &raw mut size)? };
         print!(
             "{} ",
-            get_message_with_args(
-                "stty-output-rows-columns",
-                HashMap::from([
-                    ("rows".to_string(), size.rows.to_string()),
-                    ("columns".to_string(), size.columns.to_string())
-                ])
-            )
+            translate!("stty-output-rows-columns", "rows" => size.rows, "columns" => size.columns)
         );
     }
 
@@ -593,13 +539,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
         // so we get the underlying libc::termios struct to get that information.
         let libc_termios: nix::libc::termios = termios.clone().into();
         let line = libc_termios.c_line;
-        print!(
-            "{}",
-            get_message_with_args(
-                "stty-output-line",
-                HashMap::from([("line".to_string(), line.to_string())])
-            )
-        );
+        print!("{}", translate!("stty-output-line", "line" => line));
     }
 
     println!();
@@ -684,7 +624,7 @@ fn string_to_flag(option: &str) -> Option<AllFlags> {
 
 fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
     if cc == 0 {
-        return Ok(get_message("stty-output-undef"));
+        return Ok(translate!("stty-output-undef"));
     }
 
     let (meta_prefix, code) = if cc >= 0x80 {
@@ -736,18 +676,9 @@ fn print_control_chars(termios: &Termios, opts: &Options) -> nix::Result<()> {
     }
     println!(
         "{}",
-        get_message_with_args(
-            "stty-output-min-time",
-            HashMap::from([
-                (
-                    "min".to_string(),
-                    termios.control_chars[S::VMIN as usize].to_string()
-                ),
-                (
-                    "time".to_string(),
-                    termios.control_chars[S::VTIME as usize].to_string()
-                )
-            ])
+        translate!("stty-output-min-time",
+        "min" => termios.control_chars[S::VMIN as usize],
+        "time" => termios.control_chars[S::VTIME as usize]
         )
     );
     Ok(())
@@ -916,9 +847,8 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
     if let Some(val) = ascii_num {
         if val > 255 {
             return Err(ControlCharMappingError::IntOutOfRange(s.to_string()));
-        } else {
-            return Ok(val as u8);
         }
+        return Ok(val as u8);
     }
     // try to parse ^<char> or just <char>
     let mut chars = s.chars();
@@ -1076,21 +1006,21 @@ fn get_sane_control_char(cc_index: S) -> u8 {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("stty-usage")))
-        .about(get_message("stty-about"))
+        .override_usage(format_usage(&translate!("stty-usage")))
+        .about(translate!("stty-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::ALL)
                 .short('a')
                 .long(options::ALL)
-                .help(get_message("stty-option-all"))
+                .help(translate!("stty-option-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SAVE)
                 .short('g')
                 .long(options::SAVE)
-                .help(get_message("stty-option-save"))
+                .help(translate!("stty-option-save"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -1099,13 +1029,13 @@ pub fn uu_app() -> Command {
                 .long(options::FILE)
                 .value_hint(clap::ValueHint::FilePath)
                 .value_name("DEVICE")
-                .help(get_message("stty-option-file")),
+                .help(translate!("stty-option-file")),
         )
         .arg(
             Arg::new(options::SETTINGS)
                 .action(ArgAction::Append)
                 .allow_hyphen_values(true)
-                .help(get_message("stty-option-settings")),
+                .help(translate!("stty-option-settings")),
         )
 }
 

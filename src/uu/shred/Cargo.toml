@@ -22,6 +22,7 @@ clap = { workspace = true }
 rand = { workspace = true }
 uucore = { workspace = true, features = ["parser"] }
 libc = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "shred"

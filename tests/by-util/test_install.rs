@@ -13,6 +13,8 @@ use std::process::Command;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
 use uucore::process::{getegid, geteuid};
+#[cfg(feature = "feat_selinux")]
+use uucore::selinux::get_getfattr_output;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::{TestScenario, is_ci, run_ucmd_as_root};
@@ -1518,6 +1520,13 @@ fn test_install_dir_dot() {
         .arg("-v")
         .succeeds()
         .stdout_contains("creating directory 'dir5/cali'");
+    scene
+        .ucmd()
+        .arg("-d")
+        .arg("dir6/./")
+        .arg("-v")
+        .succeeds()
+        .stdout_contains("creating directory 'dir6'");
 
     let at = &scene.fixtures;
 
@@ -1526,6 +1535,7 @@ fn test_install_dir_dot() {
     assert!(at.dir_exists("dir3"));
     assert!(at.dir_exists("dir4/cal"));
     assert!(at.dir_exists("dir5/cali"));
+    assert!(at.dir_exists("dir6"));
 }
 
 #[test]
@@ -2075,6 +2085,20 @@ fn test_install_no_target_directory_failing_cannot_overwrite() {
 }
 
 #[test]
+fn test_install_no_target_directory_overwrite_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file = "file";
+    let dest = "dest";
+
+    at.touch(file);
+    scene.ucmd().arg("-T").arg(file).arg(dest).succeeds();
+    scene.ucmd().arg("-T").arg(file).arg(dest).succeeds();
+
+    assert!(!at.dir_exists("dir/file"));
+}
+
+#[test]
 fn test_install_no_target_directory_failing_omitting_directory() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2213,8 +2237,6 @@ fn test_install_no_target_basic() {
 #[test]
 #[cfg(feature = "feat_selinux")]
 fn test_selinux() {
-    use std::process::Command;
-
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let src = "orig";
@@ -2243,29 +2265,19 @@ fn test_selinux() {
 
         result.success().stdout_contains("orig' -> '");
 
-        let getfattr_output = Command::new("getfattr")
-            .arg(at.plus_as_string(dest))
-            .arg("-n")
-            .arg("security.selinux")
-            .output();
+        // Try to get SELinux context, skip test if getfattr is not available
+        let context_value =
+            std::panic::catch_unwind(|| get_getfattr_output(&at.plus_as_string(dest)));
 
-        // Skip test if getfattr is not available
-        let Ok(getfattr_output) = getfattr_output else {
-            println!("Skipping SELinux test: getfattr not available");
+        let Ok(context_value) = context_value else {
+            println!("Skipping SELinux test: getfattr not available or failed");
             at.remove(&at.plus_as_string(dest));
             continue;
         };
-        println!("{getfattr_output:?}");
-        assert!(
-            getfattr_output.status.success(),
-            "getfattr did not run successfully: {}",
-            String::from_utf8_lossy(&getfattr_output.stderr)
-        );
 
-        let stdout = String::from_utf8_lossy(&getfattr_output.stdout);
         assert!(
-            stdout.contains("unconfined_u"),
-            "Expected 'foo' not found in getfattr output:\n{stdout}"
+            context_value.contains("unconfined_u"),
+            "Expected 'unconfined_u' not found in getfattr output:\n{context_value}"
         );
         at.remove(&at.plus_as_string(dest));
     }

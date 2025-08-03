@@ -4,8 +4,10 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile uufs xattrs
-// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel
+// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist
 use uucore::display::Quotable;
+#[cfg(feature = "feat_selinux")]
+use uucore::selinux::get_getfattr_output;
 use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, new_ucmd, path_concat, util_name};
 
@@ -3087,13 +3089,89 @@ fn test_cp_link_backup() {
 fn test_cp_fifo() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("fifo");
-    ucmd.arg("-r")
+    // Also test that permissions are preserved
+    at.set_mode("fifo", 0o731);
+    ucmd.arg("--preserve=mode")
+        .arg("-r")
         .arg("fifo")
         .arg("fifo2")
         .succeeds()
         .no_stderr()
         .no_stdout();
     assert!(at.is_fifo("fifo2"));
+
+    let metadata = std::fs::metadata(at.subdir.join("fifo2")).unwrap();
+    let permission = uucore::fs::display_permissions(&metadata, true);
+    assert_eq!(permission, "prwx-wx--x".to_string());
+}
+
+#[cfg(all(unix, not(target_vendor = "apple")))]
+fn find_other_group(current: u32) -> Option<u32> {
+    // Get the first group that doesn't match current
+    nix::unistd::getgroups().ok()?.iter().find_map(|group| {
+        let gid = group.as_raw();
+        (gid != current).then_some(gid)
+    })
+}
+
+#[cfg(target_vendor = "apple")]
+fn find_other_group(_current: u32) -> Option<u32> {
+    None
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_r_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // Specifically test copying a link in a subdirectory, as the internal path
+    // is slightly different.
+    at.mkdir("tmp");
+    // Create a symlink to a non-existent file to make sure
+    // we don't try to resolve it.
+    at.symlink_file("doesnotexist", "tmp/symlink");
+    let symlink = at.subdir.join("tmp").join("symlink");
+
+    // If we can find such a group, change the owner to a non-default to test
+    // that (group) ownership is preserved.
+    let metadata = std::fs::symlink_metadata(&symlink).unwrap();
+    let other_gid = find_other_group(metadata.gid());
+    if let Some(gid) = other_gid {
+        uucore::perms::wrap_chown(
+            &symlink,
+            &metadata,
+            None,
+            Some(gid),
+            false,
+            uucore::perms::Verbosity::default(),
+        )
+        .expect("Cannot chgrp symlink.");
+    } else {
+        println!("Cannot find a second group to chgrp to.");
+    }
+
+    // Use -r to make sure we copy the symlink itself
+    // --preserve will include ownership
+    ucmd.arg("--preserve")
+        .arg("-r")
+        .arg("tmp")
+        .arg("tmp2")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    // Is symlink2 still a symlink, and does it point at the same place?
+    assert!(at.is_symlink("tmp2/symlink"));
+    let symlink2 = at.subdir.join("tmp2/symlink");
+    assert_eq!(
+        std::fs::read_link(&symlink).unwrap(),
+        std::fs::read_link(&symlink2).unwrap(),
+    );
+
+    // If we found a suitable group, is the group correct after the copy.
+    if let Some(gid) = other_gid {
+        let metadata2 = std::fs::symlink_metadata(&symlink2).unwrap();
+        assert_eq!(metadata2.gid(), gid);
+    }
 }
 
 #[test]
@@ -5858,7 +5936,7 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
                 start_time.elapsed() < timeout,
                 "timed out: cp took too long to create destination directory"
             );
-            if at.dir_exists(&format!("{DEST_DIR}/{SRC_DIR}")) {
+            if at.dir_exists(format!("{DEST_DIR}/{SRC_DIR}")) {
                 break;
             }
             sleep(Duration::from_millis(100));
@@ -6315,30 +6393,6 @@ fn test_cp_from_stream_permission() {
 
     assert_eq!(at.read(target), test_string);
     assert_eq!(at.metadata(target).permissions().mode(), 0o100_777);
-}
-
-#[cfg(feature = "feat_selinux")]
-fn get_getfattr_output(f: &str) -> String {
-    use std::process::Command;
-
-    let getfattr_output = Command::new("getfattr")
-        .arg(f)
-        .arg("-n")
-        .arg("security.selinux")
-        .output()
-        .expect("Failed to run `getfattr` on the destination file");
-    println!("{getfattr_output:?}");
-    assert!(
-        getfattr_output.status.success(),
-        "getfattr did not run successfully: {}",
-        String::from_utf8_lossy(&getfattr_output.stderr)
-    );
-
-    String::from_utf8_lossy(&getfattr_output.stdout)
-        .split('"')
-        .nth(1)
-        .unwrap_or("")
-        .to_string()
 }
 
 #[test]

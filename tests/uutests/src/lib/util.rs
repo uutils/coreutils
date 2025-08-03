@@ -357,6 +357,11 @@ impl CmdResult {
         std::str::from_utf8(&self.stdout).unwrap()
     }
 
+    /// Returns the program's standard output as a string, automatically handling invalid utf8
+    pub fn stdout_str_lossy(self) -> String {
+        String::from_utf8_lossy(&self.stdout).to_string()
+    }
+
     /// Returns the program's standard output as a string
     /// consumes self
     pub fn stdout_move_str(self) -> String {
@@ -1140,6 +1145,19 @@ impl AtPath {
         }
     }
 
+    #[cfg(not(windows))]
+    pub fn is_char_device(&self, char_dev: &str) -> bool {
+        unsafe {
+            let name = CString::new(self.plus_as_string(char_dev)).unwrap();
+            let mut stat: libc::stat = std::mem::zeroed();
+            if libc::stat(name.as_ptr(), &mut stat) >= 0 {
+                libc::S_IFCHR & stat.st_mode as libc::mode_t != 0
+            } else {
+                false
+            }
+        }
+    }
+
     pub fn hard_link(&self, original: &str, link: &str) {
         log_info(
             "hard_link",
@@ -1243,14 +1261,14 @@ impl AtPath {
     }
 
     /// Decide whether the named symbolic link exists in the test directory.
-    pub fn symlink_exists(&self, path: &str) -> bool {
+    pub fn symlink_exists<P: AsRef<Path>>(&self, path: P) -> bool {
         match fs::symlink_metadata(self.plus(path)) {
             Ok(m) => m.file_type().is_symlink(),
             Err(_) => false,
         }
     }
 
-    pub fn dir_exists(&self, path: &str) -> bool {
+    pub fn dir_exists<P: AsRef<Path>>(&self, path: P) -> bool {
         match fs::metadata(self.plus(path)) {
             Ok(m) => m.is_dir(),
             Err(_) => false,

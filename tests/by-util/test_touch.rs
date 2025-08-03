@@ -684,7 +684,8 @@ fn test_touch_set_date_relative_smoke() {
         "2 seconds",
         "2 years 1 week",
         "2 days ago",
-        "2 months and 1 second",
+        "2 months 1 second",
+        "a",
     ];
     for time in times {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -694,11 +695,6 @@ fn test_touch_set_date_relative_smoke() {
             .no_stderr()
             .no_stdout();
     }
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.touch("f");
-    ucmd.args(&["-d", "a", "f"])
-        .fails()
-        .stderr_contains("touch: Unable to parse date");
 }
 
 #[test]

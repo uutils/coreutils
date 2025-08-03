@@ -13,7 +13,7 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::line_ending::LineEnding;
-use uucore::locale::get_message;
+use uucore::translate;
 use uucore::{format_usage, show_error};
 
 const OPT_CANONICALIZE: &str = "canonicalize";
@@ -61,12 +61,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if files.is_empty() {
         return Err(UUsageError::new(
             1,
-            get_message("readlink-error-missing-operand"),
+            translate!("readlink-error-missing-operand"),
         ));
     }
 
     if no_trailing_delimiter && files.len() > 1 && !silent {
-        show_error!("{}", get_message("readlink-error-ignoring-no-newline"));
+        show_error!("{}", translate!("readlink-error-ignoring-no-newline"));
         no_trailing_delimiter = false;
     }
 
@@ -107,63 +107,63 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("readlink-about"))
-        .override_usage(format_usage(&get_message("readlink-usage")))
+        .about(translate!("readlink-about"))
+        .override_usage(format_usage(&translate!("readlink-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_CANONICALIZE)
                 .short('f')
                 .long(OPT_CANONICALIZE)
-                .help(get_message("readlink-help-canonicalize"))
+                .help(translate!("readlink-help-canonicalize"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_CANONICALIZE_EXISTING)
                 .short('e')
                 .long("canonicalize-existing")
-                .help(get_message("readlink-help-canonicalize-existing"))
+                .help(translate!("readlink-help-canonicalize-existing"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_CANONICALIZE_MISSING)
                 .short('m')
                 .long(OPT_CANONICALIZE_MISSING)
-                .help(get_message("readlink-help-canonicalize-missing"))
+                .help(translate!("readlink-help-canonicalize-missing"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_NO_NEWLINE)
                 .short('n')
                 .long(OPT_NO_NEWLINE)
-                .help(get_message("readlink-help-no-newline"))
+                .help(translate!("readlink-help-no-newline"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_QUIET)
                 .short('q')
                 .long(OPT_QUIET)
-                .help(get_message("readlink-help-quiet"))
+                .help(translate!("readlink-help-quiet"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_SILENT)
                 .short('s')
                 .long(OPT_SILENT)
-                .help(get_message("readlink-help-silent"))
+                .help(translate!("readlink-help-silent"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
                 .short('v')
                 .long(OPT_VERBOSE)
-                .help(get_message("readlink-help-verbose"))
+                .help(translate!("readlink-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_ZERO)
                 .short('z')
                 .long(OPT_ZERO)
-                .help(get_message("readlink-help-zero"))
+                .help(translate!("readlink-help-zero"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

@@ -18,49 +18,49 @@ use native_int_str::{
     Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation_owned,
 };
 #[cfg(unix)]
-use nix::sys::signal::{
-    SaFlags, SigAction, SigHandler, SigHandler::SigIgn, SigSet, Signal, raise, sigaction, signal,
-};
+use nix::libc;
+#[cfg(unix)]
+use nix::sys::signal::{SigHandler::SigIgn, Signal, signal};
+#[cfg(unix)]
+use nix::unistd::execvp;
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::env;
+#[cfg(unix)]
+use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Write};
-
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
-#[cfg(unix)]
-use std::os::unix::process::{CommandExt, ExitStatusExt};
-use std::process::{self};
+
 use uucore::display::Quotable;
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
-use uucore::locale::{get_message, get_message_with_args};
 #[cfg(unix)]
 use uucore::signals::signal_by_name_or_value;
+use uucore::translate;
 use uucore::{format_usage, show_warning};
 
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq)]
 pub enum EnvError {
-    #[error("{}", get_message_with_args("env-error-missing-closing-quote", HashMap::from([("position".to_string(), .0.to_string()), ("quote".to_string(), .1.to_string())])))]
+    #[error("{}", translate!("env-error-missing-closing-quote", "position" => .0, "quote" => .1))]
     EnvMissingClosingQuote(usize, char),
-    #[error("{}", get_message_with_args("env-error-invalid-backslash-at-end", HashMap::from([("position".to_string(), .0.to_string()), ("context".to_string(), .1.clone())])))]
+    #[error("{}", translate!("env-error-invalid-backslash-at-end", "position" => .0, "context" => .1.clone()))]
     EnvInvalidBackslashAtEndOfStringInMinusS(usize, String),
-    #[error("{}", get_message_with_args("env-error-backslash-c-not-allowed", HashMap::from([("position".to_string(), .0.to_string())])))]
+    #[error("{}", translate!("env-error-backslash-c-not-allowed", "position" => .0))]
     EnvBackslashCNotAllowedInDoubleQuotes(usize),
-    #[error("{}", get_message_with_args("env-error-invalid-sequence", HashMap::from([("position".to_string(), .0.to_string()), ("char".to_string(), .1.to_string())])))]
+    #[error("{}", translate!("env-error-invalid-sequence", "position" => .0, "char" => .1))]
     EnvInvalidSequenceBackslashXInMinusS(usize, char),
-    #[error("{}", get_message_with_args("env-error-missing-closing-brace", HashMap::from([("position".to_string(), .0.to_string())])))]
+    #[error("{}", translate!("env-error-missing-closing-brace", "position" => .0))]
     EnvParsingOfVariableMissingClosingBrace(usize),
-    #[error("{}", get_message_with_args("env-error-missing-variable", HashMap::from([("position".to_string(), .0.to_string())])))]
+    #[error("{}", translate!("env-error-missing-variable", "position" => .0))]
     EnvParsingOfMissingVariable(usize),
-    #[error("{}", get_message_with_args("env-error-missing-closing-brace-after-value", HashMap::from([("position".to_string(), .0.to_string())])))]
+    #[error("{}", translate!("env-error-missing-closing-brace-after-value", "position" => .0))]
     EnvParsingOfVariableMissingClosingBraceAfterValue(usize),
-    #[error("{}", get_message_with_args("env-error-unexpected-number", HashMap::from([("position".to_string(), .0.to_string()), ("char".to_string(), .1.clone())])))]
+    #[error("{}", translate!("env-error-unexpected-number", "position" => .0, "char" => .1.clone()))]
     EnvParsingOfVariableUnexpectedNumber(usize, String),
-    #[error("{}", get_message_with_args("env-error-expected-brace-or-colon", HashMap::from([("position".to_string(), .0.to_string()), ("char".to_string(), .1.clone())])))]
+    #[error("{}", translate!("env-error-expected-brace-or-colon", "position" => .0, "char" => .1.clone()))]
     EnvParsingOfVariableExceptedBraceOrColon(usize, String),
     #[error("")]
     EnvReachedEnd,
@@ -129,7 +129,7 @@ fn parse_program_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> 
     if opts.line_ending == LineEnding::Nul {
         Err(UUsageError::new(
             125,
-            get_message("env-error-cannot-specify-null-with-command"),
+            translate!("env-error-cannot-specify-null-with-command"),
         ))
     } else {
         opts.program.push(opt);
@@ -143,10 +143,7 @@ fn parse_signal_value(signal_name: &str) -> UResult<usize> {
     let optional_signal_value = signal_by_name_or_value(&signal_name_upcase);
     let error = USimpleError::new(
         125,
-        get_message_with_args(
-            "env-error-invalid-signal",
-            HashMap::from([("signal".to_string(), signal_name.quote().to_string())]),
-        ),
+        translate!("env-error-invalid-signal", "signal" => signal_name.quote()),
     );
     match optional_signal_value {
         Some(sig_val) => {
@@ -181,10 +178,7 @@ fn parse_signal_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> {
         let Some(sig_str) = sig.to_str() else {
             return Err(USimpleError::new(
                 1,
-                get_message_with_args(
-                    "env-error-invalid-signal",
-                    HashMap::from([("signal".to_string(), sig.quote().to_string())]),
-                ),
+                translate!("env-error-invalid-signal", "signal" => sig.quote()),
             ));
         };
         let sig_val = parse_signal_value(sig_str)?;
@@ -211,13 +205,7 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
         let conf = conf.map_err(|e| {
             USimpleError::new(
                 1,
-                get_message_with_args(
-                    "env-error-config-file",
-                    HashMap::from([
-                        ("file".to_string(), file.maybe_quote().to_string()),
-                        ("error".to_string(), e.to_string()),
-                    ]),
-                ),
+                translate!("env-error-config-file", "file" => file.maybe_quote(), "error" => e),
             )
         })?;
 
@@ -237,16 +225,16 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(crate_name!())
         .version(uucore::crate_version!())
-        .about(get_message("env-about"))
-        .override_usage(format_usage(&get_message("env-usage")))
-        .after_help(get_message("env-after-help"))
+        .about(translate!("env-about"))
+        .override_usage(format_usage(&translate!("env-usage")))
+        .after_help(translate!("env-after-help"))
         .infer_long_args(true)
         .trailing_var_arg(true)
         .arg(
             Arg::new(options::IGNORE_ENVIRONMENT)
                 .short('i')
                 .long(options::IGNORE_ENVIRONMENT)
-                .help(get_message("env-help-ignore-environment"))
+                .help(translate!("env-help-ignore-environment"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -257,13 +245,13 @@ pub fn uu_app() -> Command {
                 .value_name("DIR")
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::DirPath)
-                .help(get_message("env-help-chdir")),
+                .help(translate!("env-help-chdir")),
         )
         .arg(
             Arg::new(options::NULL)
                 .short('0')
                 .long(options::NULL)
-                .help(get_message("env-help-null"))
+                .help(translate!("env-help-null"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -274,7 +262,7 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::FilePath)
                 .value_parser(ValueParser::os_string())
                 .action(ArgAction::Append)
-                .help(get_message("env-help-file")),
+                .help(translate!("env-help-file")),
         )
         .arg(
             Arg::new(options::UNSET)
@@ -283,14 +271,14 @@ pub fn uu_app() -> Command {
                 .value_name("NAME")
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
-                .help(get_message("env-help-unset")),
+                .help(translate!("env-help-unset")),
         )
         .arg(
             Arg::new(options::DEBUG)
                 .short('v')
                 .long(options::DEBUG)
                 .action(ArgAction::Count)
-                .help(get_message("env-help-debug")),
+                .help(translate!("env-help-debug")),
         )
         .arg(
             Arg::new(options::SPLIT_STRING) // split string handling is implemented directly, not using CLAP. But this entry here is needed for the help information output.
@@ -299,7 +287,7 @@ pub fn uu_app() -> Command {
                 .value_name("S")
                 .action(ArgAction::Set)
                 .value_parser(ValueParser::os_string())
-                .help(get_message("env-help-split-string")),
+                .help(translate!("env-help-split-string")),
         )
         .arg(
             Arg::new(options::ARGV0)
@@ -309,7 +297,7 @@ pub fn uu_app() -> Command {
                 .value_name("a")
                 .action(ArgAction::Set)
                 .value_parser(ValueParser::os_string())
-                .help(get_message("env-help-argv0")),
+                .help(translate!("env-help-argv0")),
         )
         .arg(
             Arg::new("vars")
@@ -322,7 +310,7 @@ pub fn uu_app() -> Command {
                 .value_name("SIG")
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
-                .help(get_message("env-help-ignore-signal")),
+                .help(translate!("env-help-ignore-signal")),
         )
 }
 
@@ -338,60 +326,27 @@ pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>>
         EnvError::EnvMissingClosingQuote(_, _) => USimpleError::new(125, e.to_string()),
         EnvError::EnvParsingOfVariableMissingClosingBrace(pos) => USimpleError::new(
             125,
-            get_message_with_args(
-                "env-error-variable-name-issue",
-                HashMap::from([
-                    ("position".to_string(), pos.to_string()),
-                    ("error".to_string(), e.to_string()),
-                ]),
-            ),
+            translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
         ),
         EnvError::EnvParsingOfMissingVariable(pos) => USimpleError::new(
             125,
-            get_message_with_args(
-                "env-error-variable-name-issue",
-                HashMap::from([
-                    ("position".to_string(), pos.to_string()),
-                    ("error".to_string(), e.to_string()),
-                ]),
-            ),
+            translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
         ),
         EnvError::EnvParsingOfVariableMissingClosingBraceAfterValue(pos) => USimpleError::new(
             125,
-            get_message_with_args(
-                "env-error-variable-name-issue",
-                HashMap::from([
-                    ("position".to_string(), pos.to_string()),
-                    ("error".to_string(), e.to_string()),
-                ]),
-            ),
+            translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
         ),
         EnvError::EnvParsingOfVariableUnexpectedNumber(pos, _) => USimpleError::new(
             125,
-            get_message_with_args(
-                "env-error-variable-name-issue",
-                HashMap::from([
-                    ("position".to_string(), pos.to_string()),
-                    ("error".to_string(), e.to_string()),
-                ]),
-            ),
+            translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
         ),
         EnvError::EnvParsingOfVariableExceptedBraceOrColon(pos, _) => USimpleError::new(
             125,
-            get_message_with_args(
-                "env-error-variable-name-issue",
-                HashMap::from([
-                    ("position".to_string(), pos.to_string()),
-                    ("error".to_string(), e.to_string()),
-                ]),
-            ),
+            translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
         ),
         _ => USimpleError::new(
             125,
-            get_message_with_args(
-                "env-error-generic",
-                HashMap::from([("error".to_string(), format!("{e:?}"))]),
-            ),
+            translate!("env-error-generic", "error" => format!("{e:?}")),
         ),
     })
 }
@@ -439,13 +394,10 @@ impl EnvAppData {
     fn make_error_no_such_file_or_dir(&self, prog: &OsStr) -> Box<dyn UError> {
         uucore::show_error!(
             "{}",
-            get_message_with_args(
-                "env-error-no-such-file",
-                HashMap::from([("program".to_string(), prog.quote().to_string())])
-            )
+            translate!("env-error-no-such-file", "program" => prog.quote())
         );
         if !self.had_string_argument {
-            uucore::show_error!("{}", get_message("env-error-use-s-shebang"));
+            uucore::show_error!("{}", translate!("env-error-use-s-shebang"));
         }
         ExitCode::new(127)
     }
@@ -517,12 +469,10 @@ impl EnvAppData {
                         && arg_str.starts_with("-u")
                         && !arg_str.starts_with("--")
                     {
+                        let name = &arg_str[arg_str.find('=').unwrap()..];
                         return Err(USimpleError::new(
                             125,
-                            get_message_with_args(
-                                "env-error-cannot-unset",
-                                HashMap::from([("name".to_string(), arg_str[2..].to_string())]),
-                            ),
+                            translate!("env-error-cannot-unset", "name" => name),
                         ));
                     }
 
@@ -554,7 +504,7 @@ impl EnvAppData {
                             let s = s.trim_end();
                             uucore::show_error!("{s}");
                         }
-                        uucore::show_error!("{}", get_message("env-error-use-s-shebang"));
+                        uucore::show_error!("{}", translate!("env-error-use-s-shebang"));
                         ExitCode::new(125)
                     }
                 }
@@ -605,6 +555,15 @@ impl EnvAppData {
         Ok(())
     }
 
+    /// Run the program specified by the options.
+    ///
+    /// Note that the env command must exec the program, not spawn it. See
+    /// <https://github.com/uutils/coreutils/issues/8361> for more information.
+    ///
+    /// Exit status:
+    /// - 125: if the env command itself fails
+    /// - 126: if the program is found but cannot be invoked
+    /// - 127: if the program cannot be found
     fn run_program(
         &mut self,
         opts: &Options<'_>,
@@ -617,19 +576,9 @@ impl EnvAppData {
         let arg0 = prog.clone();
         let args = &opts.program[1..];
 
-        /*
-         * On Unix-like systems Command::status either ends up calling either fork or posix_spawnp
-         * (which ends up calling clone). Keep using the current process would be ideal, but the
-         * standard library contains many checks and fail-safes to ensure the process ends up being
-         * created. This is much simpler than dealing with the hassles of calling execvp directly.
-         */
-        let mut cmd = process::Command::new(&*prog);
-        cmd.args(args);
-
         if let Some(_argv0) = opts.argv0 {
             #[cfg(unix)]
             {
-                cmd.arg0(_argv0);
                 arg0 = Cow::Borrowed(_argv0);
                 if do_debug_printing {
                     eprintln!("argv0:     {}", arg0.quote());
@@ -639,7 +588,7 @@ impl EnvAppData {
             #[cfg(not(unix))]
             return Err(USimpleError::new(
                 2,
-                get_message("env-error-argv0-not-supported"),
+                translate!("env-error-argv0-not-supported"),
             ));
         }
 
@@ -652,68 +601,91 @@ impl EnvAppData {
             }
         }
 
-        match cmd.status() {
-            Ok(exit) if !exit.success() => {
-                #[cfg(unix)]
-                {
-                    if let Some(exit_code) = exit.code() {
-                        return Err(exit_code.into());
-                    }
+        #[cfg(unix)]
+        {
+            // Convert program name to CString.
+            let Ok(prog_cstring) = CString::new(prog.as_bytes()) else {
+                return Err(self.make_error_no_such_file_or_dir(&prog));
+            };
 
-                    // `exit.code()` returns `None` on Unix when the process is terminated by a signal.
-                    // See std::os::unix::process::ExitStatusExt for more information. This prints out
-                    // the interrupted process and the signal it received.
-                    let signal_code = exit.signal().unwrap();
-                    let signal = Signal::try_from(signal_code).unwrap();
+            // Prepare arguments for execvp.
+            let mut argv = Vec::new();
 
-                    // We have to disable any handler that's installed by default.
-                    // This ensures that we exit on this signal.
-                    // For example, `SIGSEGV` and `SIGBUS` have default handlers installed in Rust.
-                    // We ignore the errors because there is not much we can do if that fails anyway.
-                    // SAFETY: The function is unsafe because installing functions is unsafe, but we are
-                    // just defaulting to default behavior and not installing a function. Hence, the call
-                    // is safe.
-                    let _ = unsafe {
-                        sigaction(
-                            signal,
-                            &SigAction::new(SigHandler::SigDfl, SaFlags::empty(), SigSet::all()),
-                        )
-                    };
+            // Convert arg0 to CString.
+            let Ok(arg0_cstring) = CString::new(arg0.as_bytes()) else {
+                return Err(self.make_error_no_such_file_or_dir(&prog));
+            };
+            argv.push(arg0_cstring);
 
-                    let _ = raise(signal);
-                }
-                return Err(exit.code().unwrap().into());
+            // Convert remaining arguments to CString.
+            for arg in args {
+                let Ok(arg_cstring) = CString::new(arg.as_bytes()) else {
+                    return Err(self.make_error_no_such_file_or_dir(&prog));
+                };
+                argv.push(arg_cstring);
             }
-            Err(ref err) => {
-                return match err.kind() {
+
+            // Execute the program using execvp. this replaces the current
+            // process. The execvp function takes care of appending a NULL
+            // argument to the argument list so that we don't have to.
+            match execvp(&prog_cstring, &argv) {
+                Err(nix::errno::Errno::ENOENT) => Err(self.make_error_no_such_file_or_dir(&prog)),
+                Err(nix::errno::Errno::EACCES) => {
+                    uucore::show_error!(
+                        "{}",
+                        translate!(
+                            "env-error-permission-denied",
+                            "program" => prog.quote()
+                        )
+                    );
+                    Err(126.into())
+                }
+                Err(_) => {
+                    uucore::show_error!(
+                        "{}",
+                        translate!(
+                            "env-error-unknown",
+                            "error" => "execvp failed"
+                        )
+                    );
+                    Err(126.into())
+                }
+                Ok(_) => {
+                    unreachable!("execvp should never return on success")
+                }
+            }
+        }
+
+        #[cfg(not(unix))]
+        {
+            // Fallback to Command::status for non-Unix systems
+            let mut cmd = std::process::Command::new(&*prog);
+            cmd.args(args);
+
+            match cmd.status() {
+                Ok(exit) if !exit.success() => Err(exit.code().unwrap_or(1).into()),
+                Err(ref err) => match err.kind() {
                     io::ErrorKind::NotFound | io::ErrorKind::InvalidInput => {
                         Err(self.make_error_no_such_file_or_dir(&prog))
                     }
                     io::ErrorKind::PermissionDenied => {
                         uucore::show_error!(
                             "{}",
-                            get_message_with_args(
-                                "env-error-permission-denied",
-                                HashMap::from([("program".to_string(), prog.quote().to_string())])
-                            )
+                            translate!("env-error-permission-denied", "program" => prog.quote())
                         );
                         Err(126.into())
                     }
                     _ => {
                         uucore::show_error!(
                             "{}",
-                            get_message_with_args(
-                                "env-error-unknown",
-                                HashMap::from([("error".to_string(), format!("{err:?}"))])
-                            )
+                            translate!("env-error-unknown", "error" => format!("{err:?}"))
                         );
                         Err(126.into())
                     }
-                };
+                },
+                Ok(_) => Ok(()),
             }
-            Ok(_) => (),
         }
-        Ok(())
     }
 }
 
@@ -795,10 +767,7 @@ fn apply_unset_env_vars(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
         {
             return Err(USimpleError::new(
                 125,
-                get_message_with_args(
-                    "env-error-cannot-unset-invalid",
-                    HashMap::from([("name".to_string(), name.quote().to_string())]),
-                ),
+                translate!("env-error-cannot-unset-invalid", "name" => name.quote()),
             ));
         }
         unsafe {
@@ -813,7 +782,7 @@ fn apply_change_directory(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
     if opts.program.is_empty() && opts.running_directory.is_some() {
         return Err(UUsageError::new(
             125,
-            get_message("env-error-must-specify-command-with-chdir"),
+            translate!("env-error-must-specify-command-with-chdir"),
         ));
     }
 
@@ -823,13 +792,7 @@ fn apply_change_directory(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
             Err(error) => {
                 return Err(USimpleError::new(
                     125,
-                    get_message_with_args(
-                        "env-error-cannot-change-directory",
-                        HashMap::from([
-                            ("directory".to_string(), d.quote().to_string()),
-                            ("error".to_string(), error.to_string()),
-                        ]),
-                    ),
+                    translate!("env-error-cannot-change-directory", "directory" => d.quote(), "error" => error),
                 ));
             }
         };
@@ -865,10 +828,7 @@ fn apply_specified_env_vars(opts: &Options<'_>) {
         if name.is_empty() {
             show_warning!(
                 "{}",
-                get_message_with_args(
-                    "env-warning-no-name-specified",
-                    HashMap::from([("value".to_string(), val.quote().to_string())])
-                )
+                translate!("env-warning-no-name-specified", "value" => val.quote())
             );
             continue;
         }
@@ -897,13 +857,7 @@ fn ignore_signal(sig: Signal) -> UResult<()> {
     if let Err(err) = result {
         return Err(USimpleError::new(
             125,
-            get_message_with_args(
-                "env-error-failed-set-signal-action",
-                HashMap::from([
-                    ("signal".to_string(), (sig as i32).to_string()),
-                    ("error".to_string(), err.desc().to_string()),
-                ]),
-            ),
+            translate!("env-error-failed-set-signal-action", "signal" => (sig as i32), "error" => err.desc()),
         ));
     }
     Ok(())
@@ -911,6 +865,12 @@ fn ignore_signal(sig: Signal) -> UResult<()> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // Rust ignores SIGPIPE (see https://github.com/rust-lang/rust/issues/62569).
+    // We restore its default action here.
+    #[cfg(unix)]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
     EnvAppData::default().run_env(args)
 }
 

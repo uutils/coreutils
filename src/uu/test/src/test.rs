@@ -21,7 +21,7 @@ use uucore::format_usage;
 #[cfg(not(windows))]
 use uucore::process::{getegid, geteuid};
 
-use uucore::locale::get_message;
+use uucore::translate;
 
 // The help_usage method replaces util name (the first word) with {}.
 // And, The format_usage method replaces {} with execution_phrase ( e.g. test or [ ).
@@ -35,9 +35,9 @@ pub fn uu_app() -> Command {
     // since we don't recognize -h and -v as help/version flags.
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("test-about"))
-        .override_usage(format_usage(&get_message("test-usage")))
-        .after_help(get_message("test-after-help"))
+        .about(translate!("test-about"))
+        .override_usage(format_usage(&translate!("test-usage")))
+        .after_help(translate!("test-after-help"))
 }
 
 #[uucore::main]
@@ -57,7 +57,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         if last.as_deref() != Some(OsStr::new("]")) {
             return Err(USimpleError::new(
                 2,
-                get_message("test-error-missing-closing-bracket"),
+                translate!("test-error-missing-closing-bracket"),
             ));
         }
     }

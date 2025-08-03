@@ -108,6 +108,7 @@ fn main() {
 
     // binary name equals util name?
     if let Some(&(uumain, _)) = utils.get(binary_as_util) {
+        setup_localization_or_exit(binary_as_util);
         process::exit(uumain(vec![binary.into()].into_iter().chain(args)));
     }
 

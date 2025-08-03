@@ -24,9 +24,9 @@ use parseargs::Parser;
 use progress::ProgUpdateType;
 use progress::{ProgUpdate, ReadStat, StatusLevel, WriteStat, gen_prog_updater};
 use uucore::io::OwnedFileDescriptorOrHandle;
+use uucore::translate;
 
 use std::cmp;
-use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
@@ -63,7 +63,6 @@ use uucore::error::{USimpleError, set_exit_code};
 use uucore::show_if_err;
 use uucore::{format_usage, show_error};
 
-use uucore::locale::{get_message, get_message_with_args};
 const BUF_INIT_BYTE: u8 = 0xDD;
 
 /// Final settings after parsing
@@ -238,10 +237,7 @@ impl Source {
                 Ok(m) if m < n => {
                     show_error!(
                         "{}",
-                        get_message_with_args(
-                            "dd-error-cannot-skip-offset",
-                            HashMap::from([("file".to_string(), "standard input".to_string())])
-                        )
+                        translate!("dd-error-cannot-skip-offset", "file" => "standard input")
                     );
                     Ok(m)
                 }
@@ -256,10 +252,7 @@ impl Source {
                         // this case prints the stats but sets the exit code to 1
                         show_error!(
                             "{}",
-                            get_message_with_args(
-                                "dd-error-cannot-skip-invalid",
-                                HashMap::from([("file".to_string(), "standard input".to_string())])
-                            )
+                            translate!("dd-error-cannot-skip-invalid", "file" => "standard input")
                         );
                         set_exit_code(1);
                         return Ok(len);
@@ -269,10 +262,7 @@ impl Source {
                     Ok(m) if m < n => {
                         show_error!(
                             "{}",
-                            get_message_with_args(
-                                "dd-error-cannot-skip-offset",
-                                HashMap::from([("file".to_string(), "standard input".to_string())])
-                            )
+                            translate!("dd-error-cannot-skip-offset", "file" => "standard input")
                         );
                         Ok(m)
                     }
@@ -362,10 +352,7 @@ impl<'a> Input<'a> {
             if settings.iflags.directory && !f.metadata()?.is_dir() {
                 return Err(USimpleError::new(
                     1,
-                    get_message_with_args(
-                        "dd-error-not-directory",
-                        HashMap::from([("file".to_string(), "standard input".to_string())]),
-                    ),
+                    translate!("dd-error-not-directory", "file" => "standard input"),
                 ));
             }
         }
@@ -386,12 +373,9 @@ impl<'a> Input<'a> {
                 opts.custom_flags(libc_flags);
             }
 
-            opts.open(filename).map_err_context(|| {
-                get_message_with_args(
-                    "dd-error-failed-to-open",
-                    HashMap::from([("path".to_string(), filename.quote().to_string())]),
-                )
-            })?
+            opts.open(filename).map_err_context(
+                || translate!("dd-error-failed-to-open", "path" => filename.quote()),
+            )?
         };
 
         let mut src = Source::File(src);
@@ -486,7 +470,7 @@ impl Input<'_> {
             show_if_err!(
                 self.src
                     .discard_cache(offset, len)
-                    .map_err_context(|| get_message("dd-error-failed-discard-cache-input"))
+                    .map_err_context(|| translate!("dd-error-failed-discard-cache-input"))
             );
         }
         #[cfg(not(target_os = "linux"))]
@@ -638,13 +622,7 @@ impl Dest {
                         // this case prints the stats but sets the exit code to 1
                         show_error!(
                             "{}",
-                            get_message_with_args(
-                                "dd-error-cannot-seek-invalid",
-                                HashMap::from([(
-                                    "output".to_string(),
-                                    "standard output".to_string()
-                                )])
-                            )
+                            translate!("dd-error-cannot-seek-invalid", "output" => "standard output")
                         );
                         set_exit_code(1);
                         return Ok(len);
@@ -759,7 +737,7 @@ impl<'a> Output<'a> {
     fn new_stdout(settings: &'a Settings) -> UResult<Self> {
         let mut dst = Dest::Stdout(io::stdout());
         dst.seek(settings.seek)
-            .map_err_context(|| get_message("dd-error-write-error"))?;
+            .map_err_context(|| translate!("dd-error-write-error"))?;
         Ok(Self { dst, settings })
     }
 
@@ -780,12 +758,9 @@ impl<'a> Output<'a> {
             opts.open(path)
         }
 
-        let dst = open_dst(filename, &settings.oconv, &settings.oflags).map_err_context(|| {
-            get_message_with_args(
-                "dd-error-failed-to-open",
-                HashMap::from([("path".to_string(), filename.quote().to_string())]),
-            )
-        })?;
+        let dst = open_dst(filename, &settings.oconv, &settings.oflags).map_err_context(
+            || translate!("dd-error-failed-to-open", "path" => filename.quote()),
+        )?;
 
         // Seek to the index in the output file, truncating if requested.
         //
@@ -810,7 +785,7 @@ impl<'a> Output<'a> {
         };
         let mut dst = Dest::File(dst, density);
         dst.seek(settings.seek)
-            .map_err_context(|| get_message("dd-error-failed-to-seek"))?;
+            .map_err_context(|| translate!("dd-error-failed-to-seek"))?;
         Ok(Self { dst, settings })
     }
 
@@ -875,7 +850,7 @@ impl<'a> Output<'a> {
             show_if_err!(
                 self.dst
                     .discard_cache(offset, len)
-                    .map_err_context(|| { get_message("dd-error-failed-discard-cache-output") })
+                    .map_err_context(|| { translate!("dd-error-failed-discard-cache-output") })
             );
         }
         #[cfg(not(target_os = "linux"))]
@@ -1125,7 +1100,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     #[cfg(target_os = "linux")]
     if let Err(e) = &signal_handler {
         if Some(StatusLevel::None) != i.settings.status {
-            eprintln!("{}\n\t{e}", get_message("dd-warning-signal-handler"));
+            eprintln!("{}\n\t{e}", translate!("dd-warning-signal-handler"));
         }
     }
 
@@ -1461,15 +1436,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None if is_stdout_redirected_to_seekable_file() => Output::new_file_from_stdout(&settings)?,
         None => Output::new_stdout(&settings)?,
     };
-    dd_copy(i, o).map_err_context(|| get_message("dd-error-io-error"))
+    dd_copy(i, o).map_err_context(|| translate!("dd-error-io-error"))
 }
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("dd-about"))
-        .override_usage(format_usage(&get_message("dd-usage")))
-        .after_help(get_message("dd-after-help"))
+        .about(translate!("dd-about"))
+        .override_usage(format_usage(&translate!("dd-usage")))
+        .after_help(translate!("dd-after-help"))
         .infer_long_args(true)
         .arg(Arg::new(options::OPERANDS).num_args(1..))
 }

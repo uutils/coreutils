@@ -534,14 +534,16 @@ pub fn display_permissions_unix(mode: mode_t, display_file_type: bool) -> String
     result
 }
 
-/// For some programs like install or mkdir, dir/. can be provided
+/// For some programs like install or mkdir, dir/. or dir/./ can be provided
 /// Special case to match GNU's behavior:
-/// install -d foo/. should work and just create foo/
+/// install -d foo/. (and foo/./) should work and just create foo/
 /// std::fs::create_dir("foo/."); fails in pure Rust
 pub fn dir_strip_dot_for_creation(path: &Path) -> PathBuf {
-    if path.to_string_lossy().ends_with("/.") {
+    let path_str = path.to_string_lossy();
+
+    if path_str.ends_with("/.") || path_str.ends_with("/./") {
         // Do a simple dance to strip the "/."
-        Path::new(&path).components().collect::<PathBuf>()
+        Path::new(&path).components().collect()
     } else {
         path.to_path_buf()
     }

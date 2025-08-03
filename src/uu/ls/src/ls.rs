@@ -5,24 +5,25 @@
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime
 
-use std::iter;
+#[cfg(unix)]
+use std::collections::HashMap;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
-use std::{cell::LazyCell, cell::OnceCell, num::IntErrorKind};
 use std::{
+    cell::{LazyCell, OnceCell},
     cmp::Reverse,
+    collections::HashSet,
     ffi::{OsStr, OsString},
     fmt::Write as FmtWrite,
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
-    io::{BufWriter, ErrorKind, Stdout, Write, stdout},
+    io::{BufWriter, ErrorKind, IsTerminal, Stdout, Write, stdout},
+    iter,
+    num::IntErrorKind,
+    ops::RangeInclusive,
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
-};
-use std::{
-    collections::{HashMap, HashSet},
-    io::IsTerminal,
 };
 
 use ansi_width::ansi_width;
@@ -31,17 +32,12 @@ use clap::{
     builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
 };
 use glob::{MatchOptions, Pattern};
-use jiff::fmt::StdIoWrite;
-use jiff::fmt::strtime::BrokenDownTime;
-use jiff::{Timestamp, Zoned};
 use lscolors::LsColors;
 use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
 use thiserror::Error;
+
 #[cfg(unix)]
 use uucore::entries;
-use uucore::error::USimpleError;
-use uucore::format::human::{SizeFormat, human_readable};
-use uucore::fs::FileInformation;
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 use uucore::fsxattr::has_acl;
 #[cfg(unix)]
@@ -59,20 +55,25 @@ use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
     target_os = "solaris"
 ))]
 use uucore::libc::{dev_t, major, minor};
-use uucore::line_ending::LineEnding;
-use uucore::locale::{get_message, get_message_with_args};
-use uucore::quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name};
 use uucore::{
     display::Quotable,
-    error::{UError, UResult, set_exit_code},
+    error::{UError, UResult, USimpleError, set_exit_code},
+    format::human::{SizeFormat, human_readable},
     format_usage,
+    fs::FileInformation,
     fs::display_permissions,
+    fsext::{MetadataTimeField, metadata_get_time},
+    line_ending::LineEnding,
     os_str_as_bytes_lossy,
+    parser::parse_glob,
     parser::parse_size::parse_size_u64,
     parser::shortcut_value_parser::ShortcutValueParser,
+    quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
+    show, show_error, show_warning,
+    time::{FormatSystemTimeFallback, format, format_system_time},
+    translate,
     version_cmp::version_cmp,
 };
-use uucore::{parser::parse_glob, show, show_error, show_warning};
 
 mod dired;
 use dired::{DiredOutput, is_dired_arg_present};
@@ -173,40 +174,40 @@ const DEFAULT_FILE_SIZE_BLOCK_SIZE: u64 = 1;
 
 #[derive(Error, Debug)]
 enum LsError {
-    #[error("{}", get_message_with_args("ls-error-invalid-line-width", HashMap::from([("width".to_string(), format!("'{_0}'"))])))]
+    #[error("{}", translate!("ls-error-invalid-line-width", "width" => format!("'{_0}'")))]
     InvalidLineWidth(String),
 
-    #[error("{}", get_message_with_args("ls-error-general-io", HashMap::from([("error".to_string(), _0.to_string())])))]
+    #[error("{}", translate!("ls-error-general-io", "error" => _0))]
     IOError(#[from] std::io::Error),
 
     #[error("{}", match .1.kind() {
-        ErrorKind::NotFound => get_message_with_args("ls-error-cannot-access-no-such-file", HashMap::from([("path".to_string(), .0.to_string_lossy().to_string())])),
+        ErrorKind::NotFound => translate!("ls-error-cannot-access-no-such-file", "path" => .0.to_string_lossy()),
         ErrorKind::PermissionDenied => match .1.raw_os_error().unwrap_or(1) {
-            1 => get_message_with_args("ls-error-cannot-access-operation-not-permitted", HashMap::from([("path".to_string(), .0.to_string_lossy().to_string())])),
+            1 => translate!("ls-error-cannot-access-operation-not-permitted", "path" => .0.to_string_lossy()),
             _ => if .0.is_dir() {
-                get_message_with_args("ls-error-cannot-open-directory-permission-denied", HashMap::from([("path".to_string(), .0.to_string_lossy().to_string())]))
+                translate!("ls-error-cannot-open-directory-permission-denied", "path" => .0.to_string_lossy())
             } else {
-                get_message_with_args("ls-error-cannot-open-file-permission-denied", HashMap::from([("path".to_string(), .0.to_string_lossy().to_string())]))
+                translate!("ls-error-cannot-open-file-permission-denied", "path" => .0.to_string_lossy())
             },
         },
         _ => match .1.raw_os_error().unwrap_or(1) {
-            9 => get_message_with_args("ls-error-cannot-open-directory-bad-descriptor", HashMap::from([("path".to_string(), .0.to_string_lossy().to_string())])),
-            _ => get_message_with_args("ls-error-unknown-io-error", HashMap::from([("path".to_string(), .0.to_string_lossy().to_string()), ("error".to_string(), format!("{:?}", .1))])),
+            9 => translate!("ls-error-cannot-open-directory-bad-descriptor", "path" => .0.to_string_lossy()),
+            _ => translate!("ls-error-unknown-io-error", "path" => .0.to_string_lossy(), "error" => format!("{:?}", .1)),
         },
     })]
     IOErrorContext(PathBuf, std::io::Error, bool),
 
-    #[error("{}", get_message_with_args("ls-error-invalid-block-size", HashMap::from([("size".to_string(), format!("'{_0}'"))])))]
+    #[error("{}", translate!("ls-error-invalid-block-size", "size" => format!("'{_0}'")))]
     BlockSizeParseError(String),
 
-    #[error("{}", get_message("ls-error-dired-and-zero-incompatible"))]
+    #[error("{}", translate!("ls-error-dired-and-zero-incompatible"))]
     DiredAndZeroAreIncompatible,
 
-    #[error("{}", get_message_with_args("ls-error-not-listing-already-listed", HashMap::from([("path".to_string(), .0.to_string_lossy().to_string())])))]
+    #[error("{}", translate!("ls-error-not-listing-already-listed", "path" => .0.to_string_lossy()))]
     AlreadyListedError(PathBuf),
 
-    #[error("{}", get_message_with_args("ls-error-invalid-time-style", HashMap::from([("style".to_string(), .0.quote().to_string()), ("values".to_string(), format!("{:?}", .1))])))]
-    TimeStyleParseError(String, Vec<String>),
+    #[error("{}", translate!("ls-error-invalid-time-style", "style" => .0.quote()))]
+    TimeStyleParseError(String),
 }
 
 impl UError for LsError {
@@ -219,7 +220,7 @@ impl UError for LsError {
             Self::BlockSizeParseError(_) => 2,
             Self::DiredAndZeroAreIncompatible => 2,
             Self::AlreadyListedError(_) => 2,
-            Self::TimeStyleParseError(_, _) => 2,
+            Self::TimeStyleParseError(_) => 2,
         }
     }
 }
@@ -251,90 +252,71 @@ enum Files {
     Normal,
 }
 
-enum Time {
-    Modification,
-    Access,
-    Change,
-    Birth,
-}
+fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String>), LsError> {
+    // TODO: Using correct locale string is not implemented.
+    const LOCALE_FORMAT: (&str, Option<&str>) = ("%b %e %H:%M", Some("%b %e  %Y"));
 
-#[derive(Debug)]
-enum TimeStyle {
-    FullIso,
-    LongIso,
-    Iso,
-    Locale,
-    Format(String),
-}
-
-/// Whether the given date is considered recent (i.e., in the last 6 months).
-fn is_recent(time: Timestamp, state: &mut ListState) -> bool {
-    time > state.recent_time_threshold
-}
-
-impl TimeStyle {
-    /// Format the given time according to this time format style.
-    fn format(
-        &self,
-        date: Zoned,
-        out: &mut Vec<u8>,
-        state: &mut ListState,
-    ) -> Result<(), jiff::Error> {
-        let recent = is_recent(date.timestamp(), state);
-        let tm = BrokenDownTime::from(&date);
-        let mut out = StdIoWrite(out);
-        let config = jiff::fmt::strtime::Config::new().lenient(true);
-
-        let fmt = match (self, recent) {
-            (Self::FullIso, _) => "%Y-%m-%d %H:%M:%S.%f %z",
-            (Self::LongIso, _) => "%Y-%m-%d %H:%M",
-            (Self::Iso, true) => "%m-%d %H:%M",
-            (Self::Iso, false) => "%Y-%m-%d ",
-            // TODO: Using correct locale string is not implemented.
-            (Self::Locale, true) => "%b %e %H:%M",
-            (Self::Locale, false) => "%b %e  %Y",
-            (Self::Format(fmt), _) => fmt,
-        };
-
-        tm.format_with_config(&config, fmt, &mut out)
+    // Convert time_styles references to owned String/option.
+    fn ok((recent, older): (&str, Option<&str>)) -> Result<(String, Option<String>), LsError> {
+        Ok((recent.to_string(), older.map(String::from)))
     }
-}
 
-fn parse_time_style(options: &clap::ArgMatches) -> Result<TimeStyle, LsError> {
-    let possible_time_styles = vec![
-        "full-iso".to_string(),
-        "long-iso".to_string(),
-        "iso".to_string(),
-        "locale".to_string(),
-        "+FORMAT (e.g., +%H:%M) for a 'date'-style format".to_string(),
-    ];
-    if let Some(field) = options.get_one::<String>(options::TIME_STYLE) {
+    if let Some(field) = options
+        .get_one::<String>(options::TIME_STYLE)
+        .map(|s| s.to_owned())
+        .or_else(|| std::env::var("TIME_STYLE").ok())
+    {
         //If both FULL_TIME and TIME_STYLE are present
         //The one added last is dominant
         if options.get_flag(options::FULL_TIME)
             && options.indices_of(options::FULL_TIME).unwrap().next_back()
                 > options.indices_of(options::TIME_STYLE).unwrap().next_back()
         {
-            Ok(TimeStyle::FullIso)
+            ok((format::FULL_ISO, None))
         } else {
-            match field.as_str() {
-                "full-iso" => Ok(TimeStyle::FullIso),
-                "long-iso" => Ok(TimeStyle::LongIso),
-                "iso" => Ok(TimeStyle::Iso),
-                "locale" => Ok(TimeStyle::Locale),
+            let field = if let Some(field) = field.strip_prefix("posix-") {
+                // See GNU documentation, set format to "locale" if LC_TIME="POSIX",
+                // else just strip the prefix and continue (even "posix+FORMAT" is
+                // supported).
+                // TODO: This needs to be moved to uucore and handled by icu?
+                if std::env::var("LC_TIME").unwrap_or_default() == "POSIX"
+                    || std::env::var("LC_ALL").unwrap_or_default() == "POSIX"
+                {
+                    return ok(LOCALE_FORMAT);
+                }
+                field
+            } else {
+                &field
+            };
+
+            match field {
+                "full-iso" => ok((format::FULL_ISO, None)),
+                "long-iso" => ok((format::LONG_ISO, None)),
+                // ISO older format needs extra padding.
+                "iso" => Ok((
+                    "%m-%d %H:%M".to_string(),
+                    Some(format::ISO.to_string() + " "),
+                )),
+                "locale" => ok(LOCALE_FORMAT),
                 _ => match field.chars().next().unwrap() {
-                    '+' => Ok(TimeStyle::Format(String::from(&field[1..]))),
-                    _ => Err(LsError::TimeStyleParseError(
-                        String::from(field),
-                        possible_time_styles,
-                    )),
+                    '+' => {
+                        // recent/older formats are (optionally) separated by a newline
+                        let mut it = field[1..].split('\n');
+                        let recent = it.next().unwrap_or_default();
+                        let older = it.next();
+                        match it.next() {
+                            None => ok((recent, older)),
+                            Some(_) => Err(LsError::TimeStyleParseError(String::from(field))),
+                        }
+                    }
+                    _ => Err(LsError::TimeStyleParseError(String::from(field))),
                 },
             }
         }
     } else if options.get_flag(options::FULL_TIME) {
-        Ok(TimeStyle::FullIso)
+        ok((format::FULL_ISO, None))
     } else {
-        Ok(TimeStyle::Locale)
+        ok(LOCALE_FORMAT)
     }
 }
 
@@ -364,7 +346,7 @@ pub struct Config {
     ignore_patterns: Vec<Pattern>,
     size_format: SizeFormat,
     directory: bool,
-    time: Time,
+    time: MetadataTimeField,
     #[cfg(unix)]
     inode: bool,
     color: Option<LsColors>,
@@ -377,7 +359,8 @@ pub struct Config {
     // Dir and vdir needs access to this field
     pub quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
-    time_style: TimeStyle,
+    time_format_recent: String,        // Time format for recent dates
+    time_format_older: Option<String>, // Time format for older dates (optional, if not present, time_format_recent is used)
     context: bool,
     selinux_supported: bool,
     group_directories_first: bool,
@@ -489,6 +472,13 @@ fn extract_sort(options: &clap::ArgMatches) -> Sort {
         Sort::Version
     } else if options.get_flag(options::sort::EXTENSION) {
         Sort::Extension
+    } else if !options.get_flag(options::format::LONG)
+        && (options.get_flag(options::time::ACCESS)
+            || options.get_flag(options::time::CHANGE)
+            || options.get_one::<String>(options::TIME).is_some())
+    {
+        // If -l is not specified, -u/-c/--time controls sorting.
+        Sort::Time
     } else {
         Sort::Name
     }
@@ -498,23 +488,16 @@ fn extract_sort(options: &clap::ArgMatches) -> Sort {
 ///
 /// # Returns
 ///
-/// A Time variant representing the time to use.
-fn extract_time(options: &clap::ArgMatches) -> Time {
+/// A `MetadataTimeField` variant representing the time to use.
+fn extract_time(options: &clap::ArgMatches) -> MetadataTimeField {
     if let Some(field) = options.get_one::<String>(options::TIME) {
-        match field.as_str() {
-            "ctime" | "status" => Time::Change,
-            "access" | "atime" | "use" => Time::Access,
-            "mtime" | "modification" => Time::Modification,
-            "birth" | "creation" => Time::Birth,
-            // below should never happen as clap already restricts the values.
-            _ => unreachable!("Invalid field for --time"),
-        }
+        field.as_str().into()
     } else if options.get_flag(options::time::ACCESS) {
-        Time::Access
+        MetadataTimeField::Access
     } else if options.get_flag(options::time::CHANGE) {
-        Time::Change
+        MetadataTimeField::Change
     } else {
-        Time::Modification
+        MetadataTimeField::Modification
     }
 }
 
@@ -643,16 +626,7 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> Quot
                 Some(qs) => return qs,
                 None => eprintln!(
                     "{}",
-                    get_message_with_args(
-                        "ls-invalid-quoting-style",
-                        HashMap::from([
-                            (
-                                "program".to_string(),
-                                std::env::args().next().unwrap_or_else(|| "ls".to_string())
-                            ),
-                            ("style".to_string(), style.clone())
-                        ])
-                    )
+                    translate!("ls-invalid-quoting-style", "program" => std::env::args().next().unwrap_or_else(|| "ls".to_string()), "style" => style.clone())
                 ),
             }
         }
@@ -726,10 +700,7 @@ fn parse_width(width_match: Option<&String>) -> Result<u16, LsError> {
             None => {
                 show_error!(
                     "{}",
-                    get_message_with_args(
-                        "ls-invalid-columns-width",
-                        HashMap::from([("width".to_string(), columns.quote().to_string())])
-                    )
+                    translate!("ls-invalid-columns-width", "width" => columns.quote())
                 );
                 DEFAULT_TERM_WIDTH
             }
@@ -925,10 +896,10 @@ impl Config {
         let indicator_style = extract_indicator_style(options);
         // Only parse the value to "--time-style" if it will become relevant.
         let dired = options.get_flag(options::DIRED);
-        let time_style = if format == Format::Long || dired {
+        let (time_format_recent, time_format_older) = if format == Format::Long || dired {
             parse_time_style(options)?
         } else {
-            TimeStyle::Iso
+            Default::default()
         };
 
         let mut ignore_patterns: Vec<Pattern> = Vec::new();
@@ -949,10 +920,7 @@ impl Config {
                 }
                 Err(_) => show_warning!(
                     "{}",
-                    get_message_with_args(
-                        "ls-invalid-ignore-pattern",
-                        HashMap::from([("pattern".to_string(), pattern.quote().to_string())])
-                    )
+                    translate!("ls-invalid-ignore-pattern", "pattern" => pattern.quote())
                 ),
             }
         }
@@ -969,10 +937,7 @@ impl Config {
                     }
                     Err(_) => show_warning!(
                         "{}",
-                        get_message_with_args(
-                            "ls-invalid-hide-pattern",
-                            HashMap::from([("pattern".to_string(), pattern.quote().to_string())])
-                        )
+                        translate!("ls-invalid-hide-pattern", "pattern" => pattern.quote())
                     ),
                 }
             }
@@ -1114,7 +1079,8 @@ impl Config {
             width,
             quoting_style,
             indicator_style,
-            time_style,
+            time_format_recent,
+            time_format_older,
             context,
             selinux_supported: {
                 #[cfg(feature = "selinux")]
@@ -1168,22 +1134,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("ls-usage")))
-        .about(get_message("ls-about"))
+        .override_usage(format_usage(&translate!("ls-usage")))
+        .about(translate!("ls-about"))
         .infer_long_args(true)
         .disable_help_flag(true)
         .args_override_self(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help(get_message("ls-help-print-help"))
+                .help(translate!("ls-help-print-help"))
                 .action(ArgAction::Help),
         )
         // Format arguments
         .arg(
             Arg::new(options::FORMAT)
                 .long(options::FORMAT)
-                .help(get_message("ls-help-set-display-format"))
+                .help(translate!("ls-help-set-display-format"))
                 .value_parser(ShortcutValueParser::new([
                     "long",
                     "verbose",
@@ -1208,7 +1174,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::format::COLUMNS)
                 .short('C')
-                .help(get_message("ls-help-display-files-columns"))
+                .help(translate!("ls-help-display-files-columns"))
                 .overrides_with_all([
                     options::FORMAT,
                     options::format::COLUMNS,
@@ -1222,7 +1188,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::format::LONG)
                 .short('l')
                 .long(options::format::LONG)
-                .help(get_message("ls-help-display-detailed-info"))
+                .help(translate!("ls-help-display-detailed-info"))
                 .overrides_with_all([
                     options::FORMAT,
                     options::format::COLUMNS,
@@ -1235,7 +1201,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::format::ACROSS)
                 .short('x')
-                .help(get_message("ls-help-list-entries-rows"))
+                .help(translate!("ls-help-list-entries-rows"))
                 .overrides_with_all([
                     options::FORMAT,
                     options::format::COLUMNS,
@@ -1251,12 +1217,12 @@ pub fn uu_app() -> Command {
                 .long(options::format::TAB_SIZE)
                 .env("TABSIZE")
                 .value_name("COLS")
-                .help(get_message("ls-help-assume-tab-stops")),
+                .help(translate!("ls-help-assume-tab-stops")),
         )
         .arg(
             Arg::new(options::format::COMMAS)
                 .short('m')
-                .help(get_message("ls-help-list-entries-commas"))
+                .help(translate!("ls-help-list-entries-commas"))
                 .overrides_with_all([
                     options::FORMAT,
                     options::format::COLUMNS,
@@ -1270,21 +1236,21 @@ pub fn uu_app() -> Command {
             Arg::new(options::ZERO)
                 .long(options::ZERO)
                 .overrides_with(options::ZERO)
-                .help(get_message("ls-help-list-entries-nul"))
+                .help(translate!("ls-help-list-entries-nul"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DIRED)
                 .long(options::DIRED)
                 .short('D')
-                .help(get_message("ls-help-generate-dired-output"))
+                .help(translate!("ls-help-generate-dired-output"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::HYPERLINK),
         )
         .arg(
             Arg::new(options::HYPERLINK)
                 .long(options::HYPERLINK)
-                .help(get_message("ls-help-hyperlink-filenames"))
+                .help(translate!("ls-help-hyperlink-filenames"))
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("always").alias("yes").alias("force"),
                     PossibleValue::new("auto").alias("tty").alias("if-tty"),
@@ -1306,33 +1272,33 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::format::ONE_LINE)
                 .short('1')
-                .help(get_message("ls-help-list-one-file-per-line"))
+                .help(translate!("ls-help-list-one-file-per-line"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::format::LONG_NO_GROUP)
                 .short('o')
-                .help(get_message("ls-help-long-format-no-group"))
+                .help(translate!("ls-help-long-format-no-group"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::format::LONG_NO_OWNER)
                 .short('g')
-                .help(get_message("ls-help-long-no-owner"))
+                .help(translate!("ls-help-long-no-owner"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::format::LONG_NUMERIC_UID_GID)
                 .short('n')
                 .long(options::format::LONG_NUMERIC_UID_GID)
-                .help(get_message("ls-help-long-numeric-uid-gid"))
+                .help(translate!("ls-help-long-numeric-uid-gid"))
                 .action(ArgAction::SetTrue),
         )
         // Quoting style
         .arg(
             Arg::new(QUOTING_STYLE)
                 .long(QUOTING_STYLE)
-                .help(get_message("ls-help-set-quoting-style"))
+                .help(translate!("ls-help-set-quoting-style"))
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("literal"),
                     PossibleValue::new("shell"),
@@ -1354,7 +1320,7 @@ pub fn uu_app() -> Command {
                 .short('N')
                 .long(options::quoting::LITERAL)
                 .alias("l")
-                .help(get_message("ls-help-literal-quoting-style"))
+                .help(translate!("ls-help-literal-quoting-style"))
                 .overrides_with_all([
                     QUOTING_STYLE,
                     options::quoting::LITERAL,
@@ -1367,7 +1333,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::quoting::ESCAPE)
                 .short('b')
                 .long(options::quoting::ESCAPE)
-                .help(get_message("ls-help-escape-quoting-style"))
+                .help(translate!("ls-help-escape-quoting-style"))
                 .overrides_with_all([
                     QUOTING_STYLE,
                     options::quoting::LITERAL,
@@ -1380,7 +1346,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::quoting::C)
                 .short('Q')
                 .long(options::quoting::C)
-                .help(get_message("ls-help-c-quoting-style"))
+                .help(translate!("ls-help-c-quoting-style"))
                 .overrides_with_all([
                     QUOTING_STYLE,
                     options::quoting::LITERAL,
@@ -1394,14 +1360,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::HIDE_CONTROL_CHARS)
                 .short('q')
                 .long(options::HIDE_CONTROL_CHARS)
-                .help(get_message("ls-help-replace-control-chars"))
+                .help(translate!("ls-help-replace-control-chars"))
                 .overrides_with_all([options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS])
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHOW_CONTROL_CHARS)
                 .long(options::SHOW_CONTROL_CHARS)
-                .help(get_message("ls-help-show-control-chars"))
+                .help(translate!("ls-help-show-control-chars"))
                 .overrides_with_all([options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS])
                 .action(ArgAction::SetTrue),
         )
@@ -1409,7 +1375,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::TIME)
                 .long(options::TIME)
-                .help(get_message("ls-help-show-time-field"))
+                .help(translate!("ls-help-show-time-field"))
                 .value_name("field")
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("atime").alias("access").alias("use"),
@@ -1424,14 +1390,14 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::time::CHANGE)
                 .short('c')
-                .help(get_message("ls-help-time-change"))
+                .help(translate!("ls-help-time-change"))
                 .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::time::ACCESS)
                 .short('u')
-                .help(get_message("ls-help-time-access"))
+                .help(translate!("ls-help-time-access"))
                 .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE])
                 .action(ArgAction::SetTrue),
         )
@@ -1441,7 +1407,7 @@ pub fn uu_app() -> Command {
                 .long(options::HIDE)
                 .action(ArgAction::Append)
                 .value_name("PATTERN")
-                .help(get_message("ls-help-hide-pattern")),
+                .help(translate!("ls-help-hide-pattern")),
         )
         .arg(
             Arg::new(options::IGNORE)
@@ -1449,20 +1415,20 @@ pub fn uu_app() -> Command {
                 .long(options::IGNORE)
                 .action(ArgAction::Append)
                 .value_name("PATTERN")
-                .help(get_message("ls-help-ignore-pattern")),
+                .help(translate!("ls-help-ignore-pattern")),
         )
         .arg(
             Arg::new(options::IGNORE_BACKUPS)
                 .short('B')
                 .long(options::IGNORE_BACKUPS)
-                .help(get_message("ls-help-ignore-backups"))
+                .help(translate!("ls-help-ignore-backups"))
                 .action(ArgAction::SetTrue),
         )
         // Sort arguments
         .arg(
             Arg::new(options::SORT)
                 .long(options::SORT)
-                .help(get_message("ls-help-sort-by-field"))
+                .help(translate!("ls-help-sort-by-field"))
                 .value_name("field")
                 .value_parser(ShortcutValueParser::new([
                     "name",
@@ -1486,7 +1452,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::sort::SIZE)
                 .short('S')
-                .help(get_message("ls-help-sort-by-size"))
+                .help(translate!("ls-help-sort-by-size"))
                 .overrides_with_all([
                     options::SORT,
                     options::sort::SIZE,
@@ -1500,7 +1466,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::sort::TIME)
                 .short('t')
-                .help(get_message("ls-help-sort-by-time"))
+                .help(translate!("ls-help-sort-by-time"))
                 .overrides_with_all([
                     options::SORT,
                     options::sort::SIZE,
@@ -1514,7 +1480,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::sort::VERSION)
                 .short('v')
-                .help(get_message("ls-help-sort-by-version"))
+                .help(translate!("ls-help-sort-by-version"))
                 .overrides_with_all([
                     options::SORT,
                     options::sort::SIZE,
@@ -1528,7 +1494,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::sort::EXTENSION)
                 .short('X')
-                .help(get_message("ls-help-sort-by-extension"))
+                .help(translate!("ls-help-sort-by-extension"))
                 .overrides_with_all([
                     options::SORT,
                     options::sort::SIZE,
@@ -1542,7 +1508,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::sort::NONE)
                 .short('U')
-                .help(get_message("ls-help-sort-none"))
+                .help(translate!("ls-help-sort-none"))
                 .overrides_with_all([
                     options::SORT,
                     options::sort::SIZE,
@@ -1558,7 +1524,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::dereference::ALL)
                 .short('L')
                 .long(options::dereference::ALL)
-                .help(get_message("ls-help-dereference-all"))
+                .help(translate!("ls-help-dereference-all"))
                 .overrides_with_all([
                     options::dereference::ALL,
                     options::dereference::DIR_ARGS,
@@ -1569,7 +1535,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::dereference::DIR_ARGS)
                 .long(options::dereference::DIR_ARGS)
-                .help(get_message("ls-help-dereference-dir-args"))
+                .help(translate!("ls-help-dereference-dir-args"))
                 .overrides_with_all([
                     options::dereference::ALL,
                     options::dereference::DIR_ARGS,
@@ -1581,7 +1547,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::dereference::ARGS)
                 .short('H')
                 .long(options::dereference::ARGS)
-                .help(get_message("ls-help-dereference-args"))
+                .help(translate!("ls-help-dereference-args"))
                 .overrides_with_all([
                     options::dereference::ALL,
                     options::dereference::DIR_ARGS,
@@ -1594,13 +1560,13 @@ pub fn uu_app() -> Command {
             Arg::new(options::NO_GROUP)
                 .long(options::NO_GROUP)
                 .short('G')
-                .help(get_message("ls-help-no-group"))
+                .help(translate!("ls-help-no-group"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::AUTHOR)
                 .long(options::AUTHOR)
-                .help(get_message("ls-help-author"))
+                .help(translate!("ls-help-author"))
                 .action(ArgAction::SetTrue),
         )
         // Other Flags
@@ -1610,7 +1576,7 @@ pub fn uu_app() -> Command {
                 .long(options::files::ALL)
                 // Overrides -A (as the order matters)
                 .overrides_with_all([options::files::ALL, options::files::ALMOST_ALL])
-                .help(get_message("ls-help-all-files"))
+                .help(translate!("ls-help-all-files"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -1619,21 +1585,21 @@ pub fn uu_app() -> Command {
                 .long(options::files::ALMOST_ALL)
                 // Overrides -a (as the order matters)
                 .overrides_with_all([options::files::ALL, options::files::ALMOST_ALL])
-                .help(get_message("ls-help-almost-all"))
+                .help(translate!("ls-help-almost-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DIRECTORY)
                 .short('d')
                 .long(options::DIRECTORY)
-                .help(get_message("ls-help-directory"))
+                .help(translate!("ls-help-directory"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::size::HUMAN_READABLE)
                 .short('h')
                 .long(options::size::HUMAN_READABLE)
-                .help(get_message("ls-help-human-readable"))
+                .help(translate!("ls-help-human-readable"))
                 .overrides_with_all([options::size::BLOCK_SIZE, options::size::SI])
                 .action(ArgAction::SetTrue),
         )
@@ -1641,13 +1607,13 @@ pub fn uu_app() -> Command {
             Arg::new(options::size::KIBIBYTES)
                 .short('k')
                 .long(options::size::KIBIBYTES)
-                .help(get_message("ls-help-kibibytes"))
+                .help(translate!("ls-help-kibibytes"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::size::SI)
                 .long(options::size::SI)
-                .help(get_message("ls-help-si"))
+                .help(translate!("ls-help-si"))
                 .overrides_with_all([options::size::BLOCK_SIZE, options::size::HUMAN_READABLE])
                 .action(ArgAction::SetTrue),
         )
@@ -1656,48 +1622,48 @@ pub fn uu_app() -> Command {
                 .long(options::size::BLOCK_SIZE)
                 .require_equals(true)
                 .value_name("BLOCK_SIZE")
-                .help(get_message("ls-help-block-size"))
+                .help(translate!("ls-help-block-size"))
                 .overrides_with_all([options::size::SI, options::size::HUMAN_READABLE]),
         )
         .arg(
             Arg::new(options::INODE)
                 .short('i')
                 .long(options::INODE)
-                .help(get_message("ls-help-print-inode"))
+                .help(translate!("ls-help-print-inode"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::REVERSE)
                 .short('r')
                 .long(options::REVERSE)
-                .help(get_message("ls-help-reverse-sort"))
+                .help(translate!("ls-help-reverse-sort"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::RECURSIVE)
                 .short('R')
                 .long(options::RECURSIVE)
-                .help(get_message("ls-help-recursive"))
+                .help(translate!("ls-help-recursive"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::WIDTH)
                 .long(options::WIDTH)
                 .short('w')
-                .help(get_message("ls-help-terminal-width"))
+                .help(translate!("ls-help-terminal-width"))
                 .value_name("COLS"),
         )
         .arg(
             Arg::new(options::size::ALLOCATION_SIZE)
                 .short('s')
                 .long(options::size::ALLOCATION_SIZE)
-                .help(get_message("ls-help-allocation-size"))
+                .help(translate!("ls-help-allocation-size"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COLOR)
                 .long(options::COLOR)
-                .help(get_message("ls-help-color-output"))
+                .help(translate!("ls-help-color-output"))
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("always").alias("yes").alias("force"),
                     PossibleValue::new("auto").alias("tty").alias("if-tty"),
@@ -1709,7 +1675,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::INDICATOR_STYLE)
                 .long(options::INDICATOR_STYLE)
-                .help(get_message("ls-help-indicator-style"))
+                .help(translate!("ls-help-indicator-style"))
                 .value_parser(ShortcutValueParser::new([
                     "none",
                     "slash",
@@ -1732,7 +1698,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::indicator_style::CLASSIFY)
                 .short('F')
                 .long(options::indicator_style::CLASSIFY)
-                .help(get_message("ls-help-classify"))
+                .help(translate!("ls-help-classify"))
                 .value_name("when")
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("always").alias("yes").alias("force"),
@@ -1752,7 +1718,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::indicator_style::FILE_TYPE)
                 .long(options::indicator_style::FILE_TYPE)
-                .help(get_message("ls-help-file-type"))
+                .help(translate!("ls-help-file-type"))
                 .overrides_with_all([
                     options::indicator_style::FILE_TYPE,
                     options::indicator_style::SLASH,
@@ -1764,7 +1730,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::indicator_style::SLASH)
                 .short('p')
-                .help(get_message("ls-help-slash-directories"))
+                .help(translate!("ls-help-slash-directories"))
                 .overrides_with_all([
                     options::indicator_style::FILE_TYPE,
                     options::indicator_style::SLASH,
@@ -1777,7 +1743,7 @@ pub fn uu_app() -> Command {
             //This still needs support for posix-*
             Arg::new(options::TIME_STYLE)
                 .long(options::TIME_STYLE)
-                .help(get_message("ls-help-time-style"))
+                .help(translate!("ls-help-time-style"))
                 .value_name("TIME_STYLE")
                 .env("TIME_STYLE")
                 .value_parser(NonEmptyStringValueParser::new())
@@ -1787,20 +1753,20 @@ pub fn uu_app() -> Command {
             Arg::new(options::FULL_TIME)
                 .long(options::FULL_TIME)
                 .overrides_with(options::FULL_TIME)
-                .help(get_message("ls-help-full-time"))
+                .help(translate!("ls-help-full-time"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CONTEXT)
                 .short('Z')
                 .long(options::CONTEXT)
-                .help(get_message("ls-help-context"))
+                .help(translate!("ls-help-context"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::GROUP_DIRECTORIES_FIRST)
                 .long(options::GROUP_DIRECTORIES_FIRST)
-                .help(get_message("ls-help-group-directories-first"))
+                .help(translate!("ls-help-group-directories-first"))
                 .action(ArgAction::SetTrue),
         )
         // Positional arguments
@@ -1810,7 +1776,7 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::AnyPath)
                 .value_parser(ValueParser::os_string()),
         )
-        .after_help(get_message("ls-after-help"))
+        .after_help(translate!("ls-after-help"))
 }
 
 /// Represents a Path along with it's associated data.
@@ -2002,7 +1968,7 @@ struct ListState<'a> {
     uid_cache: HashMap<u32, String>,
     #[cfg(unix)]
     gid_cache: HashMap<u32, String>,
-    recent_time_threshold: Timestamp,
+    recent_time_range: RangeInclusive<SystemTime>,
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -2019,8 +1985,11 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         uid_cache: HashMap::new(),
         #[cfg(unix)]
         gid_cache: HashMap::new(),
+        // Time range for which to use the "recent" format. Anything from 0.5 year in the past to now
+        // (files with modification time in the future use "old" format).
         // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-        recent_time_threshold: Timestamp::now() - Duration::new(31_556_952 / 2, 0),
+        recent_time_range: (SystemTime::now() - Duration::new(31_556_952 / 2, 0))
+            ..=SystemTime::now(),
     };
 
     for loc in locs {
@@ -2129,7 +2098,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
                 k.get_metadata(out)
-                    .and_then(|md| get_system_time(md, config))
+                    .and_then(|md| metadata_get_time(md, config.time))
                     .unwrap_or(UNIX_EPOCH),
             )
         }),
@@ -2139,8 +2108,11 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
         Sort::Version => entries.sort_by(|a, b| {
-            version_cmp(&a.p_buf.to_string_lossy(), &b.p_buf.to_string_lossy())
-                .then(a.p_buf.to_string_lossy().cmp(&b.p_buf.to_string_lossy()))
+            version_cmp(
+                os_str_as_bytes_lossy(a.p_buf.as_os_str()).as_ref(),
+                os_str_as_bytes_lossy(b.p_buf.as_os_str()).as_ref(),
+            )
+            .then(a.p_buf.to_string_lossy().cmp(&b.p_buf.to_string_lossy()))
         }),
         Sort::Extension => entries.sort_by(|a, b| {
             a.p_buf
@@ -2422,10 +2394,7 @@ fn return_total(
     }
     Ok(format!(
         "{}{}",
-        get_message_with_args(
-            "ls-total",
-            HashMap::from([("size".to_string(), display_size(total_size, config))])
-        ),
+        translate!("ls-total", "size" => display_size(total_size, config)),
         config.line_ending
     ))
 }
@@ -2712,7 +2681,7 @@ fn display_grid(
 /// * `group` ([`display_group`], config-optional)
 /// * `author` ([`display_uname`], config-optional)
 /// * `size / rdev` ([`display_len_or_rdev`])
-/// * `system_time` ([`get_system_time`])
+/// * `system_time` ([`display_date`])
 /// * `item_name` ([`display_item_name`])
 ///
 /// This function needs to display information in columns:
@@ -2990,50 +2959,25 @@ fn display_group(_metadata: &Metadata, _config: &Config, _state: &mut ListState)
     "somegroup"
 }
 
-// The implementations for get_time are separated because some options, such
-// as ctime will not be available
-#[cfg(unix)]
-fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
-    match config.time {
-        Time::Change => Some(UNIX_EPOCH + Duration::new(md.ctime() as u64, md.ctime_nsec() as u32)),
-        Time::Modification => md.modified().ok(),
-        Time::Access => md.accessed().ok(),
-        Time::Birth => md.created().ok(),
-    }
-}
-
-#[cfg(not(unix))]
-fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
-    match config.time {
-        Time::Modification => md.modified().ok(),
-        Time::Access => md.accessed().ok(),
-        Time::Birth => md.created().ok(),
-        Time::Change => None,
-    }
-}
-
-fn get_time(md: &Metadata, config: &Config) -> Option<Zoned> {
-    let time = get_system_time(md, config)?;
-    time.try_into().ok()
-}
-
 fn display_date(
     metadata: &Metadata,
     config: &Config,
     state: &mut ListState,
     out: &mut Vec<u8>,
 ) -> UResult<()> {
-    match get_time(metadata, config) {
-        // TODO: Some fancier error conversion might be nice.
-        Some(time) => config
-            .time_style
-            .format(time, out, state)
-            .map_err(|x| USimpleError::new(1, x.to_string())),
-        None => {
-            out.extend(b"???");
-            Ok(())
-        }
-    }
+    let Some(time) = metadata_get_time(metadata, config.time) else {
+        out.extend(b"???");
+        return Ok(());
+    };
+
+    // Use "recent" format if the given date is considered recent (i.e., in the last 6 months),
+    // or if no "older" format is available.
+    let fmt = match &config.time_format_older {
+        Some(time_format_older) if !state.recent_time_range.contains(&time) => time_format_older,
+        _ => &config.time_format_recent,
+    };
+
+    format_system_time(out, time, fmt, FormatSystemTimeFallback::Integer)
 }
 
 #[allow(dead_code)]
