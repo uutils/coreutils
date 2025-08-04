@@ -1568,3 +1568,42 @@ fn test_g_float_hex() {
         .succeeds()
         .stdout_is(output);
 }
+
+/* spell-checker: disable */
+#[test]
+fn test_french_translations() {
+    // Test that French translations work for clap error messages
+    // Set LANG to French and test with an invalid argument
+    let result = new_ucmd!()
+        .env("LANG", "fr_FR.UTF-8")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("--invalid-arg")
+        .fails();
+
+    let stderr = result.stderr_str();
+    assert!(stderr.contains("erreur"));
+    assert!(stderr.contains("argument inattendu"));
+    assert!(stderr.contains("trouvé"));
+}
+
+#[test]
+fn test_argument_suggestion() {
+    let test_cases = vec![
+        ("en_US.UTF-8", vec!["tip", "similar", "--reverse"]),
+        ("fr_FR.UTF-8", vec!["conseil", "similaire", "--reverse"]),
+    ];
+
+    for (locale, expected_strings) in test_cases {
+        let result = new_ucmd!()
+            .env("LANG", locale)
+            .env("LC_ALL", locale)
+            .arg("--revrse") // Typo
+            .fails();
+
+        let stderr = result.stderr_str();
+        for expected in expected_strings {
+            assert!(stderr.contains(expected));
+        }
+    }
+}
+/* spell-checker: enable */
