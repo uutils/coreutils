@@ -147,6 +147,104 @@ fn init_localization(
     Ok(())
 }
 
+/// Helper function to find the uucore locales directory from a utility's locales directory
+fn find_uucore_locales_dir(utility_locales_dir: &Path) -> Option<PathBuf> {
+    // Normalize the path to get absolute path
+    let normalized_dir = utility_locales_dir
+        .canonicalize()
+        .unwrap_or_else(|_| utility_locales_dir.to_path_buf());
+
+    // Walk up: locales -> printenv -> uu -> src
+    let uucore_locales = normalized_dir
+        .parent()? // printenv
+        .parent()? // uu
+        .parent()? // src
+        .join("uucore")
+        .join("locales");
+
+    // Only return if the directory actually exists
+    uucore_locales.exists().then_some(uucore_locales)
+}
+
+/// Create a bundle that combines common and utility-specific strings
+fn create_bundle_with_common(
+    locale: &LanguageIdentifier,
+    locales_dir: &Path,
+    util_name: &str,
+) -> Result<FluentBundle<FluentResource>, LocalizationError> {
+    let mut bundle = FluentBundle::new(vec![locale.clone()]);
+
+    // Disable Unicode directional isolate characters
+    bundle.set_use_isolating(false);
+
+    // Load common strings from uucore locales directory
+    if let Some(common_dir) = find_uucore_locales_dir(locales_dir) {
+        let common_locale_path = common_dir.join(format!("{locale}.ftl"));
+        if let Ok(common_ftl) = fs::read_to_string(&common_locale_path) {
+            if let Ok(common_resource) = FluentResource::try_new(common_ftl) {
+                bundle.add_resource_overriding(common_resource);
+            }
+        }
+    }
+
+    // Then, try to load utility-specific strings from the utility's locale directory
+    let util_locales_dir = get_locales_dir(util_name).ok();
+    if let Some(util_dir) = util_locales_dir {
+        let util_locale_path = util_dir.join(format!("{locale}.ftl"));
+        if let Ok(util_ftl) = fs::read_to_string(&util_locale_path) {
+            if let Ok(util_resource) = FluentResource::try_new(util_ftl) {
+                bundle.add_resource_overriding(util_resource);
+            }
+        }
+    }
+
+    // If we have at least one resource, return the bundle
+    if bundle.has_message("common-error") || bundle.has_message(&format!("{util_name}-about")) {
+        Ok(bundle)
+    } else {
+        Err(LocalizationError::LocalesDirNotFound(format!(
+            "No localization strings found for {locale} and utility {util_name}"
+        )))
+    }
+}
+
+/// Initialize localization with common strings in addition to utility-specific strings
+fn init_localization_with_common(
+    locale: &LanguageIdentifier,
+    locales_dir: &Path,
+    util_name: &str,
+) -> Result<(), LocalizationError> {
+    let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
+        .expect("Default locale should always be valid");
+
+    // Try to create a bundle that combines common and utility-specific strings
+    let english_bundle = create_bundle_with_common(&default_locale, locales_dir, util_name)
+        .or_else(|_| {
+            // Fallback to embedded utility-specific strings only
+            create_english_bundle_from_embedded(&default_locale, util_name)
+        })?;
+
+    let loc = if locale == &default_locale {
+        // If requesting English, just use English as primary (no fallback needed)
+        Localizer::new(english_bundle)
+    } else {
+        // Try to load the requested locale with common strings
+        if let Ok(primary_bundle) = create_bundle_with_common(locale, locales_dir, util_name) {
+            // Successfully loaded requested locale, load English as fallback
+            Localizer::new(primary_bundle).with_fallback(english_bundle)
+        } else {
+            // Failed to load requested locale, just use English as primary
+            Localizer::new(english_bundle)
+        }
+    };
+
+    LOCALIZER.with(|lock| {
+        lock.set(loc)
+            .map_err(|_| LocalizationError::Bundle("Localizer already initialized".into()))
+    })?;
+    Ok(())
+}
+
 /// Create a bundle for a specific locale
 fn create_bundle(
     locale: &LanguageIdentifier,
@@ -373,6 +471,35 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     // If no locales directory exists, directly use embedded English resources.
     match get_locales_dir(p) {
         Ok(locales_dir) => init_localization(&locale, &locales_dir, p),
+        Err(_) => {
+            // No locales directory found, use embedded English directly
+            let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
+                .expect("Default locale should always be valid");
+            let english_bundle = create_english_bundle_from_embedded(&default_locale, p)?;
+            let localizer = Localizer::new(english_bundle);
+
+            LOCALIZER.with(|lock| {
+                lock.set(localizer)
+                    .map_err(|_| LocalizationError::Bundle("Localizer already initialized".into()))
+            })?;
+            Ok(())
+        }
+    }
+}
+
+/// Enhanced version of setup_localization that also loads common/clap error strings
+/// This function loads both utility-specific strings and common strings for clap error handling
+pub fn setup_localization_with_common(p: &str) -> Result<(), LocalizationError> {
+    let locale = detect_system_locale().unwrap_or_else(|_| {
+        LanguageIdentifier::from_str(DEFAULT_LOCALE).expect("Default locale should always be valid")
+    });
+
+    // Load common strings along with utility-specific strings
+    match get_locales_dir(p) {
+        Ok(locales_dir) => {
+            // Load both utility-specific and common strings
+            init_localization_with_common(&locale, &locales_dir, p)
+        }
         Err(_) => {
             // No locales directory found, use embedded English directly
             let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
