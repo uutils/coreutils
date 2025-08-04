@@ -7,6 +7,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use platform_info::*;
+use uucore::LocalizedCommand;
 use uucore::translate;
 use uucore::{
     error::{UResult, USimpleError},
@@ -120,7 +121,7 @@ pub struct Options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().try_get_matches_from_localized(args);
 
     let options = Options {
         all: matches.get_flag(options::ALL),

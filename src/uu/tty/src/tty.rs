@@ -18,7 +18,10 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args).unwrap_or_else(|e| {
+        use uucore::clap_localization::handle_clap_error_with_exit_code;
+        handle_clap_error_with_exit_code(e, uucore::util_name(), 2)
+    });
 
     let silent = matches.get_flag(options::SILENT);
 

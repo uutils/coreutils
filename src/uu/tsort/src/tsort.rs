@@ -11,6 +11,7 @@ use uucore::display::Quotable;
 use uucore::error::{UError, UResult};
 use uucore::{format_usage, show};
 
+use uucore::LocalizedCommand;
 use uucore::translate;
 
 mod options {
@@ -43,7 +44,7 @@ impl UError for TsortError {}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().try_get_matches_from_localized(args);
 
     let input = matches
         .get_one::<String>(options::FILE)

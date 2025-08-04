@@ -10,7 +10,8 @@ mod error;
 mod hardlink;
 
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, ArgMatches, Command, error::ErrorKind};
+use clap::error::ErrorKind;
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
@@ -51,6 +52,7 @@ use uucore::update_control;
 
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
 // requires these enums
+use uucore::LocalizedCommand;
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{format_usage, prompt_yes, show};
 
@@ -151,8 +153,7 @@ static OPT_SELINUX: &str = "selinux";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut app = uu_app();
-    let matches = app.try_get_matches_from_mut(args)?;
+    let matches = uu_app().try_get_matches_from_localized(args);
 
     let files: Vec<OsString> = matches
         .get_many::<OsString>(ARG_FILES)
@@ -161,11 +162,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect();
 
     if files.len() == 1 && !matches.contains_id(OPT_TARGET_DIRECTORY) {
-        app.error(
-            ErrorKind::TooFewValues,
-            translate!("mv-error-insufficient-arguments", "arg_files" => ARG_FILES),
-        )
-        .exit();
+        return Err(UUsageError::new(
+            1,
+            format!(
+                "The argument '<{ARG_FILES}>...' requires at least 2 values, but only 1 was provided"
+            ),
+        ));
     }
 
     let overwrite_mode = determine_overwrite_mode(&matches);
