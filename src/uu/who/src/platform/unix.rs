@@ -13,6 +13,7 @@ use uucore::error::{FromIo, UResult};
 use uucore::libc::{S_IWGRP, STDIN_FILENO, ttyname};
 use uucore::translate;
 
+use uucore::LocalizedCommand;
 use uucore::utmpx::{self, Utmpx, time};
 
 use std::borrow::Cow;
@@ -28,7 +29,7 @@ fn get_long_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app()
         .after_help(get_long_usage())
-        .try_get_matches_from(args)?;
+        .try_get_matches_from_localized(args);
 
     let files: Vec<String> = matches
         .get_many::<String>(options::FILE)

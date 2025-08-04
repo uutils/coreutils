@@ -8,6 +8,7 @@
 use std::cmp::Ordering;
 use std::fs::{File, metadata};
 use std::io::{self, BufRead, BufReader, Read, Stdin, stdin};
+use uucore::LocalizedCommand;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::fs::paths_refer_to_same_file;
@@ -280,7 +281,7 @@ fn open_file(name: &str, line_ending: LineEnding) -> io::Result<LineReader> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().try_get_matches_from_localized(args);
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
     let filename1 = matches.get_one::<String>(options::FILE_1).unwrap();
     let filename2 = matches.get_one::<String>(options::FILE_2).unwrap();

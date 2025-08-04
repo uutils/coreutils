@@ -9,16 +9,15 @@ use clap::{Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::encoding::{
-    BASE2LSBF, BASE2MSBF, Format, Z85Wrapper,
+    BASE2LSBF, BASE2MSBF, EncodingWrapper, Format, SupportsFastDecodeAndEncode, Z85Wrapper,
     for_base_common::{BASE32, BASE32HEX, BASE64, BASE64_NOPAD, BASE64URL, HEXUPPER_PERMISSIVE},
 };
-use uucore::encoding::{EncodingWrapper, SupportsFastDecodeAndEncode};
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::translate;
-
 pub const BASE_CMD_PARSE_ERROR: i32 = 1;
 
 /// Encoded output will be formatted in lines of this length (the last line can be shorter)
@@ -100,7 +99,8 @@ pub fn parse_base_cmd_args(
     usage: &str,
 ) -> UResult<Config> {
     let command = base_app(about, usage);
-    Config::from(&command.try_get_matches_from(args)?)
+    let matches = command.try_get_matches_from_localized(args);
+    Config::from(&matches)
 }
 
 pub fn base_app(about: &'static str, usage: &str) -> Command {

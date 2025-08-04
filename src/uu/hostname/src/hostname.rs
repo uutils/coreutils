@@ -12,6 +12,7 @@ use std::{collections::hash_set::HashSet, ffi::OsString};
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use uucore::LocalizedCommand;
 
 #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
 use dns_lookup::lookup_host;
@@ -60,7 +61,7 @@ mod wsa {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().try_get_matches_from_localized(args);
 
     #[cfg(windows)]
     let _handle = wsa::start().map_err_context(|| translate!("hostname-error-winsock"))?;
