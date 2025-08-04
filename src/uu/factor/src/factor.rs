@@ -12,6 +12,7 @@ use std::io::{self, Write, stdin, stdout};
 use clap::{Arg, ArgAction, Command};
 use num_bigint::BigUint;
 use num_traits::FromPrimitive;
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
 use uucore::translate;
@@ -79,7 +80,7 @@ fn write_result(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().try_get_matches_from_localized(args);
 
     // If matches find --exponents flag than variable print_exponents is true and p^e output format will be used.
     let print_exponents = matches.get_flag(options::EXPONENTS);

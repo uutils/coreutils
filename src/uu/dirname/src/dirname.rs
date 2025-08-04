@@ -5,6 +5,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::path::Path;
+use uucore::LocalizedCommand;
 use uucore::display::print_verbatim;
 use uucore::error::{UResult, UUsageError};
 use uucore::format_usage;
@@ -21,7 +22,7 @@ mod options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app()
         .after_help(translate!("dirname-after-help"))
-        .try_get_matches_from(args)?;
+        .try_get_matches_from_localized(args);
 
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 

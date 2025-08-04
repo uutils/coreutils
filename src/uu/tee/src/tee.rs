@@ -17,6 +17,7 @@ use uucore::{format_usage, show_error};
 
 // spell-checker:ignore nopipe
 
+use uucore::LocalizedCommand;
 #[cfg(unix)]
 use uucore::signals::{enable_pipe_errors, ignore_interrupts};
 
@@ -51,7 +52,7 @@ enum OutputErrorMode {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().try_get_matches_from_localized(args);
 
     let append = matches.get_flag(options::APPEND);
     let ignore_interrupts = matches.get_flag(options::IGNORE_INTERRUPTS);

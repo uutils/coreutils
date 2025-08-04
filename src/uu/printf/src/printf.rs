@@ -6,6 +6,7 @@ use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::io::stdout;
 use std::ops::ControlFlow;
+use uucore::LocalizedCommand;
 use uucore::error::{UResult, UUsageError};
 use uucore::format::{FormatArgument, FormatArguments, FormatItem, parse_spec_and_escape};
 use uucore::translate;
@@ -21,7 +22,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from_localized(args);
 
     let format = matches
         .get_one::<OsString>(options::FORMAT)

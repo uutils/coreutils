@@ -333,6 +333,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = match uu_app().try_get_matches_from(&args) {
         Ok(m) => m,
         Err(e) => {
+            use uucore::clap_localization::handle_clap_error_with_exit_code;
+            if e.kind() == clap::error::ErrorKind::UnknownArgument {
+                handle_clap_error_with_exit_code(e, uucore::util_name(), 1);
+            }
             if e.kind() == clap::error::ErrorKind::TooManyValues
                 && e.context().any(|(kind, val)| {
                     kind == clap::error::ContextKind::InvalidArg
