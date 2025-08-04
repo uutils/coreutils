@@ -7,11 +7,12 @@
 
 use crate::uu_app;
 
+use uucore::LocalizedCommand;
 use uucore::error::UResult;
 use uucore::translate;
 
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let _matches = uu_app().try_get_matches_from(args)?;
+    let _matches = uu_app().try_get_matches_from_localized(args);
     println!("{}", translate!("who-unsupported-openbsd"));
     Ok(())
 }

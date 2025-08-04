@@ -13,6 +13,7 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::translate;
 
+use uucore::LocalizedCommand;
 use uucore::{format_usage, show};
 
 fn bsd_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
@@ -98,7 +99,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().try_get_matches_from_localized(args);
 
     let files: Vec<String> = match matches.get_many::<String>(options::FILE) {
         Some(v) => v.cloned().collect(),

@@ -15,6 +15,7 @@ use std::num::ParseIntError;
 use clap::{Arg, ArgAction, Command};
 use regex::Regex;
 use thiserror::Error;
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::format_usage;
@@ -728,7 +729,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().try_get_matches_from_localized(args);
     let config = get_config(&matches)?;
 
     let input_files;

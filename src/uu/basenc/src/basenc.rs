@@ -13,7 +13,6 @@ use uucore::{
     encoding::Format,
     error::{UResult, UUsageError},
 };
-
 fn get_encodings() -> Vec<(&'static str, Format, String)> {
     vec![
         ("base64", Format::Base64, translate!("basenc-help-base64")),

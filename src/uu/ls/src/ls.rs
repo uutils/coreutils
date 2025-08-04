@@ -1103,9 +1103,7 @@ impl Config {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let command = uu_app();
-
-    let matches = match command.try_get_matches_from(args) {
+    let matches = match uu_app().try_get_matches_from(args) {
         // clap successfully parsed the arguments:
         Ok(matches) => matches,
         // --help, --version, etc.:
@@ -1118,7 +1116,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
         // All other argument parsing errors cause exit code 2:
         Err(e) => {
-            return Err(USimpleError::new(2, e.to_string()));
+            uucore::clap_localization::handle_clap_error_with_exit_code(e, "ls", 2);
         }
     };
 

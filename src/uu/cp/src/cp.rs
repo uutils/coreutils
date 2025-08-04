@@ -13,6 +13,7 @@ use std::fs::{self, Metadata, OpenOptions, Permissions};
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{fmt, io};
+use uucore::LocalizedCommand;
 #[cfg(all(unix, not(target_os = "android")))]
 use uucore::fsxattr::copy_xattrs;
 use uucore::translate;
@@ -778,7 +779,7 @@ pub fn uu_app() -> Command {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().try_get_matches_from_localized(args);
 
     let options = Options::from_matches(&matches)?;
 

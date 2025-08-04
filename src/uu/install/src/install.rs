@@ -16,6 +16,7 @@ use std::fs::{self, metadata};
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process;
 use thiserror::Error;
+use uucore::LocalizedCommand;
 use uucore::backup_control::{self, BackupMode};
 use uucore::buf_copy::copy_stream;
 use uucore::display::Quotable;
@@ -165,7 +166,7 @@ static ARG_FILES: &str = "files";
 ///
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().try_get_matches_from_localized(args);
 
     let paths: Vec<String> = matches
         .get_many::<String>(ARG_FILES)

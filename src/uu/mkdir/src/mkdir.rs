@@ -15,6 +15,7 @@ use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
 
+use uucore::LocalizedCommand;
 #[cfg(not(windows))]
 use uucore::mode;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
@@ -81,7 +82,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // " of each created directory to CTX"),
     let matches = uu_app()
         .after_help(translate!("mkdir-after-help"))
-        .try_get_matches_from(args)?;
+        .try_get_matches_from_localized(args);
 
     let dirs = matches
         .get_many::<OsString>(options::DIRS)
