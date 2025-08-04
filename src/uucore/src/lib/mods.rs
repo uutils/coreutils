@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 // mods ~ cross-platforms modules (core/bundler file)
 
+pub mod clap_localization;
 pub mod display;
 pub mod error;
 #[cfg(feature = "fs")]
