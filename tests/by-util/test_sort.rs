@@ -1568,3 +1568,46 @@ fn test_g_float_hex() {
         .succeeds()
         .stdout_is(output);
 }
+
+/* spell-checker: disable */
+#[test]
+fn test_french_translations() {
+    // Test that French translations work for clap error messages
+    // Set LANG to French and test with an invalid argument
+    let result = new_ucmd!()
+        .env("LANG", "fr_FR.UTF-8")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("--invalid-arg")
+        .fails();
+
+    let stderr = result.stderr_str();
+    assert!(stderr.contains("erreur"));
+    assert!(stderr.contains("argument inattendu"));
+    assert!(stderr.contains("trouvé"));
+}
+
+#[test]
+fn test_argument_suggestion() {
+    let result_en = new_ucmd!()
+        .env("LANG", "en_US.UTF-8")
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("--revrse") // Typo
+        .fails();
+
+    let stderr_en = result_en.stderr_str();
+    assert!(stderr_en.contains("tip"));
+    assert!(stderr_en.contains("similar"));
+    assert!(stderr_en.contains("--reverse"));
+
+    let result_fr = new_ucmd!()
+        .env("LANG", "fr_FR.UTF-8")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("--revrse") // Typo
+        .fails();
+
+    let stderr_fr = result_fr.stderr_str();
+    assert!(stderr_fr.contains("conseil"));
+    assert!(stderr_fr.contains("similaire"));
+    assert!(stderr_fr.contains("--reverse"));
+}
+/* spell-checker: enable */
