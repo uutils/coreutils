@@ -418,6 +418,14 @@ endif
 
 ifeq ($(LOCALES),y)
 locales:
+	@# Copy uucore common locales
+	@if [ -d "$(BASEDIR)/src/uucore/locales" ]; then \
+		mkdir -p "$(BUILDDIR)/locales/uucore"; \
+		for locale_file in "$(BASEDIR)"/src/uucore/locales/*.ftl; do \
+			$(INSTALL) -v "$$locale_file" "$(BUILDDIR)/locales/uucore/"; \
+		done; \
+	fi; \
+	# Copy utility-specific locales
 	@for prog in $(INSTALLEES); do \
 		if [ -d "$(BASEDIR)/src/uu/$$prog/locales" ]; then \
 			mkdir -p "$(BUILDDIR)/locales/$$prog"; \
