@@ -747,7 +747,7 @@ invalid-syntax = This is { $missing
 
             let result = init_localization(&locale, temp_dir.path(), "nonexistent_test_util");
             if let Err(e) = &result {
-                eprintln!("Init localization failed: {}", e);
+                eprintln!("Init localization failed: {e}");
             }
             assert!(result.is_ok());
 
