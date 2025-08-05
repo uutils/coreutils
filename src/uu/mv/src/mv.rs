@@ -163,9 +163,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if files.len() == 1 && !matches.contains_id(OPT_TARGET_DIRECTORY) {
         app.error(
             ErrorKind::TooFewValues,
-            format!(
-                "The argument '<{ARG_FILES}>...' requires at least 2 values, but only 1 was provided"
-            ),
+            translate!("mv-error-insufficient-arguments", "arg_files" => ARG_FILES),
         )
         .exit();
     }
