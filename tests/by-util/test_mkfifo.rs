@@ -34,6 +34,13 @@ fn test_create_one_fifo_with_invalid_mode() {
         .arg("invalid")
         .fails()
         .stderr_contains("invalid mode");
+
+    new_ucmd!()
+        .arg("abcd")
+        .arg("-m")
+        .arg("0999")
+        .fails()
+        .stderr_contains("invalid mode");
 }
 
 #[test]
@@ -82,6 +89,16 @@ fn test_create_fifo_with_mode_and_umask() {
 
     test_fifo_creation("734", 0o077, "prwx-wxr--"); // spell-checker:disable-line
     test_fifo_creation("706", 0o777, "prwx---rw-"); // spell-checker:disable-line
+    test_fifo_creation("a=rwx", 0o022, "prwxrwxrwx"); // spell-checker:disable-line
+    test_fifo_creation("a=rx", 0o022, "pr-xr-xr-x"); // spell-checker:disable-line
+    test_fifo_creation("a=r", 0o022, "pr--r--r--"); // spell-checker:disable-line
+    test_fifo_creation("=rwx", 0o022, "prwxr-xr-x"); // spell-checker:disable-line
+    test_fifo_creation("u+w", 0o022, "prw-rw-rw-"); // spell-checker:disable-line
+    test_fifo_creation("u-w", 0o022, "pr--rw-rw-"); // spell-checker:disable-line
+    test_fifo_creation("u+x", 0o022, "prwxrw-rw-"); // spell-checker:disable-line
+    test_fifo_creation("u-r,g-w,o+x", 0o022, "p-w-r--rwx"); // spell-checker:disable-line
+    test_fifo_creation("a=rwx,o-w", 0o022, "prwxrwxr-x"); // spell-checker:disable-line
+    test_fifo_creation("=rwx,o-w", 0o022, "prwxr-xr-x"); // spell-checker:disable-line
 }
 
 #[test]
