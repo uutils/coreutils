@@ -12,7 +12,7 @@ use operation::{
     translate_input,
 };
 use std::ffi::OsString;
-use std::io::{BufWriter, Write, stdin, stdout};
+use std::io::{Write, stdin, stdout};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::is_stdin_directory;
@@ -107,7 +107,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let stdin = stdin();
     let mut locked_stdin = stdin.lock();
-    let mut buffered_stdout = BufWriter::new(stdout().lock());
+    let mut locked_stdout = stdout().lock();
 
     // According to the man page: translating only happens if deleting or if a second set is given
     let translating = !delete_flag && sets.len() > 1;
@@ -131,34 +131,34 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let delete_op = DeleteOperation::new(set1);
             let squeeze_op = SqueezeOperation::new(set2);
             let op = delete_op.chain(squeeze_op);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
+            translate_input(&mut locked_stdin, &mut locked_stdout, op)?;
         } else {
             let op = DeleteOperation::new(set1);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
+            translate_input(&mut locked_stdin, &mut locked_stdout, op)?;
         }
     } else if squeeze_flag {
         if sets_len == 1 {
             let op = SqueezeOperation::new(set1);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
+            translate_input(&mut locked_stdin, &mut locked_stdout, op)?;
         } else {
             let translate_op = TranslateOperation::new(set1, set2.clone())?;
             let squeeze_op = SqueezeOperation::new(set2);
             let op = translate_op.chain(squeeze_op);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
+            translate_input(&mut locked_stdin, &mut locked_stdout, op)?;
         }
     } else {
         let op = TranslateOperation::new(set1, set2)?;
-        translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
+        translate_input(&mut locked_stdin, &mut locked_stdout, op)?;
     }
 
     #[cfg(not(target_os = "windows"))]
-    buffered_stdout
+    locked_stdout
         .flush()
         .map_err_context(|| translate!("tr-error-write-error"))?;
 
     // SIGPIPE is not available on Windows.
     #[cfg(target_os = "windows")]
-    match buffered_stdout.flush() {
+    match locked_stdout.flush() {
         Ok(()) => {}
         Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => std::process::exit(13),
         Err(err) => return Err(err.map_err_context(|| translate!("tr-error-write-error"))),
