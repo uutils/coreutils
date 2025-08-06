@@ -10,7 +10,7 @@ mod error;
 mod hardlink;
 
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, error::ErrorKind};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
@@ -161,12 +161,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect();
 
     if files.len() == 1 && !matches.contains_id(OPT_TARGET_DIRECTORY) {
-        return Err(UUsageError::new(
-            1,
-            format!(
-                "The argument '<{ARG_FILES}>...' requires at least 2 values, but only 1 was provided"
-            ),
-        ));
+        app.error(
+            ErrorKind::TooFewValues,
+            translate!("mv-error-insufficient-arguments", "arg_files" => ARG_FILES),
+        )
+        .exit();
     }
 
     let overwrite_mode = determine_overwrite_mode(&matches);

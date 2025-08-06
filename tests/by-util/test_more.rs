@@ -46,14 +46,22 @@ fn test_valid_arg() {
 
 fn test_alive(args: &[&str]) {
     let (at, mut ucmd) = at_and_ucmd!();
-    let file = "test_file";
-    at.touch(file);
 
-    ucmd.args(args)
-        .arg(file)
-        .run_no_wait()
-        .make_assertion()
-        .is_alive();
+    let content = "test content";
+    let file = "test_file";
+    at.write(file, content);
+
+    let mut cmd = ucmd.args(args).arg(file).run_no_wait();
+
+    // wait for more to start and display the file
+    while cmd.is_alive() && !cmd.stdout_all().contains(content) {
+        cmd.delay(50);
+    }
+
+    assert!(cmd.is_alive(), "Command should still be alive");
+
+    // cleanup
+    cmd.kill();
 }
 
 #[test]

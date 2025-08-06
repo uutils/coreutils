@@ -672,15 +672,17 @@ where
     R: BufRead,
     W: Write,
 {
-    let mut buf = Vec::new();
+    let mut buf = [0; 8192];
     let mut output_buf = Vec::new();
 
-    while let Ok(length) = input.read_until(b'\n', &mut buf) {
+    while let Ok(length) = input.read(&mut buf[..]) {
         if length == 0 {
             break; // EOF reached
         }
 
-        let filtered = buf.iter().filter_map(|&c| translator.translate(c));
+        let filtered = buf[..length]
+            .iter()
+            .filter_map(|&c| translator.translate(c));
         output_buf.extend(filtered);
 
         #[cfg(not(target_os = "windows"))]
@@ -698,7 +700,6 @@ where
             }
         }
 
-        buf.clear();
         output_buf.clear();
     }
 
