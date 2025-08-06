@@ -17,11 +17,9 @@ use nom::{
 };
 use std::{
     char,
-    collections::{HashMap, HashSet},
     error::Error,
     fmt::{Debug, Display},
     io::{BufRead, Write},
-    ops::Not,
 };
 use uucore::error::{FromIo, UError, UResult};
 use uucore::translate;
@@ -583,42 +581,58 @@ impl<A: SymbolTranslator, B: SymbolTranslator> SymbolTranslator for ChainedSymbo
     }
 }
 
+/// Convert a set of bytes to a 256-element bitmap for O(1) lookup
+fn set_to_bitmap(set: &[u8]) -> [bool; 256] {
+    let mut bitmap = [false; 256];
+    for &byte in set {
+        bitmap[byte as usize] = true;
+    }
+    bitmap
+}
+
 #[derive(Debug)]
 pub struct DeleteOperation {
-    set: Vec<u8>,
+    delete_table: [bool; 256],
 }
 
 impl DeleteOperation {
     pub fn new(set: Vec<u8>) -> Self {
-        Self { set }
+        Self {
+            delete_table: set_to_bitmap(&set),
+        }
     }
 }
 
 impl SymbolTranslator for DeleteOperation {
     fn translate(&mut self, current: u8) -> Option<u8> {
-        // keep if not present in the set
-        self.set.contains(&current).not().then_some(current)
+        // keep if not present in the delete set
+        (!self.delete_table[current as usize]).then_some(current)
     }
 }
 
 #[derive(Debug)]
 pub struct TranslateOperation {
-    translation_map: HashMap<u8, u8>,
+    translation_table: [u8; 256],
 }
 
 impl TranslateOperation {
     pub fn new(set1: Vec<u8>, set2: Vec<u8>) -> Result<Self, BadSequence> {
+        // Initialize translation table with identity mapping
+        let mut translation_table = std::array::from_fn(|i| i as u8);
+
         if let Some(fallback) = set2.last().copied() {
-            Ok(Self {
-                translation_map: set1
-                    .into_iter()
-                    .zip(set2.into_iter().chain(std::iter::repeat(fallback)))
-                    .collect::<HashMap<_, _>>(),
-            })
+            // Apply translations from set1 to set2
+            for (from, to) in set1
+                .into_iter()
+                .zip(set2.into_iter().chain(std::iter::repeat(fallback)))
+            {
+                translation_table[from as usize] = to;
+            }
+
+            Ok(Self { translation_table })
         } else if set1.is_empty() && set2.is_empty() {
-            Ok(Self {
-                translation_map: HashMap::new(),
-            })
+            // Identity mapping for empty sets
+            Ok(Self { translation_table })
         } else {
             Err(BadSequence::EmptySet2WhenNotTruncatingSet1)
         }
@@ -627,25 +641,20 @@ impl TranslateOperation {
 
 impl SymbolTranslator for TranslateOperation {
     fn translate(&mut self, current: u8) -> Option<u8> {
-        Some(
-            self.translation_map
-                .get(&current)
-                .copied()
-                .unwrap_or(current),
-        )
+        Some(self.translation_table[current as usize])
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct SqueezeOperation {
-    set1: HashSet<u8>,
+    squeeze_table: [bool; 256],
     previous: Option<u8>,
 }
 
 impl SqueezeOperation {
     pub fn new(set1: Vec<u8>) -> Self {
         Self {
-            set1: set1.into_iter().collect(),
+            squeeze_table: set_to_bitmap(&set1),
             previous: None,
         }
     }
@@ -653,7 +662,7 @@ impl SqueezeOperation {
 
 impl SymbolTranslator for SqueezeOperation {
     fn translate(&mut self, current: u8) -> Option<u8> {
-        let next = if self.set1.contains(&current) {
+        let next = if self.squeeze_table[current as usize] {
             match self.previous {
                 Some(v) if v == current => None,
                 _ => Some(current),
@@ -672,18 +681,25 @@ where
     R: BufRead,
     W: Write,
 {
-    let mut buf = [0; 8192];
-    let mut output_buf = Vec::new();
+    const BUFFER_SIZE: usize = 32768; // Large buffer for better throughput
+    let mut buf = [0; BUFFER_SIZE];
+    let mut output_buf = Vec::with_capacity(buf.len());
 
-    while let Ok(length) = input.read(&mut buf[..]) {
-        if length == 0 {
-            break; // EOF reached
+    loop {
+        let length = match input.read(&mut buf[..]) {
+            Ok(0) => break, // EOF reached
+            Ok(len) => len,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e.map_err_context(|| translate!("tr-error-read-error"))),
+        };
+
+        // Process the buffer and collect translated chars to output
+        output_buf.clear();
+        for &byte in &buf[..length] {
+            if let Some(translated) = translator.translate(byte) {
+                output_buf.push(translated);
+            }
         }
-
-        let filtered = buf[..length]
-            .iter()
-            .filter_map(|&c| translator.translate(c));
-        output_buf.extend(filtered);
 
         #[cfg(not(target_os = "windows"))]
         output
@@ -699,8 +715,6 @@ where
                 return Err(err.map_err_context(|| translate!("tr-error-write-error")));
             }
         }
-
-        output_buf.clear();
     }
 
     Ok(())
