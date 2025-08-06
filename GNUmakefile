@@ -193,9 +193,9 @@ SELINUX_PROGS := \
 
 $(info Detected OS = $(OS))
 
-# Don't build the SELinux programs on macOS (Darwin)
-ifeq ($(OS),Darwin)
-  SELINUX_PROGS :=
+# Don't build the SELinux programs on macOS (Darwin) and FreeBSD
+ifeq ($(filter $(OS),Darwin FreeBSD),$(OS))
+	SELINUX_PROGS :=
 endif
 
 ifneq ($(OS),Windows_NT)
