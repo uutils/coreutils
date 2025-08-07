@@ -944,10 +944,8 @@ fn test_chmod_dangling_symlink_recursive_combos() {
         at.symlink_file(dangling_target, symlink);
 
         let mut ucmd = scene.ucmd();
-        for f in &flags {
-            ucmd.arg(f);
-        }
-        ucmd.arg("u+x")
+        ucmd.args(&flags)
+            .arg("u+x")
             .umask(0o022)
             .arg(symlink)
             .fails()
@@ -1002,10 +1000,8 @@ fn test_chmod_traverse_symlink_combo() {
         set_permissions(at.plus(target), Permissions::from_mode(0o664)).unwrap();
 
         let mut ucmd = scene.ucmd();
-        for f in &flags {
-            ucmd.arg(f);
-        }
-        ucmd.arg("u+x")
+        ucmd.args(&flags)
+            .arg("u+x")
             .umask(0o022)
             .arg(directory)
             .succeeds()
@@ -1026,4 +1022,164 @@ fn test_chmod_traverse_symlink_combo() {
             "For flags {flags:?}, expected symlink perms = {expected_symlink_perms:o}, got = {actual_symlink:o}",
         );
     }
+}
+
+#[test]
+fn test_chmod_recursive_symlink_to_directory_command_line() {
+    // Test behavior when the symlink itself is a command-line argument
+    let scenarios = [
+        (vec!["-R"], true), // Default behavior (-H): follow symlinks that are command line args
+        (vec!["-R", "-H"], true), // Explicit -H: follow symlinks that are command line args
+        (vec!["-R", "-L"], true), // -L: follow all symlinks
+        (vec!["-R", "-P"], false), // -P: never follow symlinks
+    ];
+
+    for (flags, should_follow_symlink_dir) in scenarios {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        let target_dir = "target_dir";
+        let symlink_to_dir = "link_dir";
+        let file_in_target = "file_in_target";
+
+        at.mkdir(target_dir);
+        at.touch(format!("{target_dir}/{file_in_target}"));
+        at.symlink_dir(target_dir, symlink_to_dir);
+
+        set_permissions(
+            at.plus(format!("{target_dir}/{file_in_target}")),
+            Permissions::from_mode(0o644),
+        )
+        .unwrap();
+
+        let mut ucmd = scene.ucmd();
+        ucmd.args(&flags)
+            .arg("go-rwx")
+            .arg(symlink_to_dir) // The symlink itself is the command-line argument
+            .succeeds()
+            .no_stderr();
+
+        let actual_file_perms = at
+            .metadata(&format!("{target_dir}/{file_in_target}"))
+            .permissions()
+            .mode();
+
+        if should_follow_symlink_dir {
+            // When following symlinks, the file inside the target directory should have its permissions changed
+            assert_eq!(
+                actual_file_perms, 0o100_600,
+                "For flags {flags:?}, expected file perms when following symlinks = 600, got = {actual_file_perms:o}",
+            );
+        } else {
+            // When not following symlinks, the file inside the target directory should be unchanged
+            assert_eq!(
+                actual_file_perms, 0o100_644,
+                "For flags {flags:?}, expected file perms when not following symlinks = 644, got = {actual_file_perms:o}",
+            );
+        }
+    }
+}
+
+#[test]
+fn test_chmod_recursive_symlink_during_traversal() {
+    // Test behavior when symlinks are encountered during directory traversal
+    let scenarios = [
+        (vec!["-R"], false), // Default behavior (-H): don't follow symlinks encountered during traversal
+        (vec!["-R", "-H"], false), // Explicit -H: don't follow symlinks encountered during traversal
+        (vec!["-R", "-L"], true),  // -L: follow all symlinks including those found during traversal
+        (vec!["-R", "-P"], false), // -P: never follow symlinks
+    ];
+
+    for (flags, should_follow_symlink_dir) in scenarios {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        let directory = "dir";
+        let target_dir = "target_dir";
+        let symlink_to_dir = "link_dir";
+        let file_in_target = "file_in_target";
+
+        at.mkdir(directory);
+        at.mkdir(target_dir);
+        at.touch(format!("{target_dir}/{file_in_target}"));
+        at.symlink_dir(target_dir, &format!("{directory}/{symlink_to_dir}"));
+
+        set_permissions(
+            at.plus(format!("{target_dir}/{file_in_target}")),
+            Permissions::from_mode(0o644),
+        )
+        .unwrap();
+
+        let mut ucmd = scene.ucmd();
+        ucmd.args(&flags)
+            .arg("go-rwx")
+            .arg(directory) // The directory is the command-line argument
+            .succeeds()
+            .no_stderr();
+
+        let actual_file_perms = at
+            .metadata(&format!("{target_dir}/{file_in_target}"))
+            .permissions()
+            .mode();
+
+        if should_follow_symlink_dir {
+            // When following symlinks, the file inside the target directory should have its permissions changed
+            assert_eq!(
+                actual_file_perms, 0o100_600,
+                "For flags {flags:?}, expected file perms when following symlinks = 600, got = {actual_file_perms:o}",
+            );
+        } else {
+            // When not following symlinks, the file inside the target directory should be unchanged
+            assert_eq!(
+                actual_file_perms, 0o100_644,
+                "For flags {flags:?}, expected file perms when not following symlinks = 644, got = {actual_file_perms:o}",
+            );
+        }
+    }
+}
+
+#[test]
+fn test_chmod_recursive_symlink_combinations() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let directory = "dir";
+    let target_dir = "target_dir";
+    let target_file = "target_file";
+    let symlink_to_dir = "link_dir";
+    let symlink_to_file = "link_file";
+    let file_in_target = "file";
+
+    at.mkdir(directory);
+    at.mkdir(target_dir);
+    at.touch(target_file);
+    at.touch(format!("{target_dir}/{file_in_target}"));
+    at.symlink_dir(target_dir, &format!("{directory}/{symlink_to_dir}"));
+    at.symlink_file(target_file, &format!("{directory}/{symlink_to_file}"));
+
+    set_permissions(at.plus(target_file), Permissions::from_mode(0o644)).unwrap();
+    set_permissions(
+        at.plus(format!("{target_dir}/{file_in_target}")),
+        Permissions::from_mode(0o644),
+    )
+    .unwrap();
+
+    // Test with -R -L (follow all symlinks)
+    scene
+        .ucmd()
+        .arg("-R")
+        .arg("-L")
+        .arg("go-rwx")
+        .arg(directory)
+        .succeeds()
+        .no_stderr();
+
+    // Both target file and file in target directory should have permissions changed
+    assert_eq!(at.metadata(target_file).permissions().mode(), 0o100_600);
+    assert_eq!(
+        at.metadata(&format!("{target_dir}/{file_in_target}"))
+            .permissions()
+            .mode(),
+        0o100_600
+    );
 }
