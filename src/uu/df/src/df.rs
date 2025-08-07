@@ -689,7 +689,7 @@ mod tests {
         fn test_different_dev_id() {
             let m1 = mount_info("0", "/mnt/bar");
             let m2 = mount_info("1", "/mnt/bar");
-            assert!(is_best(&[m1.clone()], &m2));
+            assert!(is_best(std::slice::from_ref(&m1), &m2));
             assert!(is_best(&[m2], &m1));
         }
 
@@ -700,7 +700,7 @@ mod tests {
             // one condition in this test.
             let m1 = mount_info("0", "/mnt/bar");
             let m2 = mount_info("0", "/mnt/bar/baz");
-            assert!(!is_best(&[m1.clone()], &m2));
+            assert!(!is_best(std::slice::from_ref(&m1), &m2));
             assert!(is_best(&[m2], &m1));
         }
     }
