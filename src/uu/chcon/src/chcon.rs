@@ -794,7 +794,7 @@ enum SELinuxSecurityContext<'t> {
 }
 
 impl SELinuxSecurityContext<'_> {
-    fn to_c_string(&self) -> Result<Option<Cow<CStr>>> {
+    fn to_c_string(&self) -> Result<Option<Cow<'_, CStr>>> {
         match self {
             Self::File(context) => context
                 .to_c_string()

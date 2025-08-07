@@ -74,7 +74,7 @@ impl FileHandling {
         self.get_mut(path).metadata.as_ref()
     }
 
-    pub fn keys(&self) -> Keys<PathBuf, PathData> {
+    pub fn keys(&self) -> Keys<'_, PathBuf, PathData> {
         self.map.keys()
     }
 

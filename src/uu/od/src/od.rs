@@ -603,7 +603,7 @@ fn open_input_peek_reader(
     input_strings: &[String],
     skip_bytes: u64,
     read_bytes: Option<u64>,
-) -> PeekReader<BufReader<PartialReader<MultifileReader>>> {
+) -> PeekReader<BufReader<PartialReader<MultifileReader<'_>>>> {
     // should return  "impl PeekRead + Read + HasError" when supported in (stable) rust
     let inputs = input_strings
         .iter()
