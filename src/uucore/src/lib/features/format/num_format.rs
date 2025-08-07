@@ -431,6 +431,8 @@ fn format_float_scientific(
     }
 
     let (digits, exponent) = bd_to_string_exp_with_prec(bd, precision + 1);
+
+    // TODO: Optimizations in format_float_shortest can be made here as well
     let (first_digit, remaining_digits) = digits.split_at(1);
 
     let dot =
@@ -468,6 +470,7 @@ fn format_float_shortest(
         };
     }
 
+    let mut output = String::with_capacity(precision);
     let (digits, exponent) = bd_to_string_exp_with_prec(bd, precision);
 
     if exponent < -4 || exponent >= precision as i64 {
@@ -477,42 +480,53 @@ fn format_float_shortest(
         let (first_digit, remaining_digits) = digits.split_at(1);
 
         // Always add the dot, we might trim it later.
-        let mut normalized = format!("{first_digit}.{remaining_digits}");
+        output.push_str(first_digit);
+        output.push('.');
+        output.push_str(remaining_digits);
 
         if force_decimal == ForceDecimal::No {
-            strip_fractional_zeroes_and_dot(&mut normalized);
+            strip_fractional_zeroes_and_dot(&mut output);
         }
 
-        let exp_char = match case {
+        output.push(match case {
             Case::Lowercase => 'e',
             Case::Uppercase => 'E',
-        };
+        });
 
-        format!("{normalized}{exp_char}{exponent:+03}")
+        // Format the exponent
+        let exponent_abs = exponent.abs();
+        output.push(if exponent < 0 { '-' } else { '+' });
+        if exponent_abs < 10 {
+            output.push('0');
+        }
+        output.push_str(&exponent_abs.to_string());
     } else {
         // Decimal-ish notation with a few differences:
         //  - The precision works differently and specifies the total number
         //    of digits instead of the digits in the fractional part.
         //  - If we don't force the decimal, `.` and trailing `0` in the fractional part
         //    are trimmed.
-        let mut formatted = if exponent < 0 {
+        if exponent < 0 {
             // Small number, prepend some "0.00" string
-            let zeros = "0".repeat(-exponent as usize - 1);
-            format!("0.{zeros}{digits}")
+            output.push_str("0.");
+            output.extend(std::iter::repeat_n('0', -exponent as usize - 1));
+            output.push_str(&digits);
         } else {
             // exponent >= 0, slot in a dot at the right spot
             let (first_digits, remaining_digits) = digits.split_at(exponent as usize + 1);
 
             // Always add `.` even if it's trailing, we might trim it later
-            format!("{first_digits}.{remaining_digits}")
+            output.push_str(first_digits);
+            output.push('.');
+            output.push_str(remaining_digits);
         };
 
         if force_decimal == ForceDecimal::No {
-            strip_fractional_zeroes_and_dot(&mut formatted);
+            strip_fractional_zeroes_and_dot(&mut output);
         }
-
-        formatted
     }
+
+    output
 }
 
 fn format_float_hexadecimal(
