@@ -120,7 +120,7 @@ fn format_float(f: f64, width: usize, precision: usize) -> String {
     } else if l == -1 {
         format!("{f:width$.precision$}")
     } else {
-        return format_f64_exp_precision(f, width, precision - 1); // subnormal numbers
+        format_f64_exp_precision(f, width, precision - 1) // subnormal numbers
     }
 }
 
