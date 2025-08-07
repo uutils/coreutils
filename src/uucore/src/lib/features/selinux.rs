@@ -474,57 +474,53 @@ mod tests {
 
         let result = get_selinux_security_context(path, false);
 
-        if result.is_ok() {
-            let context = result.unwrap();
-            println!("Retrieved SELinux context: {context}");
+        match result {
+            Ok(context) => {
+                println!("Retrieved SELinux context: {context}");
 
-            assert!(
-                is_selinux_enabled(),
-                "Got a successful context result but SELinux is not enabled"
-            );
-
-            if !context.is_empty() {
                 assert!(
-                    context.contains(':'),
-                    "SELinux context '{context}' doesn't match expected format"
+                    is_selinux_enabled(),
+                    "Got a successful context result but SELinux is not enabled"
+                );
+
+                if !context.is_empty() {
+                    assert!(
+                        context.contains(':'),
+                        "SELinux context '{context}' doesn't match expected format"
+                    );
+                }
+            }
+            Err(SeLinuxError::SELinuxNotEnabled) => {
+                assert!(
+                    !is_selinux_enabled(),
+                    "Got SELinuxNotEnabled error, but is_selinux_enabled() returned true"
                 );
             }
-        } else {
-            let err = result.unwrap_err();
-
-            match err {
-                SeLinuxError::SELinuxNotEnabled => {
-                    assert!(
-                        !is_selinux_enabled(),
-                        "Got SELinuxNotEnabled error, but is_selinux_enabled() returned true"
-                    );
-                }
-                SeLinuxError::ContextRetrievalFailure(e) => {
-                    assert!(
-                        is_selinux_enabled(),
-                        "Got ContextRetrievalFailure when SELinux is not enabled"
-                    );
-                    assert!(!e.is_empty(), "Error message should not be empty");
-                    println!("Context retrieval failure: {e}");
-                }
-                SeLinuxError::ContextConversionFailure(ctx, e) => {
-                    assert!(
-                        is_selinux_enabled(),
-                        "Got ContextConversionFailure when SELinux is not enabled"
-                    );
-                    assert!(!e.is_empty(), "Error message should not be empty");
-                    println!("Context conversion failure for '{ctx}': {e}");
-                }
-                SeLinuxError::ContextSetFailure(ctx, e) => {
-                    assert!(!e.is_empty(), "Error message should not be empty");
-                    println!("Context conversion failure for '{ctx}': {e}");
-                }
-                SeLinuxError::FileOpenFailure(e) => {
-                    assert!(
-                        Path::new(path).exists(),
-                        "File open failure occurred despite file being created: {e}"
-                    );
-                }
+            Err(SeLinuxError::ContextRetrievalFailure(e)) => {
+                assert!(
+                    is_selinux_enabled(),
+                    "Got ContextRetrievalFailure when SELinux is not enabled"
+                );
+                assert!(!e.is_empty(), "Error message should not be empty");
+                println!("Context retrieval failure: {e}");
+            }
+            Err(SeLinuxError::ContextConversionFailure(ctx, e)) => {
+                assert!(
+                    is_selinux_enabled(),
+                    "Got ContextConversionFailure when SELinux is not enabled"
+                );
+                assert!(!e.is_empty(), "Error message should not be empty");
+                println!("Context conversion failure for '{ctx}': {e}");
+            }
+            Err(SeLinuxError::ContextSetFailure(ctx, e)) => {
+                assert!(!e.is_empty(), "Error message should not be empty");
+                println!("Context conversion failure for '{ctx}': {e}");
+            }
+            Err(SeLinuxError::FileOpenFailure(e)) => {
+                assert!(
+                    Path::new(path).exists(),
+                    "File open failure occurred despite file being created: {e}"
+                );
             }
         }
     }
