@@ -143,9 +143,8 @@ fn find_stdout() -> UResult<File> {
             Ok(t)
         }
         Err(e1) => {
-            let home = match env::var("HOME") {
-                Err(_) => return Err(NohupError::OpenFailed(internal_failure_code, e1).into()),
-                Ok(h) => h,
+            let Ok(home) = env::var("HOME") else {
+                return Err(NohupError::OpenFailed(internal_failure_code, e1).into());
             };
             let mut homeout = PathBuf::from(home);
             homeout.push(NOHUP_OUT);

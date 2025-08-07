@@ -47,7 +47,7 @@ pub struct OutputInfo {
 
 impl OutputInfo {
     /// Returns an iterator over the `SpacedFormatterItemInfo` vector.
-    pub fn spaced_formatters_iter(&self) -> Iter<SpacedFormatterItemInfo> {
+    pub fn spaced_formatters_iter(&self) -> Iter<'_, SpacedFormatterItemInfo> {
         self.spaced_formatters.iter()
     }
 

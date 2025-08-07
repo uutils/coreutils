@@ -564,7 +564,7 @@ fn string_to_combo(arg: &str) -> Option<&str> {
         .map(|_| arg)
 }
 
-fn string_to_baud(arg: &str) -> Option<AllFlags> {
+fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
     // BSDs use a u32 for the baud rate, so any decimal number applies.
     #[cfg(any(
         target_os = "freebsd",
@@ -595,7 +595,7 @@ fn string_to_baud(arg: &str) -> Option<AllFlags> {
 }
 
 /// return `Some(flag)` if the input is a valid flag, `None` if not
-fn string_to_flag(option: &str) -> Option<AllFlags> {
+fn string_to_flag(option: &str) -> Option<AllFlags<'_>> {
     let remove = option.starts_with('-');
     let name = option.trim_start_matches('-');
 
@@ -868,7 +868,7 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
 }
 
 // decomposes a combination argument into a vec of corresponding flags
-fn combo_to_flags(combo: &str) -> Vec<ArgOptions> {
+fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
     let mut flags = Vec::new();
     let mut ccs = Vec::new();
     match combo {
