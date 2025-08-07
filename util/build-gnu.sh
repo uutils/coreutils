@@ -329,8 +329,10 @@ sed -i -e "s|44 45|48 49|" tests/ls/stat-failed.sh
 
 # small difference in the error message
 # Use GNU sed for /c command
-"${SED}" -i -e "/ls: invalid argument 'XX' for 'time style'/,/Try 'ls --help' for more information\./c\
-ls: invalid --time-style argument 'XX'\nPossible values are: [\"full-iso\", \"long-iso\", \"iso\", \"locale\", \"+FORMAT (e.g., +%H:%M) for a 'date'-style format\"]\n\nFor more information try --help" tests/ls/time-style-diag.sh
+"${SED}" -i -e "s/ls: invalid argument 'XX' for 'time style'/ls: invalid --time-style argument 'XX'/" \
+    -e "s/Valid arguments are:/Possible values are:/" \
+    -e "s/Try 'ls --help' for more information./\nFor more information try --help/" \
+    tests/ls/time-style-diag.sh
 
 # disable two kind of tests:
 # "hostid BEFORE --help" doesn't fail for GNU. we fail. we are probably doing better

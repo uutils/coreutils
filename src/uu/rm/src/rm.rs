@@ -5,7 +5,8 @@
 
 // spell-checker:ignore (path) eacces inacc rm-r4
 
-use clap::{Arg, ArgAction, Command, builder::ValueParser, parser::ValueSource};
+use clap::builder::{PossibleValue, ValueParser};
+use clap::{Arg, ArgAction, Command, parser::ValueSource};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, Metadata};
 use std::io::{IsTerminal, stdin};
@@ -19,6 +20,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
 
 use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
@@ -27,8 +29,6 @@ use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
 enum RmError {
     #[error("{}", translate!("rm-error-missing-operand", "util_name" => uucore::execution_phrase()))]
     MissingOperand,
-    #[error("{}", translate!("rm-error-invalid-interactive-argument", "arg" => _0.clone()))]
-    InvalidInteractiveArgument(String),
     #[error("{}", translate!("rm-error-cannot-remove-no-such-file", "file" => _0.quote()))]
     CannotRemoveNoSuchFile(String),
     #[error("{}", translate!("rm-error-cannot-remove-permission-denied", "file" => _0.quote()))]
@@ -57,6 +57,20 @@ pub enum InteractiveMode {
     Always,
     /// Prompt only on write-protected files
     PromptProtected,
+}
+
+// We implement `From` instead of `TryFrom` because clap guarantees that we only receive valid values.
+//
+// The `PromptProtected` variant is not supposed to be created from a string.
+impl From<&str> for InteractiveMode {
+    fn from(s: &str) -> Self {
+        match s {
+            "never" => Self::Never,
+            "once" => Self::Once,
+            "always" => Self::Always,
+            _ => unreachable!("should be prevented by clap"),
+        }
+    }
 }
 
 /// Options for the `rm` command
@@ -165,14 +179,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             } else if matches.get_flag(OPT_PROMPT_ONCE) {
                 InteractiveMode::Once
             } else if matches.contains_id(OPT_INTERACTIVE) {
-                match matches.get_one::<String>(OPT_INTERACTIVE).unwrap().as_str() {
-                    "never" => InteractiveMode::Never,
-                    "once" => InteractiveMode::Once,
-                    "always" => InteractiveMode::Always,
-                    val => {
-                        return Err(RmError::InvalidInteractiveArgument(val.to_string()).into());
-                    }
-                }
+                InteractiveMode::from(matches.get_one::<String>(OPT_INTERACTIVE).unwrap().as_str())
             } else {
                 InteractiveMode::PromptProtected
             }
@@ -249,6 +256,11 @@ pub fn uu_app() -> Command {
                 .long(OPT_INTERACTIVE)
                 .help(translate!("rm-help-interactive"))
                 .value_name("WHEN")
+                .value_parser(ShortcutValueParser::new([
+                    PossibleValue::new("always").alias("yes"),
+                    PossibleValue::new("once"),
+                    PossibleValue::new("never").alias("no").alias("none"),
+                ]))
                 .num_args(0..=1)
                 .require_equals(true)
                 .default_missing_value("always")

@@ -9,21 +9,21 @@ use std::fs::metadata;
 use uutests::new_ucmd;
 use uutests::util::UCommand;
 
-const DATE_TIME_FORMAT: &str = "%b %d %H:%M %Y";
+const DATE_TIME_FORMAT_DEFAULT: &str = "%Y-%m-%d %H:%M";
 
-fn file_last_modified_time(ucmd: &UCommand, path: &str) -> String {
+fn file_last_modified_time_format(ucmd: &UCommand, path: &str, format: &str) -> String {
     let tmp_dir_path = ucmd.get_full_fixture_path(path);
-    let file_metadata = metadata(tmp_dir_path);
-    file_metadata
-        .map(|i| {
-            i.modified()
-                .map(|x| {
-                    let date_time: DateTime<Utc> = x.into();
-                    date_time.format(DATE_TIME_FORMAT).to_string()
-                })
-                .unwrap_or_default()
+    metadata(tmp_dir_path)
+        .and_then(|meta| meta.modified())
+        .map(|mtime| {
+            let dt: DateTime<Utc> = mtime.into();
+            dt.format(format).to_string()
         })
         .unwrap_or_default()
+}
+
+fn file_last_modified_time(ucmd: &UCommand, path: &str) -> String {
+    file_last_modified_time_format(ucmd, path, DATE_TIME_FORMAT_DEFAULT)
 }
 
 fn all_minutes(from: DateTime<Utc>, to: DateTime<Utc>) -> Vec<String> {
@@ -31,7 +31,7 @@ fn all_minutes(from: DateTime<Utc>, to: DateTime<Utc>) -> Vec<String> {
     let mut vec = vec![];
     let mut current = from;
     while current < to {
-        vec.push(current.format(DATE_TIME_FORMAT).to_string());
+        vec.push(current.format(DATE_TIME_FORMAT_DEFAULT).to_string());
         current += Duration::try_minutes(1).unwrap();
     }
     vec
@@ -394,6 +394,91 @@ fn test_with_offset_space_option() {
             "-n",
             test_file_path,
         ])
+        .succeeds()
+        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
+}
+
+#[test]
+fn test_with_date_format() {
+    let test_file_path = "test_one_page.log";
+    let expected_test_file_path = "test_one_page.log.expected";
+    let mut scenario = new_ucmd!();
+    let value = file_last_modified_time_format(&scenario, test_file_path, "%Y__%s");
+    scenario
+        .args(&[test_file_path, "-D", "%Y__%s"])
+        .succeeds()
+        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
+
+    // "Format" doesn't need to contain any replaceable token.
+    new_ucmd!()
+        .args(&[test_file_path, "-D", "Hello!"])
+        .succeeds()
+        .stdout_is_templated_fixture(
+            expected_test_file_path,
+            &[("{last_modified_time}", "Hello!")],
+        );
+
+    // Long option also works
+    new_ucmd!()
+        .args(&[test_file_path, "--date-format=Hello!"])
+        .succeeds()
+        .stdout_is_templated_fixture(
+            expected_test_file_path,
+            &[("{last_modified_time}", "Hello!")],
+        );
+
+    // Option takes precedence over environment variables
+    new_ucmd!()
+        .env("POSIXLY_CORRECT", "1")
+        .env("LC_TIME", "POSIX")
+        .args(&[test_file_path, "-D", "Hello!"])
+        .succeeds()
+        .stdout_is_templated_fixture(
+            expected_test_file_path,
+            &[("{last_modified_time}", "Hello!")],
+        );
+}
+
+#[test]
+fn test_with_date_format_env() {
+    const POSIXLY_FORMAT: &str = "%b %e %H:%M %Y";
+
+    // POSIXLY_CORRECT + LC_ALL/TIME=POSIX uses "%b %e %H:%M %Y" date format
+    let test_file_path = "test_one_page.log";
+    let expected_test_file_path = "test_one_page.log.expected";
+    let mut scenario = new_ucmd!();
+    let value = file_last_modified_time_format(&scenario, test_file_path, POSIXLY_FORMAT);
+    scenario
+        .env("POSIXLY_CORRECT", "1")
+        .env("LC_ALL", "POSIX")
+        .args(&[test_file_path])
+        .succeeds()
+        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
+
+    let mut scenario = new_ucmd!();
+    let value = file_last_modified_time_format(&scenario, test_file_path, POSIXLY_FORMAT);
+    scenario
+        .env("POSIXLY_CORRECT", "1")
+        .env("LC_TIME", "POSIX")
+        .args(&[test_file_path])
+        .succeeds()
+        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
+
+    // But not if POSIXLY_CORRECT/LC_ALL is something else.
+    let mut scenario = new_ucmd!();
+    let value = file_last_modified_time_format(&scenario, test_file_path, DATE_TIME_FORMAT_DEFAULT);
+    scenario
+        .env("LC_TIME", "POSIX")
+        .args(&[test_file_path])
+        .succeeds()
+        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
+
+    let mut scenario = new_ucmd!();
+    let value = file_last_modified_time_format(&scenario, test_file_path, DATE_TIME_FORMAT_DEFAULT);
+    scenario
+        .env("POSIXLY_CORRECT", "1")
+        .env("LC_TIME", "C")
+        .args(&[test_file_path])
         .succeeds()
         .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
 }

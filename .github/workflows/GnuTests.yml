@@ -326,25 +326,25 @@ jobs:
         workflow_conclusion: completed ## continually recalibrates to last commit of default branch with a successful GnuTests (ie, "self-heals" from GnuTest regressions, but needs more supervision for/of regressions)
         path: "reference"
     - name: Download full json results
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
       with:
         name: gnu-full-result
         path: results
         merge-multiple: true
     - name: Download root json results
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
       with:
         name: gnu-root-full-result
         path: results
         merge-multiple: true
     - name: Download selinux json results
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
       with:
         name: selinux-gnu-full-result
         path: results
         merge-multiple: true
     - name: Download selinux root json results
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
       with:
         name: selinux-root-gnu-full-result
         path: results

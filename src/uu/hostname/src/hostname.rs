@@ -140,7 +140,9 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
         // use dns-lookup crate instead
         #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
         {
-            let addrs: Vec<std::net::IpAddr> = lookup_host(hostname.as_str()).unwrap();
+            let addrs: Vec<std::net::IpAddr> = lookup_host(hostname.as_str())
+                .map_err_context(|| "failed to lookup hostname".to_owned())?
+                .collect();
             addresses = addrs;
         }
 

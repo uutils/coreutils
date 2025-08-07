@@ -328,6 +328,58 @@ pub fn preserve_security_context(from_path: &Path, to_path: &Path) -> Result<(),
     set_selinux_security_context(to_path, Some(&context))
 }
 
+/// Gets the SELinux security context for a file using getfattr.
+///
+/// This function is primarily used for testing purposes to verify that SELinux
+/// contexts have been properly set on files. It uses the `getfattr` command
+/// to retrieve the security.selinux extended attribute.
+///
+/// # Arguments
+///
+/// * `f` - The file path as a string.
+///
+/// # Returns
+///
+/// Returns the SELinux context string extracted from the getfattr output.
+/// If the context cannot be retrieved, the function will panic.
+///
+/// # Panics
+///
+/// This function will panic if:
+/// - The `getfattr` command fails to execute
+/// - The `getfattr` command returns a non-zero exit status
+///
+/// # Examples
+///
+/// ```no_run
+/// use uucore::selinux::get_getfattr_output;
+///
+/// let context = get_getfattr_output("/path/to/file");
+/// println!("SELinux context: {}", context);
+/// ```
+pub fn get_getfattr_output(f: &str) -> String {
+    use std::process::Command;
+
+    let getfattr_output = Command::new("getfattr")
+        .arg(f)
+        .arg("-n")
+        .arg("security.selinux")
+        .output()
+        .expect("Failed to run `getfattr` on the destination file");
+    println!("{getfattr_output:?}");
+    assert!(
+        getfattr_output.status.success(),
+        "getfattr did not run successfully: {}",
+        String::from_utf8_lossy(&getfattr_output.stderr)
+    );
+
+    String::from_utf8_lossy(&getfattr_output.stdout)
+        .split('"')
+        .nth(1)
+        .unwrap_or("")
+        .to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

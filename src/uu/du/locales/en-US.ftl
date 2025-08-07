@@ -52,6 +52,7 @@ du-error-invalid-time-style = invalid argument { $style } for 'time style'
     - 'full-iso'
     - 'long-iso'
     - 'iso'
+    - +FORMAT (e.g., +%H:%M) for a 'date'-style format
   Try '{ $help }' for more information.
 du-error-invalid-time-arg = 'birth' and 'creation' arguments for --time are not supported on this platform.
 du-error-invalid-glob = Invalid exclude syntax: { $error }

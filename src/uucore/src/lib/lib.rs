@@ -185,7 +185,7 @@ macro_rules! bin {
                         uucore::locale::LocalizationError::ParseResource {
                             error: err_msg,
                             snippet,
-                        } => eprintln!("Localization parse error at {snippet}: {err_msg}"),
+                        } => eprintln!("Localization parse error at {snippet}: {err_msg:?}"),
                         other => eprintln!("Could not init the localization system: {other}"),
                     }
                     std::process::exit(99)

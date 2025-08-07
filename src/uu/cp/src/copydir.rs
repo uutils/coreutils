@@ -227,7 +227,7 @@ fn copy_direntry(
     // If the source is a symbolic link and the options tell us not to
     // dereference the link, then copy the link object itself.
     if source_absolute.is_symlink() && !options.dereference {
-        return copy_link(&source_absolute, &local_to_target, symlinked_files);
+        return copy_link(&source_absolute, &local_to_target, symlinked_files, options);
     }
 
     // If the source is a directory and the destination does not

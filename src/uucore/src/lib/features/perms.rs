@@ -41,6 +41,15 @@ pub struct Verbosity {
     pub level: VerbosityLevel,
 }
 
+impl Default for Verbosity {
+    fn default() -> Self {
+        Self {
+            groups_only: false,
+            level: VerbosityLevel::Normal,
+        }
+    }
+}
+
 /// Actually perform the change of owner on a path
 fn chown<P: AsRef<Path>>(path: P, uid: uid_t, gid: gid_t, follow: bool) -> IOResult<()> {
     let path = path.as_ref();

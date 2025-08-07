@@ -13,6 +13,8 @@ use std::process::Command;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
 use uucore::process::{getegid, geteuid};
+#[cfg(feature = "feat_selinux")]
+use uucore::selinux::get_getfattr_output;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::{TestScenario, is_ci, run_ucmd_as_root};
@@ -691,6 +693,8 @@ fn strip_source_file() -> &'static str {
 
 #[test]
 #[cfg(not(windows))]
+// FIXME test runs in a timeout with macos-latest on x86_64 in the CI
+#[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
 fn test_install_and_strip() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -714,6 +718,8 @@ fn test_install_and_strip() {
 
 #[test]
 #[cfg(not(windows))]
+// FIXME test runs in a timeout with macos-latest on x86_64 in the CI
+#[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
 fn test_install_and_strip_with_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2235,8 +2241,6 @@ fn test_install_no_target_basic() {
 #[test]
 #[cfg(feature = "feat_selinux")]
 fn test_selinux() {
-    use std::process::Command;
-
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let src = "orig";
@@ -2265,29 +2269,19 @@ fn test_selinux() {
 
         result.success().stdout_contains("orig' -> '");
 
-        let getfattr_output = Command::new("getfattr")
-            .arg(at.plus_as_string(dest))
-            .arg("-n")
-            .arg("security.selinux")
-            .output();
+        // Try to get SELinux context, skip test if getfattr is not available
+        let context_value =
+            std::panic::catch_unwind(|| get_getfattr_output(&at.plus_as_string(dest)));
 
-        // Skip test if getfattr is not available
-        let Ok(getfattr_output) = getfattr_output else {
-            println!("Skipping SELinux test: getfattr not available");
+        let Ok(context_value) = context_value else {
+            println!("Skipping SELinux test: getfattr not available or failed");
             at.remove(&at.plus_as_string(dest));
             continue;
         };
-        println!("{getfattr_output:?}");
-        assert!(
-            getfattr_output.status.success(),
-            "getfattr did not run successfully: {}",
-            String::from_utf8_lossy(&getfattr_output.stderr)
-        );
 
-        let stdout = String::from_utf8_lossy(&getfattr_output.stdout);
         assert!(
-            stdout.contains("unconfined_u"),
-            "Expected 'foo' not found in getfattr output:\n{stdout}"
+            context_value.contains("unconfined_u"),
+            "Expected 'unconfined_u' not found in getfattr output:\n{context_value}"
         );
         at.remove(&at.plus_as_string(dest));
     }

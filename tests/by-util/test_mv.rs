@@ -10,6 +10,8 @@ use rstest::rstest;
 use std::io::Write;
 #[cfg(not(windows))]
 use std::path::Path;
+#[cfg(feature = "feat_selinux")]
+use uucore::selinux::get_getfattr_output;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, util_name};
@@ -2489,7 +2491,7 @@ fn test_mv_cross_device_permission_denied() {
         .expect("Unable to restore directory permissions");
 }
 
-// Tests for --exchange flag
+
 #[test]
 #[cfg(target_os = "linux")]
 fn test_mv_exchange_basic() {
@@ -2647,4 +2649,61 @@ fn test_mv_exchange_with_no_target_directory() {
     assert_eq!(at.read("d2/file1"), "content1");
     assert!(!at.file_exists("d1/file1"));
     assert!(!at.file_exists("d2/file2"));
+}
+
+#[test]
+#[cfg(feature = "selinux")]
+fn test_mv_selinux_context() {
+    let test_cases = [
+        ("-Z", None),
+        (
+            "--context=unconfined_u:object_r:user_tmp_t:s0",
+            Some("unconfined_u"),
+        ),
+    ];
+
+    for (arg, expected_context) in test_cases {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let src = "source.txt";
+        let dest = "dest.txt";
+
+        at.touch(src);
+
+        let mut cmd = scene.ucmd();
+        cmd.arg(arg);
+
+        let result = cmd
+            .arg(at.plus_as_string(src))
+            .arg(at.plus_as_string(dest))
+            .run();
+
+        // Skip test if SELinux is not enabled
+        if result
+            .stderr_str()
+            .contains("SELinux is not enabled on this system")
+        {
+            println!("Skipping SELinux test: SELinux is not enabled");
+            return;
+        }
+
+        result.success();
+        assert!(at.file_exists(dest));
+        assert!(!at.file_exists(src));
+
+        // Verify SELinux context was set using getfattr
+        let context_value = get_getfattr_output(&at.plus_as_string(dest));
+        if !context_value.is_empty() {
+            if let Some(expected) = expected_context {
+                assert!(
+                    context_value.contains(expected),
+                    "Expected context to contain '{expected}', got: {context_value}"
+                );
+            }
+        }
+
+        // Clean up files
+        let _ = std::fs::remove_file(at.plus_as_string(dest));
+        let _ = std::fs::remove_file(at.plus_as_string(src));
+    }
 }

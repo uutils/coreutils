@@ -25,20 +25,8 @@ mod options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let mode = match matches.get_one::<String>(options::MODE) {
-        // if mode is passed, ignore umask
-        Some(m) => match usize::from_str_radix(m, 8) {
-            Ok(m) => m,
-            Err(e) => {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("mkfifo-error-invalid-mode", "error" => e),
-                ));
-            }
-        },
-        // Default value + umask if present
-        None => 0o666 & !(uucore::mode::get_umask() as usize),
-    };
+    let mode = calculate_mode(matches.get_one::<String>(options::MODE))
+        .map_err(|e| USimpleError::new(1, translate!("mkfifo-error-invalid-mode", "error" => e)))?;
 
     let fifos: Vec<String> = match matches.get_many::<String>(options::FIFO) {
         Some(v) => v.cloned().collect(),
@@ -63,7 +51,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         // Explicitly set the permissions to ignore umask
-        if let Err(e) = fs::set_permissions(&f, fs::Permissions::from_mode(mode as u32)) {
+        if let Err(e) = fs::set_permissions(&f, fs::Permissions::from_mode(mode)) {
             return Err(USimpleError::new(
                 1,
                 translate!("mkfifo-error-cannot-set-permissions", "path" => f.quote(), "error" => e),
@@ -126,4 +114,23 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath),
         )
+}
+
+fn calculate_mode(mode_option: Option<&String>) -> Result<u32, String> {
+    let umask = uucore::mode::get_umask();
+    let mut mode = 0o666; // Default mode for FIFOs
+
+    if let Some(m) = mode_option {
+        if m.chars().any(|c| c.is_ascii_digit()) {
+            mode = uucore::mode::parse_numeric(mode, m, false)?;
+        } else {
+            for item in m.split(',') {
+                mode = uucore::mode::parse_symbolic(mode, item, umask, false)?;
+            }
+        }
+    } else {
+        mode &= !umask; // Apply umask if no mode is specified
+    }
+
+    Ok(mode)
 }
