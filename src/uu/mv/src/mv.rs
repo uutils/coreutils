@@ -104,7 +104,7 @@ pub struct Options {
 
     /// `--exchange`
     pub exchange: bool,
-  
+
     /// `-Z, --context`
     pub context: Option<String>,
 }

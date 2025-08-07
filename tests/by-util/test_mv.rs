@@ -2491,7 +2491,6 @@ fn test_mv_cross_device_permission_denied() {
         .expect("Unable to restore directory permissions");
 }
 
-
 #[test]
 #[cfg(target_os = "linux")]
 fn test_mv_exchange_basic() {
