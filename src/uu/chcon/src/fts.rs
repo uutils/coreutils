@@ -61,7 +61,7 @@ impl FTS {
         })
     }
 
-    pub(crate) fn last_entry_ref(&mut self) -> Option<EntryRef> {
+    pub(crate) fn last_entry_ref(&mut self) -> Option<EntryRef<'_>> {
         self.entry.map(move |entry| EntryRef::new(self, entry))
     }
 

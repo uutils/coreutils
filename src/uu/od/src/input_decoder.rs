@@ -44,7 +44,7 @@ impl<I> InputDecoder<'_, I> {
         normal_length: usize,
         peek_length: usize,
         byte_order: ByteOrder,
-    ) -> InputDecoder<I> {
+    ) -> InputDecoder<'_, I> {
         let bytes = vec![0; normal_length + peek_length];
 
         InputDecoder {
@@ -64,7 +64,7 @@ where
 {
     /// calls `peek_read` on the internal stream to (re)fill the buffer. Returns a
     /// `MemoryDecoder` providing access to the result or returns an i/o error.
-    pub fn peek_read(&mut self) -> io::Result<MemoryDecoder> {
+    pub fn peek_read(&mut self) -> io::Result<MemoryDecoder<'_>> {
         match self
             .input
             .peek_read(self.data.as_mut_slice(), self.reserved_peek_length)

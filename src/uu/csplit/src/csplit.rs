@@ -240,7 +240,7 @@ impl Drop for SplitWriter<'_> {
 }
 
 impl SplitWriter<'_> {
-    fn new(options: &CsplitOptions) -> SplitWriter {
+    fn new(options: &CsplitOptions) -> SplitWriter<'_> {
         SplitWriter {
             options,
             counter: 0,

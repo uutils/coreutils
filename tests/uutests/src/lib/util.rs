@@ -2318,12 +2318,12 @@ impl UChild {
     }
 
     /// Return a [`UChildAssertion`]
-    pub fn make_assertion(&mut self) -> UChildAssertion {
+    pub fn make_assertion(&mut self) -> UChildAssertion<'_> {
         UChildAssertion::new(self)
     }
 
     /// Convenience function for calling [`UChild::delay`] and then [`UChild::make_assertion`]
-    pub fn make_assertion_with_delay(&mut self, millis: u64) -> UChildAssertion {
+    pub fn make_assertion_with_delay(&mut self, millis: u64) -> UChildAssertion<'_> {
         self.delay(millis).make_assertion()
     }
 
@@ -2879,7 +2879,7 @@ pub fn whoami() -> String {
 
 /// Add prefix 'g' for `util_name` if not on linux
 #[cfg(unix)]
-pub fn host_name_for(util_name: &str) -> Cow<str> {
+pub fn host_name_for(util_name: &str) -> Cow<'_, str> {
     // In some environments, e.g. macOS/freebsd, the GNU coreutils are prefixed with "g"
     // to not interfere with the BSD counterparts already in `$PATH`.
     #[cfg(not(target_os = "linux"))]

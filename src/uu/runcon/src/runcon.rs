@@ -282,7 +282,7 @@ fn get_plain_context(context: &OsStr) -> Result<OpaqueSecurityContext> {
         .map_err(|r| Error::from_selinux("runcon-operation-creating-context", r))
 }
 
-fn get_transition_context(command: &OsStr) -> Result<SecurityContext> {
+fn get_transition_context(command: &OsStr) -> Result<SecurityContext<'_>> {
     // Generate context based on process transition.
     let sec_class = SecurityClass::from_name("process")
         .map_err(|r| Error::from_selinux("runcon-operation-getting-process-class", r))?;

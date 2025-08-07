@@ -34,7 +34,7 @@ use crate::{
 
 /// Ensure a Windows path starts with a `\\?`.
 #[cfg(target_os = "windows")]
-fn adjust_canonicalization(p: &Path) -> Cow<Path> {
+fn adjust_canonicalization(p: &Path) -> Cow<'_, Path> {
     // In some cases, \\? can be missing on some Windows paths.  Add it at the
     // beginning unless the path is prefixed with a device namespace.
     const VERBATIM_PREFIX: &str = r"\\?";

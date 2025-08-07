@@ -88,10 +88,11 @@ impl Chunk {
         }
     }
 
-    pub fn lines(&self) -> &Vec<Line> {
+    pub fn lines(&self) -> &Vec<Line<'_>> {
         &self.borrow_dependent().lines
     }
-    pub fn line_data(&self) -> &LineData {
+
+    pub fn line_data(&self) -> &LineData<'_> {
         &self.borrow_dependent().line_data
     }
 }
