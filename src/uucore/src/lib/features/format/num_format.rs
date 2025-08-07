@@ -374,6 +374,27 @@ fn format_float_decimal(
     format!("{bd:.precision$}")
 }
 
+/// Converts a `&BigDecimal` to a scientific-like `X.XX * 10^e`.
+/// - The returned `String` contains the digits `XXX`, _without_ the separating
+///   `.` (the caller must add that to get a valid scientific format number).
+/// - `e` is an integer exponent.
+fn bd_to_string_exp_with_prec(bd: &BigDecimal, precision: u64) -> (String, i64) {
+    // Round bd to precision digits (including the leading digit)
+    // We call `with_prec` twice as it will produce an extra digit if rounding overflows
+    // (e.g. 9995.with_prec(3) => 1000 * 10^1, but we want 100 * 10^2).
+    let bd_round = bd.with_prec(precision).with_prec(precision);
+
+    // Convert to the form XXX * 10^-p (XXX is precision digit long)
+    let (frac, p) = bd_round.as_bigint_and_exponent();
+
+    let digits = frac.to_str_radix(10);
+    // If we end up with scientific formatting, we would convert XXX to X.XX:
+    // that divides by 10^(precision-1), so add that to the exponent.
+    let exponent = -p + precision as i64 - 1;
+
+    (digits, exponent)
+}
+
 fn format_float_scientific(
     bd: &BigDecimal,
     precision: Option<usize>,
@@ -395,20 +416,8 @@ fn format_float_scientific(
         };
     }
 
-    // Round bd to (1 + precision) digits (including the leading digit)
-    // We call `with_prec` twice as it will produce an extra digit if rounding overflows
-    // (e.g. 9995.with_prec(3) => 1000 * 10^1, but we want 100 * 10^2).
-    let bd_round = bd
-        .with_prec(precision as u64 + 1)
-        .with_prec(precision as u64 + 1);
-
-    // Convert to the form XXX * 10^-e (XXX is 1+precision digit long)
-    let (frac, e) = bd_round.as_bigint_and_exponent();
-
-    // Scale down "XXX" to "X.XX": that divides by 10^precision, so add that to the exponent.
-    let digits = frac.to_str_radix(10);
+    let (digits, exponent) = bd_to_string_exp_with_prec(bd, precision as u64 + 1);
     let (first_digit, remaining_digits) = digits.split_at(1);
-    let exponent = -e + precision as i64;
 
     let dot =
         if !remaining_digits.is_empty() || (precision == 0 && ForceDecimal::Yes == force_decimal) {
@@ -445,18 +454,7 @@ fn format_float_shortest(
         };
     }
 
-    // Round bd to precision digits (including the leading digit)
-    // We call `with_prec` twice as it will produce an extra digit if rounding overflows
-    // (e.g. 9995.with_prec(3) => 1000 * 10^1, but we want 100 * 10^2).
-    let bd_round = bd.with_prec(precision as u64).with_prec(precision as u64);
-
-    // Convert to the form XXX * 10^-p (XXX is precision digit long)
-    let (frac, e) = bd_round.as_bigint_and_exponent();
-
-    let digits = frac.to_str_radix(10);
-    // If we end up with scientific formatting, we would convert XXX to X.XX:
-    // that divides by 10^(precision-1), so add that to the exponent.
-    let exponent = -e + precision as i64 - 1;
+    let (digits, exponent) = bd_to_string_exp_with_prec(bd, precision as u64);
 
     if exponent < -4 || exponent >= precision as i64 {
         // Scientific-ish notation (with a few differences)
