@@ -1009,7 +1009,7 @@ mod tests_split_iterator {
     ///
     /// It tries to avoid introducing any unnecessary quotes or escape characters,
     /// but specifics regarding quoting style are left unspecified.
-    pub fn quote(s: &str) -> std::borrow::Cow<str> {
+    pub fn quote(s: &str) -> std::borrow::Cow<'_, str> {
         // We are going somewhat out of the way to provide
         // minimal amount of quoting in typical cases.
         match escape_style(s) {

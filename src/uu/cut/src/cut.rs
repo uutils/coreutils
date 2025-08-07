@@ -404,7 +404,7 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
 
 /// Get delimiter and output delimiter from `-d`/`--delimiter` and `--output-delimiter` options respectively
 /// Allow either delimiter to have a value that is neither UTF-8 nor ASCII to align with GNU behavior
-fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter, Option<&[u8]>)> {
+fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter<'_>, Option<&[u8]>)> {
     let whitespace_delimited = matches.get_flag(options::WHITESPACE_DELIMITED);
     let delim_opt = matches.get_one::<OsString>(options::DELIMITER);
     let delim = match delim_opt {

@@ -242,7 +242,7 @@ impl<'a> Input<'a> {
     }
 
     /// Converts input to title that appears in stats.
-    fn to_title(&self) -> Option<Cow<OsStr>> {
+    fn to_title(&self) -> Option<Cow<'_, OsStr>> {
         match self {
             Self::Path(path) => {
                 let path = path.as_os_str();

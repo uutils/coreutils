@@ -344,7 +344,7 @@ pub fn os_str_as_bytes(os_string: &OsStr) -> Result<&[u8], NonUtf8OsStrError> {
 ///
 /// This is always lossless on unix platforms,
 /// and wraps [`OsStr::to_string_lossy`] on non-unix platforms.
-pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<[u8]> {
+pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<'_, [u8]> {
     #[cfg(unix)]
     return Cow::from(os_string.as_bytes());
 

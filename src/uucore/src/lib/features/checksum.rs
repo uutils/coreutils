@@ -701,7 +701,7 @@ fn get_filename_for_output(filename: &OsStr, input_is_stdin: bool) -> String {
 fn get_expected_digest_as_hex_string(
     line_info: &LineInfo,
     len_hint: Option<usize>,
-) -> Option<Cow<str>> {
+) -> Option<Cow<'_, str>> {
     let ck = &line_info.checksum;
 
     let against_hint = |len| len_hint.is_none_or(|l| l == len);
