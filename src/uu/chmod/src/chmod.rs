@@ -119,11 +119,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let quiet = matches.get_flag(options::QUIET);
     let verbose = matches.get_flag(options::VERBOSE);
     let preserve_root = matches.get_flag(options::PRESERVE_ROOT);
-    let fmode = match matches.get_one::<String>(options::REFERENCE) {
+    let fmode = match matches.get_one::<OsString>(options::REFERENCE) {
         Some(fref) => match fs::metadata(fref) {
             Ok(meta) => Some(meta.mode() & 0o7777),
             Err(_) => {
-                return Err(ChmodError::CannotStat(fref.to_string()).into());
+                return Err(ChmodError::CannotStat(fref.to_string_lossy().to_string()).into());
             }
         },
         None => None,
@@ -135,16 +135,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         modes.unwrap().to_string() // modes is required
     };
-    // FIXME: enable non-utf8 paths
-    let mut files: Vec<String> = matches
-        .get_many::<String>(options::FILE)
-        .map(|v| v.map(ToString::to_string).collect())
+    let mut files: Vec<OsString> = matches
+        .get_many::<OsString>(options::FILE)
+        .map(|v| v.cloned().collect())
         .unwrap_or_default();
     let cmode = if fmode.is_some() {
         // "--reference" and MODE are mutually exclusive
         // if "--reference" was used MODE needs to be interpreted as another FILE
         // it wasn't possible to implement this behavior directly with clap
-        files.push(cmode);
+        files.push(OsString::from(cmode));
         None
     } else {
         Some(cmode)
@@ -235,6 +234,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::REFERENCE)
                 .long("reference")
                 .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString))
                 .help(translate!("chmod-help-reference")),
         )
         .arg(
@@ -247,7 +247,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE)
                 .required_unless_present(options::MODE)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::AnyPath),
+                .value_hint(clap::ValueHint::AnyPath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         // Add common arguments with chgrp, chown & chmod
         .args(uucore::perms::common_args())
@@ -266,11 +267,10 @@ struct Chmoder {
 }
 
 impl Chmoder {
-    fn chmod(&self, files: &[String]) -> UResult<()> {
+    fn chmod(&self, files: &[OsString]) -> UResult<()> {
         let mut r = Ok(());
 
         for filename in files {
-            let filename = &filename[..];
             let file = Path::new(filename);
             if !file.exists() {
                 if file.is_symlink() {
@@ -284,18 +284,22 @@ impl Chmoder {
                     }
 
                     if !self.quiet {
-                        show!(ChmodError::DanglingSymlink(filename.to_string()));
+                        show!(ChmodError::DanglingSymlink(
+                            filename.to_string_lossy().to_string()
+                        ));
                         set_exit_code(1);
                     }
 
                     if self.verbose {
                         println!(
                             "{}",
-                            translate!("chmod-verbose-failed-dangling", "file" => filename.quote())
+                            translate!("chmod-verbose-failed-dangling", "file" => filename.to_string_lossy().quote())
                         );
                     }
                 } else if !self.quiet {
-                    show!(ChmodError::NoSuchFile(filename.to_string()));
+                    show!(ChmodError::NoSuchFile(
+                        filename.to_string_lossy().to_string()
+                    ));
                 }
                 // GNU exits with exit code 1 even if -q or --quiet are passed
                 // So we set the exit code, because it hasn't been set yet if `self.quiet` is true.
@@ -307,8 +311,8 @@ impl Chmoder {
                 // should not change the permissions in this case
                 continue;
             }
-            if self.recursive && self.preserve_root && filename == "/" {
-                return Err(ChmodError::PreserveRoot(filename.to_string()).into());
+            if self.recursive && self.preserve_root && file == Path::new("/") {
+                return Err(ChmodError::PreserveRoot("/".to_string()).into());
             }
             if self.recursive {
                 r = self.walk_dir_with_context(file, true);
