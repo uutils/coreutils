@@ -5,7 +5,8 @@
 
 // spell-checker:ignore (paths) GPGHome findxs
 
-use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
+use clap::builder::{TypedValueParser, ValueParserFactory};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use uucore::display::{Quotable, println_verbatim};
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::format_usage;
@@ -110,9 +111,18 @@ pub struct Options {
 impl Options {
     fn from(matches: &ArgMatches) -> Self {
         let tmpdir = matches
-            .get_one::<PathBuf>(OPT_TMPDIR)
-            .or_else(|| matches.get_one::<PathBuf>(OPT_P))
-            .cloned();
+            .get_one::<Option<PathBuf>>(OPT_TMPDIR)
+            .or_else(|| matches.get_one::<Option<PathBuf>>(OPT_P))
+            .map(|dir| match dir {
+                // If the argument of -p/--tmpdir is non-empty, use it as the
+                // tmpdir.
+                Some(d) => d.clone(),
+                // Otherwise use $TMPDIR if set, else use the system's default
+                // temporary directory.
+                None => env::var(TMPDIR_ENV_VAR)
+                    .ok()
+                    .map_or_else(env::temp_dir, PathBuf::from),
+            });
         let (tmpdir, template) = match matches.get_one::<String>(ARG_TEMPLATE) {
             // If no template argument is given, `--tmpdir` is implied.
             None => {
@@ -274,6 +284,49 @@ impl Params {
     }
 }
 
+/// Custom parser that converts empty string to `None`, and non-empty string to
+/// `Some(PathBuf)`.
+///
+/// This parser is used for the `-p` and `--tmpdir` options where an empty string
+/// argument should be treated as "not provided", causing mktemp to fall back to
+/// using the `$TMPDIR` environment variable or the system's default temporary
+/// directory.
+///
+/// # Examples
+///
+/// - Empty string `""` -> `None`
+/// - Non-empty string `"/tmp"` -> `Some(PathBuf::from("/tmp"))`
+///
+/// This handles the special case where users can pass an empty directory name
+/// to explicitly request fallback behavior.
+#[derive(Clone, Debug)]
+struct OptionalPathBufParser;
+
+impl TypedValueParser for OptionalPathBufParser {
+    type Value = Option<PathBuf>;
+
+    fn parse_ref(
+        &self,
+        _cmd: &Command,
+        _arg: Option<&Arg>,
+        value: &OsStr,
+    ) -> Result<Self::Value, clap::Error> {
+        if value.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(PathBuf::from(value)))
+        }
+    }
+}
+
+impl ValueParserFactory for OptionalPathBufParser {
+    type Parser = Self;
+
+    fn value_parser() -> Self::Parser {
+        Self
+    }
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<_> = args.collect();
@@ -376,7 +429,7 @@ pub fn uu_app() -> Command {
                 .help(translate!("mktemp-help-p"))
                 .value_name("DIR")
                 .num_args(1)
-                .value_parser(ValueParser::path_buf())
+                .value_parser(OptionalPathBufParser)
                 .value_hint(clap::ValueHint::DirPath),
         )
         .arg(
@@ -390,7 +443,7 @@ pub fn uu_app() -> Command {
                 // Require an equals to avoid ambiguity if no tmpdir is supplied
                 .require_equals(true)
                 .overrides_with(OPT_P)
-                .value_parser(ValueParser::path_buf())
+                .value_parser(OptionalPathBufParser)
                 .value_hint(clap::ValueHint::DirPath),
         )
         .arg(
