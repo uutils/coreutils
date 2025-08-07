@@ -989,7 +989,7 @@ fn process_checksum_line(
         process_non_algo_based_line(i, &line_info, cli_algo, cli_algo_length, opts)
     } else {
         // We have no clue of what algorithm to use
-        return Err(LineCheckError::ImproperlyFormatted);
+        Err(LineCheckError::ImproperlyFormatted)
     }
 }
 

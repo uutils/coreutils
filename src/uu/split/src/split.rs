@@ -630,9 +630,9 @@ where
     } else if input == "-" {
         // STDIN stream that did not fit all content into a buffer
         // Most likely continuous/infinite input stream
-        return Err(io::Error::other(
+        Err(io::Error::other(
             translate!("split-error-cannot-determine-input-size", "input" => input),
-        ));
+        ))
     } else {
         // Could be that file size is larger than set read limit
         // Get the file size from filesystem metadata
@@ -655,9 +655,9 @@ where
                 // Give up and return an error
                 // TODO It might be possible to do more here
                 // to address all possible file types and edge cases
-                return Err(io::Error::other(
+                Err(io::Error::other(
                     translate!("split-error-cannot-determine-file-size", "input" => input),
-                ));
+                ))
             }
         }
     }
