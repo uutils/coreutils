@@ -378,16 +378,30 @@ fn format_float_decimal(
 /// - The returned `String` contains the digits `XXX`, _without_ the separating
 ///   `.` (the caller must add that to get a valid scientific format number).
 /// - `e` is an integer exponent.
-fn bd_to_string_exp_with_prec(bd: &BigDecimal, precision: u64) -> (String, i64) {
+fn bd_to_string_exp_with_prec(bd: &BigDecimal, precision: usize) -> (String, i64) {
+    // TODO: A lot of time is spent in `with_prec` computing the exact number
+    // of digits, it might be possible to save computation time by doing a rough
+    // division followed by arithmetics on `digits` to round if necessary (using
+    // `fast_inc`).
+
     // Round bd to precision digits (including the leading digit)
-    // We call `with_prec` twice as it will produce an extra digit if rounding overflows
-    // (e.g. 9995.with_prec(3) => 1000 * 10^1, but we want 100 * 10^2).
-    let bd_round = bd.with_prec(precision).with_prec(precision);
+    // Note that `with_prec` will produce an extra digit if rounding overflows
+    // (e.g. 9995.with_prec(3) => 1000 * 10^1, but we want 100 * 10^2), we compensate
+    // for that later.
+    let bd_round = bd.with_prec(precision as u64);
 
     // Convert to the form XXX * 10^-p (XXX is precision digit long)
-    let (frac, p) = bd_round.as_bigint_and_exponent();
+    let (frac, mut p) = bd_round.as_bigint_and_exponent();
 
-    let digits = frac.to_str_radix(10);
+    let mut digits = frac.to_str_radix(10);
+
+    // In the unlikely case we had an overflow, correct for that.
+    if digits.len() == precision + 1 {
+        debug_assert!(&digits[precision..] == "0");
+        digits.truncate(precision);
+        p -= 1;
+    }
+
     // If we end up with scientific formatting, we would convert XXX to X.XX:
     // that divides by 10^(precision-1), so add that to the exponent.
     let exponent = -p + precision as i64 - 1;
@@ -416,7 +430,7 @@ fn format_float_scientific(
         };
     }
 
-    let (digits, exponent) = bd_to_string_exp_with_prec(bd, precision as u64 + 1);
+    let (digits, exponent) = bd_to_string_exp_with_prec(bd, precision + 1);
     let (first_digit, remaining_digits) = digits.split_at(1);
 
     let dot =
@@ -454,7 +468,7 @@ fn format_float_shortest(
         };
     }
 
-    let (digits, exponent) = bd_to_string_exp_with_prec(bd, precision as u64);
+    let (digits, exponent) = bd_to_string_exp_with_prec(bd, precision);
 
     if exponent < -4 || exponent >= precision as i64 {
         // Scientific-ish notation (with a few differences)
