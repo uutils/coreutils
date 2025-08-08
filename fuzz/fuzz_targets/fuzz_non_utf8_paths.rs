@@ -149,6 +149,8 @@ fuzz_target!(|_data: &[u8]| {
     let num_programs_to_test = rng.random_range(1..=3); // Test 1-3 programs per iteration
     let mut tested_programs = HashSet::new();
 
+    let mut programs_tested = Vec::<String>::new();
+
     for _ in 0..num_programs_to_test {
         // Pick a random program that we haven't tested yet in this iteration
         let available_programs: Vec<_> = PATH_PROGRAMS
@@ -162,6 +164,7 @@ fuzz_target!(|_data: &[u8]| {
 
         let program = available_programs.choose(&mut rng).unwrap();
         tested_programs.insert(*program);
+        programs_tested.push(program.to_string());
 
         // Test with one random file that has non-UTF-8 names (not all files to speed up)
         if let Some(test_file) = test_files.choose(&mut rng) {
@@ -191,6 +194,8 @@ fuzz_target!(|_data: &[u8]| {
             }
         }
     }
+
+    println!("Tested programs: {}", programs_tested.join(", "));
 
     // Clean up
     cleanup_test_files(&temp_root);
