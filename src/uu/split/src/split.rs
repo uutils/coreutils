@@ -373,7 +373,8 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(ARG_INPUT)
                 .default_value("-")
-                .value_hint(ValueHint::FilePath),
+                .value_hint(ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(Arg::new(ARG_PREFIX).default_value("x"))
 }
@@ -385,7 +386,7 @@ pub fn uu_app() -> Command {
 struct Settings {
     prefix: String,
     suffix: Suffix,
-    input: String,
+    input: OsString,
     /// When supplied, a shell command to output to instead of xaa, xab …
     filter: Option<String>,
     strategy: Strategy,
@@ -489,7 +490,7 @@ impl Settings {
         let result = Self {
             prefix: matches.get_one::<String>(ARG_PREFIX).unwrap().clone(),
             suffix,
-            input: matches.get_one::<String>(ARG_INPUT).unwrap().clone(),
+            input: matches.get_one::<OsString>(ARG_INPUT).unwrap().clone(),
             filter: matches.get_one::<String>(OPT_FILTER).cloned(),
             strategy,
             verbose: matches.value_source(OPT_VERBOSE) == Some(ValueSource::CommandLine),
@@ -527,7 +528,7 @@ impl Settings {
         filename: &str,
         is_new: bool,
     ) -> io::Result<BufWriter<Box<dyn Write>>> {
-        if platform::paths_refer_to_same_file(&self.input, filename) {
+        if platform::paths_refer_to_same_file(&self.input.to_string_lossy(), filename) {
             return Err(io::Error::other(
                 translate!("split-error-would-overwrite-input", "file" => filename.quote()),
             ));
@@ -596,7 +597,7 @@ fn custom_write_all<T: Write>(
 ///
 /// Note: The `buf` might end up with either partial or entire input content.
 fn get_input_size<R>(
-    input: &String,
+    input: &OsString,
     reader: &mut R,
     buf: &mut Vec<u8>,
     io_blksize: Option<u64>,
@@ -631,12 +632,12 @@ where
         // STDIN stream that did not fit all content into a buffer
         // Most likely continuous/infinite input stream
         Err(io::Error::other(
-            translate!("split-error-cannot-determine-input-size", "input" => input),
+            translate!("split-error-cannot-determine-input-size", "input" => input.to_string_lossy()),
         ))
     } else {
         // Could be that file size is larger than set read limit
         // Get the file size from filesystem metadata
-        let metadata = metadata(input)?;
+        let metadata = metadata(Path::new(input))?;
         let metadata_size = metadata.len();
         if num_bytes <= metadata_size {
             Ok(metadata_size)
@@ -656,7 +657,7 @@ where
                 // TODO It might be possible to do more here
                 // to address all possible file types and edge cases
                 Err(io::Error::other(
-                    translate!("split-error-cannot-determine-file-size", "input" => input),
+                    translate!("split-error-cannot-determine-file-size", "input" => input.to_string_lossy()),
                 ))
             }
         }
@@ -1165,7 +1166,7 @@ where
                 Err(error) => {
                     return Err(USimpleError::new(
                         1,
-                        translate!("split-error-cannot-read-from-input", "input" => settings.input.clone(), "error" => error),
+                        translate!("split-error-cannot-read-from-input", "input" => settings.input.to_string_lossy(), "error" => error),
                     ));
                 }
             }
@@ -1527,7 +1528,7 @@ fn split(settings: &Settings) -> UResult<()> {
         Box::new(stdin()) as Box<dyn Read>
     } else {
         let r = File::open(Path::new(&settings.input)).map_err_context(
-            || translate!("split-error-cannot-open-for-reading", "file" => settings.input.quote()),
+            || translate!("split-error-cannot-open-for-reading", "file" => settings.input.to_string_lossy().quote()),
         )?;
         Box::new(r) as Box<dyn Read>
     };
