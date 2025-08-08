@@ -17,8 +17,22 @@ use std::path::PathBuf;
 use uufuzz::{run_gnu_cmd, CommandResult};
 // Programs that typically take file/path arguments and should be tested
 static PATH_PROGRAMS: &[&str] = &[
-    "basename", "cat", "chmod", "cp", "dirname", "du", "head", "ln", "ls", "mkdir", "mv",
-    "readlink", "realpath", "rm", "rmdir", "tail", "touch", "unlink",
+    // Core file operations
+    "cat", "cp", "mv", "rm", "ln", "link", "unlink", "touch", "truncate",
+    // Directory operations  
+    "ls", "mkdir", "rmdir", "du", "stat", "mktemp",
+    // Path operations
+    "basename", "dirname", "readlink", "realpath", "pathchk",
+    // File content operations
+    "head", "tail", "tee", "more", "od", "wc", "cksum", "sum",
+    // File processing
+    "sort", "uniq", "split", "csplit", "cut", "tr", "shred",
+    // File permissions/ownership
+    "chmod", "chown", "chgrp", "install",
+    // Text processing with files
+    "comm", "join", "paste", "pr", "fmt", "fold", "expand", "unexpand",
+    // Directory listing variants
+    "dir", "vdir",
 ];
 
 fn generate_non_utf8_bytes() -> Vec<u8> {
@@ -84,20 +98,65 @@ fn test_program_with_non_utf8_path(program: &str, path: &PathBuf) -> CommandResu
 
     // Build appropriate arguments for each program
     let local_args = match program {
+        // Programs that need mode/permissions
         "chmod" => vec![
             OsString::from(program),
             OsString::from("644"),
             path_os.to_owned(),
         ],
-        "cp" | "mv" | "ln" => {
-            // These need a destination - create a temp destination
+        "chown" => vec![
+            OsString::from(program),
+            OsString::from("root:root"),
+            path_os.to_owned(),
+        ],
+        "chgrp" => vec![
+            OsString::from(program),
+            OsString::from("root"),
+            path_os.to_owned(),
+        ],
+        // Programs that need source and destination
+        "cp" | "mv" | "ln" | "link" => {
             let dest_path = path.with_extension("dest");
             vec![
                 OsString::from(program),
                 path_os.to_owned(),
                 dest_path.as_os_str().to_owned(),
             ]
-        }
+        },
+        "install" => {
+            let dest_path = path.with_extension("dest");
+            vec![
+                OsString::from(program),
+                path_os.to_owned(),
+                dest_path.as_os_str().to_owned(),
+            ]
+        },
+        // Programs that need size/truncate operations
+        "truncate" => vec![
+            OsString::from(program),
+            OsString::from("--size=0"),
+            path_os.to_owned(),
+        ],
+        "split" => vec![
+            OsString::from(program),
+            path_os.to_owned(),
+            OsString::from("split_prefix_"),
+        ],
+        "csplit" => vec![
+            OsString::from(program),
+            path_os.to_owned(),
+            OsString::from("1"),
+        ],
+        // Programs that work with multiple files (use just one for testing)
+        "comm" | "join" => {
+            // These need two files, use the same file twice for simplicity
+            vec![
+                OsString::from(program),
+                path_os.to_owned(),
+                path_os.to_owned(),
+            ]
+        },
+        // Programs that typically take file input
         _ => vec![OsString::from(program), path_os.to_owned()],
     };
 
@@ -175,7 +234,7 @@ fuzz_target!(|_data: &[u8]| {
         }
 
         // Special cases for programs that need additional testing
-        if **program == "mkdir" {
+        if **program == "mkdir" || **program == "mktemp" {
             let non_utf8_dir_name = generate_non_utf8_osstring();
             let non_utf8_dir = temp_root.join(non_utf8_dir_name);
 
