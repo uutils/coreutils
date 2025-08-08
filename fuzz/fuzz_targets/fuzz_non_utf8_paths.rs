@@ -6,6 +6,8 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
 use rand::prelude::IndexedRandom;
+use rand::Rng;
+use std::collections::HashSet;
 use std::env::temp_dir;
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -79,15 +81,23 @@ fn test_program_with_non_utf8_path(program: &str, path: &PathBuf) -> CommandResu
 
     // Use the locally built uutils binary instead of system PATH
     let local_binary = "/home/sylvestre/dev/debian/coreutils.disable-loca/target/debug/coreutils";
-    
+
     // Build appropriate arguments for each program
     let local_args = match program {
-        "chmod" => vec![OsString::from(program), OsString::from("644"), path_os.to_owned()],
+        "chmod" => vec![
+            OsString::from(program),
+            OsString::from("644"),
+            path_os.to_owned(),
+        ],
         "cp" | "mv" | "ln" => {
             // These need a destination - create a temp destination
             let dest_path = path.with_extension("dest");
-            vec![OsString::from(program), path_os.to_owned(), dest_path.as_os_str().to_owned()]
-        },
+            vec![
+                OsString::from(program),
+                path_os.to_owned(),
+                dest_path.as_os_str().to_owned(),
+            ]
+        }
         _ => vec![OsString::from(program), path_os.to_owned()],
     };
 
@@ -135,57 +145,49 @@ fuzz_target!(|_data: &[u8]| {
         Err(_) => return, // Skip if we can't set up test files
     };
 
-    // Pick a random program that works with paths
-    let program = PATH_PROGRAMS.choose(&mut rng).unwrap();
+    // Pick multiple random programs to test in each iteration
+    let num_programs_to_test = rng.random_range(1..=3); // Test 1-3 programs per iteration
+    let mut tested_programs = HashSet::new();
 
-    // Test with files that have non-UTF-8 names
-    for test_file in &test_files {
-        let result = test_program_with_non_utf8_path(program, test_file);
+    for _ in 0..num_programs_to_test {
+        // Pick a random program that we haven't tested yet in this iteration
+        let available_programs: Vec<_> = PATH_PROGRAMS
+            .iter()
+            .filter(|p| !tested_programs.contains(*p))
+            .collect();
 
-        // Check if the program handled the non-UTF-8 path gracefully
-        // This will panic on the first UTF-8 error found
-        check_for_utf8_error_and_panic(&result, program, test_file);
+        if available_programs.is_empty() {
+            break;
+        }
 
-        // Special test for chmod since that's what the bug report specifically mentions
-        if *program == "chmod" && test_file.to_string_lossy().contains('\u{FFFD}') {
-            // This path contains replacement characters, indicating invalid UTF-8
-            println!("Testing chmod with non-UTF-8 path: {:?}", test_file);
+        let program = available_programs.choose(&mut rng).unwrap();
+        tested_programs.insert(*program);
 
-            // Try chmod with basic permissions using local binary
-            let local_binary = "/home/sylvestre/dev/debian/coreutils.disable-loca/target/debug/coreutils";
-            let chmod_args = vec![
-                OsString::from("chmod"),
-                OsString::from("644"),
-                test_file.as_os_str().to_owned(),
-            ];
+        // Test with one random file that has non-UTF-8 names (not all files to speed up)
+        if let Some(test_file) = test_files.choose(&mut rng) {
+            let result = test_program_with_non_utf8_path(program, test_file);
 
-            let chmod_result = run_gnu_cmd(local_binary, &chmod_args, false, None);
-            match chmod_result {
+            // Check if the program handled the non-UTF-8 path gracefully
+            check_for_utf8_error_and_panic(&result, program, test_file);
+        }
+
+        // Special cases for programs that need additional testing
+        if **program == "mkdir" {
+            let non_utf8_dir_name = generate_non_utf8_osstring();
+            let non_utf8_dir = temp_root.join(non_utf8_dir_name);
+
+            let local_binary =
+                "/home/sylvestre/dev/debian/coreutils.disable-loca/target/debug/coreutils";
+            let mkdir_args = vec![OsString::from("mkdir"), non_utf8_dir.as_os_str().to_owned()];
+
+            let mkdir_result = run_gnu_cmd(local_binary, &mkdir_args, false, None);
+            match mkdir_result {
                 Ok(result) => {
-                    check_for_utf8_error_and_panic(&result, "chmod", test_file);
+                    check_for_utf8_error_and_panic(&result, "mkdir", &non_utf8_dir);
                 }
                 Err(error) => {
-                    check_for_utf8_error_and_panic(&error, "chmod", test_file);
+                    check_for_utf8_error_and_panic(&error, "mkdir", &non_utf8_dir);
                 }
-            }
-        }
-    }
-
-    // Test creating directories with non-UTF-8 names
-    if *program == "mkdir" {
-        let non_utf8_dir_name = generate_non_utf8_osstring();
-        let non_utf8_dir = temp_root.join(non_utf8_dir_name);
-
-        let local_binary = "/home/sylvestre/dev/debian/coreutils.disable-loca/target/debug/coreutils";
-        let mkdir_args = vec![OsString::from("mkdir"), non_utf8_dir.as_os_str().to_owned()];
-
-        let mkdir_result = run_gnu_cmd(local_binary, &mkdir_args, false, None);
-        match mkdir_result {
-            Ok(result) => {
-                check_for_utf8_error_and_panic(&result, "mkdir", &non_utf8_dir);
-            }
-            Err(error) => {
-                check_for_utf8_error_and_panic(&error, "mkdir", &non_utf8_dir);
             }
         }
     }
