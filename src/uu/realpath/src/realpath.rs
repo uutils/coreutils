@@ -5,8 +5,9 @@
 
 // spell-checker:ignore (ToDO) retcode
 
-use clap::{Arg, ArgAction, ArgMatches, Command, builder::NonEmptyStringValueParser};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::{
+    ffi::OsString,
     io::{Write, stdout},
     path::{Path, PathBuf},
 };
@@ -40,7 +41,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     /*  the list of files */
 
     let paths: Vec<PathBuf> = matches
-        .get_many::<String>(ARG_FILES)
+        .get_many::<OsString>(ARG_FILES)
         .unwrap()
         .map(PathBuf::from)
         .collect();
@@ -144,21 +145,21 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_RELATIVE_TO)
                 .long(OPT_RELATIVE_TO)
                 .value_name("DIR")
-                .value_parser(NonEmptyStringValueParser::new())
+                .value_parser(clap::value_parser!(OsString))
                 .help(translate!("realpath-help-relative-to")),
         )
         .arg(
             Arg::new(OPT_RELATIVE_BASE)
                 .long(OPT_RELATIVE_BASE)
                 .value_name("DIR")
-                .value_parser(NonEmptyStringValueParser::new())
+                .value_parser(clap::value_parser!(OsString))
                 .help(translate!("realpath-help-relative-base")),
         )
         .arg(
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .required(true)
-                .value_parser(NonEmptyStringValueParser::new())
+                .value_parser(clap::value_parser!(OsString))
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }
@@ -173,10 +174,10 @@ fn prepare_relative_options(
     resolve_mode: ResolveMode,
 ) -> UResult<(Option<PathBuf>, Option<PathBuf>)> {
     let relative_to = matches
-        .get_one::<String>(OPT_RELATIVE_TO)
+        .get_one::<OsString>(OPT_RELATIVE_TO)
         .map(PathBuf::from);
     let relative_base = matches
-        .get_one::<String>(OPT_RELATIVE_BASE)
+        .get_one::<OsString>(OPT_RELATIVE_BASE)
         .map(PathBuf::from);
     let relative_to = canonicalize_relative_option(relative_to, can_mode, resolve_mode)?;
     let relative_base = canonicalize_relative_option(relative_base, can_mode, resolve_mode)?;
