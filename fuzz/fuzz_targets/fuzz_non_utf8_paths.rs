@@ -3,10 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore osstring
+
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-use rand::prelude::IndexedRandom;
 use rand::Rng;
+use rand::prelude::IndexedRandom;
 use std::collections::HashSet;
 use std::env::temp_dir;
 use std::ffi::{OsStr, OsString};
@@ -14,10 +16,10 @@ use std::fs;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::PathBuf;
 
-use uufuzz::{run_gnu_cmd, CommandResult};
+use uufuzz::{CommandResult, run_gnu_cmd};
 // Programs that typically take file/path arguments and should be tested
 static PATH_PROGRAMS: &[&str] = &[
-    "cat", "cp", "mv", "rm", "ln", "link", "unlink", "touch", "truncate",
+    // Core file operations
     "cat",
     "cp",
     "mv",
@@ -26,22 +28,22 @@ static PATH_PROGRAMS: &[&str] = &[
     "link",
     "unlink",
     "touch",
+    "truncate",
     // Path operations
-    "ls", "mkdir", "rmdir", "du", "stat", "mktemp", "df", // Path operations
     "ls",
     "mkdir",
     "rmdir",
     "du",
     "stat",
+    "mktemp",
     "df",
-    "df", // Path operations
     "basename",
     "dirname",
     "readlink",
     "realpath",
     "pathchk",
+    "chroot",
     // File processing
-    "head", "tail", "tee", "more", "od", "wc", "cksum", "sum", "nl", "tac", // File processing
     "head",
     "tail",
     "tee",
@@ -50,8 +52,8 @@ static PATH_PROGRAMS: &[&str] = &[
     "wc",
     "cksum",
     "sum",
+    "nl",
     "tac",
-    "tac", // File processing
     "sort",
     "uniq",
     "split",
@@ -61,14 +63,14 @@ static PATH_PROGRAMS: &[&str] = &[
     "shred",
     "shuf",
     "ptx",
+    "tsort",
     // Text processing with files
-    "chmod", "chown", "chgrp", "install", "chcon", "runcon", // Text processing with files
     "chmod",
     "chown",
     "chgrp",
     "install",
+    "chcon",
     "runcon",
-    "runcon", // Text processing with files
     "comm",
     "join",
     "paste",
@@ -76,28 +78,28 @@ static PATH_PROGRAMS: &[&str] = &[
     "fmt",
     "fold",
     "expand",
-    "dir", "vdir",
+    "unexpand",
     "dir",
-    "mkfifo", "mknod",
+    "vdir",
     "mkfifo",
     "mknod",
-    // File I/O utilities  
+    "hashsum",
     // File I/O utilities
     "dd",
     "sync",
     "stdbuf",
     "dircolors",
-    "base32", "base64", "basenc",
+    // Encoding/decoding utilities
     "base32",
     "base64",
-    "stty", "tty",
+    "basenc",
     "stty",
-    "env", "nohup", "nice", "timeout",
+    "tty",
     "env",
     "nohup",
     "nice",
-];
     "timeout",
+];
 
 fn generate_non_utf8_bytes() -> Vec<u8> {
     let mut rng = rand::rng();
@@ -194,7 +196,7 @@ fn test_program_with_non_utf8_path(program: &str, path: &PathBuf) -> CommandResu
                 OsString::from("cat"),
                 path_os.to_owned(),
             ]
-        },
+        }
         // Programs that need source and destination
         "cp" | "mv" | "ln" | "link" => {
             let dest_path = path.with_extension("dest");
@@ -239,9 +241,9 @@ fn test_program_with_non_utf8_path(program: &str, path: &PathBuf) -> CommandResu
                     OsString::from("1"),
                     OsString::from("3"),
                 ]
-                vec![
+            } else {
+                vec![OsString::from(program), new_path.as_os_str().to_owned()]
             }
-        },
         }
         "dd" => vec![
             OsString::from(program),
@@ -256,23 +258,23 @@ fn test_program_with_non_utf8_path(program: &str, path: &PathBuf) -> CommandResu
             OsString::from("--md5"),
             path_os.to_owned(),
         ],
-        "base32" | "base64" | "basenc" => vec![
-        "df" => vec![
-        "chroot" => {
+        // Encoding/decoding programs
+        "base32" | "base64" | "basenc" => vec![OsString::from(program), path_os.to_owned()],
         "df" => vec![OsString::from(program), path_os.to_owned()],
+        "chroot" => {
             // chroot needs a directory and command
             vec![
                 OsString::from(program),
                 path_os.to_owned(),
                 OsString::from("true"),
-        },
+            ]
         }
-        "stty" => vec![
         "sync" => vec![OsString::from(program), path_os.to_owned()],
+        "stty" => vec![
             OsString::from(program),
             OsString::from("-F"),
             path_os.to_owned(),
-        "tty" => vec![
+        ],
         "tty" => vec![OsString::from(program)], // tty doesn't take file args, but test anyway
         "env" => {
             let coreutils_binary = std::env::var("CARGO_BIN_FILE_COREUTILS")
@@ -283,7 +285,7 @@ fn test_program_with_non_utf8_path(program: &str, path: &PathBuf) -> CommandResu
                 OsString::from("cat"),
                 path_os.to_owned(),
             ]
-        },
+        }
         "nohup" => {
             let coreutils_binary = std::env::var("CARGO_BIN_FILE_COREUTILS")
                 .unwrap_or_else(|_| "target/release/coreutils".to_string());
@@ -293,7 +295,7 @@ fn test_program_with_non_utf8_path(program: &str, path: &PathBuf) -> CommandResu
                 OsString::from("cat"),
                 path_os.to_owned(),
             ]
-        },
+        }
         "nice" => {
             let coreutils_binary = std::env::var("CARGO_BIN_FILE_COREUTILS")
                 .unwrap_or_else(|_| "target/release/coreutils".to_string());
@@ -303,7 +305,7 @@ fn test_program_with_non_utf8_path(program: &str, path: &PathBuf) -> CommandResu
                 OsString::from("cat"),
                 path_os.to_owned(),
             ]
-        },
+        }
         "timeout" => {
             let coreutils_binary = std::env::var("CARGO_BIN_FILE_COREUTILS")
                 .unwrap_or_else(|_| "target/release/coreutils".to_string());
@@ -314,7 +316,7 @@ fn test_program_with_non_utf8_path(program: &str, path: &PathBuf) -> CommandResu
                 OsString::from("cat"),
                 path_os.to_owned(),
             ]
-        },
+        }
         "stdbuf" => {
             let coreutils_binary = std::env::var("CARGO_BIN_FILE_COREUTILS")
                 .unwrap_or_else(|_| "target/release/coreutils".to_string());
@@ -325,7 +327,7 @@ fn test_program_with_non_utf8_path(program: &str, path: &PathBuf) -> CommandResu
                 OsString::from("cat"),
                 path_os.to_owned(),
             ]
-        },
+        }
         // Programs that work with multiple files (use just one for testing)
         "comm" | "join" => {
             // These need two files, use the same file twice for simplicity
@@ -340,7 +342,7 @@ fn test_program_with_non_utf8_path(program: &str, path: &PathBuf) -> CommandResu
     };
 
     // Try to run the local uutils version
-    match run_gnu_cmd(local_binary, &local_args, false, None) {
+    match run_gnu_cmd(&local_binary, &local_args, false, None) {
         Ok(result) => result,
         Err(error_result) => {
             // Local command failed, return the error
@@ -421,7 +423,7 @@ fuzz_target!(|_data: &[u8]| {
                 .unwrap_or_else(|_| "target/release/coreutils".to_string());
             let mkdir_args = vec![OsString::from("mkdir"), non_utf8_dir.as_os_str().to_owned()];
 
-            let mkdir_result = run_gnu_cmd(local_binary, &mkdir_args, false, None);
+            let mkdir_result = run_gnu_cmd(&local_binary, &mkdir_args, false, None);
             match mkdir_result {
                 Ok(result) => {
                     check_for_utf8_error_and_panic(&result, "mkdir", &non_utf8_dir);
