@@ -76,13 +76,26 @@ fn setup_test_files() -> Result<(PathBuf, Vec<PathBuf>), std::io::Error> {
 
 fn test_program_with_non_utf8_path(program: &str, path: &PathBuf) -> CommandResult {
     let path_os = path.as_os_str();
-    let args = vec![OsString::from(program), path_os.to_owned()];
 
-    // Try to run the GNU version to compare behavior
-    match run_gnu_cmd(program, &args[1..], false, None) {
+    // Use the locally built uutils binary instead of system PATH
+    let local_binary = "/home/sylvestre/dev/debian/coreutils.disable-loca/target/debug/coreutils";
+    
+    // Build appropriate arguments for each program
+    let local_args = match program {
+        "chmod" => vec![OsString::from(program), OsString::from("644"), path_os.to_owned()],
+        "cp" | "mv" | "ln" => {
+            // These need a destination - create a temp destination
+            let dest_path = path.with_extension("dest");
+            vec![OsString::from(program), path_os.to_owned(), dest_path.as_os_str().to_owned()]
+        },
+        _ => vec![OsString::from(program), path_os.to_owned()],
+    };
+
+    // Try to run the local uutils version
+    match run_gnu_cmd(local_binary, &local_args, false, None) {
         Ok(result) => result,
         Err(error_result) => {
-            // GNU command failed, return the error
+            // Local command failed, return the error
             error_result
         }
     }
@@ -138,14 +151,15 @@ fuzz_target!(|_data: &[u8]| {
             // This path contains replacement characters, indicating invalid UTF-8
             println!("Testing chmod with non-UTF-8 path: {:?}", test_file);
 
-            // Try chmod with basic permissions
+            // Try chmod with basic permissions using local binary
+            let local_binary = "/home/sylvestre/dev/debian/coreutils.disable-loca/target/debug/coreutils";
             let chmod_args = vec![
                 OsString::from("chmod"),
                 OsString::from("644"),
                 test_file.as_os_str().to_owned(),
             ];
 
-            let chmod_result = run_gnu_cmd("chmod", &chmod_args[1..], false, None);
+            let chmod_result = run_gnu_cmd(local_binary, &chmod_args, false, None);
             match chmod_result {
                 Ok(result) => {
                     check_for_utf8_error_and_panic(&result, "chmod", test_file);
@@ -162,9 +176,10 @@ fuzz_target!(|_data: &[u8]| {
         let non_utf8_dir_name = generate_non_utf8_osstring();
         let non_utf8_dir = temp_root.join(non_utf8_dir_name);
 
+        let local_binary = "/home/sylvestre/dev/debian/coreutils.disable-loca/target/debug/coreutils";
         let mkdir_args = vec![OsString::from("mkdir"), non_utf8_dir.as_os_str().to_owned()];
 
-        let mkdir_result = run_gnu_cmd("mkdir", &mkdir_args[1..], false, None);
+        let mkdir_result = run_gnu_cmd(local_binary, &mkdir_args, false, None);
         match mkdir_result {
             Ok(result) => {
                 check_for_utf8_error_and_panic(&result, "mkdir", &non_utf8_dir);
