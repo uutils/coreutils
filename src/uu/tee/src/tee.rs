@@ -6,6 +6,7 @@
 // cSpell:ignore POLLERR POLLRDBAND pfds revents
 
 use clap::{Arg, ArgAction, Command, builder::PossibleValue};
+use std::ffi::OsString;
 use std::fs::OpenOptions;
 use std::io::{Error, ErrorKind, Read, Result, Write, stdin, stdout};
 use std::path::PathBuf;
@@ -33,7 +34,7 @@ struct Options {
     append: bool,
     ignore_interrupts: bool,
     ignore_pipe_errors: bool,
-    files: Vec<String>,
+    files: Vec<OsString>,
     output_error: Option<OutputErrorMode>,
 }
 
@@ -76,8 +77,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let files = matches
-        .get_many::<String>(options::FILE)
-        .map(|v| v.map(ToString::to_string).collect())
+        .get_many::<OsString>(options::FILE)
+        .map(|v| v.cloned().collect())
         .unwrap_or_default();
 
     let options = Options {
@@ -125,7 +126,8 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FILE)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::IGNORE_PIPE_ERRORS)
@@ -250,7 +252,7 @@ fn copy(mut input: impl Read, mut output: impl Write) -> Result<usize> {
 /// If that error should lead to program termination, this function returns Some(Err()),
 /// otherwise it returns None.
 fn open(
-    name: &str,
+    name: &OsString,
     append: bool,
     output_error: Option<&OutputErrorMode>,
 ) -> Option<Result<NamedWriter>> {
@@ -264,10 +266,10 @@ fn open(
     match mode.write(true).create(true).open(path.as_path()) {
         Ok(file) => Some(Ok(NamedWriter {
             inner: Box::new(file),
-            name: name.to_owned(),
+            name: name.to_string_lossy().to_string(),
         })),
         Err(f) => {
-            show_error!("{}: {f}", name.maybe_quote());
+            show_error!("{}: {f}", name.to_string_lossy().maybe_quote());
             match output_error {
                 Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) => Some(Err(f)),
                 _ => None,
