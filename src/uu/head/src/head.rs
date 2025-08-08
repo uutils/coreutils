@@ -48,6 +48,7 @@ enum HeadError {
     ParseError(String),
 
     #[error("{}", translate!("head-error-bad-encoding"))]
+    #[allow(dead_code)]
     BadEncoding,
 
     #[error("{}", translate!("head-error-num-too-large"))]
@@ -127,6 +128,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FILES_NAME)
                 .action(ArgAction::Append)
+                .value_parser(clap::value_parser!(OsString))
                 .value_hint(clap::ValueHint::FilePath),
         )
 }
@@ -184,7 +186,9 @@ fn arg_iterate<'a>(
                 None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
             }
         } else {
-            Err(HeadError::BadEncoding)
+            // The second argument contains non-UTF-8 sequences, so it can't be an obsolete option
+            // like "-5". Treat it as a regular file argument.
+            Ok(Box::new(vec![first, second].into_iter().chain(args)))
         }
     } else {
         Ok(Box::new(vec![first].into_iter()))
@@ -198,7 +202,7 @@ struct HeadOptions {
     pub line_ending: LineEnding,
     pub presume_input_pipe: bool,
     pub mode: Mode,
-    pub files: Vec<String>,
+    pub files: Vec<OsString>,
 }
 
 impl HeadOptions {
@@ -213,9 +217,9 @@ impl HeadOptions {
 
         options.mode = Mode::from(matches)?;
 
-        options.files = match matches.get_many::<String>(options::FILES_NAME) {
+        options.files = match matches.get_many::<OsString>(options::FILES_NAME) {
             Some(v) => v.cloned().collect(),
-            None => vec!["-".to_owned()],
+            None => vec![OsString::from("-")],
         };
 
         Ok(options)
@@ -461,8 +465,8 @@ fn head_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
 fn uu_head(options: &HeadOptions) -> UResult<()> {
     let mut first = true;
     for file in &options.files {
-        let res = match file.as_str() {
-            "-" => {
+        let res = match file.to_str() {
+            Some("-") => {
                 if (options.files.len() > 1 && !options.quiet) || options.verbose {
                     if !first {
                         println!();
@@ -506,12 +510,12 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
 
                 Ok(())
             }
-            name => {
-                let mut file = match File::open(name) {
+            Some(name) => {
+                let mut file_handle = match File::open(file) {
                     Ok(f) => f,
                     Err(err) => {
                         show!(err.map_err_context(
-                            || translate!("head-error-cannot-open", "name" => name.quote())
+                            || translate!("head-error-cannot-open", "name" => file.to_string_lossy().quote())
                         ));
                         continue;
                     }
@@ -522,15 +526,35 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     }
                     println!("==> {name} <==");
                 }
-                head_file(&mut file, options)?;
+                head_file(&mut file_handle, options)?;
+                Ok(())
+            }
+            None => {
+                // Handle files with non-UTF-8 names
+                let mut file_handle = match File::open(file) {
+                    Ok(f) => f,
+                    Err(err) => {
+                        show!(err.map_err_context(
+                            || translate!("head-error-cannot-open", "name" => file.to_string_lossy().quote())
+                        ));
+                        continue;
+                    }
+                };
+                if (options.files.len() > 1 && !options.quiet) || options.verbose {
+                    if !first {
+                        println!();
+                    }
+                    println!("==> {} <==", file.to_string_lossy());
+                }
+                head_file(&mut file_handle, options)?;
                 Ok(())
             }
         };
         if let Err(e) = res {
-            let name = if file.as_str() == "-" {
-                "standard input"
+            let name = if file == "-" {
+                "standard input".to_string()
             } else {
-                file
+                file.to_string_lossy().into_owned()
             };
             return Err(HeadError::Io {
                 name: name.to_string(),
