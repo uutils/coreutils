@@ -10,6 +10,8 @@ use regex::Regex;
 use rlimit::Resource;
 #[cfg(not(windows))]
 use std::env;
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStringExt;
 use std::path::Path;
 use std::{
     fs::{File, read_dir},
@@ -2005,4 +2007,18 @@ fn test_long_lines() {
     assert_eq!(at.read("xab").len(), 2);
     assert_eq!(at.read("xac").len(), 131_072);
     assert!(!at.plus("xad").exists());
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_split_non_utf8_paths() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    std::fs::write(at.plus(&filename), b"line1\nline2\nline3\nline4\nline5\n").unwrap();
+
+    ucmd.arg(&filename).succeeds();
+
+    // Check that at least one split file was created
+    assert!(at.plus("xaa").exists());
 }
