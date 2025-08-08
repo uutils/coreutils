@@ -33,7 +33,7 @@ pub struct Settings {
     symbolic: bool,
     relative: bool,
     logical: bool,
-    target_dir: Option<String>,
+    target_dir: Option<PathBuf>,
     no_target_dir: bool,
     no_dereference: bool,
     verbose: bool,
@@ -99,7 +99,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     /* the list of files */
 
     let paths: Vec<PathBuf> = matches
-        .get_many::<String>(ARG_FILES)
+        .get_many::<OsString>(ARG_FILES)
         .unwrap()
         .map(PathBuf::from)
         .collect();
@@ -128,8 +128,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         logical,
         relative: matches.get_flag(options::RELATIVE),
         target_dir: matches
-            .get_one::<String>(options::TARGET_DIRECTORY)
-            .map(String::from),
+            .get_one::<OsString>(options::TARGET_DIRECTORY)
+            .map(PathBuf::from),
         no_target_dir: matches.get_flag(options::NO_TARGET_DIRECTORY),
         no_dereference: matches.get_flag(options::NO_DEREFERENCE),
         verbose: matches.get_flag(options::VERBOSE),
@@ -206,6 +206,7 @@ pub fn uu_app() -> Command {
                 .help(translate!("ln-help-target-directory"))
                 .value_name("DIRECTORY")
                 .value_hint(clap::ValueHint::DirPath)
+                .value_parser(clap::value_parser!(OsString))
                 .conflicts_with(options::NO_TARGET_DIRECTORY),
         )
         .arg(
@@ -234,6 +235,7 @@ pub fn uu_app() -> Command {
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath)
+                .value_parser(clap::value_parser!(OsString))
                 .required(true)
                 .num_args(1..),
         )
@@ -241,9 +243,9 @@ pub fn uu_app() -> Command {
 
 fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
     // Handle cases where we create links in a directory first.
-    if let Some(ref name) = settings.target_dir {
+    if let Some(ref target_path) = settings.target_dir {
         // 4th form: a directory is specified by -t.
-        return link_files_in_dir(files, &PathBuf::from(name), settings);
+        return link_files_in_dir(files, target_path, settings);
     }
     if !settings.no_target_dir {
         if files.len() == 1 {
