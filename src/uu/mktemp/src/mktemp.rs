@@ -12,7 +12,7 @@ use uucore::format_usage;
 use uucore::translate;
 
 use std::env;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 use std::io::ErrorKind;
 use std::iter;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
@@ -191,14 +191,13 @@ fn find_last_contiguous_block_of_xs(s: &str) -> Option<(usize, usize)> {
 impl Params {
     fn from(options: Options) -> Result<Self, MkTempError> {
         // Convert OsString template to string for processing
-        let template_str = match options.template.to_str() {
-            Some(s) => s,
-            None => {
-                // For non-UTF-8 templates, return an error
-                return Err(MkTempError::InvalidTemplate(options.template.to_string_lossy().into_owned()));
-            }
+        let Some(template_str) = options.template.to_str() else {
+            // For non-UTF-8 templates, return an error
+            return Err(MkTempError::InvalidTemplate(
+                options.template.to_string_lossy().into_owned(),
+            ));
         };
-        
+
         // The template argument must end in 'X' if a suffix option is given.
         if options.suffix.is_some() && !template_str.ends_with('X') {
             return Err(MkTempError::MustEndInX(template_str.to_string()));
@@ -231,7 +230,9 @@ impl Params {
             .display()
             .to_string();
         if options.treat_as_template && prefix_from_template.contains(MAIN_SEPARATOR) {
-            return Err(MkTempError::PrefixContainsDirSeparator(template_str.to_string()));
+            return Err(MkTempError::PrefixContainsDirSeparator(
+                template_str.to_string(),
+            ));
         }
         if tmpdir.is_some() && Path::new(prefix_from_template).is_absolute() {
             return Err(MkTempError::InvalidTemplate(template_str.to_string()));
@@ -407,7 +408,11 @@ pub fn uu_app() -> Command {
                 .help(translate!("mktemp-help-t"))
                 .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(ARG_TEMPLATE).num_args(..=1).value_parser(clap::value_parser!(OsString)))
+        .arg(
+            Arg::new(ARG_TEMPLATE)
+                .num_args(..=1)
+                .value_parser(clap::value_parser!(OsString)),
+        )
 }
 
 fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {

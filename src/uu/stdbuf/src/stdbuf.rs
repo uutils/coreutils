@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDO) tempdir dyld dylib optgrps libstdbuf
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use std::ffi::OsString;
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process;
@@ -183,9 +184,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let options =
         ProgramOptions::try_from(&matches).map_err(|e| UUsageError::new(125, e.to_string()))?;
 
-    let mut command_values = matches.get_many::<String>(options::COMMAND).unwrap();
+    let mut command_values = matches.get_many::<OsString>(options::COMMAND).unwrap();
     let mut command = process::Command::new(command_values.next().unwrap());
-    let command_params: Vec<&str> = command_values.map(|s| s.as_ref()).collect();
+    let command_params: Vec<&OsString> = command_values.collect();
 
     let tmp_dir = tempdir().unwrap();
     let (preload_env, libstdbuf) = get_preload_env(&tmp_dir)?;
@@ -268,6 +269,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Append)
                 .hide(true)
                 .required(true)
-                .value_hint(clap::ValueHint::CommandName),
+                .value_hint(clap::ValueHint::CommandName)
+                .value_parser(clap::value_parser!(OsString)),
         )
 }

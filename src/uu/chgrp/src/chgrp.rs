@@ -6,8 +6,7 @@
 // spell-checker:ignore (ToDO) COMFOLLOW Chowner RFILE RFILE's derefer dgid nonblank nonprint nonprinting
 
 use uucore::display::Quotable;
-pub use uucore::entries;
-use uucore::display::Quotable;
+use uucore::entries;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::perms::{GidUidOwnerFilter, IfFrom, chown_base, options};
