@@ -7,10 +7,12 @@
 
 use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::ffi::OsString;
 use std::fmt::Write as FmtWrite;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::ParseIntError;
+use std::path::Path;
 
 use clap::{Arg, ArgAction, Command};
 use regex::Regex;
@@ -66,13 +68,12 @@ fn read_word_filter_file(
     option: &str,
 ) -> std::io::Result<HashSet<String>> {
     let filename = matches
-        .get_one::<String>(option)
-        .expect("parsing options failed!")
-        .to_string();
+        .get_one::<OsString>(option)
+        .expect("parsing options failed!");
     let reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
         Box::new(stdin())
     } else {
-        let file = File::open(filename)?;
+        let file = File::open(Path::new(filename))?;
         Box::new(file)
     });
     let mut words: HashSet<String> = HashSet::new();
@@ -88,12 +89,12 @@ fn read_char_filter_file(
     option: &str,
 ) -> std::io::Result<HashSet<char>> {
     let filename = matches
-        .get_one::<String>(option)
+        .get_one::<OsString>(option)
         .expect("parsing options failed!");
     let mut reader: Box<dyn Read> = if filename == "-" {
         Box::new(stdin())
     } else {
-        let file = File::open(filename)?;
+        let file = File::open(Path::new(filename))?;
         Box::new(file)
     };
     let mut buffer = String::new();
@@ -275,14 +276,14 @@ struct FileContent {
 
 type FileMap = HashMap<String, FileContent>;
 
-fn read_input(input_files: &[String]) -> std::io::Result<FileMap> {
+fn read_input(input_files: &[OsString]) -> std::io::Result<FileMap> {
     let mut file_map: FileMap = HashMap::new();
     let mut offset: usize = 0;
     for filename in input_files {
         let reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
             Box::new(stdin())
         } else {
-            let file = File::open(filename)?;
+            let file = File::open(Path::new(filename))?;
             Box::new(file)
         });
         let lines: Vec<String> = reader.lines().collect::<std::io::Result<Vec<String>>>()?;
@@ -292,7 +293,7 @@ fn read_input(input_files: &[String]) -> std::io::Result<FileMap> {
         let chars_lines: Vec<Vec<char>> = lines.iter().map(|x| x.chars().collect()).collect();
         let size = lines.len();
         file_map.insert(
-            filename.to_owned(),
+            filename.to_string_lossy().into_owned(),
             FileContent {
                 lines,
                 chars_lines,
@@ -736,7 +737,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let output_file;
 
     let mut files = matches
-        .get_many::<String>(options::FILE)
+        .get_many::<OsString>(options::FILE)
         .into_iter()
         .flatten()
         .cloned();
@@ -745,18 +746,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         input_files = {
             let mut files = files.collect::<Vec<_>>();
             if files.is_empty() {
-                files.push("-".to_string());
+                files.push(OsString::from("-"));
             }
             files
         };
         output_file = "-".to_string();
     } else {
-        input_files = vec![files.next().unwrap_or("-".to_string())];
-        output_file = files.next().unwrap_or("-".to_string());
+        input_files = vec![files.next().unwrap_or(OsString::from("-"))];
+        output_file = files
+            .next()
+            .unwrap_or(OsString::from("-"))
+            .to_string_lossy()
+            .into_owned();
         if let Some(file) = files.next() {
             return Err(UUsageError::new(
                 1,
-                translate!("ptx-error-extra-operand", "operand" => file.quote()),
+                translate!("ptx-error-extra-operand", "operand" => file.to_string_lossy().quote()),
             ));
         }
     }
@@ -778,7 +783,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE)
                 .hide(true)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::AUTO_REFERENCE)
@@ -856,7 +862,8 @@ pub fn uu_app() -> Command {
                 .long(options::BREAK_FILE)
                 .help(translate!("ptx-help-break-file"))
                 .value_name("FILE")
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::IGNORE_CASE)
@@ -878,7 +885,8 @@ pub fn uu_app() -> Command {
                 .long(options::IGNORE_FILE)
                 .help(translate!("ptx-help-ignore-file"))
                 .value_name("FILE")
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::ONLY_FILE)
@@ -886,7 +894,8 @@ pub fn uu_app() -> Command {
                 .long(options::ONLY_FILE)
                 .help(translate!("ptx-help-only-file"))
                 .value_name("FILE")
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::REFERENCES)
