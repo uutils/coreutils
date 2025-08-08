@@ -1022,17 +1022,17 @@ fn test_touch_non_utf8_paths() {
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    
+
     // Create a test file with non-UTF-8 bytes in the name
     let non_utf8_bytes = b"test_\xFF\xFE.txt";
     let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
-    
+
     // Test that touch handles non-UTF-8 file names without crashing
     let result = scene.ucmd().arg(non_utf8_name).succeeds();
-    
+
     // Verify no output and file was created
     result.no_output();
-    
+
     // Check that the file was created (using the raw path)
     assert!(std::fs::metadata(at.plus(non_utf8_name)).is_ok());
 }

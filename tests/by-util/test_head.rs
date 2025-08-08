@@ -867,25 +867,26 @@ fn test_head_non_utf8_paths() {
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    
+
     // Create a test file with non-UTF-8 bytes in the name
     let non_utf8_bytes = b"test_\xFF\xFE.txt";
     let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
-    
+
     // Create the actual file with some content
     std::fs::write(at.plus(non_utf8_name), "line1\nline2\nline3\n").unwrap();
-    
+
     // Test that head handles non-UTF-8 file names without crashing
     let result = scene.ucmd().arg(non_utf8_name).succeeds();
-    
+
     // The result should contain the file content
     let output = result.stdout_str_lossy();
     assert!(output.contains("line1"));
     assert!(output.contains("line2"));
     assert!(output.contains("line3"));
-    
+
     // Test with line count argument
-    scene.ucmd()
+    scene
+        .ucmd()
         .args(&["-n", "2"])
         .arg(non_utf8_name)
         .succeeds()

@@ -10,7 +10,6 @@ use std::ffi::OsString;
 use std::fs;
 use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
-use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::line_ending::LineEnding;
@@ -80,9 +79,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     for f in &files {
         let p = f;
         let path_result = if res_mode == ResolveMode::None {
-            fs::read_link(&p)
+            fs::read_link(p)
         } else {
-            canonicalize(&p, can_mode, res_mode)
+            canonicalize(p, can_mode, res_mode)
         };
 
         match path_result {

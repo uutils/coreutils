@@ -14,9 +14,9 @@ use std::process::Stdio;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
-use uutests::util_name;
 #[cfg(not(windows))]
 use uutests::util::vec_of_size;
+use uutests::util_name;
 
 #[test]
 fn test_output_simple() {
@@ -755,17 +755,17 @@ fn test_cat_non_utf8_paths() {
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    
+
     // Create a test file with non-UTF-8 bytes in the name
     let non_utf8_bytes = b"test_\xFF\xFE.txt";
     let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
-    
+
     // Create the actual file with some content
     std::fs::write(at.plus(non_utf8_name), "Hello, non-UTF-8 world!\n").unwrap();
-    
+
     // Test that cat handles non-UTF-8 file names without crashing
     let result = scene.ucmd().arg(non_utf8_name).succeeds();
-    
+
     // The result should contain the file content
     let output = result.stdout_str_lossy();
     assert_eq!(output, "Hello, non-UTF-8 world!\n");
