@@ -170,7 +170,7 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
 }
 
 struct Options {
-    files: Vec<String>,
+    files: Vec<OsString>,
     tabstops: Vec<usize>,
     tspaces: String,
     iflag: bool,
@@ -204,9 +204,9 @@ impl Options {
             .unwrap(); // length of tabstops is guaranteed >= 1
         let tspaces = " ".repeat(nspaces);
 
-        let files: Vec<String> = match matches.get_many::<String>(options::FILES) {
-            Some(s) => s.map(|v| v.to_string()).collect(),
-            None => vec!["-".to_owned()],
+        let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILES) {
+            Some(s) => s.cloned().collect(),
+            None => vec![OsString::from("-")],
         };
 
         Ok(Self {
@@ -282,16 +282,18 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILES)
                 .action(ArgAction::Append)
                 .hide(true)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
 }
 
-fn open(path: &str) -> UResult<BufReader<Box<dyn Read + 'static>>> {
+fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     let file_buf;
     if path == "-" {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
     } else {
-        file_buf = File::open(path).map_err_context(|| path.to_string())?;
+        let path_ref = Path::new(path);
+        file_buf = File::open(path_ref).map_err_context(|| path.to_string_lossy().to_string())?;
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
 }
@@ -445,7 +447,7 @@ fn expand(options: &Options) -> UResult<()> {
         if Path::new(file).is_dir() {
             show_error!(
                 "{}",
-                translate!("expand-error-is-directory", "file" => file)
+                translate!("expand-error-is-directory", "file" => file.to_string_lossy())
             );
             set_exit_code(1);
             continue;
