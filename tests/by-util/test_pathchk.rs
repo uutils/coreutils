@@ -2,6 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStringExt;
 use uutests::new_ucmd;
 
 #[test]
@@ -163,4 +165,18 @@ fn test_posix_all() {
 
     // fail on empty path
     new_ucmd!().args(&["-p", "-P", ""]).fails().no_stdout();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_pathchk_non_utf8_paths() {
+    use uutests::at_and_ucmd;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+
+    // Create the file so pathchk can check it exists
+    std::fs::write(at.plus(&filename), b"test").unwrap();
+
+    ucmd.arg(&filename).succeeds();
 }
