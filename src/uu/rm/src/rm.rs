@@ -30,17 +30,17 @@ enum RmError {
     #[error("{}", translate!("rm-error-missing-operand", "util_name" => uucore::execution_phrase()))]
     MissingOperand,
     #[error("{}", translate!("rm-error-cannot-remove-no-such-file", "file" => _0.quote()))]
-    CannotRemoveNoSuchFile(String),
+    CannotRemoveNoSuchFile(OsString),
     #[error("{}", translate!("rm-error-cannot-remove-permission-denied", "file" => _0.quote()))]
-    CannotRemovePermissionDenied(String),
+    CannotRemovePermissionDenied(OsString),
     #[error("{}", translate!("rm-error-cannot-remove-is-directory", "file" => _0.quote()))]
-    CannotRemoveIsDirectory(String),
+    CannotRemoveIsDirectory(OsString),
     #[error("{}", translate!("rm-error-dangerous-recursive-operation"))]
     DangerousRecursiveOperation,
     #[error("{}", translate!("rm-error-use-no-preserve-root"))]
     UseNoPreserveRoot,
-    #[error("{}", translate!("rm-error-refusing-to-remove-directory", "path" => _0))]
-    RefusingToRemoveDirectory(String),
+    #[error("{}", translate!("rm-error-refusing-to-remove-directory", "path" => _0.to_string_lossy()))]
+    RefusingToRemoveDirectory(OsString),
 }
 
 impl UError for RmError {}
@@ -364,7 +364,7 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
                 } else {
                     show_error!(
                         "{}",
-                        RmError::CannotRemoveNoSuchFile(filename.to_string_lossy().to_string())
+                        RmError::CannotRemoveNoSuchFile(filename.to_os_string())
                     );
                     true
                 }
@@ -540,7 +540,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     if path_is_current_or_parent_directory(path) {
         show_error!(
             "{}",
-            RmError::RefusingToRemoveDirectory(path.display().to_string())
+            RmError::RefusingToRemoveDirectory(path.as_os_str().to_os_string())
         );
         return true;
     }
@@ -557,7 +557,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     } else {
         show_error!(
             "{}",
-            RmError::CannotRemoveIsDirectory(path.to_string_lossy().to_string())
+            RmError::CannotRemoveIsDirectory(path.as_os_str().to_os_string())
         );
         had_err = true;
     }
@@ -578,7 +578,7 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
     if !options.dir && !options.recursive {
         show_error!(
             "{}",
-            RmError::CannotRemoveIsDirectory(path.to_string_lossy().to_string())
+            RmError::CannotRemoveIsDirectory(path.as_os_str().to_os_string())
         );
         return true;
     }
@@ -619,7 +619,7 @@ fn remove_file(path: &Path, options: &Options) -> bool {
                     // GNU compatibility (rm/fail-eacces.sh)
                     show_error!(
                         "{}",
-                        RmError::CannotRemovePermissionDenied(path.to_string_lossy().to_string())
+                        RmError::CannotRemovePermissionDenied(path.as_os_str().to_os_string())
                     );
                 } else {
                     show_error!("cannot remove {}: {e}", path.quote());

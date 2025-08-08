@@ -1037,3 +1037,43 @@ fn test_inaccessible_dir_recursive() {
     assert!(!at.dir_exists("a/unreadable"));
     assert!(!at.dir_exists("a"));
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_rm_non_utf8_paths() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    
+    // Create a test file with non-UTF-8 bytes in the name
+    let non_utf8_bytes = b"test_\xFF\xFE.txt";
+    let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
+    
+    // Create the actual file
+    at.touch(non_utf8_name);
+    assert!(at.file_exists(non_utf8_name));
+    
+    // Test that rm handles non-UTF-8 file names without crashing
+    scene.ucmd()
+        .arg(non_utf8_name)
+        .succeeds();
+    
+    // The file should be removed
+    assert!(!at.file_exists(non_utf8_name));
+    
+    // Test with directory
+    let non_utf8_dir_bytes = b"test_dir_\xFF\xFE";
+    let non_utf8_dir_name = OsStr::from_bytes(non_utf8_dir_bytes);
+    
+    at.mkdir(non_utf8_dir_name);
+    assert!(at.dir_exists(non_utf8_dir_name));
+    
+    scene.ucmd()
+        .args(&["-r"])
+        .arg(non_utf8_dir_name)
+        .succeeds();
+    
+    assert!(!at.dir_exists(non_utf8_dir_name));
+}
