@@ -18,17 +18,15 @@ mod numeric_str_cmp;
 mod tmp_dir;
 
 use bigdecimal::BigDecimal;
-use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
-use custom_str_cmp::custom_str_cmp;
-use ext_sort::ext_sort;
 use fnv::FnvHasher;
 #[cfg(target_os = "linux")]
 use nix::libc::{RLIMIT_NOFILE, getrlimit, rlimit};
-use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{Rng, rng};
 use rayon::prelude::*;
+use thiserror::Error;
+
 use std::cmp::Ordering;
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -37,23 +35,28 @@ use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::ops::Range;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::Utf8Error;
-use thiserror::Error;
+
 use uucore::display::Quotable;
-use uucore::error::{FromIo, strip_errno};
-use uucore::error::{UError, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::error::{
+    FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code, strip_errno,
+};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
-use uucore::format_usage;
+use uucore::i18n::date::{self, locale_parse_abbr_month};
 use uucore::line_ending::LineEnding;
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
-use uucore::show_error;
-use uucore::translate;
 use uucore::version_cmp::version_cmp;
+use uucore::{format_usage, show_error, translate};
 
+use crate::chunks::LineData;
+use crate::custom_str_cmp::custom_str_cmp;
+use crate::ext_sort::ext_sort;
+use crate::numeric_str_cmp::{
+    NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp,
+};
 use crate::tmp_dir::TmpDirWrapper;
 
 mod options {
@@ -599,7 +602,9 @@ impl<'a> Line<'a> {
                         .enumerate()
                         .skip_while(|(_, c)| c.is_ascii_whitespace());
 
-                    let month = if month_parse(initial_selection) == Month::Unknown {
+                    let month = if locale_parse_abbr_month(initial_selection.trim_ascii_start())
+                        == date::Month::Unknown
+                    {
                         // We failed to parse a month, which is equivalent to matching nothing.
                         // Add the "no match for key" marker to the first non-whitespace character.
                         let first_non_whitespace = month_chars.next();
@@ -1871,47 +1876,9 @@ fn random_shuffle(a: &[u8], b: &[u8], salt: &[u8]) -> Ordering {
     da.cmp(&db)
 }
 
-#[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy)]
-enum Month {
-    Unknown,
-    January,
-    February,
-    March,
-    April,
-    May,
-    June,
-    July,
-    August,
-    September,
-    October,
-    November,
-    December,
-}
-
-/// Parse the beginning string into a Month, returning [`Month::Unknown`] on errors.
-fn month_parse(line: &[u8]) -> Month {
-    let line = line.trim_ascii_start();
-
-    match line.get(..3).map(|x| x.to_ascii_uppercase()).as_deref() {
-        Some(b"JAN") => Month::January,
-        Some(b"FEB") => Month::February,
-        Some(b"MAR") => Month::March,
-        Some(b"APR") => Month::April,
-        Some(b"MAY") => Month::May,
-        Some(b"JUN") => Month::June,
-        Some(b"JUL") => Month::July,
-        Some(b"AUG") => Month::August,
-        Some(b"SEP") => Month::September,
-        Some(b"OCT") => Month::October,
-        Some(b"NOV") => Month::November,
-        Some(b"DEC") => Month::December,
-        _ => Month::Unknown,
-    }
-}
-
 fn month_compare(a: &[u8], b: &[u8]) -> Ordering {
-    let ma = month_parse(a);
-    let mb = month_parse(b);
+    let ma = locale_parse_abbr_month(a.trim_ascii_start());
+    let mb = locale_parse_abbr_month(b.trim_ascii_start());
 
     ma.cmp(&mb)
 }
