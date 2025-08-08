@@ -7,6 +7,7 @@
 
 use uucore::display::Quotable;
 pub use uucore::entries;
+use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::perms::{GidUidOwnerFilter, IfFrom, chown_base, options};
@@ -37,15 +38,16 @@ fn parse_gid_from_str(group: &str) -> Result<u32, String> {
 
 fn get_dest_gid(matches: &ArgMatches) -> UResult<(Option<u32>, String)> {
     let mut raw_group = String::new();
-    let dest_gid = if let Some(file) = matches.get_one::<String>(options::REFERENCE) {
-        fs::metadata(file)
+    let dest_gid = if let Some(file) = matches.get_one::<std::ffi::OsString>(options::REFERENCE) {
+        let path = std::path::Path::new(file);
+        fs::metadata(path)
             .map(|meta| {
                 let gid = meta.gid();
                 raw_group = entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string());
                 Some(gid)
             })
             .map_err_context(
-                || translate!("chgrp-error-failed-to-get-attributes", "file" => file.quote()),
+                || translate!("chgrp-error-failed-to-get-attributes", "file" => path.quote()),
             )?
     } else {
         let group = matches
@@ -153,6 +155,7 @@ pub fn uu_app() -> Command {
                 .long(options::REFERENCE)
                 .value_name("RFILE")
                 .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(std::ffi::OsString))
                 .help(translate!("chgrp-help-reference")),
         )
         .arg(
