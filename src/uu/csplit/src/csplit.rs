@@ -6,6 +6,7 @@
 #![allow(rustdoc::private_intra_doc_links)]
 
 use std::cmp::Ordering;
+use std::ffi::OsString;
 use std::io::{self, BufReader, ErrorKind};
 use std::{
     fs::{File, remove_file},
@@ -607,7 +608,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
     // get the file to split
-    let file_name = matches.get_one::<String>(options::FILE).unwrap();
+    let file_name = matches.get_one::<OsString>(options::FILE).unwrap();
 
     // get the patterns to split on
     let patterns: Vec<String> = matches
@@ -687,7 +688,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE)
                 .hide(true)
                 .required(true)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::PATTERN)
