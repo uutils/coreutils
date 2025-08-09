@@ -14,7 +14,7 @@ use uucore::translate;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    uu_app().try_get_matches_from_localized(args);
+    uu_app().get_matches_from_localized(args);
     hostid();
     Ok(())
 }

@@ -113,7 +113,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (parsed_cmode, args) = extract_negative_modes(args.skip(1)); // skip binary name
     let matches = uu_app()
         .after_help(translate!("chmod-after-help"))
-        .try_get_matches_from_localized(args);
+        .get_matches_from_localized(args);
 
     let changes = matches.get_flag(options::CHANGES);
     let quiet = matches.get_flag(options::QUIET);

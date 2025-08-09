@@ -122,7 +122,7 @@ struct State {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app()
         .after_help(translate!("id-after-help"))
-        .try_get_matches_from_localized(args);
+        .get_matches_from_localized(args);
 
     let users: Vec<String> = matches
         .get_many::<String>(options::ARG_USERS)

@@ -52,7 +52,7 @@ static ARG_PREFIX: &str = "prefix";
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, obs_lines) = handle_obsolete(args);
-    let matches = uu_app().try_get_matches_from_localized(args);
+    let matches = uu_app().get_matches_from_localized(args);
 
     match Settings::from(&matches, obs_lines.as_deref()) {
         Ok(settings) => split(&settings),

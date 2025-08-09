@@ -581,7 +581,7 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from_localized(args);
+    let matches = uu_app().get_matches_from_localized(args);
 
     let summarize = matches.get_flag(options::SUMMARIZE);
 
