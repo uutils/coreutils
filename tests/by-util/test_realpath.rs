@@ -489,3 +489,24 @@ fn test_realpath_non_utf8_paths() {
     assert!(output.contains("test_"));
     assert!(output.contains(".txt"));
 }
+
+#[test]
+fn test_realpath_empty_string() {
+    // Test that empty string arguments are rejected with exit code 1
+    new_ucmd!().arg("").fails().code_is(1);
+
+    // Test that empty --relative-base is rejected
+    new_ucmd!()
+        .arg("--relative-base=")
+        .arg("--relative-to=.")
+        .arg(".")
+        .fails()
+        .code_is(1);
+
+    // Test that empty --relative-to is rejected
+    new_ucmd!()
+        .arg("--relative-to=")
+        .arg(".")
+        .fails()
+        .code_is(1);
+}

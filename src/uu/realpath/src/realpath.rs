@@ -5,9 +5,12 @@
 
 // spell-checker:ignore (ToDO) retcode
 
-use clap::{Arg, ArgAction, ArgMatches, Command};
+use clap::{
+    Arg, ArgAction, ArgMatches, Command,
+    builder::{TypedValueParser, ValueParserFactory},
+};
 use std::{
-    ffi::OsString,
+    ffi::{OsStr, OsString},
     io::{Write, stdout},
     path::{Path, PathBuf},
 };
@@ -33,6 +36,39 @@ const OPT_RELATIVE_TO: &str = "relative-to";
 const OPT_RELATIVE_BASE: &str = "relative-base";
 
 const ARG_FILES: &str = "files";
+
+/// Custom parser that validates `OsString` is not empty
+#[derive(Clone, Debug)]
+struct NonEmptyOsStringParser;
+
+impl TypedValueParser for NonEmptyOsStringParser {
+    type Value = OsString;
+
+    fn parse_ref(
+        &self,
+        _cmd: &Command,
+        _arg: Option<&Arg>,
+        value: &OsStr,
+    ) -> Result<Self::Value, clap::Error> {
+        if value.is_empty() {
+            let mut err = clap::Error::new(clap::error::ErrorKind::ValueValidation);
+            err.insert(
+                clap::error::ContextKind::Custom,
+                clap::error::ContextValue::String("invalid operand: empty string".to_string()),
+            );
+            return Err(err);
+        }
+        Ok(value.to_os_string())
+    }
+}
+
+impl ValueParserFactory for NonEmptyOsStringParser {
+    type Parser = Self;
+
+    fn value_parser() -> Self::Parser {
+        Self
+    }
+}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -146,21 +182,21 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_RELATIVE_TO)
                 .long(OPT_RELATIVE_TO)
                 .value_name("DIR")
-                .value_parser(clap::value_parser!(OsString))
+                .value_parser(NonEmptyOsStringParser)
                 .help(translate!("realpath-help-relative-to")),
         )
         .arg(
             Arg::new(OPT_RELATIVE_BASE)
                 .long(OPT_RELATIVE_BASE)
                 .value_name("DIR")
-                .value_parser(clap::value_parser!(OsString))
+                .value_parser(NonEmptyOsStringParser)
                 .help(translate!("realpath-help-relative-base")),
         )
         .arg(
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .required(true)
-                .value_parser(clap::value_parser!(OsString))
+                .value_parser(NonEmptyOsStringParser)
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }
