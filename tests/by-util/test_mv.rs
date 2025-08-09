@@ -2547,3 +2547,28 @@ fn test_mv_selinux_context() {
         let _ = std::fs::remove_file(at.plus_as_string(src));
     }
 }
+
+#[test]
+fn test_mv_error_usage_display() {
+    let (at, _ucmd) = at_and_ucmd!();
+    at.touch("file1");
+
+    // Test case 1: No files provided with --target option (MissingRequiredArgument)
+    new_ucmd!()
+        .arg("--target-directory=.")
+        .fails()
+        .code_is(1)
+        .stderr_contains("error: the following required arguments were not provided:")
+        .stderr_contains("<files>...")
+        .stderr_contains("Usage: mv [OPTION]... [-T] SOURCE DEST")
+        .stderr_contains("For more information, try '--help'.");
+
+    // Test case 2: Only one file provided (TooFewValues from custom mv logic)
+    new_ucmd!()
+        .arg("file1")
+        .fails()
+        .code_is(1)
+        .stderr_contains("requires at least 2 values, but only 1 was provided")
+        .stderr_contains("Usage: mv [OPTION]... [-T] SOURCE DEST")
+        .stderr_contains("For more information, try '--help'.");
+}

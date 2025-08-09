@@ -161,12 +161,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect();
 
     if files.len() == 1 && !matches.contains_id(OPT_TARGET_DIRECTORY) {
-        uu_app()
-            .error(
-                ErrorKind::TooFewValues,
-                translate!("mv-error-insufficient-arguments", "arg_files" => ARG_FILES),
-            )
-            .exit();
+        let err = uu_app().error(
+            ErrorKind::TooFewValues,
+            translate!("mv-error-insufficient-arguments", "arg_files" => ARG_FILES),
+        );
+        uucore::clap_localization::handle_clap_error_with_exit_code(err, uucore::util_name(), 1);
     }
 
     let overwrite_mode = determine_overwrite_mode(&matches);

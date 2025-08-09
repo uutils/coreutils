@@ -83,7 +83,7 @@ pub fn display_usage_and_help(util_name: &str) {
     let usage_label = translate!("common-usage");
     eprintln!("{}: {}", usage_label, formatted_usage);
     eprintln!();
-    let help_msg = translate!("common-help-suggestion", "command" => crate::execution_phrase());
+    let help_msg = translate!("clap-error-help-suggestion", "command" => crate::execution_phrase());
     eprintln!("{help_msg}");
 }
 
@@ -194,7 +194,22 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
             std::process::exit(exit_code);
         }
         _ => {
-            // For other errors, use the simple format but with original clap wording
+            // For MissingRequiredArgument, use the full clap error as it includes proper usage
+            if matches!(err.kind(), ErrorKind::MissingRequiredArgument) {
+                eprint!("{}", err.render());
+                std::process::exit(exit_code);
+            }
+
+            // For TooFewValues and similar structural errors, use the full clap error
+            if matches!(
+                err.kind(),
+                ErrorKind::TooFewValues | ErrorKind::TooManyValues | ErrorKind::WrongNumberOfValues
+            ) {
+                eprint!("{}", err.render());
+                std::process::exit(exit_code);
+            }
+
+            // For other errors, show just the error and help suggestion
             let rendered_str = err.render().to_string();
             let lines: Vec<&str> = rendered_str.lines().collect();
 
@@ -203,7 +218,8 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                 eprintln!("{}", first_line);
             }
 
-            // Always use the expected test format for help
+            // For other errors, just show help suggestion
+            eprintln!();
             eprintln!("For more information, try '--help'.");
 
             std::process::exit(exit_code);
