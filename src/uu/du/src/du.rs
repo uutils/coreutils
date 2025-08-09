@@ -7,14 +7,11 @@ use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::Pattern;
 use std::collections::HashSet;
 use std::env;
-#[cfg(unix)]
 use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fs::Metadata;
 use std::fs::{self, DirEntry, File};
 use std::io::{BufRead, BufReader, stdout};
-#[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
@@ -535,7 +532,7 @@ impl StatPrinter {
 }
 
 /// Read file paths from the specified file, separated by null characters
-fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
+fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
     let reader: Box<dyn BufRead> = if file_name == "-" {
         // Read from standard input
         Box::new(BufReader::new(std::io::stdin()))
@@ -544,7 +541,7 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
         let path = PathBuf::from(file_name);
         if path.is_dir() {
             return Err(std::io::Error::other(
-                translate!("du-error-read-error-is-directory", "file" => file_name),
+                translate!("du-error-read-error-is-directory", "file" => file_name.to_string_lossy()),
             ));
         }
 
@@ -553,7 +550,7 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
             Ok(file) => Box::new(BufReader::new(file)),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 return Err(std::io::Error::other(
-                    translate!("du-error-cannot-open-for-reading", "file" => file_name),
+                    translate!("du-error-cannot-open-for-reading", "file" => file_name.to_string_lossy()),
                 ));
             }
             Err(e) => return Err(e),
@@ -569,14 +566,11 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
             let line_number = i + 1;
             show_error!(
                 "{}",
-                translate!("du-error-invalid-zero-length-file-name", "file" => file_name, "line" => line_number)
+                translate!("du-error-invalid-zero-length-file-name", "file" => file_name.to_string_lossy(), "line" => line_number)
             );
             set_exit_code(1);
         } else {
-            #[cfg(unix)]
-            let p = PathBuf::from(OsStr::from_bytes(&path));
-            #[cfg(windows)]
-            let p = PathBuf::from(String::from_utf8_lossy(&path).to_string());
+            let p = PathBuf::from(&*uucore::os_str_from_bytes(&path).unwrap());
             if !paths.contains(&p) {
                 paths.push(p);
             }
@@ -603,9 +597,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     )?;
 
     let files = if let Some(file_from) = matches.get_one::<OsString>(options::FILES0_FROM) {
-        if file_from.to_string_lossy() == "-"
-            && matches.get_one::<OsString>(options::FILE).is_some()
-        {
+        if file_from == "-" && matches.get_one::<OsString>(options::FILE).is_some() {
             return Err(std::io::Error::other(
                 translate!("du-error-extra-operand-with-files0-from",
                     "file" => matches
@@ -618,7 +610,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .into());
         }
 
-        read_files_from(&file_from.to_string_lossy())?
+        read_files_from(file_from)?
     } else if let Some(files) = matches.get_many::<OsString>(options::FILE) {
         let files = files.map(PathBuf::from);
         if count_links {

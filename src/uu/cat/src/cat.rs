@@ -455,7 +455,7 @@ fn cat_files(files: &[OsString], options: &OutputOptions) -> UResult<()> {
 ///
 /// * `path` - Path on a file system to classify metadata
 fn get_input_type(path: &OsString) -> CatResult<InputType> {
-    if path.to_str() == Some("-") {
+    if path == "-" {
         return Ok(InputType::StdIn);
     }
 
