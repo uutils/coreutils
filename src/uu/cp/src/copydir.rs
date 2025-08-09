@@ -377,6 +377,9 @@ pub(crate) fn copy_directory(
     // The directory we were in during the previous iteration
     let mut last_iter: Option<DirEntry> = None;
 
+    // Keep track of all directories we've created that need permission fixes
+    let mut dirs_needing_permissions: Vec<(PathBuf, PathBuf)> = Vec::new();
+
     // Traverse the contents of the directory, copying each one.
     for direntry_result in WalkDir::new(root)
         .same_file_system(options.one_file_system)
@@ -408,6 +411,14 @@ pub(crate) fn copy_directory(
                 // `./a/b/c` into `./a/`, in which case we'll need to fix the
                 // permissions of both `./a/b/c` and `./a/b`, in that order.)
                 if direntry.file_type().is_dir() {
+                    // Add this directory to our list for permission fixing later
+                    let entry_for_tracking =
+                        Entry::new(&context, direntry.path(), options.no_target_dir)?;
+                    dirs_needing_permissions.push((
+                        entry_for_tracking.source_absolute,
+                        entry_for_tracking.local_to_target,
+                    ));
+
                     // If true, last_iter is not a parent of this iter.
                     // The means we just exited a directory.
                     let went_up = if let Some(last_iter) = &last_iter {
@@ -452,25 +463,10 @@ pub(crate) fn copy_directory(
         }
     }
 
-    // Handle final directory permission fixes.
-    // This is almost the same as the permission-fixing code above,
-    // with minor differences (commented)
-    if let Some(last_iter) = last_iter {
-        let diff = last_iter.path().strip_prefix(root).unwrap();
-
-        // Do _not_ skip `.` this time, since we know we're done.
-        // This is where we fix the permissions of the top-level
-        // directory we just copied.
-        for p in diff.ancestors() {
-            let src = root.join(p);
-            let entry = Entry::new(&context, &src, options.no_target_dir)?;
-
-            copy_attributes(
-                &entry.source_absolute,
-                &entry.local_to_target,
-                &options.attributes,
-            )?;
-        }
+    // Fix permissions for all directories we created
+    // This ensures that even sibling directories get their permissions fixed
+    for (source_path, dest_path) in dirs_needing_permissions {
+        copy_attributes(&source_path, &dest_path, &options.attributes)?;
     }
 
     // Also fix permissions for parent directories,
