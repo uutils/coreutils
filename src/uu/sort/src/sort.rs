@@ -1050,6 +1050,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // nor return with a non-zero exit code in this case (we should print to stdout and return 0).
             // This logic is similar to the code in clap, but we return 2 as the exit code in case of real failure
             // (clap returns 1).
+            use uucore::clap_localization::handle_clap_error_with_exit_code;
+            if e.kind() == clap::error::ErrorKind::UnknownArgument {
+                handle_clap_error_with_exit_code(e, uucore::util_name(), 2);
+            }
             e.print().unwrap();
             if e.use_stderr() {
                 set_exit_code(2);
