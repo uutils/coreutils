@@ -116,7 +116,7 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
         ErrorKind::UnknownArgument => {
             // Force localization initialization - ignore any previous failures
             crate::locale::setup_localization_with_common(util_name).ok();
-            
+
             // UnknownArgument gets special handling for suggestions, but should still show simple help
             if let Some(invalid_arg) = err.get(ContextKind::InvalidArg) {
                 let arg_str = invalid_arg.to_string();
@@ -124,11 +124,19 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                 // Get the uncolored words from common strings with fallbacks
                 let error_word = {
                     let translated = translate!("common-error");
-                    if translated == "common-error" { "error".to_string() } else { translated }
+                    if translated == "common-error" {
+                        "error".to_string()
+                    } else {
+                        translated
+                    }
                 };
                 let tip_word = {
                     let translated = translate!("common-tip");
-                    if translated == "common-tip" { "tip".to_string() } else { translated }
+                    if translated == "common-tip" {
+                        "tip".to_string()
+                    } else {
+                        translated
+                    }
                 };
 
                 let colored_arg = maybe_colorize(&arg_str, Color::Yellow);
@@ -143,7 +151,10 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                         "error_word" => colored_error_word.clone()
                     );
                     if translated.starts_with("clap-error-unexpected-argument") {
-                        format!("{}: unexpected argument '{}' found", colored_error_word, colored_arg)
+                        format!(
+                            "{}: unexpected argument '{}' found",
+                            colored_error_word, colored_arg
+                        )
                     } else {
                         translated
                     }
@@ -151,7 +162,7 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                 eprintln!("{error_msg}");
                 eprintln!();
 
-                // Show suggestion if available 
+                // Show suggestion if available
                 let suggestion = err.get(ContextKind::SuggestedArg);
                 if let Some(suggested_arg) = suggestion {
                     let colored_suggestion =
@@ -163,7 +174,10 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                             "suggestion" => colored_suggestion.clone()
                         );
                         if translated.starts_with("clap-error-similar-argument") {
-                            format!("  {}: a similar argument exists: '{}'", colored_tip_word, colored_suggestion)
+                            format!(
+                                "  {}: a similar argument exists: '{}'",
+                                colored_tip_word, colored_suggestion
+                            )
                         } else {
                             format!("  {}", translated)
                         }
@@ -188,7 +202,11 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                 let formatted_usage = crate::format_usage(&usage_text);
                 let usage_label = {
                     let translated = translate!("common-usage");
-                    if translated == "common-usage" { "Usage".to_string() } else { translated }
+                    if translated == "common-usage" {
+                        "Usage".to_string()
+                    } else {
+                        translated
+                    }
                 };
                 eprintln!("{}: {}", usage_label, formatted_usage);
                 eprintln!();
@@ -200,7 +218,11 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                 // Generic fallback case
                 let error_word = {
                     let translated = translate!("common-error");
-                    if translated == "common-error" { "error".to_string() } else { translated }
+                    if translated == "common-error" {
+                        "error".to_string()
+                    } else {
+                        translated
+                    }
                 };
                 let colored_error_word = maybe_colorize(&error_word, Color::Red);
                 eprintln!("{colored_error_word}: unexpected argument");

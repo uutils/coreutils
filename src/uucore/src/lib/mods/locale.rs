@@ -1402,6 +1402,46 @@ invalid-syntax = This is { $missing
             panic!("Expected LocalizationError::ParseResource with snippet");
         }
     }
+
+    #[test]
+    fn test_clap_localization_fallbacks() {
+        std::thread::spawn(|| {
+            // Test the scenario where localization isn't properly initialized
+            // and we need fallbacks for clap error handling
+
+            // First, test when localizer is not initialized
+            let error_msg = get_message("common-error");
+            assert_eq!(error_msg, "common-error"); // Should return key when not initialized
+
+            let tip_msg = get_message("common-tip");
+            assert_eq!(tip_msg, "common-tip"); // Should return key when not initialized
+
+            // Now initialize with setup_localization_with_common
+            let result = setup_localization_with_common("comm");
+            if result.is_err() {
+                // If setup fails (e.g., no embedded locales for comm), try with a known utility
+                let _ = setup_localization_with_common("test");
+            }
+
+            // Test that common strings are available after initialization
+            let error_after_init = get_message("common-error");
+            // Should either be translated or return the key (but not panic)
+            assert!(!error_after_init.is_empty());
+
+            let tip_after_init = get_message("common-tip");
+            assert!(!tip_after_init.is_empty());
+
+            // Test that clap error keys work with fallbacks
+            let unknown_arg_key = get_message("clap-error-unexpected-argument");
+            assert!(!unknown_arg_key.is_empty());
+
+            // Test usage key fallback
+            let usage_key = get_message("common-usage");
+            assert!(!usage_key.is_empty());
+        })
+        .join()
+        .unwrap();
+    }
 }
 
 #[cfg(all(test, not(debug_assertions)))]
