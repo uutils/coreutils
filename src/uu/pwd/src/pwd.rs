@@ -110,7 +110,7 @@ fn logical_path() -> io::Result<PathBuf> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from_localized(args);
+    let matches = uu_app().get_matches_from_localized(args);
     // if POSIXLY_CORRECT is set, we want to a logical resolution.
     // This produces a different output when doing mkdir -p a/b && ln -s a/b c && cd c && pwd
     // We should get c in this case instead of a/b at the end of the path

@@ -13,7 +13,7 @@ use clap::{ArgMatches, Command, Error};
 use std::ffi::OsString;
 
 /// Apply color to text using ANSI escape codes
-pub fn colorize(text: &str, color_code: &str) -> String {
+fn colorize(text: &str, color_code: &str) -> String {
     format!("\x1b[{color_code}m{text}\x1b[0m")
 }
 
@@ -44,6 +44,15 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
             // Simple check - if the rendered output contains ANSI escape codes, colors are enabled
             let colors_enabled = rendered_str.contains("\x1b[");
 
+            // Helper closure to conditionally apply colors
+            let apply_color = |text: &str, color: &str| {
+                if colors_enabled {
+                    colorize(text, color)
+                } else {
+                    text.to_string()
+                }
+            };
+
             if let Some(invalid_arg) = err.get(ContextKind::InvalidArg) {
                 let arg_str = invalid_arg.to_string();
 
@@ -51,16 +60,10 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                 let error_word = translate!("common-error");
                 let tip_word = translate!("common-tip");
 
-                // Apply colors only if they're enabled in the original error
-                let (colored_arg, colored_error_word, colored_tip_word) = if colors_enabled {
-                    (
-                        colorize(&arg_str, colors::YELLOW),
-                        colorize(&error_word, colors::RED),
-                        colorize(&tip_word, colors::GREEN),
-                    )
-                } else {
-                    (arg_str.clone(), error_word.clone(), tip_word.clone())
-                };
+                // Apply colors using helper closure
+                let colored_arg = apply_color(&arg_str, colors::YELLOW);
+                let colored_error_word = apply_color(&error_word, colors::RED);
+                let colored_tip_word = apply_color(&tip_word, colors::GREEN);
 
                 // Print main error message
                 let error_msg = translate!(
@@ -74,11 +77,7 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                 // Show suggestion or generic tip
                 let suggestion = err.get(ContextKind::SuggestedArg);
                 if let Some(suggested_arg) = suggestion {
-                    let colored_suggestion = if colors_enabled {
-                        colorize(&suggested_arg.to_string(), colors::GREEN)
-                    } else {
-                        suggested_arg.to_string()
-                    };
+                    let colored_suggestion = apply_color(&suggested_arg.to_string(), colors::GREEN);
                     let suggestion_msg = translate!(
                         "clap-error-similar-argument",
                         "tip_word" => colored_tip_word,
@@ -86,11 +85,7 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                     );
                     eprintln!("  {suggestion_msg}");
                 } else {
-                    let colored_tip_command = if colors_enabled {
-                        colorize(&format!("-- {arg_str}"), colors::GREEN)
-                    } else {
-                        format!("-- {arg_str}")
-                    };
+                    let colored_tip_command = apply_color(&format!("-- {arg_str}"), colors::GREEN);
                     let tip_msg = translate!(
                         "clap-error-pass-as-value",
                         "arg" => colored_arg,
@@ -112,16 +107,8 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
 
                 std::process::exit(exit_code);
             } else {
-                // Generic fallback case
-                let rendered = err.render();
-                let rendered_str = rendered.to_string();
-                let colors_enabled = rendered_str.contains("\x1b[");
-
-                let colored_error_word = if colors_enabled {
-                    colorize(&translate!("common-error"), colors::RED)
-                } else {
-                    translate!("common-error")
-                };
+                // Generic fallback case - reuse colors_enabled and apply_color from above scope
+                let colored_error_word = apply_color(&translate!("common-error"), colors::RED);
                 eprintln!("{colored_error_word}: unexpected argument");
                 std::process::exit(exit_code);
             }
@@ -142,15 +129,15 @@ pub trait LocalizedCommand {
     where
         Self: Sized;
 
-    /// Try to get matches from args with localized error handling
-    fn try_get_matches_from_localized<I, T>(self, itr: I) -> ArgMatches
+    /// Get matches from args with localized error handling
+    fn get_matches_from_localized<I, T>(self, itr: I) -> ArgMatches
     where
         Self: Sized,
         I: IntoIterator<Item = T>,
         T: Into<OsString> + Clone;
 
-    /// Try to get matches from mutable args with localized error handling
-    fn try_get_matches_from_mut_localized<I, T>(self, itr: I) -> ArgMatches
+    /// Get matches from mutable args with localized error handling
+    fn get_matches_from_mut_localized<I, T>(self, itr: I) -> ArgMatches
     where
         Self: Sized,
         I: IntoIterator<Item = T>,
@@ -163,7 +150,7 @@ impl LocalizedCommand for Command {
             .unwrap_or_else(|err| handle_clap_error_with_exit_code(err, crate::util_name(), 1))
     }
 
-    fn try_get_matches_from_localized<I, T>(self, itr: I) -> ArgMatches
+    fn get_matches_from_localized<I, T>(self, itr: I) -> ArgMatches
     where
         I: IntoIterator<Item = T>,
         T: Into<OsString> + Clone,
@@ -172,7 +159,7 @@ impl LocalizedCommand for Command {
             .unwrap_or_else(|err| handle_clap_error_with_exit_code(err, crate::util_name(), 1))
     }
 
-    fn try_get_matches_from_mut_localized<I, T>(mut self, itr: I) -> ArgMatches
+    fn get_matches_from_mut_localized<I, T>(mut self, itr: I) -> ArgMatches
     where
         I: IntoIterator<Item = T>,
         T: Into<OsString> + Clone,

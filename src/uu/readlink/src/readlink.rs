@@ -30,7 +30,7 @@ const ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from_localized(args);
+    let matches = uu_app().get_matches_from_localized(args);
 
     let mut no_trailing_delimiter = matches.get_flag(OPT_NO_NEWLINE);
     let use_zero = matches.get_flag(OPT_ZERO);

@@ -112,7 +112,7 @@ impl From<&str> for Rfc3339Format {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from_localized(args);
+    let matches = uu_app().get_matches_from_localized(args);
 
     let format = if let Some(form) = matches.get_one::<String>(OPT_FORMAT) {
         if !form.starts_with('+') {

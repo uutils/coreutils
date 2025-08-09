@@ -317,7 +317,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let opt_args = recreate_arguments(&args);
 
     let command = uu_app();
-    let matches = command.try_get_matches_from_mut_localized(opt_args);
+    let matches = command.get_matches_from_mut_localized(opt_args);
 
     let mut files = matches
         .get_many::<String>(options::FILES)

@@ -231,7 +231,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
 
-    let matches = uu_app().try_get_matches_from_localized(args);
+    let matches = uu_app().get_matches_from_localized(args);
 
     let number_mode = if matches.get_flag(options::NUMBER_NONBLANK) {
         NumberingMode::NonEmpty

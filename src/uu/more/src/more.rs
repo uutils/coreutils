@@ -152,7 +152,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         print!("\r");
         println!("{panic_info}");
     }));
-    let matches = uu_app().try_get_matches_from_localized(args);
+    let matches = uu_app().get_matches_from_localized(args);
     let mut options = Options::from(&matches);
     if let Some(files) = matches.get_many::<String>(options::FILES) {
         let length = files.len();

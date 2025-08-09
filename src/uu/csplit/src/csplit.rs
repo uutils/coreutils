@@ -605,7 +605,7 @@ where
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from_localized(args);
+    let matches = uu_app().get_matches_from_localized(args);
 
     // get the file to split
     let file_name = matches.get_one::<String>(options::FILE).unwrap();

@@ -483,7 +483,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         })
         .collect();
 
-    let matches = uu_app().try_get_matches_from_localized(args);
+    let matches = uu_app().get_matches_from_localized(args);
 
     let complement = matches.get_flag(options::COMPLEMENT);
     let only_delimited = matches.get_flag(options::ONLY_DELIMITED);

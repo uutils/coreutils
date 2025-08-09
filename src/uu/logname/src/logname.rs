@@ -24,7 +24,7 @@ fn get_userlogin() -> Option<String> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let _ = uu_app().try_get_matches_from_localized(args);
+    let _ = uu_app().get_matches_from_localized(args);
 
     match get_userlogin() {
         Some(userlogin) => println!("{userlogin}"),

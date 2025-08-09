@@ -82,7 +82,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // " of each created directory to CTX"),
     let matches = uu_app()
         .after_help(translate!("mkdir-after-help"))
-        .try_get_matches_from_localized(args);
+        .get_matches_from_localized(args);
 
     let dirs = matches
         .get_many::<OsString>(options::DIRS)

@@ -221,7 +221,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let clap_opts = uu_app();
 
-    let clap_matches = clap_opts.try_get_matches_from_localized(&args);
+    let clap_matches = clap_opts.get_matches_from_localized(&args);
 
     let od_options = OdOptions::new(&clap_matches, &args)?;
 

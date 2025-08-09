@@ -22,7 +22,7 @@ const BUF_SIZE: usize = 16 * 1024;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from_localized(args);
+    let matches = uu_app().get_matches_from_localized(args);
 
     let mut buffer = Vec::with_capacity(BUF_SIZE);
     args_into_buffer(&mut buffer, matches.get_many::<OsString>("STRING")).unwrap();

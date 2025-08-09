@@ -61,7 +61,7 @@ mod wsa {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from_localized(args);
+    let matches = uu_app().get_matches_from_localized(args);
 
     #[cfg(windows)]
     let _handle = wsa::start().map_err_context(|| translate!("hostname-error-winsock"))?;
