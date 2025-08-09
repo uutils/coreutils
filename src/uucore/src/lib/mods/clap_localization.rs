@@ -184,9 +184,9 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
             if let Some(main_error_line) = lines.first() {
                 // Keep the "error: " prefix for test compatibility
                 eprintln!("{}", main_error_line);
-
+                eprintln!();
                 // Use the execution phrase for the help suggestion to match test expectations
-                eprintln!("For more information, try '--help'");
+                eprintln!("For more information, try '--help'.");
             } else {
                 // Fallback to original rendering if we can't parse
                 eprint!("{}", err.render());
@@ -204,7 +204,7 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
             }
 
             // Always use the expected test format for help
-            eprintln!("For more information, try '--help'");
+            eprintln!("For more information, try '--help'.");
 
             std::process::exit(exit_code);
         }
