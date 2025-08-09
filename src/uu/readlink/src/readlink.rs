@@ -6,10 +6,10 @@
 // spell-checker:ignore (ToDO) errno
 
 use clap::{Arg, ArgAction, Command};
+use std::ffi::OsString;
 use std::fs;
 use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
-use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::line_ending::LineEnding;
@@ -53,9 +53,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         MissingHandling::Normal
     };
 
-    let files: Vec<String> = matches
-        .get_many::<String>(ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
+    let files: Vec<PathBuf> = matches
+        .get_many::<OsString>(ARG_FILES)
+        .map(|v| v.map(PathBuf::from).collect())
         .unwrap_or_default();
 
     if files.is_empty() {
@@ -77,11 +77,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     for f in &files {
-        let p = PathBuf::from(f);
+        let p = f;
         let path_result = if res_mode == ResolveMode::None {
-            fs::read_link(&p)
+            fs::read_link(p)
         } else {
-            canonicalize(&p, can_mode, res_mode)
+            canonicalize(p, can_mode, res_mode)
         };
 
         match path_result {
@@ -92,7 +92,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 return if verbose {
                     Err(USimpleError::new(
                         1,
-                        err.map_err_context(move || f.maybe_quote().to_string())
+                        err.map_err_context(move || f.to_string_lossy().to_string())
                             .to_string(),
                     ))
                 } else {
@@ -169,13 +169,14 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
+                .value_parser(clap::value_parser!(OsString))
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }
 
 fn show(path: &Path, line_ending: Option<LineEnding>) -> std::io::Result<()> {
-    let path = path.to_str().unwrap();
-    print!("{path}");
+    use uucore::display::print_verbatim;
+    print_verbatim(path)?;
     if let Some(line_ending) = line_ending {
         print!("{line_ending}");
     }

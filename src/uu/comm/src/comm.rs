@@ -6,8 +6,10 @@
 // spell-checker:ignore (ToDO) delim mkdelim pairable
 
 use std::cmp::Ordering;
+use std::ffi::OsString;
 use std::fs::{File, metadata};
 use std::io::{self, BufRead, BufReader, Read, Stdin, stdin};
+use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::fs::paths_refer_to_same_file;
@@ -114,7 +116,7 @@ impl OrderChecker {
 }
 
 // Check if two files are identical by comparing their contents
-pub fn are_files_identical(path1: &str, path2: &str) -> io::Result<bool> {
+pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
     // First compare file sizes
     let metadata1 = metadata(path1)?;
     let metadata2 = metadata(path2)?;
@@ -173,11 +175,11 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
     let should_check_order = !no_check_order
         && (check_order
             || if let (Some(file1), Some(file2)) = (
-                opts.get_one::<String>(options::FILE_1),
-                opts.get_one::<String>(options::FILE_2),
+                opts.get_one::<OsString>(options::FILE_1),
+                opts.get_one::<OsString>(options::FILE_2),
             ) {
-                !(paths_refer_to_same_file(file1, file2, true)
-                    || are_files_identical(file1, file2).unwrap_or(false))
+                !(paths_refer_to_same_file(file1.as_os_str(), file2.as_os_str(), true)
+                    || are_files_identical(Path::new(file1), Path::new(file2)).unwrap_or(false))
             } else {
                 true
             });
@@ -263,7 +265,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
     }
 }
 
-fn open_file(name: &str, line_ending: LineEnding) -> io::Result<LineReader> {
+fn open_file(name: &OsString, line_ending: LineEnding) -> io::Result<LineReader> {
     if name == "-" {
         Ok(LineReader::new(Input::Stdin(stdin()), line_ending))
     } else {
@@ -282,10 +284,12 @@ fn open_file(name: &str, line_ending: LineEnding) -> io::Result<LineReader> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
-    let filename1 = matches.get_one::<String>(options::FILE_1).unwrap();
-    let filename2 = matches.get_one::<String>(options::FILE_2).unwrap();
-    let mut f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string())?;
-    let mut f2 = open_file(filename2, line_ending).map_err_context(|| filename2.to_string())?;
+    let filename1 = matches.get_one::<OsString>(options::FILE_1).unwrap();
+    let filename2 = matches.get_one::<OsString>(options::FILE_2).unwrap();
+    let mut f1 = open_file(filename1, line_ending)
+        .map_err_context(|| filename1.to_string_lossy().to_string())?;
+    let mut f2 = open_file(filename2, line_ending)
+        .map_err_context(|| filename2.to_string_lossy().to_string())?;
 
     // Due to default_value(), there must be at least one value here, thus unwrap() must not panic.
     let all_delimiters = matches
@@ -358,12 +362,14 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FILE_1)
                 .required(true)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::FILE_2)
                 .required(true)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::TOTAL)

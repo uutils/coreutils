@@ -156,7 +156,7 @@ fn is_first_filename_timestamp(
     reference: Option<&OsString>,
     date: Option<&str>,
     timestamp: Option<&str>,
-    files: &[&String],
+    files: &[&OsString],
 ) -> bool {
     if timestamp.is_none()
         && reference.is_none()
@@ -165,8 +165,11 @@ fn is_first_filename_timestamp(
         // env check is last as the slowest op
         && matches!(std::env::var("_POSIX2_VERSION").as_deref(), Ok("199209"))
     {
-        let s = files[0];
-        all_digits(s) && (s.len() == 8 || (s.len() == 10 && (69..=99).contains(&get_year(s))))
+        if let Some(s) = files[0].to_str() {
+            all_digits(s) && (s.len() == 8 || (s.len() == 10 && (69..=99).contains(&get_year(s))))
+        } else {
+            false
+        }
     } else {
         false
     }
@@ -188,8 +191,8 @@ fn shr2(s: &str) -> String {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let mut filenames: Vec<&String> = matches
-        .get_many::<String>(ARG_FILES)
+    let mut filenames: Vec<&OsString> = matches
+        .get_many::<OsString>(ARG_FILES)
         .ok_or_else(|| {
             USimpleError::new(
                 1,
@@ -210,12 +213,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|t| t.to_owned());
 
     if is_first_filename_timestamp(reference, date.as_deref(), timestamp.as_deref(), &filenames) {
-        timestamp = if filenames[0].len() == 10 {
-            Some(shr2(filenames[0]))
-        } else {
-            Some(filenames[0].to_string())
-        };
-        filenames = filenames[1..].to_vec();
+        if let Some(first_file) = filenames[0].to_str() {
+            timestamp = if first_file.len() == 10 {
+                Some(shr2(first_file))
+            } else {
+                Some(first_file.to_string())
+            };
+            filenames = filenames[1..].to_vec();
+        }
     }
 
     let source = if let Some(reference) = reference {
@@ -336,6 +341,7 @@ pub fn uu_app() -> Command {
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .num_args(1..)
+                .value_parser(clap::value_parser!(OsString))
                 .value_hint(clap::ValueHint::AnyPath),
         )
         .group(

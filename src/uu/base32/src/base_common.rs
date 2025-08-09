@@ -6,6 +6,7 @@
 // spell-checker:ignore hexupper lsbf msbf unpadded nopad aGVsbG8sIHdvcmxkIQ
 
 use clap::{Arg, ArgAction, Command};
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -44,14 +45,14 @@ pub mod options {
 
 impl Config {
     pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
-        let to_read = match options.get_many::<String>(options::FILE) {
+        let to_read = match options.get_many::<OsString>(options::FILE) {
             Some(mut values) => {
                 let name = values.next().unwrap();
 
                 if let Some(extra_op) = values.next() {
                     return Err(UUsageError::new(
                         BASE_CMD_PARSE_ERROR,
-                        translate!("base-common-extra-operand", "operand" => extra_op.quote()),
+                        translate!("base-common-extra-operand", "operand" => extra_op.to_string_lossy().quote()),
                     ));
                 }
 
@@ -141,6 +142,7 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
             Arg::new(options::FILE)
                 .index(1)
                 .action(ArgAction::Append)
+                .value_parser(clap::value_parser!(OsString))
                 .value_hint(clap::ValueHint::FilePath),
         )
 }

@@ -10,6 +10,7 @@ mod mode;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use file_diff::diff;
 use filetime::{FileTime, set_file_times};
+use std::ffi::OsString;
 use std::fmt::Debug;
 use std::fs::File;
 use std::fs::{self, metadata};
@@ -167,9 +168,9 @@ static ARG_FILES: &str = "files";
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let paths: Vec<String> = matches
-        .get_many::<String>(ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
+    let paths: Vec<OsString> = matches
+        .get_many::<OsString>(ARG_FILES)
+        .map(|v| v.cloned().collect())
         .unwrap_or_default();
 
     let behavior = behavior(&matches)?;
@@ -301,7 +302,8 @@ pub fn uu_app() -> Command {
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .num_args(1..)
-                .value_hint(clap::ValueHint::AnyPath),
+                .value_hint(clap::ValueHint::AnyPath)
+                .value_parser(clap::value_parser!(OsString)),
         )
 }
 
@@ -433,7 +435,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 ///
 /// Returns a Result type with the Err variant containing the error message.
 ///
-fn directory(paths: &[String], b: &Behavior) -> UResult<()> {
+fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
     if paths.is_empty() {
         Err(InstallError::DirNeedsArg.into())
     } else {
@@ -516,7 +518,7 @@ fn is_potential_directory_path(path: &Path) -> bool {
 /// Returns a Result type with the Err variant containing the error message.
 ///
 #[allow(clippy::cognitive_complexity)]
-fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
+fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
     // first check that paths contains at least one element
     if paths.is_empty() {
         return Err(UUsageError::new(
@@ -526,7 +528,7 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
     }
     if b.no_target_dir && paths.len() > 2 {
         return Err(InstallError::ExtraOperand(
-            paths[2].clone(),
+            paths[2].to_string_lossy().into_owned(),
             format_usage(&translate!("install-usage")),
         )
         .into());
@@ -542,7 +544,7 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
         if paths.is_empty() {
             return Err(UUsageError::new(
                 1,
-                translate!("install-error-missing-destination-operand", "path" => last_path.to_str().unwrap()),
+                translate!("install-error-missing-destination-operand", "path" => last_path.to_string_lossy()),
             ));
         }
 
@@ -564,8 +566,12 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
 
         if let Some(to_create) = to_create {
             // if the path ends in /, remove it
+            let to_create_owned;
             let to_create = if to_create.to_string_lossy().ends_with('/') {
-                Path::new(to_create.to_str().unwrap().trim_end_matches('/'))
+                let path_str = to_create.to_string_lossy();
+                let trimmed = path_str.trim_end_matches('/');
+                to_create_owned = PathBuf::from(trimmed);
+                to_create_owned.as_path()
             } else {
                 to_create
             };
@@ -833,7 +839,7 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
 ///
 fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
     // Check if the filename starts with a hyphen and adjust the path
-    let to_str = to.as_os_str().to_str().unwrap_or_default();
+    let to_str = to.to_string_lossy();
     let to = if to_str.starts_with('-') {
         let mut new_path = PathBuf::from(".");
         new_path.push(to);
@@ -1083,7 +1089,7 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     }
 
     // Check if the contents of the source and destination files differ.
-    if !diff(from.to_str().unwrap(), to.to_str().unwrap()) {
+    if !diff(&from.to_string_lossy(), &to.to_string_lossy()) {
         return true;
     }
 
