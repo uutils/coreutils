@@ -100,7 +100,7 @@ pub fn parse_base_cmd_args(
     usage: &str,
 ) -> UResult<Config> {
     let command = base_app(about, usage);
-    let matches = command.try_get_matches_from_localized(args);
+    let matches = command.get_matches_from_localized(args);
     Config::from(&matches)
 }
 

@@ -12,7 +12,7 @@ use uucore::translate;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    uu_app().try_get_matches_from_localized(args);
+    uu_app().get_matches_from_localized(args);
 
     let uts =
         PlatformInfo::new().map_err(|_e| USimpleError::new(1, translate!("cannot-get-system")))?;

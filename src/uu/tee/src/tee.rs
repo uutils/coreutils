@@ -52,7 +52,7 @@ enum OutputErrorMode {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from_localized(args);
+    let matches = uu_app().get_matches_from_localized(args);
 
     let append = matches.get_flag(options::APPEND);
     let ignore_interrupts = matches.get_flag(options::IGNORE_INTERRUPTS);

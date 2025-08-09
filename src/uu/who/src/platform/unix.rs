@@ -29,7 +29,7 @@ fn get_long_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app()
         .after_help(get_long_usage())
-        .try_get_matches_from_localized(args);
+        .get_matches_from_localized(args);
 
     let files: Vec<String> = matches
         .get_many::<String>(options::FILE)
