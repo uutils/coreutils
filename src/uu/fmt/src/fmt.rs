@@ -335,7 +335,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let matches = uu_app().try_get_matches_from_localized(&args);
+    let matches = uu_app().get_matches_from_localized(&args);
 
     let files = extract_files(&matches)?;
 

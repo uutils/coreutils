@@ -237,7 +237,7 @@ fn handle_tag_text_binary_flags<S: AsRef<OsStr>>(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from_localized(args);
+    let matches = uu_app().get_matches_from_localized(args);
 
     let check = matches.get_flag(options::CHECK);
 

@@ -97,7 +97,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app()
         .after_help(after_help)
-        .try_get_matches_from_localized(args);
+        .get_matches_from_localized(args);
 
     /* the list of files */
 

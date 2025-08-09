@@ -1221,7 +1221,7 @@ impl Stater {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app()
         .after_help(translate!("stat-after-help"))
-        .try_get_matches_from_localized(args);
+        .get_matches_from_localized(args);
 
     let stater = Stater::new(&matches)?;
     let exit_status = stater.exec();

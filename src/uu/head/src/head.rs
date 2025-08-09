@@ -551,7 +551,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args_vec: Vec<_> = arg_iterate(args)?.collect();
-    let matches = uu_app().try_get_matches_from_localized(args_vec);
+    let matches = uu_app().get_matches_from_localized(args_vec);
     let args = match HeadOptions::get_from(&matches) {
         Ok(o) => o,
         Err(s) => {

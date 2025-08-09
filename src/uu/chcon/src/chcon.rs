@@ -304,7 +304,7 @@ struct Options {
 }
 
 fn parse_command_line(config: Command, args: impl uucore::Args) -> Result<Options> {
-    let matches = config.try_get_matches_from_localized(args);
+    let matches = config.get_matches_from_localized(args);
 
     let verbose = matches.get_flag(options::VERBOSE);
 

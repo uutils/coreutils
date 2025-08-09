@@ -152,7 +152,7 @@ static OPT_SELINUX: &str = "selinux";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from_localized(args);
+    let matches = uu_app().get_matches_from_localized(args);
 
     let files: Vec<OsString> = matches
         .get_many::<OsString>(ARG_FILES)
@@ -161,12 +161,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect();
 
     if files.len() == 1 && !matches.contains_id(OPT_TARGET_DIRECTORY) {
-        return Err(UUsageError::new(
-            1,
-            format!(
-                "The argument '<{ARG_FILES}>...' requires at least 2 values, but only 1 was provided"
-            ),
-        ));
+        uu_app()
+            .error(
+                ErrorKind::TooFewValues,
+                translate!("mv-error-insufficient-arguments", "arg_files" => ARG_FILES),
+            )
+            .exit();
     }
 
     let overwrite_mode = determine_overwrite_mode(&matches);
