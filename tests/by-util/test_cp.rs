@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile uufs xattrs
-// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist
+// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs
 use uucore::display::Quotable;
 #[cfg(feature = "feat_selinux")]
 use uucore::selinux::get_getfattr_output;
@@ -6281,6 +6281,48 @@ fn test_cp_preserve_xattr_readonly_source() {
 
 #[test]
 #[cfg(unix)]
+fn test_cp_archive_preserves_directory_permissions() {
+    // Test for issue #8407
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("test-images");
+
+    let subdirs = ["fail", "gif-test-suite", "randomly-modified", "reftests"];
+    let mode = 0o755;
+
+    for (i, subdir) in subdirs.iter().enumerate() {
+        let path = format!("test-images/{subdir}");
+        at.mkdir(&path);
+        at.set_mode(&path, mode);
+        at.write(&format!("{path}/test{}.txt", i + 1), "test content");
+    }
+
+    ucmd.arg("-a")
+        .arg("test-images")
+        .arg("test-images-copy")
+        .succeeds();
+
+    let check_mode = |path: &str| {
+        let metadata = at.metadata(path);
+        let mode = metadata.permissions().mode();
+        // Check that the permissions are 755 (only checking the last 9 bits)
+        assert_eq!(
+            mode & 0o777,
+            0o755,
+            "Directory {} has incorrect permissions: {:o}",
+            path,
+            mode & 0o777
+        );
+    };
+
+    for subdir in subdirs {
+        check_mode(&format!("test-images-copy/{subdir}"));
+    }
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(target_os = "macos", ignore = "Flaky on MacOS, see #8453")]
 fn test_cp_from_stdin() {
     let (at, mut ucmd) = at_and_ucmd!();
     let target = "target";
@@ -6348,6 +6390,7 @@ fn test_cp_update_none_interactive_prompt_no() {
 
 /// only unix has `/dev/fd/0`
 #[cfg(unix)]
+#[cfg_attr(target_os = "macos", ignore = "Flaky on MacOS, see #8453")]
 #[test]
 fn test_cp_from_stream() {
     let target = "target";
@@ -6374,6 +6417,7 @@ fn test_cp_from_stream() {
 
 /// only unix has `/dev/fd/0`
 #[cfg(unix)]
+#[cfg_attr(target_os = "macos", ignore = "Flaky on MacOS, see #8453")]
 #[test]
 fn test_cp_from_stream_permission() {
     let target = "target";
