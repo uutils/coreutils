@@ -187,7 +187,7 @@ dependencies = [
  "bitflags 2.9.1",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.10.5",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -2432,9 +2432,9 @@ checksum = "0f7d95a54511e0c7be3f51e8867aa8cf35148d7b9445d44de2f943e2b206e749"
 
 [[package]]
 name = "selinux"
-version = "0.5.2"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ef2ca58174235414aee5465f5d8ef9f5833023b31484eb52ca505f306f4573c"
+checksum = "8f6af114a661557df02e60c25e5cb40779d295ec2e4ae0fd903fe414578b6191"
 dependencies = [
  "bitflags 2.9.1",
  "errno",
