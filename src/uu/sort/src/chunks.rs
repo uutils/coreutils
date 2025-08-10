@@ -216,12 +216,121 @@ fn parse_lines<'a>(
     assert!(line_data.num_infos.is_empty());
     assert!(line_data.parsed_floats.is_empty());
     assert!(line_data.line_num_floats.is_empty());
+
+    if settings.mode == crate::SortMode::GeneralNumeric && read.len() > 10000 {
+        parse_lines_parallel(read, lines, line_data, separator, settings);
+    } else {
+        parse_lines_sequential(read, lines, line_data, separator, settings);
+    }
+}
+
+fn parse_lines_sequential<'a>(
+    read: &'a [u8],
+    lines: &mut Vec<Line<'a>>,
+    line_data: &mut LineData<'a>,
+    separator: u8,
+    settings: &GlobalSettings,
+) {
     let mut token_buffer = vec![];
     lines.extend(
         read.split(|&c| c == separator)
             .enumerate()
             .map(|(index, line)| Line::create(line, index, line_data, &mut token_buffer, settings)),
     );
+}
+
+fn parse_lines_parallel<'a>(
+    read: &'a [u8],
+    lines: &mut Vec<Line<'a>>,
+    line_data: &mut LineData<'a>,
+    separator: u8,
+    settings: &GlobalSettings,
+) {
+    use rayon::prelude::*;
+
+    // split data into chunks at line boundaries
+    let line_boundaries: Vec<usize> = read
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &byte)| if byte == separator { Some(i) } else { None })
+        .collect();
+
+    if line_boundaries.is_empty() {
+        // fallback to sequential if no separators found
+        return parse_lines_sequential(read, lines, line_data, separator, settings);
+    }
+
+    // determine optimal chunk size based on available cores
+    let num_cores = rayon::current_num_threads();
+    let target_chunks = num_cores * 2; // 2x the number of cores for better load balancing
+    let lines_per_chunk = line_boundaries.len().max(1) / target_chunks.max(1);
+    let chunk_size = lines_per_chunk.max(100); // minimum chunk size to avoid too small chunks
+
+    // create chunks respecting line boundaries
+    let chunks: Vec<(usize, &[u8])> = line_boundaries
+        .chunks(chunk_size)
+        .enumerate()
+        .filter_map(|(chunk_idx, boundary_chunk)| {
+            let start = if chunk_idx == 0 {
+                0
+            } else {
+                boundary_chunk[0] + 1
+            };
+            let end = *boundary_chunk.last()?;
+            if start <= end && end < read.len() {
+                Some((chunk_idx * chunk_size, &read[start..=end]))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if chunks.is_empty() {
+        return parse_lines_sequential(read, lines, line_data, separator, settings);
+    }
+
+    // process chunks in parallel
+    let results: Vec<_> = chunks
+        .par_iter()
+        .map(|(base_index, chunk)| {
+            let mut chunk_lines = Vec::new();
+            let mut chunk_line_data = LineData {
+                selections: Vec::new(),
+                num_infos: Vec::new(),
+                parsed_floats: Vec::new(),
+                line_num_floats: Vec::new(),
+            };
+            let mut token_buffer = vec![];
+
+            chunk_lines.extend(chunk.split(|&c| c == separator).enumerate().map(
+                |(local_idx, line)| {
+                    let global_index = base_index + local_idx;
+                    Line::create(
+                        line,
+                        global_index,
+                        &mut chunk_line_data,
+                        &mut token_buffer,
+                        settings,
+                    )
+                },
+            ));
+
+            (chunk_lines, chunk_line_data)
+        })
+        .collect();
+
+    // merge results back in order
+    for (chunk_lines, chunk_line_data) in results {
+        lines.extend(chunk_lines);
+        line_data.selections.extend(chunk_line_data.selections);
+        line_data.num_infos.extend(chunk_line_data.num_infos);
+        line_data
+            .parsed_floats
+            .extend(chunk_line_data.parsed_floats);
+        line_data
+            .line_num_floats
+            .extend(chunk_line_data.line_num_floats);
+    }
 }
 
 /// Read from `file` into `buffer`.
