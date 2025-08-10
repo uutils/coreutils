@@ -89,9 +89,8 @@ pub fn display_usage_and_help(util_name: &str) {
 }
 
 pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: i32) -> ! {
-    // Try to ensure localization is initialized for this utility
-    // If it's already initialized, that's fine - we'll use the existing one
-    let _ = crate::locale::setup_localization_with_common(util_name);
+    // Ensure localization is initialized for this utility (always with common strings)
+    let _ = crate::locale::setup_localization(util_name);
 
     // Check if colors are enabled by examining clap's rendered output
     let rendered_str = err.render().to_string();
@@ -115,7 +114,7 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
         }
         ErrorKind::UnknownArgument => {
             // Force localization initialization - ignore any previous failures
-            crate::locale::setup_localization_with_common(util_name).ok();
+            crate::locale::setup_localization(util_name).ok();
 
             // Choose exit code based on utility name
             let exit_code = match util_name {
@@ -134,34 +133,17 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                 let arg_str = invalid_arg.to_string();
 
                 // Get localized error word with fallback
-                let error_word = {
-                    let translated = translate!("common-error");
-                    if translated == "common-error" {
-                        "error".to_string()
-                    } else {
-                        translated
-                    }
-                };
+                let error_word = translate!("common-error");
 
                 let colored_arg = maybe_colorize(&arg_str, Color::Yellow);
                 let colored_error_word = maybe_colorize(&error_word, Color::Red);
 
                 // Print main error message with fallback
-                let error_msg = {
-                    let translated = translate!(
-                        "clap-error-unexpected-argument",
-                        "arg" => colored_arg.clone(),
-                        "error_word" => colored_error_word.clone()
-                    );
-                    if translated.starts_with("clap-error-unexpected-argument") {
-                        format!(
-                            "{}: unexpected argument '{}' found",
-                            colored_error_word, colored_arg
-                        )
-                    } else {
-                        translated
-                    }
-                };
+                let error_msg = translate!(
+                    "clap-error-unexpected-argument",
+                    "arg" => colored_arg.clone(),
+                    "error_word" => colored_error_word.clone()
+                );
                 eprintln!("{error_msg}");
                 eprintln!();
 
@@ -172,21 +154,11 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                     let colored_tip_word = maybe_colorize(&tip_word, Color::Green);
                     let colored_suggestion =
                         maybe_colorize(&suggested_arg.to_string(), Color::Green);
-                    let suggestion_msg = {
-                        let translated = translate!(
-                            "clap-error-similar-argument",
-                            "tip_word" => colored_tip_word.clone(),
-                            "suggestion" => colored_suggestion.clone()
-                        );
-                        if translated.starts_with("clap-error-similar-argument") {
-                            format!(
-                                "  {}: a similar argument exists: '{}'",
-                                colored_tip_word, colored_suggestion
-                            )
-                        } else {
-                            format!("  {}", translated)
-                        }
-                    };
+                    let suggestion_msg = translate!(
+                        "clap-error-similar-argument",
+                        "tip_word" => colored_tip_word.clone(),
+                        "suggestion" => colored_suggestion.clone()
+                    );
                     eprintln!("{suggestion_msg}");
                     eprintln!();
                 } else {
@@ -204,14 +176,7 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                 let usage_key = format!("{util_name}-usage");
                 let usage_text = translate!(&usage_key);
                 let formatted_usage = crate::format_usage(&usage_text);
-                let usage_label = {
-                    let translated = translate!("common-usage");
-                    if translated == "common-usage" {
-                        "Usage".to_string()
-                    } else {
-                        translated
-                    }
-                };
+                let usage_label = translate!("common-usage");
                 eprintln!("{}: {}", usage_label, formatted_usage);
                 eprintln!();
                 eprintln!("For more information, try '--help'.");
@@ -219,14 +184,7 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                 std::process::exit(exit_code);
             } else {
                 // Generic fallback case
-                let error_word = {
-                    let translated = translate!("common-error");
-                    if translated == "common-error" {
-                        "error".to_string()
-                    } else {
-                        translated
-                    }
-                };
+                let error_word = translate!("common-error");
                 let colored_error_word = maybe_colorize(&error_word, Color::Red);
                 eprintln!("{colored_error_word}: unexpected argument");
                 std::process::exit(exit_code);
