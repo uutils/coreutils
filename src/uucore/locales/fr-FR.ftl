@@ -13,6 +13,7 @@ clap-error-unexpected-argument = { $error_word } : argument inattendu '{ $arg }'
 clap-error-similar-argument = { $tip_word } : un argument similaire existe : '{ $suggestion }'
 clap-error-pass-as-value = { $tip_word } : pour passer '{ $arg }' comme valeur, utilisez '{ $tip_command }'
 clap-error-help-suggestion = Pour plus d'informations, essayez '{ $command } --help'.
+common-help-suggestion = Pour plus d'informations, essayez '--help'.
 
 # Modèles de texte d'aide communs
 help-flag-help = Afficher les informations d'aide
