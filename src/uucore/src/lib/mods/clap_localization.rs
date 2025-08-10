@@ -117,6 +117,14 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
             // Force localization initialization - ignore any previous failures
             crate::locale::setup_localization_with_common(util_name).ok();
 
+            // Choose exit code based on utility name
+            let exit_code = match util_name {
+                // These utilities expect exit code 2 for invalid options
+                "ls" | "dir" | "vdir" | "sort" | "tty" | "printenv" => 2,
+                // Most utilities expect exit code 1
+                _ => 1,
+            };
+
             // UnknownArgument gets special handling for suggestions, but should still show simple help
             if let Some(invalid_arg) = err.get(ContextKind::InvalidArg) {
                 let arg_str = invalid_arg.to_string();
