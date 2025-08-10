@@ -125,11 +125,15 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                 _ => 1,
             };
 
-            // UnknownArgument gets special handling for suggestions, but should still show simple help
+            // For UnknownArgument, we need to preserve clap's built-in tips (like using -- for values)
+            // while still allowing localization of the main error message
+            let rendered_str = err.render().to_string();
+            let _lines: Vec<&str> = rendered_str.lines().collect();
+
             if let Some(invalid_arg) = err.get(ContextKind::InvalidArg) {
                 let arg_str = invalid_arg.to_string();
 
-                // Get the uncolored words from common strings with fallbacks
+                // Get localized error word with fallback
                 let error_word = {
                     let translated = translate!("common-error");
                     if translated == "common-error" {
@@ -138,18 +142,9 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                         translated
                     }
                 };
-                let tip_word = {
-                    let translated = translate!("common-tip");
-                    if translated == "common-tip" {
-                        "tip".to_string()
-                    } else {
-                        translated
-                    }
-                };
 
                 let colored_arg = maybe_colorize(&arg_str, Color::Yellow);
                 let colored_error_word = maybe_colorize(&error_word, Color::Red);
-                let colored_tip_word = maybe_colorize(&tip_word, Color::Green);
 
                 // Print main error message with fallback
                 let error_msg = {
@@ -173,6 +168,8 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                 // Show suggestion if available
                 let suggestion = err.get(ContextKind::SuggestedArg);
                 if let Some(suggested_arg) = suggestion {
+                    let tip_word = translate!("common-tip");
+                    let colored_tip_word = maybe_colorize(&tip_word, Color::Green);
                     let colored_suggestion =
                         maybe_colorize(&suggested_arg.to_string(), Color::Green);
                     let suggestion_msg = {
@@ -203,9 +200,8 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                     }
                 }
 
-                // Show usage information for unknown arguments but use simple --help format
-                // Try to get usage information from localization with fallback
-                let usage_key = format!("{}-usage", util_name);
+                // Show usage information for unknown arguments
+                let usage_key = format!("{util_name}-usage");
                 let usage_text = translate!(&usage_key);
                 let formatted_usage = crate::format_usage(&usage_text);
                 let usage_label = {
@@ -218,7 +214,6 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                 };
                 eprintln!("{}: {}", usage_label, formatted_usage);
                 eprintln!();
-                // Use simple --help format for GNU test compatibility
                 eprintln!("For more information, try '--help'.");
 
                 std::process::exit(exit_code);
