@@ -15,7 +15,6 @@ use uucore::display::Quotable;
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;
-#[cfg(not(windows))]
 use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
 use uucore::{format_usage, show, show_error};
@@ -375,20 +374,10 @@ impl Chmoder {
         }
     }
 
-    #[cfg(windows)]
-    fn chmod_file(&self, file: &Path) -> UResult<()> {
-        // chmod is useless on Windows
-        // it doesn't set any permissions at all
-        // instead it just sets the readonly attribute on the file
-        Ok(())
-    }
-
-    #[cfg(unix)]
     fn chmod_file(&self, file: &Path) -> UResult<()> {
         self.chmod_file_internal(file, self.dereference)
     }
 
-    #[cfg(unix)]
     fn chmod_file_internal(&self, file: &Path, dereference: bool) -> UResult<()> {
         use uucore::{mode::get_umask, perms::get_metadata};
 
@@ -484,7 +473,6 @@ impl Chmoder {
         Ok(())
     }
 
-    #[cfg(unix)]
     fn change_file(&self, fperm: u32, mode: u32, file: &Path) -> Result<(), i32> {
         if fperm == mode {
             if self.verbose && !self.changes {
