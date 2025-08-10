@@ -5,7 +5,6 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::env;
-use uucore::LocalizedCommand;
 use uucore::translate;
 use uucore::{error::UResult, format_usage};
 
@@ -15,7 +14,10 @@ static ARG_VARIABLES: &str = "variables";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uu_app().try_get_matches_from(args).unwrap_or_else(|e| {
+        use uucore::clap_localization::handle_clap_error_with_exit_code;
+        handle_clap_error_with_exit_code(e, uucore::util_name(), 2)
+    });
 
     let variables: Vec<String> = matches
         .get_many::<String>(ARG_VARIABLES)
