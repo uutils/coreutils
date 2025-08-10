@@ -311,7 +311,7 @@ impl Chmoder {
                 return Err(ChmodError::PreserveRoot(filename.to_string()).into());
             }
             if self.recursive {
-                r = self.walk_dir(file);
+                r = self.walk_dir_with_context(file, true);
             } else {
                 r = self.chmod_file(file).and(r);
             }
@@ -319,29 +319,60 @@ impl Chmoder {
         r
     }
 
-    fn walk_dir(&self, file_path: &Path) -> UResult<()> {
+    fn walk_dir_with_context(&self, file_path: &Path, is_command_line_arg: bool) -> UResult<()> {
         let mut r = self.chmod_file(file_path);
-        // Determine whether to traverse symlinks based on `self.traverse_symlinks`
+
+        // Determine whether to traverse symlinks based on context and traversal mode
         let should_follow_symlink = match self.traverse_symlinks {
             TraverseSymlinks::All => true,
-            TraverseSymlinks::First => {
-                file_path == file_path.canonicalize().unwrap_or(file_path.to_path_buf())
-            }
+            TraverseSymlinks::First => is_command_line_arg, // Only follow symlinks that are command line args
             TraverseSymlinks::None => false,
         };
 
         // If the path is a directory (or we should follow symlinks), recurse into it
         if (!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir() {
             for dir_entry in file_path.read_dir()? {
-                let path = dir_entry?.path();
-                if !path.is_symlink() {
-                    r = self.walk_dir(path.as_path());
-                } else if should_follow_symlink {
-                    r = self.chmod_file(path.as_path()).and(r);
+                let path = match dir_entry {
+                    Ok(entry) => entry.path(),
+                    Err(err) => {
+                        r = r.and(Err(err.into()));
+                        continue;
+                    }
+                };
+                if path.is_symlink() {
+                    r = self.handle_symlink_during_recursion(&path).and(r);
+                } else {
+                    r = self.walk_dir_with_context(path.as_path(), false).and(r);
                 }
             }
         }
         r
+    }
+
+    fn handle_symlink_during_recursion(&self, path: &Path) -> UResult<()> {
+        // During recursion, determine behavior based on traversal mode
+        match self.traverse_symlinks {
+            TraverseSymlinks::All => {
+                // Follow all symlinks during recursion
+                // Check if the symlink target is a directory, but handle dangling symlinks gracefully
+                match fs::metadata(path) {
+                    Ok(meta) if meta.is_dir() => self.walk_dir_with_context(path, false),
+                    Ok(_) => {
+                        // It's a file symlink, chmod it
+                        self.chmod_file(path)
+                    }
+                    Err(_) => {
+                        // Dangling symlink, chmod it without dereferencing
+                        self.chmod_file_internal(path, false)
+                    }
+                }
+            }
+            TraverseSymlinks::First | TraverseSymlinks::None => {
+                // Don't follow symlinks encountered during recursion
+                // For these symlinks, don't dereference them even if dereference is normally true
+                self.chmod_file_internal(path, false)
+            }
+        }
     }
 
     #[cfg(windows)]
@@ -351,17 +382,23 @@ impl Chmoder {
         // instead it just sets the readonly attribute on the file
         Ok(())
     }
+
     #[cfg(unix)]
     fn chmod_file(&self, file: &Path) -> UResult<()> {
+        self.chmod_file_internal(file, self.dereference)
+    }
+
+    #[cfg(unix)]
+    fn chmod_file_internal(&self, file: &Path, dereference: bool) -> UResult<()> {
         use uucore::{mode::get_umask, perms::get_metadata};
 
-        let metadata = get_metadata(file, self.dereference);
+        let metadata = get_metadata(file, dereference);
 
         let fperm = match metadata {
             Ok(meta) => meta.mode() & 0o7777,
             Err(err) => {
                 // Handle dangling symlinks or other errors
-                return if file.is_symlink() && !self.dereference {
+                return if file.is_symlink() && !dereference {
                     if self.verbose {
                         println!(
                             "neither symbolic link {} nor referent has been changed",
@@ -418,7 +455,20 @@ impl Chmoder {
                     }
                 }
 
-                self.change_file(fperm, new_mode, file)?;
+                // Special handling for symlinks when not dereferencing
+                if file.is_symlink() && !dereference {
+                    // TODO: On most Unix systems, symlink permissions are ignored by the kernel,
+                    // so changing them has no effect. We skip this operation for compatibility.
+                    // Note that "chmod without dereferencing" effectively does nothing on symlinks.
+                    if self.verbose {
+                        println!(
+                            "neither symbolic link {} nor referent has been changed",
+                            file.quote()
+                        );
+                    }
+                } else {
+                    self.change_file(fperm, new_mode, file)?;
+                }
                 // if a permission would have been removed if umask was 0, but it wasn't because umask was not 0, print an error and fail
                 if (new_mode & !naively_expected_new_mode) != 0 {
                     return Err(ChmodError::NewPermissions(
