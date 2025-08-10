@@ -179,7 +179,7 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                 let usage_label = translate!("common-usage");
                 eprintln!("{}: {}", usage_label, formatted_usage);
                 eprintln!();
-                eprintln!("For more information, try '--help'.");
+                eprintln!("{}", translate!("common-help-suggestion"));
 
                 std::process::exit(exit_code);
             } else {
@@ -199,7 +199,7 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                 eprintln!("{}", main_error_line);
                 eprintln!();
                 // Use the execution phrase for the help suggestion to match test expectations
-                eprintln!("For more information, try '--help'.");
+                eprintln!("{}", translate!("common-help-suggestion"));
             } else {
                 // Fallback to original rendering if we can't parse
                 eprint!("{}", err.render());
@@ -233,7 +233,7 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
 
             // For other errors, just show help suggestion
             eprintln!();
-            eprintln!("For more information, try '--help'.");
+            eprintln!("{}", translate!("common-help-suggestion"));
 
             std::process::exit(exit_code);
         }
