@@ -339,10 +339,10 @@ impl Write for MultiWriter {
             let result = writer.write_all(buf);
             match result {
                 Err(f) => {
-                    if let Err(e) = process_error(mode.as_ref(), f, writer, &mut errors) {
-                        if aborted.is_none() {
-                            aborted = Some(e);
-                        }
+                    if let Err(e) = process_error(mode.as_ref(), f, writer, &mut errors)
+                        && aborted.is_none()
+                    {
+                        aborted = Some(e);
                     }
                     false
                 }
@@ -370,10 +370,10 @@ impl Write for MultiWriter {
             let result = writer.flush();
             match result {
                 Err(f) => {
-                    if let Err(e) = process_error(mode.as_ref(), f, writer, &mut errors) {
-                        if aborted.is_none() {
-                            aborted = Some(e);
-                        }
+                    if let Err(e) = process_error(mode.as_ref(), f, writer, &mut errors)
+                        && aborted.is_none()
+                    {
+                        aborted = Some(e);
                     }
                     false
                 }

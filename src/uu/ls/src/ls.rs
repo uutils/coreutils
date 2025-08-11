@@ -766,13 +766,12 @@ impl Config {
             .any(|i| i >= idx)
             {
                 format = Format::Long;
-            } else if let Some(mut indices) = options.indices_of(options::format::ONE_LINE) {
-                if options.value_source(options::format::ONE_LINE)
+            } else if let Some(mut indices) = options.indices_of(options::format::ONE_LINE)
+                && options.value_source(options::format::ONE_LINE)
                     == Some(clap::parser::ValueSource::CommandLine)
-                    && indices.any(|i| i > idx)
-                {
-                    format = Format::OneLine;
-                }
+                && indices.any(|i| i > idx)
+            {
+                format = Format::OneLine;
             }
         }
 
@@ -1848,10 +1847,8 @@ impl PathData {
             p_buf: &Path,
             must_dereference: bool,
         ) -> OnceCell<Option<FileType>> {
-            if must_dereference {
-                if let Ok(md_pb) = p_buf.metadata() {
-                    return OnceCell::from(Some(md_pb.file_type()));
-                }
+            if must_dereference && let Ok(md_pb) = p_buf.metadata() {
+                return OnceCell::from(Some(md_pb.file_type()));
             }
             if let Ok(ft_de) = de.file_type() {
                 OnceCell::from(Some(ft_de))
@@ -1885,10 +1882,10 @@ impl PathData {
             .get_or_init(|| {
                 // check if we can use DirEntry metadata
                 // it will avoid a call to stat()
-                if !self.must_dereference {
-                    if let Some(dir_entry) = &self.de {
-                        return dir_entry.metadata().ok();
-                    }
+                if !self.must_dereference
+                    && let Some(dir_entry) = &self.de
+                {
+                    return dir_entry.metadata().ok();
                 }
 
                 // if not, check if we can use Path metadata
@@ -1901,10 +1898,11 @@ impl PathData {
                         // but GNU will not throw an error until a bad fd "dir"
                         // is entered, here we match that GNU behavior, by handing
                         // back the non-dereferenced metadata upon an EBADF
-                        if self.must_dereference && errno == 9i32 {
-                            if let Some(dir_entry) = &self.de {
-                                return dir_entry.metadata().ok();
-                            }
+                        if self.must_dereference
+                            && errno == 9i32
+                            && let Some(dir_entry) = &self.de
+                        {
+                            return dir_entry.metadata().ok();
                         }
                         show!(LsError::IOErrorContext(
                             self.p_buf.clone(),
@@ -3155,10 +3153,10 @@ fn display_item_name(
                     // We get the absolute path to be able to construct PathData with valid Metadata.
                     // This is because relative symlinks will fail to get_metadata.
                     let mut absolute_target = target.clone();
-                    if target.is_relative() {
-                        if let Some(parent) = path.p_buf.parent() {
-                            absolute_target = parent.join(absolute_target);
-                        }
+                    if target.is_relative()
+                        && let Some(parent) = path.p_buf.parent()
+                    {
+                        absolute_target = parent.join(absolute_target);
                     }
 
                     let target_data = PathData::new(absolute_target, None, None, config, false);
@@ -3202,17 +3200,17 @@ fn display_item_name(
 
     // Prepend the security context to the `name` and adjust `width` in order
     // to get correct alignment from later calls to`display_grid()`.
-    if config.context {
-        if let Some(pad_count) = prefix_context {
-            let security_context = if matches!(config.format, Format::Commas) {
-                path.security_context.clone()
-            } else {
-                pad_left(&path.security_context, pad_count)
-            };
-            let old_name = name;
-            name = format!("{security_context} ").into();
-            name.push(old_name);
-        }
+    if config.context
+        && let Some(pad_count) = prefix_context
+    {
+        let security_context = if matches!(config.format, Format::Commas) {
+            path.security_context.clone()
+        } else {
+            pad_left(&path.security_context, pad_count)
+        };
+        let old_name = name;
+        name = format!("{security_context} ").into();
+        name.push(old_name);
     }
 
     name
@@ -3350,11 +3348,11 @@ fn calculate_padding_collection(
             padding_collections.inode = inode_len.max(padding_collections.inode);
         }
 
-        if config.alloc_size {
-            if let Some(md) = item.get_metadata(&mut state.out) {
-                let block_size_len = display_size(get_block_size(md, config), config).len();
-                padding_collections.block_size = block_size_len.max(padding_collections.block_size);
-            }
+        if config.alloc_size
+            && let Some(md) = item.get_metadata(&mut state.out)
+        {
+            let block_size_len = display_size(get_block_size(md, config), config).len();
+            padding_collections.block_size = block_size_len.max(padding_collections.block_size);
         }
 
         if config.format == Format::Long {

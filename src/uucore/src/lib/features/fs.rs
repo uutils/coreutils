@@ -564,10 +564,10 @@ pub fn infos_refer_to_same_file(
     info1: IOResult<FileInformation>,
     info2: IOResult<FileInformation>,
 ) -> bool {
-    if let Ok(info1) = info1 {
-        if let Ok(info2) = info2 {
-            return info1 == info2;
-        }
+    if let Ok(info1) = info1
+        && let Ok(info2) = info2
+    {
+        return info1 == info2;
     }
     false
 }

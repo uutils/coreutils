@@ -373,15 +373,15 @@ where
         // obviously found our 0th-line-from-the-end offset.
         if check_last_byte_first_loop {
             check_last_byte_first_loop = false;
-            if let Some(last_byte_of_file) = buffer.last() {
-                if last_byte_of_file != &separator {
-                    if n == 0 {
-                        input.rewind()?;
-                        return Ok(file_size);
-                    }
-                    assert_eq!(lines, 0);
-                    lines = 1;
+            if let Some(last_byte_of_file) = buffer.last()
+                && last_byte_of_file != &separator
+            {
+                if n == 0 {
+                    input.rewind()?;
+                    return Ok(file_size);
                 }
+                assert_eq!(lines, 0);
+                lines = 1;
             }
         }
 

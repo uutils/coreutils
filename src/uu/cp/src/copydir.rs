@@ -245,8 +245,8 @@ fn copy_direntry(
     }
 
     // If the source is not a directory, then we need to copy the file.
-    if !source_absolute.is_dir() {
-        if let Err(err) = copy_file(
+    if !source_absolute.is_dir()
+        && let Err(err) = copy_file(
             progress_bar,
             &source_absolute,
             local_to_target.as_path(),
@@ -255,31 +255,31 @@ fn copy_direntry(
             copied_destinations,
             copied_files,
             false,
-        ) {
-            if preserve_hard_links {
-                if !source_absolute.is_symlink() {
-                    return Err(err);
+        )
+    {
+        if preserve_hard_links {
+            if !source_absolute.is_symlink() {
+                return Err(err);
+            }
+            // silent the error with a symlink
+            // In case we do --archive, we might copy the symlink
+            // before the file itself
+        } else {
+            // At this point, `path` is just a plain old file.
+            // Terminate this function immediately if there is any
+            // kind of error *except* a "permission denied" error.
+            //
+            // TODO What other kinds of errors, if any, should
+            // cause us to continue walking the directory?
+            match err {
+                CpError::IoErrContext(e, _) if e.kind() == io::ErrorKind::PermissionDenied => {
+                    show!(uio_error!(
+                        e,
+                        "{}",
+                        translate!("cp-error-cannot-open-for-reading", "source" => source_relative.quote()),
+                    ));
                 }
-                // silent the error with a symlink
-                // In case we do --archive, we might copy the symlink
-                // before the file itself
-            } else {
-                // At this point, `path` is just a plain old file.
-                // Terminate this function immediately if there is any
-                // kind of error *except* a "permission denied" error.
-                //
-                // TODO What other kinds of errors, if any, should
-                // cause us to continue walking the directory?
-                match err {
-                    CpError::IoErrContext(e, _) if e.kind() == io::ErrorKind::PermissionDenied => {
-                        show!(uio_error!(
-                            e,
-                            "{}",
-                            translate!("cp-error-cannot-open-for-reading", "source" => source_relative.quote()),
-                        ));
-                    }
-                    e => return Err(e),
-                }
+                e => return Err(e),
             }
         }
     }

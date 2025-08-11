@@ -149,12 +149,11 @@ fn dir_not_empty(error: &io::Error, path: &Path) -> bool {
         // If --ignore-fail-on-non-empty is used then we want to ignore all errors
         // for non-empty directories, even if the error was e.g. because there's
         // no permission. So we do an additional check.
-        if PERHAPS_EMPTY_CODES.contains(&code) {
-            if let Ok(mut iterator) = read_dir(path) {
-                if iterator.next().is_some() {
-                    return true;
-                }
-            }
+        if PERHAPS_EMPTY_CODES.contains(&code)
+            && let Ok(mut iterator) = read_dir(path)
+            && iterator.next().is_some()
+        {
+            return true;
         }
     }
     false

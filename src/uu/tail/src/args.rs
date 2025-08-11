@@ -389,13 +389,13 @@ fn parse_num(src: &str) -> Result<Signum, ParseSizeError> {
     let mut size_string = src.trim();
     let mut starting_with = false;
 
-    if let Some(c) = size_string.chars().next() {
-        if c == '+' || c == '-' {
-            // tail: '-' is not documented (8.32 man pages)
-            size_string = &size_string[1..];
-            if c == '+' {
-                starting_with = true;
-            }
+    if let Some(c) = size_string.chars().next()
+        && (c == '+' || c == '-')
+    {
+        // tail: '-' is not documented (8.32 man pages)
+        size_string = &size_string[1..];
+        if c == '+' {
+            starting_with = true;
         }
     }
 

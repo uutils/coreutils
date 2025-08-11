@@ -17,10 +17,10 @@ use std::panic::{self, PanicHookInfo};
 
 /// Decide whether a panic was caused by a broken pipe (SIGPIPE) error.
 fn is_broken_pipe(info: &PanicHookInfo) -> bool {
-    if let Some(res) = info.payload().downcast_ref::<String>() {
-        if res.contains("BrokenPipe") || res.contains("Broken pipe") {
-            return true;
-        }
+    if let Some(res) = info.payload().downcast_ref::<String>()
+        && (res.contains("BrokenPipe") || res.contains("Broken pipe"))
+    {
+        return true;
     }
     false
 }

@@ -250,10 +250,10 @@ fn parse_delimiters(delimiters: &str) -> UResult<Box<[Box<[u8]>]>> {
 }
 
 fn remove_trailing_line_ending_byte(line_ending_byte: u8, output: &mut Vec<u8>) {
-    if let Some(&byte) = output.last() {
-        if byte == line_ending_byte {
-            assert_eq!(output.pop(), Some(line_ending_byte));
-        }
+    if let Some(&byte) = output.last()
+        && byte == line_ending_byte
+    {
+        assert_eq!(output.pop(), Some(line_ending_byte));
     }
 }
 

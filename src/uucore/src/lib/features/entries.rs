@@ -377,11 +377,11 @@ mod test {
 
     #[test]
     fn test_entries_get_groups_gnu() {
-        if let Ok(mut groups) = get_groups() {
-            if let Some(last) = groups.pop() {
-                groups.insert(0, last);
-                assert_eq!(get_groups_gnu(Some(last)).unwrap(), groups);
-            }
+        if let Ok(mut groups) = get_groups()
+            && let Some(last) = groups.pop()
+        {
+            groups.insert(0, last);
+            assert_eq!(get_groups_gnu(Some(last)).unwrap(), groups);
         }
     }
 }

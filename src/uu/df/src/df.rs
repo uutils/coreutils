@@ -150,10 +150,10 @@ impl Options {
             .get_many::<OsString>(OPT_EXCLUDE_TYPE)
             .map(|v| v.map(|s| s.to_string_lossy().to_string()).collect());
 
-        if let (Some(include), Some(exclude)) = (&include, &exclude) {
-            if let Some(types) = Self::get_intersected_types(include, exclude) {
-                return Err(OptionsError::FilesystemTypeBothSelectedAndExcluded(types));
-            }
+        if let (Some(include), Some(exclude)) = (&include, &exclude)
+            && let Some(types) = Self::get_intersected_types(include, exclude)
+        {
+            return Err(OptionsError::FilesystemTypeBothSelectedAndExcluded(types));
         }
 
         Ok(Self {
@@ -231,15 +231,15 @@ fn is_included(mi: &MountInfo, opt: &Options) -> bool {
     }
 
     // Don't show filesystems if they have been explicitly excluded.
-    if let Some(ref excludes) = opt.exclude {
-        if excludes.contains(&mi.fs_type) {
-            return false;
-        }
+    if let Some(ref excludes) = opt.exclude
+        && excludes.contains(&mi.fs_type)
+    {
+        return false;
     }
-    if let Some(ref includes) = opt.include {
-        if !includes.contains(&mi.fs_type) {
-            return false;
-        }
+    if let Some(ref includes) = opt.include
+        && !includes.contains(&mi.fs_type)
+    {
+        return false;
     }
 
     true

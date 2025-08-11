@@ -88,13 +88,13 @@ impl Localizer {
         }
 
         // Fall back to English bundle if available
-        if let Some(ref fallback) = self.fallback_bundle {
-            if let Some(message) = fallback.get_message(id).and_then(|m| m.value()) {
-                let mut errs = Vec::new();
-                return fallback
-                    .format_pattern(message, args, &mut errs)
-                    .to_string();
-            }
+        if let Some(ref fallback) = self.fallback_bundle
+            && let Some(message) = fallback.get_message(id).and_then(|m| m.value())
+        {
+            let mut errs = Vec::new();
+            return fallback
+                .format_pattern(message, args, &mut errs)
+                .to_string();
         }
 
         // Return the key ID if not found anywhere

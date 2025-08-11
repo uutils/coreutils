@@ -39,10 +39,10 @@ impl<'a> StyleManager<'a> {
         let mut force_suffix_reset: bool = false;
 
         // if reset is done we need to apply normal style before applying new style
-        if self.is_reset() {
-            if let Some(norm_sty) = self.get_normal_style().copied() {
-                style_code.push_str(&self.get_style_code(&norm_sty));
-            }
+        if self.is_reset()
+            && let Some(norm_sty) = self.get_normal_style().copied()
+        {
+            style_code.push_str(&self.get_style_code(&norm_sty));
         }
 
         if let Some(new_style) = new_style {

@@ -308,10 +308,10 @@ impl ProcessInformation {
         };
 
         for dir in result.flatten().filter(|it| it.path().is_symlink()) {
-            if let Ok(path) = fs::read_link(dir.path()) {
-                if let Ok(tty) = Teletype::try_from(path) {
-                    return tty;
-                }
+            if let Ok(path) = fs::read_link(dir.path())
+                && let Ok(tty) = Teletype::try_from(path)
+            {
+                return tty;
             }
         }
 

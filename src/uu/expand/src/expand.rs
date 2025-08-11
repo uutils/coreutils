@@ -114,10 +114,10 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
                             }
 
                             // Tab sizes must be ascending.
-                            if let Some(last_stop) = nums.last() {
-                                if *last_stop >= num {
-                                    return Err(ParseError::TabSizesMustBeAscending);
-                                }
+                            if let Some(last_stop) = nums.last()
+                                && *last_stop >= num
+                            {
+                                return Err(ParseError::TabSizesMustBeAscending);
                             }
 
                             if is_specifier_already_used {
@@ -226,14 +226,15 @@ fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
     let mut processed_args = Vec::with_capacity(args.len());
 
     for arg in args {
-        if let Some(arg) = arg.to_str() {
-            if arg.starts_with('-') && arg[1..].chars().all(is_digit_or_comma) {
-                arg[1..]
-                    .split(',')
-                    .filter(|s| !s.is_empty())
-                    .for_each(|s| processed_args.push(OsString::from(format!("--tabs={s}"))));
-                continue;
-            }
+        if let Some(arg) = arg.to_str()
+            && arg.starts_with('-')
+            && arg[1..].chars().all(is_digit_or_comma)
+        {
+            arg[1..]
+                .split(',')
+                .filter(|s| !s.is_empty())
+                .for_each(|s| processed_args.push(OsString::from(format!("--tabs={s}"))));
+            continue;
         }
         processed_args.push(arg);
     }

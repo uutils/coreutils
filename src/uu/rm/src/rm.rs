@@ -462,17 +462,17 @@ fn remove_dir_recursive(path: &Path, options: &Options) -> bool {
     // causes a `InvalidFilename` error when trying to access the file
     // metadata, we should be able to use just the last part of the
     // path, "z", and know that it is relative to the parent, "x/y".
-    if let Some(s) = path.to_str() {
-        if s.len() > 1000 {
-            match fs::remove_dir_all(path) {
-                Ok(_) => return false,
-                Err(e) => {
-                    let e = e.map_err_context(
-                        || translate!("rm-error-cannot-remove", "file" => path.quote()),
-                    );
-                    show_error!("{e}");
-                    return true;
-                }
+    if let Some(s) = path.to_str()
+        && s.len() > 1000
+    {
+        match fs::remove_dir_all(path) {
+            Ok(_) => return false,
+            Err(e) => {
+                let e = e.map_err_context(
+                    || translate!("rm-error-cannot-remove", "file" => path.quote()),
+                );
+                show_error!("{e}");
+                return true;
             }
         }
     }
@@ -653,12 +653,11 @@ fn prompt_file(path: &Path, options: &Options) -> bool {
         return true;
     }
     // If interactive is Always we want to check if the file is symlink to prompt the right message
-    if options.interactive == InteractiveMode::Always {
-        if let Ok(metadata) = fs::symlink_metadata(path) {
-            if metadata.is_symlink() {
-                return prompt_yes!("remove symbolic link {}?", path.quote());
-            }
-        }
+    if options.interactive == InteractiveMode::Always
+        && let Ok(metadata) = fs::symlink_metadata(path)
+        && metadata.is_symlink()
+    {
+        return prompt_yes!("remove symbolic link {}?", path.quote());
     }
 
     let Ok(metadata) = fs::metadata(path) else {

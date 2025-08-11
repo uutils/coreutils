@@ -628,10 +628,10 @@ fn parse_date(ref_time: DateTime<Local>, s: &str) -> Result<FileTime, TouchError
     }
 
     // "@%s" is "The number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC). (TZ) (Calculated from mktime(tm).)"
-    if s.bytes().next() == Some(b'@') {
-        if let Ok(ts) = &s[1..].parse::<i64>() {
-            return Ok(FileTime::from_unix_time(*ts, 0));
-        }
+    if s.bytes().next() == Some(b'@')
+        && let Ok(ts) = &s[1..].parse::<i64>()
+    {
+        return Ok(FileTime::from_unix_time(*ts, 0));
     }
 
     if let Ok(dt) = parse_datetime::parse_datetime_at_date(ref_time, s) {

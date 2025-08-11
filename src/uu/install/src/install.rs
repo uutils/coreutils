@@ -362,14 +362,12 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     }
 
     // Check if compare is used with non-permission mode bits
-    // TODO use a let chain once we have a MSRV of 1.88 or greater
-    if compare {
-        if let Some(mode) = specified_mode {
-            let non_permission_bits = 0o7000; // setuid, setgid, sticky bits
-            if mode & non_permission_bits != 0 {
-                show_error!("{}", translate!("install-warning-compare-ignored"));
-            }
-        }
+    const NON_PERMISSION_BITS: u32 = 0o7000; // setuid, setgid, sticky bits
+    if compare
+        && let Some(mode) = specified_mode
+        && mode & NON_PERMISSION_BITS != 0
+    {
+        show_error!("{}", translate!("install-warning-compare-ignored"));
     }
 
     let owner = matches
@@ -773,10 +771,10 @@ fn copy_normal_file(from: &Path, to: &Path) -> UResult<()> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn copy_file(from: &Path, to: &Path) -> UResult<()> {
-    if let Ok(to_abs) = to.canonicalize() {
-        if from.canonicalize()? == to_abs {
-            return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
-        }
+    if let Ok(to_abs) = to.canonicalize()
+        && from.canonicalize()? == to_abs
+    {
+        return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
     }
 
     if to.is_dir() && !from.is_dir() {
@@ -788,13 +786,13 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     }
     // fs::copy fails if destination is a invalid symlink.
     // so lets just remove all existing files at destination before copy.
-    if let Err(e) = fs::remove_file(to) {
-        if e.kind() != std::io::ErrorKind::NotFound {
-            show_error!(
-                "{}",
-                translate!("install-error-failed-to-remove", "path" => to.display(), "error" => format!("{e:?}"))
-            );
-        }
+    if let Err(e) = fs::remove_file(to)
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        show_error!(
+            "{}",
+            translate!("install-error-failed-to-remove", "path" => to.display(), "error" => format!("{e:?}"))
+        );
     }
 
     let ft = match metadata(from) {
@@ -1023,10 +1021,10 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     };
 
     // Check if the destination is a symlink (should always be replaced)
-    if let Ok(to_symlink_meta) = fs::symlink_metadata(to) {
-        if to_symlink_meta.file_type().is_symlink() {
-            return true;
-        }
+    if let Ok(to_symlink_meta) = fs::symlink_metadata(to)
+        && to_symlink_meta.file_type().is_symlink()
+    {
+        return true;
     }
 
     // Define special file mode bits (setuid, setgid, sticky).
@@ -1067,10 +1065,10 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     // TODO: if -P (#1809) and from/to contexts mismatch, return true.
 
     // Check if the owner ID is specified and differs from the destination file's owner.
-    if let Some(owner_id) = b.owner_id {
-        if owner_id != to_meta.uid() {
-            return true;
-        }
+    if let Some(owner_id) = b.owner_id
+        && owner_id != to_meta.uid()
+    {
+        return true;
     }
 
     // Check if the group ID is specified and differs from the destination file's group.

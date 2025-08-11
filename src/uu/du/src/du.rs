@@ -238,10 +238,10 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
             .map_err(|e| USimpleError::new(1, format_error_message(&e, s, options::BLOCK_SIZE)))
     } else {
         for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
-            if let Ok(env_size) = env::var(env_var) {
-                if let Ok(v) = parse_size_u64(&env_size) {
-                    return Ok(v);
-                }
+            if let Ok(env_size) = env::var(env_var)
+                && let Ok(v) = parse_size_u64(&env_size)
+            {
+                return Ok(v);
             }
         }
         if env::var("POSIXLY_CORRECT").is_ok() {
@@ -314,14 +314,12 @@ fn du(
                             }
 
                             if this_stat.metadata.is_dir() {
-                                if options.one_file_system {
-                                    if let (Some(this_inode), Some(my_inode)) =
+                                if options.one_file_system
+                                    && let (Some(this_inode), Some(my_inode)) =
                                         (this_stat.inode, my_stat.inode)
-                                    {
-                                        if this_inode.dev_id != my_inode.dev_id {
-                                            continue;
-                                        }
-                                    }
+                                    && this_inode.dev_id != my_inode.dev_id
+                                {
+                                    continue;
                                 }
 
                                 let this_stat =

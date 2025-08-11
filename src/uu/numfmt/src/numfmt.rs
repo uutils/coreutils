@@ -108,15 +108,15 @@ fn parse_unit_size(s: &str) -> Result<usize> {
     let number: String = s.chars().take_while(char::is_ascii_digit).collect();
     let suffix = &s[number.len()..];
 
-    if number.is_empty() || "0".repeat(number.len()) != number {
-        if let Some(multiplier) = parse_unit_size_suffix(suffix) {
-            if number.is_empty() {
-                return Ok(multiplier);
-            }
+    if (number.is_empty() || "0".repeat(number.len()) != number)
+        && let Some(multiplier) = parse_unit_size_suffix(suffix)
+    {
+        if number.is_empty() {
+            return Ok(multiplier);
+        }
 
-            if let Ok(n) = number.parse::<usize>() {
-                return Ok(n * multiplier);
-            }
+        if let Ok(n) = number.parse::<usize>() {
+            return Ok(n * multiplier);
         }
     }
 

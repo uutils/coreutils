@@ -1319,10 +1319,10 @@ where
             chunk_number -= skipped as u64;
         }
 
-        if let Some(kth) = kth_chunk {
-            if chunk_number > kth {
-                break;
-            }
+        if let Some(kth) = kth_chunk
+            && chunk_number > kth
+        {
+            break;
         }
     }
     Ok(())

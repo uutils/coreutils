@@ -262,10 +262,10 @@ impl MDWriter<'_, '_> {
     /// # Errors
     /// Returns an error if the writer fails.
     fn after_help(&mut self) -> io::Result<()> {
-        if let Some(markdown) = &self.markdown {
-            if let Some(after_help) = uuhelp_parser::parse_section("after help", markdown) {
-                return writeln!(self.w, "\n\n{after_help}");
-            }
+        if let Some(markdown) = &self.markdown
+            && let Some(after_help) = uuhelp_parser::parse_section("after help", markdown)
+        {
+            return writeln!(self.w, "\n\n{after_help}");
         }
 
         Ok(())

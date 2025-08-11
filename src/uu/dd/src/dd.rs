@@ -246,17 +246,17 @@ impl Source {
             },
             #[cfg(unix)]
             Self::StdinFile(f) => {
-                if let Ok(Some(len)) = try_get_len_of_block_device(f) {
-                    if len < n {
-                        // GNU compatibility:
-                        // this case prints the stats but sets the exit code to 1
-                        show_error!(
-                            "{}",
-                            translate!("dd-error-cannot-skip-invalid", "file" => "standard input")
-                        );
-                        set_exit_code(1);
-                        return Ok(len);
-                    }
+                if let Ok(Some(len)) = try_get_len_of_block_device(f)
+                    && len < n
+                {
+                    // GNU compatibility:
+                    // this case prints the stats but sets the exit code to 1
+                    show_error!(
+                        "{}",
+                        translate!("dd-error-cannot-skip-invalid", "file" => "standard input")
+                    );
+                    set_exit_code(1);
+                    return Ok(len);
                 }
                 match io::copy(&mut f.take(n), &mut io::sink()) {
                     Ok(m) if m < n => {
@@ -348,13 +348,14 @@ impl<'a> Input<'a> {
         #[cfg(unix)]
         let mut src = Source::stdin_as_file();
         #[cfg(unix)]
-        if let Source::StdinFile(f) = &src {
-            if settings.iflags.directory && !f.metadata()?.is_dir() {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("dd-error-not-directory", "file" => "standard input"),
-                ));
-            }
+        if let Source::StdinFile(f) = &src
+            && settings.iflags.directory
+            && !f.metadata()?.is_dir()
+        {
+            return Err(USimpleError::new(
+                1,
+                translate!("dd-error-not-directory", "file" => "standard input"),
+            ));
         }
         if settings.skip > 0 {
             src.skip(settings.skip)?;
@@ -616,17 +617,17 @@ impl Dest {
             Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), stdout),
             Self::File(f, _) => {
                 #[cfg(unix)]
-                if let Ok(Some(len)) = try_get_len_of_block_device(f) {
-                    if len < n {
-                        // GNU compatibility:
-                        // this case prints the stats but sets the exit code to 1
-                        show_error!(
-                            "{}",
-                            translate!("dd-error-cannot-seek-invalid", "output" => "standard output")
-                        );
-                        set_exit_code(1);
-                        return Ok(len);
-                    }
+                if let Ok(Some(len)) = try_get_len_of_block_device(f)
+                    && len < n
+                {
+                    // GNU compatibility:
+                    // this case prints the stats but sets the exit code to 1
+                    show_error!(
+                        "{}",
+                        translate!("dd-error-cannot-seek-invalid", "output" => "standard output")
+                    );
+                    set_exit_code(1);
+                    return Ok(len);
                 }
                 f.seek(SeekFrom::Current(n.try_into().unwrap()))
             }
@@ -1098,10 +1099,10 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     #[cfg(target_os = "linux")]
     let signal_handler = progress::SignalHandler::install_signal_handler(alarm.manual_trigger_fn());
     #[cfg(target_os = "linux")]
-    if let Err(e) = &signal_handler {
-        if Some(StatusLevel::None) != i.settings.status {
-            eprintln!("{}\n\t{e}", translate!("dd-warning-signal-handler"));
-        }
+    if let Err(e) = &signal_handler
+        && Some(StatusLevel::None) != i.settings.status
+    {
+        eprintln!("{}\n\t{e}", translate!("dd-warning-signal-handler"));
     }
 
     // Index in the input file where we are reading bytes and in
@@ -1405,10 +1406,10 @@ fn try_get_len_of_block_device(file: &mut File) -> io::Result<Option<u64>> {
 /// Decide whether the named file is a named pipe, also known as a FIFO.
 #[cfg(unix)]
 fn is_fifo(filename: &str) -> bool {
-    if let Ok(metadata) = std::fs::metadata(filename) {
-        if metadata.file_type().is_fifo() {
-            return true;
-        }
+    if let Ok(metadata) = std::fs::metadata(filename)
+        && metadata.file_type().is_fifo()
+    {
+        return true;
     }
     false
 }

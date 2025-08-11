@@ -126,10 +126,10 @@ pub fn parse_escape_code(
         // This is for the \NNN syntax for octal sequences.
         // Note that '0' is intentionally omitted because that
         // would be the \0NNN syntax.
-        if let b'1'..=b'7' = c {
-            if let Some(parsed) = parse_code(rest, Base::Oct(OctalParsing::ThreeDigits)) {
-                return Ok(EscapedChar::Byte(parsed));
-            }
+        if let b'1'..=b'7' = c
+            && let Some(parsed) = parse_code(rest, Base::Oct(OctalParsing::ThreeDigits))
+        {
+            return Ok(EscapedChar::Byte(parsed));
         }
 
         *rest = new_rest;

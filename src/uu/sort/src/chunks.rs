@@ -265,18 +265,18 @@ fn read_to_buffer<T: Read>(
             Ok(0) => {
                 if read_target.is_empty() {
                     // chunk is full
-                    if let Some(max_buffer_size) = max_buffer_size {
-                        if max_buffer_size > buffer.len() {
-                            // we can grow the buffer
-                            let prev_len = buffer.len();
-                            if buffer.len() < max_buffer_size / 2 {
-                                buffer.resize(buffer.len() * 2, 0);
-                            } else {
-                                buffer.resize(max_buffer_size, 0);
-                            }
-                            read_target = &mut buffer[prev_len..];
-                            continue;
+                    if let Some(max_buffer_size) = max_buffer_size
+                        && max_buffer_size > buffer.len()
+                    {
+                        // we can grow the buffer
+                        let prev_len = buffer.len();
+                        if buffer.len() < max_buffer_size / 2 {
+                            buffer.resize(buffer.len() * 2, 0);
+                        } else {
+                            buffer.resize(max_buffer_size, 0);
                         }
+                        read_target = &mut buffer[prev_len..];
+                        continue;
                     }
                     let mut sep_iter = memchr_iter(separator, buffer).rev();
                     let last_line_end = sep_iter.next();

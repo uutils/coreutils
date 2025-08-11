@@ -519,11 +519,11 @@ impl EnvAppData {
         self.do_input_debug_printing = self
             .do_input_debug_printing
             .or(Some(matches.get_count("debug") >= 2));
-        if let Some(value) = self.do_input_debug_printing {
-            if value {
-                debug_print_args(&original_args);
-                self.do_input_debug_printing = Some(false);
-            }
+        if let Some(value) = self.do_input_debug_printing
+            && value
+        {
+            debug_print_args(&original_args);
+            self.do_input_debug_printing = Some(false);
         }
 
         let mut opts = make_options(&matches)?;

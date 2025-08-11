@@ -564,14 +564,13 @@ impl<'a> Line<'a> {
                         selection.end += leading_whitespace;
                     } else {
                         // include a trailing si unit
-                        if selector.settings.mode == SortMode::HumanNumeric {
-                            if let Some(
+                        if selector.settings.mode == SortMode::HumanNumeric
+                            && let Some(
                                 b'k' | b'K' | b'M' | b'G' | b'T' | b'P' | b'E' | b'Z' | b'Y' | b'R'
                                 | b'Q',
                             ) = self.line[selection.end..initial_selection.end].first()
-                            {
-                                selection.end += 1;
-                            }
+                        {
+                            selection.end += 1;
                         }
 
                         // include leading zeroes, a leading minus or a leading decimal point

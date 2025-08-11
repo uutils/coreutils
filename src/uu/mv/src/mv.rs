@@ -189,10 +189,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_one::<OsString>(OPT_TARGET_DIRECTORY)
         .map(OsString::from);
 
-    if let Some(ref maybe_dir) = target_dir {
-        if !Path::new(&maybe_dir).is_dir() {
-            return Err(MvError::TargetNotADirectory(maybe_dir.quote().to_string()).into());
-        }
+    if let Some(ref maybe_dir) = target_dir
+        && !Path::new(&maybe_dir).is_dir()
+    {
+        return Err(MvError::TargetNotADirectory(maybe_dir.quote().to_string()).into());
     }
 
     // Handle -Z and --context options
@@ -1043,10 +1043,10 @@ fn copy_dir_contents_recursive(
             }
         }
 
-        if let Some(pb) = progress_bar {
-            if let Ok(metadata) = from_path.metadata() {
-                pb.inc(metadata.len());
-            }
+        if let Some(pb) = progress_bar
+            && let Ok(metadata) = from_path.metadata()
+        {
+            pb.inc(metadata.len());
         }
     }
 

@@ -191,12 +191,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         {
             let path = Path::new(&f);
-            if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty()) {
-                if e != Errno::EACCES || (e == Errno::EACCES && path.is_dir()) {
-                    e.map_err_context(
-                        || translate!("sync-error-opening-file", "file" => f.quote()),
-                    )?;
-                }
+            if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty())
+                && (e != Errno::EACCES || (e == Errno::EACCES && path.is_dir()))
+            {
+                e.map_err_context(|| translate!("sync-error-opening-file", "file" => f.quote()))?;
             }
         }
         #[cfg(not(any(target_os = "linux", target_os = "android")))]

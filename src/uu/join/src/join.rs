@@ -1086,14 +1086,14 @@ fn exec<Sep: Separator>(file1: &str, file2: &str, settings: Settings, sep: Sep) 
 /// contradictory and return the key index.
 fn get_field_number(keys: Option<usize>, key: Option<usize>) -> UResult<usize> {
     if let Some(keys) = keys {
-        if let Some(key) = key {
-            if keys != key {
-                // Show zero-based field numbers as one-based.
-                return Err(USimpleError::new(
-                    1,
-                    translate!("join-error-incompatible-fields", "field1" => (keys + 1), "field2" => (key + 1)),
-                ));
-            }
+        if let Some(key) = key
+            && keys != key
+        {
+            // Show zero-based field numbers as one-based.
+            return Err(USimpleError::new(
+                1,
+                translate!("join-error-incompatible-fields", "field1" => (keys + 1), "field2" => (key + 1)),
+            ));
         }
 
         return Ok(keys);

@@ -373,14 +373,13 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
     let n_regex = Regex::new(r"^-n\s*$").unwrap();
     let mut arguments = args.to_owned();
     let num_option = args.iter().find_position(|x| n_regex.is_match(x.trim()));
-    if let Some((pos, _value)) = num_option {
-        if let Some(num_val_opt) = args.get(pos + 1) {
-            if !num_regex.is_match(num_val_opt) {
-                let could_be_file = arguments.remove(pos + 1);
-                arguments.insert(pos + 1, format!("{}", NumberingMode::default().width));
-                arguments.insert(pos + 2, could_be_file);
-            }
-        }
+    if let Some((pos, _value)) = num_option
+        && let Some(num_val_opt) = args.get(pos + 1)
+        && !num_regex.is_match(num_val_opt)
+    {
+        let could_be_file = arguments.remove(pos + 1);
+        arguments.insert(pos + 1, format!("{}", NumberingMode::default().width));
+        arguments.insert(pos + 2, could_be_file);
     }
 
     arguments
@@ -601,12 +600,12 @@ fn build_options(
         None => end_page_in_plus_option,
     };
 
-    if let Some(end_page) = end_page {
-        if start_page > end_page {
-            return Err(PrError::EncounteredErrors {
-                msg: translate!("pr-error-invalid-pages-range", "start" => start_page, "end" => end_page),
-            });
-        }
+    if let Some(end_page) = end_page
+        && start_page > end_page
+    {
+        return Err(PrError::EncounteredErrors {
+            msg: translate!("pr-error-invalid-pages-range", "start" => start_page, "end" => end_page),
+        });
     }
 
     let default_lines_per_page = if form_feed_used {

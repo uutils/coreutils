@@ -550,16 +550,15 @@ impl<'a> Pager<'a> {
             return Ok(());
         }
         loop {
-            if event::poll(Duration::from_millis(100))? {
-                if let Event::Key(KeyEvent {
+            if event::poll(Duration::from_millis(100))?
+                && let Event::Key(KeyEvent {
                     code: KeyCode::Enter,
                     modifiers: KeyModifiers::NONE,
                     kind: KeyEventKind::Press,
                     ..
                 }) = event::read()?
-                {
-                    return Ok(());
-                }
+            {
+                return Ok(());
             }
         }
     }
