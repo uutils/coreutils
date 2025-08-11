@@ -121,6 +121,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new("timeout")
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("timeout-about"))
         .override_usage(format_usage(&translate!("timeout-usage")))
         .arg(

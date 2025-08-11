@@ -95,6 +95,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("tee-about"))
         .override_usage(format_usage(&translate!("tee-usage")))
         .after_help(translate!("tee-after-help"))

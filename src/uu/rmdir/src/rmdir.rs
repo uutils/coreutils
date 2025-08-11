@@ -171,6 +171,7 @@ struct Opts {
 pub fn uu_app() -> Command {
     Command::new(util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(util_name()))
         .about(translate!("rmdir-about"))
         .override_usage(format_usage(&translate!("rmdir-usage")))
         .infer_long_args(true)
