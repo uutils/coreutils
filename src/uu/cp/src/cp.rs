@@ -1483,9 +1483,7 @@ fn copy_source(
         );
         if options.parents {
             for (x, y) in aligned_ancestors(source, dest.as_path()) {
-                if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
-                    copy_attributes(&src, y, &options.attributes)?;
-                }
+                copy_attributes(x, y, &options.attributes, true)?;
             }
         }
         res
@@ -1636,10 +1634,15 @@ pub(crate) fn copy_attributes(
     source: &Path,
     dest: &Path,
     attributes: &Attributes,
+    dereference: bool,
 ) -> CopyResult<()> {
     let context = &*format!("{} -> {}", source.quote(), dest.quote());
-    let source_metadata =
-        fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+    let source_metadata = if dereference {
+        fs::metadata(source)
+    } else {
+        fs::symlink_metadata(source)
+    }
+    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 
     // Ownership must be changed first to avoid interfering with mode change.
     #[cfg(unix)]
@@ -2441,18 +2444,14 @@ fn copy_file(
     }
 
     if options.dereference(source_in_command_line) {
-        if let Ok(src) = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical) {
-            if src.exists() {
-                copy_attributes(&src, dest, &options.attributes)?;
-            }
-        }
+        copy_attributes(source, dest, &options.attributes, true)?;
     } else if source_is_stream && !source.exists() {
         // Some stream files may not exist after we have copied it,
         // like anonymous pipes. Thus, we can't really copy its
         // attributes. However, this is already handled in the stream
         // copy function (see `copy_stream` under platform/linux.rs).
     } else {
-        copy_attributes(source, dest, &options.attributes)?;
+        copy_attributes(source, dest, &options.attributes, false)?;
     }
 
     #[cfg(feature = "selinux")]
@@ -2610,7 +2609,7 @@ fn copy_link(
         fs::remove_file(dest)?;
     }
     symlink_file(&link, dest, symlinked_files)?;
-    copy_attributes(source, dest, &options.attributes)
+    copy_attributes(source, dest, &options.attributes, false)
 }
 
 /// Generate an error message if `target` is not the correct `target_type`
