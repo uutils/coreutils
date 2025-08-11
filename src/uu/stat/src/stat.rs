@@ -902,12 +902,8 @@ impl Stater {
     }
 
     fn exec(&self) -> i32 {
-        let mut stdin_is_fifo = false;
-        if cfg!(unix)
-            && let Ok(md) = fs::metadata("/dev/stdin")
-        {
-            stdin_is_fifo = md.file_type().is_fifo();
-        }
+        let stdin_is_fifo =
+            cfg!(unix) && fs::metadata("/dev/stdin").is_ok_and(|md| md.file_type().is_fifo());
 
         let mut ret = 0;
         for f in &self.files {
