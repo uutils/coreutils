@@ -244,7 +244,7 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
             } else {
                 let mut buf1 = Vec::new();
                 if let Err(e) = stdin().read_to_end(&mut buf1) {
-                    let e: Box<dyn UError> = TacError::ReadError("stdin".to_string(), e).into();
+                    let e: Box<dyn UError> = TacError::ReadError(OsString::from("stdin"), e).into();
                     show!(e);
                     continue;
                 }
@@ -254,15 +254,13 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
         } else {
             let path = Path::new(filename);
             if path.is_dir() {
-                let e: Box<dyn UError> =
-                    TacError::InvalidArgument(filename.to_string_lossy().to_string()).into();
+                let e: Box<dyn UError> = TacError::InvalidArgument(filename.clone()).into();
                 show!(e);
                 continue;
             }
 
             if path.metadata().is_err() {
-                let e: Box<dyn UError> =
-                    TacError::FileNotFound(filename.to_string_lossy().to_string()).into();
+                let e: Box<dyn UError> = TacError::FileNotFound(filename.clone()).into();
                 show!(e);
                 continue;
             }
@@ -277,8 +275,7 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
                         &buf
                     }
                     Err(e) => {
-                        let s = filename.to_string_lossy();
-                        let e: Box<dyn UError> = TacError::ReadError(s.to_string(), e).into();
+                        let e: Box<dyn UError> = TacError::ReadError(filename.clone(), e).into();
                         show!(e);
                         continue;
                     }

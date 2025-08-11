@@ -159,21 +159,18 @@ fn is_first_filename_timestamp(
     timestamp: Option<&str>,
     files: &[&OsString],
 ) -> bool {
-    if timestamp.is_none()
+    timestamp.is_none()
         && reference.is_none()
         && date.is_none()
         && files.len() >= 2
         // env check is last as the slowest op
         && matches!(std::env::var("_POSIX2_VERSION").as_deref(), Ok("199209"))
-    {
-        if let Some(s) = files[0].to_str() {
-            all_digits(s) && (s.len() == 8 || (s.len() == 10 && (69..=99).contains(&get_year(s))))
-        } else {
-            false
-        }
-    } else {
-        false
-    }
+        && files[0].to_str().is_some_and(is_timestamp)
+}
+
+// Check if string is a valid POSIX timestamp (8 digits or 10 digits with valid year range)
+fn is_timestamp(s: &str) -> bool {
+    all_digits(s) && (s.len() == 8 || (s.len() == 10 && (69..=99).contains(&get_year(s))))
 }
 
 /// Cycle the last two characters to the beginning of the string.
@@ -214,14 +211,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|t| t.to_owned());
 
     if is_first_filename_timestamp(reference, date.as_deref(), timestamp.as_deref(), &filenames) {
-        if let Some(first_file) = filenames[0].to_str() {
-            timestamp = if first_file.len() == 10 {
-                Some(shr2(first_file))
-            } else {
-                Some(first_file.to_string())
-            };
-            filenames = filenames[1..].to_vec();
-        }
+        let first_file = filenames[0].to_str().unwrap();
+        timestamp = if first_file.len() == 10 {
+            Some(shr2(first_file))
+        } else {
+            Some(first_file.to_string())
+        };
+        filenames = filenames[1..].to_vec();
     }
 
     let source = if let Some(reference) = reference {

@@ -81,23 +81,17 @@ fn test_unlink_symlink() {
 fn test_unlink_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
-    use uutests::util::TestScenario;
-    use uutests::util_name;
 
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
+    let (at, mut ucmd) = at_and_ucmd!();
     // Create a test file with non-UTF-8 bytes in the name
     let non_utf8_bytes = b"test_\xFF\xFE.txt";
     let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
 
-    // Create the actual file
     at.touch(non_utf8_name);
     assert!(at.file_exists(non_utf8_name));
 
     // Test that unlink handles non-UTF-8 file names without crashing
-    scene.ucmd().arg(non_utf8_name).succeeds();
+    ucmd.arg(non_utf8_name).succeeds();
 
-    // The file should be removed
     assert!(!at.file_exists(non_utf8_name));
 }
