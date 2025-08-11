@@ -83,6 +83,42 @@ fn test_invalid_value_returns_1() {
     }
 }
 
+/* spellchecker: disable */
+#[test]
+fn test_localized_possible_values() {
+    let test_cases = vec![
+        (
+            "en_US.UTF-8",
+            vec![
+                "error: invalid value 'invalid_test_value' for '--color",
+                "[possible values:",
+            ],
+        ),
+        (
+            "fr_FR.UTF-8",
+            vec![
+                "erreur : valeur invalide 'invalid_test_value' pour '--color",
+                "[valeurs possibles:",
+            ],
+        ),
+    ];
+
+    for (locale, expected_strings) in test_cases {
+        let result = new_ucmd!()
+            .env("LANG", locale)
+            .env("LC_ALL", locale)
+            .arg("--color=invalid_test_value")
+            .fails();
+
+        result.code_is(1);
+        let stderr = result.stderr_str();
+        for expected in expected_strings {
+            assert!(stderr.contains(expected));
+        }
+    }
+}
+/* spellchecker: enable */
+
 #[test]
 fn test_invalid_value_returns_2() {
     // Invalid values to flags *sometimes* result in error code 2:

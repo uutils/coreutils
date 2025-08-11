@@ -12,6 +12,9 @@ common-version = version
 clap-error-unexpected-argument = { $error_word }: unexpected argument '{ $arg }' found
 clap-error-similar-argument = { $tip_word }: a similar argument exists: '{ $suggestion }'
 clap-error-pass-as-value = { $tip_word }: to pass '{ $arg }' as a value, use '{ $tip_command }'
+clap-error-invalid-value = { $error_word }: invalid value '{ $value }' for '{ $option }'
+clap-error-value-required = { $error_word }: a value is required for '{ $option }' but none was supplied
+clap-error-possible-values = possible values
 clap-error-help-suggestion = For more information, try '{ $command } --help'.
 common-help-suggestion = For more information, try '--help'.
 
