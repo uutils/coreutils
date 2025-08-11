@@ -5,7 +5,7 @@
 //! library ~ (core/bundler file)
 // #![deny(missing_docs)] //TODO: enable this
 //
-// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal
+// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil
 
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
