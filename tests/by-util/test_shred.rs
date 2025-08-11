@@ -320,22 +320,13 @@ fn test_shred_rename_exhaustion() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_shred_non_utf8_paths() {
-    use std::fs;
-
+    use std::os::unix::ffi::OsStrExt;
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    // Create test file with non-UTF-8 name
-    at.write("temp.txt", "test content");
+    let file_name = std::ffi::OsStr::from_bytes(b"test_\xFF\xFE.txt");
+    std::fs::write(at.plus(file_name), "test content").unwrap();
 
-    #[cfg(unix)]
-    {
-        use std::os::unix::ffi::OsStrExt;
-        let file_name = std::ffi::OsStr::from_bytes(b"test_\xFF\xFE.txt");
-
-        fs::rename(at.subdir.join("temp.txt"), at.subdir.join(file_name)).unwrap();
-
-        // Test that shred can handle non-UTF-8 filenames
-        ts.ucmd().arg(file_name).succeeds();
-    }
+    // Test that shred can handle non-UTF-8 filenames
+    ts.ucmd().arg(file_name).succeeds();
 }

@@ -130,23 +130,17 @@ fn test_invalid_file_perms() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_more_non_utf8_paths() {
-    use std::fs;
-
+    use std::os::unix::ffi::OsStrExt;
     if std::io::stdout().is_terminal() {
         let (at, mut ucmd) = at_and_ucmd!();
-
+        let file_name = std::ffi::OsStr::from_bytes(b"test_\xFF\xFE.txt");
         // Create test file with normal name first
-        at.write("temp.txt", "test content for non-UTF-8 file");
+        at.write(
+            &file_name.to_string_lossy(),
+            "test content for non-UTF-8 file",
+        );
 
-        // Rename to non-UTF-8 name
-        #[cfg(unix)]
-        {
-            use std::os::unix::ffi::OsStrExt;
-            let file_name = std::ffi::OsStr::from_bytes(b"test_\xFF\xFE.txt");
-            fs::rename(at.subdir.join("temp.txt"), at.subdir.join(file_name)).unwrap();
-
-            // Test that more can handle non-UTF-8 filenames without crashing
-            ucmd.arg(file_name).succeeds();
-        }
+        // Test that more can handle non-UTF-8 filenames without crashing
+        ucmd.arg(file_name).succeeds();
     }
 }

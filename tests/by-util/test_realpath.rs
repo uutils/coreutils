@@ -478,13 +478,9 @@ fn test_realpath_non_utf8_paths() {
     let non_utf8_bytes = b"test_\xFF\xFE.txt";
     let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
 
-    // Create the actual file
     at.touch(non_utf8_name);
-
-    // Test that realpath handles non-UTF-8 paths without crashing
     let result = scene.ucmd().arg(non_utf8_name).succeeds();
 
-    // The result should contain the non-UTF-8 bytes
     let output = result.stdout_str_lossy();
     assert!(output.contains("test_"));
     assert!(output.contains(".txt"));
@@ -503,7 +499,6 @@ fn test_realpath_empty_string() {
         .fails()
         .code_is(1);
 
-    // Test that empty --relative-to is rejected
     new_ucmd!()
         .arg("--relative-to=")
         .arg(".")
