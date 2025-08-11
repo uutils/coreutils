@@ -1132,6 +1132,16 @@ impl AtPath {
         }
     }
 
+    #[cfg(unix)]
+    pub fn mksocket(&self, socket: &str) {
+        let full_path = self.plus_as_string(socket);
+        log_info("mksocket", &full_path);
+        unsafe {
+            let socket_name: CString = CString::new(full_path).expect("CString creation failed.");
+            libc::mknod(socket_name.as_ptr(), libc::S_IFSOCK, 0);
+        }
+    }
+
     #[cfg(not(windows))]
     pub fn is_fifo(&self, fifo: &str) -> bool {
         unsafe {

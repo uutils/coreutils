@@ -11,7 +11,7 @@
 use libc::{
     S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, S_IRGRP, S_IROTH,
     S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR, S_IXGRP, S_IXOTH, S_IXUSR,
-    mkfifo, mode_t,
+    mkfifo, mknod, mode_t,
 };
 use std::collections::HashSet;
 use std::collections::VecDeque;
@@ -837,6 +837,17 @@ pub fn make_fifo(path: &Path) -> std::io::Result<()> {
     }
 }
 
+#[cfg(unix)]
+pub fn make_socket(path: &Path) -> std::io::Result<()> {
+    let name = CString::new(path.to_str().unwrap()).unwrap();
+    let err = unsafe { mknod(name.as_ptr(), S_IFSOCK, 0) };
+    if err == -1 {
+        Err(std::io::Error::from_raw_os_error(err))
+    } else {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -1100,5 +1111,17 @@ mod tests {
         let path2 = path.clone();
         std::thread::spawn(move || assert!(std::fs::write(&path2, b"foo").is_ok()));
         assert_eq!(std::fs::read(&path).unwrap(), b"foo");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_make_socket() {
+        // Create the socket in a temporary directory.
+        let tempdir = tempdir().unwrap();
+        let path = tempdir.path().join("f");
+        assert!(make_socket(&path).is_ok());
+
+        // Check that it is indeed a socket
+        assert!(std::fs::metadata(&path).unwrap().file_type().is_socket());
     }
 }
