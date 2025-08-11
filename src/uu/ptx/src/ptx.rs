@@ -7,7 +7,7 @@
 
 use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Write as FmtWrite;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
@@ -647,15 +647,16 @@ fn write_traditional_output(
     config: &Config,
     file_map: &FileMap,
     words: &BTreeSet<WordRef>,
-    output_filename: &str,
+    output_filename: &OsStr,
 ) -> UResult<()> {
-    let mut writer: BufWriter<Box<dyn Write>> = BufWriter::new(if output_filename == "-" {
-        Box::new(stdout())
-    } else {
-        let file = File::create(output_filename)
-            .map_err_context(|| output_filename.maybe_quote().to_string())?;
-        Box::new(file)
-    });
+    let mut writer: BufWriter<Box<dyn Write>> =
+        BufWriter::new(if output_filename == OsStr::new("-") {
+            Box::new(stdout())
+        } else {
+            let file = File::create(output_filename)
+                .map_err_context(|| output_filename.to_string_lossy().quote().to_string())?;
+            Box::new(file)
+        });
 
     let context_reg = Regex::new(&config.context_regex).unwrap();
 
@@ -734,7 +735,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let config = get_config(&matches)?;
 
     let input_files;
-    let output_file;
+    let output_file: OsString;
 
     let mut files = matches
         .get_many::<OsString>(options::FILE)
@@ -750,14 +751,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             files
         };
-        output_file = "-".to_string();
+        output_file = OsString::from("-");
     } else {
         input_files = vec![files.next().unwrap_or(OsString::from("-"))];
-        output_file = files
-            .next()
-            .unwrap_or(OsString::from("-"))
-            .to_string_lossy()
-            .into_owned();
+        output_file = files.next().unwrap_or(OsString::from("-"));
         if let Some(file) = files.next() {
             return Err(UUsageError::new(
                 1,
