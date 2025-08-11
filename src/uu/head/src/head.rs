@@ -694,6 +694,15 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
+    fn test_arg_iterate_bad_encoding() {
+        use std::os::unix::ffi::OsStringExt;
+        let invalid = OsString::from_vec(vec![b'\x80', b'\x81']);
+        // this arises from a conversion from OsString to &str
+        assert!(arg_iterate(vec![OsString::from("head"), invalid].into_iter()).is_ok());
+    }
+
+    #[test]
     fn read_early_exit() {
         let mut empty = io::BufReader::new(Cursor::new(Vec::new()));
         assert!(read_n_bytes(&mut empty, 0).is_ok());

@@ -192,7 +192,7 @@ struct WordRef {
     local_line_nr: usize,
     position: usize,
     position_end: usize,
-    filename: String,
+    filename: OsString,
 }
 
 #[derive(Debug, Error)]
@@ -274,7 +274,7 @@ struct FileContent {
     offset: usize,
 }
 
-type FileMap = HashMap<String, FileContent>;
+type FileMap = HashMap<OsString, FileContent>;
 
 fn read_input(input_files: &[OsString]) -> std::io::Result<FileMap> {
     let mut file_map: FileMap = HashMap::new();
@@ -293,7 +293,7 @@ fn read_input(input_files: &[OsString]) -> std::io::Result<FileMap> {
         let chars_lines: Vec<Vec<char>> = lines.iter().map(|x| x.chars().collect()).collect();
         let size = lines.len();
         file_map.insert(
-            filename.to_string_lossy().into_owned(),
+            filename.clone(),
             FileContent {
                 lines,
                 chars_lines,
@@ -661,7 +661,7 @@ fn write_traditional_output(
 
     for word_ref in words {
         let file_map_value: &FileContent = file_map
-            .get(&(word_ref.filename))
+            .get(&word_ref.filename)
             .expect("Missing file in file map");
         let FileContent {
             ref lines,
