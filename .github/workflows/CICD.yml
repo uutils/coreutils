@@ -735,7 +735,7 @@ jobs:
     - uses: taiki-e/install-action@v2
       if: steps.vars.outputs.CARGO_CMD == 'redoxer'
       with:
-        tool: redoxer@0.2.37
+        tool: redoxer@0.2.54
     - name: Initialize toolchain-dependent workflow variables
       id: dep_vars
       shell: bash
