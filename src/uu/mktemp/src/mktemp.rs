@@ -235,10 +235,7 @@ impl Params {
         let tmpdir = options.tmpdir;
         let prefix_from_option = tmpdir.clone().unwrap_or_default();
         let prefix_from_template = &template_str[..i];
-        let prefix = Path::new(&prefix_from_option)
-            .join(prefix_from_template)
-            .display()
-            .to_string();
+        let prefix_path = Path::new(&prefix_from_option).join(prefix_from_template);
         if options.treat_as_template && prefix_from_template.contains(MAIN_SEPARATOR) {
             return Err(MkTempError::PrefixContainsDirSeparator(
                 template_str.to_string(),
@@ -250,21 +247,23 @@ impl Params {
 
         // Split the parent directory from the file part of the prefix.
         //
-        // For example, if `prefix` is "a/b/c/d", then `directory` is
-        // "a/b/c" is `prefix` gets reassigned to "d".
-        let (directory, prefix) = if prefix.ends_with(MAIN_SEPARATOR) {
-            (prefix, String::new())
-        } else {
-            let path = Path::new(&prefix);
-            let directory = match path.parent() {
-                None => String::new(),
-                Some(d) => d.display().to_string(),
-            };
-            let prefix = match path.file_name() {
-                None => String::new(),
-                Some(f) => f.to_str().unwrap().to_string(),
-            };
-            (directory, prefix)
+        // For example, if `prefix_path` is "a/b/c/d", then `directory` is
+        // "a/b/c" and `prefix` gets reassigned to "d".
+        let (directory, prefix) = {
+            let prefix_str = prefix_path.to_string_lossy();
+            if prefix_str.ends_with(MAIN_SEPARATOR) {
+                (prefix_path, String::new())
+            } else {
+                let directory = match prefix_path.parent() {
+                    None => PathBuf::new(),
+                    Some(d) => d.to_path_buf(),
+                };
+                let prefix = match prefix_path.file_name() {
+                    None => String::new(),
+                    Some(f) => f.to_str().unwrap().to_string(),
+                };
+                (directory, prefix)
+            }
         };
 
         // Combine the suffix from the template with the suffix given as an option.
@@ -285,7 +284,7 @@ impl Params {
         let num_rand_chars = j - i;
 
         Ok(Self {
-            directory: directory.into(),
+            directory,
             prefix,
             num_rand_chars,
             suffix,
