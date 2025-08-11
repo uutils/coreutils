@@ -274,6 +274,7 @@ pub fn uu_app() -> Command {
                 .allow_hyphen_values(true)
                 .value_name("SUFFIX")
                 .default_value("")
+                .value_parser(clap::value_parser!(OsString))
                 .help(translate!("split-help-additional-suffix")),
         )
         .arg(
@@ -378,7 +379,11 @@ pub fn uu_app() -> Command {
                 .value_hint(ValueHint::FilePath)
                 .value_parser(clap::value_parser!(OsString)),
         )
-        .arg(Arg::new(ARG_PREFIX).default_value("x"))
+        .arg(
+            Arg::new(ARG_PREFIX)
+                .default_value("x")
+                .value_parser(clap::value_parser!(OsString)),
+        )
 }
 
 /// Parameters that control how a file gets split.
@@ -386,7 +391,7 @@ pub fn uu_app() -> Command {
 /// You can convert an [`ArgMatches`] instance into a [`Settings`]
 /// instance by calling [`Settings::from`].
 struct Settings {
-    prefix: String,
+    prefix: OsString,
     suffix: Suffix,
     input: OsString,
     /// When supplied, a shell command to output to instead of xaa, xab …
@@ -490,7 +495,7 @@ impl Settings {
         };
 
         let result = Self {
-            prefix: matches.get_one::<String>(ARG_PREFIX).unwrap().clone(),
+            prefix: matches.get_one::<OsString>(ARG_PREFIX).unwrap().clone(),
             suffix,
             input: matches.get_one::<OsString>(ARG_INPUT).unwrap().clone(),
             filter: matches.get_one::<String>(OPT_FILTER).cloned(),

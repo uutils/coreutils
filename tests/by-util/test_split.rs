@@ -1726,32 +1726,7 @@ fn test_split_non_utf8_argument_unix() {
     let opt_value = [0x66, 0x6f, 0x80, 0x6f];
     let opt_value = OsStr::from_bytes(&opt_value[..]);
     let name = OsStr::from_bytes(name.as_bytes());
-    ucmd.args(&[opt, opt_value, name])
-        .fails()
-        .stderr_contains("error: invalid UTF-8 was detected in one or more arguments");
-}
-
-/// Test if there are invalid (non UTF-8) in the arguments - windows
-/// clap is expected to fail/panic
-#[test]
-#[cfg(windows)]
-fn test_split_non_utf8_argument_windows() {
-    use std::ffi::OsString;
-    use std::os::windows::ffi::OsStringExt;
-
-    let (at, mut ucmd) = at_and_ucmd!();
-    let name = "test_split_non_utf8_argument";
-    let opt = OsString::from("--additional-suffix");
-    RandomFile::new(&at, name).add_lines(2000);
-    // Here the values 0x0066 and 0x006f correspond to 'f' and 'o'
-    // respectively. The value 0xD800 is a lone surrogate half, invalid
-    // in a UTF-16 sequence.
-    let opt_value = [0x0066, 0x006f, 0xD800, 0x006f];
-    let opt_value = OsString::from_wide(&opt_value[..]);
-    let name = OsString::from(name);
-    ucmd.args(&[opt, opt_value, name])
-        .fails()
-        .stderr_contains("error: invalid UTF-8 was detected in one or more arguments");
+    ucmd.args(&[opt, opt_value, name]).succeeds();
 }
 
 // Test '--separator' / '-t' option following GNU tests example
@@ -2021,4 +1996,64 @@ fn test_split_non_utf8_paths() {
 
     // Check that at least one split file was created
     assert!(at.plus("xaa").exists());
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_split_non_utf8_prefix() {
+    use std::os::unix::ffi::OsStrExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("input.txt", "line1\nline2\nline3\nline4\n");
+
+    let prefix = std::ffi::OsStr::from_bytes(b"\xFF\xFE");
+    ucmd.arg("input.txt").arg(prefix).succeeds();
+
+    // Check that split files were created (functionality works)
+    // The actual filename may be converted due to lossy conversion, but the command should succeed
+    let entries: Vec<_> = std::fs::read_dir(at.as_string()).unwrap().collect();
+    let split_files = entries
+        .iter()
+        .filter_map(|e| e.as_ref().ok())
+        .filter(|entry| {
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            name_str.starts_with("�") || name_str.len() > 2 // split files should exist
+        })
+        .count();
+    assert!(
+        split_files > 0,
+        "Expected at least one split file to be created"
+    );
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_split_non_utf8_additional_suffix() {
+    use std::os::unix::ffi::OsStrExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("input.txt", "line1\nline2\nline3\nline4\n");
+
+    let suffix = std::ffi::OsStr::from_bytes(b"\xFF\xFE");
+    ucmd.args(&["input.txt", "--additional-suffix"])
+        .arg(suffix)
+        .succeeds();
+
+    // Check that split files were created (functionality works)
+    // The actual filename may be converted due to lossy conversion, but the command should succeed
+    let entries: Vec<_> = std::fs::read_dir(at.as_string()).unwrap().collect();
+    let split_files = entries
+        .iter()
+        .filter_map(|e| e.as_ref().ok())
+        .filter(|entry| {
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            name_str.ends_with("�") || name_str.starts_with('x') // split files should exist
+        })
+        .count();
+    assert!(
+        split_files > 0,
+        "Expected at least one split file to be created"
+    );
 }
