@@ -38,7 +38,7 @@ jobs:
     steps:
     #### Get the code, setup cache
     - name: Checkout code (uutils)
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         path: 'uutils'
         persist-credentials: false
@@ -50,7 +50,7 @@ jobs:
       with:
         workspaces: "./uutils -> target"
     - name: Checkout code (GNU coreutils)
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         repository: 'coreutils/coreutils'
         path: 'gnu'
@@ -160,7 +160,7 @@ jobs:
     steps:
     #### Get the code, setup cache
     - name: Checkout code (uutils)
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         path: 'uutils'
         persist-credentials: false
@@ -172,7 +172,7 @@ jobs:
       with:
         workspaces: "./uutils -> target"
     - name: Checkout code (GNU coreutils)
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         repository: 'coreutils/coreutils'
         path: 'gnu'
@@ -311,7 +311,7 @@ jobs:
 
         outputs TEST_SUMMARY_FILE AGGREGATED_SUMMARY_FILE
     - name: Checkout code (uutils)
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         path: 'uutils'
         persist-credentials: false
