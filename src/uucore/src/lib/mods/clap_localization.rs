@@ -6,10 +6,15 @@
 
 //! Helper clap functions to localize error handling and options
 //!
+//! This module provides utilities for handling clap errors with localization support.
+//! It uses clap's error context API to extract structured information from errors
+//! instead of parsing error strings, providing a more robust solution.
+//!
 
 use crate::locale::translate;
 use clap::error::{ContextKind, ErrorKind};
 use clap::{ArgMatches, Command, Error};
+use std::error::Error as StdError;
 use std::ffi::OsString;
 
 /// Determines if a clap error should show simple help instead of full usage
@@ -193,7 +198,71 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
         }
         // Check if this is a simple validation error that should show simple help
         kind if should_show_simple_help_for_clap_error(kind) => {
-            // For simple validation errors, use the same simple format as other errors
+            // Special handling for InvalidValue and ValueValidation to provide localized error
+            if matches!(kind, ErrorKind::InvalidValue | ErrorKind::ValueValidation) {
+                // Force localization initialization
+                crate::locale::setup_localization(util_name).ok();
+
+                // Extract value and option from error context using clap's context API
+                // This is much more robust than parsing the error string
+                let invalid_arg = err.get(ContextKind::InvalidArg);
+                let invalid_value = err.get(ContextKind::InvalidValue);
+
+                if let (Some(arg), Some(value)) = (invalid_arg, invalid_value) {
+                    let option = arg.to_string();
+                    let value = value.to_string();
+
+                    // Get localized error word
+                    let error_word = translate!("common-error");
+                    let colored_error_word = maybe_colorize(&error_word, Color::Red);
+
+                    // Apply color to value and option if colors are enabled
+                    let colored_value = maybe_colorize(&value, Color::Yellow);
+                    let colored_option = maybe_colorize(&option, Color::Green);
+
+                    // Print localized error message
+                    let error_msg = translate!(
+                        "clap-error-invalid-value",
+                        "error_word" => colored_error_word,
+                        "value" => colored_value,
+                        "option" => colored_option
+                    );
+                    eprintln!("{error_msg}");
+
+                    // For ValueValidation errors, include the validation error details
+                    if matches!(kind, ErrorKind::ValueValidation) {
+                        if let Some(source) = err.source() {
+                            eprintln!("  {}", source);
+                        }
+                    }
+
+                    // Show possible values if available (for InvalidValue errors)
+                    if matches!(kind, ErrorKind::InvalidValue) {
+                        if let Some(valid_values) = err.get(ContextKind::ValidValue) {
+                            eprintln!();
+                            let possible_values_label = translate!("clap-error-possible-values");
+                            eprintln!("  [{}: {}]", possible_values_label, valid_values);
+                        }
+                    }
+
+                    eprintln!();
+                    eprintln!("{}", translate!("common-help-suggestion"));
+                    std::process::exit(1);
+                } else {
+                    // Fallback if we can't extract context - use clap's default formatting
+                    let lines: Vec<&str> = rendered_str.lines().collect();
+                    if let Some(main_error_line) = lines.first() {
+                        eprintln!("{}", main_error_line);
+                        eprintln!();
+                        eprintln!("{}", translate!("common-help-suggestion"));
+                    } else {
+                        eprint!("{}", err.render());
+                    }
+                    std::process::exit(1);
+                }
+            }
+
+            // For other simple validation errors, use the same simple format as other errors
             let lines: Vec<&str> = rendered_str.lines().collect();
             if let Some(main_error_line) = lines.first() {
                 // Keep the "error: " prefix for test compatibility

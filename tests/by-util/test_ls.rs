@@ -83,6 +83,34 @@ fn test_invalid_value_returns_1() {
     }
 }
 
+/* spellchecker: disable */
+#[test]
+fn test_localized_possible_values_english() {
+    // Test that "possible values" is properly localized in English
+    new_ucmd!()
+        .env("LANG", "en_US.UTF-8")
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("--color=invalid_test_value")
+        .fails()
+        .code_is(1)
+        .stderr_contains("error: invalid value 'invalid_test_value' for '--color")
+        .stderr_contains("[possible values:");
+}
+
+#[test]
+fn test_localized_possible_values_french() {
+    // Test that "possible values" is properly localized in French
+    new_ucmd!()
+        .env("LANG", "fr_FR.UTF-8")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("--color=invalid_test_value")
+        .fails()
+        .code_is(1)
+        .stderr_contains("erreur : valeur invalide 'invalid_test_value' pour '--color")
+        .stderr_contains("[valeurs possibles:");
+}
+/* spellchecker: enable */
+
 #[test]
 fn test_invalid_value_returns_2() {
     // Invalid values to flags *sometimes* result in error code 2:
