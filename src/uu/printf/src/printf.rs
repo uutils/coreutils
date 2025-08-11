@@ -85,6 +85,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .allow_hyphen_values(true)
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("printf-about"))
         .after_help(translate!("printf-after-help"))
         .override_usage(format_usage(&translate!("printf-usage")))

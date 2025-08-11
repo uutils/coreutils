@@ -1606,4 +1606,133 @@ fn test_argument_suggestion() {
         }
     }
 }
+
+#[test]
+fn test_clap_localization_unknown_argument() {
+    let test_cases = vec![
+        (
+            "en_US.UTF-8",
+            vec![
+                "error: unexpected argument '--unknown-option' found",
+                "Usage:",
+                "For more information, try '--help'.",
+            ],
+        ),
+        (
+            "fr_FR.UTF-8",
+            vec![
+                "erreur : argument inattendu '--unknown-option' trouvé",
+                "Utilisation:",
+                "Pour plus d'informations, essayez '--help'.",
+            ],
+        ),
+    ];
+
+    for (locale, expected_strings) in test_cases {
+        let result = new_ucmd!()
+            .env("LC_ALL", locale)
+            .arg("--unknown-option")
+            .env("LANG", locale)
+            .fails();
+
+        result.code_is(2); // sort uses exit code 2 for invalid options
+        let stderr = result.stderr_str();
+        for expected in expected_strings {
+            assert!(stderr.contains(expected));
+        }
+    }
+}
+
+#[test]
+fn test_clap_localization_help_message() {
+    // Test help message in English
+    let result_en = new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("--help")
+        .env("LANG", "en_US.UTF-8")
+        .succeeds();
+
+    let stdout_en = result_en.stdout_str();
+    assert!(stdout_en.contains("Usage:"));
+    assert!(stdout_en.contains("Options:"));
+
+    // Test help message in French
+    let result_fr = new_ucmd!()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("--help")
+        .env("LANG", "fr_FR.UTF-8")
+        .succeeds();
+
+    let stdout_fr = result_fr.stdout_str();
+    assert!(stdout_fr.contains("Utilisation:"));
+    assert!(stdout_fr.contains("Options:"));
+}
+
+#[test]
+fn test_clap_localization_missing_required_argument() {
+    // Test missing required argument
+    let result_en = new_ucmd!().env("LC_ALL", "en_US.UTF-8").arg("-k").fails();
+
+    let stderr_en = result_en.stderr_str();
+    assert!(stderr_en.contains("error:"));
+    assert!(stderr_en.contains("-k"));
+
+    // Test in French
+    let result_fr = new_ucmd!()
+        .env("LANG", "fr_FR.UTF-8")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("-k")
+        .fails();
+
+    let stderr_fr = result_fr.stderr_str();
+    // The main error message should contain French "erreur"
+    assert!(stderr_fr.contains("error:") || stderr_fr.contains("erreur"));
+}
+
+#[test]
+fn test_clap_localization_invalid_value() {
+    let test_cases = vec![
+        ("en_US.UTF-8", "sort: failed to parse key 'invalid'"),
+        ("fr_FR.UTF-8", "sort: échec d'analyse de la clé 'invalid'"),
+    ];
+
+    for (locale, expected_message) in test_cases {
+        let result = new_ucmd!()
+            .env("LC_ALL", locale)
+            .arg("-k")
+            .env("LANG", locale)
+            .arg("invalid")
+            .fails();
+
+        let stderr = result.stderr_str();
+        assert!(stderr.contains(expected_message));
+    }
+}
+
+#[test]
+fn test_clap_localization_tip_for_value_with_dash() {
+    // Test tip for passing values that look like options
+    let result_en = new_ucmd!()
+    let test_cases = vec![
+        ("en_US.UTF-8", vec!["tip:", "-- --file-with-dash"]),
+        ("fr_FR.UTF-8", vec!["tip:", "-- --file-with-dash"]), // TODO: fix French translation
+    ];
+    assert!(stderr_en.contains("tip:") || stderr_en.contains("conseil:"));
+    for (locale, expected_strings) in test_cases {
+        let result = new_ucmd!()
+            .env("LANG", locale)
+            .env("LC_ALL", locale)
+            .arg("--output")
+            .arg("--file-with-dash")
+            .fails();
+
+        let stderr = result.stderr_str();
+        for expected in expected_strings {
+            assert!(stderr.contains(expected));
+        }
+    let result_fr = new_ucmd!()
+        }
+    }
+    // The tip should be preserved from clap
+    assert!(stderr_fr.contains("tip:") || stderr_fr.contains("conseil:"));
 /* spell-checker: enable */

@@ -226,6 +226,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .about(translate!("mv-about"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .override_usage(format_usage(&translate!("mv-usage")))
         .after_help(format!(
             "{}\n\n{}",

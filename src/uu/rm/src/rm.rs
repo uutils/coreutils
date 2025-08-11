@@ -227,6 +227,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .about(translate!("rm-about"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .override_usage(format_usage(&translate!("rm-usage")))
         .after_help(translate!("rm-after-help"))
         .infer_long_args(true)

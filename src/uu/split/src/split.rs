@@ -228,6 +228,7 @@ fn handle_preceding_options(
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("split-about"))
         .after_help(translate!("split-after-help"))
         .override_usage(format_usage(&translate!("split-usage")))

@@ -287,6 +287,7 @@ pub fn uu_app() -> Command {
         .version(uucore::crate_version!())
         .override_usage(format_usage(&translate!("cat-usage")))
         .about(translate!("cat-about"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(

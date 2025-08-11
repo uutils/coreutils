@@ -230,6 +230,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .about(translate!("nl-about"))
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .override_usage(format_usage(&translate!("nl-usage")))
         .after_help(translate!("nl-after-help"))
         .infer_long_args(true)

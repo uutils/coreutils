@@ -17,7 +17,7 @@ use std::ffi::OsString;
 /// Based on clap's own design patterns and error categorization
 fn should_show_simple_help_for_clap_error(kind: ErrorKind) -> bool {
     match kind {
-        // Most validation errors should show simple help
+        // Show simple help
         ErrorKind::InvalidValue
         | ErrorKind::InvalidSubcommand
         | ErrorKind::ValueValidation
@@ -73,21 +73,6 @@ fn colorize(text: &str, color: Color) -> String {
     format!("\x1b[{}m{text}\x1b[0m", color.code())
 }
 
-/// Display usage information and help suggestion for errors that require it
-/// This consolidates the shared logic between clap errors and UUsageError
-pub fn display_usage_and_help(util_name: &str) {
-    eprintln!();
-    // Try to get usage information from localization
-    let usage_key = format!("{}-usage", util_name);
-    let usage_text = translate!(&usage_key);
-    let formatted_usage = crate::format_usage(&usage_text);
-    let usage_label = translate!("common-usage");
-    eprintln!("{}: {}", usage_label, formatted_usage);
-    eprintln!();
-    let help_msg = translate!("clap-error-help-suggestion", "command" => crate::execution_phrase());
-    eprintln!("{help_msg}");
-}
-
 pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: i32) -> ! {
     // Ensure localization is initialized for this utility (always with common strings)
     let _ = crate::locale::setup_localization(util_name);
@@ -106,8 +91,25 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
     };
 
     match err.kind() {
-        ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => {
-            // For help and version, use clap's built-in formatting and exit with 0
+        ErrorKind::DisplayHelp => {
+            // For help messages, we use the localized help template
+            // The template should already have the localized usage label,
+            // but we also replace any remaining "Usage:" instances for fallback
+
+            // Ensure localization is initialized
+            let _ = crate::locale::setup_localization(util_name);
+
+            let help_text = err.render().to_string();
+
+            // Replace any remaining "Usage:" with localized version as fallback
+            let usage_label = translate!("common-usage");
+            let localized_help = help_text.replace("Usage:", &format!("{usage_label}:"));
+
+            print!("{}", localized_help);
+            std::process::exit(0);
+        }
+        ErrorKind::DisplayVersion => {
+            // For version, use clap's built-in formatting and exit with 0
             // Output to stdout as expected by tests
             print!("{}", err.render());
             std::process::exit(0);
@@ -204,7 +206,15 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                 // Fallback to original rendering if we can't parse
                 eprint!("{}", err.render());
             }
-            std::process::exit(exit_code);
+
+            // InvalidValue errors should exit with code 1 for all utilities
+            let actual_exit_code = if matches!(kind, ErrorKind::InvalidValue) {
+                1
+            } else {
+                exit_code
+            };
+
+            std::process::exit(actual_exit_code);
         }
         _ => {
             // For MissingRequiredArgument, use the full clap error as it includes proper usage

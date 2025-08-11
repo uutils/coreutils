@@ -64,6 +64,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .about(translate!("dirname-about"))
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .override_usage(format_usage(&translate!("dirname-usage")))
         .args_override_self(true)
         .infer_long_args(true)
