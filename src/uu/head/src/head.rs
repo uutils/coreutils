@@ -180,12 +180,17 @@ fn arg_iterate<'a>(
     let first = args.next().unwrap();
     if let Some(second) = args.next() {
         if let Some(s) = second.to_str() {
-            match parse::parse_obsolete(s) {
-                Some(Ok(iter)) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
-                Some(Err(parse::ParseError)) => Err(HeadError::ParseError(
-                    translate!("head-error-bad-argument-format", "arg" => s.quote()),
-                )),
-                None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
+            if let Some(v) = parse::parse_obsolete(s) {
+                match v {
+                    Ok(iter) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
+                    Err(parse::ParseError) => Err(HeadError::ParseError(
+                        translate!("head-error-bad-argument-format", "arg" => s.quote()),
+                    )),
+                }
+            } else {
+                // The second argument contains non-UTF-8 sequences, so it can't be an obsolete option
+                // like "-5". Treat it as a regular file argument.
+                Ok(Box::new(vec![first, second].into_iter().chain(args)))
             }
         } else {
             // The second argument contains non-UTF-8 sequences, so it can't be an obsolete option
@@ -467,90 +472,68 @@ fn head_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
 fn uu_head(options: &HeadOptions) -> UResult<()> {
     let mut first = true;
     for file in &options.files {
-        let res = match file.to_str() {
-            Some("-") => {
-                if (options.files.len() > 1 && !options.quiet) || options.verbose {
-                    if !first {
-                        println!();
-                    }
-                    println!("{}", translate!("head-header-stdin"));
+        let res = if file == "-" {
+            if (options.files.len() > 1 && !options.quiet) || options.verbose {
+                if !first {
+                    println!();
                 }
-                let stdin = io::stdin();
-
-                #[cfg(unix)]
-                {
-                    let stdin_raw_fd = stdin.as_raw_fd();
-                    let mut stdin_file = unsafe { File::from_raw_fd(stdin_raw_fd) };
-                    let current_pos = stdin_file.stream_position();
-                    if let Ok(current_pos) = current_pos {
-                        // We have a seekable file. Ensure we set the input stream to the
-                        // last byte read so that any tools that parse the remainder of
-                        // the stdin stream read from the correct place.
-
-                        let bytes_read = head_file(&mut stdin_file, options)?;
-                        stdin_file.seek(SeekFrom::Start(current_pos + bytes_read))?;
-                    } else {
-                        let _bytes_read = head_file(&mut stdin_file, options)?;
-                    }
-                }
-
-                #[cfg(not(unix))]
-                {
-                    let mut stdin = stdin.lock();
-
-                    match options.mode {
-                        Mode::FirstBytes(n) => read_n_bytes(&mut stdin, n),
-                        Mode::AllButLastBytes(n) => read_but_last_n_bytes(&mut stdin, n),
-                        Mode::FirstLines(n) => {
-                            read_n_lines(&mut stdin, n, options.line_ending.into())
-                        }
-                        Mode::AllButLastLines(n) => {
-                            read_but_last_n_lines(&mut stdin, n, options.line_ending.into())
-                        }
-                    }?;
-                }
-
-                Ok(())
+                println!("{}", translate!("head-header-stdin"));
             }
-            Some(name) => {
-                let mut file_handle = match File::open(file) {
-                    Ok(f) => f,
-                    Err(err) => {
-                        show!(err.map_err_context(
-                            || translate!("head-error-cannot-open", "name" => file.to_string_lossy().quote())
-                        ));
-                        continue;
-                    }
-                };
-                if (options.files.len() > 1 && !options.quiet) || options.verbose {
-                    if !first {
-                        println!();
-                    }
-                    println!("==> {name} <==");
+            let stdin = io::stdin();
+
+            #[cfg(unix)]
+            {
+                let stdin_raw_fd = stdin.as_raw_fd();
+                let mut stdin_file = unsafe { File::from_raw_fd(stdin_raw_fd) };
+                let current_pos = stdin_file.stream_position();
+                if let Ok(current_pos) = current_pos {
+                    // We have a seekable file. Ensure we set the input stream to the
+                    // last byte read so that any tools that parse the remainder of
+                    // the stdin stream read from the correct place.
+
+                    let bytes_read = head_file(&mut stdin_file, options)?;
+                    stdin_file.seek(SeekFrom::Start(current_pos + bytes_read))?;
+                } else {
+                    let _bytes_read = head_file(&mut stdin_file, options)?;
                 }
-                head_file(&mut file_handle, options)?;
-                Ok(())
             }
-            None => {
-                // Handle files with non-UTF-8 names
-                let mut file_handle = match File::open(file) {
-                    Ok(f) => f,
-                    Err(err) => {
-                        show!(err.map_err_context(
-                            || translate!("head-error-cannot-open", "name" => file.to_string_lossy().quote())
-                        ));
-                        continue;
+
+            #[cfg(not(unix))]
+            {
+                let mut stdin = stdin.lock();
+
+                match options.mode {
+                    Mode::FirstBytes(n) => read_n_bytes(&mut stdin, n),
+                    Mode::AllButLastBytes(n) => read_but_last_n_bytes(&mut stdin, n),
+                    Mode::FirstLines(n) => read_n_lines(&mut stdin, n, options.line_ending.into()),
+                    Mode::AllButLastLines(n) => {
+                        read_but_last_n_lines(&mut stdin, n, options.line_ending.into())
                     }
-                };
-                if (options.files.len() > 1 && !options.quiet) || options.verbose {
-                    if !first {
-                        println!();
-                    }
-                    println!("==> {} <==", file.to_string_lossy());
+                }?;
+            }
+
+            Ok(())
+        } else {
+            let mut file_handle = match File::open(file) {
+                Ok(f) => f,
+                Err(err) => {
+                    show!(err.map_err_context(
+                        || translate!("head-error-cannot-open", "name" => file.to_string_lossy().quote())
+                    ));
+                    continue;
                 }
-                head_file(&mut file_handle, options)?;
-                Ok(())
+            };
+            if (options.files.len() > 1 && !options.quiet) || options.verbose {
+                if !first {
+                    println!();
+                }
+                match file.to_str() {
+                    Some(name) => println!("==> {name} <=="),
+                    None => println!("==> {} <==", file.to_string_lossy()),
+                }
             }
+            head_file(&mut file_handle, options)?;
+            Ok(())
         };
         if let Err(e) = res {
             let name = if file == "-" {

@@ -872,7 +872,6 @@ fn test_head_non_utf8_paths() {
     let non_utf8_bytes = b"test_\xFF\xFE.txt";
     let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
 
-    // Create the actual file with some content
     std::fs::write(at.plus(non_utf8_name), "line1\nline2\nline3\n").unwrap();
 
     // Test that head handles non-UTF-8 file names without crashing
