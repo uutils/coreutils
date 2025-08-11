@@ -170,13 +170,6 @@ fn test_posix_all() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_pathchk_non_utf8_paths() {
-    use uutests::at_and_ucmd;
-
-    let (at, mut ucmd) = at_and_ucmd!();
     let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
-
-    // Create the file so pathchk can check it exists
-    std::fs::write(at.plus(&filename), b"test").unwrap();
-
-    ucmd.arg(&filename).succeeds();
+    new_ucmd!().arg(&filename).succeeds();
 }
