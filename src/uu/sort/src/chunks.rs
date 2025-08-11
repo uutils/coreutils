@@ -246,91 +246,127 @@ fn parse_lines_parallel<'a>(
     separator: u8,
     settings: &GlobalSettings,
 ) {
-    use rayon::prelude::*;
+    use rayon::{ThreadPoolBuilder, prelude::*};
 
-    // split data into chunks at line boundaries
-    let line_boundaries: Vec<usize> = read
-        .iter()
-        .enumerate()
-        .filter_map(|(i, &byte)| if byte == separator { Some(i) } else { None })
+    // find all line boundaries
+    let line_boundaries: Vec<usize> = std::iter::once(0)
+        .chain(
+            read.iter()
+                .enumerate()
+                .filter_map(|(i, &byte)| if byte == separator { Some(i + 1) } else { None }),
+        )
         .collect();
 
-    if line_boundaries.is_empty() {
+    if line_boundaries.len() < 2 {
         // fallback to sequential if no separators found
         return parse_lines_sequential(read, lines, line_data, separator, settings);
     }
 
-    // determine optimal chunk size based on available cores
-    let num_cores = rayon::current_num_threads();
-    let target_chunks = num_cores * 2; // 2x the number of cores for better load balancing
-    let lines_per_chunk = line_boundaries.len().max(1) / target_chunks.max(1);
-    let chunk_size = lines_per_chunk.max(100); // minimum chunk size to avoid too small chunks
+    let num_lines = line_boundaries.len() - 1;
 
-    // create chunks respecting line boundaries
-    let chunks: Vec<(usize, &[u8])> = line_boundaries
-        .chunks(chunk_size)
-        .enumerate()
-        .filter_map(|(chunk_idx, boundary_chunk)| {
-            let start = if chunk_idx == 0 {
-                0
-            } else {
-                boundary_chunk[0] + 1
-            };
-            let end = *boundary_chunk.last()?;
-            if start <= end && end < read.len() {
-                Some((chunk_idx * chunk_size, &read[start..=end]))
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    if chunks.is_empty() {
+    // threshold to determine parallelism
+    if num_lines < 50_000 || read.len() < (1 << 20) {
         return parse_lines_sequential(read, lines, line_data, separator, settings);
     }
 
-    // process chunks in parallel
-    let results: Vec<_> = chunks
-        .par_iter()
-        .map(|(base_index, chunk)| {
-            let mut chunk_lines = Vec::new();
-            let mut chunk_line_data = LineData {
-                selections: Vec::new(),
-                num_infos: Vec::new(),
-                parsed_floats: Vec::new(),
-                line_num_floats: Vec::new(),
-            };
-            let mut token_buffer = vec![];
+    // create local thread pool
+    let phys_cores = num_cpus::get_physical().max(1);
+    let thread_count = (phys_cores / 2).max(1);
+    let pool = ThreadPoolBuilder::new()
+        .num_threads(thread_count)
+        .build()
+        .expect("Failed to create thread pool");
 
-            chunk_lines.extend(chunk.split(|&c| c == separator).enumerate().map(
-                |(local_idx, line)| {
-                    let global_index = base_index + local_idx;
-                    Line::create(
-                        line,
-                        global_index,
+    pool.install(|| {
+        let target_chunks = (thread_count * 2).min(num_lines).max(1);
+        let base_chunk_size = num_lines / target_chunks;
+        let remainder = num_lines % target_chunks;
+
+        // create chunk ranges
+        let chunk_ranges: Vec<(usize, usize)> = (0..target_chunks)
+            .map(|i| {
+                let chunk_size = base_chunk_size + if i < remainder { 1 } else { 0 };
+                let start = i * base_chunk_size + i.min(remainder);
+                let end = start + chunk_size;
+                (start, end)
+            })
+            .collect();
+
+        // process chunks in parallel and collect results
+        let results: Vec<(Vec<Line<'_>>, LineData<'_>)> = chunk_ranges
+            .par_iter()
+            .map(|&(start_idx, end_idx)| {
+                let mut chunk_lines = Vec::new();
+                let mut chunk_line_data = LineData {
+                    selections: Vec::new(),
+                    num_infos: Vec::new(),
+                    parsed_floats: Vec::new(),
+                    line_num_floats: Vec::new(),
+                };
+                let mut token_buffer = Vec::with_capacity(64); // pre-allocate buffer for tokens
+
+                for line_idx in start_idx..end_idx {
+                    let line_start = line_boundaries[line_idx];
+                    let line_end = if line_idx + 1 < line_boundaries.len() {
+                        line_boundaries[line_idx + 1] - 1
+                    } else {
+                        read.len()
+                    };
+
+                    let line_bytes = &read[line_start..line_end];
+                    let line = Line::create(
+                        line_bytes,
+                        line_idx,
                         &mut chunk_line_data,
                         &mut token_buffer,
                         settings,
-                    )
-                },
-            ));
+                    );
+                    chunk_lines.push(line);
+                }
 
-            (chunk_lines, chunk_line_data)
-        })
-        .collect();
+                (chunk_lines, chunk_line_data)
+            })
+            .collect();
 
-    // merge results back in order
-    for (chunk_lines, chunk_line_data) in results {
-        lines.extend(chunk_lines);
-        line_data.selections.extend(chunk_line_data.selections);
-        line_data.num_infos.extend(chunk_line_data.num_infos);
-        line_data
-            .parsed_floats
-            .extend(chunk_line_data.parsed_floats);
+        // pre-allocate based on known total sizes
+        let total_lines: usize = results.iter().map(|(lines, _)| lines.len()).sum();
+        let total_selections: usize = results.iter().map(|(_, data)| data.selections.len()).sum();
+        let total_num_infos: usize = results.iter().map(|(_, data)| data.num_infos.len()).sum();
+        let total_parsed_floats: usize = results
+            .iter()
+            .map(|(_, data)| data.parsed_floats.len())
+            .sum();
+        let total_line_num_floats: usize = results
+            .iter()
+            .map(|(_, data)| data.line_num_floats.len())
+            .sum();
+
+        lines.clear();
+        lines.reserve_exact(total_lines);
+        line_data.selections.clear();
+        line_data.selections.reserve_exact(total_selections);
+        line_data.num_infos.clear();
+        line_data.num_infos.reserve_exact(total_num_infos);
+        line_data.parsed_floats.clear();
+        line_data.parsed_floats.reserve_exact(total_parsed_floats);
+        line_data.line_num_floats.clear();
         line_data
             .line_num_floats
-            .extend(chunk_line_data.line_num_floats);
-    }
+            .reserve_exact(total_line_num_floats);
+
+        // merge results back in order with pre-allocated space (no more reallocations)
+        for (chunk_lines, chunk_line_data) in results {
+            lines.extend(chunk_lines);
+            line_data.selections.extend(chunk_line_data.selections);
+            line_data.num_infos.extend(chunk_line_data.num_infos);
+            line_data
+                .parsed_floats
+                .extend(chunk_line_data.parsed_floats);
+            line_data
+                .line_num_floats
+                .extend(chunk_line_data.line_num_floats);
+        }
+    });
 }
 
 /// Read from `file` into `buffer`.
