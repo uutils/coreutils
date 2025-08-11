@@ -178,8 +178,7 @@ pub fn uu_app() -> Command {
 }
 
 fn show(path: &Path, line_ending: Option<LineEnding>) -> std::io::Result<()> {
-    use uucore::display::print_verbatim;
-    print_verbatim(path)?;
+    uucore::display::print_verbatim(path)?;
     if let Some(line_ending) = line_ending {
         print!("{line_ending}");
     }
