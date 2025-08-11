@@ -569,13 +569,17 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
         if let Some(to_create) = to_create {
             // if the path ends in /, remove it
             let to_create_owned;
-            let to_create = if to_create.to_string_lossy().ends_with('/') {
-                let path_str = to_create.to_string_lossy();
-                let trimmed = path_str.trim_end_matches('/');
-                to_create_owned = PathBuf::from(trimmed);
-                to_create_owned.as_path()
-            } else {
-                to_create
+            let to_create = match uucore::os_str_as_bytes(to_create.as_os_str()) {
+                Ok(path_bytes) if path_bytes.ends_with(b"/") => {
+                    let mut trimmed_bytes = path_bytes;
+                    while trimmed_bytes.ends_with(b"/") {
+                        trimmed_bytes = &trimmed_bytes[..trimmed_bytes.len() - 1];
+                    }
+                    let trimmed_os_str = std::ffi::OsStr::from_bytes(trimmed_bytes);
+                    to_create_owned = PathBuf::from(trimmed_os_str);
+                    to_create_owned.as_path()
+                }
+                _ => to_create,
             };
 
             if !to_create.exists() {

@@ -2380,4 +2380,14 @@ fn test_install_non_utf8_paths() {
     at.mkdir(dest_dir);
 
     ucmd.arg(&source_filename).arg(dest_dir).succeeds();
+
+    // Test with trailing slash and directory creation (-D flag)
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source_file = "source.txt";
+    let mut target_path = std::ffi::OsString::from_vec(vec![0xFF, 0xFE, b'd', b'i', b'r']);
+    target_path.push("/target.txt");
+
+    at.touch(source_file);
+
+    ucmd.arg("-D").arg(source_file).arg(&target_path).succeeds();
 }
