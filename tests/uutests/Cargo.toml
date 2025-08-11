@@ -19,6 +19,7 @@ all-features = true
 path = "src/lib/lib.rs"
 
 [dependencies]
+ctor = { workspace = true }
 libc = { workspace = true }
 pretty_assertions = "1.4.0"
 rand = { workspace = true }
@@ -31,7 +32,6 @@ uucore = { workspace = true, features = [
   "signals",
   "utmpx",
 ] }
-ctor = "0.4.1"
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 
