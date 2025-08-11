@@ -54,7 +54,7 @@ impl TypedValueParser for NonEmptyOsStringParser {
             let mut err = clap::Error::new(clap::error::ErrorKind::ValueValidation);
             err.insert(
                 clap::error::ContextKind::Custom,
-                clap::error::ContextValue::String("invalid operand: empty string".to_string()),
+                clap::error::ContextValue::String(translate!("realpath-invalid-empty-operand")),
             );
             return Err(err);
         }

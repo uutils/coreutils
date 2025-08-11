@@ -530,7 +530,7 @@ impl Settings {
         filename: &str,
         is_new: bool,
     ) -> io::Result<BufWriter<Box<dyn Write>>> {
-        if platform::paths_refer_to_same_file(&self.input.to_string_lossy(), filename) {
+        if platform::paths_refer_to_same_file(&self.input, filename.as_ref()) {
             return Err(io::Error::other(
                 translate!("split-error-would-overwrite-input", "file" => filename.quote()),
             ));

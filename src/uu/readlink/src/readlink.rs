@@ -78,8 +78,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(LineEnding::from_zero_flag(use_zero))
     };
 
-    for f in &files {
-        let p = f;
+    for p in &files {
         let path_result = if res_mode == ResolveMode::None {
             fs::read_link(p)
         } else {
@@ -94,7 +93,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 return if verbose {
                     Err(USimpleError::new(
                         1,
-                        err.map_err_context(move || f.to_string_lossy().to_string())
+                        err.map_err_context(move || p.to_string_lossy().to_string())
                             .to_string(),
                     ))
                 } else {
