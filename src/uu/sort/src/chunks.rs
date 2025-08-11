@@ -285,7 +285,7 @@ fn parse_lines_parallel<'a>(
         // create chunk ranges
         let chunk_ranges: Vec<(usize, usize)> = (0..target_chunks)
             .map(|i| {
-                let chunk_size = base_chunk_size + if i < remainder { 1 } else { 0 };
+                let chunk_size = base_chunk_size + usize::from(i < remainder);
                 let start = i * base_chunk_size + i.min(remainder);
                 let end = start + chunk_size;
                 (start, end)
