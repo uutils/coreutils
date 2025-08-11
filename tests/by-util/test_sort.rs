@@ -1610,4 +1610,146 @@ fn test_argument_suggestion() {
     assert!(stderr_fr.contains("similaire"));
     assert!(stderr_fr.contains("--reverse"));
 }
+
+#[test]
+fn test_clap_localization_unknown_argument() {
+    // Test unknown argument error in English
+    let result_en = new_ucmd!()
+        .env("LANG", "en_US.UTF-8")
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("--unknown-option")
+        .fails();
+
+    result_en.code_is(2); // sort uses exit code 2 for invalid options
+    let stderr_en = result_en.stderr_str();
+    assert!(stderr_en.contains("error: unexpected argument '--unknown-option' found"));
+    assert!(stderr_en.contains("Usage:"));
+    assert!(stderr_en.contains("For more information, try '--help'."));
+
+    // Test unknown argument error in French
+    let result_fr = new_ucmd!()
+        .env("LANG", "fr_FR.UTF-8")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("--unknown-option")
+        .fails();
+
+    result_fr.code_is(2);
+    let stderr_fr = result_fr.stderr_str();
+    assert!(stderr_fr.contains("erreur : argument inattendu '--unknown-option' trouvé"));
+    assert!(stderr_fr.contains("Utilisation:"));
+    assert!(stderr_fr.contains("Pour plus d'informations, essayez '--help'."));
+}
+
+#[test]
+fn test_clap_localization_help_message() {
+    // Test help message in English
+    let result_en = new_ucmd!()
+        .env("LANG", "en_US.UTF-8")
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("--help")
+        .succeeds();
+
+    let stdout_en = result_en.stdout_str();
+    assert!(stdout_en.contains("Usage:"));
+    assert!(stdout_en.contains("Options:"));
+
+    // Test help message in French
+    let result_fr = new_ucmd!()
+        .env("LANG", "fr_FR.UTF-8")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("--help")
+        .succeeds();
+
+    let stdout_fr = result_fr.stdout_str();
+    assert!(stdout_fr.contains("Utilisation:"));
+    assert!(stdout_fr.contains("Options:"));
+}
+
+#[test]
+fn test_clap_localization_version() {
+    // Test version output (should exit with 0)
+    let result = new_ucmd!().arg("--version").succeeds();
+
+    let stdout = result.stdout_str();
+    assert!(stdout.contains("sort"));
+}
+
+#[test]
+fn test_clap_localization_missing_required_argument() {
+    // Test missing required argument
+    let result_en = new_ucmd!()
+        .env("LANG", "en_US.UTF-8")
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-k")
+        .fails();
+
+    let stderr_en = result_en.stderr_str();
+    assert!(stderr_en.contains("error:"));
+    assert!(stderr_en.contains("-k"));
+
+    // Test in French
+    let result_fr = new_ucmd!()
+        .env("LANG", "fr_FR.UTF-8")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("-k")
+        .fails();
+
+    let stderr_fr = result_fr.stderr_str();
+    // The main error message should contain French "erreur"
+    assert!(stderr_fr.contains("error:") || stderr_fr.contains("erreur"));
+}
+
+#[test]
+fn test_clap_localization_invalid_value() {
+    // Test invalid value error
+    let result_en = new_ucmd!()
+        .env("LANG", "en_US.UTF-8")
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-k")
+        .arg("invalid")
+        .fails();
+
+    let stderr_en = result_en.stderr_str();
+    assert!(stderr_en.contains("sort: failed to parse key 'invalid'"));
+
+    // Test in French
+    let result_fr = new_ucmd!()
+        .env("LANG", "fr_FR.UTF-8")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("-k")
+        .arg("invalid")
+        .fails();
+
+    let stderr_fr = result_fr.stderr_str();
+    assert!(stderr_fr.contains("sort: échec d'analyse de la clé 'invalid'"));
+}
+
+#[test]
+fn test_clap_localization_tip_for_value_with_dash() {
+    // Test tip for passing values that look like options
+    let result_en = new_ucmd!()
+        .env("LANG", "en_US.UTF-8")
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("--output")
+        .arg("--file-with-dash")
+        .fails();
+
+    let stderr_en = result_en.stderr_str();
+    assert!(stderr_en.contains("tip:") || stderr_en.contains("conseil:"));
+    assert!(stderr_en.contains("-- --file-with-dash"));
+
+    // Test in French
+    let result_fr = new_ucmd!()
+        .env("LANG", "fr_FR.UTF-8")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("--output")
+        .arg("--file-with-dash")
+        .fails();
+
+    let stderr_fr = result_fr.stderr_str();
+    // The tip should be preserved from clap
+    assert!(stderr_fr.contains("tip:") || stderr_fr.contains("conseil:"));
+    assert!(stderr_fr.contains("-- --file-with-dash"));
+}
+
 /* spell-checker: enable */

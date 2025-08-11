@@ -106,6 +106,7 @@ pub fn parse_base_cmd_args(
 pub fn base_app(about: &'static str, usage: &str) -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(about)
         .override_usage(format_usage(usage))
         .infer_long_args(true)

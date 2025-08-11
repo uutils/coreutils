@@ -225,6 +225,7 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(crate_name!())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("env-about"))
         .override_usage(format_usage(&translate!("env-usage")))
         .after_help(translate!("env-after-help"))

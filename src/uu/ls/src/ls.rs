@@ -57,7 +57,7 @@ use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::libc::{dev_t, major, minor};
 use uucore::{
     display::Quotable,
-    error::{UError, UResult, USimpleError, set_exit_code},
+    error::{UError, UResult, set_exit_code},
     format::human::{SizeFormat, human_readable},
     format_usage,
     fs::FileInformation,
@@ -1104,18 +1104,9 @@ impl Config {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = match uu_app().try_get_matches_from(args) {
-        // clap successfully parsed the arguments:
         Ok(matches) => matches,
-        // --help, --version, etc.:
-        Err(e) if e.exit_code() == 0 => {
-            return Err(e.into());
-        }
-        // Errors in argument *values* cause exit code 1:
-        Err(e) if e.kind() == clap::error::ErrorKind::InvalidValue => {
-            return Err(USimpleError::new(1, e.to_string()));
-        }
-        // All other argument parsing errors cause exit code 2:
         Err(e) => {
+            // Use localization handler for all clap errors
             uucore::clap_localization::handle_clap_error_with_exit_code(e, "ls", 2);
         }
     };
@@ -1130,10 +1121,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
+    // Ensure localization is initialized
+    let _ = uucore::locale::setup_localization("ls");
+
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .override_usage(format_usage(&translate!("ls-usage")))
         .about(translate!("ls-about"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .infer_long_args(true)
         .disable_help_flag(true)
         .args_override_self(true)

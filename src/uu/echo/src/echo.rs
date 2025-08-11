@@ -180,6 +180,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
+    // Ensure localization is initialized
+    let _ = uucore::locale::setup_localization("echo");
+
     // Note: echo is different from the other utils in that it should **not**
     // have `infer_long_args(true)`, because, for example, `--ver` should be
     // printed as `--ver` and not show the version text.
@@ -193,6 +196,7 @@ pub fn uu_app() -> Command {
         .about(translate!("echo-about"))
         .after_help(translate!("echo-after-help"))
         .override_usage(format_usage(&translate!("echo-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .arg(
             Arg::new(options::NO_NEWLINE)
                 .short('n')

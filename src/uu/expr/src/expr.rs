@@ -73,6 +73,7 @@ impl UError for ExprError {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("expr-about"))
         .override_usage(format_usage(&translate!("expr-usage")))
         .after_help(translate!("expr-after-help"))

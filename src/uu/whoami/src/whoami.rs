@@ -28,6 +28,7 @@ pub fn whoami() -> UResult<OsString> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("whoami-about"))
         .override_usage(uucore::util_name())
         .infer_long_args(true)

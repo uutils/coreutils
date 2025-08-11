@@ -805,6 +805,7 @@ fn parse_depth(max_depth_str: Option<&str>, summarize: bool) -> UResult<Option<u
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("du-about"))
         .after_help(translate!("du-after-help"))
         .override_usage(format_usage(&translate!("du-usage")))
