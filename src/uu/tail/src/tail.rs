@@ -213,17 +213,16 @@ fn tail_stdin(
     // on macOS and Linux.
     #[cfg(target_os = "macos")]
     {
-        if let Ok(mut stdin_handle) = Handle::stdin() {
-            if let Ok(meta) = stdin_handle.as_file_mut().metadata() {
-                if meta.file_type().is_dir() {
-                    set_exit_code(1);
-                    show_error!(
-                        "{}",
-                        translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name.clone(), "error" => translate!("tail-no-such-file-or-directory"))
-                    );
-                    return Ok(());
-                }
-            }
+        if let Ok(mut stdin_handle) = Handle::stdin()
+            && let Ok(meta) = stdin_handle.as_file_mut().metadata()
+            && meta.file_type().is_dir()
+        {
+            set_exit_code(1);
+            show_error!(
+                "{}",
+                translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name.clone(), "error" => translate!("tail-no-such-file-or-directory"))
+            );
+            return Ok(());
         }
     }
 

@@ -3398,11 +3398,11 @@ fn calculate_padding_collection(
     };
 
     for item in items {
-        if config.alloc_size {
-            if let Some(md) = item.get_metadata(&mut state.out) {
-                let block_size_len = display_size(get_block_size(md, config), config).len();
-                padding_collections.block_size = block_size_len.max(padding_collections.block_size);
-            }
+        if config.alloc_size
+            && let Some(md) = item.get_metadata(&mut state.out)
+        {
+            let block_size_len = display_size(get_block_size(md, config), config).len();
+            padding_collections.block_size = block_size_len.max(padding_collections.block_size);
         }
 
         let context_len = item.security_context.len();

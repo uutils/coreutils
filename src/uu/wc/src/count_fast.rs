@@ -171,15 +171,15 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
 
     #[cfg(windows)]
     {
-        if let Some(file) = handle.inner_file() {
-            if let Ok(metadata) = file.metadata() {
-                let attributes = metadata.file_attributes();
+        if let Some(file) = handle.inner_file()
+            && let Ok(metadata) = file.metadata()
+        {
+            let attributes = metadata.file_attributes();
 
-                if (attributes & FILE_ATTRIBUTE_ARCHIVE) != 0
-                    || (attributes & FILE_ATTRIBUTE_NORMAL) != 0
-                {
-                    return (metadata.file_size() as usize, None);
-                }
+            if (attributes & FILE_ATTRIBUTE_ARCHIVE) != 0
+                || (attributes & FILE_ATTRIBUTE_NORMAL) != 0
+            {
+                return (metadata.file_size() as usize, None);
             }
         }
     }
