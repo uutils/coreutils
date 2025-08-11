@@ -212,29 +212,60 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                     let option = arg.to_string();
                     let value = value.to_string();
 
-                    // Get localized error word
-                    let error_word = translate!("common-error");
-                    let colored_error_word = maybe_colorize(&error_word, Color::Red);
+                    // Check if this is actually a missing value (empty string)
+                    if value.is_empty() {
+                        // This is the case where no value was provided for an option that requires one
+                        eprintln!(
+                            "error: a value is required for '{}' but none was supplied",
+                            option
+                        );
+                        eprintln!();
+                        eprintln!("For more information, try '--help'.");
+                        std::process::exit(1);
+                    } else {
+                        // Get localized error word
+                        let error_word = translate!("common-error");
+                        let colored_error_word = maybe_colorize(&error_word, Color::Red);
 
-                    // Apply color to value and option if colors are enabled
-                    let colored_value = maybe_colorize(&value, Color::Yellow);
-                    let colored_option = maybe_colorize(&option, Color::Green);
+                        // Apply color to value and option if colors are enabled
+                        let colored_value = maybe_colorize(&value, Color::Yellow);
+                        let colored_option = maybe_colorize(&option, Color::Green);
 
-                    // Print localized error message
-                    let error_msg = translate!(
-                        "clap-error-invalid-value",
-                        "error_word" => colored_error_word,
-                        "value" => colored_value,
-                        "option" => colored_option
-                    );
-                    eprintln!("{error_msg}");
-
-                    // For ValueValidation errors, include the validation error details
-                    if matches!(kind, ErrorKind::ValueValidation) {
-                        if let Some(source) = err.source() {
-                            eprintln!("  {}", source);
+                        // For ValueValidation errors, include the validation error in the message
+                        if matches!(kind, ErrorKind::ValueValidation) {
+                            if let Some(source) = err.source() {
+                                // Print error with validation detail on same line
+                                let error_msg = translate!(
+                                    "clap-error-invalid-value",
+                                    "error_word" => colored_error_word,
+                                    "value" => colored_value,
+                                    "option" => colored_option
+                                );
+                                eprintln!("{error_msg}: {}", source);
+                            } else {
+                                // Print localized error message
+                                let error_msg = translate!(
+                                    "clap-error-invalid-value",
+                                    "error_word" => colored_error_word,
+                                    "value" => colored_value,
+                                    "option" => colored_option
+                                );
+                                eprintln!("{error_msg}");
+                            }
+                        } else {
+                            // Print localized error message
+                            let error_msg = translate!(
+                                "clap-error-invalid-value",
+                                "error_word" => colored_error_word,
+                                "value" => colored_value,
+                                "option" => colored_option
+                            );
+                            eprintln!("{error_msg}");
                         }
                     }
+
+                    // For ValueValidation errors, include the validation error details
+                    // Note: We don't print these separately anymore as they're part of the main message
 
                     // Show possible values if available (for InvalidValue errors)
                     if matches!(kind, ErrorKind::InvalidValue) {

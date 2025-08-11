@@ -862,7 +862,9 @@ fn test_du_threshold_error_handling() {
     new_ucmd!()
         .arg("--threshold")
         .fails()
-        .stderr_contains("a value is required for '--threshold <SIZE>' but none was supplied")
+        .stderr_contains(
+            "error: a value is required for '--threshold <SIZE>' but none was supplied",
+        )
         .stderr_contains("For more information, try '--help'.");
 }
 

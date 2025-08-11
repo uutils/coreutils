@@ -1935,9 +1935,8 @@ fn test_split_separator_no_value() {
         .ignore_stdin_write_error()
         .pipe_in("a\n")
         .fails()
-        .stderr_contains(
-            "error: a value is required for '--separator <SEP>' but none was supplied",
-        );
+        .stderr_contains("error: a value is required for '--separator <SEP>' but none was supplied")
+        .stderr_contains("For more information, try '--help'.");
 }
 
 #[test]

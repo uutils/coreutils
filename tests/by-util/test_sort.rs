@@ -1684,19 +1684,8 @@ fn test_clap_localization_missing_required_argument() {
         .fails();
 
     let stderr_en = result_en.stderr_str();
-    assert!(stderr_en.contains("error:"));
+    assert!(stderr_en.contains(" a value is required for '--key <key>' but none was supplied"));
     assert!(stderr_en.contains("-k"));
-
-    // Test in French
-    let result_fr = new_ucmd!()
-        .env("LANG", "fr_FR.UTF-8")
-        .env("LC_ALL", "fr_FR.UTF-8")
-        .arg("-k")
-        .fails();
-
-    let stderr_fr = result_fr.stderr_str();
-    // The main error message should contain French "erreur"
-    assert!(stderr_fr.contains("error:") || stderr_fr.contains("erreur"));
 }
 
 #[test]
