@@ -1712,18 +1712,16 @@ pub(crate) fn copy_attributes(
     #[cfg(feature = "selinux")]
     handle_preserve(&attributes.context, || -> CopyResult<()> {
         // Get the source context and apply it to the destination
-        if let Ok(context) = selinux::SecurityContext::of_path(source, false, false) {
-            if let Some(context) = context
-                && let Err(e) = context.set_for_path(dest, false, false)
-            {
-                return Err(CpError::Error(
+
+        let context = selinux::SecurityContext::of_path(source, false, false).map_err(|_| {
+            CpError::Error(translate!("cp-error-selinux-get-context", "path" => source.display()))
+        })?;
+
+        if let Some(context) = context {
+            context.set_for_path(dest, false, false).map_err(|e|
+                CpError::Error(
                     translate!("cp-error-selinux-set-context", "path" => dest.display(), "error" => e),
-                ));
-            }
-        } else {
-            return Err(CpError::Error(
-                translate!("cp-error-selinux-get-context", "path" => source.display()),
-            ));
+                ))?;
         }
         Ok(())
     })?;
