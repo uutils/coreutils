@@ -11,6 +11,8 @@ use uucore::selinux::get_getfattr_output;
 use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, new_ucmd, path_concat, util_name};
 
+use serial_test::{parallel, serial};
+
 #[cfg(not(windows))]
 use std::fs::set_permissions;
 
@@ -90,6 +92,7 @@ macro_rules! assert_metadata_eq {
 }
 
 #[test]
+#[parallel]
 fn test_cp_cp() {
     let (at, mut ucmd) = at_and_ucmd!();
     // Invoke our binary to make the copy.
@@ -102,6 +105,7 @@ fn test_cp_cp() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_existing_target() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
@@ -116,6 +120,7 @@ fn test_cp_existing_target() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_duplicate_files() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
@@ -129,6 +134,7 @@ fn test_cp_duplicate_files() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_duplicate_folder() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg("-r")
@@ -143,6 +149,7 @@ fn test_cp_duplicate_folder() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_duplicate_files_normalized_path() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
@@ -156,6 +163,7 @@ fn test_cp_duplicate_files_normalized_path() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_duplicate_files_with_plain_backup() {
     let (_, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
@@ -170,6 +178,7 @@ fn test_cp_duplicate_files_with_plain_backup() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_duplicate_files_with_numbered_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
     // cp would skip duplicate src check and succeeds
@@ -183,6 +192,7 @@ fn test_cp_duplicate_files_with_numbered_backup() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_same_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "a";
@@ -196,6 +206,7 @@ fn test_cp_same_file() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_multiple_files_target_is_file() {
     new_ucmd!()
         .arg(TEST_HELLO_WORLD_SOURCE)
@@ -206,6 +217,7 @@ fn test_cp_multiple_files_target_is_file() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_directory_not_recursive() {
     new_ucmd!()
         .arg(TEST_COPY_TO_FOLDER)
@@ -217,6 +229,7 @@ fn test_cp_directory_not_recursive() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_multiple_files() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
@@ -229,6 +242,7 @@ fn test_cp_multiple_files() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_multiple_files_with_nonexistent_file() {
     #[cfg(windows)]
     let error_msg = "The system cannot find the file specified";
@@ -247,6 +261,7 @@ fn test_cp_multiple_files_with_nonexistent_file() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_multiple_files_with_empty_file_name() {
     #[cfg(windows)]
     let error_msg = "The system cannot find the path specified";
@@ -265,6 +280,7 @@ fn test_cp_multiple_files_with_empty_file_name() {
 }
 
 #[test]
+#[parallel]
 // FixME: for MacOS, this has intermittent failures; track repair progress at GH:uutils/coreutils/issues/1590
 #[cfg(not(target_os = "macos"))]
 fn test_cp_recurse() {
@@ -279,6 +295,7 @@ fn test_cp_recurse() {
 }
 
 #[test]
+#[parallel]
 #[cfg(not(target_os = "macos"))]
 fn test_cp_recurse_several() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -293,6 +310,7 @@ fn test_cp_recurse_several() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_recurse_source_path_ends_with_slash_dot() {
     let source_dir = "source_dir";
     let target_dir = "target_dir";
@@ -311,6 +329,7 @@ fn test_cp_recurse_source_path_ends_with_slash_dot() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_with_dirs_t() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg("-t")
@@ -321,6 +340,7 @@ fn test_cp_with_dirs_t() {
 }
 
 #[test]
+#[parallel]
 // FixME: for MacOS, this has intermittent failures; track repair progress at GH:uutils/coreutils/issues/1590
 #[cfg(not(target_os = "macos"))]
 fn test_cp_with_dirs() {
@@ -343,6 +363,7 @@ fn test_cp_with_dirs() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_target_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
@@ -354,6 +375,7 @@ fn test_cp_arg_target_directory() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_no_target_directory() {
     new_ucmd!()
         .arg(TEST_HELLO_WORLD_SOURCE)
@@ -365,6 +387,7 @@ fn test_cp_arg_no_target_directory() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_no_target_directory_with_recursive() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -385,6 +408,7 @@ fn test_cp_arg_no_target_directory_with_recursive() {
 }
 
 #[test]
+#[parallel]
 #[ignore = "disabled until https://github.com/uutils/coreutils/issues/7455 is fixed"]
 fn test_cp_arg_no_target_directory_with_recursive_target_does_not_exists() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -408,6 +432,7 @@ fn test_cp_arg_no_target_directory_with_recursive_target_does_not_exists() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_target_directory_is_file() {
     new_ucmd!()
         .arg("-t")
@@ -418,6 +443,7 @@ fn test_cp_target_directory_is_file() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_update_interactive_error() {
     new_ucmd!()
         .arg(TEST_HELLO_WORLD_SOURCE)
@@ -428,6 +454,7 @@ fn test_cp_arg_update_interactive_error() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_update_none() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
@@ -440,6 +467,7 @@ fn test_cp_arg_update_none() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_update_none_fail() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
@@ -451,6 +479,7 @@ fn test_cp_arg_update_none_fail() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_update_all() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -468,6 +497,7 @@ fn test_cp_arg_update_all() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_update_older_dest_not_older_than_src() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -490,6 +520,7 @@ fn test_cp_arg_update_older_dest_not_older_than_src() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_update_older_dest_not_older_than_src_no_verbose_output() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -513,6 +544,7 @@ fn test_cp_arg_update_older_dest_not_older_than_src_no_verbose_output() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_update_older_dest_older_than_src() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -538,6 +570,7 @@ fn test_cp_arg_update_older_dest_older_than_src() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_update_older_dest_older_than_src_with_verbose_output() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -564,6 +597,7 @@ fn test_cp_arg_update_older_dest_older_than_src_with_verbose_output() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_update_short_no_overwrite() {
     // same as --update=older
     let (at, mut ucmd) = at_and_ucmd!();
@@ -590,6 +624,7 @@ fn test_cp_arg_update_short_no_overwrite() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_update_short_overwrite() {
     // same as --update=older
     let (at, mut ucmd) = at_and_ucmd!();
@@ -616,6 +651,7 @@ fn test_cp_arg_update_short_overwrite() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_update_none_then_all() {
     // take last if multiple update args are supplied,
     // update=all wins in this case
@@ -644,6 +680,7 @@ fn test_cp_arg_update_none_then_all() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_update_all_then_none() {
     // take last if multiple update args are supplied,
     // update=none wins in this case
@@ -672,6 +709,7 @@ fn test_cp_arg_update_all_then_none() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_interactive() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
@@ -684,6 +722,7 @@ fn test_cp_arg_interactive() {
 }
 
 #[test]
+#[parallel]
 #[cfg(not(any(target_os = "android", target_os = "freebsd", target_os = "openbsd")))]
 fn test_cp_arg_interactive_update_overwrite_newer() {
     // -u -i won't show the prompt to validate the override or not
@@ -703,6 +742,7 @@ fn test_cp_arg_interactive_update_overwrite_newer() {
 }
 
 #[test]
+#[parallel]
 #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
 fn test_cp_arg_interactive_update_overwrite_older() {
     // -u -i *WILL* show the prompt to validate the override.
@@ -730,6 +770,7 @@ fn test_cp_arg_interactive_update_overwrite_older() {
 }
 
 #[test]
+#[parallel]
 #[cfg(not(target_os = "android"))]
 fn test_cp_arg_interactive_verbose() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -743,6 +784,7 @@ fn test_cp_arg_interactive_verbose() {
 }
 
 #[test]
+#[parallel]
 #[cfg(not(target_os = "android"))]
 fn test_cp_arg_interactive_verbose_clobber() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -754,6 +796,7 @@ fn test_cp_arg_interactive_verbose_clobber() {
 }
 
 #[test]
+#[parallel]
 #[cfg(unix)]
 fn test_cp_f_i_verbose_non_writeable_destination_y() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -772,6 +815,7 @@ fn test_cp_f_i_verbose_non_writeable_destination_y() {
 }
 
 #[test]
+#[parallel]
 #[cfg(unix)]
 fn test_cp_f_i_verbose_non_writeable_destination_empty() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -789,6 +833,7 @@ fn test_cp_f_i_verbose_non_writeable_destination_empty() {
 }
 
 #[test]
+#[parallel]
 #[cfg(target_os = "linux")]
 fn test_cp_arg_link() {
     use std::os::linux::fs::MetadataExt;
@@ -803,6 +848,7 @@ fn test_cp_arg_link() {
 }
 
 #[test]
+#[parallel]
 #[cfg(target_os = "linux")]
 fn test_cp_arg_link_with_dest_hardlink_to_source() {
     use std::os::linux::fs::MetadataExt;
@@ -822,6 +868,7 @@ fn test_cp_arg_link_with_dest_hardlink_to_source() {
 }
 
 #[test]
+#[parallel]
 #[cfg(target_os = "linux")]
 fn test_cp_arg_link_with_same_file() {
     use std::os::linux::fs::MetadataExt;
@@ -838,6 +885,7 @@ fn test_cp_arg_link_with_same_file() {
 }
 
 #[test]
+#[parallel]
 #[cfg(target_os = "linux")]
 fn test_cp_verbose_preserved_link_to_dir() {
     use std::os::linux::fs::MetadataExt;
@@ -868,6 +916,7 @@ fn test_cp_verbose_preserved_link_to_dir() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
@@ -879,6 +928,7 @@ fn test_cp_arg_symlink() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_no_clobber() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
@@ -892,6 +942,7 @@ fn test_cp_arg_no_clobber() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_no_clobber_inferred_arg() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
@@ -905,6 +956,7 @@ fn test_cp_arg_no_clobber_inferred_arg() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_no_clobber_twice() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -938,6 +990,7 @@ fn test_cp_arg_no_clobber_twice() {
 }
 
 #[test]
+#[parallel]
 #[cfg(not(windows))]
 fn test_cp_arg_force() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -964,6 +1017,7 @@ fn test_cp_arg_force() {
 /// Windows. This test originally checked file timestamps, which
 /// proved to be unreliable per target / CI platform
 #[test]
+#[parallel]
 #[cfg(not(windows))]
 fn test_cp_arg_remove_destination() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -986,6 +1040,7 @@ fn test_cp_arg_remove_destination() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1002,6 +1057,7 @@ fn test_cp_arg_backup() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_backup_with_dest_a_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let source = "source";
@@ -1023,6 +1079,7 @@ fn test_cp_arg_backup_with_dest_a_symlink() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_backup_with_dest_a_symlink_to_source() {
     let (at, mut ucmd) = at_and_ucmd!();
     let source = "source";
@@ -1042,6 +1099,7 @@ fn test_cp_arg_backup_with_dest_a_symlink_to_source() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_backup_with_other_args() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1058,6 +1116,7 @@ fn test_cp_arg_backup_with_other_args() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_backup_arg_first() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1074,6 +1133,7 @@ fn test_cp_arg_backup_arg_first() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_suffix() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1092,6 +1152,7 @@ fn test_cp_arg_suffix() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_arg_suffix_hyphen_value() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1110,6 +1171,7 @@ fn test_cp_arg_suffix_hyphen_value() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_custom_backup_suffix_via_env() {
     let (at, mut ucmd) = at_and_ucmd!();
     let suffix = "super-suffix-of-the-century";
@@ -1129,6 +1191,7 @@ fn test_cp_custom_backup_suffix_via_env() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_backup_numbered_with_t() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1146,6 +1209,7 @@ fn test_cp_backup_numbered_with_t() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_backup_numbered() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1163,6 +1227,7 @@ fn test_cp_backup_numbered() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_backup_existing() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1180,6 +1245,7 @@ fn test_cp_backup_existing() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_backup_nil() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1197,6 +1263,7 @@ fn test_cp_backup_nil() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_numbered_if_existing_backup_existing() {
     let (at, mut ucmd) = at_and_ucmd!();
     let existing_backup = &format!("{TEST_HOW_ARE_YOU_SOURCE}.~1~");
@@ -1217,6 +1284,7 @@ fn test_cp_numbered_if_existing_backup_existing() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_numbered_if_existing_backup_nil() {
     let (at, mut ucmd) = at_and_ucmd!();
     let existing_backup = &format!("{TEST_HOW_ARE_YOU_SOURCE}.~1~");
@@ -1237,6 +1305,7 @@ fn test_cp_numbered_if_existing_backup_nil() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_backup_simple() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1254,6 +1323,7 @@ fn test_cp_backup_simple() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_backup_simple_protect_source() {
     let (at, mut ucmd) = at_and_ucmd!();
     let source = format!("{TEST_HELLO_WORLD_SOURCE}~");
@@ -1271,6 +1341,7 @@ fn test_cp_backup_simple_protect_source() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_backup_never() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1288,6 +1359,7 @@ fn test_cp_backup_never() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_backup_none() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1302,6 +1374,7 @@ fn test_cp_backup_none() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_backup_off() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1316,6 +1389,7 @@ fn test_cp_backup_off() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_backup_no_clobber_conflicting_options() {
     new_ucmd!()
         .arg("--backup")
@@ -1327,6 +1401,7 @@ fn test_cp_backup_no_clobber_conflicting_options() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_deref_conflicting_options() {
     new_ucmd!()
         .arg("-LP")
@@ -1336,6 +1411,7 @@ fn test_cp_deref_conflicting_options() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_deref() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1376,6 +1452,7 @@ fn test_cp_deref() {
     assert_eq!(at.read(path_to_check), "Hello, World!\n");
 }
 #[test]
+#[parallel]
 fn test_cp_no_deref() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1416,6 +1493,7 @@ fn test_cp_no_deref() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_no_deref_link_onto_link() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1463,6 +1541,7 @@ fn test_cp_no_deref_link_onto_link() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_strip_trailing_slashes() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1477,6 +1556,7 @@ fn test_cp_strip_trailing_slashes() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_parents() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1494,6 +1574,7 @@ fn test_cp_parents() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_parents_multiple_files() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1516,6 +1597,7 @@ fn test_cp_parents_multiple_files() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_parents_dest_not_directory() {
     new_ucmd!()
         .arg("--parents")
@@ -1526,6 +1608,7 @@ fn test_cp_parents_dest_not_directory() {
 }
 
 #[test]
+#[parallel]
 #[cfg(not(target_os = "openbsd"))]
 fn test_cp_parents_with_permissions_copy_file() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1567,6 +1650,7 @@ fn test_cp_parents_with_permissions_copy_file() {
 }
 
 #[test]
+#[parallel]
 #[cfg(not(target_os = "openbsd"))]
 fn test_cp_parents_with_permissions_copy_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1610,12 +1694,14 @@ fn test_cp_parents_with_permissions_copy_dir() {
 }
 
 #[test]
+#[parallel]
 #[cfg(unix)]
 fn test_cp_writable_special_file_permissions() {
     new_ucmd!().arg("/dev/null").arg("/dev/zero").succeeds();
 }
 
 #[test]
+#[parallel]
 #[cfg(unix)]
 fn test_cp_issue_1665() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1625,6 +1711,7 @@ fn test_cp_issue_1665() {
 }
 
 #[test]
+#[parallel]
 #[cfg(not(target_os = "openbsd"))]
 fn test_cp_preserve_no_args() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1653,6 +1740,7 @@ fn test_cp_preserve_no_args() {
 }
 
 #[test]
+#[parallel]
 #[cfg(not(target_os = "openbsd"))]
 fn test_cp_preserve_no_args_before_opts() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1681,6 +1769,7 @@ fn test_cp_preserve_no_args_before_opts() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_preserve_all() {
     for argument in ["--preserve=all", "--preserve=al"] {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -1711,6 +1800,7 @@ fn test_cp_preserve_all() {
 // any of the parents is unreadable. We just need to follow symlinks as needed.
 #[cfg(unix)]
 #[test]
+#[serial]
 fn test_cp_preserve_unreadable_parent() {
     for test_link in [false, true] {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -1763,6 +1853,7 @@ fn test_cp_preserve_unreadable_parent() {
 }
 
 #[test]
+#[parallel]
 #[cfg(all(unix, not(any(target_os = "android", target_os = "openbsd"))))]
 fn test_cp_preserve_xattr() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1797,6 +1888,7 @@ fn test_cp_preserve_xattr() {
 }
 
 #[test]
+#[parallel]
 #[cfg(all(target_os = "linux", not(feature = "feat_selinux")))]
 fn test_cp_preserve_all_context_fails_on_non_selinux() {
     new_ucmd!()
@@ -1807,6 +1899,7 @@ fn test_cp_preserve_all_context_fails_on_non_selinux() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_preserve_link_parses() {
     // TODO: Also check whether --preserve=link did the right thing!
     for argument in [
@@ -1825,6 +1918,7 @@ fn test_cp_preserve_link_parses() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_preserve_invalid_rejected() {
     new_ucmd!()
         .arg("--preserve=invalid-value")
@@ -1835,6 +1929,7 @@ fn test_cp_preserve_invalid_rejected() {
 }
 
 #[test]
+#[parallel]
 #[cfg(target_os = "android")]
 #[ignore = "disabled until fixed"] // FIXME: the test looks to .succeed on android
 fn test_cp_preserve_xattr_fails_on_android() {
@@ -1849,6 +1944,7 @@ fn test_cp_preserve_xattr_fails_on_android() {
 }
 
 #[test]
+#[parallel]
 // android platform will causing stderr = cp: Permission denied (os error 13)
 #[cfg(not(target_os = "android"))]
 fn test_cp_preserve_links_case_1() {
@@ -1874,6 +1970,7 @@ fn test_cp_preserve_links_case_1() {
 }
 
 #[test]
+#[parallel]
 // android platform will causing stderr = cp: Permission denied (os error 13)
 #[cfg(not(target_os = "android"))]
 fn test_cp_preserve_links_case_2() {
@@ -1905,6 +2002,7 @@ fn test_cp_preserve_links_case_2() {
 }
 
 #[test]
+#[parallel]
 // android platform will causing stderr = cp: Permission denied (os error 13)
 #[cfg(not(target_os = "android"))]
 fn test_cp_preserve_links_case_3() {
@@ -1935,6 +2033,7 @@ fn test_cp_preserve_links_case_3() {
 }
 
 #[test]
+#[parallel]
 // android platform will causing stderr = cp: Permission denied (os error 13)
 #[cfg(not(target_os = "android"))]
 fn test_cp_preserve_links_case_4() {
@@ -1965,6 +2064,7 @@ fn test_cp_preserve_links_case_4() {
 }
 
 #[test]
+#[parallel]
 // android platform will causing stderr = cp: Permission denied (os error 13)
 #[cfg(not(target_os = "android"))]
 fn test_cp_preserve_links_case_5() {
@@ -1994,6 +2094,7 @@ fn test_cp_preserve_links_case_5() {
 }
 
 #[test]
+#[parallel]
 // android platform will causing stderr = cp: Permission denied (os error 13)
 #[cfg(not(target_os = "android"))]
 fn test_cp_preserve_links_case_6() {
@@ -2019,6 +2120,7 @@ fn test_cp_preserve_links_case_6() {
 }
 
 #[test]
+#[parallel]
 // android platform will causing stderr = cp: Permission denied (os error 13)
 #[cfg(not(target_os = "android"))]
 fn test_cp_preserve_links_case_7() {
@@ -2046,6 +2148,7 @@ fn test_cp_preserve_links_case_7() {
 }
 
 #[test]
+#[parallel]
 #[cfg(unix)]
 fn test_cp_no_preserve_mode() {
     use uucore::fs as uufs;
@@ -2069,6 +2172,7 @@ fn test_cp_no_preserve_mode() {
 }
 
 #[test]
+#[parallel]
 // For now, disable the test on Windows. Symlinks aren't well support on Windows.
 // It works on Unix for now and it works locally when run from a powershell
 #[cfg(not(windows))]
@@ -2167,6 +2271,7 @@ fn test_cp_deref_folder_to_folder() {
 }
 
 #[test]
+#[parallel]
 // For now, disable the test on Windows. Symlinks aren't well support on Windows.
 // It works on Unix for now and it works locally when run from a powershell
 #[cfg(not(windows))]
@@ -2265,6 +2370,7 @@ fn test_cp_no_deref_folder_to_folder() {
 }
 
 #[test]
+#[parallel]
 #[cfg(target_os = "linux")]
 fn test_cp_archive() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2298,6 +2404,7 @@ fn test_cp_archive() {
 }
 
 #[test]
+#[parallel]
 #[cfg(all(unix, not(target_os = "android")))]
 fn test_cp_archive_recursive() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2362,6 +2469,7 @@ fn test_cp_archive_recursive() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_preserve_timestamps() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2395,6 +2503,7 @@ fn test_cp_preserve_timestamps() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_no_preserve_timestamps() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2436,6 +2545,7 @@ fn test_cp_no_preserve_timestamps() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_target_file_dev_null() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2449,6 +2559,7 @@ fn test_cp_target_file_dev_null() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 fn test_cp_one_file_system() {
     use uutests::util::AtPath;
@@ -2507,6 +2618,7 @@ fn test_cp_one_file_system() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
 fn test_cp_reflink_always() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2525,6 +2637,7 @@ fn test_cp_reflink_always() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
 fn test_cp_reflink_auto() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2538,6 +2651,7 @@ fn test_cp_reflink_auto() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
 fn test_cp_reflink_none() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2556,6 +2670,7 @@ fn test_cp_reflink_none() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
 fn test_cp_reflink_never() {
     for argument in ["--reflink=never", "--reflink=neve", "--reflink=n"] {
@@ -2571,6 +2686,7 @@ fn test_cp_reflink_never() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
 fn test_cp_reflink_bad() {
     let (_, mut ucmd) = at_and_ucmd!();
@@ -2583,6 +2699,7 @@ fn test_cp_reflink_bad() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_conflicting_update() {
     new_ucmd!()
         .arg("-b")
@@ -2594,6 +2711,7 @@ fn test_cp_conflicting_update() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_reflink_insufficient_permission() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2612,6 +2730,7 @@ fn test_cp_reflink_insufficient_permission() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[parallel]
 fn test_closes_file_descriptors() {
     use rlimit::Resource;
 
@@ -2639,6 +2758,7 @@ fn test_closes_file_descriptors() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
+#[parallel]
 fn test_cp_sparse_never_empty() {
     const BUFFER_SIZE: usize = 4096 * 4;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2659,6 +2779,7 @@ fn test_cp_sparse_never_empty() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
+#[parallel]
 fn test_cp_sparse_always_empty() {
     const BUFFER_SIZE: usize = 4096 * 4;
     for argument in ["--sparse=always", "--sparse=alway", "--sparse=al"] {
@@ -2679,6 +2800,7 @@ fn test_cp_sparse_always_empty() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
+#[parallel]
 fn test_cp_sparse_always_non_empty() {
     const BUFFER_SIZE: usize = 4096 * 16 + 3;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2705,6 +2827,7 @@ fn test_cp_sparse_always_non_empty() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
+#[parallel]
 fn test_cp_sparse_invalid_option() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2716,6 +2839,7 @@ fn test_cp_sparse_invalid_option() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
+#[parallel]
 fn test_cp_sparse_always_reflink_always() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2732,6 +2856,7 @@ fn test_cp_sparse_always_reflink_always() {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
+#[parallel]
 fn test_cp_sparse_never_reflink_always() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2749,6 +2874,7 @@ fn test_cp_sparse_never_reflink_always() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(feature = "truncate")]
 #[test]
+#[parallel]
 fn test_cp_reflink_always_override() {
     const DISK: &str = "disk.img";
     const ROOTDIR: &str = "disk_root/";
@@ -2828,6 +2954,7 @@ fn test_cp_reflink_always_override() {
 }
 
 #[test]
+#[parallel]
 fn test_copy_dir_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
@@ -2837,6 +2964,7 @@ fn test_copy_dir_symlink() {
 }
 
 #[test]
+#[parallel]
 #[cfg(not(target_os = "freebsd"))] // FIXME: fix this test for FreeBSD
 #[cfg(feature = "ln")]
 fn test_copy_dir_with_symlinks() {
@@ -2856,6 +2984,7 @@ fn test_copy_dir_with_symlinks() {
 }
 
 #[test]
+#[parallel]
 #[cfg(not(windows))]
 fn test_copy_symlink_force() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2869,6 +2998,7 @@ fn test_copy_symlink_force() {
 }
 
 #[test]
+#[parallel]
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
 fn test_no_preserve_mode() {
@@ -2900,6 +3030,7 @@ fn test_no_preserve_mode() {
 }
 
 #[test]
+#[parallel]
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
 fn test_preserve_mode() {
@@ -2928,6 +3059,7 @@ fn test_preserve_mode() {
 }
 
 #[test]
+#[parallel]
 fn test_canonicalize_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
@@ -2941,6 +3073,7 @@ fn test_canonicalize_symlink() {
 }
 
 #[test]
+#[parallel]
 fn test_copy_through_just_created_symlink() {
     for create_t in [true, false] {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -2969,6 +3102,7 @@ fn test_copy_through_just_created_symlink() {
 }
 
 #[test]
+#[parallel]
 fn test_copy_through_dangling_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
@@ -2980,6 +3114,7 @@ fn test_copy_through_dangling_symlink() {
 }
 
 #[test]
+#[parallel]
 fn test_copy_through_dangling_symlink_posixly_correct() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
@@ -2991,6 +3126,7 @@ fn test_copy_through_dangling_symlink_posixly_correct() {
 }
 
 #[test]
+#[parallel]
 fn test_copy_through_dangling_symlink_no_dereference() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("no-such-file", "dangle");
@@ -3003,6 +3139,7 @@ fn test_copy_through_dangling_symlink_no_dereference() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_symlink_overwrite_detection() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -3035,6 +3172,7 @@ fn test_cp_symlink_overwrite_detection() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_dangling_symlink_inside_directory() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -3061,6 +3199,7 @@ fn test_cp_dangling_symlink_inside_directory() {
 /// Test for copying a dangling symbolic link and its permissions.
 #[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))] // FIXME: fix this test for FreeBSD/OpenBSD
 #[test]
+#[parallel]
 fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     let (at, mut ucmd) = at_and_ucmd!();
     //               target name    link name
@@ -3089,6 +3228,7 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
 }
 
 #[test]
+#[parallel]
 fn test_copy_through_dangling_symlink_no_dereference_2() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
@@ -3100,6 +3240,7 @@ fn test_copy_through_dangling_symlink_no_dereference_2() {
 
 /// Test that copy through a dangling symbolic link fails, even with --force.
 #[test]
+#[parallel]
 #[cfg(not(windows))]
 fn test_copy_through_dangling_symlink_force() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3112,6 +3253,7 @@ fn test_copy_through_dangling_symlink_force() {
 }
 
 #[test]
+#[parallel]
 #[cfg(unix)]
 fn test_cp_archive_on_nonexistent_file() {
     new_ucmd!()
@@ -3125,6 +3267,7 @@ fn test_cp_archive_on_nonexistent_file() {
 }
 
 #[test]
+#[parallel]
 #[cfg(not(target_os = "android"))]
 fn test_cp_link_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3140,6 +3283,7 @@ fn test_cp_link_backup() {
 }
 
 #[test]
+#[parallel]
 #[cfg(unix)]
 fn test_cp_fifo() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3175,6 +3319,7 @@ fn find_other_group(_current: u32) -> Option<u32> {
 }
 
 #[test]
+#[parallel]
 #[cfg(unix)]
 fn test_cp_r_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3230,6 +3375,7 @@ fn test_cp_r_symlink() {
 }
 
 #[test]
+#[parallel]
 fn test_dir_recursive_copy() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -3271,6 +3417,7 @@ fn test_dir_recursive_copy() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_dir_vs_file() {
     new_ucmd!()
         .arg("-R")
@@ -3281,6 +3428,7 @@ fn test_cp_dir_vs_file() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_overriding_arguments() {
     let s = TestScenario::new(util_name!());
     s.fixtures.touch("file1");
@@ -3307,6 +3455,7 @@ fn test_cp_overriding_arguments() {
 }
 
 #[test]
+#[parallel]
 fn test_copy_no_dereference_1() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a");
@@ -3317,6 +3466,7 @@ fn test_copy_no_dereference_1() {
 }
 
 #[test]
+#[parallel]
 fn test_abuse_existing() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a");
@@ -3336,6 +3486,7 @@ fn test_abuse_existing() {
 }
 
 #[test]
+#[parallel]
 fn test_copy_same_symlink_no_dereference() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.relative_symlink_file("t", "a");
@@ -3345,6 +3496,7 @@ fn test_copy_same_symlink_no_dereference() {
 }
 
 #[test]
+#[parallel]
 fn test_copy_same_symlink_no_dereference_dangling() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.relative_symlink_file("t", "a");
@@ -3355,6 +3507,7 @@ fn test_copy_same_symlink_no_dereference_dangling() {
 // TODO: enable for Android, when #3477 solved
 #[cfg(not(any(windows, target_os = "android", target_os = "openbsd")))]
 #[test]
+#[parallel]
 fn test_cp_parents_2_dirs() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir_all("a/b/c");
@@ -3367,6 +3520,7 @@ fn test_cp_parents_2_dirs() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_parents_2() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir_all("a/b");
@@ -3383,6 +3537,7 @@ fn test_cp_parents_2() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_parents_2_link() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir_all("a/b");
@@ -3402,6 +3557,7 @@ fn test_cp_parents_2_link() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_parents_2_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir_all("a/b/c");
@@ -3417,6 +3573,7 @@ fn test_cp_parents_2_dir() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_parents_2_deep_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir_all("a/b/c");
@@ -3432,6 +3589,7 @@ fn test_cp_parents_2_deep_dir() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_copy_symlink_contents_recursive() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("src-dir");
@@ -3450,6 +3608,7 @@ fn test_cp_copy_symlink_contents_recursive() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_mode_symlink() {
     for from in ["file", "slink", "slink2"] {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -3465,6 +3624,7 @@ fn test_cp_mode_symlink() {
 // Android doesn't allow creating hard links
 #[cfg(not(target_os = "android"))]
 #[test]
+#[parallel]
 fn test_cp_mode_hardlink() {
     for from in ["file", "slink", "slink2"] {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -3483,6 +3643,7 @@ fn test_cp_mode_hardlink() {
 // Android doesn't allow creating hard links
 #[cfg(not(target_os = "android"))]
 #[test]
+#[parallel]
 fn test_cp_mode_hardlink_no_dereference() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("file", "f");
@@ -3495,6 +3656,7 @@ fn test_cp_mode_hardlink_no_dereference() {
 
 #[cfg(not(any(windows, target_os = "android")))]
 #[test]
+#[parallel]
 fn test_remove_destination_with_destination_being_a_hardlink_to_source() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "file";
@@ -3512,6 +3674,7 @@ fn test_remove_destination_with_destination_being_a_hardlink_to_source() {
 }
 
 #[test]
+#[parallel]
 fn test_remove_destination_with_destination_being_a_symlink_to_source() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "file";
@@ -3528,6 +3691,7 @@ fn test_remove_destination_with_destination_being_a_symlink_to_source() {
 }
 
 #[test]
+#[parallel]
 fn test_remove_destination_symbolic_link_loop() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("loop", "loop");
@@ -3541,6 +3705,7 @@ fn test_remove_destination_symbolic_link_loop() {
 }
 
 #[test]
+#[parallel]
 #[cfg(not(windows))]
 fn test_cp_symbolic_link_loop() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3556,6 +3721,7 @@ fn test_cp_symbolic_link_loop() {
 
 /// Test that copying a directory to itself is disallowed.
 #[test]
+#[parallel]
 fn test_copy_directory_to_itself_disallowed() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("d");
@@ -3568,6 +3734,7 @@ fn test_copy_directory_to_itself_disallowed() {
 
 /// Test that copying a nested directory to itself is disallowed.
 #[test]
+#[parallel]
 fn test_copy_nested_directory_to_itself_disallowed() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a");
@@ -3585,6 +3752,7 @@ fn test_copy_nested_directory_to_itself_disallowed() {
 /// Test for preserving permissions when copying a directory.
 #[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
 #[test]
+#[parallel]
 fn test_copy_dir_preserve_permissions() {
     // Create a directory that has some non-default permissions.
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3614,6 +3782,7 @@ fn test_copy_dir_preserve_permissions() {
 /// cp should preserve attributes of subdirectories when copying recursively.
 #[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
 #[test]
+#[parallel]
 fn test_copy_dir_preserve_subdir_permissions() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a1");
@@ -3638,6 +3807,7 @@ fn test_copy_dir_preserve_subdir_permissions() {
 /// the face of an inaccessible file in that directory.
 #[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
 #[test]
+#[parallel]
 fn test_copy_dir_preserve_permissions_inaccessible_file() {
     // Create a directory that has some non-default permissions and
     // contains an inaccessible file.
@@ -3670,6 +3840,7 @@ fn test_copy_dir_preserve_permissions_inaccessible_file() {
 
 /// Test that copying file to itself with backup fails.
 #[test]
+#[parallel]
 fn test_same_file_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("f");
@@ -3682,6 +3853,7 @@ fn test_same_file_backup() {
 /// Test that copying file to itself with forced backup succeeds.
 #[cfg(not(windows))]
 #[test]
+#[parallel]
 fn test_same_file_force() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("f");
@@ -3694,6 +3866,7 @@ fn test_same_file_force() {
 /// Test that copying file to itself with forced backup succeeds.
 #[cfg(not(windows))]
 #[test]
+#[parallel]
 fn test_same_file_force_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("f");
@@ -3707,6 +3880,7 @@ fn test_same_file_force_backup() {
 /// Test for copying the contents of a FIFO as opposed to the FIFO object itself.
 #[cfg(unix)]
 #[test]
+#[parallel]
 fn test_copy_contents_fifo() {
     let scenario = TestScenario::new(util_name!());
     let at = &scenario.fixtures;
@@ -3732,6 +3906,7 @@ fn test_copy_contents_fifo() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[parallel]
 fn test_reflink_never_sparse_always() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -3759,6 +3934,7 @@ fn test_reflink_never_sparse_always() {
 
 /// Test for preserving attributes of a hard link in a directory.
 #[test]
+#[parallel]
 #[cfg(not(any(target_os = "android", target_os = "openbsd")))]
 fn test_preserve_hardlink_attributes_in_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3788,6 +3964,7 @@ fn test_preserve_hardlink_attributes_in_directory() {
 }
 
 #[test]
+#[parallel]
 #[cfg(not(any(windows, target_os = "android")))]
 fn test_hard_link_file() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3801,6 +3978,7 @@ fn test_hard_link_file() {
 }
 
 #[test]
+#[parallel]
 #[cfg(not(windows))]
 fn test_symbolic_link_file() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3816,6 +3994,7 @@ fn test_symbolic_link_file() {
 }
 
 #[test]
+#[parallel]
 fn test_src_base_dot() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -3840,6 +4019,7 @@ fn non_utf8_name(suffix: &str) -> OsString {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[parallel]
 fn test_non_utf8_src() {
     let (at, mut ucmd) = at_and_ucmd!();
     let src = non_utf8_name("src");
@@ -3853,6 +4033,7 @@ fn test_non_utf8_src() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[parallel]
 fn test_non_utf8_dest() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dest = non_utf8_name("dest");
@@ -3865,6 +4046,7 @@ fn test_non_utf8_dest() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[parallel]
 fn test_non_utf8_target() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dest = non_utf8_name("dest");
@@ -3879,6 +4061,7 @@ fn test_non_utf8_target() {
 }
 
 #[test]
+#[parallel]
 #[cfg(not(windows))]
 fn test_cp_archive_on_directory_ending_dot() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3890,6 +4073,7 @@ fn test_cp_archive_on_directory_ending_dot() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
 fn test_cp_debug_default() {
     #[cfg(target_os = "macos")]
@@ -3912,6 +4096,7 @@ fn test_cp_debug_default() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
 fn test_cp_debug_multiple_default() {
     let ts = TestScenario::new(util_name!());
@@ -3941,6 +4126,7 @@ fn test_cp_debug_multiple_default() {
 }
 
 #[test]
+#[parallel]
 #[cfg(target_os = "linux")]
 fn test_cp_debug_sparse_reflink() {
     let ts = TestScenario::new(util_name!());
@@ -3958,6 +4144,7 @@ fn test_cp_debug_sparse_reflink() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_debug_no_update() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -3973,6 +4160,7 @@ fn test_cp_debug_no_update() {
 }
 
 #[test]
+#[parallel]
 #[cfg(target_os = "linux")]
 fn test_cp_debug_sparse_always() {
     let ts = TestScenario::new(util_name!());
@@ -3989,6 +4177,7 @@ fn test_cp_debug_sparse_always() {
 }
 
 #[test]
+#[parallel]
 #[cfg(target_os = "linux")]
 fn test_cp_debug_sparse_never() {
     let ts = TestScenario::new(util_name!());
@@ -4005,6 +4194,7 @@ fn test_cp_debug_sparse_never() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_debug_sparse_auto() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4036,6 +4226,7 @@ fn test_cp_debug_sparse_auto() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn test_cp_debug_reflink_auto() {
     #[cfg(target_os = "macos")]
@@ -4057,6 +4248,7 @@ fn test_cp_debug_reflink_auto() {
 }
 
 #[test]
+#[parallel]
 #[cfg(target_os = "linux")]
 fn test_cp_debug_sparse_always_reflink_auto() {
     let ts = TestScenario::new(util_name!());
@@ -4073,6 +4265,7 @@ fn test_cp_debug_sparse_always_reflink_auto() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_only_source_no_target() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4084,6 +4277,7 @@ fn test_cp_only_source_no_target() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_dest_no_permissions() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4100,6 +4294,7 @@ fn test_cp_dest_no_permissions() {
 }
 
 #[test]
+#[parallel]
 #[cfg(all(unix, not(target_os = "freebsd")))]
 fn test_cp_attributes_only() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -4130,6 +4325,7 @@ fn test_cp_attributes_only() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_seen_file() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4167,6 +4363,7 @@ fn test_cp_seen_file() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_path_ends_with_terminator() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4175,6 +4372,7 @@ fn test_cp_path_ends_with_terminator() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_no_such() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4191,6 +4389,7 @@ fn test_cp_no_such() {
     not(any(target_os = "android", target_os = "macos", target_os = "openbsd"))
 ))]
 #[test]
+#[parallel]
 fn test_acl_preserve() {
     use std::process::Command;
 
@@ -4230,6 +4429,7 @@ fn test_acl_preserve() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_reflink_never_with_hole() {
     let ts = TestScenario::new(util_name!());
@@ -4255,6 +4455,7 @@ fn test_cp_debug_reflink_never_with_hole() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_reflink_never_empty_file_with_hole() {
     let ts = TestScenario::new(util_name!());
@@ -4280,6 +4481,7 @@ fn test_cp_debug_reflink_never_empty_file_with_hole() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_default_with_hole() {
     let ts = TestScenario::new(util_name!());
@@ -4306,6 +4508,7 @@ fn test_cp_debug_default_with_hole() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_default_less_than_512_bytes() {
     let ts = TestScenario::new(util_name!());
@@ -4329,6 +4532,7 @@ fn test_cp_debug_default_less_than_512_bytes() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_default_without_hole() {
     let ts = TestScenario::new(util_name!());
@@ -4349,6 +4553,7 @@ fn test_cp_debug_default_without_hole() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_default_empty_file_with_hole() {
     let ts = TestScenario::new(util_name!());
@@ -4375,6 +4580,7 @@ fn test_cp_debug_default_empty_file_with_hole() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_reflink_never_sparse_always_with_hole() {
     let ts = TestScenario::new(util_name!());
@@ -4401,6 +4607,7 @@ fn test_cp_debug_reflink_never_sparse_always_with_hole() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_reflink_never_sparse_always_without_hole() {
     let ts = TestScenario::new(util_name!());
@@ -4426,6 +4633,7 @@ fn test_cp_debug_reflink_never_sparse_always_without_hole() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_reflink_never_sparse_always_empty_file_with_hole() {
     let ts = TestScenario::new(util_name!());
@@ -4448,6 +4656,7 @@ fn test_cp_debug_reflink_never_sparse_always_empty_file_with_hole() {
 }
 
 #[test]
+#[parallel]
 #[cfg(target_os = "linux")]
 fn test_cp_default_virtual_file() {
     // This file has existed at least since 2008, so we assume that it is present on "all" Linux kernels.
@@ -4471,6 +4680,7 @@ fn test_cp_default_virtual_file() {
     assert!(dest_size > 0);
 }
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_reflink_auto_sparse_always_non_sparse_file_with_long_zero_sequence() {
     let ts = TestScenario::new(util_name!());
@@ -4497,6 +4707,7 @@ fn test_cp_debug_reflink_auto_sparse_always_non_sparse_file_with_long_zero_seque
 }
 
 #[test]
+#[parallel]
 #[cfg(target_os = "linux")]
 fn test_cp_debug_sparse_never_empty_sparse_file() {
     let ts = TestScenario::new(util_name!());
@@ -4513,6 +4724,7 @@ fn test_cp_debug_sparse_never_empty_sparse_file() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_reflink_never_sparse_always_non_sparse_file_with_long_zero_sequence() {
     let ts = TestScenario::new(util_name!());
@@ -4540,6 +4752,7 @@ fn test_cp_debug_reflink_never_sparse_always_non_sparse_file_with_long_zero_sequ
 }
 
 #[test]
+#[parallel]
 #[cfg(target_os = "linux")]
 fn test_cp_debug_sparse_always_sparse_virtual_file() {
     // This file has existed at least since 2008, so we assume that it is present on "all" Linux kernels.
@@ -4564,6 +4777,7 @@ fn test_cp_debug_sparse_always_sparse_virtual_file() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_reflink_never_less_than_512_bytes() {
     let ts = TestScenario::new(util_name!());
@@ -4586,6 +4800,7 @@ fn test_cp_debug_reflink_never_less_than_512_bytes() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_reflink_never_sparse_never_empty_file_with_hole() {
     let ts = TestScenario::new(util_name!());
@@ -4608,6 +4823,7 @@ fn test_cp_debug_reflink_never_sparse_never_empty_file_with_hole() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_reflink_never_file_with_hole() {
     let ts = TestScenario::new(util_name!());
@@ -4631,6 +4847,7 @@ fn test_cp_debug_reflink_never_file_with_hole() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_sparse_never_less_than_512_bytes() {
     let ts = TestScenario::new(util_name!());
@@ -4654,6 +4871,7 @@ fn test_cp_debug_sparse_never_less_than_512_bytes() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_sparse_never_without_hole() {
     let ts = TestScenario::new(util_name!());
@@ -4676,6 +4894,7 @@ fn test_cp_debug_sparse_never_without_hole() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_sparse_never_empty_file_with_hole() {
     let ts = TestScenario::new(util_name!());
@@ -4698,6 +4917,7 @@ fn test_cp_debug_sparse_never_empty_file_with_hole() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_sparse_never_file_with_hole() {
     let ts = TestScenario::new(util_name!());
@@ -4721,6 +4941,7 @@ fn test_cp_debug_sparse_never_file_with_hole() {
 }
 
 #[test]
+#[parallel]
 #[cfg(target_os = "linux")]
 fn test_cp_debug_default_sparse_virtual_file() {
     // This file has existed at least since 2008, so we assume that it is present on "all" Linux kernels.
@@ -4744,6 +4965,7 @@ fn test_cp_debug_default_sparse_virtual_file() {
 }
 
 #[test]
+#[parallel]
 #[cfg(target_os = "linux")]
 fn test_cp_debug_sparse_never_zero_sized_virtual_file() {
     let ts = TestScenario::new(util_name!());
@@ -4757,6 +4979,7 @@ fn test_cp_debug_sparse_never_zero_sized_virtual_file() {
 }
 
 #[test]
+#[parallel]
 #[cfg(target_os = "linux")]
 fn test_cp_debug_default_zero_sized_virtual_file() {
     let ts = TestScenario::new(util_name!());
@@ -4769,6 +4992,7 @@ fn test_cp_debug_default_zero_sized_virtual_file() {
 }
 
 #[test]
+#[parallel]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_reflink_never_without_hole() {
     let ts = TestScenario::new(util_name!());
@@ -4787,6 +5011,7 @@ fn test_cp_debug_reflink_never_without_hole() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_force_remove_destination_attributes_only_with_symlink() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4819,6 +5044,7 @@ fn test_cp_force_remove_destination_attributes_only_with_symlink() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_no_dereference_attributes_only_with_symlink() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4842,6 +5068,7 @@ fn test_cp_no_dereference_attributes_only_with_symlink() {
 }
 #[cfg(all(unix, not(target_os = "android")))]
 #[cfg(test)]
+#[parallel]
 /// contains the test for cp when the source and destination points to the same file
 mod same_file {
 
@@ -5815,6 +6042,7 @@ mod same_file {
 // the following tests are for how the cp should behave when the source is a symlink
 // and link option is given
 #[cfg(all(unix, not(target_os = "android")))]
+#[parallel]
 mod link_deref {
 
     use std::os::unix::fs::MetadataExt;
@@ -5955,6 +6183,7 @@ mod link_deref {
 // ownership as the newly created directory. To mitigate this issue, when creating a directory we
 // disable these excessive permissions.
 #[test]
+#[parallel]
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
 fn test_dir_perm_race_with_preserve_mode_and_ownership() {
@@ -6010,6 +6239,7 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
 }
 
 #[test]
+#[parallel]
 // when -d and -a are overridden with --preserve or --no-preserve make sure that it only
 // overrides attributes not other flags like -r or --no_deref implied in -a and -d.
 fn test_preserve_attrs_overriding_1() {
@@ -6030,6 +6260,7 @@ fn test_preserve_attrs_overriding_1() {
 }
 
 #[test]
+#[parallel]
 #[cfg(all(unix, not(target_os = "android")))]
 fn test_preserve_attrs_overriding_2() {
     const FILE1: &str = "file1";
@@ -6079,6 +6310,7 @@ fn test_preserve_attrs_overriding_2() {
 
 /// Test the behavior of preserving permissions when copying through a symlink
 #[test]
+#[parallel]
 #[cfg(unix)]
 fn test_cp_symlink_permissions() {
     let scene = TestScenario::new(util_name!());
@@ -6101,6 +6333,7 @@ fn test_cp_symlink_permissions() {
 
 /// Test the behavior of preserving permissions of parents when copying through a symlink
 #[test]
+#[parallel]
 #[cfg(unix)]
 fn test_cp_parents_symlink_permissions_file() {
     let scene = TestScenario::new(util_name!());
@@ -6125,6 +6358,7 @@ fn test_cp_parents_symlink_permissions_file() {
 /// Test the behavior of preserving permissions of parents when copying through
 /// a symlink when source is a dir.
 #[test]
+#[parallel]
 #[cfg(unix)]
 fn test_cp_parents_symlink_permissions_dir() {
     let scene = TestScenario::new(util_name!());
@@ -6148,6 +6382,7 @@ fn test_cp_parents_symlink_permissions_dir() {
 /// Test the behavior of copying a file to a destination with parents using absolute paths.
 #[cfg(unix)]
 #[test]
+#[parallel]
 fn test_cp_parents_absolute_path() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -6164,6 +6399,7 @@ fn test_cp_parents_absolute_path() {
 }
 
 #[test]
+#[parallel]
 fn test_copy_symlink_overwrite() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a");
@@ -6187,6 +6423,7 @@ fn test_copy_symlink_overwrite() {
 }
 
 #[test]
+#[parallel]
 fn test_symlink_mode_overwrite() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a");
@@ -6218,6 +6455,7 @@ fn test_symlink_mode_overwrite() {
 
 // make sure that cp backup dest symlink before removing it.
 #[test]
+#[parallel]
 fn test_cp_with_options_backup_and_rem_when_dest_is_symlink() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -6237,6 +6475,7 @@ fn test_cp_with_options_backup_and_rem_when_dest_is_symlink() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_single_file() {
     let (_at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
@@ -6245,6 +6484,7 @@ fn test_cp_single_file() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_no_file() {
     let (_at, mut ucmd) = at_and_ucmd!();
     ucmd.fails_with_code(1)
@@ -6252,6 +6492,7 @@ fn test_cp_no_file() {
 }
 
 #[test]
+#[parallel]
 #[cfg(all(
     unix,
     not(any(target_os = "android", target_os = "macos", target_os = "openbsd"))
@@ -6335,6 +6576,7 @@ fn test_cp_preserve_xattr_readonly_source() {
 }
 
 #[test]
+#[parallel]
 #[cfg(unix)]
 fn test_cp_archive_preserves_directory_permissions() {
     // Test for issue #8407
@@ -6376,6 +6618,7 @@ fn test_cp_archive_preserves_directory_permissions() {
 }
 
 #[test]
+#[parallel]
 #[cfg(unix)]
 #[cfg_attr(target_os = "macos", ignore = "Flaky on MacOS, see #8453")]
 fn test_cp_from_stdin() {
@@ -6393,6 +6636,7 @@ fn test_cp_from_stdin() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_update_older_interactive_prompt_yes() {
     let (at, mut ucmd) = at_and_ucmd!();
     let old_file = "old";
@@ -6410,6 +6654,7 @@ fn test_cp_update_older_interactive_prompt_yes() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_update_older_interactive_prompt_no() {
     let (at, mut ucmd) = at_and_ucmd!();
     let old_file = "old";
@@ -6427,6 +6672,7 @@ fn test_cp_update_older_interactive_prompt_no() {
 }
 
 #[test]
+#[parallel]
 fn test_cp_update_none_interactive_prompt_no() {
     let (at, mut ucmd) = at_and_ucmd!();
     let old_file = "old";
@@ -6447,6 +6693,7 @@ fn test_cp_update_none_interactive_prompt_no() {
 #[cfg(unix)]
 #[cfg_attr(target_os = "macos", ignore = "Flaky on MacOS, see #8453")]
 #[test]
+#[parallel]
 fn test_cp_from_stream() {
     let target = "target";
     let test_string1 = "longer: Hello, World!\n";
@@ -6474,6 +6721,7 @@ fn test_cp_from_stream() {
 #[cfg(unix)]
 #[cfg_attr(target_os = "macos", ignore = "Flaky on MacOS, see #8453")]
 #[test]
+#[parallel]
 fn test_cp_from_stream_permission() {
     let target = "target";
     let link = "link";
@@ -6495,6 +6743,7 @@ fn test_cp_from_stream_permission() {
 }
 
 #[test]
+#[parallel]
 #[cfg(feature = "feat_selinux")]
 fn test_cp_selinux() {
     let ts = TestScenario::new(util_name!());
@@ -6520,6 +6769,7 @@ fn test_cp_selinux() {
 }
 
 #[test]
+#[parallel]
 #[cfg(feature = "feat_selinux")]
 fn test_cp_selinux_invalid() {
     let scene = TestScenario::new(util_name!());
@@ -6544,6 +6794,7 @@ fn test_cp_selinux_invalid() {
 }
 
 #[test]
+#[parallel]
 #[cfg(feature = "feat_selinux")]
 fn test_cp_preserve_selinux() {
     let ts = TestScenario::new(util_name!());
@@ -6582,6 +6833,7 @@ fn test_cp_preserve_selinux() {
 }
 
 #[test]
+#[parallel]
 #[cfg(feature = "feat_selinux")]
 fn test_cp_preserve_selinux_admin_context() {
     let ts = TestScenario::new(util_name!());
@@ -6641,6 +6893,7 @@ fn test_cp_preserve_selinux_admin_context() {
 }
 
 #[test]
+#[parallel]
 #[cfg(feature = "feat_selinux")]
 fn test_cp_selinux_context_priority() {
     // This test verifies that the priority order is respected:
@@ -6735,6 +6988,7 @@ fn test_cp_selinux_context_priority() {
 }
 
 #[test]
+#[parallel]
 #[cfg(feature = "feat_selinux")]
 fn test_cp_selinux_empty_context() {
     // This test verifies that --context without a value works like -Z
@@ -6781,6 +7035,7 @@ fn test_cp_selinux_empty_context() {
 }
 
 #[test]
+#[parallel]
 #[cfg(feature = "feat_selinux")]
 fn test_cp_selinux_recursive() {
     // Test SELinux context preservation in recursive directory copies
@@ -6835,6 +7090,7 @@ fn test_cp_selinux_recursive() {
 }
 
 #[test]
+#[parallel]
 #[cfg(feature = "feat_selinux")]
 fn test_cp_preserve_context_root() {
     use uutests::util::run_ucmd_as_root;
@@ -6882,6 +7138,7 @@ fn test_cp_preserve_context_root() {
 }
 
 #[test]
+#[parallel]
 #[cfg(not(windows))]
 fn test_cp_no_dereference_symlink_with_parents() {
     let ts = TestScenario::new(util_name!());
