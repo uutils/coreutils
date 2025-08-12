@@ -1707,6 +1707,61 @@ fn test_cp_preserve_all() {
     }
 }
 
+// #8452, cp uses to incorrectly fully canonicalize paths, which fails if
+// any of the parents is unreadable. We just need to follow symlinks as needed.
+#[cfg(unix)]
+#[test]
+fn test_cp_preserve_unreadable_parent() {
+    for test_link in [false, true] {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let root_dir = "t";
+        let sub_dir = "t/u";
+        at.mkdir(root_dir);
+        at.mkdir(sub_dir);
+
+        let src_file = "t/u/a1";
+        let dst_file = "t/u/b1";
+
+        // Prepare the source file
+        at.touch(src_file);
+        at.set_mode(src_file, 0o0500);
+
+        // Link l1 to a1 for the second test scenario
+        if test_link {
+            at.relative_symlink_file("a1", "t/u/l1");
+        }
+
+        // We deny access to "t", so we need to change directory, and run the command from ".".
+        // TODO: Other tests will fail if we cannot restore the directory for some reason.
+        let cur_dir = std::env::current_dir().expect("Cannot get current dir.");
+        std::env::set_current_dir(at.plus("t").join("u")).expect("Cannot set current dir.");
+        // Deny access to "t"
+        at.set_mode(root_dir, 0o0000);
+
+        // Copy a1 (or l1) to b1.
+        ucmd.current_dir(".")
+            .arg(if test_link { "l1" } else { "a1" })
+            .arg("b1")
+            .arg("--preserve")
+            .succeeds();
+
+        // Restore access to make the rest of the checks easier.
+        at.set_mode(root_dir, 0o0700);
+        // And restore current directory (test init is unhappy otherwise)
+        std::env::set_current_dir(cur_dir).expect("Cannot set current dir.");
+
+        #[cfg(all(unix, not(target_os = "freebsd")))]
+        {
+            // Assert that the mode, ownership, and timestamps are preserved
+            // NOTICE: the ownership is not modified on the src file, because that requires root permissions
+            let metadata_src = at.metadata(src_file);
+            let metadata_dst = at.metadata(dst_file);
+            assert_metadata_eq!(metadata_src, metadata_dst);
+        }
+    }
+}
+
 #[test]
 #[cfg(all(unix, not(any(target_os = "android", target_os = "openbsd"))))]
 fn test_cp_preserve_xattr() {
