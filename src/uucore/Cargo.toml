@@ -1,4 +1,4 @@
-# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal tzdb zoneinfo
+# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal tzdb zoneinfo logind
 
 [package]
 name = "uucore"
@@ -113,6 +113,7 @@ fs = ["dunce", "libc", "winapi-util", "windows-sys"]
 fsext = ["libc", "windows-sys"]
 fsxattr = ["xattr"]
 lines = []
+feat_systemd_logind = ["utmpx", "libc"]
 format = [
   "bigdecimal",
   "extendedbigdecimal",

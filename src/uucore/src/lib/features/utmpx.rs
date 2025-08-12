@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
+// spell-checker:ignore logind
+
 //! Aims to provide platform-independent methods to obtain login records
 //!
 //! **ONLY** support linux, macos and freebsd for the time being
@@ -38,6 +40,9 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::ptr;
 use std::sync::{Mutex, MutexGuard};
+
+#[cfg(feature = "feat_systemd_logind")]
+use crate::features::systemd_logind;
 
 pub use self::ut::*;
 
@@ -278,18 +283,30 @@ impl Utmpx {
     /// This will use the default location, or the path [`Utmpx::iter_all_records_from`]
     /// was most recently called with.
     ///
+    /// On systems with systemd-logind feature enabled at compile time,
+    /// this will use systemd-logind instead of traditional utmp files.
+    ///
     /// Only one instance of [`UtmpxIter`] may be active at a time. This
     /// function will block as long as one is still active. Beware!
     pub fn iter_all_records() -> UtmpxIter {
-        let iter = UtmpxIter::new();
-        unsafe {
-            // This can technically fail, and it would be nice to detect that,
-            // but it doesn't return anything so we'd have to do nasty things
-            // with errno.
-            #[cfg_attr(target_env = "musl", allow(deprecated))]
-            setutxent();
+        #[cfg(feature = "feat_systemd_logind")]
+        {
+            // Use systemd-logind instead of traditional utmp when feature is enabled
+            UtmpxIter::new_systemd()
         }
-        iter
+
+        #[cfg(not(feature = "feat_systemd_logind"))]
+        {
+            let iter = UtmpxIter::new();
+            unsafe {
+                // This can technically fail, and it would be nice to detect that,
+                // but it doesn't return anything so we'd have to do nasty things
+                // with errno.
+                #[cfg_attr(target_env = "musl", allow(deprecated))]
+                setutxent();
+            }
+            iter
+        }
     }
 
     /// Iterate through all the utmp records from a specific file.
@@ -298,8 +315,20 @@ impl Utmpx {
     ///
     /// This function affects subsequent calls to [`Utmpx::iter_all_records`].
     ///
+    /// On systems with systemd-logind feature enabled at compile time,
+    /// if the path matches the default utmp file, this will use systemd-logind
+    /// instead of traditional utmp files.
+    ///
     /// The same caveats as for [`Utmpx::iter_all_records`] apply.
     pub fn iter_all_records_from<P: AsRef<Path>>(path: P) -> UtmpxIter {
+        #[cfg(feature = "feat_systemd_logind")]
+        {
+            // Use systemd-logind for default utmp file when feature is enabled
+            if path.as_ref().to_str() == Some(DEFAULT_FILE) {
+                return UtmpxIter::new_systemd();
+            }
+        }
+
         let iter = UtmpxIter::new();
         let path = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
         unsafe {
@@ -336,6 +365,8 @@ pub struct UtmpxIter {
     /// Ensure UtmpxIter is !Send. Technically redundant because MutexGuard
     /// is also !Send.
     phantom: PhantomData<std::rc::Rc<()>>,
+    #[cfg(feature = "feat_systemd_logind")]
+    systemd_iter: Option<systemd_logind::SystemdUtmpxIter>,
 }
 
 impl UtmpxIter {
@@ -345,13 +376,137 @@ impl UtmpxIter {
         Self {
             guard,
             phantom: PhantomData,
+            #[cfg(feature = "feat_systemd_logind")]
+            systemd_iter: None,
+        }
+    }
+
+    #[cfg(feature = "feat_systemd_logind")]
+    fn new_systemd() -> Self {
+        // PoisonErrors can safely be ignored
+        let guard = LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let systemd_iter = systemd_logind::SystemdUtmpxIter::new().ok();
+        Self {
+            guard,
+            phantom: PhantomData,
+            systemd_iter,
+        }
+    }
+}
+
+/// Wrapper type that can hold either traditional utmpx records or systemd records
+pub enum UtmpxRecord {
+    Traditional(Box<Utmpx>),
+    #[cfg(feature = "feat_systemd_logind")]
+    Systemd(systemd_logind::SystemdUtmpxCompat),
+}
+
+impl UtmpxRecord {
+    /// A.K.A. ut.ut_type
+    pub fn record_type(&self) -> i16 {
+        match self {
+            UtmpxRecord::Traditional(utmpx) => utmpx.record_type(),
+            #[cfg(feature = "feat_systemd_logind")]
+            UtmpxRecord::Systemd(systemd) => systemd.record_type(),
+        }
+    }
+
+    /// A.K.A. ut.ut_pid
+    pub fn pid(&self) -> i32 {
+        match self {
+            UtmpxRecord::Traditional(utmpx) => utmpx.pid(),
+            #[cfg(feature = "feat_systemd_logind")]
+            UtmpxRecord::Systemd(systemd) => systemd.pid(),
+        }
+    }
+
+    /// A.K.A. ut.ut_id
+    pub fn terminal_suffix(&self) -> String {
+        match self {
+            UtmpxRecord::Traditional(utmpx) => utmpx.terminal_suffix(),
+            #[cfg(feature = "feat_systemd_logind")]
+            UtmpxRecord::Systemd(systemd) => systemd.terminal_suffix(),
+        }
+    }
+
+    /// A.K.A. ut.ut_user
+    pub fn user(&self) -> String {
+        match self {
+            UtmpxRecord::Traditional(utmpx) => utmpx.user(),
+            #[cfg(feature = "feat_systemd_logind")]
+            UtmpxRecord::Systemd(systemd) => systemd.user(),
+        }
+    }
+
+    /// A.K.A. ut.ut_host
+    pub fn host(&self) -> String {
+        match self {
+            UtmpxRecord::Traditional(utmpx) => utmpx.host(),
+            #[cfg(feature = "feat_systemd_logind")]
+            UtmpxRecord::Systemd(systemd) => systemd.host(),
+        }
+    }
+
+    /// A.K.A. ut.ut_line
+    pub fn tty_device(&self) -> String {
+        match self {
+            UtmpxRecord::Traditional(utmpx) => utmpx.tty_device(),
+            #[cfg(feature = "feat_systemd_logind")]
+            UtmpxRecord::Systemd(systemd) => systemd.tty_device(),
+        }
+    }
+
+    /// A.K.A. ut.ut_tv
+    pub fn login_time(&self) -> time::OffsetDateTime {
+        match self {
+            UtmpxRecord::Traditional(utmpx) => utmpx.login_time(),
+            #[cfg(feature = "feat_systemd_logind")]
+            UtmpxRecord::Systemd(systemd) => systemd.login_time(),
+        }
+    }
+
+    /// A.K.A. ut.ut_exit
+    ///
+    /// Return (e_termination, e_exit)
+    pub fn exit_status(&self) -> (i16, i16) {
+        match self {
+            UtmpxRecord::Traditional(utmpx) => utmpx.exit_status(),
+            #[cfg(feature = "feat_systemd_logind")]
+            UtmpxRecord::Systemd(systemd) => systemd.exit_status(),
+        }
+    }
+
+    /// check if the record is a user process
+    pub fn is_user_process(&self) -> bool {
+        match self {
+            UtmpxRecord::Traditional(utmpx) => utmpx.is_user_process(),
+            #[cfg(feature = "feat_systemd_logind")]
+            UtmpxRecord::Systemd(systemd) => systemd.is_user_process(),
+        }
+    }
+
+    /// Canonicalize host name using DNS
+    pub fn canon_host(&self) -> IOResult<String> {
+        match self {
+            UtmpxRecord::Traditional(utmpx) => utmpx.canon_host(),
+            #[cfg(feature = "feat_systemd_logind")]
+            UtmpxRecord::Systemd(systemd) => systemd.canon_host(),
         }
     }
 }
 
 impl Iterator for UtmpxIter {
-    type Item = Utmpx;
+    type Item = UtmpxRecord;
     fn next(&mut self) -> Option<Self::Item> {
+        #[cfg(feature = "feat_systemd_logind")]
+        {
+            if let Some(ref mut systemd_iter) = self.systemd_iter {
+                if let Some(systemd_record) = systemd_iter.next() {
+                    return Some(UtmpxRecord::Systemd(systemd_record));
+                }
+            }
+        }
+
         unsafe {
             #[cfg_attr(target_env = "musl", allow(deprecated))]
             let res = getutxent();
@@ -362,9 +517,9 @@ impl Iterator for UtmpxIter {
                 // call to getutxent(), so we have to read it now.
                 // All the strings live inline in the struct as arrays, which
                 // makes things easier.
-                Some(Utmpx {
+                Some(UtmpxRecord::Traditional(Box::new(Utmpx {
                     inner: ptr::read(res as *const _),
-                })
+                })))
             }
         }
     }

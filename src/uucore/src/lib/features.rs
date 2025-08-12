@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // features ~ feature-gated modules (core/bundler file)
 //
-// spell-checker:ignore (features) extendedbigdecimal
+// spell-checker:ignore (features) extendedbigdecimal logind
 
 #[cfg(feature = "backup-control")]
 pub mod backup_control;
@@ -74,6 +74,8 @@ pub mod fsxattr;
 pub mod selinux;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
 pub mod signals;
+#[cfg(feature = "feat_systemd_logind")]
+pub mod systemd_logind;
 #[cfg(all(
     unix,
     not(target_os = "android"),

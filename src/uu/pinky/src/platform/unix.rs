@@ -14,7 +14,7 @@ use uucore::entries::{Locate, Passwd};
 use uucore::error::{FromIo, UResult};
 use uucore::libc::S_IWGRP;
 use uucore::translate;
-use uucore::utmpx::{self, Utmpx, time};
+use uucore::utmpx::{self, Utmpx, UtmpxRecord, time};
 
 use std::io::BufReader;
 use std::io::prelude::*;
@@ -137,7 +137,7 @@ fn idle_string(when: i64) -> String {
     })
 }
 
-fn time_string(ut: &Utmpx) -> String {
+fn time_string(ut: &UtmpxRecord) -> String {
     // "%b %e %H:%M"
     let time_format: Vec<time::format_description::FormatItem> =
         time::format_description::parse("[month repr:short] [day padding:space] [hour]:[minute]")
@@ -158,7 +158,7 @@ fn gecos_to_fullname(pw: &Passwd) -> Option<String> {
 }
 
 impl Pinky {
-    fn print_entry(&self, ut: &Utmpx) -> std::io::Result<()> {
+    fn print_entry(&self, ut: &UtmpxRecord) -> std::io::Result<()> {
         let mut pts_path = PathBuf::from("/dev");
         pts_path.push(ut.tty_device().as_str());
 

@@ -1,6 +1,6 @@
 name: FreeBSD
 
-# spell-checker:ignore sshfs usesh vmactions taiki Swatinem esac fdescfs fdesc sccache nextest copyback
+# spell-checker:ignore sshfs usesh vmactions taiki Swatinem esac fdescfs fdesc sccache nextest copyback logind
 
 env:
   # * style job configuration
@@ -140,7 +140,7 @@ jobs:
         usesh: true
         sync: rsync
         copyback: false
-        prepare: pkg install -y curl gmake sudo
+        prepare: pkg install -y curl gmake sudo jq
         run: |
           ## Prepare, build, and test
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
@@ -194,7 +194,11 @@ jobs:
           export RUST_BACKTRACE=1
           export CARGO_TERM_COLOR=always
           if (test -z "\$FAULT"); then cargo nextest run --hide-progress-bar --profile ci --features '${{ matrix.job.features }}' || FAULT=1 ; fi
-          if (test -z "\$FAULT"); then cargo nextest run --hide-progress-bar --profile ci --all-features -p uucore || FAULT=1 ; fi
+          # There is no systemd-logind on FreeBSD, so test all features except feat_systemd_logind ( https://github.com/rust-lang/cargo/issues/3126#issuecomment-2523441905 )
+          if (test -z "\$FAULT"); then
+            UUCORE_FEATURES=\$(cargo metadata --format-version=1 --no-deps -p uucore | jq -r '.packages[] | select(.name == "uucore") | .features | keys | .[]' | grep -v "feat_systemd_logind" | paste -s -d "," -)
+            cargo nextest run --hide-progress-bar --profile ci --features "\$UUCORE_FEATURES" -p uucore || FAULT=1
+          fi
           # Test building with make
           if (test -z "\$FAULT"); then make PROFILE=ci || FAULT=1 ; fi
           # Clean to avoid to rsync back the files

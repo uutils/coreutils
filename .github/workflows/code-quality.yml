@@ -1,7 +1,7 @@
 name: Code Quality
 
 # spell-checker:ignore (people) reactivecircus Swatinem dtolnay juliangruber pell taplo
-# spell-checker:ignore (misc) TERMUX noaudio pkill swiftshader esac sccache pcoreutils shopt subshell dequote
+# spell-checker:ignore (misc) TERMUX noaudio pkill swiftshader esac sccache pcoreutils shopt subshell dequote libsystemd
 
 on:
   pull_request:
@@ -110,8 +110,8 @@ jobs:
         ## Install/setup prerequisites
         case '${{ matrix.job.os }}' in
           ubuntu-*)
-            # selinux headers needed to enable all features
-            sudo apt-get -y install libselinux1-dev
+            # selinux and systemd headers needed to enable all features
+            sudo apt-get -y install libselinux1-dev libsystemd-dev
           ;;
         esac
     - name: "`cargo clippy` lint testing"
