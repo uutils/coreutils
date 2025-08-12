@@ -7,6 +7,10 @@
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
 use std::fs;
+#[cfg(target_os = "linux")]
+use std::fs::File;
+#[cfg(target_os = "linux")]
+use std::io::{BufRead, BufReader};
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(not(windows))]
 use std::process::Command;
@@ -2364,5 +2368,58 @@ fn test_install_compare_with_mode_bits() {
             at.file_exists(&dest),
             "Failed to create dest file for {description}"
         );
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_set_owner_nonexistent_userid() {
+    let file = File::open("/etc/login.defs").unwrap();
+    let reader = BufReader::new(file);
+    let mut uid_min: u32 = 0;
+    let mut uid_max: u32 = 0;
+    for line in reader.lines() {
+        let line = line.unwrap();
+        if line.starts_with("UID_MIN") {
+            let tokens: Vec<&str> = line.split_whitespace().collect();
+            uid_min = tokens[1].parse().unwrap();
+        }
+        if line.starts_with("UID_MAX") {
+            let tokens: Vec<&str> = line.split_whitespace().collect();
+            uid_max = tokens[1].parse().unwrap();
+        }
+    }
+    let file = File::open("/etc/passwd").unwrap();
+    let reader = BufReader::new(file);
+
+    let mut uids: Vec<u32> = vec![];
+    for line in reader.lines() {
+        let line = line.unwrap();
+        let tokens: Vec<&str> = line.split(':').collect();
+        let uid: u32 = tokens[3].parse().unwrap();
+        if (uid_min..=uid_max).contains(&uid) {
+            uids.push(uid);
+        }
+    }
+    uids.sort_unstable();
+
+    let next_userid = if let Some(uid) = uids.last() {
+        *uid + 1
+    } else {
+        uid_min
+    };
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+
+    if let Ok(result) = run_ucmd_as_root(&ts, &[format!("-o{}", next_userid).as_str(), "a", "b"]) {
+        result.success();
+        assert!(at.file_exists("b"));
+
+        let metadata = fs::metadata(at.plus("b")).unwrap();
+        assert_eq!(metadata.uid(), next_userid);
+    } else {
+        print!("Test skipped; requires root user");
     }
 }
