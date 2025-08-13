@@ -11,16 +11,17 @@ use crate::display::Quotable;
 use crate::error::{UResult, USimpleError, strip_errno};
 pub use crate::features::entries;
 use crate::show_error;
+
 use clap::{Arg, ArgMatches, Command};
+
 use libc::{gid_t, uid_t};
 use options::traverse;
 use walkdir::WalkDir;
 
-use std::io::Error as IOError;
-use std::io::Result as IOResult;
-
 use std::ffi::CString;
 use std::fs::Metadata;
+use std::io::Error as IOError;
+use std::io::Result as IOResult;
 use std::os::unix::fs::MetadataExt;
 
 use std::os::unix::ffi::OsStrExt;

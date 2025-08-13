@@ -1630,9 +1630,9 @@ fn test_clap_localization_unknown_argument() {
 
     for (locale, expected_strings) in test_cases {
         let result = new_ucmd!()
+            .env("LANG", locale)
             .env("LC_ALL", locale)
             .arg("--unknown-option")
-            .env("LANG", locale)
             .fails();
 
         result.code_is(2); // sort uses exit code 2 for invalid options
@@ -1647,9 +1647,9 @@ fn test_clap_localization_unknown_argument() {
 fn test_clap_localization_help_message() {
     // Test help message in English
     let result_en = new_ucmd!()
+        .env("LANG", "en_US.UTF-8")
         .env("LC_ALL", "en_US.UTF-8")
         .arg("--help")
-        .env("LANG", "en_US.UTF-8")
         .succeeds();
 
     let stdout_en = result_en.stdout_str();
@@ -1658,9 +1658,9 @@ fn test_clap_localization_help_message() {
 
     // Test help message in French
     let result_fr = new_ucmd!()
+        .env("LANG", "fr_FR.UTF-8")
         .env("LC_ALL", "fr_FR.UTF-8")
         .arg("--help")
-        .env("LANG", "fr_FR.UTF-8")
         .succeeds();
 
     let stdout_fr = result_fr.stdout_str();
@@ -1687,9 +1687,9 @@ fn test_clap_localization_invalid_value() {
 
     for (locale, expected_message) in test_cases {
         let result = new_ucmd!()
+            .env("LANG", locale)
             .env("LC_ALL", locale)
             .arg("-k")
-            .env("LANG", locale)
             .arg("invalid")
             .fails();
 
@@ -1700,13 +1700,11 @@ fn test_clap_localization_invalid_value() {
 
 #[test]
 fn test_clap_localization_tip_for_value_with_dash() {
-    // Test tip for passing values that look like options
-    let result_en = new_ucmd!()
     let test_cases = vec![
         ("en_US.UTF-8", vec!["tip:", "-- --file-with-dash"]),
         ("fr_FR.UTF-8", vec!["tip:", "-- --file-with-dash"]), // TODO: fix French translation
     ];
-    assert!(stderr_en.contains("tip:") || stderr_en.contains("conseil:"));
+
     for (locale, expected_strings) in test_cases {
         let result = new_ucmd!()
             .env("LANG", locale)
@@ -1719,9 +1717,7 @@ fn test_clap_localization_tip_for_value_with_dash() {
         for expected in expected_strings {
             assert!(stderr.contains(expected));
         }
-    let result_fr = new_ucmd!()
-        }
     }
-    // The tip should be preserved from clap
-    assert!(stderr_fr.contains("tip:") || stderr_fr.contains("conseil:"));
+}
+
 /* spell-checker: enable */

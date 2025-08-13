@@ -2550,7 +2550,6 @@ fn test_mv_selinux_context() {
 
 #[test]
 fn test_mv_error_usage_display_missing_arg() {
-
     new_ucmd!()
         .arg("--target-directory=.")
         .fails()
