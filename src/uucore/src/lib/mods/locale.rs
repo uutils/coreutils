@@ -5,12 +5,15 @@
 // spell-checker:disable
 
 use crate::error::UError;
+
 use fluent::{FluentArgs, FluentBundle, FluentResource};
 use fluent_syntax::parser::ParserError;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::OnceLock;
+
 use thiserror::Error;
 use unic_langid::LanguageIdentifier;
 
