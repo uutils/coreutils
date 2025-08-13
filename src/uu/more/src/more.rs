@@ -26,6 +26,7 @@ use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::{display::Quotable, show};
 
+use uucore::LocalizedCommand;
 use uucore::translate;
 
 #[derive(Debug)]
@@ -151,7 +152,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         print!("\r");
         println!("{panic_info}");
     }));
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
     let mut options = Options::from(&matches);
     if let Some(files) = matches.get_many::<String>(options::FILES) {
         let length = files.len();
@@ -212,6 +213,7 @@ pub fn uu_app() -> Command {
         .about(translate!("more-about"))
         .override_usage(format_usage(&translate!("more-usage")))
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .infer_long_args(true)
         .arg(
             Arg::new(options::SILENT)

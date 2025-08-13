@@ -5,6 +5,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::path::Path;
+use uucore::LocalizedCommand;
 use uucore::display::print_verbatim;
 use uucore::error::{UResult, UUsageError};
 use uucore::format_usage;
@@ -21,7 +22,7 @@ mod options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app()
         .after_help(translate!("dirname-after-help"))
-        .try_get_matches_from(args)?;
+        .get_matches_from_localized(args);
 
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
@@ -63,6 +64,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .about(translate!("dirname-about"))
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .override_usage(format_usage(&translate!("dirname-usage")))
         .args_override_self(true)
         .infer_long_args(true)

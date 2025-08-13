@@ -44,6 +44,7 @@ use uucore::libc::{getlogin, uid_t};
 use uucore::line_ending::LineEnding;
 use uucore::translate;
 
+use uucore::LocalizedCommand;
 use uucore::process::{getegid, geteuid, getgid, getuid};
 use uucore::{format_usage, show_error};
 
@@ -121,7 +122,7 @@ struct State {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app()
         .after_help(translate!("id-after-help"))
-        .try_get_matches_from(args)?;
+        .get_matches_from_localized(args);
 
     let users: Vec<String> = matches
         .get_many::<String>(options::ARG_USERS)
@@ -349,6 +350,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("id-about"))
         .override_usage(format_usage(&translate!("id-usage")))
         .infer_long_args(true)

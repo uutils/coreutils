@@ -11,6 +11,7 @@ use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use thiserror::Error;
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::fs::display_permissions_unix;
@@ -112,7 +113,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (parsed_cmode, args) = extract_negative_modes(args.skip(1)); // skip binary name
     let matches = uu_app()
         .after_help(translate!("chmod-after-help"))
-        .try_get_matches_from(args)?;
+        .get_matches_from_localized(args);
 
     let changes = matches.get_flag(options::CHANGES);
     let quiet = matches.get_flag(options::QUIET);
@@ -177,6 +178,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("chmod-about"))
         .override_usage(format_usage(&translate!("chmod-usage")))
         .args_override_self(true)

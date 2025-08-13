@@ -12,6 +12,7 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::translate;
 
+use uucore::LocalizedCommand;
 use uucore::format_usage;
 
 use linebreak::break_lines;
@@ -334,7 +335,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let matches = uu_app().try_get_matches_from(&args)?;
+    let matches = uu_app().get_matches_from_localized(&args);
 
     let files = extract_files(&matches)?;
 
@@ -352,6 +353,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("fmt-about"))
         .override_usage(format_usage(&translate!("fmt-usage")))
         .infer_long_args(true)

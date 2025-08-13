@@ -14,6 +14,7 @@ use std::num::TryFromIntError;
 #[cfg(unix)]
 use std::os::fd::{AsRawFd, FromRawFd};
 use thiserror::Error;
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::line_ending::LineEnding;
@@ -71,6 +72,7 @@ type HeadResult<T> = Result<T, HeadError>;
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("head-about"))
         .override_usage(format_usage(&translate!("head-usage")))
         .infer_long_args(true)
@@ -549,7 +551,8 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(arg_iterate(args)?)?;
+    let args_vec: Vec<_> = arg_iterate(args)?.collect();
+    let matches = uu_app().get_matches_from_localized(args_vec);
     let args = match HeadOptions::get_from(&matches) {
         Ok(o) => o,
         Err(s) => {
