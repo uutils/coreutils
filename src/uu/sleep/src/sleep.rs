@@ -6,6 +6,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::thread;
 use std::time::Duration;
+use uucore::LocalizedCommand;
 use uucore::translate;
 use uucore::{
     error::{UResult, USimpleError, UUsageError},
@@ -20,7 +21,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let numbers = matches
         .get_many::<String>(options::NUMBER)
@@ -39,6 +40,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("sleep-about"))
         .after_help(translate!("sleep-after-help"))
         .override_usage(format_usage(&translate!("sleep-usage")))

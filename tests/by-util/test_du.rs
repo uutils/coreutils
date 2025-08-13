@@ -857,6 +857,18 @@ fn test_du_invalid_threshold() {
 }
 
 #[test]
+fn test_du_threshold_error_handling() {
+    // Test missing threshold value - the specific case from GNU test
+    new_ucmd!()
+        .arg("--threshold")
+        .fails()
+        .stderr_contains(
+            "error: a value is required for '--threshold <SIZE>' but none was supplied",
+        )
+        .stderr_contains("For more information, try '--help'.");
+}
+
+#[test]
 fn test_du_apparent_size() {
     let (at, mut ucmd) = at_and_ucmd!();
 

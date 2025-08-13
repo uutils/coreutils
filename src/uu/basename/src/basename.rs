@@ -15,6 +15,7 @@ use uucore::error::{UResult, UUsageError};
 use uucore::format_usage;
 use uucore::line_ending::LineEnding;
 
+use uucore::LocalizedCommand;
 use uucore::translate;
 
 pub mod options {
@@ -29,7 +30,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     //
     // Argument parsing
     //
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
@@ -81,6 +82,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("basename-about"))
         .override_usage(format_usage(&translate!("basename-usage")))
         .infer_long_args(true)

@@ -13,6 +13,7 @@ use std::result::Result as StdResult;
 use std::str::FromStr;
 
 use units::{IEC_BASES, SI_BASES};
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::translate;
@@ -254,7 +255,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
 
@@ -279,6 +280,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("numfmt-about"))
         .after_help(translate!("numfmt-after-help"))
         .override_usage(format_usage(&translate!("numfmt-usage")))

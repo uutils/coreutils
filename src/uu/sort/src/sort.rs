@@ -43,7 +43,7 @@ use std::str::Utf8Error;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
-use uucore::error::{UError, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::format_usage;
 use uucore::line_ending::LineEnding;
@@ -1050,11 +1050,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // nor return with a non-zero exit code in this case (we should print to stdout and return 0).
             // This logic is similar to the code in clap, but we return 2 as the exit code in case of real failure
             // (clap returns 1).
-            e.print().unwrap();
-            if e.use_stderr() {
-                set_exit_code(2);
-            }
-            return Ok(());
+            use uucore::clap_localization::handle_clap_error_with_exit_code;
+            // Always use the localization handler for proper error and help handling
+            handle_clap_error_with_exit_code(e, uucore::util_name(), 2);
         }
     };
 
@@ -1345,6 +1343,7 @@ pub fn uu_app() -> Command {
         .about(translate!("sort-about"))
         .after_help(translate!("sort-after-help"))
         .override_usage(format_usage(&translate!("sort-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .infer_long_args(true)
         .disable_help_flag(true)
         .disable_version_flag(true)

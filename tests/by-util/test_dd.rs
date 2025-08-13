@@ -1617,7 +1617,7 @@ fn test_reading_partial_blocks_from_fifo() {
         .args(["dd", "ibs=3", "obs=3", &format!("if={fifoname}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .env("LANG", "C")
+        .env("LC_ALL", "C")
         .spawn()
         .unwrap();
 
@@ -1662,7 +1662,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
         .args(["dd", "bs=3", "ibs=1", "obs=1", &format!("if={fifoname}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .env("LANG", "C")
+        .env("LC_ALL", "C")
         .spawn()
         .unwrap();
 

@@ -221,6 +221,7 @@ pub fn uu_app() -> Command {
         .trailing_var_arg(true)
         .infer_long_args(true)
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("seq-about"))
         .override_usage(format_usage(&translate!("seq-usage")))
         .arg(

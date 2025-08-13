@@ -11,6 +11,7 @@ mod table;
 use blocks::HumanReadable;
 use clap::builder::ValueParser;
 use table::HeaderMode;
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError, get_exit_code};
 use uucore::fsext::{MountInfo, read_fs_list};
@@ -406,7 +407,7 @@ impl UError for DfError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     #[cfg(windows)]
     {
@@ -462,6 +463,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("df-about"))
         .override_usage(format_usage(&translate!("df-usage")))
         .after_help(translate!("df-after-help"))

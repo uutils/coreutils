@@ -15,6 +15,7 @@ use std::io::{BufReader, Read, stdin};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
+use uucore::LocalizedCommand;
 use uucore::checksum::ChecksumError;
 use uucore::checksum::ChecksumOptions;
 use uucore::checksum::ChecksumVerbose;
@@ -181,7 +182,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     //        causes "error: " to be printed twice (once from crash!() and once from clap).  With
     //        the current setup, the name of the utility is not printed, but I think this is at
     //        least somewhat better from a user's perspective.
-    let matches = command.try_get_matches_from(args)?;
+    let matches = command.get_matches_from_localized(args);
 
     let input_length: Option<&usize> = if binary_name == "b2sum" {
         matches.get_one::<usize>(options::LENGTH)
@@ -311,6 +312,7 @@ mod options {
 pub fn uu_app_common() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("hashsum-about"))
         .override_usage(format_usage(&translate!("hashsum-usage")))
         .infer_long_args(true)

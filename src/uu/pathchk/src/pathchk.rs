@@ -8,6 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::fs;
 use std::io::{ErrorKind, Write};
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError, set_exit_code};
 use uucore::format_usage;
@@ -34,7 +35,7 @@ const POSIX_NAME_MAX: usize = 14;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     // set working mode
     let is_posix = matches.get_flag(options::POSIX);
@@ -81,6 +82,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("pathchk-about"))
         .override_usage(format_usage(&translate!("pathchk-usage")))
         .infer_long_args(true)

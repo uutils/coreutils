@@ -193,6 +193,7 @@ pub fn uu_app() -> Command {
         .about(translate!("echo-about"))
         .after_help(translate!("echo-after-help"))
         .override_usage(format_usage(&translate!("echo-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .arg(
             Arg::new(options::NO_NEWLINE)
                 .short('n')

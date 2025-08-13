@@ -147,7 +147,8 @@ fn test_wrap_no_arg() {
         new_ucmd!()
             .arg(wrap_param)
             .fails()
-            .stderr_contains("a value is required for '--wrap <COLS>' but none was supplied")
+            .stderr_contains("error: a value is required for '--wrap <COLS>' but none was supplied")
+            .stderr_contains("For more information, try '--help'.")
             .no_stdout();
     }
 }

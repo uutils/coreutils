@@ -17,6 +17,7 @@ use std::io::{BufWriter, Error, Read, Write, stdin, stdout};
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use uucore::LocalizedCommand;
 use uucore::display::{OsWrite, Quotable};
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
@@ -51,7 +52,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let mode = if matches.get_flag(options::ECHO) {
         Mode::Echo(
@@ -145,6 +146,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .about(translate!("shuf-about"))
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .override_usage(format_usage(&translate!("shuf-usage")))
         .infer_long_args(true)
         .arg(

@@ -22,7 +22,7 @@ clap = { workspace = true }
 filetime = { workspace = true }
 file_diff = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = [
+uucore = { workspace = true, default-features = true, features = [
   "backup-control",
   "buf-copy",
   "fs",

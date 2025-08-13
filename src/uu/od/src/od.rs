@@ -46,6 +46,7 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
 
+use uucore::LocalizedCommand;
 use uucore::parser::parse_size::ParseSizeError;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, show_error, show_warning};
@@ -220,7 +221,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let clap_opts = uu_app();
 
-    let clap_matches = clap_opts.try_get_matches_from(&args)?;
+    let clap_matches = clap_opts.get_matches_from_localized(&args);
 
     let od_options = OdOptions::new(&clap_matches, &args)?;
 
@@ -251,6 +252,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("od-about"))
         .override_usage(format_usage(&translate!("od-usage")))
         .after_help(translate!("od-after-help"))

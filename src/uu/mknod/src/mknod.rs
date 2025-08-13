@@ -10,6 +10,7 @@ use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOT
 use libc::{dev_t, mode_t};
 use std::ffi::CString;
 
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::format_usage;
@@ -111,7 +112,7 @@ fn mknod(file_name: &str, config: Config) -> i32 {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let file_type = matches.get_one::<FileType>("type").unwrap();
 
@@ -170,6 +171,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .override_usage(format_usage(&translate!("mknod-usage")))
         .after_help(translate!("mknod-after-help"))
         .about(translate!("mknod-about"))

@@ -13,6 +13,7 @@ use nix::fcntl::{OFlag, open};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::sys::stat::Mode;
 use std::path::Path;
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::error::FromIo;
@@ -173,7 +174,7 @@ mod platform {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
     let files: Vec<String> = matches
         .get_many::<String>(ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
@@ -226,6 +227,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("sync-about"))
         .override_usage(format_usage(&translate!("sync-usage")))
         .infer_long_args(true)

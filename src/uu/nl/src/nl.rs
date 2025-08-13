@@ -10,6 +10,7 @@ use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
 use uucore::translate;
 
+use uucore::LocalizedCommand;
 use uucore::{format_usage, show_error};
 
 mod helper;
@@ -176,7 +177,7 @@ pub mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let mut settings = Settings::default();
 
@@ -229,6 +230,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .about(translate!("nl-about"))
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .override_usage(format_usage(&translate!("nl-usage")))
         .after_help(translate!("nl-after-help"))
         .infer_long_args(true)

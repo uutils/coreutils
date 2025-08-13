@@ -14,7 +14,10 @@ static ARG_VARIABLES: &str = "variables";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args).unwrap_or_else(|e| {
+        use uucore::clap_localization::handle_clap_error_with_exit_code;
+        handle_clap_error_with_exit_code(e, uucore::util_name(), 2)
+    });
 
     let variables: Vec<String> = matches
         .get_many::<String>(ARG_VARIABLES)
@@ -54,6 +57,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("printenv-about"))
         .override_usage(format_usage(&translate!("printenv-usage")))
         .infer_long_args(true)

@@ -29,6 +29,19 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_invalid_negative_arg_shows_tip() {
+    // Test that factor shows a tip when given an invalid negative argument
+    // This replicates the GNU test issue where "-1" was interpreted as an invalid option
+    new_ucmd!()
+        .arg("-1")
+        .fails()
+        .code_is(1)
+        .stderr_contains("unexpected argument '-1' found")
+        .stderr_contains("tip: to pass '-1' as a value, use '-- -1'")
+        .stderr_contains("Usage: factor");
+}
+
+#[test]
 fn test_valid_arg_exponents() {
     new_ucmd!().arg("-h").succeeds();
     new_ucmd!().arg("--exponents").succeeds();

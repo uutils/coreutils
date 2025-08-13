@@ -23,6 +23,7 @@ use uucore::error::{FromIo, UError, UResult};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
 
+use uucore::LocalizedCommand;
 use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
 
 #[derive(Debug, Error)]
@@ -143,7 +144,7 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let files: Vec<_> = matches
         .get_many::<OsString>(ARG_FILES)
@@ -226,6 +227,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .about(translate!("rm-about"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .override_usage(format_usage(&translate!("rm-usage")))
         .after_help(translate!("rm-after-help"))
         .infer_long_args(true)
