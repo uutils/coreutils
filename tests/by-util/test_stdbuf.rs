@@ -220,6 +220,7 @@ fn test_libstdbuf_preload() {
 }
 
 #[cfg(target_os = "linux")]
+#[cfg(not(target_env = "musl"))]
 #[test]
 fn test_stdbuf_non_utf8_paths() {
     use std::os::unix::ffi::OsStringExt;

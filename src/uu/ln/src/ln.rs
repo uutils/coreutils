@@ -30,7 +30,7 @@ use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 pub struct Settings {
     overwrite: OverwriteMode,
     backup: BackupMode,
-    suffix: String,
+    suffix: OsString,
     symbolic: bool,
     relative: bool,
     logical: bool,
@@ -126,7 +126,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let settings = Settings {
         overwrite: overwrite_mode,
         backup: backup_mode,
-        suffix: backup_suffix,
+        suffix: OsString::from(backup_suffix),
         symbolic,
         logical,
         relative: matches.get_flag(options::RELATIVE),
@@ -447,16 +447,16 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     Ok(())
 }
 
-fn simple_backup_path(path: &Path, suffix: &str) -> PathBuf {
-    let mut p = path.as_os_str().to_str().unwrap().to_owned();
-    p.push_str(suffix);
-    PathBuf::from(p)
+fn simple_backup_path(path: &Path, suffix: &OsString) -> PathBuf {
+    let mut file_name = path.file_name().unwrap_or_default().to_os_string();
+    file_name.push(suffix);
+    path.with_file_name(file_name)
 }
 
 fn numbered_backup_path(path: &Path) -> PathBuf {
     let mut i: u64 = 1;
     loop {
-        let new_path = simple_backup_path(path, &format!(".~{i}~"));
+        let new_path = simple_backup_path(path, &OsString::from(format!(".~{i}~")));
         if !new_path.exists() {
             return new_path;
         }
@@ -464,8 +464,8 @@ fn numbered_backup_path(path: &Path) -> PathBuf {
     }
 }
 
-fn existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
-    let test_path = simple_backup_path(path, ".~1~");
+fn existing_backup_path(path: &Path, suffix: &OsString) -> PathBuf {
+    let test_path = simple_backup_path(path, &OsString::from(".~1~"));
     if test_path.exists() {
         return numbered_backup_path(path);
     }

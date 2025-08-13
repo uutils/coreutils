@@ -11,7 +11,6 @@ use std::fs;
 use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
 use uucore::LocalizedCommand;
-use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::line_ending::LineEnding;

@@ -389,29 +389,24 @@ fn test_failed_write_is_reported() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_cut_non_utf8_paths() {
-    use std::fs;
+    use std::fs::File;
+    use std::io::Write;
+    use std::os::unix::ffi::OsStrExt;
     use uutests::util::TestScenario;
     use uutests::util_name;
 
     let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
+    let test_dir = ts.fixtures.subdir.as_path();
 
-    // Create test file with normal name first
-    at.write("temp.txt", "a\tb\tc\n1\t2\t3\n");
+    // Create file directly with non-UTF-8 name
+    let file_name = std::ffi::OsStr::from_bytes(b"test_\xFF\xFE.txt");
+    let mut file = File::create(test_dir.join(file_name)).unwrap();
+    file.write_all(b"a\tb\tc\n1\t2\t3\n").unwrap();
 
-    // Rename to non-UTF-8 name
-    #[cfg(unix)]
-    {
-        use std::os::unix::ffi::OsStrExt;
-        let file_name = std::ffi::OsStr::from_bytes(b"test_\xFF\xFE.txt");
-
-        fs::rename(at.subdir.join("temp.txt"), at.subdir.join(file_name)).unwrap();
-
-        // Test that cut can handle non-UTF-8 filenames
-        ts.ucmd()
-            .arg("-f1,3")
-            .arg(file_name)
-            .succeeds()
-            .stdout_only("a\tc\n1\t3\n");
-    }
+    // Test that cut can handle non-UTF-8 filenames
+    ts.ucmd()
+        .arg("-f1,3")
+        .arg(file_name)
+        .succeeds()
+        .stdout_only("a\tc\n1\t3\n");
 }

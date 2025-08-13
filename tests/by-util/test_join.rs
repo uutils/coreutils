@@ -537,20 +537,13 @@ fn test_full() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_join_non_utf8_paths() {
-    use std::fs;
+    use std::fs::File;
+    use std::io::Write;
 
     let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
+    let test_dir = ts.fixtures.subdir.as_path();
 
-    // Create files with non-UTF-8 names using shell commands
-    // since the test framework doesn't support OsStr for file names
-    let test_dir = at.subdir.as_path();
-
-    // Create temporary files with valid names first
-    at.write("temp1.txt", "a 1\n");
-    at.write("temp2.txt", "a 2\n");
-
-    // Rename them to non-UTF-8 names using std::fs
+    // Create files directly with non-UTF-8 names
     let file1_bytes = b"test_\xFF\xFE_1.txt";
     let file2_bytes = b"test_\xFF\xFE_2.txt";
 
@@ -560,10 +553,12 @@ fn test_join_non_utf8_paths() {
         let file1_name = std::ffi::OsStr::from_bytes(file1_bytes);
         let file2_name = std::ffi::OsStr::from_bytes(file2_bytes);
 
-        fs::rename(test_dir.join("temp1.txt"), test_dir.join(file1_name)).unwrap();
-        fs::rename(test_dir.join("temp2.txt"), test_dir.join(file2_name)).unwrap();
+        let mut file1 = File::create(test_dir.join(file1_name)).unwrap();
+        file1.write_all(b"a 1\n").unwrap();
 
-        // Test that join can handle non-UTF-8 filenames
+        let mut file2 = File::create(test_dir.join(file2_name)).unwrap();
+        file2.write_all(b"a 2\n").unwrap();
+
         ts.ucmd()
             .arg(file1_name)
             .arg(file2_name)

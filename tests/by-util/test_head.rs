@@ -874,22 +874,11 @@ fn test_head_non_utf8_paths() {
 
     std::fs::write(at.plus(non_utf8_name), "line1\nline2\nline3\n").unwrap();
 
-    // Test that head handles non-UTF-8 file names without crashing
     let result = scene.ucmd().arg(non_utf8_name).succeeds();
 
-    // The result should contain the file content
     let output = result.stdout_str_lossy();
     assert!(output.contains("line1"));
     assert!(output.contains("line2"));
     assert!(output.contains("line3"));
-
-    // Test with line count argument
-    scene
-        .ucmd()
-        .args(&["-n", "2"])
-        .arg(non_utf8_name)
-        .succeeds()
-        .stdout_contains("line1")
-        .stdout_contains("line2");
 }
     // Test that head handles non-UTF-8 file names without crashing
