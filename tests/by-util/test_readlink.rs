@@ -382,18 +382,18 @@ fn test_readlink_non_utf8_paths() {
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    
+
     // Create a target file and a symlink with non-UTF-8 bytes in the name
     at.touch("target_file");
     let non_utf8_bytes = b"symlink_\xFF\xFE";
     let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
-    
+
     // Create symlink using std::os::unix::fs::symlink
     std::os::unix::fs::symlink(at.plus_as_string("target_file"), at.plus(non_utf8_name)).unwrap();
-    
+
     // Test that readlink handles non-UTF-8 symlink names without crashing
     let result = scene.ucmd().arg(non_utf8_name).succeeds();
-    
+
     // The result should contain the target path
     let output = result.stdout_str_lossy();
     assert!(output.contains("target_file"));

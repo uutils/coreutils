@@ -852,36 +852,38 @@ fn test_ln_non_utf8_paths() {
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    
+
     // Create a test file with non-UTF-8 bytes in the name
     let non_utf8_bytes = b"test_\xFF\xFE.txt";
     let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
     let non_utf8_link_bytes = b"link_\xFF\xFE.txt";
     let non_utf8_link_name = OsStr::from_bytes(non_utf8_link_bytes);
-    
+
     // Create the actual file
     at.touch(non_utf8_name);
-    
+
     // Test creating a hard link with non-UTF-8 file names
-    scene.ucmd()
+    scene
+        .ucmd()
         .arg(non_utf8_name)
         .arg(non_utf8_link_name)
         .succeeds();
-    
+
     // Both files should exist
     assert!(at.file_exists(non_utf8_name));
     assert!(at.file_exists(non_utf8_link_name));
-    
+
     // Test creating a symbolic link with non-UTF-8 file names
     let symlink_bytes = b"symlink_\xFF\xFE.txt";
     let symlink_name = OsStr::from_bytes(symlink_bytes);
-    
-    scene.ucmd()
+
+    scene
+        .ucmd()
         .args(&["-s"])
         .arg(non_utf8_name)
         .arg(symlink_name)
         .succeeds();
-    
+
     // Check if symlink was created successfully
     let symlink_path = at.plus(symlink_name);
     assert!(symlink_path.is_symlink());

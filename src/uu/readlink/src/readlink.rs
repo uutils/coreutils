@@ -81,9 +81,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     for f in &files {
         let p = f;
         let path_result = if res_mode == ResolveMode::None {
-            fs::read_link(&p)
+            fs::read_link(p)
         } else {
-            canonicalize(&p, can_mode, res_mode)
+            canonicalize(p, can_mode, res_mode)
         };
 
         match path_result {

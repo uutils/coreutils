@@ -7,9 +7,14 @@ use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::Pattern;
 use std::collections::HashSet;
 use std::env;
+#[cfg(unix)]
+use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::fs::Metadata;
 use std::fs::{self, DirEntry, File};
 use std::io::{BufRead, BufReader, stdout};
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
@@ -568,6 +573,9 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
             );
             set_exit_code(1);
         } else {
+            #[cfg(unix)]
+            let p = PathBuf::from(OsStr::from_bytes(&path));
+            #[cfg(windows)]
             let p = PathBuf::from(String::from_utf8_lossy(&path).to_string());
             if !paths.contains(&p) {
                 paths.push(p);
@@ -594,21 +602,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         summarize,
     )?;
 
-    let files = if let Some(file_from) = matches.get_one::<String>(options::FILES0_FROM) {
-        if file_from == "-" && matches.get_one::<String>(options::FILE).is_some() {
+    let files = if let Some(file_from) = matches.get_one::<OsString>(options::FILES0_FROM) {
+        if file_from.to_string_lossy() == "-"
+            && matches.get_one::<OsString>(options::FILE).is_some()
+        {
             return Err(std::io::Error::other(
                 translate!("du-error-extra-operand-with-files0-from",
                     "file" => matches
-                        .get_one::<String>(options::FILE)
+                        .get_one::<OsString>(options::FILE)
                         .unwrap()
+                        .to_string_lossy()
                         .quote()
                 ),
             )
             .into());
         }
 
-        read_files_from(file_from)?
-    } else if let Some(files) = matches.get_many::<String>(options::FILE) {
+        read_files_from(&file_from.to_string_lossy())?
+    } else if let Some(files) = matches.get_many::<OsString>(options::FILE) {
         let files = files.map(PathBuf::from);
         if count_links {
             files.collect()
@@ -984,6 +995,7 @@ pub fn uu_app() -> Command {
                 .long("files0-from")
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString))
                 .help(translate!("du-help-files0-from"))
                 .action(ArgAction::Append),
         )
@@ -1010,6 +1022,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE)
                 .hide(true)
                 .value_hint(clap::ValueHint::AnyPath)
+                .value_parser(clap::value_parser!(OsString))
                 .action(ArgAction::Append),
         )
 }
