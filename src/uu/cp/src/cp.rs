@@ -11,6 +11,8 @@ use std::fmt::Display;
 use std::fs::{self, Metadata, OpenOptions, Permissions};
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+#[cfg(unix)]
+use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{fmt, io};
 #[cfg(all(unix, not(target_os = "android")))]
@@ -2071,6 +2073,7 @@ fn handle_copy_mode(
     symlinked_files: &mut HashSet<FileInformation>,
     source_in_command_line: bool,
     source_is_fifo: bool,
+    source_is_socket: bool,
     #[cfg(unix)] source_is_stream: bool,
 ) -> CopyResult<PerformedAction> {
     let source_is_symlink = source_metadata.is_symlink();
@@ -2110,6 +2113,7 @@ fn handle_copy_mode(
                 context,
                 source_is_symlink,
                 source_is_fifo,
+                source_is_socket,
                 symlinked_files,
                 #[cfg(unix)]
                 source_is_stream,
@@ -2132,6 +2136,7 @@ fn handle_copy_mode(
                             context,
                             source_is_symlink,
                             source_is_fifo,
+                            source_is_socket,
                             symlinked_files,
                             #[cfg(unix)]
                             source_is_stream,
@@ -2167,6 +2172,7 @@ fn handle_copy_mode(
                             context,
                             source_is_symlink,
                             source_is_fifo,
+                            source_is_socket,
                             symlinked_files,
                             #[cfg(unix)]
                             source_is_stream,
@@ -2181,6 +2187,7 @@ fn handle_copy_mode(
                     context,
                     source_is_symlink,
                     source_is_fifo,
+                    source_is_socket,
                     symlinked_files,
                     #[cfg(unix)]
                     source_is_stream,
@@ -2407,8 +2414,12 @@ fn copy_file(
 
     #[cfg(unix)]
     let source_is_fifo = source_metadata.file_type().is_fifo();
+    #[cfg(unix)]
+    let source_is_socket = source_metadata.file_type().is_socket();
     #[cfg(not(unix))]
     let source_is_fifo = false;
+    #[cfg(not(unix))]
+    let source_is_socket = false;
 
     let source_is_stream = is_stream(&source_metadata);
 
@@ -2421,6 +2432,7 @@ fn copy_file(
         symlinked_files,
         source_in_command_line,
         source_is_fifo,
+        source_is_socket,
         #[cfg(unix)]
         source_is_stream,
     )?;
@@ -2547,6 +2559,7 @@ fn copy_helper(
     context: &str,
     source_is_symlink: bool,
     source_is_fifo: bool,
+    source_is_socket: bool,
     symlinked_files: &mut HashSet<FileInformation>,
     #[cfg(unix)] source_is_stream: bool,
 ) -> CopyResult<()> {
@@ -2559,7 +2572,10 @@ fn copy_helper(
         return Err(CpError::NotADirectory(dest.to_path_buf()));
     }
 
-    if source_is_fifo && options.recursive && !options.copy_contents {
+    if source_is_socket && options.recursive && !options.copy_contents {
+        #[cfg(unix)]
+        copy_socket(dest, options.overwrite, options.debug)?;
+    } else if source_is_fifo && options.recursive && !options.copy_contents {
         #[cfg(unix)]
         copy_fifo(dest, options.overwrite, options.debug)?;
     } else if source_is_symlink {
@@ -2594,6 +2610,17 @@ fn copy_fifo(dest: &Path, overwrite: OverwriteMode, debug: bool) -> CopyResult<(
 
     make_fifo(dest)
         .map_err(|_| translate!("cp-error-cannot-create-fifo", "path" => dest.quote()).into())
+}
+
+#[cfg(unix)]
+fn copy_socket(dest: &Path, overwrite: OverwriteMode, debug: bool) -> CopyResult<()> {
+    if dest.exists() {
+        overwrite.verify(dest, debug)?;
+        fs::remove_file(dest)?;
+    }
+
+    UnixListener::bind(dest)?;
+    Ok(())
 }
 
 fn copy_link(

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
-//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV sigbus tmpfs
+//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV sigbus tmpfs mksocket
 
 #![allow(dead_code)]
 #![allow(
@@ -33,6 +33,8 @@ use std::io::{self, BufWriter, Read, Result, Write};
 use std::os::fd::OwnedFd;
 #[cfg(unix)]
 use std::os::unix::fs::{PermissionsExt, symlink as symlink_dir, symlink as symlink_file};
+#[cfg(unix)]
+use std::os::unix::net::UnixListener;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 #[cfg(unix)]
@@ -1130,6 +1132,13 @@ impl AtPath {
             let fifo_name: CString = CString::new(full_path).expect("CString creation failed.");
             libc::mkfifo(fifo_name.as_ptr(), libc::S_IWUSR | libc::S_IRUSR);
         }
+    }
+
+    #[cfg(unix)]
+    pub fn mksocket(&self, socket: &str) {
+        let full_path = self.plus_as_string(socket);
+        log_info("mksocket", &full_path);
+        UnixListener::bind(full_path).expect("Socket file creation failed.");
     }
 
     #[cfg(not(windows))]
