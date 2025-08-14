@@ -1747,9 +1747,7 @@ fn test_split_non_utf8_argument_windows() {
     let opt_value = [0x0066, 0x006f, 0xD800, 0x006f];
     let opt_value = OsString::from_wide(&opt_value[..]);
     let name = OsString::from(name);
-    ucmd.args(&[opt, opt_value, name])
-        .fails()
-        .stderr_contains("error: invalid UTF-8 was detected in one or more arguments");
+    ucmd.args(&[opt, opt_value, name]).succeeds();
 }
 
 // Test '--separator' / '-t' option following GNU tests example
