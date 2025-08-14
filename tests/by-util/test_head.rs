@@ -881,4 +881,4 @@ fn test_head_non_utf8_paths() {
     assert!(output.contains("line2"));
     assert!(output.contains("line3"));
 }
-    // Test that head handles non-UTF-8 file names without crashing
+// Test that head handles non-UTF-8 file names without crashing
