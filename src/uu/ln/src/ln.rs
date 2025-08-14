@@ -61,7 +61,7 @@ enum LnError {
     #[error("{}", translate!("ln-error-missing-destination", "operand" => _0.quote()))]
     MissingDestination(PathBuf),
 
-    #[error("{}", translate!("ln-error-extra-operand", "operand" => format!("{_0:?}").trim_matches('"'), "program" => _1.clone()))]
+    #[error("{}", translate!("ln-error-extra-operand", "operand" => _0.quote(), "program" => _1.clone()))]
     ExtraOperand(OsString, String),
 }
 
@@ -294,13 +294,13 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
         {
             // In that case, we don't want to do link resolution
             // We need to clean the target
-            if target_dir.is_file() {
-                if let Err(e) = fs::remove_file(target_dir) {
-                    show_error!(
-                        "{}",
-                        translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
-                    );
-                }
+            if target_dir.is_file()
+                && let Err(e) = fs::remove_file(target_dir)
+            {
+                show_error!(
+                    "{}",
+                    translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
+                );
             }
             #[cfg(windows)]
             if target_dir.is_dir() {
@@ -360,14 +360,14 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
 }
 
 fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
-    if let Ok(src_abs) = canonicalize(src, MissingHandling::Missing, ResolveMode::Physical) {
-        if let Ok(dst_abs) = canonicalize(
+    if let Ok(src_abs) = canonicalize(src, MissingHandling::Missing, ResolveMode::Physical)
+        && let Ok(dst_abs) = canonicalize(
             dst.parent().unwrap(),
             MissingHandling::Missing,
             ResolveMode::Physical,
-        ) {
-            return make_path_relative_to(src_abs, dst_abs).into();
-        }
+        )
+    {
+        return make_path_relative_to(src_abs, dst_abs).into();
     }
     src.into()
 }

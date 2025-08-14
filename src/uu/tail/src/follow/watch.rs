@@ -401,14 +401,13 @@ impl Observer {
                 | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
                 if self.follow_name() {
                     if settings.retry {
-                        if let Some(old_md) = self.files.get_mut_metadata(event_path) {
-                            if old_md.is_tailable() && self.files.get(event_path).reader.is_some() {
+                        if let Some(old_md) = self.files.get_mut_metadata(event_path)
+                            && old_md.is_tailable() && self.files.get(event_path).reader.is_some() {
                                 show_error!(
                                     "{}",
                                     translate!("tail-status-file-became-inaccessible", "file" => display_name.quote(), "become_inaccessible" => translate!("tail-become-inaccessible"), "no_such_file" => translate!("tail-no-such-file-or-directory"))
                                 );
                             }
-                        }
                         if event_path.is_orphan() && !self.orphans.contains(event_path) {
                             show_error!("{}", translate!("tail-status-directory-containing-watched-file-removed"));
                             show_error!(
@@ -550,26 +549,26 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
         let mut paths = vec![]; // Paths worth checking for new content to print
         match rx_result {
             Ok(Ok(event)) => {
-                if let Some(event_path) = event.paths.first() {
-                    if observer.files.contains_key(event_path) {
-                        // Handle Event if it is about a path that we are monitoring
-                        paths = observer.handle_event(&event, settings)?;
-                    }
+                if let Some(event_path) = event.paths.first()
+                    && observer.files.contains_key(event_path)
+                {
+                    // Handle Event if it is about a path that we are monitoring
+                    paths = observer.handle_event(&event, settings)?;
                 }
             }
             Ok(Err(notify::Error {
                 kind: notify::ErrorKind::Io(ref e),
                 paths,
             })) if e.kind() == std::io::ErrorKind::NotFound => {
-                if let Some(event_path) = paths.first() {
-                    if observer.files.contains_key(event_path) {
-                        let _ = observer
-                            .watcher_rx
-                            .as_mut()
-                            .unwrap()
-                            .watcher
-                            .unwatch(event_path);
-                    }
+                if let Some(event_path) = paths.first()
+                    && observer.files.contains_key(event_path)
+                {
+                    let _ = observer
+                        .watcher_rx
+                        .as_mut()
+                        .unwrap()
+                        .watcher
+                        .unwatch(event_path);
                 }
             }
             Ok(Err(notify::Error {

@@ -18,13 +18,13 @@ impl<'a> VariableParser<'a, '_> {
     }
 
     fn check_variable_name_start(&self) -> Result<(), EnvError> {
-        if let Some(c) = self.get_current_char() {
-            if c.is_ascii_digit() {
-                return Err(EnvError::EnvParsingOfVariableUnexpectedNumber(
-                    self.parser.get_peek_position(),
-                    c.to_string(),
-                ));
-            }
+        if let Some(c) = self.get_current_char()
+            && c.is_ascii_digit()
+        {
+            return Err(EnvError::EnvParsingOfVariableUnexpectedNumber(
+                self.parser.get_peek_position(),
+                c.to_string(),
+            ));
         }
         Ok(())
     }

@@ -39,10 +39,11 @@ fn block(buf: &[u8], cbs: usize, sync: bool, rstat: &mut ReadStat) -> Vec<Vec<u8
     // If `sync` is true and there has been at least one partial
     // record read from the input, then leave the all-spaces block at
     // the end. Otherwise, remove it.
-    if let Some(last) = blocks.last() {
-        if (!sync || rstat.reads_partial == 0) && last.iter().all(|&e| e == SPACE) {
-            blocks.pop();
-        }
+    if let Some(last) = blocks.last()
+        && (!sync || rstat.reads_partial == 0)
+        && last.iter().all(|&e| e == SPACE)
+    {
+        blocks.pop();
     }
 
     blocks

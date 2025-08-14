@@ -72,10 +72,10 @@ fn detect_target_utility() -> Option<String> {
     use std::fs;
 
     // First check if an explicit environment variable was set
-    if let Ok(target_util) = env::var("UUCORE_TARGET_UTIL") {
-        if !target_util.is_empty() {
-            return Some(target_util);
-        }
+    if let Ok(target_util) = env::var("UUCORE_TARGET_UTIL")
+        && !target_util.is_empty()
+    {
+        return Some(target_util);
     }
 
     // Check for a build configuration file in the target directory
@@ -162,10 +162,10 @@ fn embed_all_utilities_locales(
     let mut util_dirs = Vec::new();
     for entry in fs::read_dir(&src_uu_dir)? {
         let entry = entry?;
-        if entry.file_type()?.is_dir() {
-            if let Some(dir_name) = entry.file_name().to_str() {
-                util_dirs.push(dir_name.to_string());
-            }
+        if entry.file_type()?.is_dir()
+            && let Some(dir_name) = entry.file_name().to_str()
+        {
+            util_dirs.push(dir_name.to_string());
         }
     }
     util_dirs.sort();

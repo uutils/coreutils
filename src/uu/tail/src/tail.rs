@@ -213,17 +213,16 @@ fn tail_stdin(
     // on macOS and Linux.
     #[cfg(target_os = "macos")]
     {
-        if let Ok(mut stdin_handle) = Handle::stdin() {
-            if let Ok(meta) = stdin_handle.as_file_mut().metadata() {
-                if meta.file_type().is_dir() {
-                    set_exit_code(1);
-                    show_error!(
-                        "{}",
-                        translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name.clone(), "error" => translate!("tail-no-such-file-or-directory"))
-                    );
-                    return Ok(());
-                }
-            }
+        if let Ok(mut stdin_handle) = Handle::stdin()
+            && let Ok(meta) = stdin_handle.as_file_mut().metadata()
+            && meta.file_type().is_dir()
+        {
+            set_exit_code(1);
+            show_error!(
+                "{}",
+                translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name.clone(), "error" => translate!("tail-no-such-file-or-directory"))
+            );
+            return Ok(());
         }
     }
 
@@ -234,10 +233,10 @@ fn tail_stdin(
             if cfg!(unix) {
                 // Save the current seek position/offset of a stdin redirected file.
                 // This is needed to pass "gnu/tests/tail-2/start-middle.sh"
-                if let Ok(mut stdin_handle) = Handle::stdin() {
-                    if let Ok(offset) = stdin_handle.as_file_mut().stream_position() {
-                        stdin_offset = offset;
-                    }
+                if let Ok(mut stdin_handle) = Handle::stdin()
+                    && let Ok(offset) = stdin_handle.as_file_mut().stream_position()
+                {
+                    stdin_offset = offset;
                 }
             }
             tail_file(
@@ -374,10 +373,10 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
 
         // Ignore a trailing newline in the last block, if there is one.
         if first_slice {
-            if let Some(c) = slice.last() {
-                if *c == delimiter {
-                    iter.next();
-                }
+            if let Some(c) = slice.last()
+                && *c == delimiter
+            {
+                iter.next();
             }
             first_slice = false;
         }

@@ -2533,13 +2533,13 @@ fn test_mv_selinux_context() {
 
         // Verify SELinux context was set using getfattr
         let context_value = get_getfattr_output(&at.plus_as_string(dest));
-        if !context_value.is_empty() {
-            if let Some(expected) = expected_context {
-                assert!(
-                    context_value.contains(expected),
-                    "Expected context to contain '{expected}', got: {context_value}"
-                );
-            }
+        if !context_value.is_empty()
+            && let Some(expected) = expected_context
+        {
+            assert!(
+                context_value.contains(expected),
+                "Expected context to contain '{expected}', got: {context_value}"
+            );
         }
 
         // Clean up files

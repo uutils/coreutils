@@ -1350,10 +1350,10 @@ impl TestScenario {
         fixture_path_builder.push(TESTS_DIR);
         fixture_path_builder.push(FIXTURES_DIR);
         fixture_path_builder.push(util_name.as_ref());
-        if let Ok(m) = fs::metadata(&fixture_path_builder) {
-            if m.is_dir() {
-                recursive_copy(&fixture_path_builder, &ts.fixtures.subdir).unwrap();
-            }
+        if let Ok(m) = fs::metadata(&fixture_path_builder)
+            && m.is_dir()
+        {
+            recursive_copy(&fixture_path_builder, &ts.fixtures.subdir).unwrap();
         }
         ts
     }
