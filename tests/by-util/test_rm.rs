@@ -6,8 +6,7 @@
 
 use std::process::Stdio;
 
-use uutests::util::TestScenario;
-use uutests::{at_and_ucmd, new_ucmd, util_name};
+use uutests::{at_and_ucmd, new_ucmd, util::TestScenario, util_name};
 
 #[test]
 fn test_invalid_arg() {
@@ -218,6 +217,24 @@ fn test_recursive_multiple() {
     assert!(!at.file_exists(file_b));
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_recursive_long_filepath() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_recursive_directory";
+    let mkdir = "test_rm_recursive_directory/".repeat(35);
+    let file_a = mkdir.clone() + "test_rm_recursive_file_a";
+    assert!(file_a.len() > 1000);
+
+    at.mkdir_all(&mkdir);
+    at.touch(&file_a);
+
+    ucmd.arg("-r").arg(dir).succeeds().no_stderr();
+
+    assert!(!at.dir_exists(dir));
+    assert!(!at.file_exists(file_a));
+}
+
 #[test]
 fn test_directory_without_flag() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -361,42 +378,53 @@ fn test_silently_accepts_presume_input_tty2() {
 fn test_interactive_never() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
+    let file = "a";
 
-    let file_2 = "test_rm_interactive";
+    for arg in ["never", "no", "none"] {
+        at.touch(file);
+        #[cfg(feature = "chmod")]
+        scene.ccmd("chmod").arg("0").arg(file).succeeds();
 
-    at.touch(file_2);
-    #[cfg(feature = "chmod")]
-    scene.ccmd("chmod").arg("0").arg(file_2).succeeds();
+        scene
+            .ucmd()
+            .arg(format!("--interactive={arg}"))
+            .arg(file)
+            .succeeds()
+            .no_output();
 
-    scene
-        .ucmd()
-        .arg("--interactive=never")
-        .arg(file_2)
-        .succeeds()
-        .stdout_is("");
-
-    assert!(!at.file_exists(file_2));
+        assert!(!at.file_exists(file));
+    }
 }
 
 #[test]
-fn test_interactive_missing_value() {
-    // `--interactive` is equivalent to `--interactive=always` or `-i`
-    let (at, mut ucmd) = at_and_ucmd!();
+fn test_interactive_always() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
 
-    let file1 = "test_rm_interactive_missing_value_file1";
-    let file2 = "test_rm_interactive_missing_value_file2";
+    let file_a = "a";
+    let file_b = "b";
 
-    at.touch(file1);
-    at.touch(file2);
+    for arg in [
+        "-i",
+        "--interactive",
+        "--interactive=always",
+        "--interactive=yes",
+    ] {
+        at.touch(file_a);
+        at.touch(file_b);
 
-    ucmd.arg("--interactive")
-        .arg(file1)
-        .arg(file2)
-        .pipe_in("y\ny")
-        .succeeds();
+        scene
+            .ucmd()
+            .arg(arg)
+            .arg(file_a)
+            .arg(file_b)
+            .pipe_in("y\ny")
+            .succeeds()
+            .no_stdout();
 
-    assert!(!at.file_exists(file1));
-    assert!(!at.file_exists(file2));
+        assert!(!at.file_exists(file_a));
+        assert!(!at.file_exists(file_b));
+    }
 }
 
 #[test]

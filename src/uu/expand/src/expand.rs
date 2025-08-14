@@ -16,9 +16,8 @@ use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
+use uucore::translate;
 use uucore::{format_usage, show_error};
-
-use uucore::locale::get_message;
 
 pub mod options {
     pub static TABS: &str = "tabs";
@@ -61,17 +60,17 @@ fn is_digit_or_comma(c: char) -> bool {
 /// Errors that can occur when parsing a `--tabs` argument.
 #[derive(Debug, Error)]
 enum ParseError {
-    #[error("tab size contains invalid character(s): {}", .0.quote())]
+    #[error("{}", translate!("expand-error-invalid-character", "char" => .0.quote()))]
     InvalidCharacter(String),
-    #[error("{} specifier not at start of number: {}", .0.quote(), .1.quote())]
+    #[error("{}", translate!("expand-error-specifier-not-at-start", "specifier" => .0.quote(), "number" => .1.quote()))]
     SpecifierNotAtStartOfNumber(String, String),
-    #[error("{} specifier only allowed with the last value", .0.quote())]
+    #[error("{}", translate!("expand-error-specifier-only-allowed-with-last", "specifier" => .0.quote()))]
     SpecifierOnlyAllowedWithLastValue(String),
-    #[error("tab size cannot be 0")]
+    #[error("{}", translate!("expand-error-tab-size-cannot-be-zero"))]
     TabSizeCannotBeZero,
-    #[error("tab stop is too large {}", .0.quote())]
+    #[error("{}", translate!("expand-error-tab-size-too-large", "size" => .0.quote()))]
     TabSizeTooLarge(String),
-    #[error("tab sizes must be ascending")]
+    #[error("{}", translate!("expand-error-tab-sizes-must-be-ascending"))]
     TabSizesMustBeAscending,
 }
 
@@ -252,16 +251,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("expand-about"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("expand-about"))
         .after_help(LONG_HELP)
-        .override_usage(format_usage(&get_message("expand-usage")))
+        .override_usage(format_usage(&translate!("expand-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
             Arg::new(options::INITIAL)
                 .long(options::INITIAL)
                 .short('i')
-                .help("do not convert tabs after non blanks")
+                .help(translate!("expand-help-initial"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -270,16 +270,13 @@ pub fn uu_app() -> Command {
                 .short('t')
                 .value_name("N, LIST")
                 .action(ArgAction::Append)
-                .help(
-                    "have tabs N characters apart, not 8 or use comma separated list \
-                    of explicit tab positions",
-                ),
+                .help(translate!("expand-help-tabs")),
         )
         .arg(
             Arg::new(options::NO_UTF8)
                 .long(options::NO_UTF8)
                 .short('U')
-                .help("interpret input file as 8-bit ASCII rather than UTF-8")
+                .help(translate!("expand-help-no-utf8"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -383,10 +380,10 @@ fn expand_line(
             }
         } else {
             (
-                match buf[byte] {
+                match buf.get(byte) {
                     // always take exactly 1 byte in strict ASCII mode
-                    0x09 => Tab,
-                    0x08 => Backspace,
+                    Some(0x09) => Tab,
+                    Some(0x08) => Backspace,
                     _ => Other,
                 },
                 1,
@@ -407,7 +404,7 @@ fn expand_line(
                         output.write_all(&options.tspaces.as_bytes()[..nts])?;
                     } else {
                         output.write_all(" ".repeat(nts).as_bytes())?;
-                    };
+                    }
                 } else {
                     output.write_all(&buf[byte..byte + nbytes])?;
                 }
@@ -447,7 +444,10 @@ fn expand(options: &Options) -> UResult<()> {
 
     for file in &options.files {
         if Path::new(file).is_dir() {
-            show_error!("{file}: Is a directory");
+            show_error!(
+                "{}",
+                translate!("expand-error-is-directory", "file" => file)
+            );
             set_exit_code(1);
             continue;
         }
@@ -458,13 +458,12 @@ fn expand(options: &Options) -> UResult<()> {
                     Err(_) => buf.is_empty(),
                 } {
                     expand_line(&mut buf, &mut output, ts, options)
-                        .map_err_context(|| "failed to write output".to_string())?;
+                        .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
                 }
             }
             Err(e) => {
                 show_error!("{e}");
                 set_exit_code(1);
-                continue;
             }
         }
     }

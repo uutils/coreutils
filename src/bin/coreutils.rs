@@ -108,6 +108,7 @@ fn main() {
 
     // binary name equals util name?
     if let Some(&(uumain, _)) = utils.get(binary_as_util) {
+        setup_localization_or_exit(binary_as_util);
         process::exit(uumain(vec![binary.into()].into_iter().chain(args)));
     }
 
@@ -143,6 +144,10 @@ fn main() {
                 for util in utils {
                     println!("{util}");
                 }
+                process::exit(0);
+            }
+            "--version" | "-V" => {
+                println!("{binary_as_util} {VERSION} (multi-call binary)");
                 process::exit(0);
             }
             // Not a special command: fallthrough to calling a util

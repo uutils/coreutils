@@ -11,12 +11,12 @@ use std::{
 use tempfile::TempDir;
 use uucore::{
     error::{UResult, USimpleError},
-    show_error,
+    show_error, translate,
 };
 
 use crate::SortError;
 
-/// A wrapper around TempDir that may only exist once in a process.
+/// A wrapper around [`TempDir`] that may only exist once in a process.
 ///
 /// `TmpDirWrapper` handles the allocation of new temporary files in this temporary directory and
 /// deleting the whole directory when `SIGINT` is received. Creating a second `TmpDirWrapper` will
@@ -58,11 +58,25 @@ impl TmpDirWrapper {
             // and the program doesn't terminate before the handler has finished
             let _lock = lock.lock().unwrap();
             if let Err(e) = remove_tmp_dir(&path) {
-                show_error!("failed to delete temporary directory: {e}");
+                show_error!(
+                    "{}",
+                    translate!(
+                        "sort-failed-to-delete-temporary-directory",
+                        "error" => e
+                    )
+                );
             }
             std::process::exit(2)
         })
-        .map_err(|e| USimpleError::new(2, format!("failed to set up signal handler: {e}")))
+        .map_err(|e| {
+            USimpleError::new(
+                2,
+                translate!(
+                    "sort-failed-to-set-up-signal-handler",
+                    "error" => e
+                ),
+            )
+        })
     }
 
     pub fn next_file(&mut self) -> UResult<(File, PathBuf)> {

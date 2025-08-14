@@ -22,10 +22,12 @@ use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
+use uucore::translate;
+
 use uucore::parser::parse_size::parse_size_u64;
 
+use uucore::LocalizedCommand;
 use uucore::format_usage;
-use uucore::locale::get_message;
 use uucore::uio_error;
 
 static OPT_BYTES: &str = "bytes";
@@ -50,7 +52,7 @@ static ARG_PREFIX: &str = "prefix";
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, obs_lines) = handle_obsolete(args);
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     match Settings::from(&matches, obs_lines.as_deref()) {
         Ok(settings) => split(&settings),
@@ -226,9 +228,10 @@ fn handle_preceding_options(
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("split-about"))
-        .after_help(get_message("split-after-help"))
-        .override_usage(format_usage(&get_message("split-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("split-about"))
+        .after_help(translate!("split-after-help"))
+        .override_usage(format_usage(&translate!("split-usage")))
         .infer_long_args(true)
         // strategy (mutually exclusive)
         .arg(
@@ -237,7 +240,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_BYTES)
                 .allow_hyphen_values(true)
                 .value_name("SIZE")
-                .help("put SIZE bytes per output file"),
+                .help(translate!("split-help-bytes")),
         )
         .arg(
             Arg::new(OPT_LINE_BYTES)
@@ -245,7 +248,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_LINE_BYTES)
                 .allow_hyphen_values(true)
                 .value_name("SIZE")
-                .help("put at most SIZE bytes of lines per output file"),
+                .help(translate!("split-help-line-bytes")),
         )
         .arg(
             Arg::new(OPT_LINES)
@@ -254,7 +257,7 @@ pub fn uu_app() -> Command {
                 .allow_hyphen_values(true)
                 .value_name("NUMBER")
                 .default_value("1000")
-                .help("put NUMBER lines/records per output file"),
+                .help(translate!("split-help-lines")),
         )
         .arg(
             Arg::new(OPT_NUMBER)
@@ -262,7 +265,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_NUMBER)
                 .allow_hyphen_values(true)
                 .value_name("CHUNKS")
-                .help("generate CHUNKS output files; see explanation below"),
+                .help(translate!("split-help-number")),
         )
         // rest of the arguments
         .arg(
@@ -271,7 +274,7 @@ pub fn uu_app() -> Command {
                 .allow_hyphen_values(true)
                 .value_name("SUFFIX")
                 .default_value("")
-                .help("additional SUFFIX to append to output file names"),
+                .help(translate!("split-help-additional-suffix")),
         )
         .arg(
             Arg::new(OPT_FILTER)
@@ -279,15 +282,13 @@ pub fn uu_app() -> Command {
                 .allow_hyphen_values(true)
                 .value_name("COMMAND")
                 .value_hint(ValueHint::CommandName)
-                .help(
-                    "write to shell COMMAND; file name is $FILE (Currently not implemented for Windows)",
-                ),
+                .help(translate!("split-help-filter")),
         )
         .arg(
             Arg::new(OPT_ELIDE_EMPTY_FILES)
                 .long(OPT_ELIDE_EMPTY_FILES)
                 .short('e')
-                .help("do not generate empty output files with '-n'")
+                .help(translate!("split-help-elide-empty-files"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -298,9 +299,9 @@ pub fn uu_app() -> Command {
                     OPT_NUMERIC_SUFFIXES,
                     OPT_NUMERIC_SUFFIXES_SHORT,
                     OPT_HEX_SUFFIXES,
-                    OPT_HEX_SUFFIXES_SHORT
+                    OPT_HEX_SUFFIXES_SHORT,
                 ])
-                .help("use numeric suffixes starting at 0, not alphabetic"),
+                .help(translate!("split-help-numeric-suffixes-short")),
         )
         .arg(
             Arg::new(OPT_NUMERIC_SUFFIXES)
@@ -311,10 +312,10 @@ pub fn uu_app() -> Command {
                     OPT_NUMERIC_SUFFIXES,
                     OPT_NUMERIC_SUFFIXES_SHORT,
                     OPT_HEX_SUFFIXES,
-                    OPT_HEX_SUFFIXES_SHORT
+                    OPT_HEX_SUFFIXES_SHORT,
                 ])
                 .value_name("FROM")
-                .help("same as -d, but allow setting the start value"),
+                .help(translate!("split-help-numeric-suffixes")),
         )
         .arg(
             Arg::new(OPT_HEX_SUFFIXES_SHORT)
@@ -324,9 +325,9 @@ pub fn uu_app() -> Command {
                     OPT_NUMERIC_SUFFIXES,
                     OPT_NUMERIC_SUFFIXES_SHORT,
                     OPT_HEX_SUFFIXES,
-                    OPT_HEX_SUFFIXES_SHORT
+                    OPT_HEX_SUFFIXES_SHORT,
                 ])
-                .help("use hex suffixes starting at 0, not alphabetic"),
+                .help(translate!("split-help-hex-suffixes-short")),
         )
         .arg(
             Arg::new(OPT_HEX_SUFFIXES)
@@ -337,10 +338,10 @@ pub fn uu_app() -> Command {
                     OPT_NUMERIC_SUFFIXES,
                     OPT_NUMERIC_SUFFIXES_SHORT,
                     OPT_HEX_SUFFIXES,
-                    OPT_HEX_SUFFIXES_SHORT
+                    OPT_HEX_SUFFIXES_SHORT,
                 ])
                 .value_name("FROM")
-                .help("same as -x, but allow setting the start value"),
+                .help(translate!("split-help-hex-suffixes")),
         )
         .arg(
             Arg::new(OPT_SUFFIX_LENGTH)
@@ -348,12 +349,12 @@ pub fn uu_app() -> Command {
                 .long(OPT_SUFFIX_LENGTH)
                 .allow_hyphen_values(true)
                 .value_name("N")
-                .help("generate suffixes of length N (default 2)"),
+                .help(translate!("split-help-suffix-length")),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
                 .long(OPT_VERBOSE)
-                .help("print a diagnostic just before each output file is opened")
+                .help(translate!("split-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -363,7 +364,7 @@ pub fn uu_app() -> Command {
                 .allow_hyphen_values(true)
                 .value_name("SEP")
                 .action(ArgAction::Append)
-                .help("use SEP instead of newline as the record separator; '\\0' (zero) specifies the NUL character"),
+                .help(translate!("split-help-separator")),
         )
         .arg(
             Arg::new(OPT_IO_BLKSIZE)
@@ -376,10 +377,7 @@ pub fn uu_app() -> Command {
                 .default_value("-")
                 .value_hint(ValueHint::FilePath),
         )
-        .arg(
-            Arg::new(ARG_PREFIX)
-                .default_value("x")
-        )
+        .arg(Arg::new(ARG_PREFIX).default_value("x"))
 }
 
 /// Parameters that control how a file gets split.
@@ -420,27 +418,27 @@ enum SettingsError {
     Suffix(SuffixError),
 
     /// Multi-character (Invalid) separator
-    #[error("multi-character separator {}", .0.quote())]
+    #[error("{}", translate!("split-error-multi-character-separator", "separator" => .0.quote()))]
     MultiCharacterSeparator(String),
 
     /// Multiple different separator characters
-    #[error("multiple separator characters specified")]
+    #[error("{}", translate!("split-error-multiple-separator-characters"))]
     MultipleSeparatorCharacters,
 
     /// Using `--filter` with `--number` option sub-strategies that print Kth chunk out of N chunks to stdout
     /// K/N
     /// l/K/N
     /// r/K/N
-    #[error("--filter does not process a chunk extracted to stdout")]
+    #[error("{}", translate!("split-error-filter-with-kth-chunk"))]
     FilterWithKthChunkNumber,
 
     /// Invalid IO block size
-    #[error("invalid IO block size: {}", .0.quote())]
+    #[error("{}", translate!("split-error-invalid-io-block-size", "size" => .0.quote()))]
     InvalidIOBlockSize(String),
 
     /// The `--filter` option is not supported on Windows.
     #[cfg(windows)]
-    #[error("{OPT_FILTER} is currently not supported in this platform")]
+    #[error("{}", translate!("split-error-not-supported"))]
     NotSupported,
 }
 
@@ -532,9 +530,9 @@ impl Settings {
         is_new: bool,
     ) -> io::Result<BufWriter<Box<dyn Write>>> {
         if platform::paths_refer_to_same_file(&self.input, filename) {
-            return Err(io::Error::other(format!(
-                "'{filename}' would overwrite input; aborting"
-            )));
+            return Err(io::Error::other(
+                translate!("split-error-would-overwrite-input", "file" => filename.quote()),
+            ));
         }
 
         platform::instantiate_current_writer(self.filter.as_deref(), filename, is_new)
@@ -542,7 +540,7 @@ impl Settings {
 }
 
 /// When using `--filter` option, writing to child command process stdin
-/// could fail with BrokenPipe error
+/// could fail with [`ErrorKind::BrokenPipe`] error
 /// It can be safely ignored
 fn ignorable_io_error(error: &io::Error, settings: &Settings) -> bool {
     error.kind() == ErrorKind::BrokenPipe && settings.filter.is_some()
@@ -563,7 +561,7 @@ fn custom_write<T: Write>(bytes: &[u8], writer: &mut T, settings: &Settings) -> 
 
 /// Custom wrapper for `write_all()` method
 /// Similar to [`custom_write`], but returns true or false
-/// depending on if `--filter` stdin is still open (no BrokenPipe error)
+/// depending on if `--filter` stdin is still open (no [`ErrorKind::BrokenPipe`] error)
 /// Should not be used for Kth chunk number sub-strategies
 /// as those do not work with `--filter` option
 fn custom_write_all<T: Write>(
@@ -634,9 +632,9 @@ where
     } else if input == "-" {
         // STDIN stream that did not fit all content into a buffer
         // Most likely continuous/infinite input stream
-        return Err(io::Error::other(format!(
-            "{input}: cannot determine input size"
-        )));
+        Err(io::Error::other(
+            translate!("split-error-cannot-determine-input-size", "input" => input),
+        ))
     } else {
         // Could be that file size is larger than set read limit
         // Get the file size from filesystem metadata
@@ -659,9 +657,9 @@ where
                 // Give up and return an error
                 // TODO It might be possible to do more here
                 // to address all possible file types and edge cases
-                return Err(io::Error::other(format!(
-                    "{input}: cannot determine file size"
-                )));
+                Err(io::Error::other(
+                    translate!("split-error-cannot-determine-file-size", "input" => input),
+                ))
             }
         }
     }
@@ -706,9 +704,9 @@ struct ByteChunkWriter<'a> {
 impl<'a> ByteChunkWriter<'a> {
     fn new(chunk_size: u64, settings: &'a Settings) -> UResult<Self> {
         let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)?;
-        let filename = filename_iterator
-            .next()
-            .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+        let filename = filename_iterator.next().ok_or_else(|| {
+            USimpleError::new(1, translate!("split-error-output-file-suffixes-exhausted"))
+        })?;
         if settings.verbose {
             println!("creating file {}", filename.quote());
         }
@@ -744,10 +742,9 @@ impl Write for ByteChunkWriter<'_> {
                 self.num_bytes_remaining_in_current_chunk = self.chunk_size;
 
                 // Allocate the new file, since at this point we know there are bytes to be written to it.
-                let filename = self
-                    .filename_iterator
-                    .next()
-                    .ok_or_else(|| io::Error::other("output file suffixes exhausted"))?;
+                let filename = self.filename_iterator.next().ok_or_else(|| {
+                    io::Error::other(translate!("split-error-output-file-suffixes-exhausted"))
+                })?;
                 if self.settings.verbose {
                     println!("creating file {}", filename.quote());
                 }
@@ -763,28 +760,28 @@ impl Write for ByteChunkWriter<'_> {
                 let num_bytes_written = custom_write(buf, &mut self.inner, self.settings)?;
                 self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
                 return Ok(carryover_bytes_written + num_bytes_written);
-            } else {
-                // Write enough bytes to fill the current chunk.
-                //
-                // Conversion to usize is safe because we checked that
-                // self.num_bytes_remaining_in_current_chunk is lower than
-                // n, which is already usize.
-                let i = self.num_bytes_remaining_in_current_chunk as usize;
-                let num_bytes_written = custom_write(&buf[..i], &mut self.inner, self.settings)?;
-                self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
-
-                // It's possible that the underlying writer did not
-                // write all the bytes.
-                if num_bytes_written < i {
-                    return Ok(carryover_bytes_written + num_bytes_written);
-                } else {
-                    // Move the window to look at only the remaining bytes.
-                    buf = &buf[i..];
-
-                    // Remember for the next iteration that we wrote these bytes.
-                    carryover_bytes_written += num_bytes_written;
-                }
             }
+
+            // Write enough bytes to fill the current chunk.
+            //
+            // Conversion to usize is safe because we checked that
+            // self.num_bytes_remaining_in_current_chunk is lower than
+            // n, which is already usize.
+            let i = self.num_bytes_remaining_in_current_chunk as usize;
+            let num_bytes_written = custom_write(&buf[..i], &mut self.inner, self.settings)?;
+            self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
+
+            // It's possible that the underlying writer did not
+            // write all the bytes.
+            if num_bytes_written < i {
+                return Ok(carryover_bytes_written + num_bytes_written);
+            }
+
+            // Move the window to look at only the remaining bytes.
+            buf = &buf[i..];
+
+            // Remember for the next iteration that we wrote these bytes.
+            carryover_bytes_written += num_bytes_written;
         }
     }
     fn flush(&mut self) -> io::Result<()> {
@@ -846,9 +843,9 @@ impl<'a> LineChunkWriter<'a> {
         settings: &Settings,
         filename_iterator: &mut FilenameIterator,
     ) -> io::Result<BufWriter<Box<dyn Write>>> {
-        let filename = filename_iterator
-            .next()
-            .ok_or_else(|| io::Error::other("output file suffixes exhausted"))?;
+        let filename = filename_iterator.next().ok_or_else(|| {
+            io::Error::other(translate!("split-error-output-file-suffixes-exhausted"))
+        })?;
         if settings.verbose {
             println!("creating file {}", filename.quote());
         }
@@ -925,7 +922,7 @@ trait ManageOutFiles {
         settings: &Settings,
     ) -> UResult<&mut BufWriter<Box<dyn Write>>>;
     /// Initialize a new set of output files
-    /// Each OutFile is generated with filename, while the writer for it could be
+    /// Each [`OutFile`] is generated with filename, while the writer for it could be
     /// optional, to be instantiated later by the calling function as needed.
     /// Optional writers could happen in the following situations:
     /// * in [`n_chunks_by_line`] and [`n_chunks_by_line_round_robin`] if `elide_empty_files` parameter is set to `true`
@@ -957,9 +954,9 @@ impl ManageOutFiles for OutFiles {
                 .map_err(|e| io::Error::other(format!("{e}")))?;
         let mut out_files: Self = Self::new();
         for _ in 0..num_files {
-            let filename = filename_iterator
-                .next()
-                .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+            let filename = filename_iterator.next().ok_or_else(|| {
+                USimpleError::new(1, translate!("split-error-output-file-suffixes-exhausted"))
+            })?;
             let maybe_writer = if is_writer_optional {
                 None
             } else {
@@ -1030,7 +1027,8 @@ impl ManageOutFiles for OutFiles {
 
             // If this fails - give up and propagate the error
             uucore::show_error!(
-                "at file descriptor limit, but no file descriptor left to close. Closed {count} writers before."
+                "{}",
+                translate!("split-error-file-descriptor-limit", "count" => count)
             );
             return Err(maybe_writer.err().unwrap().into());
         }
@@ -1169,7 +1167,7 @@ where
                 Err(error) => {
                     return Err(USimpleError::new(
                         1,
-                        format!("{}: cannot read from input : {error}", settings.input),
+                        translate!("split-error-cannot-read-from-input", "input" => settings.input.clone(), "error" => error),
                     ));
                 }
             }
@@ -1395,7 +1393,7 @@ where
         // if there is nothing else to read - exit the loop
         if num_bytes_read == 0 {
             break;
-        };
+        }
 
         let bytes = line.as_slice();
         if let Some(chunk_number) = kth_chunk {
@@ -1476,9 +1474,9 @@ where
         let mut line = &line[..];
         loop {
             if remaining == 0 {
-                let filename = filename_iterator
-                    .next()
-                    .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+                let filename = filename_iterator.next().ok_or_else(|| {
+                    USimpleError::new(1, translate!("split-error-output-file-suffixes-exhausted"))
+                })?;
                 if settings.verbose {
                     println!("creating file {}", filename.quote());
                 }
@@ -1530,8 +1528,9 @@ fn split(settings: &Settings) -> UResult<()> {
     let r_box = if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
     } else {
-        let r = File::open(Path::new(&settings.input))
-            .map_err_context(|| format!("cannot open {} for reading", settings.input.quote()))?;
+        let r = File::open(Path::new(&settings.input)).map_err_context(
+            || translate!("split-error-cannot-open-for-reading", "file" => settings.input.quote()),
+        )?;
         Box::new(r) as Box<dyn Read>
     };
     let mut reader = if let Some(c) = settings.io_blksize {
@@ -1575,7 +1574,11 @@ fn split(settings: &Settings) -> UResult<()> {
                     // indicate that. A special error message needs to be
                     // printed in that case.
                     ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
-                    _ => Err(uio_error!(e, "input/output error")),
+                    _ => Err(uio_error!(
+                        e,
+                        "{}",
+                        translate!("split-error-input-output-error")
+                    )),
                 },
             }
         }
@@ -1593,7 +1596,11 @@ fn split(settings: &Settings) -> UResult<()> {
                     // indicate that. A special error message needs to be
                     // printed in that case.
                     ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
-                    _ => Err(uio_error!(e, "input/output error")),
+                    _ => Err(uio_error!(
+                        e,
+                        "{}",
+                        translate!("split-error-input-output-error")
+                    )),
                 },
             }
         }

@@ -3,34 +3,33 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use chrono::{DateTime, Local};
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::Pattern;
 use std::collections::HashSet;
 use std::env;
-#[cfg(not(windows))]
 use std::fs::Metadata;
 use std::fs::{self, DirEntry, File};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, stdout};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
-#[cfg(windows)]
-use std::os::windows::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::mpsc;
 use std::thread;
-use std::time::{Duration, UNIX_EPOCH};
 use thiserror::Error;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
+use uucore::fsext::{MetadataTimeField, metadata_get_time};
 use uucore::line_ending::LineEnding;
-use uucore::locale::get_message;
+use uucore::translate;
+
+use uucore::LocalizedCommand;
 use uucore::parser::parse_glob;
 use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
 use uucore::{format_usage, show, show_error, show_warning};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
@@ -88,10 +87,11 @@ struct StatPrinter {
     threshold: Option<Threshold>,
     apparent_size: bool,
     size_format: SizeFormat,
-    time: Option<Time>,
+    time: Option<MetadataTimeField>,
     time_format: String,
     line_ending: LineEnding,
     summarize: bool,
+    total_text: String,
 }
 
 #[derive(PartialEq, Clone)]
@@ -99,13 +99,6 @@ enum Deref {
     All,
     Args(Vec<PathBuf>),
     None,
-}
-
-#[derive(Clone, Copy)]
-enum Time {
-    Accessed,
-    Modified,
-    Created,
 }
 
 #[derive(Clone)]
@@ -123,14 +116,11 @@ struct FileInfo {
 
 struct Stat {
     path: PathBuf,
-    is_dir: bool,
     size: u64,
     blocks: u64,
     inodes: u64,
     inode: Option<FileInfo>,
-    created: Option<u64>,
-    accessed: u64,
-    modified: u64,
+    metadata: Metadata,
 }
 
 impl Stat {
@@ -157,69 +147,27 @@ impl Stat {
             fs::symlink_metadata(path)
         }?;
 
-        #[cfg(not(windows))]
-        {
-            let file_info = FileInfo {
-                file_id: metadata.ino() as u128,
-                dev_id: metadata.dev(),
-            };
+        let file_info = get_file_info(path, &metadata);
+        let blocks = get_blocks(path, &metadata);
 
-            Ok(Self {
-                path: path.to_path_buf(),
-                is_dir: metadata.is_dir(),
-                size: if metadata.is_dir() { 0 } else { metadata.len() },
-                blocks: metadata.blocks(),
-                inodes: 1,
-                inode: Some(file_info),
-                created: birth_u64(&metadata),
-                accessed: metadata.atime() as u64,
-                modified: metadata.mtime() as u64,
-            })
-        }
-
-        #[cfg(windows)]
-        {
-            let size_on_disk = get_size_on_disk(path);
-            let file_info = get_file_info(path);
-
-            Ok(Self {
-                path: path.to_path_buf(),
-                is_dir: metadata.is_dir(),
-                size: if metadata.is_dir() { 0 } else { metadata.len() },
-                blocks: size_on_disk / 1024 * 2,
-                inodes: 1,
-                inode: file_info,
-                created: windows_creation_time_to_unix_time(metadata.creation_time()),
-                accessed: windows_time_to_unix_time(metadata.last_access_time()),
-                modified: windows_time_to_unix_time(metadata.last_write_time()),
-            })
-        }
+        Ok(Self {
+            path: path.to_path_buf(),
+            size: if metadata.is_dir() { 0 } else { metadata.len() },
+            blocks,
+            inodes: 1,
+            inode: file_info,
+            metadata,
+        })
     }
 }
 
-#[cfg(windows)]
-// https://doc.rust-lang.org/std/os/windows/fs/trait.MetadataExt.html#tymethod.last_access_time
-// "The returned 64-bit value [...] which represents the number of 100-nanosecond intervals since January 1, 1601 (UTC)."
-// "If the underlying filesystem does not support last access time, the returned value is 0."
-fn windows_time_to_unix_time(win_time: u64) -> u64 {
-    (win_time / 10_000_000).saturating_sub(11_644_473_600)
-}
-
-#[cfg(windows)]
-fn windows_creation_time_to_unix_time(win_time: u64) -> Option<u64> {
-    (win_time / 10_000_000).checked_sub(11_644_473_600)
-}
-
 #[cfg(not(windows))]
-fn birth_u64(meta: &Metadata) -> Option<u64> {
-    meta.created()
-        .ok()
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|e| e.as_secs())
+fn get_blocks(_path: &Path, metadata: &Metadata) -> u64 {
+    metadata.blocks()
 }
 
 #[cfg(windows)]
-fn get_size_on_disk(path: &Path) -> u64 {
+fn get_blocks(path: &Path, _metadata: &Metadata) -> u64 {
     let mut size_on_disk = 0;
 
     // bind file so it stays in scope until end of function
@@ -230,7 +178,7 @@ fn get_size_on_disk(path: &Path) -> u64 {
 
     unsafe {
         let mut file_info: FILE_STANDARD_INFO = core::mem::zeroed();
-        let file_info_ptr: *mut FILE_STANDARD_INFO = &mut file_info;
+        let file_info_ptr: *mut FILE_STANDARD_INFO = &raw mut file_info;
 
         let success = GetFileInformationByHandleEx(
             file.as_raw_handle() as HANDLE,
@@ -244,11 +192,19 @@ fn get_size_on_disk(path: &Path) -> u64 {
         }
     }
 
-    size_on_disk
+    size_on_disk / 1024 * 2
+}
+
+#[cfg(not(windows))]
+fn get_file_info(_path: &Path, metadata: &Metadata) -> Option<FileInfo> {
+    Some(FileInfo {
+        file_id: metadata.ino() as u128,
+        dev_id: metadata.dev(),
+    })
 }
 
 #[cfg(windows)]
-fn get_file_info(path: &Path) -> Option<FileInfo> {
+fn get_file_info(path: &Path, _metadata: &Metadata) -> Option<FileInfo> {
     let mut result = None;
 
     let Ok(file) = File::open(path) else {
@@ -257,7 +213,7 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
 
     unsafe {
         let mut file_info: FILE_ID_INFO = core::mem::zeroed();
-        let file_info_ptr: *mut FILE_ID_INFO = &mut file_info;
+        let file_info_ptr: *mut FILE_ID_INFO = &raw mut file_info;
 
         let success = GetFileInformationByHandleEx(
             file.as_raw_handle() as HANDLE,
@@ -306,13 +262,13 @@ fn du(
     seen_inodes: &mut HashSet<FileInfo>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
-    if my_stat.is_dir {
+    if my_stat.metadata.is_dir() {
         let read = match fs::read_dir(&my_stat.path) {
             Ok(read) => read,
             Err(e) => {
-                print_tx.send(Err(e.map_err_context(|| {
-                    format!("cannot read directory {}", my_stat.path.quote())
-                })))?;
+                print_tx.send(Err(e.map_err_context(
+                    || translate!("du-error-cannot-read-directory", "path" => my_stat.path.quote()),
+                )))?;
                 return Ok(my_stat);
             }
         };
@@ -332,7 +288,10 @@ fn du(
                                 {
                                     // if the directory is ignored, leave early
                                     if options.verbose {
-                                        println!("{} ignored", &this_stat.path.quote());
+                                        println!(
+                                            "{}",
+                                            translate!("du-verbose-ignored", "path" => this_stat.path.quote())
+                                        );
                                     }
                                     // Go to the next file
                                     continue 'file_loop;
@@ -355,7 +314,7 @@ fn du(
                                 seen_inodes.insert(inode);
                             }
 
-                            if this_stat.is_dir {
+                            if this_stat.metadata.is_dir() {
                                 if options.one_file_system {
                                     if let (Some(this_inode), Some(my_inode)) =
                                         (this_stat.inode, my_stat.inode)
@@ -390,9 +349,9 @@ fn du(
                                 }
                             }
                         }
-                        Err(e) => print_tx.send(Err(e.map_err_context(|| {
-                            format!("cannot access {}", entry.path().quote())
-                        })))?,
+                        Err(e) => print_tx.send(Err(e.map_err_context(
+                            || translate!("du-error-cannot-access", "path" => entry.path().quote()),
+                        )))?,
                     }
                 }
                 Err(error) => print_tx.send(Err(error.into()))?,
@@ -405,21 +364,16 @@ fn du(
 
 #[derive(Debug, Error)]
 enum DuError {
-    #[error("invalid maximum depth {depth}", depth = .0.quote())]
+    #[error("{}", translate!("du-error-invalid-max-depth", "depth" => _0.quote()))]
     InvalidMaxDepthArg(String),
 
-    #[error("summarizing conflicts with --max-depth={depth}", depth = .0.maybe_quote())]
+    #[error("{}", translate!("du-error-summarize-depth-conflict", "depth" => _0.maybe_quote()))]
     SummarizeDepthConflict(String),
 
-    #[error("invalid argument {style} for 'time style'\nValid arguments are:\n- 'full-iso'\n- 'long-iso'\n- 'iso'\nTry '{help}' for more information.",
-           style = .0.quote(),
-           help = uucore::execution_phrase())]
+    #[error("{}", translate!("du-error-invalid-time-style", "style" => _0.quote(), "help" => uucore::execution_phrase()))]
     InvalidTimeStyleArg(String),
 
-    #[error("'birth' and 'creation' arguments for --time are not supported on this platform.")]
-    InvalidTimeArg,
-
-    #[error("Invalid exclude syntax: {0}")]
+    #[error("{}", translate!("du-error-invalid-glob", "error" => _0))]
     InvalidGlob(String),
 }
 
@@ -429,13 +383,12 @@ impl UError for DuError {
             Self::InvalidMaxDepthArg(_)
             | Self::SummarizeDepthConflict(_)
             | Self::InvalidTimeStyleArg(_)
-            | Self::InvalidTimeArg
             | Self::InvalidGlob(_) => 1,
         }
     }
 }
 
-// Read a file and return each line in a vector of String
+/// Read a file and return each line in a vector of String
 fn file_as_vec(filename: impl AsRef<Path>) -> Vec<String> {
     let file = File::open(filename).expect("no such file");
     let buf = BufReader::new(file);
@@ -445,8 +398,8 @@ fn file_as_vec(filename: impl AsRef<Path>) -> Vec<String> {
         .collect()
 }
 
-// Given the --exclude-from and/or --exclude arguments, returns the globset lists
-// to ignore the files
+/// Given the `--exclude-from` and/or `--exclude` arguments, returns the globset lists
+/// to ignore the files
 fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
     let exclude_from_iterator = matches
         .get_many::<String>(options::EXCLUDE_FROM)
@@ -461,7 +414,10 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
     let mut exclude_patterns = Vec::new();
     for f in excludes_iterator.chain(exclude_from_iterator) {
         if matches.get_flag(options::VERBOSE) {
-            println!("adding {f:?} to the exclude list ");
+            println!(
+                "{}",
+                translate!("du-verbose-adding-to-exclude-list", "pattern" => f.clone())
+            );
         }
         match parse_glob::from_str(&f) {
             Ok(glob) => exclude_patterns.push(glob),
@@ -521,7 +477,7 @@ impl StatPrinter {
         }
 
         if self.total {
-            print!("{}\ttotal", self.convert_size(grand_total));
+            print!("{}\t{}", self.convert_size(grand_total), self.total_text);
             print!("{}", self.line_ending);
         }
 
@@ -550,13 +506,20 @@ impl StatPrinter {
     }
 
     fn print_stat(&self, stat: &Stat, size: u64) -> UResult<()> {
-        if let Some(time) = self.time {
-            let secs = get_time_secs(time, stat)?;
-            let tm = DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs));
-            let time_str = tm.format(&self.time_format).to_string();
-            print!("{}\t{time_str}\t", self.convert_size(size));
-        } else {
-            print!("{}\t", self.convert_size(size));
+        print!("{}\t", self.convert_size(size));
+
+        if let Some(md_time) = &self.time {
+            if let Some(time) = metadata_get_time(&stat.metadata, *md_time) {
+                format_system_time(
+                    &mut stdout(),
+                    time,
+                    &self.time_format,
+                    FormatSystemTimeFallback::IntegerError,
+                )?;
+                print!("\t");
+            } else {
+                print!("???\t");
+            }
         }
 
         print_verbatim(&stat.path).unwrap();
@@ -566,7 +529,7 @@ impl StatPrinter {
     }
 }
 
-// Read file paths from the specified file, separated by null characters
+/// Read file paths from the specified file, separated by null characters
 fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
     let reader: Box<dyn BufRead> = if file_name == "-" {
         // Read from standard input
@@ -575,18 +538,18 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
         // First, check if the file_name is a directory
         let path = PathBuf::from(file_name);
         if path.is_dir() {
-            return Err(std::io::Error::other(format!(
-                "{file_name}: read error: Is a directory"
-            )));
+            return Err(std::io::Error::other(
+                translate!("du-error-read-error-is-directory", "file" => file_name),
+            ));
         }
 
         // Attempt to open the file and handle the error if it does not exist
         match File::open(file_name) {
             Ok(file) => Box::new(BufReader::new(file)),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                return Err(std::io::Error::other(format!(
-                    "cannot open '{file_name}' for reading: No such file or directory"
-                )));
+                return Err(std::io::Error::other(
+                    translate!("du-error-cannot-open-for-reading", "file" => file_name),
+                ));
             }
             Err(e) => return Err(e),
         }
@@ -599,7 +562,10 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
 
         if path.is_empty() {
             let line_number = i + 1;
-            show_error!("{file_name}:{line_number}: invalid zero-length file name");
+            show_error!(
+                "{}",
+                translate!("du-error-invalid-zero-length-file-name", "file" => file_name, "line" => line_number)
+            );
             set_exit_code(1);
         } else {
             let p = PathBuf::from(String::from_utf8_lossy(&path).to_string());
@@ -615,7 +581,7 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let summarize = matches.get_flag(options::SUMMARIZE);
 
@@ -630,10 +596,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let files = if let Some(file_from) = matches.get_one::<String>(options::FILES0_FROM) {
         if file_from == "-" && matches.get_one::<String>(options::FILE).is_some() {
-            return Err(std::io::Error::other(format!(
-                "extra operand {}\nfile operands cannot be combined with --files0-from",
-                matches.get_one::<String>(options::FILE).unwrap().quote()
-            ))
+            return Err(std::io::Error::other(
+                translate!("du-error-extra-operand-with-files0-from",
+                    "file" => matches
+                        .get_one::<String>(options::FILE)
+                        .unwrap()
+                        .quote()
+                ),
+            )
             .into());
         }
 
@@ -654,12 +624,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let time = matches.contains_id(options::TIME).then(|| {
-        match matches.get_one::<String>(options::TIME).map(AsRef::as_ref) {
-            None | Some("ctime" | "status") => Time::Modified,
-            Some("access" | "atime" | "use") => Time::Accessed,
-            Some("birth" | "creation") => Time::Created,
-            _ => unreachable!("should be caught by clap"),
-        }
+        matches
+            .get_one::<String>(options::TIME)
+            .map_or(MetadataTimeField::Modification, |s| s.as_str().into())
     });
 
     let size_format = if matches.get_flag(options::HUMAN_READABLE) {
@@ -676,11 +643,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let block_size_str = matches.get_one::<String>(options::BLOCK_SIZE);
         let block_size = read_block_size(block_size_str.map(AsRef::as_ref))?;
         if block_size == 0 {
-            return Err(std::io::Error::other(format!(
-                "invalid --{} argument {}",
-                options::BLOCK_SIZE,
-                block_size_str.map_or("???BUG", |v| v).quote()
-            ))
+            return Err(std::io::Error::other(translate!("du-error-invalid-block-size-argument", "option" => options::BLOCK_SIZE, "value" => block_size_str.map_or("???BUG", |v| v).quote()))
             .into());
         }
         SizeFormat::BlockSize(block_size)
@@ -704,9 +667,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let time_format = if time.is_some() {
-        parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?.to_string()
+        parse_time_style(matches.get_one::<String>("time-style"))?
     } else {
-        "%Y-%m-%d %H:%M".to_string()
+        format::LONG_ISO.to_string()
     };
 
     let stat_printer = StatPrinter {
@@ -727,12 +690,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         time,
         time_format,
         line_ending: LineEnding::from_zero_flag(matches.get_flag(options::NULL)),
+        total_text: translate!("du-total"),
     };
 
     if stat_printer.inodes
         && (matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES))
     {
-        show_warning!("options --apparent-size and -b are ineffective with --inodes");
+        show_warning!(
+            "{}",
+            translate!("du-warning-apparent-size-ineffective-with-inodes")
+        );
     }
 
     // Use separate thread to print output, so we can print finished results while computation is still running
@@ -747,7 +714,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 if pattern.matches(&path_string) {
                     // if the directory is ignored, leave early
                     if traversal_options.verbose {
-                        println!("{} ignored", path_string.quote());
+                        println!(
+                            "{}",
+                            translate!("du-verbose-ignored", "path" => path_string.quote())
+                        );
                     }
                     continue 'loop_file;
                 }
@@ -771,10 +741,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             print_tx
                 .send(Err(USimpleError::new(
                     1,
-                    format!(
-                        "cannot access {}: No such file or directory",
-                        path.to_string_lossy().quote()
-                    ),
+                    translate!("du-error-cannot-access-no-such-file", "path" => path.to_string_lossy().quote()),
                 )))
                 .map_err(|e| USimpleError::new(1, e.to_string()))?;
         }
@@ -784,28 +751,45 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     printing_thread
         .join()
-        .map_err(|_| USimpleError::new(1, "Printing thread panicked."))??;
+        .map_err(|_| USimpleError::new(1, translate!("du-error-printing-thread-panicked")))??;
 
     Ok(())
 }
 
-fn get_time_secs(time: Time, stat: &Stat) -> Result<u64, DuError> {
-    match time {
-        Time::Modified => Ok(stat.modified),
-        Time::Accessed => Ok(stat.accessed),
-        Time::Created => stat.created.ok_or(DuError::InvalidTimeArg),
-    }
-}
-
-fn parse_time_style(s: Option<&str>) -> UResult<&str> {
+// Parse --time-style argument, falling back to environment variable if necessary.
+fn parse_time_style(s: Option<&String>) -> UResult<String> {
+    let s = match s {
+        Some(s) => Some(s.into()),
+        None => {
+            match env::var("TIME_STYLE") {
+                // Per GNU manual, strip `posix-` if present, ignore anything after a newline if
+                // the string starts with +, and ignore "locale".
+                Ok(s) => {
+                    let s = s.strip_prefix("posix-").unwrap_or(s.as_str());
+                    let s = match s.chars().next().unwrap() {
+                        '+' => s.split('\n').next().unwrap(),
+                        _ => s,
+                    };
+                    match s {
+                        "locale" => None,
+                        _ => Some(s.to_string()),
+                    }
+                }
+                Err(_) => None,
+            }
+        }
+    };
     match s {
-        Some(s) => match s {
-            "full-iso" => Ok("%Y-%m-%d %H:%M:%S.%f %z"),
-            "long-iso" => Ok("%Y-%m-%d %H:%M"),
-            "iso" => Ok("%Y-%m-%d"),
-            _ => Err(DuError::InvalidTimeStyleArg(s.into()).into()),
+        Some(s) => match s.as_ref() {
+            "full-iso" => Ok(format::FULL_ISO.to_string()),
+            "long-iso" => Ok(format::LONG_ISO.to_string()),
+            "iso" => Ok(format::ISO.to_string()),
+            _ => match s.chars().next().unwrap() {
+                '+' => Ok(s[1..].to_string()),
+                _ => Err(DuError::InvalidTimeStyleArg(s).into()),
+            },
         },
-        None => Ok("%Y-%m-%d %H:%M"),
+        None => Ok(format::LONG_ISO.to_string()),
     }
 }
 
@@ -821,159 +805,147 @@ fn parse_depth(max_depth_str: Option<&str>, summarize: bool) -> UResult<Option<u
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("du-about"))
-        .after_help(get_message("du-after-help"))
-        .override_usage(format_usage(&get_message("du-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("du-about"))
+        .after_help(translate!("du-after-help"))
+        .override_usage(format_usage(&translate!("du-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help("Print help information.")
-                .action(ArgAction::Help)
+                .help(translate!("du-help-print-help"))
+                .action(ArgAction::Help),
         )
         .arg(
             Arg::new(options::ALL)
                 .short('a')
                 .long(options::ALL)
-                .help("write counts for all files, not just directories")
-                .action(ArgAction::SetTrue)
+                .help(translate!("du-help-all"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::APPARENT_SIZE)
                 .long(options::APPARENT_SIZE)
-                .help(
-                    "print apparent sizes, rather than disk usage \
-                    although the apparent size is usually smaller, it may be larger due to holes \
-                    in ('sparse') files, internal fragmentation, indirect blocks, and the like"
-                )
-                .action(ArgAction::SetTrue)
+                .help(translate!("du-help-apparent-size"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::BLOCK_SIZE)
                 .short('B')
                 .long(options::BLOCK_SIZE)
                 .value_name("SIZE")
-                .help(
-                    "scale sizes by SIZE before printing them. \
-                    E.g., '-BM' prints sizes in units of 1,048,576 bytes. See SIZE format below."
-                )
+                .help(translate!("du-help-block-size")),
         )
         .arg(
             Arg::new(options::BYTES)
                 .short('b')
                 .long("bytes")
-                .help("equivalent to '--apparent-size --block-size=1'")
-                .action(ArgAction::SetTrue)
+                .help(translate!("du-help-bytes"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TOTAL)
                 .long("total")
                 .short('c')
-                .help("produce a grand total")
-                .action(ArgAction::SetTrue)
+                .help(translate!("du-help-total"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::MAX_DEPTH)
                 .short('d')
                 .long("max-depth")
                 .value_name("N")
-                .help(
-                    "print the total for a directory (or file, with --all) \
-                    only if it is N or fewer levels below the command \
-                    line argument;  --max-depth=0 is the same as --summarize"
-                )
+                .help(translate!("du-help-max-depth")),
         )
         .arg(
             Arg::new(options::HUMAN_READABLE)
                 .long("human-readable")
                 .short('h')
-                .help("print sizes in human readable format (e.g., 1K 234M 2G)")
-                .action(ArgAction::SetTrue)
+                .help(translate!("du-help-human-readable"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::INODES)
                 .long(options::INODES)
-                .help(
-                    "list inode usage information instead of block usage like --block-size=1K"
-                )
-                .action(ArgAction::SetTrue)
+                .help(translate!("du-help-inodes"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::BLOCK_SIZE_1K)
                 .short('k')
-                .help("like --block-size=1K")
-                .action(ArgAction::SetTrue)
+                .help(translate!("du-help-block-size-1k"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COUNT_LINKS)
                 .short('l')
                 .long("count-links")
-                .help("count sizes many times if hard linked")
-                .action(ArgAction::SetTrue)
+                .help(translate!("du-help-count-links"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DEREFERENCE)
                 .short('L')
                 .long(options::DEREFERENCE)
-                .help("follow all symbolic links")
-                .action(ArgAction::SetTrue)
+                .help(translate!("du-help-dereference"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DEREFERENCE_ARGS)
                 .short('D')
                 .visible_short_alias('H')
                 .long(options::DEREFERENCE_ARGS)
-                .help("follow only symlinks that are listed on the command line")
-                .action(ArgAction::SetTrue)
+                .help(translate!("du-help-dereference-args"))
+                .action(ArgAction::SetTrue),
         )
-         .arg(
-             Arg::new(options::NO_DEREFERENCE)
-                 .short('P')
-                 .long(options::NO_DEREFERENCE)
-                 .help("don't follow any symbolic links (this is the default)")
-                 .overrides_with(options::DEREFERENCE)
-                 .action(ArgAction::SetTrue),
-         )
+        .arg(
+            Arg::new(options::NO_DEREFERENCE)
+                .short('P')
+                .long(options::NO_DEREFERENCE)
+                .help(translate!("du-help-no-dereference"))
+                .overrides_with(options::DEREFERENCE)
+                .action(ArgAction::SetTrue),
+        )
         .arg(
             Arg::new(options::BLOCK_SIZE_1M)
                 .short('m')
-                .help("like --block-size=1M")
-                .action(ArgAction::SetTrue)
+                .help(translate!("du-help-block-size-1m"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NULL)
                 .short('0')
                 .long("null")
-                .help("end each output line with 0 byte rather than newline")
-                .action(ArgAction::SetTrue)
+                .help(translate!("du-help-null"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SEPARATE_DIRS)
                 .short('S')
                 .long("separate-dirs")
-                .help("do not include size of subdirectories")
-                .action(ArgAction::SetTrue)
+                .help(translate!("du-help-separate-dirs"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SUMMARIZE)
                 .short('s')
                 .long("summarize")
-                .help("display only a total for each argument")
-                .action(ArgAction::SetTrue)
+                .help(translate!("du-help-summarize"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SI)
                 .long(options::SI)
-                .help("like -h, but use powers of 1000 not 1024")
-                .action(ArgAction::SetTrue)
+                .help(translate!("du-help-si"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ONE_FILE_SYSTEM)
                 .short('x')
                 .long(options::ONE_FILE_SYSTEM)
-                .help("skip directories on different file systems")
-                .action(ArgAction::SetTrue)
+                .help(translate!("du-help-one-file-system"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::THRESHOLD)
@@ -982,22 +954,21 @@ pub fn uu_app() -> Command {
                 .value_name("SIZE")
                 .num_args(1)
                 .allow_hyphen_values(true)
-                .help("exclude entries smaller than SIZE if positive, \
-                          or entries greater than SIZE if negative")
+                .help(translate!("du-help-threshold")),
         )
         .arg(
             Arg::new(options::VERBOSE)
                 .short('v')
                 .long("verbose")
-                .help("verbose mode (option not present in GNU/Coreutils)")
-                .action(ArgAction::SetTrue)
+                .help(translate!("du-help-verbose"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::EXCLUDE)
                 .long(options::EXCLUDE)
                 .value_name("PATTERN")
-                .help("exclude files that match PATTERN")
-                .action(ArgAction::Append)
+                .help(translate!("du-help-exclude"))
+                .action(ArgAction::Append),
         )
         .arg(
             Arg::new(options::EXCLUDE_FROM)
@@ -1005,16 +976,16 @@ pub fn uu_app() -> Command {
                 .long("exclude-from")
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::FilePath)
-                .help("exclude files that match any pattern in FILE")
-                .action(ArgAction::Append)
+                .help(translate!("du-help-exclude-from"))
+                .action(ArgAction::Append),
         )
         .arg(
             Arg::new(options::FILES0_FROM)
                 .long("files0-from")
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::FilePath)
-                .help("summarize device usage of the NUL-terminated file names specified in file F; if F is -, then read names from standard input")
-                .action(ArgAction::Append)
+                .help(translate!("du-help-files0-from"))
+                .action(ArgAction::Append),
         )
         .arg(
             Arg::new(options::TIME)
@@ -1027,26 +998,19 @@ pub fn uu_app() -> Command {
                     PossibleValue::new("ctime").alias("status"),
                     PossibleValue::new("creation").alias("birth"),
                 ]))
-                .help(
-                    "show time of the last modification of any file in the \
-                    directory, or any of its subdirectories. If WORD is given, show time as WORD instead \
-                    of modification time: atime, access, use, ctime, status, birth or creation"
-                )
+                .help(translate!("du-help-time")),
         )
         .arg(
             Arg::new(options::TIME_STYLE)
                 .long(options::TIME_STYLE)
                 .value_name("STYLE")
-                .help(
-                    "show times using style STYLE: \
-                    full-iso, long-iso, iso, +FORMAT FORMAT is interpreted like 'date'"
-                )
+                .help(translate!("du-help-time-style")),
         )
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
                 .value_hint(clap::ValueHint::AnyPath)
-                .action(ArgAction::Append)
+                .action(ArgAction::Append),
         )
 }
 
@@ -1091,12 +1055,14 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
     // GNU's du echos affected flag, -B or --block-size (-t or --threshold), depending user's selection
     match error {
         ParseSizeError::InvalidSuffix(_) => {
-            format!("invalid suffix in --{option} argument {}", s.quote())
+            translate!("du-error-invalid-suffix", "option" => option, "value" => s.quote())
         }
         ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
-            format!("invalid --{option} argument {}", s.quote())
+            translate!("du-error-invalid-argument", "option" => option, "value" => s.quote())
         }
-        ParseSizeError::SizeTooBig(_) => format!("--{option} argument {} too large", s.quote()),
+        ParseSizeError::SizeTooBig(_) => {
+            translate!("du-error-argument-too-large", "option" => option, "value" => s.quote())
+        }
     }
 }
 

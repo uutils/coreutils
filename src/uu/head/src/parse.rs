@@ -26,7 +26,6 @@ pub fn parse_obsolete(src: &str) -> Option<Result<Vec<OsString>, ParseError>> {
             } else if c == '+' && plus_possible {
                 plus_possible = false;
                 num_start += 1;
-                continue;
             } else {
                 num_end = n;
                 last_char = c;
@@ -153,7 +152,7 @@ mod tests {
     }
 
     fn obsolete_result(src: &[&str]) -> Option<Result<Vec<String>, ParseError>> {
-        Some(Ok(src.iter().map(|s| s.to_string()).collect()))
+        Some(Ok(src.iter().map(|&s| s.to_string()).collect()))
     }
 
     #[test]

@@ -11,16 +11,17 @@ use crate::display::Quotable;
 use crate::error::{UResult, USimpleError, strip_errno};
 pub use crate::features::entries;
 use crate::show_error;
+
 use clap::{Arg, ArgMatches, Command};
+
 use libc::{gid_t, uid_t};
 use options::traverse;
 use walkdir::WalkDir;
 
-use std::io::Error as IOError;
-use std::io::Result as IOResult;
-
 use std::ffi::CString;
 use std::fs::Metadata;
+use std::io::Error as IOError;
+use std::io::Result as IOResult;
 use std::os::unix::fs::MetadataExt;
 
 use std::os::unix::ffi::OsStrExt;
@@ -39,6 +40,15 @@ pub enum VerbosityLevel {
 pub struct Verbosity {
     pub groups_only: bool,
     pub level: VerbosityLevel,
+}
+
+impl Default for Verbosity {
+    fn default() -> Self {
+        Self {
+            groups_only: false,
+            level: VerbosityLevel::Normal,
+        }
+    }
 }
 
 /// Actually perform the change of owner on a path
@@ -113,51 +123,52 @@ pub fn wrap_chown<P: AsRef<Path>>(
             }
         }
         return Err(out);
-    } else {
-        let changed = dest_uid != meta.uid() || dest_gid != meta.gid();
-        if changed {
-            match verbosity.level {
-                VerbosityLevel::Changes | VerbosityLevel::Verbose => {
-                    let gid = meta.gid();
-                    out = if verbosity.groups_only {
-                        format!(
-                            "changed group of {} from {} to {}",
-                            path.quote(),
-                            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                            entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
-                        )
-                    } else {
-                        let gid = meta.gid();
-                        let uid = meta.uid();
-                        format!(
-                            "changed ownership of {} from {}:{} to {}:{}",
-                            path.quote(),
-                            entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
-                            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                            entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
-                            entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
-                        )
-                    };
-                }
-                _ => (),
-            };
-        } else if verbosity.level == VerbosityLevel::Verbose {
-            out = if verbosity.groups_only {
-                format!(
-                    "group of {} retained as {}",
-                    path.quote(),
-                    entries::gid2grp(dest_gid).unwrap_or_default()
-                )
-            } else {
-                format!(
-                    "ownership of {} retained as {}:{}",
-                    path.quote(),
-                    entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
-                    entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
-                )
-            };
-        }
     }
+
+    let changed = dest_uid != meta.uid() || dest_gid != meta.gid();
+    if changed {
+        match verbosity.level {
+            VerbosityLevel::Changes | VerbosityLevel::Verbose => {
+                let gid = meta.gid();
+                out = if verbosity.groups_only {
+                    format!(
+                        "changed group of {} from {} to {}",
+                        path.quote(),
+                        entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                        entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
+                    )
+                } else {
+                    let gid = meta.gid();
+                    let uid = meta.uid();
+                    format!(
+                        "changed ownership of {} from {}:{} to {}:{}",
+                        path.quote(),
+                        entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                        entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                        entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
+                        entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
+                    )
+                };
+            }
+            _ => (),
+        };
+    } else if verbosity.level == VerbosityLevel::Verbose {
+        out = if verbosity.groups_only {
+            format!(
+                "group of {} retained as {}",
+                path.quote(),
+                entries::gid2grp(dest_gid).unwrap_or_default()
+            )
+        } else {
+            format!(
+                "ownership of {} retained as {}:{}",
+                path.quote(),
+                entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
+                entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
+            )
+        };
+    }
+
     Ok(out)
 }
 

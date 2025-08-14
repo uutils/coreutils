@@ -90,3 +90,25 @@ cut-after-help = Each call must specify a mode (what to use for columns),
   echo 'ab\\0cd' | cut -z -c 1
 
   will result in 'a\\0c\\0'
+
+# Help messages
+cut-help-bytes = filter byte columns from the input source
+cut-help-characters = alias for character mode
+cut-help-delimiter = specify the delimiter character that separates fields in the input source. Defaults to Tab.
+cut-help-whitespace-delimited = Use any number of whitespace (Space, Tab) to separate fields in the input source (FreeBSD extension).
+cut-help-fields = filter field columns from the input source
+cut-help-complement = invert the filter - instead of displaying only the filtered columns, display all but those columns
+cut-help-only-delimited = in field mode, only print lines which contain the delimiter
+cut-help-zero-terminated = instead of filtering columns based on line, filter columns based on \\0 (NULL character)
+cut-help-output-delimiter = in field mode, replace the delimiter in output lines with this option's argument
+
+# Error messages
+cut-error-is-directory = Is a directory
+cut-error-write-error = write error
+cut-error-delimiter-and-whitespace-conflict = invalid input: Only one of --delimiter (-d) or -w option can be specified
+cut-error-delimiter-must-be-single-character = the delimiter must be a single character
+cut-error-multiple-mode-args = invalid usage: expects no more than one of --fields (-f), --chars (-c) or --bytes (-b)
+cut-error-missing-mode-arg = invalid usage: expects one of --fields (-f), --chars (-c) or --bytes (-b)
+cut-error-delimiter-only-with-fields = invalid input: The '--delimiter' ('-d') option only usable if printing a sequence of fields
+cut-error-whitespace-only-with-fields = invalid input: The '-w' option only usable if printing a sequence of fields
+cut-error-only-delimited-only-with-fields = invalid input: The '--only-delimited' ('-s') option only usable if printing a sequence of fields

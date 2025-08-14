@@ -4,10 +4,10 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) araba merci efjkow
 
+use regex::Regex;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util::UCommand;
-use uutests::util_name;
 
 #[test]
 fn test_default() {
@@ -516,6 +516,20 @@ fn partial_help_argument() {
 }
 
 #[test]
+fn full_version_argument() {
+    new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .stdout_matches(&Regex::new(r"^echo \(uutils coreutils\) (\d+\.\d+\.\d+)\n$").unwrap());
+}
+
+#[test]
+fn full_help_argument() {
+    assert_ne!(new_ucmd!().arg("--help").succeeds().stdout(), b"--help\n");
+    assert_ne!(new_ucmd!().arg("--help").succeeds().stdout(), b"--help"); // This one is just in case.
+}
+
+#[test]
 fn multibyte_escape_unicode() {
     // spell-checker:disable-next-line
     // Tests suggested by kkew3
@@ -654,7 +668,7 @@ fn test_cmd_result_stdout_str_check_when_false_then_panics() {
 #[cfg(unix)]
 #[test]
 fn test_cmd_result_signal_when_normal_exit_then_no_signal() {
-    let result = TestScenario::new("echo").ucmd().run();
+    let result = new_ucmd!().run();
     assert!(result.signal().is_none());
 }
 

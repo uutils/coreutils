@@ -69,7 +69,7 @@ fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
                 }
             }
             Err(_) => return Err(byte_count),
-        };
+        }
     }
 
     Ok(byte_count)
@@ -192,13 +192,13 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
             Ok(n) => {
                 byte_count += n;
             }
-            Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(ref e) if e.kind() == ErrorKind::Interrupted => (),
             Err(e) => return (byte_count, Some(e)),
         }
     }
 }
 
-/// A simple structure used to align a BUF_SIZE buffer to 32-byte boundary.
+/// A simple structure used to align a [`BUF_SIZE`] buffer to 32-byte boundary.
 ///
 /// This is useful as bytecount uses 256-bit wide vector operations that run much
 /// faster on aligned data (at least on x86 with AVX2 support).
@@ -215,7 +215,7 @@ impl Default for AlignedBuffer {
     }
 }
 
-/// Returns a WordCount that counts the number of bytes, lines, and/or the number of Unicode characters encoded in UTF-8 read via a Reader.
+/// Returns a [`WordCount`] that counts the number of bytes, lines, and/or the number of Unicode characters encoded in UTF-8 read via a Reader.
 ///
 /// This corresponds to the `-c`, `-l` and `-m` command line flags to wc.
 ///
@@ -246,7 +246,7 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
                     total.lines += bytecount::count(&buf[..n], b'\n');
                 }
             }
-            Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(ref e) if e.kind() == ErrorKind::Interrupted => (),
             Err(e) => return (total, Some(e)),
         }
     }

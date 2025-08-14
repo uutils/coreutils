@@ -9,13 +9,14 @@ use clap::{Arg, ArgAction, Command};
 use std::fs;
 use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::line_ending::LineEnding;
+use uucore::translate;
 use uucore::{format_usage, show_error};
 
-use uucore::locale::get_message;
 const OPT_CANONICALIZE: &str = "canonicalize";
 const OPT_CANONICALIZE_MISSING: &str = "canonicalize-missing";
 const OPT_CANONICALIZE_EXISTING: &str = "canonicalize-existing";
@@ -29,7 +30,7 @@ const ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let mut no_trailing_delimiter = matches.get_flag(OPT_NO_NEWLINE);
     let use_zero = matches.get_flag(OPT_ZERO);
@@ -57,14 +58,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_many::<String>(ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
+
     if files.is_empty() {
-        return Err(UUsageError::new(1, "missing operand"));
+        return Err(UUsageError::new(
+            1,
+            translate!("readlink-error-missing-operand"),
+        ));
     }
 
     if no_trailing_delimiter && files.len() > 1 && !silent {
-        show_error!("ignoring --no-newline with multiple arguments");
+        show_error!("{}", translate!("readlink-error-ignoring-no-newline"));
         no_trailing_delimiter = false;
     }
+
     let line_ending = if no_trailing_delimiter {
         None
     } else {
@@ -78,6 +84,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             canonicalize(&p, can_mode, res_mode)
         };
+
         match path_result {
             Ok(path) => {
                 show(&path, line_ending).map_err_context(String::new)?;
@@ -101,72 +108,64 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("readlink-about"))
-        .override_usage(format_usage(&get_message("readlink-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("readlink-about"))
+        .override_usage(format_usage(&translate!("readlink-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_CANONICALIZE)
                 .short('f')
                 .long(OPT_CANONICALIZE)
-                .help(
-                    "canonicalize by following every symlink in every component of the \
-                     given name recursively; all but the last component must exist",
-                )
+                .help(translate!("readlink-help-canonicalize"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_CANONICALIZE_EXISTING)
                 .short('e')
                 .long("canonicalize-existing")
-                .help(
-                    "canonicalize by following every symlink in every component of the \
-                     given name recursively, all components must exist",
-                )
+                .help(translate!("readlink-help-canonicalize-existing"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_CANONICALIZE_MISSING)
                 .short('m')
                 .long(OPT_CANONICALIZE_MISSING)
-                .help(
-                    "canonicalize by following every symlink in every component of the \
-                     given name recursively, without requirements on components existence",
-                )
+                .help(translate!("readlink-help-canonicalize-missing"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_NO_NEWLINE)
                 .short('n')
                 .long(OPT_NO_NEWLINE)
-                .help("do not output the trailing delimiter")
+                .help(translate!("readlink-help-no-newline"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_QUIET)
                 .short('q')
                 .long(OPT_QUIET)
-                .help("suppress most error messages")
+                .help(translate!("readlink-help-quiet"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_SILENT)
                 .short('s')
                 .long(OPT_SILENT)
-                .help("suppress most error messages")
+                .help(translate!("readlink-help-silent"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
                 .short('v')
                 .long(OPT_VERBOSE)
-                .help("report error message")
+                .help(translate!("readlink-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_ZERO)
                 .short('z')
                 .long(OPT_ZERO)
-                .help("separate output with NUL rather than newline")
+                .help(translate!("readlink-help-zero"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

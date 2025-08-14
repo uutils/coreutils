@@ -12,10 +12,11 @@ use std::{collections::hash_set::HashSet, ffi::OsString};
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use uucore::LocalizedCommand;
 
 #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
 use dns_lookup::lookup_host;
-use uucore::locale::get_message;
+use uucore::translate;
 
 use uucore::{
     error::{FromIo, UResult},
@@ -60,15 +61,15 @@ mod wsa {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     #[cfg(windows)]
-    let _handle = wsa::start().map_err_context(|| get_message("hostname-error-winsock"))?;
+    let _handle = wsa::start().map_err_context(|| translate!("hostname-error-winsock"))?;
 
     match matches.get_one::<OsString>(OPT_HOST) {
         None => display_hostname(&matches),
         Some(host) => {
-            hostname::set(host).map_err_context(|| get_message("hostname-error-set-hostname"))
+            hostname::set(host).map_err_context(|| translate!("hostname-error-set-hostname"))
         }
     }
 }
@@ -76,15 +77,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("hostname-about"))
-        .override_usage(format_usage(&get_message("hostname-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("hostname-about"))
+        .override_usage(format_usage(&translate!("hostname-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_DOMAIN)
                 .short('d')
                 .long("domain")
                 .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-                .help(get_message("hostname-help-domain"))
+                .help(translate!("hostname-help-domain"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -92,7 +94,7 @@ pub fn uu_app() -> Command {
                 .short('i')
                 .long("ip-address")
                 .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-                .help(get_message("hostname-help-ip-address"))
+                .help(translate!("hostname-help-ip-address"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -100,7 +102,7 @@ pub fn uu_app() -> Command {
                 .short('f')
                 .long("fqdn")
                 .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-                .help(get_message("hostname-help-fqdn"))
+                .help(translate!("hostname-help-fqdn"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -108,7 +110,7 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long("short")
                 .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-                .help(get_message("hostname-help-short"))
+                .help(translate!("hostname-help-short"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -140,7 +142,9 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
         // use dns-lookup crate instead
         #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
         {
-            let addrs: Vec<std::net::IpAddr> = lookup_host(hostname.as_str()).unwrap();
+            let addrs: Vec<std::net::IpAddr> = lookup_host(hostname.as_str())
+                .map_err_context(|| "failed to lookup hostname".to_owned())?
+                .collect();
             addresses = addrs;
         }
 

@@ -11,8 +11,9 @@ use uucore::error::USimpleError;
 use uucore::fs;
 use uucore::fs::FileInformation;
 use uucore::show;
+use uucore::translate;
 
-/// A writer that writes to a shell_process' stdin
+/// A writer that writes to a `shell_process`' stdin
 ///
 /// We use a shell process (not directly calling a sub-process) so we can forward the name of the
 /// corresponding output file (xaa, xab, xac… ). This is the way it was implemented in GNU split.
@@ -110,11 +111,14 @@ impl Drop for FilterWriter {
             if return_code != 0 {
                 show!(USimpleError::new(
                     1,
-                    format!("Shell process returned {return_code}")
+                    translate!("split-error-shell-process-returned", "code" => return_code)
                 ));
             }
         } else {
-            show!(USimpleError::new(1, "Shell process terminated by signal"));
+            show!(USimpleError::new(
+                1,
+                translate!("split-error-shell-process-terminated")
+            ));
         }
     }
 }
@@ -134,14 +138,20 @@ pub fn instantiate_current_writer(
                     .create(true)
                     .truncate(true)
                     .open(Path::new(&filename))
-                    .map_err(|_| Error::other(format!("unable to open '{filename}'; aborting")))?
+                    .map_err(|_| {
+                        Error::other(
+                            translate!("split-error-unable-to-open-file", "file" => filename),
+                        )
+                    })?
             } else {
                 // re-open file that we previously created to append to it
                 std::fs::OpenOptions::new()
                     .append(true)
                     .open(Path::new(&filename))
                     .map_err(|_| {
-                        Error::other(format!("unable to re-open '{filename}'; aborting"))
+                        Error::other(
+                            translate!("split-error-unable-to-reopen-file", "file" => filename),
+                        )
                     })?
             };
             Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))

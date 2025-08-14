@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit
 
 mod check;
 mod chunks;
@@ -41,21 +41,20 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
 use thiserror::Error;
-use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
-use uucore::error::{UError, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
+use uucore::format_usage;
 use uucore::line_ending::LineEnding;
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+use uucore::show_error;
+use uucore::translate;
 use uucore::version_cmp::version_cmp;
-use uucore::{format_usage, show_error};
 
 use crate::tmp_dir::TmpDirWrapper;
-
-use uucore::locale::get_message;
 
 mod options {
     pub mod modes {
@@ -111,10 +110,10 @@ mod options {
     pub const FILES: &str = "files";
 }
 
-const DECIMAL_PT: char = '.';
+const DECIMAL_PT: u8 = b'.';
 
-const NEGATIVE: char = '-';
-const POSITIVE: char = '+';
+const NEGATIVE: &u8 = &b'-';
+const POSITIVE: &u8 = &b'+';
 
 // Choosing a higher buffer size does not result in performance improvements
 // (at least not on my machine). TODO: In the future, we should also take the amount of
@@ -131,49 +130,49 @@ pub enum SortError {
         silent: bool,
     },
 
-    #[error("open failed: {}: {}", .path.maybe_quote(), strip_errno(.error))]
+    #[error("{}", translate!("sort-open-failed", "path" => format!("{}", .path.maybe_quote()), "error" => strip_errno(.error)))]
     OpenFailed {
         path: PathBuf,
         error: std::io::Error,
     },
 
-    #[error("failed to parse key {}: {}", .key.quote(), .msg)]
+    #[error("{}", translate!("sort-parse-key-error", "key" => .key.quote(), "msg" => .msg.clone()))]
     ParseKeyError { key: String, msg: String },
 
-    #[error("cannot read: {}: {}", .path.maybe_quote(), strip_errno(.error))]
+    #[error("{}", translate!("sort-cannot-read", "path" => format!("{}", .path.maybe_quote()), "error" => strip_errno(.error)))]
     ReadFailed {
         path: PathBuf,
         error: std::io::Error,
     },
 
-    #[error("failed to open temporary file: {}", strip_errno(.error))]
+    #[error("{}", translate!("sort-open-tmp-file-failed", "error" => strip_errno(.error)))]
     OpenTmpFileFailed { error: std::io::Error },
 
-    #[error("couldn't execute compress program: errno {code}")]
+    #[error("{}", translate!("sort-compress-prog-execution-failed", "code" => .code))]
     CompressProgExecutionFailed { code: i32 },
 
-    #[error("{} terminated abnormally", .prog.quote())]
+    #[error("{}", translate!("sort-compress-prog-terminated-abnormally", "prog" => .prog.quote()))]
     CompressProgTerminatedAbnormally { prog: String },
 
-    #[error("cannot create temporary file in '{}':", .path.display())]
+    #[error("{}", translate!("sort-cannot-create-tmp-file", "path" => format!("{}", .path.display())))]
     TmpFileCreationFailed { path: PathBuf },
 
-    #[error("extra operand '{}'\nfile operands cannot be combined with --files0-from\nTry '{} --help' for more information.", .file.display(), uucore::execution_phrase())]
+    #[error("{}", translate!("sort-file-operands-combined", "file" => format!("{}", .file.display()), "help" => uucore::execution_phrase()))]
     FileOperandsCombined { file: PathBuf },
 
     #[error("{error}")]
     Uft8Error { error: Utf8Error },
 
-    #[error("multiple output files specified")]
+    #[error("{}", translate!("sort-multiple-output-files"))]
     MultipleOutputFiles,
 
-    #[error("when reading file names from stdin, no file name of '-' allowed")]
+    #[error("{}", translate!("sort-minus-in-stdin"))]
     MinusInStdIn,
 
-    #[error("no input from '{}'", .file.display())]
+    #[error("{}", translate!("sort-no-input-from", "file" => format!("{}", .file.display())))]
     EmptyInputFile { file: PathBuf },
 
-    #[error("{}:{}: invalid zero-length file name", .file.display(), .line_num)]
+    #[error("{}", translate!("sort-invalid-zero-length-filename", "file" => format!("{}", .file.display()), "line_num" => .line_num))]
     ZeroLengthFileName { file: PathBuf, line_num: usize },
 }
 
@@ -190,7 +189,7 @@ fn format_disorder(file: &OsString, line_number: &usize, line: &String, silent: 
     if *silent {
         String::new()
     } else {
-        format!("{}:{}: disorder: {line}", file.maybe_quote(), line_number)
+        translate!("sort-error-disorder", "file" => file.maybe_quote(), "line_number" => line_number, "line" => line.to_owned())
     }
 }
 
@@ -224,9 +223,9 @@ pub struct Output {
 }
 
 impl Output {
-    fn new(name: Option<&OsStr>) -> UResult<Self> {
+    fn new(name: Option<impl AsRef<OsStr>>) -> UResult<Self> {
         let file = if let Some(name) = name {
-            let path = Path::new(name);
+            let path = Path::new(name.as_ref());
             // This is different from `File::create()` because we don't truncate the output yet.
             // This allows using the output file as an input file.
             #[allow(clippy::suspicious_open_options)]
@@ -238,7 +237,7 @@ impl Output {
                     path: path.to_owned(),
                     error: e,
                 })?;
-            Some((name.to_os_string(), file))
+            Some((name.as_ref().to_owned(), file))
         } else {
             None
         };
@@ -280,7 +279,7 @@ pub struct GlobalSettings {
     check_silent: bool,
     salt: Option<[u8; 16]>,
     selectors: Vec<FieldSelector>,
-    separator: Option<char>,
+    separator: Option<u8>,
     threads: String,
     line_ending: LineEnding,
     buffer_size: usize,
@@ -316,7 +315,7 @@ impl GlobalSettings {
             .parse(input.trim())?;
 
         usize::try_from(size).map_err(|_| {
-            ParseSizeError::SizeTooBig(format!("Buffer size {size} does not fit in address space"))
+            ParseSizeError::SizeTooBig(translate!("sort-error-buffer-size-too-big", "size" => size))
         })
     }
 
@@ -390,17 +389,13 @@ impl KeySettings {
             SortMode::Numeric | SortMode::HumanNumeric | SortMode::GeneralNumeric | SortMode::Month
         ) {
             if dictionary_order {
-                return Err(format!(
-                    "options '-{}{}' are incompatible",
-                    'd',
-                    mode.get_short_name().unwrap()
-                ));
+                return Err(
+                    translate!("sort-options-incompatible", "opt1" => "d", "opt2" => mode.get_short_name().unwrap()),
+                );
             } else if ignore_non_printing {
-                return Err(format!(
-                    "options '-{}{}' are incompatible",
-                    'i',
-                    mode.get_short_name().unwrap()
-                ));
+                return Err(
+                    translate!("sort-options-incompatible", "opt1" => "i", "opt2" => mode.get_short_name().unwrap()),
+                );
             }
         }
         Ok(())
@@ -408,11 +403,9 @@ impl KeySettings {
 
     fn set_sort_mode(&mut self, mode: SortMode) -> Result<(), String> {
         if self.mode != SortMode::Default && self.mode != mode {
-            return Err(format!(
-                "options '-{}{}' are incompatible",
-                self.mode.get_short_name().unwrap(),
-                mode.get_short_name().unwrap()
-            ));
+            return Err(
+                translate!("sort-options-incompatible", "opt1" => self.mode.get_short_name().unwrap(), "opt2" => mode.get_short_name().unwrap()),
+            );
         }
         Self::check_compatibility(mode, self.ignore_non_printing, self.dictionary_order)?;
         self.mode = mode;
@@ -452,15 +445,15 @@ impl Default for KeySettings {
 }
 enum Selection<'a> {
     AsBigDecimal(GeneralBigDecimalParseResult),
-    WithNumInfo(&'a str, NumInfo),
-    Str(&'a str),
+    WithNumInfo(&'a [u8], NumInfo),
+    Str(&'a [u8]),
 }
 
 type Field = Range<usize>;
 
 #[derive(Clone, Debug)]
 pub struct Line<'a> {
-    line: &'a str,
+    line: &'a [u8],
     index: usize,
 }
 
@@ -470,7 +463,7 @@ impl<'a> Line<'a> {
     /// If additional data is needed for sorting it is added to `line_data`.
     /// `token_buffer` allows to reuse the allocation for tokens.
     fn create(
-        line: &'a str,
+        line: &'a [u8],
         index: usize,
         line_data: &mut LineData<'a>,
         token_buffer: &mut Vec<Field>,
@@ -482,9 +475,10 @@ impl<'a> Line<'a> {
         }
         if settings.mode == SortMode::Numeric {
             // exclude inf, nan, scientific notation
-            let line_num_float = (!line.contains(char::is_alphabetic))
-                .then(|| line.parse::<f64>().ok())
-                .flatten();
+            let line_num_float = (!line.iter().any(u8::is_ascii_alphabetic))
+                .then(|| std::str::from_utf8(line).ok())
+                .flatten()
+                .and_then(|s| s.parse::<f64>().ok());
             line_data.line_num_floats.push(line_num_float);
         }
         for (selector, selection) in settings
@@ -512,7 +506,7 @@ impl<'a> Line<'a> {
         if settings.debug {
             self.print_debug(settings, writer)?;
         } else {
-            writer.write_all(self.line.as_bytes())?;
+            writer.write_all(self.line)?;
             writer.write_all(&[settings.line_ending.into()])?;
         }
         Ok(())
@@ -529,8 +523,15 @@ impl<'a> Line<'a> {
         // which are not a performance problem in any case. Therefore there aren't any special performance
         // optimizations here.
 
-        let line = self.line.replace('\t', ">");
-        writeln!(writer, "{line}")?;
+        let line = self
+            .line
+            .iter()
+            .copied()
+            .map(|c| if c == b'\t' { b'>' } else { c })
+            .collect::<Vec<_>>();
+
+        writer.write_all(&line)?;
+        writeln!(writer)?;
 
         let mut fields = vec![];
         tokenize(self.line, settings.separator, &mut fields);
@@ -556,23 +557,26 @@ impl<'a> Line<'a> {
                         // This was not a valid number.
                         // Report no match at the first non-whitespace character.
                         let leading_whitespace = self.line[selection.clone()]
-                            .find(|c: char| !c.is_whitespace())
+                            .iter()
+                            .position(|c| !c.is_ascii_whitespace())
                             .unwrap_or(0);
                         selection.start += leading_whitespace;
                         selection.end += leading_whitespace;
                     } else {
                         // include a trailing si unit
-                        if selector.settings.mode == SortMode::HumanNumeric
-                            && self.line[selection.end..initial_selection.end].starts_with(
-                                &['k', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y', 'R', 'Q'][..],
-                            )
-                        {
-                            selection.end += 1;
+                        if selector.settings.mode == SortMode::HumanNumeric {
+                            if let Some(
+                                b'k' | b'K' | b'M' | b'G' | b'T' | b'P' | b'E' | b'Z' | b'Y' | b'R'
+                                | b'Q',
+                            ) = self.line[selection.end..initial_selection.end].first()
+                            {
+                                selection.end += 1;
+                            }
                         }
 
                         // include leading zeroes, a leading minus or a leading decimal point
-                        while self.line[initial_selection.start..selection.start]
-                            .ends_with(&['-', '0', '.'][..])
+                        while let Some(b'-' | b'0' | b'.') =
+                            self.line[initial_selection.start..selection.start].last()
                         {
                             selection.start -= 1;
                         }
@@ -591,8 +595,9 @@ impl<'a> Line<'a> {
                     let initial_selection = &self.line[selection.clone()];
 
                     let mut month_chars = initial_selection
-                        .char_indices()
-                        .skip_while(|(_, c)| c.is_whitespace());
+                        .iter()
+                        .enumerate()
+                        .skip_while(|(_, c)| c.is_ascii_whitespace());
 
                     let month = if month_parse(initial_selection) == Month::Unknown {
                         // We failed to parse a month, which is equivalent to matching nothing.
@@ -617,20 +622,14 @@ impl<'a> Line<'a> {
                 _ => {}
             }
 
-            write!(
-                writer,
-                "{}",
-                " ".repeat(UnicodeWidthStr::width(&line[..selection.start]))
-            )?;
+            let select = &line[..selection.start];
+            write!(writer, "{}", " ".repeat(select.len()))?;
 
             if selection.is_empty() {
-                writeln!(writer, "^ no match for key")?;
+                writeln!(writer, "{}", translate!("sort-error-no-match-for-key"))?;
             } else {
-                writeln!(
-                    writer,
-                    "{}",
-                    "_".repeat(UnicodeWidthStr::width(&line[selection]))
-                )?;
+                let select = &line[selection];
+                writeln!(writer, "{}", "_".repeat(select.len()))?;
             }
         }
 
@@ -649,13 +648,9 @@ impl<'a> Line<'a> {
         {
             // A last resort comparator is in use, underline the whole line.
             if self.line.is_empty() {
-                writeln!(writer, "^ no match for key")?;
+                writeln!(writer, "{}", translate!("sort-error-no-match-for-key"))?;
             } else {
-                writeln!(
-                    writer,
-                    "{}",
-                    "_".repeat(UnicodeWidthStr::width(line.as_str()))
-                )?;
+                writeln!(writer, "{}", "_".repeat(self.line.len()))?;
             }
         }
         Ok(())
@@ -663,7 +658,7 @@ impl<'a> Line<'a> {
 }
 
 /// Tokenize a line into fields. The result is stored into `token_buffer`.
-fn tokenize(line: &str, separator: Option<char>, token_buffer: &mut Vec<Field>) {
+fn tokenize(line: &[u8], separator: Option<u8>, token_buffer: &mut Vec<Field>) {
     assert!(token_buffer.is_empty());
     if let Some(separator) = separator {
         tokenize_with_separator(line, separator, token_buffer);
@@ -675,12 +670,12 @@ fn tokenize(line: &str, separator: Option<char>, token_buffer: &mut Vec<Field>) 
 /// By default fields are separated by the first whitespace after non-whitespace.
 /// Whitespace is included in fields at the start.
 /// The result is stored into `token_buffer`.
-fn tokenize_default(line: &str, token_buffer: &mut Vec<Field>) {
+fn tokenize_default(line: &[u8], token_buffer: &mut Vec<Field>) {
     token_buffer.push(0..0);
     // pretend that there was whitespace in front of the line
     let mut previous_was_whitespace = true;
-    for (idx, char) in line.char_indices() {
-        if char.is_whitespace() {
+    for (idx, char) in line.iter().enumerate() {
+        if char.is_ascii_whitespace() {
             if !previous_was_whitespace {
                 token_buffer.last_mut().unwrap().end = idx;
                 token_buffer.push(idx..0);
@@ -695,10 +690,11 @@ fn tokenize_default(line: &str, token_buffer: &mut Vec<Field>) {
 
 /// Split between separators. These separators are not included in fields.
 /// The result is stored into `token_buffer`.
-fn tokenize_with_separator(line: &str, separator: char, token_buffer: &mut Vec<Field>) {
+fn tokenize_with_separator(line: &[u8], separator: u8, token_buffer: &mut Vec<Field>) {
     let separator_indices = line
-        .char_indices()
-        .filter_map(|(i, c)| if c == separator { Some(i) } else { None });
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &c)| if c == separator { Some(i) } else { None });
     let mut start = 0;
     for sep_idx in separator_indices {
         token_buffer.push(start..sep_idx);
@@ -724,23 +720,26 @@ impl KeyPosition {
 
         let field = field_and_char
             .next()
-            .ok_or_else(|| format!("invalid key {}", key.quote()))?;
+            .ok_or_else(|| translate!("sort-invalid-key", "key" => key.quote()))?;
         let char = field_and_char.next();
 
         let field = match field.parse::<usize>() {
             Ok(f) => f,
             Err(e) if *e.kind() == IntErrorKind::PosOverflow => usize::MAX,
             Err(e) => {
-                return Err(format!("failed to parse field index {} {e}", field.quote(),));
+                return Err(
+                    translate!("sort-failed-parse-field-index", "field" => field.quote(), "error" => e),
+                );
             }
         };
         if field == 0 {
-            return Err("field index can not be 0".to_string());
+            return Err(translate!("sort-field-index-cannot-be-zero"));
         }
 
         let char = char.map_or(Ok(default_char_index), |char| {
-            char.parse()
-                .map_err(|e| format!("failed to parse character index {}: {e}", char.quote()))
+            char.parse().map_err(|e: std::num::ParseIntError| {
+                translate!("sort-failed-parse-char-index", "char" => char.quote(), "error" => e)
+            })
         })?;
 
         Ok(Self {
@@ -839,7 +838,9 @@ impl FieldSelector {
                     'R' => key_settings.set_sort_mode(SortMode::Random)?,
                     'r' => key_settings.reverse = true,
                     'V' => key_settings.set_sort_mode(SortMode::Version)?,
-                    c => return Err(format!("invalid option: '{c}'")),
+                    c => {
+                        return Err(translate!("sort-invalid-option", "option" => c));
+                    }
                 }
             }
             Ok(ignore_blanks)
@@ -865,7 +866,7 @@ impl FieldSelector {
         settings: KeySettings,
     ) -> Result<Self, String> {
         if from.char == 0 {
-            Err("invalid character index 0 for the start position of a field".to_string())
+            Err(translate!("sort-invalid-char-index-zero-start"))
         } else {
             Ok(Self {
                 needs_selection: (from.field != 1
@@ -883,39 +884,39 @@ impl FieldSelector {
     }
 
     /// Get the selection that corresponds to this selector for the line.
-    /// If needs_fields returned false, tokens may be empty.
-    fn get_selection<'a>(&self, line: &'a str, tokens: &[Field]) -> Selection<'a> {
+    /// If `needs_fields` returned false, tokens may be empty.
+    fn get_selection<'a>(&self, line: &'a [u8], tokens: &[Field]) -> Selection<'a> {
         // `get_range` expects `None` when we don't need tokens and would get confused by an empty vector.
         let tokens = if self.needs_tokens {
             Some(tokens)
         } else {
             None
         };
-        let mut range = &line[self.get_range(line, tokens)];
+        let mut range_str = &line[self.get_range(line, tokens)];
         if self.settings.mode == SortMode::Numeric || self.settings.mode == SortMode::HumanNumeric {
             // Parse NumInfo for this number.
             let (info, num_range) = NumInfo::parse(
-                range,
+                range_str,
                 &NumInfoParseSettings {
                     accept_si_units: self.settings.mode == SortMode::HumanNumeric,
                     ..Default::default()
                 },
             );
             // Shorten the range to what we need to pass to numeric_str_cmp later.
-            range = &range[num_range];
-            Selection::WithNumInfo(range, info)
+            range_str = &range_str[num_range];
+            Selection::WithNumInfo(range_str, info)
         } else if self.settings.mode == SortMode::GeneralNumeric {
             // Parse this number as BigDecimal, as this is the requirement for general numeric sorting.
-            Selection::AsBigDecimal(general_bd_parse(&range[get_leading_gen(range)]))
+            Selection::AsBigDecimal(general_bd_parse(&range_str[get_leading_gen(range_str)]))
         } else {
             // This is not a numeric sort, so we don't need a NumCache.
-            Selection::Str(range)
+            Selection::Str(range_str)
         }
     }
 
     /// Look up the range in the line that corresponds to this selector.
-    /// If needs_fields returned false, tokens must be None.
-    fn get_range(&self, line: &str, tokens: Option<&[Field]>) -> Range<usize> {
+    /// If `needs_fields` returned false, tokens must be None.
+    fn get_range(&self, line: &[u8], tokens: Option<&[Field]>) -> Range<usize> {
         enum Resolution {
             // The start index of the resolved character, inclusive
             StartOfChar(usize),
@@ -928,9 +929,9 @@ impl FieldSelector {
             TooHigh,
         }
 
-        // Get the index for this line given the KeyPosition
+        /// Get the index for this line given the [`KeyPosition`]
         fn resolve_index(
-            line: &str,
+            line: &[u8],
             tokens: Option<&[Field]>,
             position: &KeyPosition,
         ) -> Resolution {
@@ -954,13 +955,15 @@ impl FieldSelector {
                 // strip blanks if needed
                 if position.ignore_blanks {
                     idx += line[idx..]
-                        .char_indices()
-                        .find(|(_, c)| !c.is_whitespace())
+                        .iter()
+                        .enumerate()
+                        .find(|(_, c)| !c.is_ascii_whitespace())
                         .map_or(line[idx..].len(), |(idx, _)| idx);
                 }
                 // apply the character index
                 idx += line[idx..]
-                    .char_indices()
+                    .iter()
+                    .enumerate()
                     .nth(position.char - 1)
                     .map_or(line[idx..].len(), |(idx, _)| idx);
                 if idx >= line.len() {
@@ -978,7 +981,7 @@ impl FieldSelector {
                 let mut range = match to {
                     Some(Resolution::StartOfChar(mut to)) => {
                         // We need to include the character at `to`.
-                        to += line[to..].chars().next().map_or(1, char::len_utf8);
+                        to += 1;
                         from..to
                     }
                     Some(Resolution::EndOfChar(to)) => from..to,
@@ -1007,18 +1010,17 @@ impl FieldSelector {
 }
 
 /// Creates an `Arg` that conflicts with all other sort modes.
-fn make_sort_mode_arg(mode: &'static str, short: char, help: &'static str) -> Arg {
-    let mut arg = Arg::new(mode)
+fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
+    Arg::new(mode)
         .short(short)
         .long(mode)
         .help(help)
-        .action(ArgAction::SetTrue);
-    for possible_mode in &options::modes::ALL_SORT_MODES {
-        if *possible_mode != mode {
-            arg = arg.conflicts_with(possible_mode);
-        }
-    }
-    arg
+        .action(ArgAction::SetTrue)
+        .conflicts_with_all(
+            options::modes::ALL_SORT_MODES
+                .iter()
+                .filter(|&&m| m != mode),
+        )
 }
 
 #[cfg(target_os = "linux")]
@@ -1027,9 +1029,9 @@ fn get_rlimit() -> UResult<usize> {
         rlim_cur: 0,
         rlim_max: 0,
     };
-    match unsafe { getrlimit(RLIMIT_NOFILE, &mut limit) } {
+    match unsafe { getrlimit(RLIMIT_NOFILE, &raw mut limit) } {
         0 => Ok(limit.rlim_cur as usize),
-        _ => Err(UUsageError::new(2, "Failed to fetch rlimit")),
+        _ => Err(UUsageError::new(2, translate!("sort-failed-fetch-rlimit"))),
     }
 }
 
@@ -1048,11 +1050,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // nor return with a non-zero exit code in this case (we should print to stdout and return 0).
             // This logic is similar to the code in clap, but we return 2 as the exit code in case of real failure
             // (clap returns 1).
-            e.print().unwrap();
-            if e.use_stderr() {
-                set_exit_code(2);
-            }
-            return Ok(());
+            use uucore::clap_localization::handle_clap_error_with_exit_code;
+            // Always use the localization handler for proper error and help handling
+            handle_clap_error_with_exit_code(e, uucore::util_name(), 2);
         }
     };
 
@@ -1119,43 +1119,37 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.mode = if matches.get_flag(options::modes::HUMAN_NUMERIC)
         || matches
             .get_one::<String>(options::modes::SORT)
-            .map(|s| s.as_str())
-            == Some("human-numeric")
+            .is_some_and(|s| s == "human-numeric")
     {
         SortMode::HumanNumeric
     } else if matches.get_flag(options::modes::MONTH)
         || matches
             .get_one::<String>(options::modes::SORT)
-            .map(|s| s.as_str())
-            == Some("month")
+            .is_some_and(|s| s == "month")
     {
         SortMode::Month
     } else if matches.get_flag(options::modes::GENERAL_NUMERIC)
         || matches
             .get_one::<String>(options::modes::SORT)
-            .map(|s| s.as_str())
-            == Some("general-numeric")
+            .is_some_and(|s| s == "general-numeric")
     {
         SortMode::GeneralNumeric
     } else if matches.get_flag(options::modes::NUMERIC)
         || matches
             .get_one::<String>(options::modes::SORT)
-            .map(|s| s.as_str())
-            == Some("numeric")
+            .is_some_and(|s| s == "numeric")
     {
         SortMode::Numeric
     } else if matches.get_flag(options::modes::VERSION)
         || matches
             .get_one::<String>(options::modes::SORT)
-            .map(|s| s.as_str())
-            == Some("version")
+            .is_some_and(|s| s == "version")
     {
         SortMode::Version
     } else if matches.get_flag(options::modes::RANDOM)
         || matches
             .get_one::<String>(options::modes::SORT)
-            .map(|s| s.as_str())
-            == Some("random")
+            .is_some_and(|s| s == "random")
     {
         settings.salt = Some(get_rand_string());
         SortMode::Random
@@ -1169,8 +1163,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // "0" is default - threads = num of cores
         settings.threads = matches
             .get_one::<String>(options::PARALLEL)
-            .map(String::from)
-            .unwrap_or_else(|| "0".to_string());
+            .map_or_else(|| "0".to_string(), String::from);
         unsafe {
             env::set_var("RAYON_NUM_THREADS", &settings.threads);
         }
@@ -1188,8 +1181,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut tmp_dir = TmpDirWrapper::new(
         matches
             .get_one::<String>(options::TMP_DIR)
-            .map(PathBuf::from)
-            .unwrap_or_else(env::temp_dir),
+            .map_or_else(env::temp_dir, PathBuf::from),
     );
 
     settings.compress_prog = matches
@@ -1200,28 +1192,42 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         match n_merge.parse::<usize>() {
             Ok(parsed_value) => {
                 if parsed_value < 2 {
-                    show_error!("invalid --batch-size argument '{n_merge}'");
-                    return Err(UUsageError::new(2, "minimum --batch-size argument is '2'"));
+                    show_error!(
+                        "{}",
+                        translate!("sort-invalid-batch-size-arg", "arg" => n_merge)
+                    );
+                    return Err(UUsageError::new(
+                        2,
+                        translate!("sort-minimum-batch-size-two"),
+                    ));
                 }
                 settings.merge_batch_size = parsed_value;
             }
             Err(e) => {
                 let error_message = if *e.kind() == IntErrorKind::PosOverflow {
+                    let batch_too_large = translate!(
+                        "sort-batch-size-too-large",
+                        "arg" => n_merge.quote()
+                    );
+
                     #[cfg(target_os = "linux")]
                     {
-                        show_error!("--batch-size argument {} too large", n_merge.quote());
+                        show_error!("{}", batch_too_large);
 
-                        format!(
-                            "maximum --batch-size argument with current rlimit is {}",
-                            get_rlimit()?
+                        translate!(
+                            "sort-maximum-batch-size-rlimit",
+                            "rlimit" =>  get_rlimit()?
                         )
                     }
                     #[cfg(not(target_os = "linux"))]
                     {
-                        format!("--batch-size argument {} too large", n_merge.quote())
+                        batch_too_large
                     }
                 } else {
-                    format!("invalid --batch-size argument {}", n_merge.quote())
+                    translate!(
+                        "sort-invalid-batch-size-arg",
+                        "arg" =>  n_merge,
+                    )
                 };
 
                 return Err(UUsageError::new(2, error_message));
@@ -1243,7 +1249,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     {
         settings.check_silent = true;
         settings.check = true;
-    };
+    }
 
     settings.ignore_case = matches.get_flag(options::IGNORE_CASE);
 
@@ -1259,7 +1265,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if settings.check && files.len() != 1 {
         return Err(UUsageError::new(
             2,
-            format!("extra operand {} not allowed with -c", files[1].quote()),
+            translate!("sort-extra-operand-not-allowed-with-c", "operand" => files[1].quote()),
         ));
     }
 
@@ -1267,7 +1273,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let mut separator = arg.to_str().ok_or_else(|| {
             UUsageError::new(
                 2,
-                format!("separator is not valid unicode: {}", arg.quote()),
+                translate!("sort-separator-not-valid-unicode", "arg" => arg.quote()),
             )
         })?;
         if separator == "\\0" {
@@ -1276,16 +1282,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // This rejects non-ASCII codepoints, but perhaps we don't have to.
         // On the other hand GNU accepts any single byte, valid unicode or not.
         // (Supporting multi-byte chars would require changes in tokenize_with_separator().)
-        if separator.len() != 1 {
+        let &[sep_char] = separator.as_bytes() else {
             return Err(UUsageError::new(
                 2,
-                format!(
-                    "separator must be exactly one character long: {}",
-                    separator.quote()
-                ),
+                translate!("sort-separator-must-be-one-char", "separator" => separator.quote()),
             ));
-        }
-        settings.separator = Some(separator.chars().next().unwrap());
+        };
+        settings.separator = Some(sep_char);
     }
 
     if let Some(values) = matches.get_many::<String>(options::KEY) {
@@ -1323,11 +1326,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         open(file)?;
     }
 
-    let output = Output::new(
-        matches
-            .get_one::<OsString>(options::OUTPUT)
-            .map(|s| s.as_os_str()),
-    )?;
+    let output = Output::new(matches.get_one::<OsString>(options::OUTPUT))?;
 
     settings.init_precomputed();
 
@@ -1341,9 +1340,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("sort-about"))
-        .after_help(get_message("sort-after-help"))
-        .override_usage(format_usage(&get_message("sort-usage")))
+        .about(translate!("sort-about"))
+        .after_help(translate!("sort-after-help"))
+        .override_usage(format_usage(&translate!("sort-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .infer_long_args(true)
         .disable_help_flag(true)
         .disable_version_flag(true)
@@ -1351,13 +1351,13 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help("Print help information.")
+                .help(translate!("sort-help-help"))
                 .action(ArgAction::Help),
         )
         .arg(
             Arg::new(options::VERSION)
                 .long(options::VERSION)
-                .help("Print version information.")
+                .help(translate!("sort-help-version"))
                 .action(ArgAction::Version),
         )
         .arg(
@@ -1376,38 +1376,38 @@ pub fn uu_app() -> Command {
         .arg(make_sort_mode_arg(
             options::modes::HUMAN_NUMERIC,
             'h',
-            "compare according to human readable sizes, eg 1M > 100k",
+            translate!("sort-help-human-numeric"),
         ))
         .arg(make_sort_mode_arg(
             options::modes::MONTH,
             'M',
-            "compare according to month name abbreviation",
+            translate!("sort-help-month"),
         ))
         .arg(make_sort_mode_arg(
             options::modes::NUMERIC,
             'n',
-            "compare according to string numerical value",
+            translate!("sort-help-numeric"),
         ))
         .arg(make_sort_mode_arg(
             options::modes::GENERAL_NUMERIC,
             'g',
-            "compare according to string general numerical value",
+            translate!("sort-help-general-numeric"),
         ))
         .arg(make_sort_mode_arg(
             options::modes::VERSION,
             'V',
-            "Sort by SemVer version number, eg 1.12.2 > 1.1.2",
+            translate!("sort-help-version-sort"),
         ))
         .arg(make_sort_mode_arg(
             options::modes::RANDOM,
             'R',
-            "shuffle in random order",
+            translate!("sort-help-random"),
         ))
         .arg(
             Arg::new(options::DICTIONARY_ORDER)
                 .short('d')
                 .long(options::DICTIONARY_ORDER)
-                .help("consider only blanks and alphanumeric characters")
+                .help(translate!("sort-help-dictionary-order"))
                 .conflicts_with_all([
                     options::modes::NUMERIC,
                     options::modes::GENERAL_NUMERIC,
@@ -1420,7 +1420,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::MERGE)
                 .short('m')
                 .long(options::MERGE)
-                .help("merge already sorted files; do not sort")
+                .help(translate!("sort-help-merge"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -1435,31 +1435,28 @@ pub fn uu_app() -> Command {
                     options::check::DIAGNOSE_FIRST,
                 ]))
                 .conflicts_with_all([options::OUTPUT, options::check::CHECK_SILENT])
-                .help("check for sorted input; do not sort"),
+                .help(translate!("sort-help-check")),
         )
         .arg(
             Arg::new(options::check::CHECK_SILENT)
                 .short('C')
                 .long(options::check::CHECK_SILENT)
                 .conflicts_with_all([options::OUTPUT, options::check::CHECK])
-                .help(
-                    "exit successfully if the given file is already sorted, \
-                and exit with status 1 otherwise.",
-                )
+                .help(translate!("sort-help-check-silent"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::IGNORE_CASE)
                 .short('f')
                 .long(options::IGNORE_CASE)
-                .help("fold lower case to upper case characters")
+                .help(translate!("sort-help-ignore-case"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::IGNORE_NONPRINTING)
                 .short('i')
                 .long(options::IGNORE_NONPRINTING)
-                .help("ignore nonprinting characters")
+                .help(translate!("sort-help-ignore-nonprinting"))
                 .conflicts_with_all([
                     options::modes::NUMERIC,
                     options::modes::GENERAL_NUMERIC,
@@ -1472,14 +1469,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::IGNORE_LEADING_BLANKS)
                 .short('b')
                 .long(options::IGNORE_LEADING_BLANKS)
-                .help("ignore leading blanks when finding sort keys in each line")
+                .help(translate!("sort-help-ignore-leading-blanks"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OUTPUT)
                 .short('o')
                 .long(options::OUTPUT)
-                .help("write output to FILENAME instead of stdout")
+                .help(translate!("sort-help-output"))
                 .value_parser(ValueParser::os_string())
                 .value_name("FILENAME")
                 .value_hint(clap::ValueHint::FilePath)
@@ -1490,28 +1487,28 @@ pub fn uu_app() -> Command {
             Arg::new(options::REVERSE)
                 .short('r')
                 .long(options::REVERSE)
-                .help("reverse the output")
+                .help(translate!("sort-help-reverse"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::STABLE)
                 .short('s')
                 .long(options::STABLE)
-                .help("stabilize sort by disabling last-resort comparison")
+                .help(translate!("sort-help-stable"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::UNIQUE)
                 .short('u')
                 .long(options::UNIQUE)
-                .help("output only the first of an equal run")
+                .help(translate!("sort-help-unique"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::KEY)
                 .short('k')
                 .long(options::KEY)
-                .help("sort by a key")
+                .help(translate!("sort-help-key"))
                 .action(ArgAction::Append)
                 .num_args(1),
         )
@@ -1519,54 +1516,54 @@ pub fn uu_app() -> Command {
             Arg::new(options::SEPARATOR)
                 .short('t')
                 .long(options::SEPARATOR)
-                .help("custom separator for -k")
+                .help(translate!("sort-help-separator"))
                 .value_parser(ValueParser::os_string()),
         )
         .arg(
             Arg::new(options::ZERO_TERMINATED)
                 .short('z')
                 .long(options::ZERO_TERMINATED)
-                .help("line delimiter is NUL, not newline")
+                .help(translate!("sort-help-zero-terminated"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PARALLEL)
                 .long(options::PARALLEL)
-                .help("change the number of threads running concurrently to NUM_THREADS")
+                .help(translate!("sort-help-parallel"))
                 .value_name("NUM_THREADS"),
         )
         .arg(
             Arg::new(options::BUF_SIZE)
                 .short('S')
                 .long(options::BUF_SIZE)
-                .help("sets the maximum SIZE of each segment in number of sorted items")
+                .help(translate!("sort-help-buf-size"))
                 .value_name("SIZE"),
         )
         .arg(
             Arg::new(options::TMP_DIR)
                 .short('T')
                 .long(options::TMP_DIR)
-                .help("use DIR for temporaries, not $TMPDIR or /tmp")
+                .help(translate!("sort-help-tmp-dir"))
                 .value_name("DIR")
                 .value_hint(clap::ValueHint::DirPath),
         )
         .arg(
             Arg::new(options::COMPRESS_PROG)
                 .long(options::COMPRESS_PROG)
-                .help("compress temporary files with PROG, decompress with PROG -d; PROG has to take input from stdin and output to stdout")
+                .help(translate!("sort-help-compress-prog"))
                 .value_name("PROG")
                 .value_hint(clap::ValueHint::CommandName),
         )
         .arg(
             Arg::new(options::BATCH_SIZE)
                 .long(options::BATCH_SIZE)
-                .help("Merge at most N_MERGE inputs at once.")
+                .help(translate!("sort-help-batch-size"))
                 .value_name("N_MERGE"),
         )
         .arg(
             Arg::new(options::FILES0_FROM)
                 .long(options::FILES0_FROM)
-                .help("read input from the files specified by NUL-terminated NUL_FILE")
+                .help(translate!("sort-help-files0-from"))
                 .value_name("NUL_FILE")
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::FilePath),
@@ -1574,7 +1571,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::DEBUG)
                 .long(options::DEBUG)
-                .help("underline the parts of the line that are actually used for sorting")
+                .help(translate!("sort-help-debug"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -1595,7 +1592,10 @@ fn exec(
         merge::merge(files, settings, output, tmp_dir)
     } else if settings.check {
         if files.len() > 1 {
-            Err(UUsageError::new(2, "only one file allowed with -c"))
+            Err(UUsageError::new(
+                2,
+                translate!("sort-only-one-file-allowed-with-c"),
+            ))
         } else {
             check::check(files.first().unwrap(), settings)
         }
@@ -1736,20 +1736,21 @@ fn compare_by<'a>(
 // scientific notation, so we strip those lines only after the end of the following numeric string.
 // For example, 5e10KFD would be 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
 #[allow(clippy::cognitive_complexity)]
-fn get_leading_gen(input: &str) -> Range<usize> {
-    let trimmed = input.trim_start();
-    let leading_whitespace_len = input.len() - trimmed.len();
+fn get_leading_gen(inp: &[u8]) -> Range<usize> {
+    let trimmed = inp.trim_ascii_start();
+    let leading_whitespace_len = inp.len() - trimmed.len();
 
     // check for inf, -inf and nan
-    for allowed_prefix in ["inf", "-inf", "nan"] {
-        if trimmed.is_char_boundary(allowed_prefix.len())
+    const ALLOWED_PREFIXES: &[&[u8]] = &[b"inf", b"-inf", b"nan"];
+    for &allowed_prefix in ALLOWED_PREFIXES {
+        if trimmed.len() >= allowed_prefix.len()
             && trimmed[..allowed_prefix.len()].eq_ignore_ascii_case(allowed_prefix)
         {
             return leading_whitespace_len..(leading_whitespace_len + allowed_prefix.len());
         }
     }
     // Make this iter peekable to see if next char is numeric
-    let mut char_indices = itertools::peek_nth(trimmed.char_indices());
+    let mut char_indices = itertools::peek_nth(trimmed.iter().enumerate());
 
     let first = char_indices.peek();
 
@@ -1759,18 +1760,30 @@ fn get_leading_gen(input: &str) -> Range<usize> {
 
     let mut had_e_notation = false;
     let mut had_decimal_pt = false;
-    while let Some((idx, c)) = char_indices.next() {
-        if c.is_ascii_digit() {
+    let mut had_hex_notation: bool = false;
+    while let Some((idx, &c)) = char_indices.next() {
+        if had_hex_notation && c.is_ascii_hexdigit() {
             continue;
         }
+
+        if c.is_ascii_digit() {
+            if c == b'0' && matches!(char_indices.peek(), Some((_, b'x' | b'X'))) {
+                had_hex_notation = true;
+                char_indices.next();
+            }
+            continue;
+        }
+
         if c == DECIMAL_PT && !had_decimal_pt && !had_e_notation {
             had_decimal_pt = true;
             continue;
         }
-        if (c == 'e' || c == 'E') && !had_e_notation {
+        let is_decimal_e = (c == b'e' || c == b'E') && !had_hex_notation;
+        let is_hex_e = (c == b'p' || c == b'P') && had_hex_notation;
+        if (is_decimal_e || is_hex_e) && !had_e_notation {
             // we can only consume the 'e' if what follow is either a digit, or a sign followed by a digit.
-            if let Some(&(_, next_char)) = char_indices.peek() {
-                if (next_char == '+' || next_char == '-')
+            if let Some(&(_, &next_char)) = char_indices.peek() {
+                if (next_char == b'+' || next_char == b'-')
                     && matches!(
                         char_indices.peek_nth(2),
                         Some((_, c)) if c.is_ascii_digit()
@@ -1789,7 +1802,7 @@ fn get_leading_gen(input: &str) -> Range<usize> {
         }
         return leading_whitespace_len..(leading_whitespace_len + idx);
     }
-    leading_whitespace_len..input.len()
+    leading_whitespace_len..inp.len()
 }
 
 #[derive(Clone, PartialEq, PartialOrd, Debug)]
@@ -1801,16 +1814,23 @@ pub enum GeneralBigDecimalParseResult {
     Infinity,
 }
 
-/// Parse the beginning string into a GeneralBigDecimalParseResult.
-/// Using a GeneralBigDecimalParseResult instead of ExtendedBigDecimal is necessary to correctly order floats.
+/// Parse the beginning string into a [`GeneralBigDecimalParseResult`].
+/// Using a [`GeneralBigDecimalParseResult`] instead of [`ExtendedBigDecimal`] is necessary to correctly order floats.
 #[inline(always)]
-fn general_bd_parse(a: &str) -> GeneralBigDecimalParseResult {
+fn general_bd_parse(a: &[u8]) -> GeneralBigDecimalParseResult {
+    // The string should be valid ASCII to be parsed.
+    let Ok(a) = std::str::from_utf8(a) else {
+        return GeneralBigDecimalParseResult::Invalid;
+    };
+
     // Parse digits, and fold in recoverable errors
     let ebd = match ExtendedBigDecimal::extended_parse(a) {
         Err(ExtendedParserError::NotNumeric) => return GeneralBigDecimalParseResult::Invalid,
-        Err(ExtendedParserError::PartialMatch(ebd, _))
-        | Err(ExtendedParserError::Overflow(ebd))
-        | Err(ExtendedParserError::Underflow(ebd))
+        Err(
+            ExtendedParserError::PartialMatch(ebd, _)
+            | ExtendedParserError::Overflow(ebd)
+            | ExtendedParserError::Underflow(ebd),
+        )
         | Ok(ebd) => ebd,
     };
 
@@ -1844,7 +1864,7 @@ fn get_hash<T: Hash>(t: &T) -> u64 {
     s.finish()
 }
 
-fn random_shuffle(a: &str, b: &str, salt: &[u8]) -> Ordering {
+fn random_shuffle(a: &[u8], b: &[u8], salt: &[u8]) -> Ordering {
     let da = get_hash(&(a, salt));
     let db = get_hash(&(b, salt));
     da.cmp(&db)
@@ -1867,48 +1887,32 @@ enum Month {
     December,
 }
 
-/// Parse the beginning string into a Month, returning Month::Unknown on errors.
-fn month_parse(line: &str) -> Month {
-    let line = line.trim();
+/// Parse the beginning string into a Month, returning [`Month::Unknown`] on errors.
+fn month_parse(line: &[u8]) -> Month {
+    let line = line.trim_ascii_start();
 
-    const MONTHS: [(&str, Month); 12] = [
-        ("JAN", Month::January),
-        ("FEB", Month::February),
-        ("MAR", Month::March),
-        ("APR", Month::April),
-        ("MAY", Month::May),
-        ("JUN", Month::June),
-        ("JUL", Month::July),
-        ("AUG", Month::August),
-        ("SEP", Month::September),
-        ("OCT", Month::October),
-        ("NOV", Month::November),
-        ("DEC", Month::December),
-    ];
-
-    for (month_str, month) in &MONTHS {
-        if line.is_char_boundary(month_str.len())
-            && line[..month_str.len()].eq_ignore_ascii_case(month_str)
-        {
-            return *month;
-        }
+    match line.get(..3).map(|x| x.to_ascii_uppercase()).as_deref() {
+        Some(b"JAN") => Month::January,
+        Some(b"FEB") => Month::February,
+        Some(b"MAR") => Month::March,
+        Some(b"APR") => Month::April,
+        Some(b"MAY") => Month::May,
+        Some(b"JUN") => Month::June,
+        Some(b"JUL") => Month::July,
+        Some(b"AUG") => Month::August,
+        Some(b"SEP") => Month::September,
+        Some(b"OCT") => Month::October,
+        Some(b"NOV") => Month::November,
+        Some(b"DEC") => Month::December,
+        _ => Month::Unknown,
     }
-
-    Month::Unknown
 }
 
-fn month_compare(a: &str, b: &str) -> Ordering {
-    #![allow(clippy::comparison_chain)]
+fn month_compare(a: &[u8], b: &[u8]) -> Ordering {
     let ma = month_parse(a);
     let mb = month_parse(b);
 
-    if ma > mb {
-        Ordering::Greater
-    } else if ma < mb {
-        Ordering::Less
-    } else {
-        Ordering::Equal
-    }
+    ma.cmp(&mb)
 }
 
 fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
@@ -1920,7 +1924,7 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
         .as_output_name()
         .unwrap_or(OsStr::new("standard output"))
         .to_owned();
-    let ctx = || format!("write failed: {}", output_name.maybe_quote());
+    let ctx = || translate!("sort-error-write-failed", "output" => output_name.maybe_quote());
 
     let mut writer = output.into_write();
     for line in iter {
@@ -1972,12 +1976,14 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
     // GNU's sort echos affected flag, -S or --buffer-size, depending on user's selection
     match error {
         ParseSizeError::InvalidSuffix(_) => {
-            format!("invalid suffix in --{option} argument {}", s.quote())
+            translate!("sort-invalid-suffix-in-option-arg", "option" => option, "arg" => s.quote())
         }
         ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
-            format!("invalid --{option} argument {}", s.quote())
+            translate!("sort-invalid-option-arg", "option" => option, "arg" => s.quote())
         }
-        ParseSizeError::SizeTooBig(_) => format!("--{option} argument {} too large", s.quote()),
+        ParseSizeError::SizeTooBig(_) => {
+            translate!("sort-option-arg-too-large", "option" => option, "arg" => s.quote())
+        }
     }
 }
 
@@ -1986,7 +1992,7 @@ mod tests {
 
     use super::*;
 
-    fn tokenize_helper(line: &str, separator: Option<char>) -> Vec<Field> {
+    fn tokenize_helper(line: &[u8], separator: Option<u8>) -> Vec<Field> {
         let mut buffer = vec![];
         tokenize(line, separator, &mut buffer);
         buffer
@@ -2001,8 +2007,8 @@ mod tests {
 
     #[test]
     fn test_random_shuffle() {
-        let a = "Ted";
-        let b = "Ted";
+        let a = b"Ted";
+        let b = b"Ted";
         let c = get_rand_string();
 
         assert_eq!(Ordering::Equal, random_shuffle(a, b, &c));
@@ -2010,23 +2016,23 @@ mod tests {
 
     #[test]
     fn test_month_compare() {
-        let a = "JaN";
-        let b = "OCt";
+        let a = b"JaN";
+        let b = b"OCt";
 
         assert_eq!(Ordering::Less, month_compare(a, b));
     }
     #[test]
     fn test_version_compare() {
-        let a = "1.2.3-alpha2";
-        let b = "1.4.0";
+        let a = b"1.2.3-alpha2";
+        let b = b"1.4.0";
 
         assert_eq!(Ordering::Less, version_cmp(a, b));
     }
 
     #[test]
     fn test_random_compare() {
-        let a = "9";
-        let b = "9";
+        let a = b"9";
+        let b = b"9";
         let c = get_rand_string();
 
         assert_eq!(Ordering::Equal, random_shuffle(a, b, &c));
@@ -2034,13 +2040,13 @@ mod tests {
 
     #[test]
     fn test_tokenize_fields() {
-        let line = "foo bar b    x";
+        let line = b"foo bar b    x";
         assert_eq!(tokenize_helper(line, None), vec![0..3, 3..7, 7..9, 9..14]);
     }
 
     #[test]
     fn test_tokenize_fields_leading_whitespace() {
-        let line = "    foo bar b    x";
+        let line = b"    foo bar b    x";
         assert_eq!(
             tokenize_helper(line, None),
             vec![0..7, 7..11, 11..13, 13..18]
@@ -2049,21 +2055,21 @@ mod tests {
 
     #[test]
     fn test_tokenize_fields_custom_separator() {
-        let line = "aaa foo bar b    x";
+        let line = b"aaa foo bar b    x";
         assert_eq!(
-            tokenize_helper(line, Some('a')),
+            tokenize_helper(line, Some(b'a')),
             vec![0..0, 1..1, 2..2, 3..9, 10..18]
         );
     }
 
     #[test]
     fn test_tokenize_fields_trailing_custom_separator() {
-        let line = "a";
-        assert_eq!(tokenize_helper(line, Some('a')), vec![0..0]);
-        let line = "aa";
-        assert_eq!(tokenize_helper(line, Some('a')), vec![0..0, 1..1]);
-        let line = "..a..a";
-        assert_eq!(tokenize_helper(line, Some('a')), vec![0..2, 3..5]);
+        let line = b"a";
+        assert_eq!(tokenize_helper(line, Some(b'a')), vec![0..0]);
+        let line = b"aa";
+        assert_eq!(tokenize_helper(line, Some(b'a')), vec![0..0, 1..1]);
+        let line = b"..a..a";
+        assert_eq!(tokenize_helper(line, Some(b'a')), vec![0..2, 3..5]);
     }
 
     #[test]

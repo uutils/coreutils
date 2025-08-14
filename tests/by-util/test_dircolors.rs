@@ -4,8 +4,6 @@
 // file that was distributed with this source code.
 // spell-checker:ignore overridable colorterm
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 use dircolors::{OutputFmt, StrUtils, guess_syntax};
 

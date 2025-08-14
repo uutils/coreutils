@@ -10,8 +10,6 @@ use std::time::Duration;
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 fn test_helper(file_name: &str, possible_args: &[&str]) {
     for args in possible_args {
@@ -38,8 +36,7 @@ fn test_buffer_sizes() {
     #[cfg(not(target_os = "linux"))]
     let buffer_sizes = ["0", "50K", "50k", "1M", "100M"];
     for buffer_size in &buffer_sizes {
-        TestScenario::new(util_name!())
-            .ucmd()
+        new_ucmd!()
             .arg("-n")
             .arg("-S")
             .arg(buffer_size)
@@ -52,8 +49,7 @@ fn test_buffer_sizes() {
     {
         let buffer_sizes = ["1000G", "10T"];
         for buffer_size in &buffer_sizes {
-            TestScenario::new(util_name!())
-                .ucmd()
+            new_ucmd!()
                 .arg("-n")
                 .arg("-S")
                 .arg(buffer_size)
@@ -1007,8 +1003,7 @@ fn test_compress_merge() {
 #[cfg(not(target_os = "android"))]
 fn test_compress_fail() {
     #[cfg(not(windows))]
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .args(&[
             "ext_sort.txt",
             "-n",
@@ -1023,8 +1018,7 @@ fn test_compress_fail() {
     // "thread 'main' panicked at 'called `Option::unwrap()` on ...
     // So, don't check the output
     #[cfg(windows)]
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .args(&[
             "ext_sort.txt",
             "-n",
@@ -1038,8 +1032,7 @@ fn test_compress_fail() {
 
 #[test]
 fn test_merge_batches() {
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .timeout(Duration::from_secs(120))
         .args(&["ext_sort.txt", "-n", "-S", "150b"])
         .succeeds()
@@ -1048,27 +1041,31 @@ fn test_merge_batches() {
 
 #[test]
 fn test_batch_size_invalid() {
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .arg("--batch-size=0")
         .fails_with_code(2)
         .stderr_contains("sort: invalid --batch-size argument '0'")
         .stderr_contains("sort: minimum --batch-size argument is '2'");
+
+    // with -m, the error path is a bit different
+    new_ucmd!()
+        .args(&["-m", "--batch-size=a"])
+        .fails_with_code(2)
+        .stderr_contains("sort: invalid --batch-size argument 'a'");
 }
 
 #[test]
 fn test_batch_size_too_large() {
     let large_batch_size = "18446744073709551616";
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .arg(format!("--batch-size={large_batch_size}"))
         .fails_with_code(2)
         .stderr_contains(format!(
             "--batch-size argument '{large_batch_size}' too large"
         ));
+
     #[cfg(target_os = "linux")]
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .arg(format!("--batch-size={large_batch_size}"))
         .fails_with_code(2)
         .stderr_contains("maximum --batch-size argument with current rlimit is");
@@ -1076,8 +1073,7 @@ fn test_batch_size_too_large() {
 
 #[test]
 fn test_merge_batch_size() {
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .arg("--batch-size=2")
         .arg("-m")
         .arg("--unique")
@@ -1102,8 +1098,7 @@ fn test_merge_batch_size_with_limit() {
     // 2 descriptors for CTRL+C handling logic (to be reworked at some point)
     // 2 descriptors for the input files (i.e. batch-size of 2).
     let limit_fd = 3 + 2 + 2;
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .limit(Resource::NOFILE, limit_fd, limit_fd)
         .arg("--batch-size=2")
         .arg("-m")
@@ -1204,13 +1199,12 @@ fn test_separator_null() {
 #[test]
 fn test_output_is_input() {
     let input = "a\nb\nc\n";
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
+
     at.touch("file");
     at.append("file", input);
-    scene
-        .ucmd()
-        .args(&["-m", "-u", "-o", "file", "file", "file", "file"])
+
+    ucmd.args(&["-m", "-u", "-o", "file", "file", "file", "file"])
         .succeeds();
     assert_eq!(at.read("file"), input);
 }
@@ -1394,12 +1388,11 @@ fn test_files0_from_minus_in_stdin() {
 #[test]
 // Test for GNU tests/sort/sort-files0-from.pl "empty"
 fn test_files0_from_empty() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
+
     at.touch("file");
-    scene
-        .ucmd()
-        .args(&["--files0-from", "file"])
+
+    ucmd.args(&["--files0-from", "file"])
         .fails_with_code(2)
         .stderr_only("sort: no input from 'file'\n");
 }
@@ -1437,13 +1430,12 @@ fn test_files0_from_nul2() {
 #[test]
 // Test for GNU tests/sort/sort-files0-from.pl "1"
 fn test_files0_from_1() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
+
     at.touch("file");
     at.append("file", "a");
-    scene
-        .ucmd()
-        .args(&["--files0-from", "-"])
+
+    ucmd.args(&["--files0-from", "-"])
         .pipe_in("file")
         .succeeds()
         .stdout_only("a\n");
@@ -1452,13 +1444,12 @@ fn test_files0_from_1() {
 #[test]
 // Test for GNU tests/sort/sort-files0-from.pl "1a"
 fn test_files0_from_1a() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
+
     at.touch("file");
     at.append("file", "a");
-    scene
-        .ucmd()
-        .args(&["--files0-from", "-"])
+
+    ucmd.args(&["--files0-from", "-"])
         .pipe_in("file\0")
         .succeeds()
         .stdout_only("a\n");
@@ -1467,13 +1458,12 @@ fn test_files0_from_1a() {
 #[test]
 // Test for GNU tests/sort/sort-files0-from.pl "2"
 fn test_files0_from_2() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
+
     at.touch("file");
     at.append("file", "a");
-    scene
-        .ucmd()
-        .args(&["--files0-from", "-"])
+
+    ucmd.args(&["--files0-from", "-"])
         .pipe_in("file\0file")
         .succeeds()
         .stdout_only("a\na\n");
@@ -1482,13 +1472,12 @@ fn test_files0_from_2() {
 #[test]
 // Test for GNU tests/sort/sort-files0-from.pl "2a"
 fn test_files0_from_2a() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
+
     at.touch("file");
     at.append("file", "a");
-    scene
-        .ucmd()
-        .args(&["--files0-from", "-"])
+
+    ucmd.args(&["--files0-from", "-"])
         .pipe_in("file\0file\0")
         .succeeds()
         .stdout_only("a\na\n");
@@ -1567,3 +1556,168 @@ fn test_g_arbitrary() {
         .succeeds()
         .stdout_is(output);
 }
+
+#[test]
+// Test hexadecimal numbers (and hex floats)
+fn test_g_float_hex() {
+    let input = "0x123\n0x0\n0x2p10\n0x9p-10\n";
+    let output = "0x0\n0x9p-10\n0x123\n0x2p10\n";
+    new_ucmd!()
+        .args(&["-g"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(output);
+}
+
+/* spell-checker: disable */
+#[test]
+fn test_french_translations() {
+    // Test that French translations work for clap error messages
+    // Set LANG to French and test with an invalid argument
+    let result = new_ucmd!()
+        .env("LANG", "fr_FR.UTF-8")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("--invalid-arg")
+        .fails();
+
+    let stderr = result.stderr_str();
+    assert!(stderr.contains("erreur"));
+    assert!(stderr.contains("argument inattendu"));
+    assert!(stderr.contains("trouvé"));
+}
+
+#[test]
+fn test_argument_suggestion() {
+    let test_cases = vec![
+        ("en_US.UTF-8", vec!["tip", "similar", "--reverse"]),
+        ("fr_FR.UTF-8", vec!["conseil", "similaire", "--reverse"]),
+    ];
+
+    for (locale, expected_strings) in test_cases {
+        let result = new_ucmd!()
+            .env("LANG", locale)
+            .env("LC_ALL", locale)
+            .arg("--revrse") // Typo
+            .fails();
+
+        let stderr = result.stderr_str();
+        for expected in expected_strings {
+            assert!(stderr.contains(expected));
+        }
+    }
+}
+
+#[test]
+fn test_clap_localization_unknown_argument() {
+    let test_cases = vec![
+        (
+            "en_US.UTF-8",
+            vec![
+                "error: unexpected argument '--unknown-option' found",
+                "Usage:",
+                "For more information, try '--help'.",
+            ],
+        ),
+        (
+            "fr_FR.UTF-8",
+            vec![
+                "erreur : argument inattendu '--unknown-option' trouvé",
+                "Utilisation:",
+                "Pour plus d'informations, essayez '--help'.",
+            ],
+        ),
+    ];
+
+    for (locale, expected_strings) in test_cases {
+        let result = new_ucmd!()
+            .env("LANG", locale)
+            .env("LC_ALL", locale)
+            .arg("--unknown-option")
+            .fails();
+
+        result.code_is(2); // sort uses exit code 2 for invalid options
+        let stderr = result.stderr_str();
+        for expected in expected_strings {
+            assert!(stderr.contains(expected));
+        }
+    }
+}
+
+#[test]
+fn test_clap_localization_help_message() {
+    // Test help message in English
+    let result_en = new_ucmd!()
+        .env("LANG", "en_US.UTF-8")
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("--help")
+        .succeeds();
+
+    let stdout_en = result_en.stdout_str();
+    assert!(stdout_en.contains("Usage:"));
+    assert!(stdout_en.contains("Options:"));
+
+    // Test help message in French
+    let result_fr = new_ucmd!()
+        .env("LANG", "fr_FR.UTF-8")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("--help")
+        .succeeds();
+
+    let stdout_fr = result_fr.stdout_str();
+    assert!(stdout_fr.contains("Utilisation:"));
+    assert!(stdout_fr.contains("Options:"));
+}
+
+#[test]
+fn test_clap_localization_missing_required_argument() {
+    // Test missing required argument
+    let result_en = new_ucmd!().env("LC_ALL", "en_US.UTF-8").arg("-k").fails();
+
+    let stderr_en = result_en.stderr_str();
+    assert!(stderr_en.contains(" a value is required for '--key <key>' but none was supplied"));
+    assert!(stderr_en.contains("-k"));
+}
+
+#[test]
+fn test_clap_localization_invalid_value() {
+    let test_cases = vec![
+        ("en_US.UTF-8", "sort: failed to parse key 'invalid'"),
+        ("fr_FR.UTF-8", "sort: échec d'analyse de la clé 'invalid'"),
+    ];
+
+    for (locale, expected_message) in test_cases {
+        let result = new_ucmd!()
+            .env("LANG", locale)
+            .env("LC_ALL", locale)
+            .arg("-k")
+            .arg("invalid")
+            .fails();
+
+        let stderr = result.stderr_str();
+        assert!(stderr.contains(expected_message));
+    }
+}
+
+#[test]
+fn test_clap_localization_tip_for_value_with_dash() {
+    let test_cases = vec![
+        ("en_US.UTF-8", vec!["tip:", "-- --file-with-dash"]),
+        ("fr_FR.UTF-8", vec!["tip:", "-- --file-with-dash"]), // TODO: fix French translation
+    ];
+
+    for (locale, expected_strings) in test_cases {
+        let result = new_ucmd!()
+            .env("LANG", locale)
+            .env("LC_ALL", locale)
+            .arg("--output")
+            .arg("--file-with-dash")
+            .fails();
+
+        let stderr = result.stderr_str();
+        for expected in expected_strings {
+            assert!(stderr.contains(expected));
+        }
+    }
+}
+
+/* spell-checker: enable */

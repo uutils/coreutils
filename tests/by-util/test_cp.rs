@@ -4,8 +4,10 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile uufs xattrs
-// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel
+// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs
 use uucore::display::Quotable;
+#[cfg(feature = "feat_selinux")]
+use uucore::selinux::get_getfattr_output;
 use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, new_ucmd, path_concat, util_name};
 
@@ -927,7 +929,7 @@ fn test_cp_arg_no_clobber_twice() {
         .arg(TEST_HELLO_WORLD_DEST)
         .arg("--debug")
         .succeeds()
-        .stdout_contains(format!("skipped '{}'", TEST_HELLO_WORLD_DEST));
+        .stdout_contains(format!("skipped '{TEST_HELLO_WORLD_DEST}'"));
 
     assert_eq!(at.read(TEST_HELLO_WORLD_SOURCE), "some-content");
     // Should be empty as the "no-clobber" should keep
@@ -3087,13 +3089,89 @@ fn test_cp_link_backup() {
 fn test_cp_fifo() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("fifo");
-    ucmd.arg("-r")
+    // Also test that permissions are preserved
+    at.set_mode("fifo", 0o731);
+    ucmd.arg("--preserve=mode")
+        .arg("-r")
         .arg("fifo")
         .arg("fifo2")
         .succeeds()
         .no_stderr()
         .no_stdout();
     assert!(at.is_fifo("fifo2"));
+
+    let metadata = std::fs::metadata(at.subdir.join("fifo2")).unwrap();
+    let permission = uucore::fs::display_permissions(&metadata, true);
+    assert_eq!(permission, "prwx-wx--x".to_string());
+}
+
+#[cfg(all(unix, not(target_vendor = "apple")))]
+fn find_other_group(current: u32) -> Option<u32> {
+    // Get the first group that doesn't match current
+    nix::unistd::getgroups().ok()?.iter().find_map(|group| {
+        let gid = group.as_raw();
+        (gid != current).then_some(gid)
+    })
+}
+
+#[cfg(target_vendor = "apple")]
+fn find_other_group(_current: u32) -> Option<u32> {
+    None
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_r_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // Specifically test copying a link in a subdirectory, as the internal path
+    // is slightly different.
+    at.mkdir("tmp");
+    // Create a symlink to a non-existent file to make sure
+    // we don't try to resolve it.
+    at.symlink_file("doesnotexist", "tmp/symlink");
+    let symlink = at.subdir.join("tmp").join("symlink");
+
+    // If we can find such a group, change the owner to a non-default to test
+    // that (group) ownership is preserved.
+    let metadata = std::fs::symlink_metadata(&symlink).unwrap();
+    let other_gid = find_other_group(metadata.gid());
+    if let Some(gid) = other_gid {
+        uucore::perms::wrap_chown(
+            &symlink,
+            &metadata,
+            None,
+            Some(gid),
+            false,
+            uucore::perms::Verbosity::default(),
+        )
+        .expect("Cannot chgrp symlink.");
+    } else {
+        println!("Cannot find a second group to chgrp to.");
+    }
+
+    // Use -r to make sure we copy the symlink itself
+    // --preserve will include ownership
+    ucmd.arg("--preserve")
+        .arg("-r")
+        .arg("tmp")
+        .arg("tmp2")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    // Is symlink2 still a symlink, and does it point at the same place?
+    assert!(at.is_symlink("tmp2/symlink"));
+    let symlink2 = at.subdir.join("tmp2/symlink");
+    assert_eq!(
+        std::fs::read_link(&symlink).unwrap(),
+        std::fs::read_link(&symlink2).unwrap(),
+    );
+
+    // If we found a suitable group, is the group correct after the copy.
+    if let Some(gid) = other_gid {
+        let metadata2 = std::fs::symlink_metadata(&symlink2).unwrap();
+        assert_eq!(metadata2.gid(), gid);
+    }
 }
 
 #[test]
@@ -4322,6 +4400,13 @@ fn test_cp_default_virtual_file() {
 
     use std::os::unix::prelude::MetadataExt;
     let ts = TestScenario::new(util_name!());
+
+    // in case the kernel was not built with profiling support, e.g. WSL
+    if !ts.fixtures.file_exists("/sys/kernel/profiling") {
+        println!("test skipped: /sys/kernel/profiling does not exist");
+        return;
+    }
+
     let at = &ts.fixtures;
     ts.ucmd().arg("/sys/kernel/profiling").arg("b").succeeds();
 
@@ -4405,6 +4490,13 @@ fn test_cp_debug_sparse_always_sparse_virtual_file() {
     // This file has existed at least since 2008, so we assume that it is present on "all" Linux kernels.
     // https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-profiling
     let ts = TestScenario::new(util_name!());
+
+    // in case the kernel was not built with profiling support, e.g. WSL
+    if !ts.fixtures.file_exists("/sys/kernel/profiling") {
+        println!("test skipped: /sys/kernel/profiling does not exist");
+        return;
+    }
+
     ts.ucmd()
         .arg("--debug")
         .arg("--sparse=always")
@@ -4579,6 +4671,13 @@ fn test_cp_debug_default_sparse_virtual_file() {
     // This file has existed at least since 2008, so we assume that it is present on "all" Linux kernels.
     // https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-profiling
     let ts = TestScenario::new(util_name!());
+
+    // in case the kernel was not built with profiling support, e.g. WSL
+    if !ts.fixtures.file_exists("/sys/kernel/profiling") {
+        println!("test skipped: /sys/kernel/profiling does not exist");
+        return;
+    }
+
     ts.ucmd()
         .arg("--debug")
         .arg("/sys/kernel/profiling")
@@ -5837,7 +5936,7 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
                 start_time.elapsed() < timeout,
                 "timed out: cp took too long to create destination directory"
             );
-            if at.dir_exists(&format!("{DEST_DIR}/{SRC_DIR}")) {
+            if at.dir_exists(format!("{DEST_DIR}/{SRC_DIR}")) {
                 break;
             }
             sleep(Duration::from_millis(100));
@@ -6182,6 +6281,48 @@ fn test_cp_preserve_xattr_readonly_source() {
 
 #[test]
 #[cfg(unix)]
+fn test_cp_archive_preserves_directory_permissions() {
+    // Test for issue #8407
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("test-images");
+
+    let subdirs = ["fail", "gif-test-suite", "randomly-modified", "reftests"];
+    let mode = 0o755;
+
+    for (i, subdir) in subdirs.iter().enumerate() {
+        let path = format!("test-images/{subdir}");
+        at.mkdir(&path);
+        at.set_mode(&path, mode);
+        at.write(&format!("{path}/test{}.txt", i + 1), "test content");
+    }
+
+    ucmd.arg("-a")
+        .arg("test-images")
+        .arg("test-images-copy")
+        .succeeds();
+
+    let check_mode = |path: &str| {
+        let metadata = at.metadata(path);
+        let mode = metadata.permissions().mode();
+        // Check that the permissions are 755 (only checking the last 9 bits)
+        assert_eq!(
+            mode & 0o777,
+            0o755,
+            "Directory {} has incorrect permissions: {:o}",
+            path,
+            mode & 0o777
+        );
+    };
+
+    for subdir in subdirs {
+        check_mode(&format!("test-images-copy/{subdir}"));
+    }
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(target_os = "macos", ignore = "Flaky on MacOS, see #8453")]
 fn test_cp_from_stdin() {
     let (at, mut ucmd) = at_and_ucmd!();
     let target = "target";
@@ -6247,28 +6388,55 @@ fn test_cp_update_none_interactive_prompt_no() {
     assert_eq!(at.read(new_file), "new content");
 }
 
-#[cfg(feature = "feat_selinux")]
-fn get_getfattr_output(f: &str) -> String {
-    use std::process::Command;
+/// only unix has `/dev/fd/0`
+#[cfg(unix)]
+#[cfg_attr(target_os = "macos", ignore = "Flaky on MacOS, see #8453")]
+#[test]
+fn test_cp_from_stream() {
+    let target = "target";
+    let test_string1 = "longer: Hello, World!\n";
+    let test_string2 = "shorter";
+    let scenario = TestScenario::new(util_name!());
+    let at = &scenario.fixtures;
+    at.touch(target);
 
-    let getfattr_output = Command::new("getfattr")
-        .arg(f)
-        .arg("-n")
-        .arg("security.selinux")
-        .output()
-        .expect("Failed to run `getfattr` on the destination file");
-    println!("{:?}", getfattr_output);
-    assert!(
-        getfattr_output.status.success(),
-        "getfattr did not run successfully: {}",
-        String::from_utf8_lossy(&getfattr_output.stderr)
-    );
+    let mut ucmd = scenario.ucmd();
+    ucmd.arg("/dev/fd/0")
+        .arg(target)
+        .pipe_in(test_string1)
+        .succeeds();
+    assert_eq!(at.read(target), test_string1);
 
-    String::from_utf8_lossy(&getfattr_output.stdout)
-        .split('"')
-        .nth(1)
-        .unwrap_or("")
-        .to_string()
+    let mut ucmd = scenario.ucmd();
+    ucmd.arg("/dev/fd/0")
+        .arg(target)
+        .pipe_in(test_string2)
+        .succeeds();
+    assert_eq!(at.read(target), test_string2);
+}
+
+/// only unix has `/dev/fd/0`
+#[cfg(unix)]
+#[cfg_attr(target_os = "macos", ignore = "Flaky on MacOS, see #8453")]
+#[test]
+fn test_cp_from_stream_permission() {
+    let target = "target";
+    let link = "link";
+    let test_string = "Hello, World!\n";
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch(target);
+    at.symlink_file(target, link);
+    let mode = 0o777;
+    at.set_mode("target", mode);
+
+    ucmd.arg("/dev/fd/0")
+        .arg(link)
+        .pipe_in(test_string)
+        .succeeds();
+
+    assert_eq!(at.read(target), test_string);
+    assert_eq!(at.metadata(target).permissions().mode(), 0o100_777);
 }
 
 #[test]
@@ -6395,12 +6563,12 @@ fn test_cp_preserve_selinux_admin_context() {
     let cmd_result = ts
         .ucmd()
         .arg("-Z")
-        .arg(format!("--context={}", default_context))
+        .arg(format!("--context={default_context}"))
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HELLO_WORLD_DEST)
         .run();
 
-    println!("cp command result: {:?}", cmd_result);
+    println!("cp command result: {cmd_result:?}");
 
     if !cmd_result.succeeded() {
         println!("Skipping test: Cannot set SELinux context, system may not support this context");
@@ -6410,7 +6578,7 @@ fn test_cp_preserve_selinux_admin_context() {
     assert!(at.file_exists(TEST_HELLO_WORLD_DEST));
 
     let selinux_perm_dest = get_getfattr_output(&at.plus_as_string(TEST_HELLO_WORLD_DEST));
-    println!("Destination SELinux context: {}", selinux_perm_dest);
+    println!("Destination SELinux context: {selinux_perm_dest}");
 
     assert_eq!(default_context, selinux_perm_dest);
 
@@ -6630,7 +6798,7 @@ fn test_cp_preserve_context_root() {
         .status();
 
     if !chcon_result.is_ok_and(|status| status.success()) {
-        println!("Skipping test: Failed to set context: {}", context);
+        println!("Skipping test: Failed to set context: {context}");
         return;
     }
 
@@ -6639,8 +6807,8 @@ fn test_cp_preserve_context_root() {
     if let Ok(result) = run_ucmd_as_root(&scene, &["--preserve=context", source_file, dest_file]) {
         let src_ctx = get_getfattr_output(&at.plus_as_string(source_file));
         let dest_ctx = get_getfattr_output(&at.plus_as_string(dest_file));
-        println!("Source context: {}", src_ctx);
-        println!("Destination context: {}", dest_ctx);
+        println!("Source context: {src_ctx}");
+        println!("Destination context: {dest_ctx}");
 
         if !result.succeeded() {
             println!("Skipping test: Failed to copy with preserved context");
@@ -6651,11 +6819,29 @@ fn test_cp_preserve_context_root() {
 
         assert!(
             dest_context.contains("root:object_r:tmp_t"),
-            "Expected context '{}' not found in destination context: '{}'",
-            context,
-            dest_context
+            "Expected context '{context}' not found in destination context: '{dest_context}'",
         );
     } else {
         print!("Test skipped; requires root user");
     }
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_cp_no_dereference_symlink_with_parents() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("directory");
+    at.symlink_file("directory", "symlink-to-directory");
+
+    ts.ucmd()
+        .args(&["--parents", "--no-dereference", "symlink-to-directory", "x"])
+        .fails()
+        .stderr_contains("with --parents, the destination must be a directory");
+
+    at.mkdir("x");
+    ts.ucmd()
+        .args(&["--parents", "--no-dereference", "symlink-to-directory", "x"])
+        .succeeds();
+    assert_eq!(at.resolve_link("x/symlink-to-directory"), "directory");
 }

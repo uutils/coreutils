@@ -4,7 +4,6 @@
 // file that was distributed with this source code.
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[test]
 fn test_encode() {
@@ -148,7 +147,8 @@ fn test_wrap_no_arg() {
         new_ucmd!()
             .arg(wrap_param)
             .fails()
-            .stderr_contains("a value is required for '--wrap <COLS>' but none was supplied")
+            .stderr_contains("error: a value is required for '--wrap <COLS>' but none was supplied")
+            .stderr_contains("For more information, try '--help'.")
             .no_stdout();
     }
 }
@@ -231,6 +231,10 @@ cyBvdmVyIHRoZSBsYXp5IGRvZy4=
 #[test]
 fn test_manpage() {
     use std::process::{Command, Stdio};
+    unsafe {
+        // force locale to english to avoid issues with manpage output
+        std::env::set_var("LANG", "C");
+    }
 
     let test_scenario = TestScenario::new("");
 

@@ -24,6 +24,7 @@ use parseargs::Parser;
 use progress::ProgUpdateType;
 use progress::{ProgUpdate, ReadStat, StatusLevel, WriteStat, gen_prog_updater};
 use uucore::io::OwnedFileDescriptorOrHandle;
+use uucore::translate;
 
 use std::cmp;
 use std::env;
@@ -54,6 +55,7 @@ use nix::{
     errno::Errno,
     fcntl::{PosixFadviseAdvice, posix_fadvise},
 };
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
 #[cfg(unix)]
@@ -62,7 +64,6 @@ use uucore::error::{USimpleError, set_exit_code};
 use uucore::show_if_err;
 use uucore::{format_usage, show_error};
 
-use uucore::locale::get_message;
 const BUF_INIT_BYTE: u8 = 0xDD;
 
 /// Final settings after parsing
@@ -235,7 +236,10 @@ impl Source {
             #[cfg(not(unix))]
             Self::Stdin(stdin) => match io::copy(&mut stdin.take(n), &mut io::sink()) {
                 Ok(m) if m < n => {
-                    show_error!("'standard input': cannot skip to specified offset");
+                    show_error!(
+                        "{}",
+                        translate!("dd-error-cannot-skip-offset", "file" => "standard input")
+                    );
                     Ok(m)
                 }
                 Ok(m) => Ok(m),
@@ -247,14 +251,20 @@ impl Source {
                     if len < n {
                         // GNU compatibility:
                         // this case prints the stats but sets the exit code to 1
-                        show_error!("'standard input': cannot skip: Invalid argument");
+                        show_error!(
+                            "{}",
+                            translate!("dd-error-cannot-skip-invalid", "file" => "standard input")
+                        );
                         set_exit_code(1);
                         return Ok(len);
                     }
                 }
                 match io::copy(&mut f.take(n), &mut io::sink()) {
                     Ok(m) if m < n => {
-                        show_error!("'standard input': cannot skip to specified offset");
+                        show_error!(
+                            "{}",
+                            translate!("dd-error-cannot-skip-offset", "file" => "standard input")
+                        );
                         Ok(m)
                     }
                     Ok(m) => Ok(m),
@@ -343,10 +353,10 @@ impl<'a> Input<'a> {
             if settings.iflags.directory && !f.metadata()?.is_dir() {
                 return Err(USimpleError::new(
                     1,
-                    "setting flags for 'standard input': Not a directory",
+                    translate!("dd-error-not-directory", "file" => "standard input"),
                 ));
             }
-        };
+        }
         if settings.skip > 0 {
             src.skip(settings.skip)?;
         }
@@ -364,8 +374,9 @@ impl<'a> Input<'a> {
                 opts.custom_flags(libc_flags);
             }
 
-            opts.open(filename)
-                .map_err_context(|| format!("failed to open {}", filename.quote()))?
+            opts.open(filename).map_err_context(
+                || translate!("dd-error-failed-to-open", "path" => filename.quote()),
+            )?
         };
 
         let mut src = Source::File(src);
@@ -437,7 +448,7 @@ impl Read for Input<'_> {
                     }
                 }
                 Ok(len) => return Ok(len),
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => (),
                 Err(_) if self.settings.iconv.noerror => return Ok(base_idx),
                 Err(e) => return Err(e),
             }
@@ -457,10 +468,11 @@ impl Input<'_> {
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
         #[cfg(target_os = "linux")]
         {
-            show_if_err!(self
-                .src
-                .discard_cache(offset, len)
-                .map_err_context(|| "failed to discard cache for: 'standard input'".to_string()));
+            show_if_err!(
+                self.src
+                    .discard_cache(offset, len)
+                    .map_err_context(|| translate!("dd-error-failed-discard-cache-input"))
+            );
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -609,7 +621,10 @@ impl Dest {
                     if len < n {
                         // GNU compatibility:
                         // this case prints the stats but sets the exit code to 1
-                        show_error!("'standard output': cannot seek: Invalid argument");
+                        show_error!(
+                            "{}",
+                            translate!("dd-error-cannot-seek-invalid", "output" => "standard output")
+                        );
                         set_exit_code(1);
                         return Ok(len);
                     }
@@ -723,7 +738,7 @@ impl<'a> Output<'a> {
     fn new_stdout(settings: &'a Settings) -> UResult<Self> {
         let mut dst = Dest::Stdout(io::stdout());
         dst.seek(settings.seek)
-            .map_err_context(|| "write error".to_string())?;
+            .map_err_context(|| translate!("dd-error-write-error"))?;
         Ok(Self { dst, settings })
     }
 
@@ -744,8 +759,9 @@ impl<'a> Output<'a> {
             opts.open(path)
         }
 
-        let dst = open_dst(filename, &settings.oconv, &settings.oflags)
-            .map_err_context(|| format!("failed to open {}", filename.quote()))?;
+        let dst = open_dst(filename, &settings.oconv, &settings.oflags).map_err_context(
+            || translate!("dd-error-failed-to-open", "path" => filename.quote()),
+        )?;
 
         // Seek to the index in the output file, truncating if requested.
         //
@@ -770,7 +786,7 @@ impl<'a> Output<'a> {
         };
         let mut dst = Dest::File(dst, density);
         dst.seek(settings.seek)
-            .map_err_context(|| "failed to seek in output file".to_string())?;
+            .map_err_context(|| translate!("dd-error-failed-to-seek"))?;
         Ok(Self { dst, settings })
     }
 
@@ -832,9 +848,11 @@ impl<'a> Output<'a> {
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
         #[cfg(target_os = "linux")]
         {
-            show_if_err!(self.dst.discard_cache(offset, len).map_err_context(|| {
-                "failed to discard cache for: 'standard output'".to_string()
-            }));
+            show_if_err!(
+                self.dst
+                    .discard_cache(offset, len)
+                    .map_err_context(|| { translate!("dd-error-failed-discard-cache-output") })
+            );
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -861,7 +879,7 @@ impl<'a> Output<'a> {
                         return Ok(base_idx);
                     }
                 }
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => (),
                 Err(e) => return Err(e),
             }
         }
@@ -1063,7 +1081,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             output_thread,
             truncate,
         );
-    };
+    }
 
     // Create a common buffer with a capacity of the block size.
     // This is the max size needed.
@@ -1083,7 +1101,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     #[cfg(target_os = "linux")]
     if let Err(e) = &signal_handler {
         if Some(StatusLevel::None) != i.settings.status {
-            eprintln!("Internal dd Warning: Unable to register signal handler \n\t{e}");
+            eprintln!("{}\n\t{e}", translate!("dd-warning-signal-handler"));
         }
     }
 
@@ -1296,8 +1314,8 @@ fn calc_bsize(ibs: usize, obs: usize) -> usize {
     (ibs / gcd) * obs
 }
 
-// Calculate the buffer size appropriate for this loop iteration, respecting
-// a count=N if present.
+/// Calculate the buffer size appropriate for this loop iteration, respecting
+/// a `count=N` if present.
 fn calc_loop_bsize(
     count: Option<Num>,
     rstat: &ReadStat,
@@ -1320,8 +1338,8 @@ fn calc_loop_bsize(
     }
 }
 
-// Decide if the current progress is below a count=N limit or return
-// true if no such limit is set.
+/// Decide if the current progress is below a `count=N` limit or return
+/// `true` if no such limit is set.
 fn below_count_limit(count: Option<Num>, rstat: &ReadStat) -> bool {
     match count {
         Some(Num::Blocks(n)) => rstat.reads_complete + rstat.reads_partial < n,
@@ -1398,7 +1416,7 @@ fn is_fifo(filename: &str) -> bool {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let settings: Settings = Parser::new().parse(
         matches
@@ -1419,15 +1437,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None if is_stdout_redirected_to_seekable_file() => Output::new_file_from_stdout(&settings)?,
         None => Output::new_stdout(&settings)?,
     };
-    dd_copy(i, o).map_err_context(|| "IO error".to_string())
+    dd_copy(i, o).map_err_context(|| translate!("dd-error-io-error"))
 }
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("dd-about"))
-        .override_usage(format_usage(&get_message("dd-usage")))
-        .after_help(get_message("dd-after-help"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("dd-about"))
+        .override_usage(format_usage(&translate!("dd-usage")))
+        .after_help(translate!("dd-after-help"))
         .infer_long_args(true)
         .arg(Arg::new(options::OPERANDS).num_args(1..))
 }

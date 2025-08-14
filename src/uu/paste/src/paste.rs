@@ -10,11 +10,11 @@ use std::io::{BufRead, BufReader, Stdin, Write, stdin, stdout};
 use std::iter::Cycle;
 use std::rc::Rc;
 use std::slice::Iter;
+use uucore::LocalizedCommand;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 use uucore::line_ending::LineEnding;
-
-use uucore::locale::get_message;
+use uucore::translate;
 
 mod options {
     pub const DELIMITER: &str = "delimiters";
@@ -25,7 +25,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let serial = matches.get_flag(options::SERIAL);
     let delimiters = matches.get_one::<String>(options::DELIMITER).unwrap();
@@ -42,21 +42,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("paste-about"))
-        .override_usage(format_usage(&get_message("paste-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("paste-about"))
+        .override_usage(format_usage(&translate!("paste-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::SERIAL)
                 .long(options::SERIAL)
                 .short('s')
-                .help("paste one file at a time instead of in parallel")
+                .help(translate!("paste-help-serial"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DELIMITER)
                 .long(options::DELIMITER)
                 .short('d')
-                .help("reuse characters from LIST instead of TABs")
+                .help(translate!("paste-help-delimiter"))
                 .value_name("LIST")
                 .default_value("\t")
                 .hide_default_value(true),
@@ -72,7 +73,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::ZERO_TERMINATED)
                 .long(options::ZERO_TERMINATED)
                 .short('z')
-                .help("line delimiter is NUL, not newline")
+                .help(translate!("paste-help-zero-terminated"))
                 .action(ArgAction::SetTrue),
         )
 }
@@ -237,7 +238,7 @@ fn parse_delimiters(delimiters: &str) -> UResult<Box<[Box<[u8]>]>> {
                 None => {
                     return Err(USimpleError::new(
                         1,
-                        format!("delimiter list ends with an unescaped backslash: {delimiters}"),
+                        translate!("paste-error-delimiter-unescaped-backslash", "delimiters" => delimiters),
                     ));
                 }
             },
@@ -365,7 +366,9 @@ impl InputSource {
             InputSource::File(bu) => bu.read_until(byte, buf)?,
             InputSource::StandardInput(rc) => rc
                 .try_borrow()
-                .map_err(|bo| USimpleError::new(1, format!("{bo}")))?
+                .map_err(|bo| {
+                    USimpleError::new(1, translate!("paste-error-stdin-borrow", "error" => bo))
+                })?
                 .lock()
                 .read_until(byte, buf)?,
         };

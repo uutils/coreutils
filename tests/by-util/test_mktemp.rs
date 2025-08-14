@@ -427,6 +427,26 @@ fn test_mktemp_tmpdir() {
 }
 
 #[test]
+fn test_mktemp_empty_tmpdir() {
+    let scene = TestScenario::new(util_name!());
+    let pathname = scene.fixtures.as_string();
+
+    let result = scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .args(&["-p", ""])
+        .succeeds();
+    assert!(result.stdout_str().trim().starts_with(&pathname));
+
+    let result = scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("--tmpdir=")
+        .succeeds();
+    assert!(result.stdout_str().trim().starts_with(&pathname));
+}
+
+#[test]
 fn test_mktemp_tmpdir_one_arg() {
     let scene = TestScenario::new(util_name!());
 

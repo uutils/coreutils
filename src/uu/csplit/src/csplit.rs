@@ -25,7 +25,8 @@ mod split_name;
 use crate::csplit_error::CsplitError;
 use crate::split_name::SplitName;
 
-use uucore::locale::get_message;
+use uucore::LocalizedCommand;
+use uucore::translate;
 
 mod options {
     pub const SUFFIX_FORMAT: &str = "suffix-format";
@@ -85,7 +86,7 @@ impl<T: BufRead> Iterator for LinesWithNewlines<T> {
     fn next(&mut self) -> Option<Self::Item> {
         fn ret(v: Vec<u8>) -> io::Result<String> {
             String::from_utf8(v).map_err(|_| {
-                io::Error::new(ErrorKind::InvalidData, "stream did not contain valid UTF-8")
+                io::Error::new(ErrorKind::InvalidData, translate!("csplit-stream-not-utf8"))
             })
         }
 
@@ -115,7 +116,7 @@ where
     T: BufRead,
 {
     let enumerated_input_lines = LinesWithNewlines::new(input)
-        .map(|line| line.map_err_context(|| "read error".to_string()))
+        .map(|line| line.map_err_context(|| translate!("csplit-read-error")))
         .enumerate();
     let mut input_iter = InputSplitter::new(enumerated_input_lines);
     let mut split_writer = SplitWriter::new(options);
@@ -201,10 +202,10 @@ where
                         (Err(err), _) => return Err(err),
                         // continue the splitting process
                         (Ok(()), _) => (),
-                    };
+                    }
                 }
             }
-        };
+        }
     }
     Ok(())
 }
@@ -239,7 +240,7 @@ impl Drop for SplitWriter<'_> {
 }
 
 impl SplitWriter<'_> {
-    fn new(options: &CsplitOptions) -> SplitWriter {
+    fn new(options: &CsplitOptions) -> SplitWriter<'_> {
         SplitWriter {
             options,
             counter: 0,
@@ -283,7 +284,7 @@ impl SplitWriter<'_> {
                     current_writer.write_all(bytes)?;
                     self.size += bytes.len();
                 }
-                None => panic!("trying to write to a split that was not created"),
+                None => panic!("{}", translate!("csplit-write-split-not-created")),
             }
         }
         Ok(())
@@ -426,7 +427,7 @@ impl SplitWriter<'_> {
                             self.writeln(&line)?;
                         }
                         _ => (),
-                    };
+                    }
                     offset -= 1;
 
                     // write the extra lines required by the offset
@@ -441,7 +442,7 @@ impl SplitWriter<'_> {
                                     pattern_as_str.to_string(),
                                 ));
                             }
-                        };
+                        }
                         offset -= 1;
                     }
                     self.finish_split();
@@ -604,7 +605,7 @@ where
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     // get the file to split
     let file_name = matches.get_one::<String>(options::FILE).unwrap();
@@ -629,8 +630,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("csplit-about"))
-        .override_usage(format_usage(&get_message("csplit-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("csplit-about"))
+        .override_usage(format_usage(&translate!("csplit-usage")))
         .args_override_self(true)
         .infer_long_args(true)
         .arg(
@@ -638,26 +640,26 @@ pub fn uu_app() -> Command {
                 .short('b')
                 .long(options::SUFFIX_FORMAT)
                 .value_name("FORMAT")
-                .help("use sprintf FORMAT instead of %02d"),
+                .help(translate!("csplit-help-suffix-format")),
         )
         .arg(
             Arg::new(options::PREFIX)
                 .short('f')
                 .long(options::PREFIX)
                 .value_name("PREFIX")
-                .help("use PREFIX instead of 'xx'"),
+                .help(translate!("csplit-help-prefix")),
         )
         .arg(
             Arg::new(options::KEEP_FILES)
                 .short('k')
                 .long(options::KEEP_FILES)
-                .help("do not remove output files on errors")
+                .help(translate!("csplit-help-keep-files"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SUPPRESS_MATCHED)
                 .long(options::SUPPRESS_MATCHED)
-                .help("suppress the lines matching PATTERN")
+                .help(translate!("csplit-help-suppress-matched"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -665,7 +667,7 @@ pub fn uu_app() -> Command {
                 .short('n')
                 .long(options::DIGITS)
                 .value_name("DIGITS")
-                .help("use specified number of digits instead of 2"),
+                .help(translate!("csplit-help-digits")),
         )
         .arg(
             Arg::new(options::QUIET)
@@ -673,14 +675,14 @@ pub fn uu_app() -> Command {
                 .long(options::QUIET)
                 .visible_short_alias('s')
                 .visible_alias("silent")
-                .help("do not print counts of output file sizes")
+                .help(translate!("csplit-help-quiet"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ELIDE_EMPTY_FILES)
                 .short('z')
                 .long(options::ELIDE_EMPTY_FILES)
-                .help("remove empty output files")
+                .help(translate!("csplit-help-elide-empty-files"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -695,7 +697,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Append)
                 .required(true),
         )
-        .after_help(get_message("csplit-after-help"))
+        .after_help(translate!("csplit-after-help"))
 }
 
 #[cfg(test)]
@@ -723,7 +725,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         match input_splitter.next() {
             Some((1, Ok(line))) => {
@@ -732,7 +734,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         match input_splitter.next() {
             Some((2, Ok(line))) => {
@@ -744,7 +746,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         input_splitter.rewind_buffer();
 
@@ -754,7 +756,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         match input_splitter.next() {
             Some((2, Ok(line))) => {
@@ -762,7 +764,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         match input_splitter.next() {
             Some((3, Ok(line))) => {
@@ -770,7 +772,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         assert!(input_splitter.next().is_none());
     }
@@ -796,7 +798,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         match input_splitter.next() {
             Some((1, Ok(line))) => {
@@ -805,7 +807,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         match input_splitter.next() {
             Some((2, Ok(line))) => {
@@ -814,7 +816,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 3);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         input_splitter.rewind_buffer();
 
@@ -825,7 +827,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 3);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         match input_splitter.next() {
             Some((0, Ok(line))) => {
@@ -833,7 +835,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         match input_splitter.next() {
             Some((1, Ok(line))) => {
@@ -841,7 +843,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         match input_splitter.next() {
             Some((2, Ok(line))) => {
@@ -849,7 +851,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         match input_splitter.next() {
             Some((3, Ok(line))) => {
@@ -857,7 +859,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         assert!(input_splitter.next().is_none());
     }

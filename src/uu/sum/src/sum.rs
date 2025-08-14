@@ -11,9 +11,10 @@ use std::io::{ErrorKind, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::{format_usage, show};
+use uucore::translate;
 
-use uucore::locale::get_message;
+use uucore::LocalizedCommand;
+use uucore::{format_usage, show};
 
 fn bsd_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
     let mut buf = [0; 4096];
@@ -29,7 +30,7 @@ fn bsd_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
                     rotated.wrapping_add(u16::from(byte))
                 });
             }
-            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) if e.kind() == ErrorKind::Interrupted => (),
             Err(e) => return Err(e),
         }
     }
@@ -53,7 +54,7 @@ fn sysv_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
                     .iter()
                     .fold(ret, |acc, &byte| acc.wrapping_add(u32::from(byte)));
             }
-            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) if e.kind() == ErrorKind::Interrupted => (),
             Err(e) => return Err(e),
         }
     }
@@ -74,16 +75,16 @@ fn open(name: &str) -> UResult<Box<dyn Read>> {
             if path.is_dir() {
                 return Err(USimpleError::new(
                     2,
-                    format!("{}: Is a directory", name.maybe_quote()),
+                    translate!("sum-error-is-directory", "name" => name.maybe_quote()),
                 ));
-            };
+            }
             // Silent the warning as we want to the error message
             if path.metadata().is_err() {
                 return Err(USimpleError::new(
                     2,
-                    format!("{}: No such file or directory", name.maybe_quote()),
+                    translate!("sum-error-no-such-file-or-directory", "name" => name.maybe_quote()),
                 ));
-            };
+            }
             let f = File::open(path).map_err_context(String::new)?;
             Ok(Box::new(f) as Box<dyn Read>)
         }
@@ -98,7 +99,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let files: Vec<String> = match matches.get_many::<String>(options::FILE) {
         Some(v) => v.cloned().collect(),
@@ -137,8 +138,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("sum-usage")))
-        .about(get_message("sum-about"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .override_usage(format_usage(&translate!("sum-usage")))
+        .about(translate!("sum-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE)
@@ -149,14 +151,14 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::BSD_COMPATIBLE)
                 .short('r')
-                .help("use the BSD sum algorithm, use 1K blocks (default)")
+                .help(translate!("sum-help-bsd-compatible"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SYSTEM_V_COMPATIBLE)
                 .short('s')
                 .long(options::SYSTEM_V_COMPATIBLE)
-                .help("use System V sum algorithm, use 512 bytes blocks")
+                .help(translate!("sum-help-sysv-compatible"))
                 .action(ArgAction::SetTrue),
         )
 }

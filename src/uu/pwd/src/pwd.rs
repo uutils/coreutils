@@ -13,25 +13,27 @@ use uucore::format_usage;
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
 
-use uucore::locale::get_message;
+use uucore::LocalizedCommand;
+use uucore::translate;
 const OPT_LOGICAL: &str = "logical";
 const OPT_PHYSICAL: &str = "physical";
 
 fn physical_path() -> io::Result<PathBuf> {
     // std::env::current_dir() is a thin wrapper around libc::getcwd().
+    let path = env::current_dir()?;
 
     // On Unix, getcwd() must return the physical path:
     // https://pubs.opengroup.org/onlinepubs/9699919799/functions/getcwd.html
     #[cfg(unix)]
     {
-        env::current_dir()
+        Ok(path)
     }
 
     // On Windows we have to resolve it.
     // On other systems we also resolve it, just in case.
     #[cfg(not(unix))]
     {
-        env::current_dir().and_then(|path| path.canonicalize())
+        path.canonicalize()
     }
 }
 
@@ -108,7 +110,7 @@ fn logical_path() -> io::Result<PathBuf> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
     // if POSIXLY_CORRECT is set, we want to a logical resolution.
     // This produces a different output when doing mkdir -p a/b && ln -s a/b c && cd c && pwd
     // We should get c in this case instead of a/b at the end of the path
@@ -119,7 +121,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         physical_path()
     }
-    .map_err_context(|| "failed to get current directory".to_owned())?;
+    .map_err_context(|| translate!("pwd-error-failed-to-get-current-directory"))?;
 
     // \\?\ is a prefix Windows gives to paths under certain circumstances,
     // including when canonicalizing them.
@@ -132,22 +134,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(Into::into)
         .unwrap_or(cwd);
 
-    println_verbatim(cwd).map_err_context(|| "failed to print current directory".to_owned())?;
-
+    println_verbatim(cwd)
+        .map_err_context(|| translate!("pwd-error-failed-to-print-current-directory"))?;
     Ok(())
 }
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("pwd-about"))
-        .override_usage(format_usage(&get_message("pwd-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("pwd-about"))
+        .override_usage(format_usage(&translate!("pwd-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_LOGICAL)
                 .short('L')
                 .long(OPT_LOGICAL)
-                .help("use PWD from environment, even if it contains symlinks")
+                .help(translate!("pwd-help-logical"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -155,7 +158,7 @@ pub fn uu_app() -> Command {
                 .short('P')
                 .long(OPT_PHYSICAL)
                 .overrides_with(OPT_LOGICAL)
-                .help("avoid all symlinks")
+                .help(translate!("pwd-help-physical"))
                 .action(ArgAction::SetTrue),
         )
 }

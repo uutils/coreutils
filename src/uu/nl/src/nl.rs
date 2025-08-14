@@ -8,7 +8,9 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Read, stdin};
 use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
-use uucore::locale::get_message;
+use uucore::translate;
+
+use uucore::LocalizedCommand;
 use uucore::{format_usage, show_error};
 
 mod helper;
@@ -89,9 +91,9 @@ impl TryFrom<&str> for NumberingStyle {
             "n" => Ok(Self::None),
             _ if s.starts_with('p') => match regex::Regex::new(&s[1..]) {
                 Ok(re) => Ok(Self::Regex(Box::new(re))),
-                Err(_) => Err(String::from("invalid regular expression")),
+                Err(_) => Err(translate!("nl-error-invalid-regex")),
             },
-            _ => Err(format!("invalid numbering style: '{s}'")),
+            _ => Err(translate!("nl-error-invalid-numbering-style", "style" => s)),
         }
     }
 }
@@ -119,8 +121,8 @@ impl<T: AsRef<str>> From<T> for NumberFormat {
 }
 
 impl NumberFormat {
-    // Turns a line number into a `String` with at least `min_width` chars,
-    // formatted according to the `NumberFormat`s variant.
+    /// Turns a line number into a `String` with at least `min_width` chars,
+    /// formatted according to the `NumberFormat`s variant.
     fn format(&self, number: i64, min_width: usize) -> String {
         match self {
             Self::Left => format!("{number:<min_width$}"),
@@ -138,8 +140,8 @@ enum SectionDelimiter {
 }
 
 impl SectionDelimiter {
-    // A valid section delimiter contains the pattern one to three times,
-    // and nothing else.
+    /// A valid section delimiter contains the pattern one to three times,
+    /// and nothing else.
     fn parse(s: &str, pattern: &str) -> Option<Self> {
         if s.is_empty() || pattern.is_empty() {
             return None;
@@ -175,7 +177,7 @@ pub mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let mut settings = Settings::default();
 
@@ -185,7 +187,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if !parse_errors.is_empty() {
         return Err(USimpleError::new(
             1,
-            format!("Invalid arguments supplied.\n{}", parse_errors.join("\n")),
+            format!(
+                "{}\n{}",
+                translate!("nl-error-invalid-arguments"),
+                parse_errors.join("\n")
+            ),
         ));
     }
 
@@ -204,7 +210,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let path = Path::new(file);
 
             if path.is_dir() {
-                show_error!("{}: Is a directory", path.display());
+                show_error!(
+                    "{}",
+                    translate!("nl-error-is-directory", "path" => path.display())
+                );
                 set_exit_code(1);
             } else {
                 let reader = File::open(path).map_err_context(|| file.to_string())?;
@@ -219,16 +228,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about(get_message("nl-about"))
+        .about(translate!("nl-about"))
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("nl-usage")))
-        .after_help(get_message("nl-after-help"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .override_usage(format_usage(&translate!("nl-usage")))
+        .after_help(translate!("nl-after-help"))
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help("Print help information.")
+                .help(translate!("nl-help-help"))
                 .action(ArgAction::Help),
         )
         .arg(
@@ -241,35 +251,35 @@ pub fn uu_app() -> Command {
             Arg::new(options::BODY_NUMBERING)
                 .short('b')
                 .long(options::BODY_NUMBERING)
-                .help("use STYLE for numbering body lines")
+                .help(translate!("nl-help-body-numbering"))
                 .value_name("STYLE"),
         )
         .arg(
             Arg::new(options::SECTION_DELIMITER)
                 .short('d')
                 .long(options::SECTION_DELIMITER)
-                .help("use CC for separating logical pages")
+                .help(translate!("nl-help-section-delimiter"))
                 .value_name("CC"),
         )
         .arg(
             Arg::new(options::FOOTER_NUMBERING)
                 .short('f')
                 .long(options::FOOTER_NUMBERING)
-                .help("use STYLE for numbering footer lines")
+                .help(translate!("nl-help-footer-numbering"))
                 .value_name("STYLE"),
         )
         .arg(
             Arg::new(options::HEADER_NUMBERING)
                 .short('h')
                 .long(options::HEADER_NUMBERING)
-                .help("use STYLE for numbering header lines")
+                .help(translate!("nl-help-header-numbering"))
                 .value_name("STYLE"),
         )
         .arg(
             Arg::new(options::LINE_INCREMENT)
                 .short('i')
                 .long(options::LINE_INCREMENT)
-                .help("line number increment at each line")
+                .help(translate!("nl-help-line-increment"))
                 .value_name("NUMBER")
                 .value_parser(clap::value_parser!(i64)),
         )
@@ -277,7 +287,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::JOIN_BLANK_LINES)
                 .short('l')
                 .long(options::JOIN_BLANK_LINES)
-                .help("group of NUMBER empty lines counted as one")
+                .help(translate!("nl-help-join-blank-lines"))
                 .value_name("NUMBER")
                 .value_parser(clap::value_parser!(u64)),
         )
@@ -285,7 +295,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::NUMBER_FORMAT)
                 .short('n')
                 .long(options::NUMBER_FORMAT)
-                .help("insert line numbers according to FORMAT")
+                .help(translate!("nl-help-number-format"))
                 .value_name("FORMAT")
                 .value_parser(["ln", "rn", "rz"]),
         )
@@ -293,21 +303,21 @@ pub fn uu_app() -> Command {
             Arg::new(options::NO_RENUMBER)
                 .short('p')
                 .long(options::NO_RENUMBER)
-                .help("do not reset line numbers at logical pages")
+                .help(translate!("nl-help-no-renumber"))
                 .action(ArgAction::SetFalse),
         )
         .arg(
             Arg::new(options::NUMBER_SEPARATOR)
                 .short('s')
                 .long(options::NUMBER_SEPARATOR)
-                .help("add STRING after (possible) line number")
+                .help(translate!("nl-help-number-separator"))
                 .value_name("STRING"),
         )
         .arg(
             Arg::new(options::STARTING_LINE_NUMBER)
                 .short('v')
                 .long(options::STARTING_LINE_NUMBER)
-                .help("first line number on each logical page")
+                .help(translate!("nl-help-starting-line-number"))
                 .value_name("NUMBER")
                 .value_parser(clap::value_parser!(i64)),
         )
@@ -315,24 +325,24 @@ pub fn uu_app() -> Command {
             Arg::new(options::NUMBER_WIDTH)
                 .short('w')
                 .long(options::NUMBER_WIDTH)
-                .help("use NUMBER columns for line numbers")
+                .help(translate!("nl-help-number-width"))
                 .value_name("NUMBER")
                 .value_parser(clap::value_parser!(usize)),
         )
 }
 
-// nl implements the main functionality for an individual buffer.
+/// `nl` implements the main functionality for an individual buffer.
 fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings) -> UResult<()> {
     let mut current_numbering_style = &settings.body_numbering;
 
     for line in reader.lines() {
-        let line = line.map_err_context(|| "could not read line".to_string())?;
+        let line = line.map_err_context(|| translate!("nl-error-could-not-read-line"))?;
 
         if line.is_empty() {
             stats.consecutive_empty_lines += 1;
         } else {
             stats.consecutive_empty_lines = 0;
-        };
+        }
 
         let new_numbering_style = match SectionDelimiter::parse(&line, &settings.section_delimiter)
         {
@@ -366,7 +376,10 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
 
             if is_line_numbered {
                 let Some(line_number) = stats.line_number else {
-                    return Err(USimpleError::new(1, "line number overflow"));
+                    return Err(USimpleError::new(
+                        1,
+                        translate!("nl-error-line-number-overflow"),
+                    ));
                 };
                 println!(
                     "{}{}{line}",

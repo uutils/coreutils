@@ -396,7 +396,7 @@ fn test_null_fullblock() {
 }
 
 #[cfg(unix)]
-#[ignore] // See note below before using this test.
+#[ignore = "See note below before using this test."]
 #[test]
 fn test_fullblock() {
     let tname = "fullblock-from-urand";
@@ -555,7 +555,7 @@ fn test_ascii_521k_to_file() {
     );
 }
 
-#[ignore]
+#[ignore = ""]
 #[cfg(unix)]
 #[test]
 fn test_ascii_5_gibi_to_file() {
@@ -1617,6 +1617,7 @@ fn test_reading_partial_blocks_from_fifo() {
         .args(["dd", "ibs=3", "obs=3", &format!("if={fifoname}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        .env("LC_ALL", "C")
         .spawn()
         .unwrap();
 
@@ -1661,6 +1662,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
         .args(["dd", "bs=3", "ibs=1", "obs=1", &format!("if={fifoname}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        .env("LC_ALL", "C")
         .spawn()
         .unwrap();
 
@@ -1767,10 +1769,10 @@ fn test_wrong_number_err_msg() {
     new_ucmd!()
         .args(&["count=kBb"])
         .fails()
-        .stderr_contains("dd: invalid number: ‘kBb’\n");
+        .stderr_contains("dd: invalid number: 'kBb'\n");
 
     new_ucmd!()
         .args(&["count=1kBb555"])
         .fails()
-        .stderr_contains("dd: invalid number: ‘1kBb555’\n");
+        .stderr_contains("dd: invalid number: '1kBb555'\n");
 }

@@ -247,3 +247,8 @@ printf-after-help = basic anonymous string templating:
   of the next character will be interpreted as an 8-bit unsigned integer. If there are
   additional bytes, they will throw an error (unless the environment variable POSIXLY_CORRECT
   is set)
+
+printf-error-missing-operand = missing operand
+printf-warning-ignoring-excess-arguments = ignoring excess arguments, starting with '{ $arg }'
+printf-help-version = Print version information
+printf-help-help = Print help information

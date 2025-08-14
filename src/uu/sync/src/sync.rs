@@ -12,14 +12,14 @@ use nix::errno::Errno;
 use nix::fcntl::{OFlag, open};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::sys::stat::Mode;
-use std::collections::HashMap;
 use std::path::Path;
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 pub mod options {
     pub static FILE_SYSTEM: &str = "file-system";
@@ -67,7 +67,7 @@ mod platform {
     use std::os::windows::prelude::*;
     use std::path::Path;
     use uucore::error::{UResult, USimpleError};
-    use uucore::locale::get_message;
+    use uucore::translate;
     use uucore::wide::{FromWide, ToWide};
     use windows_sys::Win32::Foundation::{
         ERROR_NO_MORE_FILES, GetLastError, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
@@ -93,7 +93,7 @@ mod platform {
                     if unsafe { FlushFileBuffers(file.as_raw_handle() as HANDLE) } == 0 {
                         Err(USimpleError::new(
                             get_last_error() as i32,
-                            get_message("sync-error-flush-file-buffer"),
+                            translate!("sync-error-flush-file-buffer"),
                         ))
                     } else {
                         Ok(())
@@ -101,7 +101,7 @@ mod platform {
                 }
                 Err(e) => Err(USimpleError::new(
                     e.raw_os_error().unwrap_or(1),
-                    get_message("sync-error-create-volume-handle"),
+                    translate!("sync-error-create-volume-handle"),
                 )),
             }
         } else {
@@ -116,7 +116,7 @@ mod platform {
         if handle == INVALID_HANDLE_VALUE {
             return Err(USimpleError::new(
                 get_last_error() as i32,
-                get_message("sync-error-find-first-volume"),
+                translate!("sync-error-find-first-volume"),
             ));
         }
         Ok((String::from_wide_null(&name), handle))
@@ -140,12 +140,11 @@ mod platform {
                     }
                     err => Err(USimpleError::new(
                         err as i32,
-                        get_message("sync-error-find-next-volume"),
+                        translate!("sync-error-find-next-volume"),
                     )),
                 };
-            } else {
-                volumes.push(String::from_wide_null(&name));
             }
+            volumes.push(String::from_wide_null(&name));
         }
     }
 
@@ -175,7 +174,7 @@ mod platform {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
     let files: Vec<String> = matches
         .get_many::<String>(ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
@@ -184,7 +183,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if matches.get_flag(options::DATA) && files.is_empty() {
         return Err(USimpleError::new(
             1,
-            get_message("sync-error-data-needs-argument"),
+            translate!("sync-error-data-needs-argument"),
         ));
     }
 
@@ -195,12 +194,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let path = Path::new(&f);
             if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty()) {
                 if e != Errno::EACCES || (e == Errno::EACCES && path.is_dir()) {
-                    e.map_err_context(|| {
-                        get_message_with_args(
-                            "sync-error-opening-file",
-                            HashMap::from([("file".to_string(), f.quote().to_string())]),
-                        )
-                    })?;
+                    e.map_err_context(
+                        || translate!("sync-error-opening-file", "file" => f.quote()),
+                    )?;
                 }
             }
         }
@@ -209,10 +205,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if !Path::new(&f).exists() {
                 return Err(USimpleError::new(
                     1,
-                    get_message_with_args(
-                        "sync-error-no-such-file",
-                        HashMap::from([("file".to_string(), f.quote().to_string())]),
-                    ),
+                    translate!("sync-error-no-such-file", "file" => f.quote()),
                 ));
             }
         }
@@ -234,15 +227,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("sync-about"))
-        .override_usage(format_usage(&get_message("sync-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("sync-about"))
+        .override_usage(format_usage(&translate!("sync-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE_SYSTEM)
                 .short('f')
                 .long(options::FILE_SYSTEM)
                 .conflicts_with(options::DATA)
-                .help(get_message("sync-help-file-system"))
+                .help(translate!("sync-help-file-system"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -250,7 +244,7 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(options::DATA)
                 .conflicts_with(options::FILE_SYSTEM)
-                .help(get_message("sync-help-data"))
+                .help(translate!("sync-help-data"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

@@ -8,13 +8,14 @@
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 #[cfg(not(windows))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
+
+use uucore::LocalizedCommand;
 #[cfg(not(windows))]
 use uucore::mode;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
@@ -42,20 +43,20 @@ pub struct Config<'a> {
     /// Print message for each created directory.
     pub verbose: bool,
 
-    /// Set SELinux security context.
+    /// Set `SELinux` security context.
     pub set_selinux_context: bool,
 
-    /// Specific SELinux context.
+    /// Specific `SELinux` context.
     pub context: Option<&'a String>,
 }
 
 #[cfg(windows)]
-fn get_mode(_matches: &ArgMatches, _mode_had_minus_prefix: bool) -> Result<u32, String> {
+fn get_mode(_matches: &ArgMatches) -> Result<u32, String> {
     Ok(DEFAULT_PERM)
 }
 
 #[cfg(not(windows))]
-fn get_mode(matches: &ArgMatches, mode_had_minus_prefix: bool) -> Result<u32, String> {
+fn get_mode(matches: &ArgMatches) -> Result<u32, String> {
     // Not tested on Windows
     let mut new_mode = DEFAULT_PERM;
 
@@ -64,13 +65,7 @@ fn get_mode(matches: &ArgMatches, mode_had_minus_prefix: bool) -> Result<u32, St
             if mode.chars().any(|c| c.is_ascii_digit()) {
                 new_mode = mode::parse_numeric(new_mode, m, true)?;
             } else {
-                let cmode = if mode_had_minus_prefix {
-                    // clap parsing is finished, now put prefix back
-                    format!("-{mode}")
-                } else {
-                    mode.to_string()
-                };
-                new_mode = mode::parse_symbolic(new_mode, &cmode, mode::get_umask(), true)?;
+                new_mode = mode::parse_symbolic(new_mode, mode, mode::get_umask(), true)?;
             }
         }
         Ok(new_mode)
@@ -80,30 +75,14 @@ fn get_mode(matches: &ArgMatches, mode_had_minus_prefix: bool) -> Result<u32, St
     }
 }
 
-#[cfg(windows)]
-fn strip_minus_from_mode(_args: &mut [String]) -> bool {
-    false
-}
-
-#[cfg(not(windows))]
-fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
-    mode::strip_minus_from_mode(args)
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut args = args.collect_lossy();
-
-    // Before we can parse 'args' with clap (and previously getopts),
-    // a possible MODE prefix '-' needs to be removed (e.g. "chmod -x FILE").
-    let mode_had_minus_prefix = strip_minus_from_mode(&mut args);
-
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
     let matches = uu_app()
-        .after_help(get_message("mkdir-after-help"))
-        .try_get_matches_from(args)?;
+        .after_help(translate!("mkdir-after-help"))
+        .get_matches_from_localized(args);
 
     let dirs = matches
         .get_many::<OsString>(options::DIRS)
@@ -115,7 +94,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let set_selinux_context = matches.get_flag(options::SELINUX);
     let context = matches.get_one::<String>(options::CONTEXT);
 
-    match get_mode(&matches, mode_had_minus_prefix) {
+    match get_mode(&matches) {
         Ok(mode) => {
             let config = Config {
                 recursive,
@@ -133,20 +112,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("mkdir-about"))
-        .override_usage(format_usage(&get_message("mkdir-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("mkdir-about"))
+        .override_usage(format_usage(&translate!("mkdir-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::MODE)
                 .short('m')
                 .long(options::MODE)
-                .help(get_message("mkdir-help-mode")),
+                .help(translate!("mkdir-help-mode"))
+                .allow_hyphen_values(true)
+                .num_args(1),
         )
         .arg(
             Arg::new(options::PARENTS)
                 .short('p')
                 .long(options::PARENTS)
-                .help(get_message("mkdir-help-parents"))
+                .help(translate!("mkdir-help-parents"))
                 .overrides_with(options::PARENTS)
                 .action(ArgAction::SetTrue),
         )
@@ -154,20 +136,20 @@ pub fn uu_app() -> Command {
             Arg::new(options::VERBOSE)
                 .short('v')
                 .long(options::VERBOSE)
-                .help(get_message("mkdir-help-verbose"))
+                .help(translate!("mkdir-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SELINUX)
                 .short('Z')
-                .help(get_message("mkdir-help-selinux"))
+                .help(translate!("mkdir-help-selinux"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CONTEXT)
                 .long(options::CONTEXT)
                 .value_name("CTX")
-                .help(get_message("mkdir-help-context")),
+                .help(translate!("mkdir-help-context")),
         )
         .arg(
             Arg::new(options::DIRS)
@@ -209,7 +191,7 @@ pub fn mkdir(path: &Path, config: &Config) -> UResult<()> {
     if path.as_os_str().is_empty() {
         return Err(USimpleError::new(
             1,
-            get_message("mkdir-error-empty-directory-name"),
+            translate!("mkdir-error-empty-directory-name"),
         ));
     }
     // Special case to match GNU's behavior:
@@ -225,12 +207,9 @@ fn chmod(path: &Path, mode: u32) -> UResult<()> {
     use std::fs::{Permissions, set_permissions};
     use std::os::unix::fs::PermissionsExt;
     let mode = Permissions::from_mode(mode);
-    set_permissions(path, mode).map_err_context(|| {
-        get_message_with_args(
-            "mkdir-error-cannot-set-permissions",
-            HashMap::from([("path".to_string(), path.quote().to_string())]),
-        )
-    })
+    set_permissions(path, mode).map_err_context(
+        || translate!("mkdir-error-cannot-set-permissions", "path" => path.quote()),
+    )
 }
 
 #[cfg(windows)]
@@ -247,10 +226,7 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
     if path_exists && !config.recursive {
         return Err(USimpleError::new(
             1,
-            get_message_with_args(
-                "mkdir-error-file-exists",
-                HashMap::from([("path".to_string(), path.to_string_lossy().to_string())]),
-            ),
+            translate!("mkdir-error-file-exists", "path" => path.to_string_lossy()),
         ));
     }
     if path == Path::new("") {
@@ -261,7 +237,7 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
         match path.parent() {
             Some(p) => create_dir(p, true, config)?,
             None => {
-                USimpleError::new(1, get_message("mkdir-error-failed-to-create-tree"));
+                USimpleError::new(1, translate!("mkdir-error-failed-to-create-tree"));
             }
         }
     }
@@ -271,13 +247,7 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
             if config.verbose {
                 println!(
                     "{}",
-                    get_message_with_args(
-                        "mkdir-verbose-created-directory",
-                        HashMap::from([
-                            ("util_name".to_string(), uucore::util_name().to_string()),
-                            ("path".to_string(), path.quote().to_string())
-                        ])
-                    )
+                    translate!("mkdir-verbose-created-directory", "util_name" => uucore::util_name(), "path" => path.quote())
                 );
             }
 

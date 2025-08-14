@@ -7,8 +7,6 @@
 use uucore::posix::OBSOLETE;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 static INPUT: &str = "sorted.txt";
 static OUTPUT: &str = "sorted-output.txt";

@@ -7,6 +7,7 @@
 
 use clap::builder::ValueParser;
 use uucore::error::{UClapError, UError, UResult};
+use uucore::translate;
 
 use clap::{Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
@@ -22,8 +23,6 @@ mod errors;
 
 use errors::error_exit_status;
 use errors::{Error, Result, RunconError};
-
-use uucore::locale::get_message;
 
 pub mod options {
     pub const COMPUTE: &str = "compute";
@@ -88,15 +87,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("runcon-about"))
-        .after_help(get_message("runcon-after-help"))
-        .override_usage(format_usage(&get_message("runcon-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("runcon-about"))
+        .after_help(translate!("runcon-after-help"))
+        .override_usage(format_usage(&translate!("runcon-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::COMPUTE)
                 .short('c')
                 .long(options::COMPUTE)
-                .help("Compute process transition context before modifying.")
+                .help(translate!("runcon-help-compute"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -104,7 +104,7 @@ pub fn uu_app() -> Command {
                 .short('u')
                 .long(options::USER)
                 .value_name("USER")
-                .help("Set user USER in the target security context.")
+                .help(translate!("runcon-help-user"))
                 .value_parser(ValueParser::os_string()),
         )
         .arg(
@@ -112,7 +112,7 @@ pub fn uu_app() -> Command {
                 .short('r')
                 .long(options::ROLE)
                 .value_name("ROLE")
-                .help("Set role ROLE in the target security context.")
+                .help(translate!("runcon-help-role"))
                 .value_parser(ValueParser::os_string()),
         )
         .arg(
@@ -120,7 +120,7 @@ pub fn uu_app() -> Command {
                 .short('t')
                 .long(options::TYPE)
                 .value_name("TYPE")
-                .help("Set type TYPE in the target security context.")
+                .help(translate!("runcon-help-type"))
                 .value_parser(ValueParser::os_string()),
         )
         .arg(
@@ -128,7 +128,7 @@ pub fn uu_app() -> Command {
                 .short('l')
                 .long(options::RANGE)
                 .value_name("RANGE")
-                .help("Set range RANGE in the target security context.")
+                .help(translate!("runcon-help-range"))
                 .value_parser(ValueParser::os_string()),
         )
         .arg(
@@ -235,12 +235,12 @@ fn parse_command_line(config: Command, args: impl uucore::Args) -> UResult<Optio
 }
 
 fn print_current_context() -> Result<()> {
-    let op = "Getting security context of the current process";
-    let context = SecurityContext::current(false).map_err(|r| Error::from_selinux(op, r))?;
+    let context = SecurityContext::current(false)
+        .map_err(|r| Error::from_selinux("runcon-operation-getting-current-context", r))?;
 
     let context = context
         .to_c_string()
-        .map_err(|r| Error::from_selinux(op, r))?;
+        .map_err(|r| Error::from_selinux("runcon-operation-getting-current-context", r))?;
 
     if let Some(context) = context {
         let context = context.as_ref().to_str()?;
@@ -254,18 +254,22 @@ fn print_current_context() -> Result<()> {
 fn set_next_exec_context(context: &OpaqueSecurityContext) -> Result<()> {
     let c_context = context
         .to_c_string()
-        .map_err(|r| Error::from_selinux("Creating new context", r))?;
+        .map_err(|r| Error::from_selinux("runcon-operation-creating-context", r))?;
 
     let sc = SecurityContext::from_c_str(&c_context, false);
 
     if sc.check() != Some(true) {
         let ctx = OsStr::from_bytes(c_context.as_bytes());
         let err = io::ErrorKind::InvalidInput.into();
-        return Err(Error::from_io1("Checking security context", ctx, err));
+        return Err(Error::from_io1(
+            "runcon-operation-checking-context",
+            ctx,
+            err,
+        ));
     }
 
     sc.set_for_next_exec()
-        .map_err(|r| Error::from_selinux("Setting new security context", r))
+        .map_err(|r| Error::from_selinux("runcon-operation-setting-context", r))
 }
 
 fn get_plain_context(context: &OsStr) -> Result<OpaqueSecurityContext> {
@@ -276,13 +280,13 @@ fn get_plain_context(context: &OsStr) -> Result<OpaqueSecurityContext> {
     let c_context = os_str_to_c_string(context)?;
 
     OpaqueSecurityContext::from_c_str(&c_context)
-        .map_err(|r| Error::from_selinux("Creating new context", r))
+        .map_err(|r| Error::from_selinux("runcon-operation-creating-context", r))
 }
 
-fn get_transition_context(command: &OsStr) -> Result<SecurityContext> {
+fn get_transition_context(command: &OsStr) -> Result<SecurityContext<'_>> {
     // Generate context based on process transition.
     let sec_class = SecurityClass::from_name("process")
-        .map_err(|r| Error::from_selinux("Getting process security class", r))?;
+        .map_err(|r| Error::from_selinux("runcon-operation-getting-process-class", r))?;
 
     // Get context of file to be executed.
     let file_context = match SecurityContext::of_path(command, true, false) {
@@ -290,22 +294,24 @@ fn get_transition_context(command: &OsStr) -> Result<SecurityContext> {
 
         Ok(None) => {
             let err = io::Error::from_raw_os_error(libc::ENODATA);
-            return Err(Error::from_io1("getfilecon", command, err));
+            return Err(Error::from_io1("runcon-operation-getfilecon", command, err));
         }
 
         Err(r) => {
-            let op = "Getting security context of command file";
-            return Err(Error::from_selinux(op, r));
+            return Err(Error::from_selinux(
+                "runcon-operation-getting-file-context",
+                r,
+            ));
         }
     };
 
     let process_context = SecurityContext::current(false)
-        .map_err(|r| Error::from_selinux("Getting security context of the current process", r))?;
+        .map_err(|r| Error::from_selinux("runcon-operation-getting-current-context", r))?;
 
     // Compute result of process transition.
     process_context
         .of_labeling_decision(&file_context, sec_class, "")
-        .map_err(|r| Error::from_selinux("Computing result of process transition", r))
+        .map_err(|r| Error::from_selinux("runcon-operation-computing-transition", r))
 }
 
 fn get_initial_custom_opaque_context(
@@ -315,18 +321,17 @@ fn get_initial_custom_opaque_context(
     let context = if compute_transition_context {
         get_transition_context(command)?
     } else {
-        SecurityContext::current(false).map_err(|r| {
-            Error::from_selinux("Getting security context of the current process", r)
-        })?
+        SecurityContext::current(false)
+            .map_err(|r| Error::from_selinux("runcon-operation-getting-current-context", r))?
     };
 
     let c_context = context
         .to_c_string()
-        .map_err(|r| Error::from_selinux("Getting security context", r))?
+        .map_err(|r| Error::from_selinux("runcon-operation-getting-context", r))?
         .unwrap_or_else(|| Cow::Owned(CString::default()));
 
     OpaqueSecurityContext::from_c_str(c_context.as_ref())
-        .map_err(|r| Error::from_selinux("Creating new context", r))
+        .map_err(|r| Error::from_selinux("runcon-operation-creating-context", r))
 }
 
 fn get_custom_context(
@@ -347,16 +352,16 @@ fn get_custom_context(
     let osc = get_initial_custom_opaque_context(compute_transition_context, command)?;
 
     let list: &[(Option<&OsStr>, SetNewValueProc, &'static str)] = &[
-        (user, OSC::set_user, "Setting security context user"),
-        (role, OSC::set_role, "Setting security context role"),
-        (the_type, OSC::set_type, "Setting security context type"),
-        (range, OSC::set_range, "Setting security context range"),
+        (user, OSC::set_user, "runcon-operation-setting-user"),
+        (role, OSC::set_role, "runcon-operation-setting-role"),
+        (the_type, OSC::set_type, "runcon-operation-setting-type"),
+        (range, OSC::set_range, "runcon-operation-setting-range"),
     ];
 
-    for &(new_value, method, op) in list {
+    for &(new_value, method, op_key) in list {
         if let Some(new_value) = new_value {
             let c_new_value = os_str_to_c_string(new_value)?;
-            method(&osc, &c_new_value).map_err(|r| Error::from_selinux(op, r))?;
+            method(&osc, &c_new_value).map_err(|r| Error::from_selinux(op_key, r))?;
         }
     }
     Ok(osc)
@@ -390,11 +395,15 @@ fn execute_command(command: &OsStr, arguments: &[OsString]) -> UResult<()> {
         error_exit_status::COULD_NOT_EXECUTE
     };
 
-    let err = Error::from_io1("Executing command", command, err);
+    let err = Error::from_io1("runcon-operation-executing-command", command, err);
     Err(RunconError::with_code(exit_status, err).into())
 }
 
 fn os_str_to_c_string(s: &OsStr) -> Result<CString> {
-    CString::new(s.as_bytes())
-        .map_err(|_r| Error::from_io("CString::new()", io::ErrorKind::InvalidInput.into()))
+    CString::new(s.as_bytes()).map_err(|_r| {
+        Error::from_io(
+            "runcon-operation-cstring-new",
+            io::ErrorKind::InvalidInput.into(),
+        )
+    })
 }

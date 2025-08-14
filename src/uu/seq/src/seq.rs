@@ -28,7 +28,7 @@ mod numberparse;
 use crate::error::SeqError;
 use crate::number::PreciseNumber;
 
-use uucore::locale::get_message;
+use uucore::translate;
 
 const OPT_SEPARATOR: &str = "separator";
 const OPT_TERMINATOR: &str = "terminator";
@@ -50,8 +50,8 @@ struct SeqOptions<'a> {
 /// The elements are (first, increment, last).
 type RangeFloat = (ExtendedBigDecimal, ExtendedBigDecimal, ExtendedBigDecimal);
 
-// Turn short args with attached value, for example "-s,", into two args "-s" and "," to make
-// them work with clap.
+/// Turn short args with attached value, for example "-s,", into two args "-s" and "," to make
+/// them work with clap.
 fn split_short_args_with_value(args: impl uucore::Args) -> impl uucore::Args {
     let mut v: Vec<OsString> = Vec::new();
 
@@ -221,32 +221,33 @@ pub fn uu_app() -> Command {
         .trailing_var_arg(true)
         .infer_long_args(true)
         .version(uucore::crate_version!())
-        .about(get_message("seq-about"))
-        .override_usage(format_usage(&get_message("seq-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("seq-about"))
+        .override_usage(format_usage(&translate!("seq-usage")))
         .arg(
             Arg::new(OPT_SEPARATOR)
                 .short('s')
                 .long("separator")
-                .help("Separator character (defaults to \\n)"),
+                .help(translate!("seq-help-separator")),
         )
         .arg(
             Arg::new(OPT_TERMINATOR)
                 .short('t')
                 .long("terminator")
-                .help("Terminator character (defaults to \\n)"),
+                .help(translate!("seq-help-terminator")),
         )
         .arg(
             Arg::new(OPT_EQUAL_WIDTH)
                 .short('w')
                 .long("equal-width")
-                .help("Equalize widths of all numbers by padding with zeros")
+                .help(translate!("seq-help-equal-width"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_FORMAT)
                 .short('f')
                 .long(OPT_FORMAT)
-                .help("use printf style floating-point FORMAT"),
+                .help(translate!("seq-help-format")),
         )
         .arg(
             // we use allow_hyphen_values instead of allow_negative_numbers because clap removed

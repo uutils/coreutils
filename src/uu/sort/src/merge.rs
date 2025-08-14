@@ -144,7 +144,7 @@ pub fn merge_with_file_limit<
 fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
     files: F,
     settings: &GlobalSettings,
-) -> UResult<FileMerger> {
+) -> UResult<FileMerger<'_>> {
     let (request_sender, request_receiver) = channel();
     let mut reader_files = Vec::with_capacity(files.size_hint().0);
     let mut loaded_receivers = Vec::with_capacity(files.size_hint().0);
@@ -370,7 +370,7 @@ impl Compare<MergeableFile> for FileComparator<'_> {
     }
 }
 
-// Wait for the child to exit and check its exit code.
+/// Wait for the child to exit and check its exit code.
 fn check_child_success(mut child: Child, program: &str) -> UResult<()> {
     if matches!(child.wait().map(|e| e.code()), Ok(Some(0) | None) | Err(_)) {
         Ok(())

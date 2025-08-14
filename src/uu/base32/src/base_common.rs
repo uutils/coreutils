@@ -9,14 +9,15 @@ use clap::{Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::encoding::{
-    BASE2LSBF, BASE2MSBF, Format, Z85Wrapper,
+    BASE2LSBF, BASE2MSBF, EncodingWrapper, Format, SupportsFastDecodeAndEncode, Z85Wrapper,
     for_base_common::{BASE32, BASE32HEX, BASE64, BASE64_NOPAD, BASE64URL, HEXUPPER_PERMISSIVE},
 };
-use uucore::encoding::{EncodingWrapper, SupportsFastDecodeAndEncode};
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
+use uucore::translate;
 
 pub const BASE_CMD_PARSE_ERROR: i32 = 1;
 
@@ -50,7 +51,7 @@ impl Config {
                 if let Some(extra_op) = values.next() {
                     return Err(UUsageError::new(
                         BASE_CMD_PARSE_ERROR,
-                        format!("extra operand {}", extra_op.quote()),
+                        translate!("base-common-extra-operand", "operand" => extra_op.quote()),
                     ));
                 }
 
@@ -62,7 +63,7 @@ impl Config {
                     if !path.exists() {
                         return Err(USimpleError::new(
                             BASE_CMD_PARSE_ERROR,
-                            format!("{}: No such file or directory", path.maybe_quote()),
+                            translate!("base-common-no-such-file", "file" => path.maybe_quote()),
                         ));
                     }
 
@@ -78,7 +79,7 @@ impl Config {
                 num.parse::<usize>().map_err(|_| {
                     USimpleError::new(
                         BASE_CMD_PARSE_ERROR,
-                        format!("invalid wrap size: {}", num.quote()),
+                        translate!("base-common-invalid-wrap-size", "size" => num.quote()),
                     )
                 })
             })
@@ -99,12 +100,14 @@ pub fn parse_base_cmd_args(
     usage: &str,
 ) -> UResult<Config> {
     let command = base_app(about, usage);
-    Config::from(&command.try_get_matches_from(args)?)
+    let matches = command.get_matches_from_localized(args);
+    Config::from(&matches)
 }
 
 pub fn base_app(about: &'static str, usage: &str) -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(about)
         .override_usage(format_usage(usage))
         .infer_long_args(true)
@@ -114,7 +117,7 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
                 .short('d')
                 .visible_short_alias('D')
                 .long(options::DECODE)
-                .help("decode data")
+                .help(translate!("base-common-help-decode"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::DECODE),
         )
@@ -122,7 +125,7 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
             Arg::new(options::IGNORE_GARBAGE)
                 .short('i')
                 .long(options::IGNORE_GARBAGE)
-                .help("when decoding, ignore non-alphabetic characters")
+                .help(translate!("base-common-help-ignore-garbage"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::IGNORE_GARBAGE),
         )
@@ -131,7 +134,7 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
                 .short('w')
                 .long(options::WRAP)
                 .value_name("COLS")
-                .help(format!("wrap encoded lines after COLS character (default {WRAP_DEFAULT}, 0 to disable wrapping)"))
+                .help(translate!("base-common-help-wrap", "default" => WRAP_DEFAULT))
                 .overrides_with(options::WRAP),
         )
         // "multiple" arguments are used to check whether there is more than one
@@ -813,7 +816,7 @@ fn format_read_error(kind: ErrorKind) -> String {
         }
     }
 
-    format!("read error: {kind_string_capitalized}")
+    translate!("base-common-read-error", "error" => kind_string_capitalized)
 }
 
 #[cfg(test)]

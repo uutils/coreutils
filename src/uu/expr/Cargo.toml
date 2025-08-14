@@ -22,8 +22,9 @@ clap = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 onig = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["i18n-collator"] }
 thiserror = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "expr"

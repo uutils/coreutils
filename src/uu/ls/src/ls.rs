@@ -5,25 +5,26 @@
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime
 
-use std::iter;
+#[cfg(unix)]
+use std::collections::HashMap;
+#[cfg(unix)]
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
-use std::{cell::LazyCell, cell::OnceCell, num::IntErrorKind};
 use std::{
+    cell::{LazyCell, OnceCell},
     cmp::Reverse,
+    collections::HashSet,
     ffi::{OsStr, OsString},
     fmt::Write as FmtWrite,
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
-    io::{BufWriter, ErrorKind, Stdout, Write, stdout},
+    io::{BufWriter, ErrorKind, IsTerminal, Stdout, Write, stdout},
+    iter,
+    num::IntErrorKind,
+    ops::RangeInclusive,
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-#[cfg(unix)]
-use std::{
-    collections::HashMap,
-    os::unix::fs::{FileTypeExt, MetadataExt},
-};
-use std::{collections::HashSet, io::IsTerminal};
 
 use ansi_width::ansi_width;
 use clap::{
@@ -31,17 +32,12 @@ use clap::{
     builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
 };
 use glob::{MatchOptions, Pattern};
-use jiff::fmt::StdIoWrite;
-use jiff::fmt::strtime::BrokenDownTime;
-use jiff::{Timestamp, Zoned};
 use lscolors::LsColors;
 use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
 use thiserror::Error;
+
 #[cfg(unix)]
 use uucore::entries;
-use uucore::error::USimpleError;
-use uucore::format::human::{SizeFormat, human_readable};
-use uucore::fs::FileInformation;
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 use uucore::fsxattr::has_acl;
 #[cfg(unix)]
@@ -59,30 +55,31 @@ use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
     target_os = "solaris"
 ))]
 use uucore::libc::{dev_t, major, minor};
-use uucore::line_ending::LineEnding;
-use uucore::locale::get_message;
-use uucore::quoting_style::{self, QuotingStyle, escape_name};
 use uucore::{
     display::Quotable,
     error::{UError, UResult, set_exit_code},
+    format::human::{SizeFormat, human_readable},
     format_usage,
+    fs::FileInformation,
     fs::display_permissions,
+    fsext::{MetadataTimeField, metadata_get_time},
+    line_ending::LineEnding,
     os_str_as_bytes_lossy,
+    parser::parse_glob,
     parser::parse_size::parse_size_u64,
     parser::shortcut_value_parser::ShortcutValueParser,
+    quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
+    show, show_error, show_warning,
+    time::{FormatSystemTimeFallback, format, format_system_time},
+    translate,
     version_cmp::version_cmp,
 };
-use uucore::{parser::parse_glob, show, show_error, show_warning};
 
 mod dired;
 use dired::{DiredOutput, is_dired_arg_present};
 mod colors;
+use crate::options::QUOTING_STYLE;
 use colors::{StyleManager, color_name};
-
-#[cfg(not(feature = "selinux"))]
-static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
-#[cfg(feature = "selinux")]
-static CONTEXT_HELP_TEXT: &str = "print any security context of each file";
 
 pub mod options {
     pub mod format {
@@ -177,40 +174,40 @@ const DEFAULT_FILE_SIZE_BLOCK_SIZE: u64 = 1;
 
 #[derive(Error, Debug)]
 enum LsError {
-    #[error("invalid line width: '{0}'")]
+    #[error("{}", translate!("ls-error-invalid-line-width", "width" => format!("'{_0}'")))]
     InvalidLineWidth(String),
 
-    #[error("general io error: {0}")]
+    #[error("{}", translate!("ls-error-general-io", "error" => _0))]
     IOError(#[from] std::io::Error),
 
     #[error("{}", match .1.kind() {
-        ErrorKind::NotFound => format!("cannot access '{}': No such file or directory", .0.to_string_lossy()),
+        ErrorKind::NotFound => translate!("ls-error-cannot-access-no-such-file", "path" => .0.to_string_lossy()),
         ErrorKind::PermissionDenied => match .1.raw_os_error().unwrap_or(1) {
-            1 => format!("cannot access '{}': Operation not permitted", .0.to_string_lossy()),
+            1 => translate!("ls-error-cannot-access-operation-not-permitted", "path" => .0.to_string_lossy()),
             _ => if .0.is_dir() {
-                format!("cannot open directory '{}': Permission denied", .0.to_string_lossy())
+                translate!("ls-error-cannot-open-directory-permission-denied", "path" => .0.to_string_lossy())
             } else {
-                format!("cannot open file '{}': Permission denied", .0.to_string_lossy())
+                translate!("ls-error-cannot-open-file-permission-denied", "path" => .0.to_string_lossy())
             },
         },
         _ => match .1.raw_os_error().unwrap_or(1) {
-            9 => format!("cannot open directory '{}': Bad file descriptor", .0.to_string_lossy()),
-            _ => format!("unknown io error: '{:?}', '{:?}'", .0.to_string_lossy(), .1),
+            9 => translate!("ls-error-cannot-open-directory-bad-descriptor", "path" => .0.to_string_lossy()),
+            _ => translate!("ls-error-unknown-io-error", "path" => .0.to_string_lossy(), "error" => format!("{:?}", .1)),
         },
     })]
     IOErrorContext(PathBuf, std::io::Error, bool),
 
-    #[error("invalid --block-size argument '{0}'")]
+    #[error("{}", translate!("ls-error-invalid-block-size", "size" => format!("'{_0}'")))]
     BlockSizeParseError(String),
 
-    #[error("--dired and --zero are incompatible")]
+    #[error("{}", translate!("ls-error-dired-and-zero-incompatible"))]
     DiredAndZeroAreIncompatible,
 
-    #[error("{}: not listing already-listed directory", .0.to_string_lossy())]
+    #[error("{}", translate!("ls-error-not-listing-already-listed", "path" => .0.to_string_lossy()))]
     AlreadyListedError(PathBuf),
 
-    #[error("invalid --time-style argument {}\nPossible values are: {:?}\n\nFor more information try --help", .0.quote(), .1)]
-    TimeStyleParseError(String, Vec<String>),
+    #[error("{}", translate!("ls-error-invalid-time-style", "style" => .0.quote()))]
+    TimeStyleParseError(String),
 }
 
 impl UError for LsError {
@@ -223,7 +220,7 @@ impl UError for LsError {
             Self::BlockSizeParseError(_) => 2,
             Self::DiredAndZeroAreIncompatible => 2,
             Self::AlreadyListedError(_) => 2,
-            Self::TimeStyleParseError(_, _) => 2,
+            Self::TimeStyleParseError(_) => 2,
         }
     }
 }
@@ -255,91 +252,71 @@ enum Files {
     Normal,
 }
 
-enum Time {
-    Modification,
-    Access,
-    Change,
-    Birth,
-}
+fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String>), LsError> {
+    // TODO: Using correct locale string is not implemented.
+    const LOCALE_FORMAT: (&str, Option<&str>) = ("%b %e %H:%M", Some("%b %e  %Y"));
 
-#[derive(Debug)]
-enum TimeStyle {
-    FullIso,
-    LongIso,
-    Iso,
-    Locale,
-    Format(String),
-}
-
-/// Whether the given date is considered recent (i.e., in the last 6 months).
-fn is_recent(time: Timestamp, state: &mut ListState) -> bool {
-    // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-    time > state.recent_time_threshold
-}
-
-impl TimeStyle {
-    /// Format the given time according to this time format style.
-    fn format(
-        &self,
-        date: Zoned,
-        out: &mut Vec<u8>,
-        state: &mut ListState,
-    ) -> Result<(), jiff::Error> {
-        let recent = is_recent(date.timestamp(), state);
-        let tm = BrokenDownTime::from(&date);
-        let mut out = StdIoWrite(out);
-        let config = jiff::fmt::strtime::Config::new().lenient(true);
-
-        let fmt = match (self, recent) {
-            (Self::FullIso, _) => "%Y-%m-%d %H:%M:%S.%f %z",
-            (Self::LongIso, _) => "%Y-%m-%d %H:%M",
-            (Self::Iso, true) => "%m-%d %H:%M",
-            (Self::Iso, false) => "%Y-%m-%d ",
-            // TODO: Using correct locale string is not implemented.
-            (Self::Locale, true) => "%b %e %H:%M",
-            (Self::Locale, false) => "%b %e  %Y",
-            (Self::Format(fmt), _) => fmt,
-        };
-
-        tm.format_with_config(&config, fmt, &mut out)
+    // Convert time_styles references to owned String/option.
+    fn ok((recent, older): (&str, Option<&str>)) -> Result<(String, Option<String>), LsError> {
+        Ok((recent.to_string(), older.map(String::from)))
     }
-}
 
-fn parse_time_style(options: &clap::ArgMatches) -> Result<TimeStyle, LsError> {
-    let possible_time_styles = vec![
-        "full-iso".to_string(),
-        "long-iso".to_string(),
-        "iso".to_string(),
-        "locale".to_string(),
-        "+FORMAT (e.g., +%H:%M) for a 'date'-style format".to_string(),
-    ];
-    if let Some(field) = options.get_one::<String>(options::TIME_STYLE) {
+    if let Some(field) = options
+        .get_one::<String>(options::TIME_STYLE)
+        .map(|s| s.to_owned())
+        .or_else(|| std::env::var("TIME_STYLE").ok())
+    {
         //If both FULL_TIME and TIME_STYLE are present
         //The one added last is dominant
         if options.get_flag(options::FULL_TIME)
             && options.indices_of(options::FULL_TIME).unwrap().next_back()
                 > options.indices_of(options::TIME_STYLE).unwrap().next_back()
         {
-            Ok(TimeStyle::FullIso)
+            ok((format::FULL_ISO, None))
         } else {
-            match field.as_str() {
-                "full-iso" => Ok(TimeStyle::FullIso),
-                "long-iso" => Ok(TimeStyle::LongIso),
-                "iso" => Ok(TimeStyle::Iso),
-                "locale" => Ok(TimeStyle::Locale),
+            let field = if let Some(field) = field.strip_prefix("posix-") {
+                // See GNU documentation, set format to "locale" if LC_TIME="POSIX",
+                // else just strip the prefix and continue (even "posix+FORMAT" is
+                // supported).
+                // TODO: This needs to be moved to uucore and handled by icu?
+                if std::env::var("LC_TIME").unwrap_or_default() == "POSIX"
+                    || std::env::var("LC_ALL").unwrap_or_default() == "POSIX"
+                {
+                    return ok(LOCALE_FORMAT);
+                }
+                field
+            } else {
+                &field
+            };
+
+            match field {
+                "full-iso" => ok((format::FULL_ISO, None)),
+                "long-iso" => ok((format::LONG_ISO, None)),
+                // ISO older format needs extra padding.
+                "iso" => Ok((
+                    "%m-%d %H:%M".to_string(),
+                    Some(format::ISO.to_string() + " "),
+                )),
+                "locale" => ok(LOCALE_FORMAT),
                 _ => match field.chars().next().unwrap() {
-                    '+' => Ok(TimeStyle::Format(String::from(&field[1..]))),
-                    _ => Err(LsError::TimeStyleParseError(
-                        String::from(field),
-                        possible_time_styles,
-                    )),
+                    '+' => {
+                        // recent/older formats are (optionally) separated by a newline
+                        let mut it = field[1..].split('\n');
+                        let recent = it.next().unwrap_or_default();
+                        let older = it.next();
+                        match it.next() {
+                            None => ok((recent, older)),
+                            Some(_) => Err(LsError::TimeStyleParseError(String::from(field))),
+                        }
+                    }
+                    _ => Err(LsError::TimeStyleParseError(String::from(field))),
                 },
             }
         }
     } else if options.get_flag(options::FULL_TIME) {
-        Ok(TimeStyle::FullIso)
+        ok((format::FULL_ISO, None))
     } else {
-        Ok(TimeStyle::Locale)
+        ok(LOCALE_FORMAT)
     }
 }
 
@@ -369,7 +346,7 @@ pub struct Config {
     ignore_patterns: Vec<Pattern>,
     size_format: SizeFormat,
     directory: bool,
-    time: Time,
+    time: MetadataTimeField,
     #[cfg(unix)]
     inode: bool,
     color: Option<LsColors>,
@@ -382,7 +359,8 @@ pub struct Config {
     // Dir and vdir needs access to this field
     pub quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
-    time_style: TimeStyle,
+    time_format_recent: String,        // Time format for recent dates
+    time_format_older: Option<String>, // Time format for older dates (optional, if not present, time_format_recent is used)
     context: bool,
     selinux_supported: bool,
     group_directories_first: bool,
@@ -494,6 +472,13 @@ fn extract_sort(options: &clap::ArgMatches) -> Sort {
         Sort::Version
     } else if options.get_flag(options::sort::EXTENSION) {
         Sort::Extension
+    } else if !options.get_flag(options::format::LONG)
+        && (options.get_flag(options::time::ACCESS)
+            || options.get_flag(options::time::CHANGE)
+            || options.get_one::<String>(options::TIME).is_some())
+    {
+        // If -l is not specified, -u/-c/--time controls sorting.
+        Sort::Time
     } else {
         Sort::Name
     }
@@ -503,28 +488,21 @@ fn extract_sort(options: &clap::ArgMatches) -> Sort {
 ///
 /// # Returns
 ///
-/// A Time variant representing the time to use.
-fn extract_time(options: &clap::ArgMatches) -> Time {
+/// A `MetadataTimeField` variant representing the time to use.
+fn extract_time(options: &clap::ArgMatches) -> MetadataTimeField {
     if let Some(field) = options.get_one::<String>(options::TIME) {
-        match field.as_str() {
-            "ctime" | "status" => Time::Change,
-            "access" | "atime" | "use" => Time::Access,
-            "mtime" | "modification" => Time::Modification,
-            "birth" | "creation" => Time::Birth,
-            // below should never happen as clap already restricts the values.
-            _ => unreachable!("Invalid field for --time"),
-        }
+        field.as_str().into()
     } else if options.get_flag(options::time::ACCESS) {
-        Time::Access
+        MetadataTimeField::Access
     } else if options.get_flag(options::time::CHANGE) {
-        Time::Change
+        MetadataTimeField::Change
     } else {
-        Time::Modification
+        MetadataTimeField::Modification
     }
 }
 
-// Some env variables can be passed
-// For now, we are only verifying if empty or not and known for TERM
+/// Some env variables can be passed
+/// For now, we are only verifying if empty or not and known for `TERM`
 fn is_color_compatible_term() -> bool {
     let is_term_set = std::env::var("TERM").is_ok();
     let is_colorterm_set = std::env::var("COLORTERM").is_ok();
@@ -589,12 +567,12 @@ fn extract_hyperlink(options: &clap::ArgMatches) -> bool {
     }
 }
 
-/// Match the argument given to --quoting-style or the QUOTING_STYLE env variable.
+/// Match the argument given to --quoting-style or the [`QUOTING_STYLE`] env variable.
 ///
 /// # Arguments
 ///
 /// * `style`: the actual argument string
-/// * `show_control` - A boolean value representing whether or not to show control characters.
+/// * `show_control` - A boolean value representing whether to show control characters.
 ///
 /// # Returns
 ///
@@ -602,50 +580,31 @@ fn extract_hyperlink(options: &clap::ArgMatches) -> bool {
 fn match_quoting_style_name(style: &str, show_control: bool) -> Option<QuotingStyle> {
     match style {
         "literal" => Some(QuotingStyle::Literal { show_control }),
-        "shell" => Some(QuotingStyle::Shell {
-            escape: false,
-            always_quote: false,
-            show_control,
-        }),
-        "shell-always" => Some(QuotingStyle::Shell {
-            escape: false,
-            always_quote: true,
-            show_control,
-        }),
-        "shell-escape" => Some(QuotingStyle::Shell {
-            escape: true,
-            always_quote: false,
-            show_control,
-        }),
-        "shell-escape-always" => Some(QuotingStyle::Shell {
-            escape: true,
-            always_quote: true,
-            show_control,
-        }),
-        "c" => Some(QuotingStyle::C {
-            quotes: quoting_style::Quotes::Double,
-        }),
-        "escape" => Some(QuotingStyle::C {
-            quotes: quoting_style::Quotes::None,
-        }),
+        "shell" => Some(QuotingStyle::SHELL),
+        "shell-always" => Some(QuotingStyle::SHELL_QUOTE),
+        "shell-escape" => Some(QuotingStyle::SHELL_ESCAPE),
+        "shell-escape-always" => Some(QuotingStyle::SHELL_ESCAPE_QUOTE),
+        "c" => Some(QuotingStyle::C_DOUBLE),
+        "escape" => Some(QuotingStyle::C_NO_QUOTES),
         _ => None,
     }
+    .map(|qs| qs.show_control(show_control))
 }
 
 /// Extracts the quoting style to use based on the options provided.
 /// If no options are given, it looks if a default quoting style is provided
-/// through the QUOTING_STYLE environment variable.
+/// through the [`QUOTING_STYLE`] environment variable.
 ///
 /// # Arguments
 ///
-/// * `options` - A reference to a clap::ArgMatches object containing command line arguments.
+/// * `options` - A reference to a [`clap::ArgMatches`] object containing command line arguments.
 /// * `show_control` - A boolean value representing whether or not to show control characters.
 ///
 /// # Returns
 ///
-/// A QuotingStyle variant representing the quoting style to use.
+/// A [`QuotingStyle`] variant representing the quoting style to use.
 fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> QuotingStyle {
-    let opt_quoting_style = options.get_one::<String>(options::QUOTING_STYLE);
+    let opt_quoting_style = options.get_one::<String>(QUOTING_STYLE);
 
     if let Some(style) = opt_quoting_style {
         match match_quoting_style_name(style, show_control) {
@@ -655,13 +614,9 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> Quot
     } else if options.get_flag(options::quoting::LITERAL) {
         QuotingStyle::Literal { show_control }
     } else if options.get_flag(options::quoting::ESCAPE) {
-        QuotingStyle::C {
-            quotes: quoting_style::Quotes::None,
-        }
+        QuotingStyle::C_NO_QUOTES
     } else if options.get_flag(options::quoting::C) {
-        QuotingStyle::C {
-            quotes: quoting_style::Quotes::Double,
-        }
+        QuotingStyle::C_DOUBLE
     } else if options.get_flag(options::DIRED) {
         QuotingStyle::Literal { show_control }
     } else {
@@ -670,8 +625,8 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> Quot
             match match_quoting_style_name(style.as_str(), show_control) {
                 Some(qs) => return qs,
                 None => eprintln!(
-                    "{}: Ignoring invalid value of environment variable QUOTING_STYLE: '{style}'",
-                    std::env::args().next().unwrap_or_else(|| "ls".to_string()),
+                    "{}",
+                    translate!("ls-invalid-quoting-style", "program" => std::env::args().next().unwrap_or_else(|| "ls".to_string()), "style" => style.clone())
                 ),
             }
         }
@@ -679,11 +634,7 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> Quot
         // By default, `ls` uses Shell escape quoting style when writing to a terminal file
         // descriptor and Literal otherwise.
         if stdout().is_terminal() {
-            QuotingStyle::Shell {
-                escape: true,
-                always_quote: false,
-                show_control,
-            }
+            QuotingStyle::SHELL_ESCAPE.show_control(show_control)
         } else {
             QuotingStyle::Literal { show_control }
         }
@@ -694,7 +645,7 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> Quot
 ///
 /// # Returns
 ///
-/// An IndicatorStyle variant representing the indicator style to use.
+/// An [`IndicatorStyle`] variant representing the indicator style to use.
 fn extract_indicator_style(options: &clap::ArgMatches) -> IndicatorStyle {
     if let Some(field) = options.get_one::<String>(options::INDICATOR_STYLE) {
         match field.as_str() {
@@ -748,8 +699,8 @@ fn parse_width(width_match: Option<&String>) -> Result<u16, LsError> {
             Some(columns) => columns,
             None => {
                 show_error!(
-                    "ignoring invalid width in environment variable COLUMNS: {}",
-                    columns.quote()
+                    "{}",
+                    translate!("ls-invalid-columns-width", "width" => columns.quote())
                 );
                 DEFAULT_TERM_WIDTH
             }
@@ -945,10 +896,10 @@ impl Config {
         let indicator_style = extract_indicator_style(options);
         // Only parse the value to "--time-style" if it will become relevant.
         let dired = options.get_flag(options::DIRED);
-        let time_style = if format == Format::Long || dired {
+        let (time_format_recent, time_format_older) = if format == Format::Long || dired {
             parse_time_style(options)?
         } else {
-            TimeStyle::Iso
+            Default::default()
         };
 
         let mut ignore_patterns: Vec<Pattern> = Vec::new();
@@ -967,7 +918,10 @@ impl Config {
                 Ok(p) => {
                     ignore_patterns.push(p);
                 }
-                Err(_) => show_warning!("Invalid pattern for ignore: {}", pattern.quote()),
+                Err(_) => show_warning!(
+                    "{}",
+                    translate!("ls-invalid-ignore-pattern", "pattern" => pattern.quote())
+                ),
             }
         }
 
@@ -981,7 +935,10 @@ impl Config {
                     Ok(p) => {
                         ignore_patterns.push(p);
                     }
-                    Err(_) => show_warning!("Invalid pattern for hide: {}", pattern.quote()),
+                    Err(_) => show_warning!(
+                        "{}",
+                        translate!("ls-invalid-hide-pattern", "pattern" => pattern.quote())
+                    ),
                 }
             }
         }
@@ -1007,7 +964,7 @@ impl Config {
         let zero_colors_opts = [options::COLOR];
         let zero_show_control_opts = [options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS];
         let zero_quoting_style_opts = [
-            options::QUOTING_STYLE,
+            QUOTING_STYLE,
             options::quoting::C,
             options::quoting::ESCAPE,
             options::quoting::LITERAL,
@@ -1091,13 +1048,13 @@ impl Config {
             Dereference::DirArgs
         };
 
-        let tab_size = if !needs_color {
+        let tab_size = if needs_color {
+            Some(0)
+        } else {
             options
                 .get_one::<String>(options::format::TAB_SIZE)
                 .and_then(|size| size.parse::<usize>().ok())
                 .or_else(|| std::env::var("TABSIZE").ok().and_then(|s| s.parse().ok()))
-        } else {
-            Some(0)
         }
         .unwrap_or(SPACES_IN_TAB);
 
@@ -1122,7 +1079,8 @@ impl Config {
             width,
             quoting_style,
             indicator_style,
-            time_style,
+            time_format_recent,
+            time_format_older,
             context,
             selinux_supported: {
                 #[cfg(feature = "selinux")]
@@ -1145,22 +1103,11 @@ impl Config {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let command = uu_app();
-
-    let matches = match command.try_get_matches_from(args) {
-        // clap successfully parsed the arguments:
+    let matches = match uu_app().try_get_matches_from(args) {
         Ok(matches) => matches,
-        // --help, --version, etc.:
-        Err(e) if e.exit_code() == 0 => {
-            return Err(e.into());
-        }
-        // Errors in argument *values* cause exit code 1:
-        Err(e) if e.kind() == clap::error::ErrorKind::InvalidValue => {
-            return Err(USimpleError::new(1, e.to_string()));
-        }
-        // All other argument parsing errors cause exit code 2:
         Err(e) => {
-            return Err(USimpleError::new(2, e.to_string()));
+            // Use localization handler for all clap errors
+            uucore::clap_localization::handle_clap_error_with_exit_code(e, "ls", 2);
         }
     };
 
@@ -1168,8 +1115,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let locs = matches
         .get_many::<OsString>(options::PATHS)
-        .map(|v| v.map(Path::new).collect())
-        .unwrap_or_else(|| vec![Path::new(".")]);
+        .map_or_else(|| vec![Path::new(".")], |v| v.map(Path::new).collect());
 
     list(locs, &config)
 }
@@ -1177,22 +1123,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("ls-usage")))
-        .about(get_message("ls-about"))
+        .override_usage(format_usage(&translate!("ls-usage")))
+        .about(translate!("ls-about"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .infer_long_args(true)
         .disable_help_flag(true)
         .args_override_self(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help("Print help information.")
+                .help(translate!("ls-help-print-help"))
                 .action(ArgAction::Help),
         )
         // Format arguments
         .arg(
             Arg::new(options::FORMAT)
                 .long(options::FORMAT)
-                .help("Set the display format.")
+                .help(translate!("ls-help-set-display-format"))
                 .value_parser(ShortcutValueParser::new([
                     "long",
                     "verbose",
@@ -1217,7 +1164,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::format::COLUMNS)
                 .short('C')
-                .help("Display the files in columns.")
+                .help(translate!("ls-help-display-files-columns"))
                 .overrides_with_all([
                     options::FORMAT,
                     options::format::COLUMNS,
@@ -1231,7 +1178,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::format::LONG)
                 .short('l')
                 .long(options::format::LONG)
-                .help("Display detailed information.")
+                .help(translate!("ls-help-display-detailed-info"))
                 .overrides_with_all([
                     options::FORMAT,
                     options::format::COLUMNS,
@@ -1244,7 +1191,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::format::ACROSS)
                 .short('x')
-                .help("List entries in rows instead of in columns.")
+                .help(translate!("ls-help-list-entries-rows"))
                 .overrides_with_all([
                     options::FORMAT,
                     options::format::COLUMNS,
@@ -1260,12 +1207,12 @@ pub fn uu_app() -> Command {
                 .long(options::format::TAB_SIZE)
                 .env("TABSIZE")
                 .value_name("COLS")
-                .help("Assume tab stops at each COLS instead of 8"),
+                .help(translate!("ls-help-assume-tab-stops")),
         )
         .arg(
             Arg::new(options::format::COMMAS)
                 .short('m')
-                .help("List entries separated by commas.")
+                .help(translate!("ls-help-list-entries-commas"))
                 .overrides_with_all([
                     options::FORMAT,
                     options::format::COLUMNS,
@@ -1279,21 +1226,21 @@ pub fn uu_app() -> Command {
             Arg::new(options::ZERO)
                 .long(options::ZERO)
                 .overrides_with(options::ZERO)
-                .help("List entries separated by ASCII NUL characters.")
+                .help(translate!("ls-help-list-entries-nul"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DIRED)
                 .long(options::DIRED)
                 .short('D')
-                .help("generate output designed for Emacs' dired (Directory Editor) mode")
+                .help(translate!("ls-help-generate-dired-output"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::HYPERLINK),
         )
         .arg(
             Arg::new(options::HYPERLINK)
                 .long(options::HYPERLINK)
-                .help("hyperlink file names WHEN")
+                .help(translate!("ls-help-hyperlink-filenames"))
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("always").alias("yes").alias("force"),
                     PossibleValue::new("auto").alias("tty").alias("if-tty"),
@@ -1315,36 +1262,33 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::format::ONE_LINE)
                 .short('1')
-                .help("List one file per line.")
+                .help(translate!("ls-help-list-one-file-per-line"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::format::LONG_NO_GROUP)
                 .short('o')
-                .help(
-                    "Long format without group information. \
-                        Identical to --format=long with --no-group.",
-                )
+                .help(translate!("ls-help-long-format-no-group"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::format::LONG_NO_OWNER)
                 .short('g')
-                .help("Long format without owner information.")
+                .help(translate!("ls-help-long-no-owner"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::format::LONG_NUMERIC_UID_GID)
                 .short('n')
                 .long(options::format::LONG_NUMERIC_UID_GID)
-                .help("-l with numeric UIDs and GIDs.")
+                .help(translate!("ls-help-long-numeric-uid-gid"))
                 .action(ArgAction::SetTrue),
         )
         // Quoting style
         .arg(
-            Arg::new(options::QUOTING_STYLE)
-                .long(options::QUOTING_STYLE)
-                .help("Set quoting style.")
+            Arg::new(QUOTING_STYLE)
+                .long(QUOTING_STYLE)
+                .help(translate!("ls-help-set-quoting-style"))
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("literal"),
                     PossibleValue::new("shell"),
@@ -1355,7 +1299,7 @@ pub fn uu_app() -> Command {
                     PossibleValue::new("escape"),
                 ]))
                 .overrides_with_all([
-                    options::QUOTING_STYLE,
+                    QUOTING_STYLE,
                     options::quoting::LITERAL,
                     options::quoting::ESCAPE,
                     options::quoting::C,
@@ -1366,9 +1310,9 @@ pub fn uu_app() -> Command {
                 .short('N')
                 .long(options::quoting::LITERAL)
                 .alias("l")
-                .help("Use literal quoting style. Equivalent to `--quoting-style=literal`")
+                .help(translate!("ls-help-literal-quoting-style"))
                 .overrides_with_all([
-                    options::QUOTING_STYLE,
+                    QUOTING_STYLE,
                     options::quoting::LITERAL,
                     options::quoting::ESCAPE,
                     options::quoting::C,
@@ -1379,9 +1323,9 @@ pub fn uu_app() -> Command {
             Arg::new(options::quoting::ESCAPE)
                 .short('b')
                 .long(options::quoting::ESCAPE)
-                .help("Use escape quoting style. Equivalent to `--quoting-style=escape`")
+                .help(translate!("ls-help-escape-quoting-style"))
                 .overrides_with_all([
-                    options::QUOTING_STYLE,
+                    QUOTING_STYLE,
                     options::quoting::LITERAL,
                     options::quoting::ESCAPE,
                     options::quoting::C,
@@ -1392,9 +1336,9 @@ pub fn uu_app() -> Command {
             Arg::new(options::quoting::C)
                 .short('Q')
                 .long(options::quoting::C)
-                .help("Use C quoting style. Equivalent to `--quoting-style=c`")
+                .help(translate!("ls-help-c-quoting-style"))
                 .overrides_with_all([
-                    options::QUOTING_STYLE,
+                    QUOTING_STYLE,
                     options::quoting::LITERAL,
                     options::quoting::ESCAPE,
                     options::quoting::C,
@@ -1406,14 +1350,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::HIDE_CONTROL_CHARS)
                 .short('q')
                 .long(options::HIDE_CONTROL_CHARS)
-                .help("Replace control characters with '?' if they are not escaped.")
+                .help(translate!("ls-help-replace-control-chars"))
                 .overrides_with_all([options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS])
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHOW_CONTROL_CHARS)
                 .long(options::SHOW_CONTROL_CHARS)
-                .help("Show control characters 'as is' if they are not escaped.")
+                .help(translate!("ls-help-show-control-chars"))
                 .overrides_with_all([options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS])
                 .action(ArgAction::SetTrue),
         )
@@ -1421,13 +1365,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::TIME)
                 .long(options::TIME)
-                .help(
-                    "Show time in <field>:\n\
-                        \taccess time (-u): atime, access, use;\n\
-                        \tchange time (-t): ctime, status.\n\
-                        \tmodification time: mtime, modification.\n\
-                        \tbirth time: birth, creation;",
-                )
+                .help(translate!("ls-help-show-time-field"))
                 .value_name("field")
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("atime").alias("access").alias("use"),
@@ -1442,24 +1380,14 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::time::CHANGE)
                 .short('c')
-                .help(
-                    "If the long listing format (e.g., -l, -o) is being used, print the \
-                        status change time (the 'ctime' in the inode) instead of the modification \
-                        time. When explicitly sorting by time (--sort=time or -t) or when not \
-                        using a long listing format, sort according to the status change time.",
-                )
+                .help(translate!("ls-help-time-change"))
                 .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::time::ACCESS)
                 .short('u')
-                .help(
-                    "If the long listing format (e.g., -l, -o) is being used, print the \
-                        status access time instead of the modification time. When explicitly \
-                        sorting by time (--sort=time or -t) or when not using a long listing \
-                        format, sort according to the access time.",
-                )
+                .help(translate!("ls-help-time-access"))
                 .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE])
                 .action(ArgAction::SetTrue),
         )
@@ -1469,9 +1397,7 @@ pub fn uu_app() -> Command {
                 .long(options::HIDE)
                 .action(ArgAction::Append)
                 .value_name("PATTERN")
-                .help(
-                    "do not list implied entries matching shell PATTERN (overridden by -a or -A)",
-                ),
+                .help(translate!("ls-help-hide-pattern")),
         )
         .arg(
             Arg::new(options::IGNORE)
@@ -1479,22 +1405,30 @@ pub fn uu_app() -> Command {
                 .long(options::IGNORE)
                 .action(ArgAction::Append)
                 .value_name("PATTERN")
-                .help("do not list implied entries matching shell PATTERN"),
+                .help(translate!("ls-help-ignore-pattern")),
         )
         .arg(
             Arg::new(options::IGNORE_BACKUPS)
                 .short('B')
                 .long(options::IGNORE_BACKUPS)
-                .help("Ignore entries which end with ~.")
+                .help(translate!("ls-help-ignore-backups"))
                 .action(ArgAction::SetTrue),
         )
         // Sort arguments
         .arg(
             Arg::new(options::SORT)
                 .long(options::SORT)
-                .help("Sort by <field>: name, none (-U), time (-t), size (-S), extension (-X) or width")
+                .help(translate!("ls-help-sort-by-field"))
                 .value_name("field")
-                .value_parser(ShortcutValueParser::new(["name", "none", "time", "size", "version", "extension", "width"]))
+                .value_parser(ShortcutValueParser::new([
+                    "name",
+                    "none",
+                    "time",
+                    "size",
+                    "version",
+                    "extension",
+                    "width",
+                ]))
                 .require_equals(true)
                 .overrides_with_all([
                     options::SORT,
@@ -1508,7 +1442,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::sort::SIZE)
                 .short('S')
-                .help("Sort by file size, largest first.")
+                .help(translate!("ls-help-sort-by-size"))
                 .overrides_with_all([
                     options::SORT,
                     options::sort::SIZE,
@@ -1522,7 +1456,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::sort::TIME)
                 .short('t')
-                .help("Sort by modification time (the 'mtime' in the inode), newest first.")
+                .help(translate!("ls-help-sort-by-time"))
                 .overrides_with_all([
                     options::SORT,
                     options::sort::SIZE,
@@ -1536,7 +1470,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::sort::VERSION)
                 .short('v')
-                .help("Natural sort of (version) numbers in the filenames.")
+                .help(translate!("ls-help-sort-by-version"))
                 .overrides_with_all([
                     options::SORT,
                     options::sort::SIZE,
@@ -1550,7 +1484,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::sort::EXTENSION)
                 .short('X')
-                .help("Sort alphabetically by entry extension.")
+                .help(translate!("ls-help-sort-by-extension"))
                 .overrides_with_all([
                     options::SORT,
                     options::sort::SIZE,
@@ -1564,11 +1498,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::sort::NONE)
                 .short('U')
-                .help(
-                    "Do not sort; list the files in whatever order they are stored in the \
-                    directory.  This is especially useful when listing very large directories, \
-                    since not doing any sorting can be noticeably faster.",
-                )
+                .help(translate!("ls-help-sort-none"))
                 .overrides_with_all([
                     options::SORT,
                     options::sort::SIZE,
@@ -1584,10 +1514,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::dereference::ALL)
                 .short('L')
                 .long(options::dereference::ALL)
-                .help(
-                    "When showing file information for a symbolic link, show information for the \
-                    file the link references rather than the link itself.",
-                )
+                .help(translate!("ls-help-dereference-all"))
                 .overrides_with_all([
                     options::dereference::ALL,
                     options::dereference::DIR_ARGS,
@@ -1598,10 +1525,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::dereference::DIR_ARGS)
                 .long(options::dereference::DIR_ARGS)
-                .help(
-                    "Do not follow symlinks except when they link to directories and are \
-                    given as command line arguments.",
-                )
+                .help(translate!("ls-help-dereference-dir-args"))
                 .overrides_with_all([
                     options::dereference::ALL,
                     options::dereference::DIR_ARGS,
@@ -1613,7 +1537,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::dereference::ARGS)
                 .short('H')
                 .long(options::dereference::ARGS)
-                .help("Do not follow symlinks except when given as command line arguments.")
+                .help(translate!("ls-help-dereference-args"))
                 .overrides_with_all([
                     options::dereference::ALL,
                     options::dereference::DIR_ARGS,
@@ -1626,13 +1550,15 @@ pub fn uu_app() -> Command {
             Arg::new(options::NO_GROUP)
                 .long(options::NO_GROUP)
                 .short('G')
-                .help("Do not show group in long format.")
+                .help(translate!("ls-help-no-group"))
                 .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(options::AUTHOR).long(options::AUTHOR).help(
-            "Show author in long format. On the supported platforms, \
-            the author always matches the file owner.",
-        ).action(ArgAction::SetTrue))
+        .arg(
+            Arg::new(options::AUTHOR)
+                .long(options::AUTHOR)
+                .help(translate!("ls-help-author"))
+                .action(ArgAction::SetTrue),
+        )
         // Other Flags
         .arg(
             Arg::new(options::files::ALL)
@@ -1640,7 +1566,7 @@ pub fn uu_app() -> Command {
                 .long(options::files::ALL)
                 // Overrides -A (as the order matters)
                 .overrides_with_all([options::files::ALL, options::files::ALMOST_ALL])
-                .help("Do not ignore hidden files (files with names that start with '.').")
+                .help(translate!("ls-help-all-files"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -1649,29 +1575,21 @@ pub fn uu_app() -> Command {
                 .long(options::files::ALMOST_ALL)
                 // Overrides -a (as the order matters)
                 .overrides_with_all([options::files::ALL, options::files::ALMOST_ALL])
-                .help(
-                    "In a directory, do not ignore all file names that start with '.', \
-                    only ignore '.' and '..'.",
-                )
+                .help(translate!("ls-help-almost-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DIRECTORY)
                 .short('d')
                 .long(options::DIRECTORY)
-                .help(
-                    "Only list the names of directories, rather than listing directory contents. \
-                    This will not follow symbolic links unless one of `--dereference-command-line \
-                    (-H)`, `--dereference (-L)`, or `--dereference-command-line-symlink-to-dir` is \
-                    specified.",
-                )
+                .help(translate!("ls-help-directory"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::size::HUMAN_READABLE)
                 .short('h')
                 .long(options::size::HUMAN_READABLE)
-                .help("Print human readable file sizes (e.g. 1K 234M 56G).")
+                .help(translate!("ls-help-human-readable"))
                 .overrides_with_all([options::size::BLOCK_SIZE, options::size::SI])
                 .action(ArgAction::SetTrue),
         )
@@ -1679,16 +1597,13 @@ pub fn uu_app() -> Command {
             Arg::new(options::size::KIBIBYTES)
                 .short('k')
                 .long(options::size::KIBIBYTES)
-                .help(
-                    "default to 1024-byte blocks for file system usage; used only with -s and per \
-                    directory totals",
-                )
+                .help(translate!("ls-help-kibibytes"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::size::SI)
                 .long(options::size::SI)
-                .help("Print human readable file sizes using powers of 1000 instead of 1024.")
+                .help(translate!("ls-help-si"))
                 .overrides_with_all([options::size::BLOCK_SIZE, options::size::HUMAN_READABLE])
                 .action(ArgAction::SetTrue),
         )
@@ -1697,51 +1612,48 @@ pub fn uu_app() -> Command {
                 .long(options::size::BLOCK_SIZE)
                 .require_equals(true)
                 .value_name("BLOCK_SIZE")
-                .help("scale sizes by BLOCK_SIZE when printing them")
+                .help(translate!("ls-help-block-size"))
                 .overrides_with_all([options::size::SI, options::size::HUMAN_READABLE]),
         )
         .arg(
             Arg::new(options::INODE)
                 .short('i')
                 .long(options::INODE)
-                .help("print the index number of each file")
+                .help(translate!("ls-help-print-inode"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::REVERSE)
                 .short('r')
                 .long(options::REVERSE)
-                .help(
-                    "Reverse whatever the sorting method is e.g., list files in reverse \
-            alphabetical order, youngest first, smallest first, or whatever.",
-                )
+                .help(translate!("ls-help-reverse-sort"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::RECURSIVE)
                 .short('R')
                 .long(options::RECURSIVE)
-                .help("List the contents of all directories recursively.")
+                .help(translate!("ls-help-recursive"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::WIDTH)
                 .long(options::WIDTH)
                 .short('w')
-                .help("Assume that the terminal is COLS columns wide.")
+                .help(translate!("ls-help-terminal-width"))
                 .value_name("COLS"),
         )
         .arg(
             Arg::new(options::size::ALLOCATION_SIZE)
                 .short('s')
                 .long(options::size::ALLOCATION_SIZE)
-                .help("print the allocated size of each file, in blocks")
+                .help(translate!("ls-help-allocation-size"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COLOR)
                 .long(options::COLOR)
-                .help("Color output based on file type.")
+                .help(translate!("ls-help-color-output"))
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("always").alias("yes").alias("force"),
                     PossibleValue::new("auto").alias("tty").alias("if-tty"),
@@ -1753,11 +1665,13 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::INDICATOR_STYLE)
                 .long(options::INDICATOR_STYLE)
-                .help(
-                    "Append indicator with style WORD to entry names: \
-                none (default),  slash (-p), file-type (--file-type), classify (-F)",
-                )
-                .value_parser(ShortcutValueParser::new(["none", "slash", "file-type", "classify"]))
+                .help(translate!("ls-help-indicator-style"))
+                .value_parser(ShortcutValueParser::new([
+                    "none",
+                    "slash",
+                    "file-type",
+                    "classify",
+                ]))
                 .overrides_with_all([
                     options::indicator_style::FILE_TYPE,
                     options::indicator_style::SLASH,
@@ -1774,19 +1688,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::indicator_style::CLASSIFY)
                 .short('F')
                 .long(options::indicator_style::CLASSIFY)
-                .help(
-                    "Append a character to each file name indicating the file type. Also, for \
-                    regular files that are executable, append '*'. The file type indicators are \
-                    '/' for directories, '@' for symbolic links, '|' for FIFOs, '=' for sockets, \
-                    '>' for doors, and nothing for regular files. when may be omitted, or one of:\n\
-                        \tnone - Do not classify. This is the default.\n\
-                        \tauto - Only classify if standard output is a terminal.\n\
-                        \talways - Always classify.\n\
-                    Specifying --classify and no when is equivalent to --classify=always. This will \
-                    not follow symbolic links listed on the command line unless the \
-                    --dereference-command-line (-H), --dereference (-L), or \
-                    --dereference-command-line-symlink-to-dir options are specified.",
-                )
+                .help(translate!("ls-help-classify"))
                 .value_name("when")
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("always").alias("yes").alias("force"),
@@ -1806,7 +1708,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::indicator_style::FILE_TYPE)
                 .long(options::indicator_style::FILE_TYPE)
-                .help("Same as --classify, but do not append '*'")
+                .help(translate!("ls-help-file-type"))
                 .overrides_with_all([
                     options::indicator_style::FILE_TYPE,
                     options::indicator_style::SLASH,
@@ -1818,7 +1720,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::indicator_style::SLASH)
                 .short('p')
-                .help("Append / indicator to directories.")
+                .help(translate!("ls-help-slash-directories"))
                 .overrides_with_all([
                     options::indicator_style::FILE_TYPE,
                     options::indicator_style::SLASH,
@@ -1831,7 +1733,7 @@ pub fn uu_app() -> Command {
             //This still needs support for posix-*
             Arg::new(options::TIME_STYLE)
                 .long(options::TIME_STYLE)
-                .help("time/date format with -l; see TIME_STYLE below")
+                .help(translate!("ls-help-time-style"))
                 .value_name("TIME_STYLE")
                 .env("TIME_STYLE")
                 .value_parser(NonEmptyStringValueParser::new())
@@ -1841,23 +1743,20 @@ pub fn uu_app() -> Command {
             Arg::new(options::FULL_TIME)
                 .long(options::FULL_TIME)
                 .overrides_with(options::FULL_TIME)
-                .help("like -l --time-style=full-iso")
+                .help(translate!("ls-help-full-time"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CONTEXT)
                 .short('Z')
                 .long(options::CONTEXT)
-                .help(CONTEXT_HELP_TEXT)
+                .help(translate!("ls-help-context"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::GROUP_DIRECTORIES_FIRST)
                 .long(options::GROUP_DIRECTORIES_FIRST)
-                .help(
-                    "group directories before files; can be augmented with \
-                    a --sort option, but any use of --sort=none (-U) disables grouping",
-                )
+                .help(translate!("ls-help-group-directories-first"))
                 .action(ArgAction::SetTrue),
         )
         // Positional arguments
@@ -1867,7 +1766,7 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::AnyPath)
                 .value_parser(ValueParser::os_string()),
         )
-        .after_help(get_message("ls-after-help"))
+        .after_help(translate!("ls-after-help"))
 }
 
 /// Represents a Path along with it's associated data.
@@ -1957,11 +1856,7 @@ impl PathData {
             None => OnceCell::new(),
         };
 
-        let security_context = if config.context {
-            get_security_context(config, &p_buf, must_dereference)
-        } else {
-            String::new()
-        };
+        let security_context = get_security_context(config, &p_buf, must_dereference);
 
         Self {
             md: OnceCell::new(),
@@ -2038,7 +1933,7 @@ fn show_dir_name(
     config: &Config,
 ) -> std::io::Result<()> {
     let escaped_name =
-        quoting_style::escape_dir_name(path_data.p_buf.as_os_str(), &config.quoting_style);
+        locale_aware_escape_dir_name(path_data.p_buf.as_os_str(), config.quoting_style);
 
     let name = if config.hyperlink && !config.dired {
         create_hyperlink(&escaped_name, path_data)
@@ -2063,7 +1958,7 @@ struct ListState<'a> {
     uid_cache: HashMap<u32, String>,
     #[cfg(unix)]
     gid_cache: HashMap<u32, String>,
-    recent_time_threshold: Timestamp,
+    recent_time_range: RangeInclusive<SystemTime>,
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -2080,7 +1975,11 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         uid_cache: HashMap::new(),
         #[cfg(unix)]
         gid_cache: HashMap::new(),
-        recent_time_threshold: Timestamp::now() - Duration::new(31_556_952 / 2, 0),
+        // Time range for which to use the "recent" format. Anything from 0.5 year in the past to now
+        // (files with modification time in the future use "old" format).
+        // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
+        recent_time_range: (SystemTime::now() - Duration::new(31_556_952 / 2, 0))
+            ..=SystemTime::now(),
     };
 
     for loc in locs {
@@ -2189,18 +2088,21 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
                 k.get_metadata(out)
-                    .and_then(|md| get_system_time(md, config))
+                    .and_then(|md| metadata_get_time(md, config.time))
                     .unwrap_or(UNIX_EPOCH),
             )
         }),
         Sort::Size => {
-            entries.sort_by_key(|k| Reverse(k.get_metadata(out).map(|md| md.len()).unwrap_or(0)));
+            entries.sort_by_key(|k| Reverse(k.get_metadata(out).map_or(0, |md| md.len())));
         }
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
         Sort::Version => entries.sort_by(|a, b| {
-            version_cmp(&a.p_buf.to_string_lossy(), &b.p_buf.to_string_lossy())
-                .then(a.p_buf.to_string_lossy().cmp(&b.p_buf.to_string_lossy()))
+            version_cmp(
+                os_str_as_bytes_lossy(a.p_buf.as_os_str()).as_ref(),
+                os_str_as_bytes_lossy(b.p_buf.as_os_str()).as_ref(),
+            )
+            .then(a.p_buf.to_string_lossy().cmp(&b.p_buf.to_string_lossy()))
         }),
         Sort::Extension => entries.sort_by(|a, b| {
             a.p_buf
@@ -2253,8 +2155,7 @@ fn is_hidden(file_path: &DirEntry) -> bool {
         file_path
             .file_name()
             .to_str()
-            .map(|res| res.starts_with('.'))
-            .unwrap_or(false)
+            .is_some_and(|res| res.starts_with('.'))
     }
 }
 
@@ -2333,7 +2234,7 @@ fn enter_directory(
             let entry_path_data =
                 PathData::new(dir_entry.path(), Some(Ok(dir_entry)), None, config, false);
             entries.push(entry_path_data);
-        };
+        }
     }
 
     sort_entries(&mut entries, config, &mut state.out);
@@ -2366,7 +2267,6 @@ fn enter_directory(
                         err,
                         e.command_line
                     ));
-                    continue;
                 }
                 Ok(rd) => {
                     if listed_ancestors
@@ -2483,8 +2383,8 @@ fn return_total(
         dired::indent(out)?;
     }
     Ok(format!(
-        "total {}{}",
-        display_size(total_size, config),
+        "{}{}",
+        translate!("ls-total", "size" => display_size(total_size, config)),
         config.line_ending
     ))
 }
@@ -2519,7 +2419,7 @@ fn display_additional_leading_info(
             write!(result, "{s} ").unwrap();
         } else {
             write!(result, "{} ", pad_left(&s, padding.block_size)).unwrap();
-        };
+        }
     }
     Ok(result)
 }
@@ -2536,7 +2436,7 @@ fn display_items(
     // option, print the security context to the left of the size column.
 
     let quoted = items.iter().any(|item| {
-        let name = escape_name(&item.display_name, &config.quoting_style);
+        let name = locale_aware_escape_name(&item.display_name, config.quoting_style);
         os_str_starts_with(&name, b"'")
     });
 
@@ -2653,7 +2553,7 @@ fn display_items(
                     write!(state.out, "{}", config.line_ending)?;
                 }
             }
-        };
+        }
     }
 
     Ok(())
@@ -2761,7 +2661,7 @@ fn display_grid(
     Ok(())
 }
 
-/// This writes to the BufWriter state.out a single string of the output of `ls -l`.
+/// This writes to the [`BufWriter`] `state.out` a single string of the output of `ls -l`.
 ///
 /// It writes the following keys, in order:
 /// * `inode` ([`get_inode`], config-optional)
@@ -2771,12 +2671,12 @@ fn display_grid(
 /// * `group` ([`display_group`], config-optional)
 /// * `author` ([`display_uname`], config-optional)
 /// * `size / rdev` ([`display_len_or_rdev`])
-/// * `system_time` ([`get_system_time`])
+/// * `system_time` ([`display_date`])
 /// * `item_name` ([`display_item_name`])
 ///
 /// This function needs to display information in columns:
-/// * permissions and system_time are already guaranteed to be pre-formatted in fixed length.
-/// * item_name is the last column and is left-aligned.
+/// * permissions and `system_time` are already guaranteed to be pre-formatted in fixed length.
+/// * `item_name` is the last column and is left-aligned.
 /// * Everything else needs to be padded using [`pad_left`].
 ///
 /// That's why we have the parameters:
@@ -2873,7 +2773,7 @@ fn display_item_long(
                     padding.minor,
                 );
             }
-        };
+        }
 
         output_display.extend(b" ");
         display_date(md, config, state, &mut output_display)?;
@@ -3049,50 +2949,25 @@ fn display_group(_metadata: &Metadata, _config: &Config, _state: &mut ListState)
     "somegroup"
 }
 
-// The implementations for get_time are separated because some options, such
-// as ctime will not be available
-#[cfg(unix)]
-fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
-    match config.time {
-        Time::Change => Some(UNIX_EPOCH + Duration::new(md.ctime() as u64, md.ctime_nsec() as u32)),
-        Time::Modification => md.modified().ok(),
-        Time::Access => md.accessed().ok(),
-        Time::Birth => md.created().ok(),
-    }
-}
-
-#[cfg(not(unix))]
-fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
-    match config.time {
-        Time::Modification => md.modified().ok(),
-        Time::Access => md.accessed().ok(),
-        Time::Birth => md.created().ok(),
-        Time::Change => None,
-    }
-}
-
-fn get_time(md: &Metadata, config: &Config) -> Option<Zoned> {
-    let time = get_system_time(md, config)?;
-    time.try_into().ok()
-}
-
 fn display_date(
     metadata: &Metadata,
     config: &Config,
     state: &mut ListState,
     out: &mut Vec<u8>,
 ) -> UResult<()> {
-    match get_time(metadata, config) {
-        // TODO: Some fancier error conversion might be nice.
-        Some(time) => config
-            .time_style
-            .format(time, out, state)
-            .map_err(|x| USimpleError::new(1, x.to_string())),
-        None => {
-            out.extend(b"???");
-            Ok(())
-        }
-    }
+    let Some(time) = metadata_get_time(metadata, config.time) else {
+        out.extend(b"???");
+        return Ok(());
+    };
+
+    // Use "recent" format if the given date is considered recent (i.e., in the last 6 months),
+    // or if no "older" format is available.
+    let fmt = match &config.time_format_older {
+        Some(time_format_older) if !state.recent_time_range.contains(&time) => time_format_older,
+        _ => &config.time_format_recent,
+    };
+
+    format_system_time(out, time, fmt, FormatSystemTimeFallback::Integer)
 }
 
 #[allow(dead_code)]
@@ -3179,7 +3054,7 @@ fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
 /// Takes a [`PathData`] struct and returns a cell with a name ready for displaying.
 ///
 /// This function relies on the following parameters in the provided `&Config`:
-/// * `config.quoting_style` to decide how we will escape `name` using [`escape_name`].
+/// * `config.quoting_style` to decide how we will escape `name` using [`locale_aware_escape_name`].
 /// * `config.inode` decides whether to display inode numbers beside names using [`get_inode`].
 /// * `config.color` decides whether it's going to color `name` using [`color_name`].
 /// * `config.indicator_style` to append specific characters to `name` using [`classify_file`].
@@ -3200,7 +3075,7 @@ fn display_item_name(
     current_column: LazyCell<usize, Box<dyn FnOnce() -> usize + '_>>,
 ) -> OsString {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
-    let mut name = escape_name(&path.display_name, &config.quoting_style);
+    let mut name = locale_aware_escape_name(&path.display_name, config.quoting_style);
 
     let is_wrap =
         |namelen: usize| config.width != 0 && *current_column + namelen > config.width.into();
@@ -3292,7 +3167,7 @@ fn display_item_name(
                         name.push(path.p_buf.read_link().unwrap());
                     } else {
                         name.push(color_name(
-                            escape_name(target.as_os_str(), &config.quoting_style),
+                            locale_aware_escape_name(target.as_os_str(), config.quoting_style),
                             path,
                             style_manager,
                             &mut state.out,
@@ -3303,7 +3178,10 @@ fn display_item_name(
                 } else {
                     // If no coloring is required, we just use target as is.
                     // Apply the right quoting
-                    name.push(escape_name(target.as_os_str(), &config.quoting_style));
+                    name.push(locale_aware_escape_name(
+                        target.as_os_str(),
+                        config.quoting_style,
+                    ));
                 }
             }
             Err(err) => {
@@ -3378,8 +3256,8 @@ fn display_inode(metadata: &Metadata) -> String {
     get_inode(metadata)
 }
 
-// This returns the SELinux security context as UTF8 `String`.
-// In the long term this should be changed to `OsStr`, see discussions at #2621/#2656
+/// This returns the `SELinux` security context as UTF8 `String`.
+/// In the long term this should be changed to [`OsStr`], see discussions at #2621/#2656
 fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -> String {
     let substitute_string = "?".to_string();
     // If we must dereference, ensure that the symlink is actually valid even if the system
@@ -3390,7 +3268,10 @@ fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -
             Err(err) => {
                 // The Path couldn't be dereferenced, so return early and set exit code 1
                 // to indicate a minor error
-                show!(LsError::IOErrorContext(p_buf.to_path_buf(), err, false));
+                // Only show error when context display is requested to avoid duplicate messages
+                if config.context {
+                    show!(LsError::IOErrorContext(p_buf.to_path_buf(), err, false));
+                }
                 return substitute_string;
             }
             Ok(_md) => (),

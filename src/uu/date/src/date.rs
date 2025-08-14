@@ -14,14 +14,14 @@ use libc::{CLOCK_REALTIME, clock_settime, timespec};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
+use uucore::translate;
 use uucore::{format_usage, show};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
-use uucore::locale::get_message;
+use uucore::LocalizedCommand;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 
 // Options
@@ -42,29 +42,6 @@ const OPT_SET: &str = "set";
 const OPT_REFERENCE: &str = "reference";
 const OPT_UNIVERSAL: &str = "universal";
 const OPT_UNIVERSAL_2: &str = "utc";
-
-// Help strings
-
-static ISO_8601_HELP_STRING: &str = "output date/time in ISO 8601 format.
- FMT='date' for date only (the default),
- 'hours', 'minutes', 'seconds', or 'ns'
- for date and time to the indicated precision.
- Example: 2006-08-14T02:34:56-06:00";
-
-static RFC_5322_HELP_STRING: &str = "output date and time in RFC 5322 format.
- Example: Mon, 14 Aug 2006 02:34:56 -0600";
-
-static RFC_3339_HELP_STRING: &str = "output date/time in RFC 3339 format.
- FMT='date', 'seconds', or 'ns'
- for date and time to the indicated precision.
- Example: 2006-08-14 02:34:56-06:00";
-
-#[cfg(not(any(target_os = "macos", target_os = "redox")))]
-static OPT_SET_HELP_STRING: &str = "set time described by STRING";
-#[cfg(target_os = "macos")]
-static OPT_SET_HELP_STRING: &str = "set time described by STRING (not available on mac yet)";
-#[cfg(target_os = "redox")]
-static OPT_SET_HELP_STRING: &str = "set time described by STRING (not available on redox yet)";
 
 /// Settings for this program, parsed from the command line
 struct Settings {
@@ -135,13 +112,13 @@ impl From<&str> for Rfc3339Format {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let format = if let Some(form) = matches.get_one::<String>(OPT_FORMAT) {
         if !form.starts_with('+') {
             return Err(USimpleError::new(
                 1,
-                format!("invalid date {}", form.quote()),
+                translate!("date-error-invalid-date", "date" => form),
             ));
         }
         let form = form[1..].to_string();
@@ -182,7 +159,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(Err((input, _err))) => {
             return Err(USimpleError::new(
                 1,
-                format!("invalid date {}", input.quote()),
+                translate!("date-error-invalid-date", "date" => input),
             ));
         }
         Some(Ok(date)) => Some(date),
@@ -204,81 +181,81 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         };
 
         return set_system_datetime(date);
-    } else {
-        // Get the current time, either in the local time zone or UTC.
-        let now = if settings.utc {
-            Timestamp::now().to_zoned(TimeZone::UTC)
-        } else {
-            Zoned::now()
-        };
+    }
 
-        // Iterate over all dates - whether it's a single date or a file.
-        let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
-            DateSource::Custom(ref input) => {
-                let date = parse_date(input);
-                let iter = std::iter::once(date);
-                Box::new(iter)
-            }
-            DateSource::Human(relative_time) => {
-                // Double check the result is overflow or not of the current_time + relative_time
-                // it may cause a panic of chrono::datetime::DateTime add
-                match now.checked_add(relative_time) {
-                    Ok(date) => {
-                        let iter = std::iter::once(Ok(date));
-                        Box::new(iter)
-                    }
-                    Err(_) => {
-                        return Err(USimpleError::new(
-                            1,
-                            format!("invalid date {relative_time}"),
-                        ));
-                    }
+    // Get the current time, either in the local time zone or UTC.
+    let now = if settings.utc {
+        Timestamp::now().to_zoned(TimeZone::UTC)
+    } else {
+        Zoned::now()
+    };
+
+    // Iterate over all dates - whether it's a single date or a file.
+    let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
+        DateSource::Custom(ref input) => {
+            let date = parse_date(input);
+            let iter = std::iter::once(date);
+            Box::new(iter)
+        }
+        DateSource::Human(relative_time) => {
+            // Double check the result is overflow or not of the current_time + relative_time
+            // it may cause a panic of chrono::datetime::DateTime add
+            match now.checked_add(relative_time) {
+                Ok(date) => {
+                    let iter = std::iter::once(Ok(date));
+                    Box::new(iter)
                 }
-            }
-            DateSource::Stdin => {
-                let lines = BufReader::new(std::io::stdin()).lines();
-                let iter = lines.map_while(Result::ok).map(parse_date);
-                Box::new(iter)
-            }
-            DateSource::File(ref path) => {
-                if path.is_dir() {
+                Err(_) => {
                     return Err(USimpleError::new(
-                        2,
-                        format!("expected file, got directory {}", path.quote()),
+                        1,
+                        translate!("date-error-date-overflow", "date" => relative_time),
                     ));
                 }
-                let file = File::open(path)
-                    .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
-                let lines = BufReader::new(file).lines();
-                let iter = lines.map_while(Result::ok).map(parse_date);
-                Box::new(iter)
             }
-            DateSource::Now => {
-                let iter = std::iter::once(Ok(now));
-                Box::new(iter)
+        }
+        DateSource::Stdin => {
+            let lines = BufReader::new(std::io::stdin()).lines();
+            let iter = lines.map_while(Result::ok).map(parse_date);
+            Box::new(iter)
+        }
+        DateSource::File(ref path) => {
+            if path.is_dir() {
+                return Err(USimpleError::new(
+                    2,
+                    translate!("date-error-expected-file-got-directory", "path" => path.to_string_lossy()),
+                ));
             }
-        };
+            let file = File::open(path)
+                .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
+            let lines = BufReader::new(file).lines();
+            let iter = lines.map_while(Result::ok).map(parse_date);
+            Box::new(iter)
+        }
+        DateSource::Now => {
+            let iter = std::iter::once(Ok(now));
+            Box::new(iter)
+        }
+    };
 
-        let format_string = make_format_string(&settings);
+    let format_string = make_format_string(&settings);
 
-        // Format all the dates
-        for date in dates {
-            match date {
-                // TODO: Switch to lenient formatting.
-                Ok(date) => match strtime::format(format_string, &date) {
-                    Ok(s) => println!("{s}"),
-                    Err(e) => {
-                        return Err(USimpleError::new(
-                            1,
-                            format!("invalid format {} ({e})", format_string),
-                        ));
-                    }
-                },
-                Err((input, _err)) => show!(USimpleError::new(
-                    1,
-                    format!("invalid date {}", input.quote())
-                )),
-            }
+    // Format all the dates
+    for date in dates {
+        match date {
+            // TODO: Switch to lenient formatting.
+            Ok(date) => match strtime::format(format_string, &date) {
+                Ok(s) => println!("{s}"),
+                Err(e) => {
+                    return Err(USimpleError::new(
+                        1,
+                        translate!("date-error-invalid-format", "format" => format_string, "error" => e),
+                    ));
+                }
+            },
+            Err((input, _err)) => show!(USimpleError::new(
+                1,
+                translate!("date-error-invalid-date", "date" => input)
+            )),
         }
     }
 
@@ -288,8 +265,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("date-about"))
-        .override_usage(format_usage(&get_message("date-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("date-about"))
+        .override_usage(format_usage(&translate!("date-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_DATE)
@@ -297,7 +275,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_DATE)
                 .value_name("STRING")
                 .allow_hyphen_values(true)
-                .help("display time described by STRING, not 'now'"),
+                .help(translate!("date-help-date")),
         )
         .arg(
             Arg::new(OPT_FILE)
@@ -305,7 +283,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_FILE)
                 .value_name("DATEFILE")
                 .value_hint(clap::ValueHint::FilePath)
-                .help("like --date; once for each line of DATEFILE"),
+                .help(translate!("date-help-file")),
         )
         .arg(
             Arg::new(OPT_ISO_8601)
@@ -317,13 +295,13 @@ pub fn uu_app() -> Command {
                 ]))
                 .num_args(0..=1)
                 .default_missing_value(OPT_DATE)
-                .help(ISO_8601_HELP_STRING),
+                .help(translate!("date-help-iso-8601")),
         )
         .arg(
             Arg::new(OPT_RFC_EMAIL)
                 .short('R')
                 .long(OPT_RFC_EMAIL)
-                .help(RFC_5322_HELP_STRING)
+                .help(translate!("date-help-rfc-email"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -331,12 +309,12 @@ pub fn uu_app() -> Command {
                 .long(OPT_RFC_3339)
                 .value_name("FMT")
                 .value_parser(ShortcutValueParser::new([DATE, SECONDS, NS]))
-                .help(RFC_3339_HELP_STRING),
+                .help(translate!("date-help-rfc-3339")),
         )
         .arg(
             Arg::new(OPT_DEBUG)
                 .long(OPT_DEBUG)
-                .help("annotate the parsed date, and warn about questionable usage to stderr")
+                .help(translate!("date-help-debug"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -345,21 +323,34 @@ pub fn uu_app() -> Command {
                 .long(OPT_REFERENCE)
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::AnyPath)
-                .help("display the last modification time of FILE"),
+                .help(translate!("date-help-reference")),
         )
         .arg(
             Arg::new(OPT_SET)
                 .short('s')
                 .long(OPT_SET)
                 .value_name("STRING")
-                .help(OPT_SET_HELP_STRING),
+                .help({
+                    #[cfg(not(any(target_os = "macos", target_os = "redox")))]
+                    {
+                        translate!("date-help-set")
+                    }
+                    #[cfg(target_os = "macos")]
+                    {
+                        translate!("date-help-set-macos")
+                    }
+                    #[cfg(target_os = "redox")]
+                    {
+                        translate!("date-help-set-redox")
+                    }
+                }),
         )
         .arg(
             Arg::new(OPT_UNIVERSAL)
                 .short('u')
                 .long(OPT_UNIVERSAL)
                 .alias(OPT_UNIVERSAL_2)
-                .help("print or set Coordinated Universal Time (UTC)")
+                .help(translate!("date-help-universal"))
                 .action(ArgAction::SetTrue),
         )
         .arg(Arg::new(OPT_FORMAT))
@@ -427,7 +418,7 @@ fn set_system_datetime(_date: Zoned) -> UResult<()> {
 fn set_system_datetime(_date: Zoned) -> UResult<()> {
     Err(USimpleError::new(
         1,
-        "setting the date is not supported by macOS".to_string(),
+        translate!("date-error-setting-date-not-supported-macos"),
     ))
 }
 
@@ -435,7 +426,7 @@ fn set_system_datetime(_date: Zoned) -> UResult<()> {
 fn set_system_datetime(_date: Zoned) -> UResult<()> {
     Err(USimpleError::new(
         1,
-        "setting the date is not supported by Redox".to_string(),
+        translate!("date-error-setting-date-not-supported-redox"),
     ))
 }
 
@@ -452,20 +443,21 @@ fn set_system_datetime(date: Zoned) -> UResult<()> {
         tv_nsec: ts.subsec_nanosecond() as _,
     };
 
-    let result = unsafe { clock_settime(CLOCK_REALTIME, &timespec) };
+    let result = unsafe { clock_settime(CLOCK_REALTIME, &raw const timespec) };
 
     if result == 0 {
         Ok(())
     } else {
-        Err(std::io::Error::last_os_error().map_err_context(|| "cannot set date".to_string()))
+        Err(std::io::Error::last_os_error()
+            .map_err_context(|| translate!("date-error-cannot-set-date")))
     }
 }
 
 #[cfg(windows)]
 /// System call to set date (Windows).
 /// See here for more:
-/// https://docs.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-setsystemtime
-/// https://docs.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-systemtime
+/// * <https://docs.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-setsystemtime>
+/// * <https://docs.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-systemtime>
 fn set_system_datetime(date: Zoned) -> UResult<()> {
     let system_time = SYSTEMTIME {
         wYear: date.year() as u16,
@@ -480,10 +472,11 @@ fn set_system_datetime(date: Zoned) -> UResult<()> {
         wMilliseconds: ((date.subsec_nanosecond() / 1_000_000) % 1000) as u16,
     };
 
-    let result = unsafe { SetSystemTime(&system_time) };
+    let result = unsafe { SetSystemTime(&raw const system_time) };
 
     if result == 0 {
-        Err(std::io::Error::last_os_error().map_err_context(|| "cannot set date".to_string()))
+        Err(std::io::Error::last_os_error()
+            .map_err_context(|| translate!("date-error-cannot-set-date")))
     } else {
         Ok(())
     }

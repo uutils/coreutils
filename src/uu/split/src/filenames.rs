@@ -43,6 +43,7 @@ use std::path::is_separator;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
+use uucore::translate;
 
 /// The format to use for suffixes in the filename for each output chunk.
 #[derive(Clone, Copy)]
@@ -82,15 +83,15 @@ pub struct Suffix {
 #[derive(Debug, Error)]
 pub enum SuffixError {
     /// Invalid suffix length parameter.
-    #[error("invalid suffix length: {}", .0.quote())]
+    #[error("{}", translate!("split-error-suffix-not-parsable", "value" => .0.quote()))]
     NotParsable(String),
 
     /// Suffix contains a directory separator, which is not allowed.
-    #[error("invalid suffix {}, contains directory separator", .0.quote())]
+    #[error("{}", translate!("split-error-suffix-contains-separator", "value" => .0.quote()))]
     ContainsSeparator(String),
 
     /// Suffix is not large enough to split into specified chunks
-    #[error("the suffix length needs to be at least {0}")]
+    #[error("{}", translate!("split-error-suffix-too-small", "length" => .0))]
     TooSmall(usize),
 }
 
@@ -315,7 +316,7 @@ impl<'a> FilenameIterator<'a> {
                 FixedWidthNumber::new(radix, suffix.length, suffix.start).map_err(|_| {
                     USimpleError::new(
                         1,
-                        "numerical suffix start value is too large for the suffix length",
+                        translate!("split-error-numerical-suffix-start-too-large"),
                     )
                 })?,
             )

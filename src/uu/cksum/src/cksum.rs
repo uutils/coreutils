@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) fname, algo
+
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command, value_parser};
 use std::ffi::{OsStr, OsString};
@@ -17,7 +18,9 @@ use uucore::checksum::{
     ChecksumVerbose, SUPPORTED_ALGORITHMS, calculate_blake2b_length, detect_algo, digest_reader,
     perform_checksum_validation,
 };
-use uucore::locale::get_message;
+use uucore::translate;
+
+use uucore::LocalizedCommand;
 use uucore::{
     encoding,
     error::{FromIo, UResult, USimpleError},
@@ -50,7 +53,7 @@ struct Options {
 /// # Arguments
 ///
 /// * `options` - CLI options for the assigning checksum algorithm
-/// * `files` - A iterator of OsStr which is a bunch of files that are using for calculating checksum
+/// * `files` - A iterator of [`OsStr`] which is a bunch of files that are using for calculating checksum
 #[allow(clippy::cognitive_complexity)]
 fn cksum<'a, I>(mut options: Options, files: I) -> UResult<()>
 where
@@ -87,14 +90,14 @@ where
         if filename.is_dir() {
             show!(USimpleError::new(
                 1,
-                format!("{}: Is a directory", filename.display())
+                translate!("cksum-error-is-directory", "file" => filename.display())
             ));
             continue;
         }
 
         let (sum_hex, sz) =
             digest_reader(&mut options.digest, &mut file, false, options.output_bits)
-                .map_err_context(|| "failed to read input".to_string())?;
+                .map_err_context(|| translate!("cksum-error-failed-to-read-input"))?;
 
         let sum = match options.output_format {
             OutputFormat::Raw => {
@@ -118,6 +121,7 @@ where
                 _ => encoding::for_cksum::BASE64.encode(&hex::decode(sum_hex).unwrap()),
             },
         };
+
         // The BSD checksum output is 5 digit integer
         let bsd_width = 5;
         let (before_filename, should_print_filename, after_filename) = match options.algo_name {
@@ -171,6 +175,7 @@ where
                 }
             }
         };
+
         print!("{before_filename}");
         if should_print_filename {
             // The filename might not be valid UTF-8, and filename.display() would mangle the names.
@@ -179,7 +184,6 @@ where
         }
         print!("{after_filename}{}", options.line_ending);
     }
-
     Ok(())
 }
 
@@ -233,7 +237,7 @@ fn handle_tag_text_binary_flags<S: AsRef<OsStr>>(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let check = matches.get_flag(options::CHECK);
 
@@ -279,6 +283,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if tag || binary_flag || text_flag {
             return Err(ChecksumError::BinaryTextConflict.into());
         }
+
         // Determine the appropriate algorithm option to pass
         let algo_option = if algo_name.is_empty() {
             None
@@ -294,7 +299,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         );
 
         let verbose = ChecksumVerbose::new(status, quiet, warn);
-
         let opts = ChecksumOptions {
             binary: binary_flag,
             ignore_missing,
@@ -332,7 +336,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     match matches.get_many::<OsString>(options::FILE) {
         Some(files) => cksum(opts, files.map(OsStr::new))?,
         None => cksum(opts, iter::once(OsStr::new("-")))?,
-    };
+    }
 
     Ok(())
 }
@@ -340,8 +344,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("cksum-about"))
-        .override_usage(format_usage(&get_message("cksum-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("cksum-about"))
+        .override_usage(format_usage(&translate!("cksum-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
@@ -355,21 +360,21 @@ pub fn uu_app() -> Command {
             Arg::new(options::ALGORITHM)
                 .long(options::ALGORITHM)
                 .short('a')
-                .help("select the digest type to use. See DIGEST below")
+                .help(translate!("cksum-help-algorithm"))
                 .value_name("ALGORITHM")
                 .value_parser(SUPPORTED_ALGORITHMS),
         )
         .arg(
             Arg::new(options::UNTAGGED)
                 .long(options::UNTAGGED)
-                .help("create a reversed style checksum, without digest type")
+                .help(translate!("cksum-help-untagged"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::TAG),
         )
         .arg(
             Arg::new(options::TAG)
                 .long(options::TAG)
-                .help("create a BSD style checksum, undo --untagged (default)")
+                .help(translate!("cksum-help-tag"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::UNTAGGED),
         )
@@ -378,35 +383,32 @@ pub fn uu_app() -> Command {
                 .long(options::LENGTH)
                 .value_parser(value_parser!(usize))
                 .short('l')
-                .help(
-                    "digest length in bits; must not exceed the max for the blake2 algorithm \
-                    and must be a multiple of 8",
-                )
+                .help(translate!("cksum-help-length"))
                 .action(ArgAction::Set),
         )
         .arg(
             Arg::new(options::RAW)
                 .long(options::RAW)
-                .help("emit a raw binary digest, not hexadecimal")
+                .help(translate!("cksum-help-raw"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::STRICT)
                 .long(options::STRICT)
-                .help("exit non-zero for improperly formatted checksum lines")
+                .help(translate!("cksum-help-strict"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CHECK)
                 .short('c')
                 .long(options::CHECK)
-                .help("read hashsums from the FILEs and check them")
+                .help(translate!("cksum-help-check"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::BASE64)
                 .long(options::BASE64)
-                .help("emit a base64 digest, not hexadecimal")
+                .help(translate!("cksum-help-base64"))
                 .action(ArgAction::SetTrue)
                 // Even though this could easily just override an earlier '--raw',
                 // GNU cksum does not permit these flags to be combined:
@@ -432,55 +434,36 @@ pub fn uu_app() -> Command {
             Arg::new(options::WARN)
                 .short('w')
                 .long("warn")
-                .help("warn about improperly formatted checksum lines")
+                .help(translate!("cksum-help-warn"))
                 .action(ArgAction::SetTrue)
                 .overrides_with_all([options::STATUS, options::QUIET]),
         )
         .arg(
             Arg::new(options::STATUS)
                 .long("status")
-                .help("don't output anything, status code shows success")
+                .help(translate!("cksum-help-status"))
                 .action(ArgAction::SetTrue)
                 .overrides_with_all([options::WARN, options::QUIET]),
         )
         .arg(
             Arg::new(options::QUIET)
                 .long(options::QUIET)
-                .help("don't print OK for each successfully verified file")
+                .help(translate!("cksum-help-quiet"))
                 .action(ArgAction::SetTrue)
                 .overrides_with_all([options::WARN, options::STATUS]),
         )
         .arg(
             Arg::new(options::IGNORE_MISSING)
                 .long(options::IGNORE_MISSING)
-                .help("don't fail or report status for missing files")
+                .help(translate!("cksum-help-ignore-missing"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ZERO)
                 .long(options::ZERO)
                 .short('z')
-                .help(
-                    "end each output line with NUL, not newline,\n and disable file name escaping",
-                )
+                .help(translate!("cksum-help-zero"))
                 .action(ArgAction::SetTrue),
         )
-        .after_help(get_message("cksum-after-help"))
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::calculate_blake2b_length;
-
-    #[test]
-    fn test_calculate_length() {
-        assert_eq!(calculate_blake2b_length(256).unwrap(), Some(32));
-        assert_eq!(calculate_blake2b_length(512).unwrap(), None);
-        assert_eq!(calculate_blake2b_length(256).unwrap(), Some(32));
-        calculate_blake2b_length(255).unwrap_err();
-
-        calculate_blake2b_length(33).unwrap_err();
-
-        calculate_blake2b_length(513).unwrap_err();
-    }
+        .after_help(translate!("cksum-after-help"))
 }

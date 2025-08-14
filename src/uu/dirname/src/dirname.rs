@@ -5,12 +5,13 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::path::Path;
+use uucore::LocalizedCommand;
 use uucore::display::print_verbatim;
 use uucore::error::{UResult, UUsageError};
 use uucore::format_usage;
 use uucore::line_ending::LineEnding;
 
-use uucore::locale::get_message;
+use uucore::translate;
 
 mod options {
     pub const ZERO: &str = "zero";
@@ -20,8 +21,8 @@ mod options {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app()
-        .after_help(get_message("dirname-after-help"))
-        .try_get_matches_from(args)?;
+        .after_help(translate!("dirname-after-help"))
+        .get_matches_from_localized(args);
 
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
@@ -32,28 +33,28 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect();
 
     if dirnames.is_empty() {
-        return Err(UUsageError::new(1, get_message("dirname-missing-operand")));
-    } else {
-        for path in &dirnames {
-            let p = Path::new(path);
-            match p.parent() {
-                Some(d) => {
-                    if d.components().next().is_none() {
-                        print!(".");
-                    } else {
-                        print_verbatim(d).unwrap();
-                    }
-                }
-                None => {
-                    if p.is_absolute() || path == "/" {
-                        print!("/");
-                    } else {
-                        print!(".");
-                    }
+        return Err(UUsageError::new(1, translate!("dirname-missing-operand")));
+    }
+
+    for path in &dirnames {
+        let p = Path::new(path);
+        match p.parent() {
+            Some(d) => {
+                if d.components().next().is_none() {
+                    print!(".");
+                } else {
+                    print_verbatim(d).unwrap();
                 }
             }
-            print!("{line_ending}");
+            None => {
+                if p.is_absolute() || path == "/" {
+                    print!("/");
+                } else {
+                    print!(".");
+                }
+            }
         }
+        print!("{line_ending}");
     }
 
     Ok(())
@@ -61,16 +62,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about(get_message("dirname-about"))
+        .about(translate!("dirname-about"))
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("dirname-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .override_usage(format_usage(&translate!("dirname-usage")))
         .args_override_self(true)
         .infer_long_args(true)
         .arg(
             Arg::new(options::ZERO)
                 .long(options::ZERO)
                 .short('z')
-                .help(get_message("dirname-zero-help"))
+                .help(translate!("dirname-zero-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

@@ -33,6 +33,9 @@ PREFIX ?= /usr/local
 DESTDIR ?=
 BINDIR ?= $(PREFIX)/bin
 DATAROOTDIR ?= $(PREFIX)/share
+LIBSTDBUF_DIR ?= $(PREFIX)/libexec/coreutils
+# Export variable so that it is used during the build
+export LIBSTDBUF_DIR
 
 INSTALLDIR_BIN=$(DESTDIR)$(BINDIR)
 
@@ -190,15 +193,17 @@ SELINUX_PROGS := \
 
 $(info Detected OS = $(OS))
 
-# Don't build the SELinux programs on macOS (Darwin)
-ifeq ($(OS),Darwin)
-  SELINUX_PROGS :=
+# Don't build the SELinux programs on macOS (Darwin) and FreeBSD
+ifeq ($(filter $(OS),Darwin FreeBSD),$(OS))
+	SELINUX_PROGS :=
 endif
 
 ifneq ($(OS),Windows_NT)
 	PROGS := $(PROGS) $(UNIX_PROGS)
 # Build the selinux command even if not on the system
 	PROGS := $(PROGS) $(SELINUX_PROGS)
+# Always use external libstdbuf when building with make (Unix only)
+	CARGOFLAGS += --features feat_external_libstdbuf
 endif
 
 UTILS ?= $(PROGS)
@@ -315,10 +320,10 @@ else
 endif
 endif
 
-build-coreutils: locales
+build-coreutils:
 	${CARGO} build ${CARGOFLAGS} --features "${EXES} $(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} --no-default-features
 
-build: build-coreutils build-pkgs
+build: build-coreutils build-pkgs locales
 
 $(foreach test,$(filter-out $(SKIP_UTILS),$(PROGS)),$(eval $(call TEST_BUSYBOX,$(test))))
 
@@ -413,31 +418,47 @@ endif
 
 ifeq ($(LOCALES),y)
 locales:
-	$(foreach prog, $(INSTALLEES), \
-		if [ -d "$(BASEDIR)/src/uu/$(prog)/locales" ]; then \
-			mkdir -p "$(BUILDDIR)/locales/$(prog)"; \
-			for locale_file in "$(BASEDIR)"/src/uu/$(prog)/locales/*.ftl; do \
-				$(INSTALL) -v "$$locale_file" "$(BUILDDIR)/locales/$(prog)/"; \
+	@# Copy uucore common locales
+	@if [ -d "$(BASEDIR)/src/uucore/locales" ]; then \
+		mkdir -p "$(BUILDDIR)/locales/uucore"; \
+		for locale_file in "$(BASEDIR)"/src/uucore/locales/*.ftl; do \
+			$(INSTALL) -v "$$locale_file" "$(BUILDDIR)/locales/uucore/"; \
+		done; \
+	fi; \
+	# Copy utility-specific locales
+	@for prog in $(INSTALLEES); do \
+		if [ -d "$(BASEDIR)/src/uu/$$prog/locales" ]; then \
+			mkdir -p "$(BUILDDIR)/locales/$$prog"; \
+			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
+				if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
+					$(INSTALL) -v "$$locale_file" "$(BUILDDIR)/locales/$$prog/"; \
+				fi; \
 			done; \
-		fi $(newline) \
-	)
+		fi; \
+	done
 
 
 install-locales:
-	$(foreach prog, $(INSTALLEES), \
-		if [ -d "$(BASEDIR)/src/uu/$(prog)/locales" ]; then \
-			mkdir -p "$(DESTDIR)$(DATAROOTDIR)/locales/$(prog)"; \
-			for locale_file in "$(BASEDIR)"/src/uu/$(prog)/locales/*.ftl; do \
-				$(INSTALL) -v "$$locale_file" "$(DESTDIR)$(DATAROOTDIR)/locales/$(prog)/"; \
+	@for prog in $(INSTALLEES); do \
+		if [ -d "$(BASEDIR)/src/uu/$$prog/locales" ]; then \
+			mkdir -p "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog"; \
+			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
+				if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
+					$(INSTALL) -v "$$locale_file" "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog/"; \
+				fi; \
 			done; \
-		fi $(newline) \
-	)
+		fi; \
+	done
 else
 install-locales:
 endif
 
 install: build install-manpages install-completions install-locales
 	mkdir -p $(INSTALLDIR_BIN)
+ifneq ($(OS),Windows_NT)
+	mkdir -p $(DESTDIR)$(LIBSTDBUF_DIR)
+	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf* $(DESTDIR)$(LIBSTDBUF_DIR)/
+endif
 ifeq (${MULTICALL}, y)
 	$(INSTALL) $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
 	$(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
@@ -452,6 +473,10 @@ else
 endif
 
 uninstall:
+ifneq ($(OS),Windows_NT)
+	rm -f $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf*
+	-rmdir $(DESTDIR)$(LIBSTDBUF_DIR) 2>/dev/null || true
+endif
 ifeq (${MULTICALL}, y)
 	rm -f $(addprefix $(INSTALLDIR_BIN)/,$(PROG_PREFIX)coreutils)
 endif

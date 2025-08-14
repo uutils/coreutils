@@ -12,13 +12,13 @@ use clap::builder::ValueParser;
 use clap::{Arg, Command};
 use uucore::error::UResult;
 use uucore::format_usage;
+use uucore::translate;
 
 #[cfg(target_os = "openbsd")]
 use utmp_classic::{UtmpEntry, parse_from_path};
+use uucore::LocalizedCommand;
 #[cfg(not(target_os = "openbsd"))]
 use uucore::utmpx::{self, Utmpx};
-
-use uucore::locale::get_message;
 
 #[cfg(target_os = "openbsd")]
 const OPENBSD_UTMP_FILE: &str = "/var/run/utmp";
@@ -30,17 +30,15 @@ fn get_long_usage() -> String {
     let default_path: &str = utmpx::DEFAULT_FILE;
     #[cfg(target_os = "openbsd")]
     let default_path: &str = OPENBSD_UTMP_FILE;
-    format!(
-        "Output who is currently logged in according to FILE.
-If FILE is not specified, use {default_path}.  /var/log/wtmp as FILE is common."
-    )
+
+    translate!("users-long-usage", "default_path" => default_path)
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app()
         .after_help(get_long_usage())
-        .try_get_matches_from(args)?;
+        .get_matches_from_localized(args);
 
     let maybe_file: Option<&Path> = matches.get_one::<OsString>(ARG_FILE).map(AsRef::as_ref);
 
@@ -86,14 +84,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     #[cfg(not(target_env = "musl"))]
-    let about = get_message("users-about");
+    let about = translate!("users-about");
     #[cfg(target_env = "musl")]
-    let about = get_message("users-about") + &get_message("users-about-musl-warning");
+    let about = translate!("users-about") + &translate!("users-about-musl-warning");
 
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(about)
-        .override_usage(format_usage(&get_message("users-usage")))
+        .override_usage(format_usage(&translate!("users-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(ARG_FILE)

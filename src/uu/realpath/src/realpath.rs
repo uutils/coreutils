@@ -11,7 +11,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use uucore::fs::make_path_relative_to;
-use uucore::locale::get_message;
+use uucore::translate;
 use uucore::{
     display::{Quotable, print_verbatim},
     error::{FromIo, UClapError, UResult},
@@ -21,17 +21,17 @@ use uucore::{
     show_if_err,
 };
 
-static OPT_QUIET: &str = "quiet";
-static OPT_STRIP: &str = "strip";
-static OPT_ZERO: &str = "zero";
-static OPT_PHYSICAL: &str = "physical";
-static OPT_LOGICAL: &str = "logical";
+const OPT_QUIET: &str = "quiet";
+const OPT_STRIP: &str = "strip";
+const OPT_ZERO: &str = "zero";
+const OPT_PHYSICAL: &str = "physical";
+const OPT_LOGICAL: &str = "logical";
 const OPT_CANONICALIZE_MISSING: &str = "canonicalize-missing";
 const OPT_CANONICALIZE_EXISTING: &str = "canonicalize-existing";
 const OPT_RELATIVE_TO: &str = "relative-to";
 const OPT_RELATIVE_BASE: &str = "relative-base";
 
-static ARG_FILES: &str = "files";
+const ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -86,14 +86,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("realpath-about"))
-        .override_usage(format_usage(&get_message("realpath-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("realpath-about"))
+        .override_usage(format_usage(&translate!("realpath-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_QUIET)
                 .short('q')
                 .long(OPT_QUIET)
-                .help("Do not print warnings for invalid paths")
+                .help(translate!("realpath-help-quiet"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -101,21 +102,21 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(OPT_STRIP)
                 .visible_alias("no-symlinks")
-                .help("Only strip '.' and '..' components, but don't resolve symbolic links")
+                .help(translate!("realpath-help-strip"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_ZERO)
                 .short('z')
                 .long(OPT_ZERO)
-                .help("Separate output filenames with \\0 rather than newline")
+                .help(translate!("realpath-help-zero"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_LOGICAL)
                 .short('L')
                 .long(OPT_LOGICAL)
-                .help("resolve '..' components before symlinks")
+                .help(translate!("realpath-help-logical"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -123,27 +124,21 @@ pub fn uu_app() -> Command {
                 .short('P')
                 .long(OPT_PHYSICAL)
                 .overrides_with_all([OPT_STRIP, OPT_LOGICAL])
-                .help("resolve symlinks as encountered (default)")
+                .help(translate!("realpath-help-physical"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_CANONICALIZE_EXISTING)
                 .short('e')
                 .long(OPT_CANONICALIZE_EXISTING)
-                .help(
-                    "canonicalize by following every symlink in every component of the \
-                     given name recursively, all components must exist",
-                )
+                .help(translate!("realpath-help-canonicalize-existing"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_CANONICALIZE_MISSING)
                 .short('m')
                 .long(OPT_CANONICALIZE_MISSING)
-                .help(
-                    "canonicalize by following every symlink in every component of the \
-                     given name recursively, without requirements on components existence",
-                )
+                .help(translate!("realpath-help-canonicalize-missing"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -151,14 +146,14 @@ pub fn uu_app() -> Command {
                 .long(OPT_RELATIVE_TO)
                 .value_name("DIR")
                 .value_parser(NonEmptyStringValueParser::new())
-                .help("print the resolved path relative to DIR"),
+                .help(translate!("realpath-help-relative-to")),
         )
         .arg(
             Arg::new(OPT_RELATIVE_BASE)
                 .long(OPT_RELATIVE_BASE)
                 .value_name("DIR")
                 .value_parser(NonEmptyStringValueParser::new())
-                .help("print absolute paths unless paths below DIR"),
+                .help(translate!("realpath-help-relative-base")),
         )
         .arg(
             Arg::new(ARG_FILES)

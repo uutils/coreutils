@@ -4,8 +4,6 @@
 // file that was distributed with this source code.
 // spell-checker:ignore lmnop xlmnop
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
@@ -943,7 +941,7 @@ fn test_parse_out_of_bounds_exponents() {
         .stdout_only("-0\n1\n");
 }
 
-#[ignore]
+#[ignore = ""]
 #[test]
 fn test_parse_valid_hexadecimal_float_format_issues() {
     // These tests detect differences in the representation of floating-point values with GNU seq.

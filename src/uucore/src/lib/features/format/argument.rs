@@ -7,12 +7,16 @@ use super::ExtendedBigDecimal;
 use crate::format::spec::ArgumentLocation;
 use crate::{
     error::set_exit_code,
+    os_str_as_bytes,
     parser::num_parser::{ExtendedParser, ExtendedParserError},
-    quoting_style::{Quotes, QuotingStyle, escape_name},
+    quoting_style::{QuotingStyle, locale_aware_escape_name},
     show_error, show_warning,
 };
 use os_display::Quotable;
-use std::{ffi::OsStr, num::NonZero};
+use std::{
+    ffi::{OsStr, OsString},
+    num::NonZero,
+};
 
 /// An argument for formatting
 ///
@@ -24,12 +28,12 @@ use std::{ffi::OsStr, num::NonZero};
 #[derive(Clone, Debug, PartialEq)]
 pub enum FormatArgument {
     Char(char),
-    String(String),
+    String(OsString),
     UnsignedInt(u64),
     SignedInt(i64),
     Float(ExtendedBigDecimal),
     /// Special argument that gets coerced into the other variants
-    Unparsed(String),
+    Unparsed(OsString),
 }
 
 /// A struct that holds a slice of format arguments and provides methods to access them
@@ -72,22 +76,25 @@ impl<'a> FormatArguments<'a> {
     pub fn next_char(&mut self, position: &ArgumentLocation) -> u8 {
         match self.next_arg(position) {
             Some(FormatArgument::Char(c)) => *c as u8,
-            Some(FormatArgument::Unparsed(s)) => s.bytes().next().unwrap_or(b'\0'),
+            Some(FormatArgument::Unparsed(os)) => match os_str_as_bytes(os) {
+                Ok(bytes) => bytes.first().copied().unwrap_or(b'\0'),
+                Err(_) => b'\0',
+            },
             _ => b'\0',
         }
     }
 
-    pub fn next_string(&mut self, position: &ArgumentLocation) -> &'a str {
+    pub fn next_string(&mut self, position: &ArgumentLocation) -> &'a OsStr {
         match self.next_arg(position) {
-            Some(FormatArgument::Unparsed(s) | FormatArgument::String(s)) => s,
-            _ => "",
+            Some(FormatArgument::Unparsed(os) | FormatArgument::String(os)) => os,
+            _ => "".as_ref(),
         }
     }
 
     pub fn next_i64(&mut self, position: &ArgumentLocation) -> i64 {
         match self.next_arg(position) {
             Some(FormatArgument::SignedInt(n)) => *n,
-            Some(FormatArgument::Unparsed(s)) => extract_value(i64::extended_parse(s), s),
+            Some(FormatArgument::Unparsed(os)) => Self::get_num::<i64>(os),
             _ => 0,
         }
     }
@@ -95,26 +102,7 @@ impl<'a> FormatArguments<'a> {
     pub fn next_u64(&mut self, position: &ArgumentLocation) -> u64 {
         match self.next_arg(position) {
             Some(FormatArgument::UnsignedInt(n)) => *n,
-            Some(FormatArgument::Unparsed(s)) => {
-                // Check if the string is a character literal enclosed in quotes
-                if s.starts_with(['"', '\'']) {
-                    // Extract the content between the quotes safely using chars
-                    let mut chars = s.trim_matches(|c| c == '"' || c == '\'').chars();
-                    if let Some(first_char) = chars.next() {
-                        if chars.clone().count() > 0 {
-                            // Emit a warning if there are additional characters
-                            let remaining: String = chars.collect();
-                            show_warning!(
-                                "{}: character(s) following character constant have been ignored",
-                                remaining
-                            );
-                        }
-                        return first_char as u64; // Use only the first character
-                    }
-                    return 0; // Empty quotes
-                }
-                extract_value(u64::extended_parse(s), s)
-            }
+            Some(FormatArgument::Unparsed(os)) => Self::get_num::<u64>(os),
             _ => 0,
         }
     }
@@ -122,11 +110,79 @@ impl<'a> FormatArguments<'a> {
     pub fn next_extended_big_decimal(&mut self, position: &ArgumentLocation) -> ExtendedBigDecimal {
         match self.next_arg(position) {
             Some(FormatArgument::Float(n)) => n.clone(),
-            Some(FormatArgument::Unparsed(s)) => {
-                extract_value(ExtendedBigDecimal::extended_parse(s), s)
-            }
+            Some(FormatArgument::Unparsed(os)) => Self::get_num::<ExtendedBigDecimal>(os),
             _ => ExtendedBigDecimal::zero(),
         }
+    }
+
+    // Parse an OsStr that we know to start with a '/"
+    fn parse_quote_start<T>(os: &OsStr) -> Result<T, ExtendedParserError<T>>
+    where
+        T: ExtendedParser + From<u8> + From<u32> + Default,
+    {
+        // If this fails (this can only happens on Windows), then just
+        // return NotNumeric.
+        let s = match os_str_as_bytes(os) {
+            Ok(s) => s,
+            Err(_) => return Err(ExtendedParserError::NotNumeric),
+        };
+
+        let bytes = match s.split_first() {
+            Some((b'"', bytes)) | Some((b'\'', bytes)) => bytes,
+            _ => {
+                // This really can't happen, the string we are given must start with '/".
+                debug_assert!(false);
+                return Err(ExtendedParserError::NotNumeric);
+            }
+        };
+
+        if bytes.is_empty() {
+            return Err(ExtendedParserError::NotNumeric);
+        }
+
+        let (val, len) = if let Some(c) = bytes
+            .utf8_chunks()
+            .next()
+            .expect("bytes should not be empty")
+            .valid()
+            .chars()
+            .next()
+        {
+            // Valid UTF-8 character, cast the codepoint to u32 then T
+            // (largest unicode codepoint is only 3 bytes, so this is safe)
+            ((c as u32).into(), c.len_utf8())
+        } else {
+            // Not a valid UTF-8 character, use the first byte
+            (bytes[0].into(), 1)
+        };
+        // Emit a warning if there are additional characters
+        if bytes.len() > len {
+            return Err(ExtendedParserError::PartialMatch(
+                val,
+                String::from_utf8_lossy(&bytes[len..]).into_owned(),
+            ));
+        }
+
+        Ok(val)
+    }
+
+    fn get_num<T>(os: &OsStr) -> T
+    where
+        T: ExtendedParser + From<u8> + From<u32> + Default,
+    {
+        let s = os.to_string_lossy();
+        let first = s.as_bytes().first().copied();
+
+        let quote_start = first == Some(b'"') || first == Some(b'\'');
+        let parsed = if quote_start {
+            // The string begins with a quote
+            Self::parse_quote_start(os)
+        } else {
+            T::extended_parse(&s)
+        };
+
+        // Get the best possible value, even if parsed was an error.
+        extract_value(parsed, &s, quote_start)
     }
 
     fn get_at_relative_position(&mut self, pos: NonZero<usize>) -> Option<&'a FormatArgument> {
@@ -148,17 +204,16 @@ impl<'a> FormatArguments<'a> {
     }
 }
 
-fn extract_value<T: Default>(p: Result<T, ExtendedParserError<'_, T>>, input: &str) -> T {
+fn extract_value<T: Default>(
+    p: Result<T, ExtendedParserError<T>>,
+    input: &str,
+    quote_start: bool,
+) -> T {
     match p {
         Ok(v) => v,
         Err(e) => {
             set_exit_code(1);
-            let input = escape_name(
-                OsStr::new(input),
-                &QuotingStyle::C {
-                    quotes: Quotes::None,
-                },
-            );
+            let input = locale_aware_escape_name(OsStr::new(input), QuotingStyle::C_NO_QUOTES);
             match e {
                 ExtendedParserError::Overflow(v) => {
                     show_error!("{}: Numerical result out of range", input.quote());
@@ -173,14 +228,15 @@ fn extract_value<T: Default>(p: Result<T, ExtendedParserError<'_, T>>, input: &s
                     Default::default()
                 }
                 ExtendedParserError::PartialMatch(v, rest) => {
-                    let bytes = input.as_encoded_bytes();
-                    if !bytes.is_empty() && (bytes[0] == b'\'' || bytes[0] == b'"') {
+                    if quote_start {
+                        set_exit_code(0);
                         show_warning!(
                             "{rest}: character(s) following character constant have been ignored"
                         );
                     } else {
                         show_error!("{}: value not completely converted", input.quote());
                     }
+
                     v
                 }
             }
@@ -255,11 +311,11 @@ mod tests {
         // Test with different method types in sequence
         let args = [
             FormatArgument::Char('a'),
-            FormatArgument::String("hello".to_string()),
-            FormatArgument::Unparsed("123".to_string()),
-            FormatArgument::String("world".to_string()),
+            FormatArgument::String("hello".into()),
+            FormatArgument::Unparsed("123".into()),
+            FormatArgument::String("world".into()),
             FormatArgument::Char('z'),
-            FormatArgument::String("test".to_string()),
+            FormatArgument::String("test".into()),
         ];
         let mut args = FormatArguments::new(&args);
 
@@ -390,10 +446,10 @@ mod tests {
     fn test_unparsed_arguments() {
         // Test with unparsed arguments that get coerced
         let args = [
-            FormatArgument::Unparsed("hello".to_string()),
-            FormatArgument::Unparsed("123".to_string()),
-            FormatArgument::Unparsed("hello".to_string()),
-            FormatArgument::Unparsed("456".to_string()),
+            FormatArgument::Unparsed("hello".into()),
+            FormatArgument::Unparsed("123".into()),
+            FormatArgument::Unparsed("hello".into()),
+            FormatArgument::Unparsed("456".into()),
         ];
         let mut args = FormatArguments::new(&args);
 
@@ -415,10 +471,10 @@ mod tests {
         // Test with mixed types and positional access
         let args = [
             FormatArgument::Char('a'),
-            FormatArgument::String("test".to_string()),
+            FormatArgument::String("test".into()),
             FormatArgument::UnsignedInt(42),
             FormatArgument::Char('b'),
-            FormatArgument::String("more".to_string()),
+            FormatArgument::String("more".into()),
             FormatArgument::UnsignedInt(99),
         ];
         let mut args = FormatArguments::new(&args);

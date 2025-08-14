@@ -15,21 +15,20 @@ use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::translate;
 use uucore::{format_usage, show};
-
-use uucore::locale::get_message;
 
 const DEFAULT_TABSTOP: usize = 8;
 
 #[derive(Debug, Error)]
 enum ParseError {
-    #[error("tab size contains invalid character(s): {}", _0.quote())]
+    #[error("{}", translate!("unexpand-error-invalid-character", "char" => _0.quote()))]
     InvalidCharacter(String),
-    #[error("tab size cannot be 0")]
+    #[error("{}", translate!("unexpand-error-tab-size-cannot-be-zero"))]
     TabSizeCannotBeZero,
-    #[error("tab stop value is too large")]
+    #[error("{}", translate!("unexpand-error-tab-size-too-large"))]
     TabSizeTooLarge,
-    #[error("tab sizes must be ascending")]
+    #[error("{}", translate!("unexpand-error-tab-sizes-must-be-ascending"))]
     TabSizesMustBeAscending,
 }
 
@@ -156,8 +155,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("unexpand-usage")))
-        .about(get_message("unexpand-about"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .override_usage(format_usage(&translate!("unexpand-usage")))
+        .about(translate!("unexpand-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE)
@@ -169,23 +169,21 @@ pub fn uu_app() -> Command {
             Arg::new(options::ALL)
                 .short('a')
                 .long(options::ALL)
-                .help("convert all blanks, instead of just initial blanks")
+                .help(translate!("unexpand-help-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FIRST_ONLY)
+                .short('f')
                 .long(options::FIRST_ONLY)
-                .help("convert only leading sequences of blanks (overrides -a)")
+                .help(translate!("unexpand-help-first-only"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TABS)
                 .short('t')
                 .long(options::TABS)
-                .help(
-                    "use comma separated LIST of tab positions or have tabs N characters \
-                apart instead of 8 (enables -a)",
-                )
+                .help(translate!("unexpand-help-tabs"))
                 .action(ArgAction::Append)
                 .value_name("N, LIST"),
         )
@@ -193,7 +191,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::NO_UTF8)
                 .short('U')
                 .long(options::NO_UTF8)
-                .help("interpret input file as 8-bit ASCII rather than UTF-8")
+                .help(translate!("unexpand-help-no-utf8"))
                 .action(ArgAction::SetTrue),
         )
 }
@@ -204,7 +202,7 @@ fn open(path: &str) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     if filename.is_dir() {
         Err(Box::new(USimpleError {
             code: 1,
-            message: format!("{}: Is a directory", filename.display()),
+            message: translate!("unexpand-error-is-directory", "path" => filename.display()),
         }))
     } else if path == "-" {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))

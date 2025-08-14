@@ -436,7 +436,7 @@ fn test_touch_no_dereference() {
 
 #[test]
 fn test_touch_reference() {
-    let scenario = TestScenario::new("touch");
+    let scenario = TestScenario::new(util_name!());
     let (at, mut _ucmd) = (scenario.fixtures.clone(), scenario.ucmd());
     let file_a = "test_touch_reference_a";
     let file_b = "test_touch_reference_b";
@@ -684,7 +684,8 @@ fn test_touch_set_date_relative_smoke() {
         "2 seconds",
         "2 years 1 week",
         "2 days ago",
-        "2 months and 1 second",
+        "2 months 1 second",
+        "a",
     ];
     for time in times {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -694,11 +695,6 @@ fn test_touch_set_date_relative_smoke() {
             .no_stderr()
             .no_stdout();
     }
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.touch("f");
-    ucmd.args(&["-d", "a", "f"])
-        .fails()
-        .stderr_contains("touch: Unable to parse date");
 }
 
 #[test]
@@ -1005,4 +1001,15 @@ fn test_obsolete_posix_format_with_year() {
         .no_output();
     assert!(at.file_exists("11111111"));
     assert!(!at.file_exists("0101000090"));
+}
+
+#[test]
+fn test_touch_f_option() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_f_option.txt";
+
+    ucmd.args(&["-f", file]).succeeds().no_output();
+
+    assert!(at.file_exists(file));
+    at.remove(file);
 }

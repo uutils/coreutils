@@ -2,8 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//  *
-//  * Synced with http://lingrok.org/xref/coreutils/src/tty.c
 
 // spell-checker:ignore (ToDO) ttyname filedesc
 
@@ -12,7 +10,7 @@ use std::io::{IsTerminal, Write};
 use uucore::error::{UResult, set_exit_code};
 use uucore::format_usage;
 
-use uucore::locale::get_message;
+use uucore::translate;
 
 mod options {
     pub const SILENT: &str = "silent";
@@ -20,7 +18,10 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args).unwrap_or_else(|e| {
+        use uucore::clap_localization::handle_clap_error_with_exit_code;
+        handle_clap_error_with_exit_code(e, uucore::util_name(), 2)
+    });
 
     let silent = matches.get_flag(options::SILENT);
 
@@ -31,7 +32,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             Err(1.into())
         };
-    };
+    }
 
     let mut stdout = std::io::stdout();
 
@@ -41,7 +42,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Ok(name) => writeln!(stdout, "{}", name.display()),
         Err(_) => {
             set_exit_code(1);
-            writeln!(stdout, "not a tty")
+            writeln!(stdout, "{}", translate!("tty-not-a-tty"))
         }
     };
 
@@ -49,7 +50,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // Don't return to prevent a panic later when another flush is attempted
         // because the `uucore_procs::main` macro inserts a flush after execution for every utility.
         std::process::exit(3);
-    };
+    }
 
     Ok(())
 }
@@ -57,15 +58,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("tty-about"))
-        .override_usage(format_usage(&get_message("tty-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("tty-about"))
+        .override_usage(format_usage(&translate!("tty-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::SILENT)
                 .long(options::SILENT)
                 .visible_alias("quiet")
                 .short('s')
-                .help("print nothing, only return an exit status")
+                .help(translate!("tty-help-silent"))
                 .action(ArgAction::SetTrue),
         )
 }

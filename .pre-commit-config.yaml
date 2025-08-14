@@ -19,6 +19,13 @@ repos:
         args: [ --fix=lf ]
       - id: trailing-whitespace
 
+  - repo: https://github.com/mozilla-l10n/moz-fluent-linter
+    rev: v0.4.8
+    hooks:
+      - id: fluent_linter
+        files: \.ftl$
+        args: [--config, .github/fluent_linter_config.yml, src/uu/]
+
   - repo: local
     hooks:
       - id: rust-linting
@@ -37,7 +44,7 @@ repos:
         language: system
       - id: cspell
         name: Code spell checker (cspell)
-        description: Run cspell to check for spelling errors.
-        entry: cspell --no-must-find-files --
+        description: Run cspell to check for spelling errors (if available).
+        entry: bash -c 'if command -v cspell >/dev/null 2>&1; then cspell --no-must-find-files -- "$@"; else echo "cspell not found, skipping spell check"; exit 0; fi' --
         pass_filenames: true
         language: system

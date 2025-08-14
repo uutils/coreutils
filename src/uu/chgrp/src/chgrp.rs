@@ -10,20 +10,19 @@ pub use uucore::entries;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::perms::{GidUidOwnerFilter, IfFrom, chown_base, options};
+use uucore::translate;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 
-use uucore::locale::get_message;
-
 fn parse_gid_from_str(group: &str) -> Result<u32, String> {
     if let Some(gid_str) = group.strip_prefix(':') {
         // Handle :gid format
         gid_str
             .parse::<u32>()
-            .map_err(|_| format!("invalid group id: '{gid_str}'"))
+            .map_err(|_| translate!("chgrp-error-invalid-group-id", "gid_str" => gid_str))
     } else {
         // Try as group name first
         match entries::grp2gid(group) {
@@ -31,7 +30,7 @@ fn parse_gid_from_str(group: &str) -> Result<u32, String> {
             // If group name lookup fails, try parsing as raw number
             Err(_) => group
                 .parse::<u32>()
-                .map_err(|_| format!("invalid group: '{group}'")),
+                .map_err(|_| translate!("chgrp-error-invalid-group", "group" => group)),
         }
     }
 }
@@ -45,7 +44,9 @@ fn get_dest_gid(matches: &ArgMatches) -> UResult<(Option<u32>, String)> {
                 raw_group = entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string());
                 Some(gid)
             })
-            .map_err_context(|| format!("failed to get attributes of {}", file.quote()))?
+            .map_err_context(
+                || translate!("chgrp-error-failed-to-get-attributes", "file" => file.quote()),
+            )?
     } else {
         let group = matches
             .get_one::<String>(options::ARG_GROUP)
@@ -74,7 +75,7 @@ fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
             Err(_) => {
                 return Err(USimpleError::new(
                     1,
-                    format!("invalid user: '{from_group}'"),
+                    translate!("chgrp-error-invalid-user", "from_group" => from_group),
                 ));
             }
         }
@@ -98,21 +99,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("chgrp-about"))
-        .override_usage(format_usage(&get_message("chgrp-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("chgrp-about"))
+        .override_usage(format_usage(&translate!("chgrp-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help("Print help information.")
+                .help(translate!("chgrp-help-print-help"))
                 .action(ArgAction::Help),
         )
         .arg(
             Arg::new(options::verbosity::CHANGES)
                 .short('c')
                 .long(options::verbosity::CHANGES)
-                .help("like verbose but report only when a change is made")
+                .help(translate!("chgrp-help-changes"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -124,26 +126,26 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::verbosity::QUIET)
                 .long(options::verbosity::QUIET)
-                .help("suppress most error messages")
+                .help(translate!("chgrp-help-quiet"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::verbosity::VERBOSE)
                 .short('v')
                 .long(options::verbosity::VERBOSE)
-                .help("output a diagnostic for every file processed")
+                .help(translate!("chgrp-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::preserve_root::PRESERVE)
                 .long(options::preserve_root::PRESERVE)
-                .help("fail to operate recursively on '/'")
+                .help(translate!("chgrp-help-preserve-root"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::preserve_root::NO_PRESERVE)
                 .long(options::preserve_root::NO_PRESERVE)
-                .help("do not treat '/' specially (the default)")
+                .help(translate!("chgrp-help-no-preserve-root"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -151,19 +153,19 @@ pub fn uu_app() -> Command {
                 .long(options::REFERENCE)
                 .value_name("RFILE")
                 .value_hint(clap::ValueHint::FilePath)
-                .help("use RFILE's group rather than specifying GROUP values"),
+                .help(translate!("chgrp-help-reference")),
         )
         .arg(
             Arg::new(options::FROM)
                 .long(options::FROM)
                 .value_name("GROUP")
-                .help("change the group only if its current group matches GROUP"),
+                .help(translate!("chgrp-help-from")),
         )
         .arg(
             Arg::new(options::RECURSIVE)
                 .short('R')
                 .long(options::RECURSIVE)
-                .help("operate on files and directories recursively")
+                .help(translate!("chgrp-help-recursive"))
                 .action(ArgAction::SetTrue),
         )
         // Add common arguments with chgrp, chown & chmod

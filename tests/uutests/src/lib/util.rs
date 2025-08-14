@@ -12,6 +12,7 @@
     clippy::missing_errors_doc
 )]
 
+use core::str;
 #[cfg(unix)]
 use libc::mode_t;
 #[cfg(unix)]
@@ -356,6 +357,11 @@ impl CmdResult {
         std::str::from_utf8(&self.stdout).unwrap()
     }
 
+    /// Returns the program's standard output as a string, automatically handling invalid utf8
+    pub fn stdout_str_lossy(self) -> String {
+        String::from_utf8_lossy(&self.stdout).to_string()
+    }
+
     /// Returns the program's standard output as a string
     /// consumes self
     pub fn stdout_move_str(self) -> String {
@@ -694,7 +700,11 @@ impl CmdResult {
     #[track_caller]
     pub fn fails_silently(&self) -> &Self {
         assert!(!self.succeeded());
-        assert!(self.stderr.is_empty());
+        assert!(
+            self.stderr.is_empty(),
+            "Expected stderr to be empty, but it's:\n{}",
+            self.stderr_str()
+        );
         self
     }
 
@@ -758,6 +768,29 @@ impl CmdResult {
         self
     }
 
+    /// Verify if stdout contains a byte sequence
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// new_ucmd!()
+    /// .arg("--help")
+    /// .succeeds()
+    /// .stdout_contains_bytes(b"hello \xff");
+    /// ```
+    #[track_caller]
+    pub fn stdout_contains_bytes<T: AsRef<[u8]>>(&self, cmp: T) -> &Self {
+        assert!(
+            self.stdout()
+                .windows(cmp.as_ref().len())
+                .any(|sub| sub == cmp.as_ref()),
+            "'{:?}'\ndoes not contain\n'{:?}'",
+            self.stdout(),
+            cmp.as_ref()
+        );
+        self
+    }
+
     /// Verify if stderr contains a specific string
     ///
     /// # Examples
@@ -775,6 +808,29 @@ impl CmdResult {
             self.stderr_str().contains(cmp.as_ref()),
             "'{}' does not contain '{}'",
             self.stderr_str(),
+            cmp.as_ref()
+        );
+        self
+    }
+
+    /// Verify if stderr contains a byte sequence
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// new_ucmd!()
+    /// .arg("--help")
+    /// .succeeds()
+    /// .stdout_contains_bytes(b"hello \xff");
+    /// ```
+    #[track_caller]
+    pub fn stderr_contains_bytes<T: AsRef<[u8]>>(&self, cmp: T) -> &Self {
+        assert!(
+            self.stderr()
+                .windows(cmp.as_ref().len())
+                .any(|sub| sub == cmp.as_ref()),
+            "'{:?}'\ndoes not contain\n'{:?}'",
+            self.stderr(),
             cmp.as_ref()
         );
         self
@@ -1089,6 +1145,19 @@ impl AtPath {
         }
     }
 
+    #[cfg(not(windows))]
+    pub fn is_char_device(&self, char_dev: &str) -> bool {
+        unsafe {
+            let name = CString::new(self.plus_as_string(char_dev)).unwrap();
+            let mut stat: libc::stat = std::mem::zeroed();
+            if libc::stat(name.as_ptr(), &mut stat) >= 0 {
+                libc::S_IFCHR & stat.st_mode as libc::mode_t != 0
+            } else {
+                false
+            }
+        }
+    }
+
     pub fn hard_link(&self, original: &str, link: &str) {
         log_info(
             "hard_link",
@@ -1192,14 +1261,14 @@ impl AtPath {
     }
 
     /// Decide whether the named symbolic link exists in the test directory.
-    pub fn symlink_exists(&self, path: &str) -> bool {
+    pub fn symlink_exists<P: AsRef<Path>>(&self, path: P) -> bool {
         match fs::symlink_metadata(self.plus(path)) {
             Ok(m) => m.file_type().is_symlink(),
             Err(_) => false,
         }
     }
 
-    pub fn dir_exists(&self, path: &str) -> bool {
+    pub fn dir_exists<P: AsRef<Path>>(&self, path: P) -> bool {
         match fs::metadata(self.plus(path)) {
             Ok(m) => m.is_dir(),
             Err(_) => false,
@@ -2249,12 +2318,12 @@ impl UChild {
     }
 
     /// Return a [`UChildAssertion`]
-    pub fn make_assertion(&mut self) -> UChildAssertion {
+    pub fn make_assertion(&mut self) -> UChildAssertion<'_> {
         UChildAssertion::new(self)
     }
 
     /// Convenience function for calling [`UChild::delay`] and then [`UChild::make_assertion`]
-    pub fn make_assertion_with_delay(&mut self, millis: u64) -> UChildAssertion {
+    pub fn make_assertion_with_delay(&mut self, millis: u64) -> UChildAssertion<'_> {
         self.delay(millis).make_assertion()
     }
 
@@ -2810,7 +2879,7 @@ pub fn whoami() -> String {
 
 /// Add prefix 'g' for `util_name` if not on linux
 #[cfg(unix)]
-pub fn host_name_for(util_name: &str) -> Cow<str> {
+pub fn host_name_for(util_name: &str) -> Cow<'_, str> {
     // In some environments, e.g. macOS/freebsd, the GNU coreutils are prefixed with "g"
     // to not interfere with the BSD counterparts already in `$PATH`.
     #[cfg(not(target_os = "linux"))]

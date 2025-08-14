@@ -16,7 +16,9 @@ use clap::{Arg, ArgAction, Command};
 use uucore::colors::{FILE_ATTRIBUTE_CODES, FILE_COLORS, FILE_TYPES, TERMS};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::locale::get_message;
+use uucore::translate;
+
+use uucore::LocalizedCommand;
 use uucore::{format_usage, parser::parse_glob};
 
 mod options {
@@ -119,7 +121,7 @@ fn generate_ls_colors(fmt: &OutputFmt, sep: &str) -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let files = matches
         .get_many::<String>(options::FILE)
@@ -132,15 +134,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     {
         return Err(UUsageError::new(
             1,
-            "the options to output non shell syntax,\n\
-             and to select a shell syntax are mutually exclusive",
+            translate!("dircolors-error-shell-and-output-exclusive"),
         ));
     }
 
     if matches.get_flag(options::PRINT_DATABASE) && matches.get_flag(options::PRINT_LS_COLORS) {
         return Err(UUsageError::new(
             1,
-            "options --print-database and --print-ls-colors are mutually exclusive",
+            translate!("dircolors-error-print-database-and-ls-colors-exclusive"),
         ));
     }
 
@@ -148,11 +149,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if !files.is_empty() {
             return Err(UUsageError::new(
                 1,
-                format!(
-                    "extra operand {}\nfile operands cannot be combined with \
-                     --print-database (-p)",
-                    files[0].quote()
-                ),
+                translate!("dircolors-error-extra-operand-print-database", "operand" => files[0].quote()),
             ));
         }
 
@@ -175,7 +172,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             OutputFmt::Unknown => {
                 return Err(USimpleError::new(
                     1,
-                    "no SHELL environment variable, and no shell type option given",
+                    translate!("dircolors-error-no-shell-environment"),
                 ));
             }
             fmt => out_format = fmt,
@@ -201,7 +198,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if files.len() > 1 {
         return Err(UUsageError::new(
             1,
-            format!("extra operand {}", files[1].quote()),
+            translate!("dircolors-error-extra-operand", "operand" => files[1].quote()),
         ));
     } else if files[0].eq("-") {
         let fin = BufReader::new(std::io::stdin());
@@ -212,7 +209,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if path.is_dir() {
             return Err(USimpleError::new(
                 2,
-                format!("expected file, got directory {}", path.quote()),
+                translate!("dircolors-error-expected-file-got-directory", "path" => path.quote()),
             ));
         }
         match File::open(path) {
@@ -242,9 +239,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("dircolors-about"))
-        .after_help(get_message("dircolors-after-help"))
-        .override_usage(format_usage(&get_message("dircolors-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("dircolors-about"))
+        .after_help(translate!("dircolors-after-help"))
+        .override_usage(format_usage(&translate!("dircolors-usage")))
         .args_override_self(true)
         .infer_long_args(true)
         .arg(
@@ -253,7 +251,7 @@ pub fn uu_app() -> Command {
                 .short('b')
                 .visible_alias("bourne-shell")
                 .overrides_with(options::C_SHELL)
-                .help("output Bourne shell code to set LS_COLORS")
+                .help(translate!("dircolors-help-bourne-shell"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -262,20 +260,20 @@ pub fn uu_app() -> Command {
                 .short('c')
                 .visible_alias("c-shell")
                 .overrides_with(options::BOURNE_SHELL)
-                .help("output C shell code to set LS_COLORS")
+                .help(translate!("dircolors-help-c-shell"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PRINT_DATABASE)
                 .long("print-database")
                 .short('p')
-                .help("print the byte counts")
+                .help(translate!("dircolors-help-print-database"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PRINT_LS_COLORS)
                 .long("print-ls-colors")
-                .help("output fully escaped colors for display")
+                .help(translate!("dircolors-help-print-ls-colors"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -289,7 +287,7 @@ pub fn uu_app() -> Command {
 pub trait StrUtils {
     /// Remove comments and trim whitespace
     fn purify(&self) -> &Self;
-    /// Like split_whitespace() but only produce 2 components
+    /// Like `split_whitespace()` but only produce 2 parts
     fn split_two(&self) -> (&str, &str);
     fn fnmatch(&self, pattern: &str) -> bool;
 }
@@ -375,11 +373,9 @@ where
 
         let (key, val) = line.split_two();
         if val.is_empty() {
-            return Err(format!(
-                // The double space is what GNU is doing
-                "{}:{num}: invalid line;  missing second token",
-                fp.maybe_quote(),
-            ));
+            return Err(
+                translate!("dircolors-error-invalid-line-missing-token", "file" => fp.maybe_quote(), "line" => num),
+            );
         }
 
         let lower = key.to_lowercase();
@@ -461,7 +457,7 @@ fn append_entry(
                 result.push_str(&disp);
                 Ok(())
             } else {
-                Err(format!("unrecognized keyword {key}"))
+                Err(translate!("dircolors-error-unrecognized-keyword", "keyword" => key))
             }
         }
     }

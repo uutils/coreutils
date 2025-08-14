@@ -121,6 +121,20 @@ fn test_closes_file_descriptors() {
 
 #[test]
 #[cfg(unix)]
+fn test_broken_pipe() {
+    let mut cmd = new_ucmd!();
+    let mut child = cmd
+        .set_stdin(Stdio::from(File::open("/dev/zero").unwrap()))
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+    // Dropping the stdout should not lead to an error.
+    // The "Broken pipe" error should be silently ignored.
+    child.close_stdout();
+    child.wait().unwrap().fails_silently();
+}
+
+#[test]
+#[cfg(unix)]
 fn test_piped_to_regular_file() {
     use std::fs::read_to_string;
 
@@ -562,7 +576,7 @@ fn test_write_fast_fallthrough_uses_flush() {
 
 #[test]
 #[cfg(unix)]
-#[ignore]
+#[ignore = ""]
 fn test_domain_socket() {
     use std::io::prelude::*;
     use std::os::unix::net::UnixListener;
@@ -711,6 +725,26 @@ fn test_u_ignored() {
             .succeeds()
             .stdout_only("hello");
     }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_write_fast_read_error() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // Create a file with content
+    at.write("foo", "content");
+
+    // Remove read permissions to cause a read error
+    let file_path = at.plus_as_string("foo");
+    let mut perms = std::fs::metadata(&file_path).unwrap().permissions();
+    perms.set_mode(0o000); // No permissions
+    std::fs::set_permissions(&file_path, perms).unwrap();
+
+    // Test that cat fails with permission denied
+    ucmd.arg("foo").fails().stderr_contains("Permission denied");
 }
 
 #[test]

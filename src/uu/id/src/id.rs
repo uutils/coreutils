@@ -34,7 +34,6 @@
 #![allow(dead_code)]
 
 use clap::{Arg, ArgAction, Command};
-use std::collections::HashMap;
 use std::ffi::CStr;
 use uucore::display::Quotable;
 use uucore::entries::{self, Group, Locate, Passwd};
@@ -43,7 +42,9 @@ use uucore::error::{USimpleError, set_exit_code};
 pub use uucore::libc;
 use uucore::libc::{getlogin, uid_t};
 use uucore::line_ending::LineEnding;
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
+
+use uucore::LocalizedCommand;
 use uucore::process::{getegid, geteuid, getgid, getuid};
 use uucore::{format_usage, show_error};
 
@@ -63,9 +64,9 @@ macro_rules! cstr2cow {
 
 fn get_context_help_text() -> String {
     #[cfg(not(feature = "selinux"))]
-    return get_message("id-context-help-disabled");
+    return translate!("id-context-help-disabled");
     #[cfg(feature = "selinux")]
-    return get_message("id-context-help-enabled");
+    return translate!("id-context-help-enabled");
 }
 
 mod options {
@@ -120,8 +121,8 @@ struct State {
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app()
-        .after_help(get_message("id-after-help"))
-        .try_get_matches_from(args)?;
+        .after_help(translate!("id-after-help"))
+        .get_matches_from_localized(args);
 
     let users: Vec<String> = matches
         .get_many::<String>(options::ARG_USERS)
@@ -159,20 +160,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if (state.nflag || state.rflag) && default_format && !state.cflag {
         return Err(USimpleError::new(
             1,
-            get_message("id-error-names-real-ids-require-flags"),
+            translate!("id-error-names-real-ids-require-flags"),
         ));
     }
     if state.zflag && default_format && !state.cflag {
         // NOTE: GNU test suite "id/zero.sh" needs this stderr output:
         return Err(USimpleError::new(
             1,
-            get_message("id-error-zero-not-permitted-default"),
+            translate!("id-error-zero-not-permitted-default"),
         ));
     }
     if state.user_specified && state.cflag {
         return Err(USimpleError::new(
             1,
-            get_message("id-error-cannot-print-context-with-user"),
+            translate!("id-error-cannot-print-context-with-user"),
         ));
     }
 
@@ -190,14 +191,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 // print error because `cflag` was explicitly requested
                 return Err(USimpleError::new(
                     1,
-                    get_message("id-error-cannot-get-context"),
+                    translate!("id-error-cannot-get-context"),
                 ));
             }
             Ok(())
         } else {
             Err(USimpleError::new(
                 1,
-                get_message("id-error-context-selinux-only"),
+                translate!("id-error-context-selinux-only"),
             ))
         };
     }
@@ -209,17 +210,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Err(_) => {
                     show_error!(
                         "{}",
-                        get_message_with_args(
-                            "id-error-no-such-user",
-                            HashMap::from([("user".to_string(), users[i].quote().to_string())])
+                        translate!("id-error-no-such-user",
+                                                     "user" => users[i].quote()
                         )
                     );
                     set_exit_code(1);
                     if i + 1 >= users.len() {
                         break;
-                    } else {
-                        continue;
                     }
+
+                    continue;
                 }
             }
         } else {
@@ -231,7 +231,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // BSD's `id` ignores all but the first specified user
             pline(possible_pw.as_ref().map(|v| v.uid));
             return Ok(());
-        };
+        }
         if matches.get_flag(options::OPT_HUMAN_READABLE) {
             // BSD's `id` ignores all but the first specified user
             pretty(possible_pw);
@@ -243,14 +243,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             return Ok(());
         }
 
-        let (uid, gid) = possible_pw.as_ref().map(|p| (p.uid, p.gid)).unwrap_or({
-            let use_effective = !state.rflag && (state.uflag || state.gflag || state.gsflag);
-            if use_effective {
-                (geteuid(), getegid())
-            } else {
-                (getuid(), getgid())
-            }
-        });
+        let (uid, gid) = possible_pw.as_ref().map_or(
+            {
+                let use_effective = !state.rflag && (state.uflag || state.gflag || state.gsflag);
+                if use_effective {
+                    (geteuid(), getegid())
+                } else {
+                    (getuid(), getgid())
+                }
+            },
+            |p| (p.uid, p.gid),
+        );
         state.ids = Some(Ids {
             uid,
             gid,
@@ -265,10 +268,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     entries::gid2grp(gid).unwrap_or_else(|_| {
                         show_error!(
                             "{}",
-                            get_message_with_args(
-                                "id-error-cannot-find-group-name",
-                                HashMap::from([("gid".to_string(), gid.to_string())])
-                            )
+                            translate!("id-error-cannot-find-group-name", "gid" => gid)
                         );
                         set_exit_code(1);
                         gid.to_string()
@@ -286,10 +286,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     entries::uid2usr(uid).unwrap_or_else(|_| {
                         show_error!(
                             "{}",
-                            get_message_with_args(
-                                "id-error-cannot-find-user-name",
-                                HashMap::from([("uid".to_string(), uid.to_string())])
-                            )
+                            translate!("id-error-cannot-find-user-name", "uid" => uid)
                         );
                         set_exit_code(1);
                         uid.to_string()
@@ -317,10 +314,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                             entries::gid2grp(id).unwrap_or_else(|_| {
                                 show_error!(
                                     "{}",
-                                    get_message_with_args(
-                                        "id-error-cannot-find-group-name",
-                                        HashMap::from([("gid".to_string(), id.to_string())])
-                                    )
+                                    translate!("id-error-cannot-find-group-name", "gid" => id)
                                 );
                                 set_exit_code(1);
                                 id.to_string()
@@ -356,8 +350,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("id-about"))
-        .override_usage(format_usage(&get_message("id-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("id-about"))
+        .override_usage(format_usage(&translate!("id-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
@@ -371,7 +366,7 @@ pub fn uu_app() -> Command {
                     options::OPT_GROUPS,
                     options::OPT_ZERO,
                 ])
-                .help(get_message("id-help-audit"))
+                .help(translate!("id-help-audit"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -379,7 +374,7 @@ pub fn uu_app() -> Command {
                 .short('u')
                 .long(options::OPT_EFFECTIVE_USER)
                 .conflicts_with(options::OPT_GROUP)
-                .help(get_message("id-help-user"))
+                .help(translate!("id-help-user"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -387,7 +382,7 @@ pub fn uu_app() -> Command {
                 .short('g')
                 .long(options::OPT_GROUP)
                 .conflicts_with(options::OPT_EFFECTIVE_USER)
-                .help(get_message("id-help-group"))
+                .help(translate!("id-help-group"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -402,26 +397,26 @@ pub fn uu_app() -> Command {
                     options::OPT_PASSWORD,
                     options::OPT_AUDIT,
                 ])
-                .help(get_message("id-help-groups"))
+                .help(translate!("id-help-groups"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OPT_HUMAN_READABLE)
                 .short('p')
-                .help(get_message("id-help-human-readable"))
+                .help(translate!("id-help-human-readable"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OPT_NAME)
                 .short('n')
                 .long(options::OPT_NAME)
-                .help(get_message("id-help-name"))
+                .help(translate!("id-help-name"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OPT_PASSWORD)
                 .short('P')
-                .help(get_message("id-help-password"))
+                .help(translate!("id-help-password"))
                 .conflicts_with(options::OPT_HUMAN_READABLE)
                 .action(ArgAction::SetTrue),
         )
@@ -429,14 +424,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::OPT_REAL_ID)
                 .short('r')
                 .long(options::OPT_REAL_ID)
-                .help(get_message("id-help-real"))
+                .help(translate!("id-help-real"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OPT_ZERO)
                 .short('z')
                 .long(options::OPT_ZERO)
-                .help(get_message("id-help-zero"))
+                .help(translate!("id-help-zero"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -459,9 +454,9 @@ fn pretty(possible_pw: Option<Passwd>) {
     if let Some(p) = possible_pw {
         print!(
             "{}\t{}\n{}\t",
-            get_message("id-output-uid"),
+            translate!("id-output-uid"),
             p.name,
-            get_message("id-output-groups")
+            translate!("id-output-groups")
         );
         println!(
             "{}",
@@ -476,19 +471,19 @@ fn pretty(possible_pw: Option<Passwd>) {
         let uid = getuid();
         if let Ok(p) = Passwd::locate(uid) {
             if let Some(user_name) = login {
-                println!("{}\t{user_name}", get_message("id-output-login"));
+                println!("{}\t{user_name}", translate!("id-output-login"));
             }
-            println!("{}\t{}", get_message("id-output-uid"), p.name);
+            println!("{}\t{}", translate!("id-output-uid"), p.name);
         } else {
-            println!("{}\t{uid}", get_message("id-output-uid"));
+            println!("{}\t{uid}", translate!("id-output-uid"));
         }
 
         let euid = geteuid();
         if euid != uid {
             if let Ok(p) = Passwd::locate(euid) {
-                println!("{}\t{}", get_message("id-output-euid"), p.name);
+                println!("{}\t{}", translate!("id-output-euid"), p.name);
             } else {
-                println!("{}\t{euid}", get_message("id-output-euid"));
+                println!("{}\t{euid}", translate!("id-output-euid"));
             }
         }
 
@@ -496,15 +491,15 @@ fn pretty(possible_pw: Option<Passwd>) {
         let egid = getegid();
         if egid != rgid {
             if let Ok(g) = Group::locate(rgid) {
-                println!("{}\t{}", get_message("id-output-rgid"), g.name);
+                println!("{}\t{}", translate!("id-output-rgid"), g.name);
             } else {
-                println!("{}\t{rgid}", get_message("id-output-rgid"));
+                println!("{}\t{rgid}", translate!("id-output-rgid"));
             }
         }
 
         println!(
             "{}\t{}",
-            get_message("id-output-groups"),
+            translate!("id-output-groups"),
             entries::get_groups_gnu(None)
                 .unwrap()
                 .iter()
@@ -562,7 +557,7 @@ fn auditid() {
     let mut auditinfo: MaybeUninit<audit::c_auditinfo_addr_t> = MaybeUninit::uninit();
     let address = auditinfo.as_mut_ptr();
     if unsafe { audit::getaudit(address) } < 0 {
-        println!("{}", get_message("id-error-audit-retrieve"));
+        println!("{}", translate!("id-error-audit-retrieve"));
         return;
     }
 
@@ -587,10 +582,7 @@ fn id_print(state: &State, groups: &[u32]) {
         entries::uid2usr(uid).unwrap_or_else(|_| {
             show_error!(
                 "{}",
-                get_message_with_args(
-                    "id-error-cannot-find-user-name",
-                    HashMap::from([("uid".to_string(), uid.to_string())])
-                )
+                translate!("id-error-cannot-find-user-name", "uid" => uid)
             );
             set_exit_code(1);
             uid.to_string()
@@ -601,10 +593,7 @@ fn id_print(state: &State, groups: &[u32]) {
         entries::gid2grp(gid).unwrap_or_else(|_| {
             show_error!(
                 "{}",
-                get_message_with_args(
-                    "id-error-cannot-find-group-name",
-                    HashMap::from([("gid".to_string(), gid.to_string())])
-                )
+                translate!("id-error-cannot-find-group-name", "gid" => gid)
             );
             set_exit_code(1);
             gid.to_string()
@@ -616,10 +605,7 @@ fn id_print(state: &State, groups: &[u32]) {
             entries::uid2usr(euid).unwrap_or_else(|_| {
                 show_error!(
                     "{}",
-                    get_message_with_args(
-                        "id-error-cannot-find-user-name",
-                        HashMap::from([("uid".to_string(), euid.to_string())])
-                    )
+                    translate!("id-error-cannot-find-user-name", "uid" => euid)
                 );
                 set_exit_code(1);
                 euid.to_string()
@@ -633,10 +619,7 @@ fn id_print(state: &State, groups: &[u32]) {
             entries::gid2grp(egid).unwrap_or_else(|_| {
                 show_error!(
                     "{}",
-                    get_message_with_args(
-                        "id-error-cannot-find-group-name",
-                        HashMap::from([("gid".to_string(), egid.to_string())])
-                    )
+                    translate!("id-error-cannot-find-group-name", "gid" => egid)
                 );
                 set_exit_code(1);
                 egid.to_string()
@@ -652,10 +635,7 @@ fn id_print(state: &State, groups: &[u32]) {
                 entries::gid2grp(gr).unwrap_or_else(|_| {
                     show_error!(
                         "{}",
-                        get_message_with_args(
-                            "id-error-cannot-find-group-name",
-                            HashMap::from([("gid".to_string(), gr.to_string())])
-                        )
+                        translate!("id-error-cannot-find-group-name", "gid" => gr)
                     );
                     set_exit_code(1);
                     gr.to_string()

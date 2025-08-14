@@ -7,7 +7,8 @@
 
 use clap::{Arg, ArgAction, Command};
 use platform_info::*;
-use uucore::locale::get_message;
+use uucore::LocalizedCommand;
+use uucore::translate;
 use uucore::{
     error::{UResult, USimpleError},
     format_usage,
@@ -38,30 +39,26 @@ pub struct UNameOutput {
 
 impl UNameOutput {
     fn display(&self) -> String {
-        let mut output = String::new();
-        for name in [
+        [
             self.kernel_name.as_ref(),
             self.nodename.as_ref(),
             self.kernel_release.as_ref(),
             self.kernel_version.as_ref(),
             self.machine.as_ref(),
-            self.os.as_ref(),
             self.processor.as_ref(),
             self.hardware_platform.as_ref(),
+            self.os.as_ref(),
         ]
         .into_iter()
         .flatten()
-        {
-            output.push_str(name);
-            output.push(' ');
-        }
-        output
+        .map(|name| name.as_str())
+        .collect::<Vec<_>>()
+        .join(" ")
     }
 
     pub fn new(opts: &Options) -> UResult<Self> {
-        let uname = PlatformInfo::new().map_err(|_e| {
-            USimpleError::new(1, get_message("uname-error-cannot-get-system-name"))
-        })?;
+        let uname = PlatformInfo::new()
+            .map_err(|_e| USimpleError::new(1, translate!("uname-error-cannot-get-system-name")))?;
         let none = !(opts.all
             || opts.kernel_name
             || opts.nodename
@@ -91,11 +88,11 @@ impl UNameOutput {
 
         // This option is unsupported on modern Linux systems
         // See: https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html
-        let processor = opts.processor.then(|| get_message("uname-unknown"));
+        let processor = opts.processor.then(|| translate!("uname-unknown"));
 
         // This option is unsupported on modern Linux systems
         // See: https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html
-        let hardware_platform = opts.hardware_platform.then(|| get_message("uname-unknown"));
+        let hardware_platform = opts.hardware_platform.then(|| translate!("uname-unknown"));
 
         Ok(Self {
             kernel_name,
@@ -124,7 +121,7 @@ pub struct Options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let options = Options {
         all: matches.get_flag(options::ALL),
@@ -138,21 +135,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         os: matches.get_flag(options::OS),
     };
     let output = UNameOutput::new(&options)?;
-    println!("{}", output.display().trim_end());
+    println!("{}", output.display());
     Ok(())
 }
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("uname-about"))
-        .override_usage(format_usage(&get_message("uname-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("uname-about"))
+        .override_usage(format_usage(&translate!("uname-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::ALL)
                 .short('a')
                 .long(options::ALL)
-                .help(get_message("uname-help-all"))
+                .help(translate!("uname-help-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -160,14 +158,14 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(options::KERNEL_NAME)
                 .alias("sysname") // Obsolescent option in GNU uname
-                .help(get_message("uname-help-kernel-name"))
+                .help(translate!("uname-help-kernel-name"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NODENAME)
                 .short('n')
                 .long(options::NODENAME)
-                .help(get_message("uname-help-nodename"))
+                .help(translate!("uname-help-nodename"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -175,35 +173,35 @@ pub fn uu_app() -> Command {
                 .short('r')
                 .long(options::KERNEL_RELEASE)
                 .alias("release") // Obsolescent option in GNU uname
-                .help(get_message("uname-help-kernel-release"))
+                .help(translate!("uname-help-kernel-release"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::KERNEL_VERSION)
                 .short('v')
                 .long(options::KERNEL_VERSION)
-                .help(get_message("uname-help-kernel-version"))
+                .help(translate!("uname-help-kernel-version"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::MACHINE)
                 .short('m')
                 .long(options::MACHINE)
-                .help(get_message("uname-help-machine"))
+                .help(translate!("uname-help-machine"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OS)
                 .short('o')
                 .long(options::OS)
-                .help(get_message("uname-help-os"))
+                .help(translate!("uname-help-os"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PROCESSOR)
                 .short('p')
                 .long(options::PROCESSOR)
-                .help(get_message("uname-help-processor"))
+                .help(translate!("uname-help-processor"))
                 .action(ArgAction::SetTrue)
                 .hide(true),
         )
@@ -211,7 +209,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::HARDWARE_PLATFORM)
                 .short('i')
                 .long(options::HARDWARE_PLATFORM)
-                .help(get_message("uname-help-hardware-platform"))
+                .help(translate!("uname-help-hardware-platform"))
                 .action(ArgAction::SetTrue)
                 .hide(true),
         )

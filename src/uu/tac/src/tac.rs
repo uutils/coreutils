@@ -21,7 +21,8 @@ use uucore::{format_usage, show};
 
 use crate::error::TacError;
 
-use uucore::locale::get_message;
+use uucore::LocalizedCommand;
+use uucore::translate;
 
 mod options {
     pub static BEFORE: &str = "before";
@@ -32,14 +33,13 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let before = matches.get_flag(options::BEFORE);
     let regex = matches.get_flag(options::REGEX);
     let raw_separator = matches
         .get_one::<String>(options::SEPARATOR)
-        .map(|s| s.as_str())
-        .unwrap_or("\n");
+        .map_or("\n", |s| s.as_str());
     let separator = if raw_separator.is_empty() {
         "\0"
     } else {
@@ -57,28 +57,29 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("tac-usage")))
-        .about(get_message("tac-about"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .override_usage(format_usage(&translate!("tac-usage")))
+        .about(translate!("tac-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::BEFORE)
                 .short('b')
                 .long(options::BEFORE)
-                .help("attach the separator before instead of after")
+                .help(translate!("tac-help-before"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::REGEX)
                 .short('r')
                 .long(options::REGEX)
-                .help("interpret the sequence as a regular expression")
+                .help(translate!("tac-help-regex"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SEPARATOR)
                 .short('s')
                 .long(options::SEPARATOR)
-                .help("use STRING as the separator instead of newline")
+                .help(translate!("tac-help-separator"))
                 .value_name("STRING"),
         )
         .arg(

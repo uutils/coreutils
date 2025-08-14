@@ -11,7 +11,8 @@ use uucore::display::Quotable;
 use uucore::error::{UError, UResult};
 use uucore::{format_usage, show};
 
-use uucore::locale::get_message;
+use uucore::LocalizedCommand;
+use uucore::translate;
 
 mod options {
     pub const FILE: &str = "file";
@@ -20,18 +21,18 @@ mod options {
 #[derive(Debug, Error)]
 enum TsortError {
     /// The input file is actually a directory.
-    #[error("{0}: read error: Is a directory")]
+    #[error("{input}: {message}", input = .0, message = translate!("tsort-error-is-dir"))]
     IsDir(String),
 
     /// The number of tokens in the input data is odd.
     ///
     /// The list of edges must be even because each edge has two
     /// components: a source node and a target node.
-    #[error("{input}: input contains an odd number of tokens", input = .0.maybe_quote())]
+    #[error("{input}: {message}", input = .0.maybe_quote(), message = translate!("tsort-error-odd"))]
     NumTokensOdd(String),
 
     /// The graph contains a cycle.
-    #[error("{0}: input contains a loop:")]
+    #[error("{input}: {message}", input = .0, message = translate!("tsort-error-loop"))]
     Loop(String),
 
     /// A particular node in a cycle. (This is mainly used for printing.)
@@ -43,7 +44,7 @@ impl UError for TsortError {}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let input = matches
         .get_one::<String>(options::FILE)
@@ -72,11 +73,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     g.run_tsort();
     Ok(())
 }
+
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("tsort-usage")))
-        .about(get_message("tsort-about"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .override_usage(format_usage(&translate!("tsort-usage")))
+        .about(translate!("tsort-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE)
@@ -147,7 +150,7 @@ impl<'input> Graph<'input> {
 
     /// Implementation of algorithm T from TAOCP (Don. Knuth), vol. 1.
     fn run_tsort(&mut self) {
-        // First, we find a node that have no prerequisites (independent nodes)
+        // First, we find nodes that have no prerequisites (independent nodes).
         // If no such node exists, then there is a cycle.
         let mut independent_nodes_queue: VecDeque<&'input str> = self
             .nodes
@@ -177,7 +180,7 @@ impl<'input> Graph<'input> {
                     let successor_node = self.nodes.get_mut(successor_name).unwrap();
                     successor_node.predecessor_count -= 1;
                     if successor_node.predecessor_count == 0 {
-                        // if we find nodes without any other prerequisites, we add them to the queue.
+                        // If we find nodes without any other prerequisites, we add them to the queue.
                         independent_nodes_queue.push_back(successor_name);
                     }
                 }
@@ -217,7 +220,7 @@ impl<'input> Graph<'input> {
         let cycle = self.detect_cycle();
         show!(TsortError::Loop(self.name.clone()));
         for node in &cycle {
-            show!(TsortError::LoopNode(node.to_string()));
+            show!(TsortError::LoopNode((*node).to_string()));
         }
         let u = cycle[0];
         let v = cycle[1];

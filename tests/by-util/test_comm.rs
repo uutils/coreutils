@@ -309,7 +309,7 @@ fn zero_terminated_with_total() {
     }
 }
 
-#[cfg_attr(not(feature = "test_unimplemented"), ignore)]
+#[cfg_attr(not(feature = "test_unimplemented"), ignore = "")]
 #[test]
 fn check_order() {
     let scene = TestScenario::new(util_name!());
@@ -324,7 +324,7 @@ fn check_order() {
         .stderr_is("error to be defined");
 }
 
-#[cfg_attr(not(feature = "test_unimplemented"), ignore)]
+#[cfg_attr(not(feature = "test_unimplemented"), ignore = "")]
 #[test]
 fn nocheck_order() {
     let scene = TestScenario::new(util_name!());
@@ -340,7 +340,7 @@ fn nocheck_order() {
 // when neither --check-order nor --no-check-order is provided,
 // stderr and the error code behaves like check order, but stdout
 // behaves like nocheck_order. However with some quirks detailed below.
-#[cfg_attr(not(feature = "test_unimplemented"), ignore)]
+#[cfg_attr(not(feature = "test_unimplemented"), ignore = "")]
 #[test]
 fn defaultcheck_order() {
     let scene = TestScenario::new(util_name!());
@@ -571,4 +571,19 @@ fn test_both_inputs_out_of_order_but_identical() {
         .succeeds()
         .stdout_is("\t\t2\n\t\t1\n\t\t0\n")
         .no_stderr();
+}
+
+#[test]
+fn test_comm_extra_arg_error() {
+    let scene = TestScenario::new(util_name!());
+
+    // Test extra argument error case from GNU test
+    scene
+        .ucmd()
+        .args(&["a", "b", "no-such"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("error: unexpected argument 'no-such' found")
+        .stderr_contains("Usage: comm [OPTION]... FILE1 FILE2")
+        .stderr_contains("For more information, try '--help'.");
 }

@@ -6,15 +6,16 @@
 use platform_info::*;
 
 use clap::Command;
+use uucore::LocalizedCommand;
 use uucore::error::{UResult, USimpleError};
-use uucore::locale::get_message;
+use uucore::translate;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    uu_app().try_get_matches_from(args)?;
+    uu_app().get_matches_from_localized(args);
 
     let uts =
-        PlatformInfo::new().map_err(|_e| USimpleError::new(1, get_message("cannot-get-system")))?;
+        PlatformInfo::new().map_err(|_e| USimpleError::new(1, translate!("cannot-get-system")))?;
 
     println!("{}", uts.machine().to_string_lossy().trim());
     Ok(())
@@ -23,7 +24,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("arch-about"))
-        .after_help(get_message("arch-after-help"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("arch-about"))
+        .after_help(translate!("arch-after-help"))
         .infer_long_args(true)
 }

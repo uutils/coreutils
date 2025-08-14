@@ -38,11 +38,7 @@ This file documents why some tests are failing:
 * gnu/tests/mv/part-hardlink.sh
 * gnu/tests/od/od-N.sh
 * gnu/tests/od/od-float.sh
-* gnu/tests/printf/printf-cov.pl
-* gnu/tests/printf/printf-indexed.sh
-* gnu/tests/printf/printf-mb.sh
 * gnu/tests/printf/printf-quote.sh
-* gnu/tests/printf/printf.sh
 * gnu/tests/ptx/ptx-overrun.sh
 * gnu/tests/ptx/ptx.pl
 * gnu/tests/rm/empty-inacc.sh - https://github.com/uutils/coreutils/issues/7033

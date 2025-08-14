@@ -39,6 +39,7 @@ executable
 executables
 exponentiate
 eval
+esac
 falsey
 fileio
 filesystem
@@ -68,6 +69,7 @@ kibi
 kibibytes
 libacl
 lcase
+listxattr
 llistxattr
 lossily
 lstat

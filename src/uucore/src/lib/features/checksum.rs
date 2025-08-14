@@ -18,7 +18,9 @@ use std::{
 
 use crate::{
     error::{FromIo, UError, UResult, USimpleError},
-    os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_error, show_warning_caps,
+    os_str_as_bytes, os_str_from_bytes,
+    quoting_style::{QuotingStyle, locale_aware_escape_name},
+    read_os_string_lines, show, show_error, show_warning_caps,
     sum::{
         Blake2b, Blake3, Bsd, CRC32B, Crc, Digest, DigestWriter, Md5, Sha1, Sha3_224, Sha3_256,
         Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256, Sm3, SysV,
@@ -233,6 +235,8 @@ pub enum ChecksumError {
     CombineMultipleAlgorithms,
     #[error("Needs an algorithm to hash with.\nUse --help for more information.")]
     NeedAlgorithmToHash,
+    #[error("")]
+    Io(#[from] io::Error),
 }
 
 impl UError for ChecksumError {
@@ -669,7 +673,7 @@ impl LineInfo {
             match cached_format {
                 LineFormat::Untagged => LineFormat::parse_untagged(line_bytes),
                 LineFormat::SingleSpace => LineFormat::parse_single_space(line_bytes),
-                _ => unreachable!("we never catch the algo based format"),
+                LineFormat::AlgoBased => unreachable!("we never catch the algo based format"),
             }
         } else if let Some(info) = LineFormat::parse_untagged(line_bytes) {
             *cached_line_format = Some(LineFormat::Untagged);
@@ -697,7 +701,7 @@ fn get_filename_for_output(filename: &OsStr, input_is_stdin: bool) -> String {
 fn get_expected_digest_as_hex_string(
     line_info: &LineInfo,
     len_hint: Option<usize>,
-) -> Option<Cow<str>> {
+) -> Option<Cow<'_, str>> {
     let ck = &line_info.checksum;
 
     let against_hint = |len| len_hint.is_none_or(|l| l == len);
@@ -732,7 +736,7 @@ fn get_file_to_check(
     opts: ChecksumOptions,
 ) -> Result<Box<dyn Read>, LineCheckError> {
     let filename_bytes = os_str_as_bytes(filename).expect("UTF-8 error");
-    let filename_lossy = String::from_utf8_lossy(filename_bytes);
+
     if filename == "-" {
         Ok(Box::new(stdin())) // Use stdin if "-" is specified in the checksum file
     } else {
@@ -745,15 +749,23 @@ fn get_file_to_check(
                 opts.verbose,
             );
         };
+        let print_error = |err: io::Error| {
+            show!(err.map_err_context(|| {
+                locale_aware_escape_name(filename, QuotingStyle::SHELL_ESCAPE)
+                    // This is non destructive thanks to the escaping
+                    .to_string_lossy()
+                    .to_string()
+            }));
+        };
         match File::open(filename) {
             Ok(f) => {
                 if f.metadata()
                     .map_err(|_| LineCheckError::CantOpenFile)?
                     .is_dir()
                 {
-                    show!(USimpleError::new(
-                        1,
-                        format!("{filename_lossy}: Is a directory")
+                    print_error(io::Error::new(
+                        io::ErrorKind::IsADirectory,
+                        "Is a directory",
                     ));
                     // also regarded as a failed open
                     failed_open();
@@ -765,7 +777,7 @@ fn get_file_to_check(
             Err(err) => {
                 if !opts.ignore_missing {
                     // yes, we have both stderr and stdout here
-                    show!(err.map_err_context(|| filename_lossy.to_string()));
+                    print_error(err);
                     failed_open();
                 }
                 // we could not open the file but we want to continue
@@ -956,7 +968,7 @@ fn process_checksum_line(
     cached_line_format: &mut Option<LineFormat>,
     last_algo: &mut Option<String>,
 ) -> Result<(), LineCheckError> {
-    let line_bytes = os_str_as_bytes(line)?;
+    let line_bytes = os_str_as_bytes(line).map_err(|e| LineCheckError::UError(Box::new(e)))?;
 
     // Early return on empty or commented lines.
     if line.is_empty() || line_bytes.starts_with(b"#") {
@@ -977,7 +989,7 @@ fn process_checksum_line(
         process_non_algo_based_line(i, &line_info, cli_algo, cli_algo_length, opts)
     } else {
         // We have no clue of what algorithm to use
-        return Err(LineCheckError::ImproperlyFormatted);
+        Err(LineCheckError::ImproperlyFormatted)
     }
 }
 
@@ -1061,7 +1073,7 @@ fn process_checksum_file(
             }
             Err(CantOpenFile | FileIsDirectory) => res.failed_open_file += 1,
             Err(FileNotFound) if !opts.ignore_missing => res.failed_open_file += 1,
-            _ => continue,
+            _ => (),
         };
     }
 
@@ -1130,7 +1142,7 @@ where
         match process_checksum_file(filename_input, algo_name_input, length_input, opts) {
             Err(UError(e)) => return Err(e),
             Err(Failed | CantOpenChecksumFile) => failed = true,
-            Ok(_) => continue,
+            Ok(_) => (),
         }
     }
 

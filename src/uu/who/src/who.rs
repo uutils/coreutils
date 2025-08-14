@@ -3,11 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ttyname hostnames runlevel mesg wtmp statted boottime deadprocs initspawn clockchange curr runlvline pidstr exitstr hoststr
+// spell-checker:ignore (ToDO) runlevel mesg
 
 use clap::{Arg, ArgAction, Command};
 use uucore::format_usage;
-use uucore::locale::get_message;
+use uucore::translate;
 
 mod platform;
 
@@ -31,9 +31,9 @@ mod options {
 
 fn get_runlevel_help() -> String {
     #[cfg(target_os = "linux")]
-    return get_message("who-help-runlevel");
+    return translate!("who-help-runlevel");
     #[cfg(not(target_os = "linux"))]
-    return get_message("who-help-runlevel-non-linux");
+    return translate!("who-help-runlevel-non-linux");
 }
 
 #[uucore::main]
@@ -41,74 +41,75 @@ use platform::uumain;
 
 pub fn uu_app() -> Command {
     #[cfg(not(target_env = "musl"))]
-    let about = get_message("who-about");
+    let about = translate!("who-about");
     #[cfg(target_env = "musl")]
-    let about = get_message("who-about") + &get_message("who-about-musl-warning");
+    let about = translate!("who-about") + &translate!("who-about-musl-warning");
 
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(about)
-        .override_usage(format_usage(&get_message("who-usage")))
+        .override_usage(format_usage(&translate!("who-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::ALL)
                 .long(options::ALL)
                 .short('a')
-                .help(get_message("who-help-all"))
+                .help(translate!("who-help-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::BOOT)
                 .long(options::BOOT)
                 .short('b')
-                .help(get_message("who-help-boot"))
+                .help(translate!("who-help-boot"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DEAD)
                 .long(options::DEAD)
                 .short('d')
-                .help(get_message("who-help-dead"))
+                .help(translate!("who-help-dead"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::HEADING)
                 .long(options::HEADING)
                 .short('H')
-                .help(get_message("who-help-heading"))
+                .help(translate!("who-help-heading"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::LOGIN)
                 .long(options::LOGIN)
                 .short('l')
-                .help(get_message("who-help-login"))
+                .help(translate!("who-help-login"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::LOOKUP)
                 .long(options::LOOKUP)
-                .help(get_message("who-help-lookup"))
+                .help(translate!("who-help-lookup"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ONLY_HOSTNAME_USER)
                 .short('m')
-                .help(get_message("who-help-only-hostname-user"))
+                .help(translate!("who-help-only-hostname-user"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PROCESS)
                 .long(options::PROCESS)
                 .short('p')
-                .help(get_message("who-help-process"))
+                .help(translate!("who-help-process"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COUNT)
                 .long(options::COUNT)
                 .short('q')
-                .help(get_message("who-help-count"))
+                .help(translate!("who-help-count"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -122,21 +123,21 @@ pub fn uu_app() -> Command {
             Arg::new(options::SHORT)
                 .long(options::SHORT)
                 .short('s')
-                .help(get_message("who-help-short"))
+                .help(translate!("who-help-short"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TIME)
                 .long(options::TIME)
                 .short('t')
-                .help(get_message("who-help-time"))
+                .help(translate!("who-help-time"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::USERS)
                 .long(options::USERS)
                 .short('u')
-                .help(get_message("who-help-users"))
+                .help(translate!("who-help-users"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -145,7 +146,7 @@ pub fn uu_app() -> Command {
                 .short('T')
                 .visible_short_alias('w')
                 .visible_aliases(["message", "writable"])
-                .help(get_message("who-help-mesg"))
+                .help(translate!("who-help-mesg"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

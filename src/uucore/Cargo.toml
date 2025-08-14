@@ -1,4 +1,4 @@
-# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal
+# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal tzdb zoneinfo
 
 [package]
 name = "uucore"
@@ -19,6 +19,7 @@ all-features = true
 path = "src/lib/lib.rs"
 
 [dependencies]
+bstr = { workspace = true }
 chrono = { workspace = true, optional = true }
 clap = { workspace = true }
 uucore_procs = { workspace = true }
@@ -28,6 +29,11 @@ dunce = { version = "1.0.4", optional = true }
 wild = "2.2.1"
 glob = { workspace = true, optional = true }
 itertools = { workspace = true, optional = true }
+jiff = { workspace = true, optional = true, features = [
+  "tzdb-bundle-platform",
+  "tzdb-zoneinfo",
+  "tzdb-concatenated",
+] }
 time = { workspace = true, optional = true, features = [
   "formatting",
   "local-offset",
@@ -51,16 +57,25 @@ blake2b_simd = { workspace = true, optional = true }
 blake3 = { workspace = true, optional = true }
 sm3 = { workspace = true, optional = true }
 crc32fast = { workspace = true, optional = true }
-regex = { workspace = true, optional = true }
 bigdecimal = { workspace = true, optional = true }
 num-traits = { workspace = true, optional = true }
 selinux = { workspace = true, optional = true }
 
-# Fluent dependencies
-fluent-bundle = { workspace = true }
+# icu stuff
+icu_collator = { workspace = true, optional = true, features = [
+  "compiled_data",
+] }
+icu_decimal = { workspace = true, optional = true, features = [
+  "compiled_data",
+] }
+icu_locale = { workspace = true, optional = true, features = ["compiled_data"] }
+icu_provider = { workspace = true, optional = true }
+
+# Fluent dependencies (always available for localization)
 fluent = { workspace = true }
 fluent-syntax = { workspace = true }
 unic-langid = { workspace = true }
+fluent-bundle = { workspace = true }
 thiserror = { workspace = true }
 [target.'cfg(unix)'.dependencies]
 walkdir = { workspace = true, optional = true }
@@ -89,7 +104,7 @@ default = []
 # * non-default features
 backup-control = []
 colors = []
-checksum = ["data-encoding", "sum"]
+checksum = ["data-encoding", "quoting-style", "sum"]
 encoding = ["data-encoding", "data-encoding-macro", "z85"]
 entries = ["libc"]
 extendedbigdecimal = ["bigdecimal", "num-traits"]
@@ -106,6 +121,10 @@ format = [
   "num-traits",
   "quoting-style",
 ]
+i18n-all = ["i18n-collator", "i18n-decimal"]
+i18n-common = ["icu_locale"]
+i18n-collator = ["i18n-common", "icu_collator"]
+i18n-decimal = ["i18n-common", "icu_decimal", "icu_provider"]
 mode = ["libc"]
 perms = ["entries", "libc", "walkdir"]
 buf-copy = []
@@ -113,7 +132,7 @@ parser = ["extendedbigdecimal", "glob", "num-traits"]
 pipes = []
 process = ["libc"]
 proc-info = ["tty", "walkdir"]
-quoting-style = []
+quoting-style = ["i18n-common"]
 ranges = []
 ringbuffer = []
 selinux = ["dep:selinux"]
@@ -137,4 +156,5 @@ utmpx = ["time", "time/macros", "libc", "dns-lookup"]
 version-cmp = []
 wide = []
 tty = []
+time = ["jiff"]
 uptime = ["chrono", "libc", "windows-sys", "utmpx", "utmp-classic"]

@@ -6,6 +6,7 @@ use std::io::Write;
 use std::io::{BufWriter, Error, Result};
 use std::path::Path;
 use uucore::fs;
+use uucore::translate;
 
 /// Get a file writer
 ///
@@ -23,13 +24,17 @@ pub fn instantiate_current_writer(
             .create(true)
             .truncate(true)
             .open(Path::new(&filename))
-            .map_err(|_| Error::other(format!("unable to open '{filename}'; aborting")))?
+            .map_err(|_| {
+                Error::other(translate!("split-error-unable-to-open-file", "file" => filename))
+            })?
     } else {
         // re-open file that we previously created to append to it
         std::fs::OpenOptions::new()
             .append(true)
             .open(Path::new(&filename))
-            .map_err(|_| Error::other(format!("unable to re-open '{filename}'; aborting")))?
+            .map_err(|_| {
+                Error::other(translate!("split-error-unable-to-reopen-file", "file" => filename))
+            })?
     };
     Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))
 }
