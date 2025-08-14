@@ -6,6 +6,7 @@
 
 // spell-checker:ignore (ToDO) lstat
 use clap::{Arg, ArgAction, Command};
+use std::ffi::OsString;
 use std::fs;
 use std::io::{ErrorKind, Write};
 use uucore::LocalizedCommand;
@@ -53,7 +54,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     // take necessary actions
-    let paths = matches.get_many::<String>(options::PATH);
+    let paths = matches.get_many::<OsString>(options::PATH);
     if paths.is_none() {
         return Err(UUsageError::new(
             1,
@@ -65,8 +66,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // FIXME: TCS, seems inefficient and overly verbose (?)
     let mut res = true;
     for p in paths.unwrap() {
+        let path_str = p.to_string_lossy();
         let mut path = Vec::new();
-        for path_segment in p.split('/') {
+        for path_segment in path_str.split('/') {
             path.push(path_segment.to_string());
         }
         res &= check_path(&mode, &path);
@@ -108,7 +110,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::PATH)
                 .hide(true)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::AnyPath),
+                .value_hint(clap::ValueHint::AnyPath)
+                .value_parser(clap::value_parser!(OsString)),
         )
 }
 

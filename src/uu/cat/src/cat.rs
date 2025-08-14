@@ -10,6 +10,7 @@ mod platform;
 use crate::platform::is_unsafe_overwrite;
 use clap::{Arg, ArgAction, Command};
 use memchr::memchr2;
+use std::ffi::OsString;
 use std::fs::{File, metadata};
 use std::io::{self, BufWriter, ErrorKind, IsTerminal, Read, Write};
 /// Unix domain socket support
@@ -267,9 +268,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     .any(|v| matches.get_flag(v));
 
     let squeeze_blank = matches.get_flag(options::SQUEEZE_BLANK);
-    let files: Vec<String> = match matches.get_many::<String>(options::FILE) {
+    let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILE) {
         Some(v) => v.cloned().collect(),
-        None => vec!["-".to_owned()],
+        None => vec![OsString::from("-")],
     };
 
     let options = OutputOptions {
@@ -294,6 +295,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE)
                 .hide(true)
                 .action(ArgAction::Append)
+                .value_parser(clap::value_parser!(OsString))
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
@@ -379,7 +381,7 @@ fn cat_handle<R: FdReadable>(
     }
 }
 
-fn cat_path(path: &str, options: &OutputOptions, state: &mut OutputState) -> CatResult<()> {
+fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -> CatResult<()> {
     match get_input_type(path)? {
         InputType::StdIn => {
             let stdin = io::stdin();
@@ -417,7 +419,7 @@ fn cat_path(path: &str, options: &OutputOptions, state: &mut OutputState) -> Cat
     }
 }
 
-fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
+fn cat_files(files: &[OsString], options: &OutputOptions) -> UResult<()> {
     let mut state = OutputState {
         line_number: LineNumber::new(),
         at_line_start: true,
@@ -452,7 +454,7 @@ fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
 /// # Arguments
 ///
 /// * `path` - Path on a file system to classify metadata
-fn get_input_type(path: &str) -> CatResult<InputType> {
+fn get_input_type(path: &OsString) -> CatResult<InputType> {
     if path == "-" {
         return Ok(InputType::StdIn);
     }

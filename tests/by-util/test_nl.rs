@@ -10,6 +10,22 @@ use uutests::util::TestScenario;
 use uutests::util_name;
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_nl_non_utf8_paths() {
+    use std::os::unix::ffi::OsStringExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    std::fs::write(at.plus(&filename), b"line 1\nline 2\nline 3\n").unwrap();
+
+    ucmd.arg(&filename)
+        .succeeds()
+        .stdout_contains("1\t")
+        .stdout_contains("2\t")
+        .stdout_contains("3\t");
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }

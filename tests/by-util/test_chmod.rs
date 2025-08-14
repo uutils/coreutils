@@ -1183,3 +1183,88 @@ fn test_chmod_recursive_symlink_combinations() {
         0o100_600
     );
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_chmod_non_utf8_paths() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a file with non-UTF-8 name
+    // Using bytes that form an invalid UTF-8 sequence
+    let non_utf8_bytes = b"test_\xFF\xFE.txt";
+    let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
+
+    // Create the file using OpenOptions with the non-UTF-8 name
+    OpenOptions::new()
+        .mode(0o644)
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(at.plus(non_utf8_name))
+        .unwrap();
+
+    // Verify initial permissions
+    let initial_perms = metadata(at.plus(non_utf8_name))
+        .unwrap()
+        .permissions()
+        .mode();
+    assert_eq!(initial_perms & 0o777, 0o644);
+
+    // Test chmod with the non-UTF-8 filename
+    scene
+        .ucmd()
+        .arg("755")
+        .arg(non_utf8_name)
+        .succeeds()
+        .no_stderr();
+
+    // Verify permissions were changed
+    let new_perms = metadata(at.plus(non_utf8_name))
+        .unwrap()
+        .permissions()
+        .mode();
+    assert_eq!(new_perms & 0o777, 0o755);
+
+    // Test with multiple non-UTF-8 files
+    let non_utf8_bytes2 = b"file_\xC0\x80.dat";
+    let non_utf8_name2 = OsStr::from_bytes(non_utf8_bytes2);
+
+    OpenOptions::new()
+        .mode(0o666)
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(at.plus(non_utf8_name2))
+        .unwrap();
+
+    // Change permissions on both files at once
+    scene
+        .ucmd()
+        .arg("644")
+        .arg(non_utf8_name)
+        .arg(non_utf8_name2)
+        .succeeds()
+        .no_stderr();
+
+    // Verify both files have the new permissions
+    assert_eq!(
+        metadata(at.plus(non_utf8_name))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o644
+    );
+    assert_eq!(
+        metadata(at.plus(non_utf8_name2))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o644
+    );
+}

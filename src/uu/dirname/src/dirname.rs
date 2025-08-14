@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command};
+use std::ffi::OsString;
 use std::path::Path;
 use uucore::LocalizedCommand;
 use uucore::display::print_verbatim;
@@ -26,8 +27,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
-    let dirnames: Vec<String> = matches
-        .get_many::<String>(options::DIR)
+    let dirnames: Vec<OsString> = matches
+        .get_many::<OsString>(options::DIR)
         .unwrap_or_default()
         .cloned()
         .collect();
@@ -47,7 +48,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
             }
             None => {
-                if p.is_absolute() || path == "/" {
+                if p.is_absolute() || path.as_os_str() == "/" {
                     print!("/");
                 } else {
                     print!(".");
@@ -79,6 +80,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::DIR)
                 .hide(true)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::AnyPath),
+                .value_hint(clap::ValueHint::AnyPath)
+                .value_parser(clap::value_parser!(OsString)),
         )
 }

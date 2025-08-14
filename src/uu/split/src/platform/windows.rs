@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+use std::ffi::OsStr;
 use std::io::Write;
 use std::io::{BufWriter, Error, Result};
 use std::path::Path;
@@ -39,7 +40,7 @@ pub fn instantiate_current_writer(
     Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))
 }
 
-pub fn paths_refer_to_same_file(p1: &str, p2: &str) -> bool {
+pub fn paths_refer_to_same_file(p1: &OsStr, p2: &OsStr) -> bool {
     // Windows doesn't support many of the unix ways of paths being equals
     fs::paths_refer_to_same_file(Path::new(p1), Path::new(p2), true)
 }

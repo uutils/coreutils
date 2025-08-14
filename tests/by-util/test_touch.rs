@@ -1013,3 +1013,19 @@ fn test_touch_f_option() {
     assert!(at.file_exists(file));
     at.remove(file);
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_touch_non_utf8_paths() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let non_utf8_bytes = b"test_\xFF\xFE.txt";
+    let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
+
+    scene.ucmd().arg(non_utf8_name).succeeds().no_output();
+    assert!(std::fs::metadata(at.plus(non_utf8_name)).is_ok());
+}

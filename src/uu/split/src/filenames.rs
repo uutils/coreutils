@@ -39,6 +39,7 @@ use crate::{
     OPT_NUMERIC_SUFFIXES_SHORT, OPT_SUFFIX_LENGTH,
 };
 use clap::ArgMatches;
+use std::ffi::{OsStr, OsString};
 use std::path::is_separator;
 use thiserror::Error;
 use uucore::display::Quotable;
@@ -76,7 +77,7 @@ pub struct Suffix {
     length: usize,
     start: usize,
     auto_widening: bool,
-    additional: String,
+    additional: OsString,
 }
 
 /// An error when parsing suffix parameters from command-line arguments.
@@ -219,11 +220,13 @@ impl Suffix {
         }
 
         let additional = matches
-            .get_one::<String>(OPT_ADDITIONAL_SUFFIX)
+            .get_one::<OsString>(OPT_ADDITIONAL_SUFFIX)
             .unwrap()
-            .to_string();
-        if additional.chars().any(is_separator) {
-            return Err(SuffixError::ContainsSeparator(additional));
+            .clone();
+        if additional.to_string_lossy().chars().any(is_separator) {
+            return Err(SuffixError::ContainsSeparator(
+                additional.to_string_lossy().to_string(),
+            ));
         }
 
         let result = Self {
@@ -300,14 +303,14 @@ impl Suffix {
 /// assert_eq!(it.next().unwrap(), "chunk_02.txt");
 /// ```
 pub struct FilenameIterator<'a> {
-    prefix: &'a str,
-    additional_suffix: &'a str,
+    prefix: &'a OsStr,
+    additional_suffix: &'a OsStr,
     number: Number,
     first_iteration: bool,
 }
 
 impl<'a> FilenameIterator<'a> {
-    pub fn new(prefix: &'a str, suffix: &'a Suffix) -> UResult<Self> {
+    pub fn new(prefix: &'a OsStr, suffix: &'a Suffix) -> UResult<Self> {
         let radix = suffix.stype.radix();
         let number = if suffix.auto_widening {
             Number::DynamicWidth(DynamicWidthNumber::new(radix, suffix.start))
@@ -321,7 +324,7 @@ impl<'a> FilenameIterator<'a> {
                 })?,
             )
         };
-        let additional_suffix = suffix.additional.as_str();
+        let additional_suffix = &suffix.additional;
 
         Ok(FilenameIterator {
             prefix,
@@ -345,7 +348,9 @@ impl Iterator for FilenameIterator<'_> {
         // struct parameters unchanged.
         Some(format!(
             "{}{}{}",
-            self.prefix, self.number, self.additional_suffix
+            self.prefix.to_string_lossy(),
+            self.number,
+            self.additional_suffix.to_string_lossy()
         ))
     }
 }
@@ -364,14 +369,14 @@ mod tests {
             length: 2,
             start: 0,
             auto_widening: false,
-            additional: ".txt".to_string(),
+            additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_aa.txt");
         assert_eq!(it.next().unwrap(), "chunk_ab.txt");
         assert_eq!(it.next().unwrap(), "chunk_ac.txt");
 
-        let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
         assert_eq!(it.nth(26 * 26 - 1).unwrap(), "chunk_zz.txt");
         assert_eq!(it.next(), None);
     }
@@ -383,14 +388,14 @@ mod tests {
             length: 2,
             start: 0,
             auto_widening: false,
-            additional: ".txt".to_string(),
+            additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_00.txt");
         assert_eq!(it.next().unwrap(), "chunk_01.txt");
         assert_eq!(it.next().unwrap(), "chunk_02.txt");
 
-        let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
         assert_eq!(it.nth(10 * 10 - 1).unwrap(), "chunk_99.txt");
         assert_eq!(it.next(), None);
     }
@@ -402,14 +407,14 @@ mod tests {
             length: 2,
             start: 0,
             auto_widening: true,
-            additional: ".txt".to_string(),
+            additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_aa.txt");
         assert_eq!(it.next().unwrap(), "chunk_ab.txt");
         assert_eq!(it.next().unwrap(), "chunk_ac.txt");
 
-        let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
         assert_eq!(it.nth(26 * 25 - 1).unwrap(), "chunk_yz.txt");
         assert_eq!(it.next().unwrap(), "chunk_zaaa.txt");
         assert_eq!(it.next().unwrap(), "chunk_zaab.txt");
@@ -422,14 +427,14 @@ mod tests {
             length: 2,
             start: 0,
             auto_widening: true,
-            additional: ".txt".to_string(),
+            additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_00.txt");
         assert_eq!(it.next().unwrap(), "chunk_01.txt");
         assert_eq!(it.next().unwrap(), "chunk_02.txt");
 
-        let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
         assert_eq!(it.nth(10 * 9 - 1).unwrap(), "chunk_89.txt");
         assert_eq!(it.next().unwrap(), "chunk_9000.txt");
         assert_eq!(it.next().unwrap(), "chunk_9001.txt");
@@ -442,9 +447,9 @@ mod tests {
             length: 2,
             start: 5,
             auto_widening: true,
-            additional: ".txt".to_string(),
+            additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_05.txt");
         assert_eq!(it.next().unwrap(), "chunk_06.txt");
         assert_eq!(it.next().unwrap(), "chunk_07.txt");
@@ -457,9 +462,9 @@ mod tests {
             length: 2,
             start: 9,
             auto_widening: true,
-            additional: ".txt".to_string(),
+            additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_09.txt");
         assert_eq!(it.next().unwrap(), "chunk_0a.txt");
         assert_eq!(it.next().unwrap(), "chunk_0b.txt");
@@ -472,9 +477,9 @@ mod tests {
             length: 3,
             start: 999,
             auto_widening: false,
-            additional: ".txt".to_string(),
+            additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_999.txt");
         assert!(it.next().is_none());
 
@@ -483,9 +488,9 @@ mod tests {
             length: 3,
             start: 1000,
             auto_widening: false,
-            additional: ".txt".to_string(),
+            additional: ".txt".into(),
         };
-        let it = FilenameIterator::new("chunk_", &suffix);
+        let it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert!(it.is_err());
 
         let suffix = Suffix {
@@ -493,9 +498,9 @@ mod tests {
             length: 3,
             start: 0xfff,
             auto_widening: false,
-            additional: ".txt".to_string(),
+            additional: ".txt".into(),
         };
-        let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
+        let mut it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_fff.txt");
         assert!(it.next().is_none());
 
@@ -504,9 +509,9 @@ mod tests {
             length: 3,
             start: 0x1000,
             auto_widening: false,
-            additional: ".txt".to_string(),
+            additional: ".txt".into(),
         };
-        let it = FilenameIterator::new("chunk_", &suffix);
+        let it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert!(it.is_err());
     }
 }

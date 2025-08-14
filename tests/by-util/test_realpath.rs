@@ -464,3 +464,44 @@ fn test_realpath_trailing_slash() {
 fn test_realpath_empty() {
     new_ucmd!().fails_with_code(1);
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_realpath_non_utf8_paths() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a test file with non-UTF-8 bytes in the name
+    let non_utf8_bytes = b"test_\xFF\xFE.txt";
+    let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
+
+    at.touch(non_utf8_name);
+    let result = scene.ucmd().arg(non_utf8_name).succeeds();
+
+    let output = result.stdout_str_lossy();
+    assert!(output.contains("test_"));
+    assert!(output.contains(".txt"));
+}
+
+#[test]
+fn test_realpath_empty_string() {
+    // Test that empty string arguments are rejected with exit code 1
+    new_ucmd!().arg("").fails().code_is(1);
+
+    // Test that empty --relative-base is rejected
+    new_ucmd!()
+        .arg("--relative-base=")
+        .arg("--relative-to=.")
+        .arg(".")
+        .fails()
+        .code_is(1);
+
+    new_ucmd!()
+        .arg("--relative-to=")
+        .arg(".")
+        .fails()
+        .code_is(1);
+}
