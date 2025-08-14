@@ -11,16 +11,18 @@ use crate::display::Quotable;
 use crate::error::{UResult, USimpleError, strip_errno};
 pub use crate::features::entries;
 use crate::show_error;
+
 use clap::{Arg, ArgMatches, Command};
+
 use libc::{gid_t, uid_t};
 use options::traverse;
+use std::ffi::OsString;
 use walkdir::WalkDir;
-
-use std::io::Error as IOError;
-use std::io::Result as IOResult;
 
 use std::ffi::CString;
 use std::fs::Metadata;
+use std::io::Error as IOError;
+use std::io::Result as IOResult;
 use std::os::unix::fs::MetadataExt;
 
 use std::os::unix::ffi::OsStrExt;
@@ -192,7 +194,7 @@ pub struct ChownExecutor {
     pub traverse_symlinks: TraverseSymlinks,
     pub verbosity: Verbosity,
     pub filter: IfFrom,
-    pub files: Vec<String>,
+    pub files: Vec<OsString>,
     pub recursive: bool,
     pub preserve_root: bool,
     pub dereference: bool,
@@ -596,13 +598,14 @@ pub fn chown_base(
             .value_hint(clap::ValueHint::FilePath)
             .action(clap::ArgAction::Append)
             .required(true)
-            .num_args(1..),
+            .num_args(1..)
+            .value_parser(clap::value_parser!(std::ffi::OsString)),
     );
     let matches = command.try_get_matches_from(args)?;
 
-    let files: Vec<String> = matches
-        .get_many::<String>(options::ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
+    let files: Vec<OsString> = matches
+        .get_many::<OsString>(options::ARG_FILES)
+        .map(|v| v.cloned().collect())
         .unwrap_or_default();
 
     let preserve_root = matches.get_flag(options::preserve_root::PRESERVE);

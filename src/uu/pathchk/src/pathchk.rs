@@ -6,8 +6,10 @@
 
 // spell-checker:ignore (ToDO) lstat
 use clap::{Arg, ArgAction, Command};
+use std::ffi::OsString;
 use std::fs;
 use std::io::{ErrorKind, Write};
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError, set_exit_code};
 use uucore::format_usage;
@@ -34,7 +36,7 @@ const POSIX_NAME_MAX: usize = 14;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     // set working mode
     let is_posix = matches.get_flag(options::POSIX);
@@ -52,7 +54,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     // take necessary actions
-    let paths = matches.get_many::<String>(options::PATH);
+    let paths = matches.get_many::<OsString>(options::PATH);
     if paths.is_none() {
         return Err(UUsageError::new(
             1,
@@ -64,8 +66,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // FIXME: TCS, seems inefficient and overly verbose (?)
     let mut res = true;
     for p in paths.unwrap() {
+        let path_str = p.to_string_lossy();
         let mut path = Vec::new();
-        for path_segment in p.split('/') {
+        for path_segment in path_str.split('/') {
             path.push(path_segment.to_string());
         }
         res &= check_path(&mode, &path);
@@ -81,6 +84,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("pathchk-about"))
         .override_usage(format_usage(&translate!("pathchk-usage")))
         .infer_long_args(true)
@@ -106,7 +110,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::PATH)
                 .hide(true)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::AnyPath),
+                .value_hint(clap::ValueHint::AnyPath)
+                .value_parser(clap::value_parser!(OsString)),
         )
 }
 

@@ -6,6 +6,7 @@
 #![allow(rustdoc::private_intra_doc_links)]
 
 use std::cmp::Ordering;
+use std::ffi::OsString;
 use std::io::{self, BufReader, ErrorKind};
 use std::{
     fs::{File, remove_file},
@@ -25,6 +26,7 @@ mod split_name;
 use crate::csplit_error::CsplitError;
 use crate::split_name::SplitName;
 
+use uucore::LocalizedCommand;
 use uucore::translate;
 
 mod options {
@@ -604,10 +606,10 @@ where
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     // get the file to split
-    let file_name = matches.get_one::<String>(options::FILE).unwrap();
+    let file_name = matches.get_one::<OsString>(options::FILE).unwrap();
 
     // get the patterns to split on
     let patterns: Vec<String> = matches
@@ -629,6 +631,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("csplit-about"))
         .override_usage(format_usage(&translate!("csplit-usage")))
         .args_override_self(true)
@@ -687,7 +690,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE)
                 .hide(true)
                 .required(true)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::PATTERN)

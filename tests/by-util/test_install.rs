@@ -7,6 +7,8 @@
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
 use std::fs;
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(not(windows))]
 use std::process::Command;
@@ -2365,4 +2367,27 @@ fn test_install_compare_with_mode_bits() {
             "Failed to create dest file for {description}"
         );
     }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_non_utf8_paths() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source_filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    let dest_dir = "target_dir";
+
+    std::fs::write(at.plus(&source_filename), b"test content").unwrap();
+    at.mkdir(dest_dir);
+
+    ucmd.arg(&source_filename).arg(dest_dir).succeeds();
+
+    // Test with trailing slash and directory creation (-D flag)
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source_file = "source.txt";
+    let mut target_path = std::ffi::OsString::from_vec(vec![0xFF, 0xFE, b'd', b'i', b'r']);
+    target_path.push("/target.txt");
+
+    at.touch(source_file);
+
+    ucmd.arg("-D").arg(source_file).arg(&target_path).succeeds();
 }

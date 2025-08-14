@@ -8,6 +8,7 @@ use clap::{Arg, Command};
 use std::ffi::OsString;
 use std::fs::hard_link;
 use std::path::Path;
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
 use uucore::format_usage;
@@ -19,7 +20,7 @@ pub mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
     let files: Vec<_> = matches
         .get_many::<OsString>(options::FILES)
         .unwrap_or_default()
@@ -36,6 +37,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("link-about"))
         .override_usage(format_usage(&translate!("link-usage")))
         .infer_long_args(true)

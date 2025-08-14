@@ -28,3 +28,15 @@ fn test_ignore_equal_var() {
     // tested by gnu/tests/misc/printenv.sh
     new_ucmd!().env("a=b", "c").arg("a=b").fails().no_stdout();
 }
+
+#[test]
+fn test_invalid_option_exit_code() {
+    // printenv should return exit code 2 for invalid options
+    // This matches GNU printenv behavior and the GNU tests expectation
+    new_ucmd!()
+        .arg("-/")
+        .fails()
+        .code_is(2)
+        .stderr_contains("unexpected argument")
+        .stderr_contains("For more information, try '--help'");
+}

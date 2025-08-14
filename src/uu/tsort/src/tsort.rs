@@ -5,12 +5,14 @@
 //spell-checker:ignore TAOCP indegree
 use clap::{Arg, Command};
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::ffi::OsString;
 use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult};
 use uucore::{format_usage, show};
 
+use uucore::LocalizedCommand;
 use uucore::translate;
 
 mod options {
@@ -43,29 +45,29 @@ impl UError for TsortError {}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let input = matches
-        .get_one::<String>(options::FILE)
+        .get_one::<OsString>(options::FILE)
         .expect("Value is required by clap");
 
     let data = if input == "-" {
         let stdin = std::io::stdin();
         std::io::read_to_string(stdin)?
     } else {
-        let path = Path::new(&input);
+        let path = Path::new(input);
         if path.is_dir() {
-            return Err(TsortError::IsDir(input.to_string()).into());
+            return Err(TsortError::IsDir(input.to_string_lossy().to_string()).into());
         }
         std::fs::read_to_string(path)?
     };
 
     // Create the directed graph from pairs of tokens in the input data.
-    let mut g = Graph::new(input.clone());
+    let mut g = Graph::new(input.to_string_lossy().to_string());
     for ab in data.split_whitespace().collect::<Vec<&str>>().chunks(2) {
         match ab {
             [a, b] => g.add_edge(a, b),
-            _ => return Err(TsortError::NumTokensOdd(input.to_string()).into()),
+            _ => return Err(TsortError::NumTokensOdd(input.to_string_lossy().to_string()).into()),
         }
     }
 
@@ -76,6 +78,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .override_usage(format_usage(&translate!("tsort-usage")))
         .about(translate!("tsort-about"))
         .infer_long_args(true)
@@ -83,6 +86,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE)
                 .default_value("-")
                 .hide(true)
+                .value_parser(clap::value_parser!(OsString))
                 .value_hint(clap::ValueHint::FilePath),
         )
 }

@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use std::{
+    ffi::OsString,
     fs::File,
     io::{BufRead, BufReader, Stdin, Stdout, Write, stdin, stdout},
     panic::set_hook,
@@ -26,6 +27,7 @@ use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::{display::Quotable, show};
 
+use uucore::LocalizedCommand;
 use uucore::translate;
 
 #[derive(Debug)]
@@ -151,14 +153,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         print!("\r");
         println!("{panic_info}");
     }));
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
     let mut options = Options::from(&matches);
-    if let Some(files) = matches.get_many::<String>(options::FILES) {
+    if let Some(files) = matches.get_many::<OsString>(options::FILES) {
         let length = files.len();
 
-        let mut files_iter = files.map(|s| s.as_str()).peekable();
-        while let (Some(file), next_file) = (files_iter.next(), files_iter.peek()) {
-            let file = Path::new(file);
+        let mut files_iter = files.peekable();
+        while let (Some(file_os), next_file) = (files_iter.next(), files_iter.peek()) {
+            let file = Path::new(file_os);
             if file.is_dir() {
                 show!(UUsageError::new(
                     0,
@@ -187,11 +189,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
                 Ok(opened_file) => opened_file,
             };
+            let next_file_str = next_file.map(|f| f.to_string_lossy().into_owned());
             more(
                 InputType::File(BufReader::new(opened_file)),
                 length > 1,
-                file.to_str(),
-                next_file.copied(),
+                Some(&file.to_string_lossy()),
+                next_file_str.as_deref(),
                 &mut options,
             )?;
         }
@@ -212,6 +215,7 @@ pub fn uu_app() -> Command {
         .about(translate!("more-about"))
         .override_usage(format_usage(&translate!("more-usage")))
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .infer_long_args(true)
         .arg(
             Arg::new(options::SILENT)
@@ -309,7 +313,8 @@ pub fn uu_app() -> Command {
                 .required(false)
                 .action(ArgAction::Append)
                 .help(translate!("more-help-files"))
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
 }
 

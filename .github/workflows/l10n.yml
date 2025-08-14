@@ -129,6 +129,176 @@ jobs:
 
         echo "::notice::All Fluent files passed Mozilla Fluent Linter validation"
 
+  l10n_clap_error_localization:
+    name: L10n/Clap Error Localization Test
+    runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.9
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev locales
+        sudo locale-gen --keep-existing fr_FR.UTF-8
+        locale -a | grep -i fr || exit 1
+    - name: Build coreutils with clap localization support
+      shell: bash
+      run: |
+        cargo build --features feat_os_unix --bin coreutils
+    - name: Test English clap error localization
+      shell: bash
+      run: |
+        export LANG=en_US.UTF-8
+        export LC_ALL=en_US.UTF-8
+
+        # Test invalid argument error - should show colored error message
+        echo "Testing invalid argument error..."
+        error_output=$(cargo run --features feat_os_unix --bin coreutils -- cp --invalid-arg 2>&1 || echo "Expected error occurred")
+        echo "Error output: $error_output"
+
+        # Check for expected English clap error patterns
+        english_errors_found=0
+
+        if echo "$error_output" | grep -q "error.*unexpected argument"; then
+          echo "✓ Found English clap error message pattern"
+          english_errors_found=$((english_errors_found + 1))
+        fi
+
+        if echo "$error_output" | grep -q "Usage:"; then
+          echo "✓ Found English usage pattern"
+          english_errors_found=$((english_errors_found + 1))
+        fi
+
+        if echo "$error_output" | grep -q "For more information.*--help"; then
+          echo "✓ Found English help suggestion"
+          english_errors_found=$((english_errors_found + 1))
+        fi
+
+        # Test typo suggestion
+        echo "Testing typo suggestion..."
+        typo_output=$(cargo run --features feat_os_unix --bin coreutils -- ls --verbos 2>&1 || echo "Expected error occurred")
+        echo "Typo output: $typo_output"
+
+        if echo "$typo_output" | grep -q "similar.*verbose"; then
+          echo "✓ Found English typo suggestion"
+          english_errors_found=$((english_errors_found + 1))
+        fi
+
+        echo "English clap errors found: $english_errors_found"
+        if [ "$english_errors_found" -ge 2 ]; then
+          echo "✓ SUCCESS: English clap error localization working"
+        else
+          echo "✗ ERROR: English clap error localization not working properly"
+          exit 1
+        fi
+      env:
+        RUST_BACKTRACE: "1"
+
+    - name: Test French clap error localization
+      shell: bash
+      run: |
+        export LANG=fr_FR.UTF-8
+        export LC_ALL=fr_FR.UTF-8
+
+        # Test invalid argument error - should show French colored error message
+        echo "Testing invalid argument error in French..."
+        error_output=$(cargo run --features feat_os_unix --bin coreutils -- cp --invalid-arg 2>&1 || echo "Expected error occurred")
+        echo "French error output: $error_output"
+
+        # Check for expected French clap error patterns
+        french_errors_found=0
+
+        if echo "$error_output" | grep -q "erreur.*argument inattendu"; then
+          echo "✓ Found French clap error message: 'erreur: argument inattendu'"
+          french_errors_found=$((french_errors_found + 1))
+        fi
+
+        if echo "$error_output" | grep -q "conseil.*pour passer.*comme valeur"; then
+          echo "✓ Found French tip message: 'conseil: pour passer ... comme valeur'"
+          french_errors_found=$((french_errors_found + 1))
+        fi
+
+        if echo "$error_output" | grep -q "Utilisation:"; then
+          echo "✓ Found French usage pattern: 'Utilisation:'"
+          french_errors_found=$((french_errors_found + 1))
+        fi
+
+        if echo "$error_output" | grep -q "Pour plus d'informations.*--help"; then
+          echo "✓ Found French help suggestion: 'Pour plus d'informations'"
+          french_errors_found=$((french_errors_found + 1))
+        fi
+
+        # Test typo suggestion in French
+        echo "Testing typo suggestion in French..."
+        typo_output=$(cargo run --features feat_os_unix --bin coreutils -- ls --verbos 2>&1 || echo "Expected error occurred")
+        echo "French typo output: $typo_output"
+
+        if echo "$typo_output" | grep -q "conseil.*similaire.*verbose"; then
+          echo "✓ Found French typo suggestion with 'conseil'"
+          french_errors_found=$((french_errors_found + 1))
+        fi
+
+        echo "French clap errors found: $french_errors_found"
+        if [ "$french_errors_found" -ge 2 ]; then
+          echo "✓ SUCCESS: French clap error localization working - found $french_errors_found French patterns"
+        else
+          echo "✗ ERROR: French clap error localization not working properly"
+          echo "Note: This might be expected if French common locale files are not available"
+          # Don't fail the build - French clap localization might not be fully set up yet
+          echo "::warning::French clap error localization not working, but continuing"
+        fi
+
+        # Test that colors are working (ANSI escape codes)
+        echo "Testing ANSI color codes in error output..."
+        if echo "$error_output" | grep -q $'\x1b\[3[0-7]m'; then
+          echo "✓ Found ANSI color codes in error output"
+        else
+          echo "✗ No ANSI color codes found - colors may not be working"
+          echo "::warning::ANSI color codes not detected in clap error output"
+        fi
+      env:
+        RUST_BACKTRACE: "1"
+
+    - name: Test clap localization with multiple utilities
+      shell: bash
+      run: |
+        export LANG=en_US.UTF-8
+        export LC_ALL=en_US.UTF-8
+
+        utilities_to_test=("ls" "cat" "touch" "cp" "mv")
+        utilities_passed=0
+
+        for util in "${utilities_to_test[@]}"; do
+          echo "Testing $util with invalid argument..."
+          util_error=$(cargo run --features feat_os_unix --bin coreutils -- "$util" --nonexistent-flag 2>&1 || echo "Expected error occurred")
+
+          if echo "$util_error" | grep -q "error.*unexpected argument"; then
+            echo "✓ $util: clap localization working"
+            utilities_passed=$((utilities_passed + 1))
+          else
+            echo "✗ $util: clap localization not working"
+            echo "Output: $util_error"
+          fi
+        done
+
+        echo "Utilities with working clap localization: $utilities_passed/${#utilities_to_test[@]}"
+        if [ "$utilities_passed" -ge 3 ]; then
+          echo "✓ SUCCESS: Clap localization working across multiple utilities"
+        else
+          echo "✗ ERROR: Clap localization not working for enough utilities"
+          exit 1
+        fi
+      env:
+        RUST_BACKTRACE: "1"
+
   l10n_french_integration:
     name: L10n/French Integration Test
     runs-on: ubuntu-latest

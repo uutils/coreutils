@@ -5,11 +5,14 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::cell::{OnceCell, RefCell};
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Stdin, Write, stdin, stdout};
 use std::iter::Cycle;
+use std::path::Path;
 use std::rc::Rc;
 use std::slice::Iter;
+use uucore::LocalizedCommand;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 use uucore::line_ending::LineEnding;
@@ -24,12 +27,12 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let serial = matches.get_flag(options::SERIAL);
     let delimiters = matches.get_one::<String>(options::DELIMITER).unwrap();
     let files = matches
-        .get_many::<String>(options::FILE)
+        .get_many::<OsString>(options::FILE)
         .unwrap()
         .cloned()
         .collect();
@@ -41,6 +44,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("paste-about"))
         .override_usage(format_usage(&translate!("paste-usage")))
         .infer_long_args(true)
@@ -65,7 +69,8 @@ pub fn uu_app() -> Command {
                 .value_name("FILE")
                 .action(ArgAction::Append)
                 .default_value("-")
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::ZERO_TERMINATED)
@@ -78,7 +83,7 @@ pub fn uu_app() -> Command {
 
 #[allow(clippy::cognitive_complexity)]
 fn paste(
-    filenames: Vec<String>,
+    filenames: Vec<OsString>,
     serial: bool,
     delimiters: &str,
     line_ending: LineEnding,
@@ -90,17 +95,16 @@ fn paste(
     let mut input_source_vec = Vec::with_capacity(filenames.len());
 
     for filename in filenames {
-        let input_source = match filename.as_str() {
-            "-" => InputSource::StandardInput(
+        let input_source = if filename == "-" {
+            InputSource::StandardInput(
                 stdin_once_cell
                     .get_or_init(|| Rc::new(RefCell::new(stdin())))
                     .clone(),
-            ),
-            st => {
-                let file = File::open(st)?;
-
-                InputSource::File(BufReader::new(file))
-            }
+            )
+        } else {
+            let path = Path::new(&filename);
+            let file = File::open(path)?;
+            InputSource::File(BufReader::new(file))
         };
 
         input_source_vec.push(input_source);

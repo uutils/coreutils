@@ -4,12 +4,14 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command};
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, stdin};
 use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
 use uucore::translate;
 
+use uucore::LocalizedCommand;
 use uucore::{format_usage, show_error};
 
 mod helper;
@@ -176,7 +178,7 @@ pub mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let mut settings = Settings::default();
 
@@ -194,9 +196,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    let files: Vec<String> = match matches.get_many::<String>(options::FILE) {
+    let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILE) {
         Some(v) => v.cloned().collect(),
-        None => vec!["-".to_owned()],
+        None => vec![OsString::from("-")],
     };
 
     let mut stats = Stats::new(settings.starting_line_number);
@@ -215,7 +217,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 );
                 set_exit_code(1);
             } else {
-                let reader = File::open(path).map_err_context(|| file.to_string())?;
+                let reader =
+                    File::open(path).map_err_context(|| file.to_string_lossy().to_string())?;
                 let mut buffer = BufReader::new(reader);
                 nl(&mut buffer, &mut stats, &settings)?;
             }
@@ -229,6 +232,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .about(translate!("nl-about"))
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .override_usage(format_usage(&translate!("nl-usage")))
         .after_help(translate!("nl-after-help"))
         .infer_long_args(true)
@@ -243,7 +247,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE)
                 .hide(true)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::BODY_NUMBERING)

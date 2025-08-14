@@ -23,6 +23,7 @@ use uucore::error::{FromIo, UError, UResult};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
 
+use uucore::LocalizedCommand;
 use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
 
 #[derive(Debug, Error)]
@@ -30,17 +31,17 @@ enum RmError {
     #[error("{}", translate!("rm-error-missing-operand", "util_name" => uucore::execution_phrase()))]
     MissingOperand,
     #[error("{}", translate!("rm-error-cannot-remove-no-such-file", "file" => _0.quote()))]
-    CannotRemoveNoSuchFile(String),
+    CannotRemoveNoSuchFile(OsString),
     #[error("{}", translate!("rm-error-cannot-remove-permission-denied", "file" => _0.quote()))]
-    CannotRemovePermissionDenied(String),
+    CannotRemovePermissionDenied(OsString),
     #[error("{}", translate!("rm-error-cannot-remove-is-directory", "file" => _0.quote()))]
-    CannotRemoveIsDirectory(String),
+    CannotRemoveIsDirectory(OsString),
     #[error("{}", translate!("rm-error-dangerous-recursive-operation"))]
     DangerousRecursiveOperation,
     #[error("{}", translate!("rm-error-use-no-preserve-root"))]
     UseNoPreserveRoot,
-    #[error("{}", translate!("rm-error-refusing-to-remove-directory", "path" => _0))]
-    RefusingToRemoveDirectory(String),
+    #[error("{}", translate!("rm-error-refusing-to-remove-directory", "path" => _0.to_string_lossy()))]
+    RefusingToRemoveDirectory(OsString),
 }
 
 impl UError for RmError {}
@@ -143,7 +144,7 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let files: Vec<_> = matches
         .get_many::<OsString>(ARG_FILES)
@@ -226,6 +227,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .about(translate!("rm-about"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .override_usage(format_usage(&translate!("rm-usage")))
         .after_help(translate!("rm-after-help"))
         .infer_long_args(true)
@@ -364,7 +366,7 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
                 } else {
                     show_error!(
                         "{}",
-                        RmError::CannotRemoveNoSuchFile(filename.to_string_lossy().to_string())
+                        RmError::CannotRemoveNoSuchFile(filename.to_os_string())
                     );
                     true
                 }
@@ -540,7 +542,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     if path_is_current_or_parent_directory(path) {
         show_error!(
             "{}",
-            RmError::RefusingToRemoveDirectory(path.display().to_string())
+            RmError::RefusingToRemoveDirectory(path.as_os_str().to_os_string())
         );
         return true;
     }
@@ -557,7 +559,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     } else {
         show_error!(
             "{}",
-            RmError::CannotRemoveIsDirectory(path.to_string_lossy().to_string())
+            RmError::CannotRemoveIsDirectory(path.as_os_str().to_os_string())
         );
         had_err = true;
     }
@@ -578,7 +580,7 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
     if !options.dir && !options.recursive {
         show_error!(
             "{}",
-            RmError::CannotRemoveIsDirectory(path.to_string_lossy().to_string())
+            RmError::CannotRemoveIsDirectory(path.as_os_str().to_os_string())
         );
         return true;
     }
@@ -619,7 +621,7 @@ fn remove_file(path: &Path, options: &Options) -> bool {
                     // GNU compatibility (rm/fail-eacces.sh)
                     show_error!(
                         "{}",
-                        RmError::CannotRemovePermissionDenied(path.to_string_lossy().to_string())
+                        RmError::CannotRemovePermissionDenied(path.as_os_str().to_os_string())
                     );
                 } else {
                     show_error!("cannot remove {}: {e}", path.quote());

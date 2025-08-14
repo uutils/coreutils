@@ -5,7 +5,7 @@
 //! library ~ (core/bundler file)
 // #![deny(missing_docs)] //TODO: enable this
 //
-// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal
+// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil
 
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
@@ -22,6 +22,8 @@ mod mods; // core cross-platform modules
 pub use uucore_procs::*;
 
 // * cross-platform modules
+pub use crate::mods::clap_localization;
+pub use crate::mods::clap_localization::LocalizedCommand;
 pub use crate::mods::display;
 pub use crate::mods::error;
 #[cfg(feature = "fs")]
@@ -224,6 +226,41 @@ macro_rules! crate_version {
 pub fn format_usage(s: &str) -> String {
     let s = s.replace('\n', &format!("\n{}", " ".repeat(7)));
     s.replace("{}", crate::execution_phrase())
+}
+
+/// Creates a localized help template for clap commands.
+///
+/// This function returns a help template that uses the localized
+/// "Usage:" label from the translation files. This ensures consistent
+/// localization across all utilities.
+///
+/// Note: We avoid using clap's `{usage-heading}` placeholder because it is
+/// hardcoded to "Usage:" and cannot be localized. Instead, we manually
+/// construct the usage line with the localized label.
+///
+/// # Parameters
+/// - `util_name`: The name of the utility (for localization setup)
+///
+/// # Example
+/// ```no_run
+/// use clap::Command;
+/// use uucore::localized_help_template;
+///
+/// let app = Command::new("myutil")
+///     .help_template(localized_help_template("myutil"));
+/// ```
+pub fn localized_help_template(util_name: &str) -> clap::builder::StyledStr {
+    // Ensure localization is initialized for this utility
+    let _ = crate::locale::setup_localization(util_name);
+
+    let usage_label = crate::locale::translate!("common-usage");
+
+    // Create a template that avoids clap's hardcoded {usage-heading}
+    let template = format!(
+        "{{before-help}}{{about-with-newline}}\n{usage_label}: {{usage}}\n\n{{all-args}}{{after-help}}"
+    );
+
+    clap::builder::StyledStr::from(template)
 }
 
 /// Used to check if the utility is the second argument.

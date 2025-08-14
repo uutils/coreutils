@@ -75,3 +75,23 @@ fn test_unlink_symlink() {
     assert!(at.file_exists("foo"));
     assert!(!at.file_exists("bar"));
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_unlink_non_utf8_paths() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    // Create a test file with non-UTF-8 bytes in the name
+    let non_utf8_bytes = b"test_\xFF\xFE.txt";
+    let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
+
+    at.touch(non_utf8_name);
+    assert!(at.file_exists(non_utf8_name));
+
+    // Test that unlink handles non-UTF-8 file names without crashing
+    ucmd.arg(non_utf8_name).succeeds();
+
+    assert!(!at.file_exists(non_utf8_name));
+}

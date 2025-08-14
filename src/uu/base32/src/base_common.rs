@@ -6,15 +6,16 @@
 // spell-checker:ignore hexupper lsbf msbf unpadded nopad aGVsbG8sIHdvcmxkIQ
 
 use clap::{Arg, ArgAction, Command};
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::encoding::{
-    BASE2LSBF, BASE2MSBF, Format, Z85Wrapper,
+    BASE2LSBF, BASE2MSBF, EncodingWrapper, Format, SupportsFastDecodeAndEncode, Z85Wrapper,
     for_base_common::{BASE32, BASE32HEX, BASE64, BASE64_NOPAD, BASE64URL, HEXUPPER_PERMISSIVE},
 };
-use uucore::encoding::{EncodingWrapper, SupportsFastDecodeAndEncode};
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::translate;
@@ -44,14 +45,14 @@ pub mod options {
 
 impl Config {
     pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
-        let to_read = match options.get_many::<String>(options::FILE) {
+        let to_read = match options.get_many::<OsString>(options::FILE) {
             Some(mut values) => {
                 let name = values.next().unwrap();
 
                 if let Some(extra_op) = values.next() {
                     return Err(UUsageError::new(
                         BASE_CMD_PARSE_ERROR,
-                        translate!("base-common-extra-operand", "operand" => extra_op.quote()),
+                        translate!("base-common-extra-operand", "operand" => extra_op.to_string_lossy().quote()),
                     ));
                 }
 
@@ -100,12 +101,14 @@ pub fn parse_base_cmd_args(
     usage: &str,
 ) -> UResult<Config> {
     let command = base_app(about, usage);
-    Config::from(&command.try_get_matches_from(args)?)
+    let matches = command.get_matches_from_localized(args);
+    Config::from(&matches)
 }
 
 pub fn base_app(about: &'static str, usage: &str) -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(about)
         .override_usage(format_usage(usage))
         .infer_long_args(true)
@@ -141,6 +144,7 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
             Arg::new(options::FILE)
                 .index(1)
                 .action(ArgAction::Append)
+                .value_parser(clap::value_parser!(OsString))
                 .value_hint(clap::ValueHint::FilePath),
         )
 }

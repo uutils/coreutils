@@ -17,6 +17,7 @@ use uucore::uptime::*;
 
 use clap::{Arg, ArgAction, Command, ValueHint, builder::ValueParser};
 
+use uucore::LocalizedCommand;
 use uucore::format_usage;
 
 #[cfg(unix)]
@@ -47,7 +48,7 @@ impl UError for UptimeError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     #[cfg(unix)]
     let file_path = matches.get_one::<OsString>(options::PATH);
@@ -71,6 +72,7 @@ pub fn uu_app() -> Command {
 
     let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(about)
         .override_usage(format_usage(&translate!("uptime-usage")))
         .infer_long_args(true)
