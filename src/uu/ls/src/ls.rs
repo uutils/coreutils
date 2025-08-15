@@ -2970,7 +2970,6 @@ fn display_date(
     format_system_time(out, time, fmt, FormatSystemTimeFallback::Integer)
 }
 
-#[allow(dead_code)]
 enum SizeOrDeviceId {
     Size(String),
     Device(String, String),
