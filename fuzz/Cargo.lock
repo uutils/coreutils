@@ -1571,6 +1571,7 @@ dependencies = [
 name = "uu_tr"
 version = "0.1.0"
 dependencies = [
+ "bytecount",
  "clap",
  "fluent",
  "nom",
