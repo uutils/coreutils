@@ -1480,6 +1480,8 @@ pub fn uu_app() -> Command {
                 .value_parser(ValueParser::os_string())
                 .value_name("FILENAME")
                 .value_hint(clap::ValueHint::FilePath)
+                .num_args(1)
+                .allow_hyphen_values(true)
                 // To detect multiple occurrences and raise an error
                 .action(ArgAction::Append),
         )

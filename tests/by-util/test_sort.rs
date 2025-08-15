@@ -1350,6 +1350,29 @@ fn test_multiple_output_files() {
 }
 
 #[test]
+fn test_output_file_with_leading_dash() {
+    let test_cases = [
+        (
+            ["--output", "--dash-file"],
+            "banana\napple\ncherry\n",
+            "apple\nbanana\ncherry\n",
+        ),
+        (
+            ["-o", "--another-dash-file"],
+            "zebra\nxray\nyak\n",
+            "xray\nyak\nzebra\n",
+        ),
+    ];
+
+    for (args, input, expected) in test_cases {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&args).pipe_in(input).succeeds().no_stdout();
+
+        assert_eq!(at.read(args[1]), expected);
+    }
+}
+
+#[test]
 // Test for GNU tests/sort/sort-files0-from.pl "f-extra-arg"
 fn test_files0_from_extra_arg() {
     new_ucmd!()
@@ -1695,28 +1718,6 @@ fn test_clap_localization_invalid_value() {
 
         let stderr = result.stderr_str();
         assert!(stderr.contains(expected_message));
-    }
-}
-
-#[test]
-fn test_clap_localization_tip_for_value_with_dash() {
-    let test_cases = vec![
-        ("en_US.UTF-8", vec!["tip:", "-- --file-with-dash"]),
-        ("fr_FR.UTF-8", vec!["tip:", "-- --file-with-dash"]), // TODO: fix French translation
-    ];
-
-    for (locale, expected_strings) in test_cases {
-        let result = new_ucmd!()
-            .env("LANG", locale)
-            .env("LC_ALL", locale)
-            .arg("--output")
-            .arg("--file-with-dash")
-            .fails();
-
-        let stderr = result.stderr_str();
-        for expected in expected_strings {
-            assert!(stderr.contains(expected));
-        }
     }
 }
 
