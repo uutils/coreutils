@@ -48,10 +48,6 @@ enum HeadError {
     #[error("{}", translate!("head-error-parse-error", "err" => 0))]
     ParseError(String),
 
-    #[error("{}", translate!("head-error-bad-encoding"))]
-    #[allow(dead_code)]
-    BadEncoding,
-
     #[error("{}", translate!("head-error-num-too-large"))]
     NumTooLarge(#[from] TryFromIntError),
 
