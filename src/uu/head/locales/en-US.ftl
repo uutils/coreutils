@@ -19,7 +19,6 @@ head-help-zero-terminated = line delimiter is NUL, not newline
 # Error messages
 head-error-reading-file = error reading {$name}: {$err}
 head-error-parse-error = parse error: {$err}
-head-error-bad-encoding = bad argument encoding
 head-error-num-too-large = number of -bytes or -lines is too large
 head-error-clap = clap error: {$err}
 head-error-invalid-bytes = invalid number of bytes: {$err}

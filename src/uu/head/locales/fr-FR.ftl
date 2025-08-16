@@ -19,7 +19,6 @@ head-help-zero-terminated = le délimiteur de ligne est NUL, pas nouvelle ligne
 # Messages d'erreur
 head-error-reading-file = erreur lors de la lecture de {$name} : {$err}
 head-error-parse-error = erreur d'analyse : {$err}
-head-error-bad-encoding = mauvais encodage d'argument
 head-error-num-too-large = le nombre d'octets ou de lignes est trop grand
 head-error-clap = erreur clap : {$err}
 head-error-invalid-bytes = nombre d'octets invalide : {$err}
