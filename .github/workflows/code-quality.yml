@@ -110,8 +110,8 @@ jobs:
         ## Install/setup prerequisites
         case '${{ matrix.job.os }}' in
           ubuntu-*)
-            # selinux headers needed to enable all features
-            sudo apt-get -y install libselinux1-dev
+            # selinux headers needed for testing
+            sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
           ;;
         esac
     - name: "`cargo clippy` lint testing"

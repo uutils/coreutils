@@ -1,3 +1,6 @@
+# spell-checker:ignore logind
+
+
 [package]
 name = "uu_who"
 description = "who ~ (uutils) display information about currently logged-in users"
@@ -13,6 +16,9 @@ readme.workspace = true
 
 [lints]
 workspace = true
+
+[features]
+feat_systemd_logind = ["uucore/feat_systemd_logind"]
 
 [lib]
 path = "src/who.rs"

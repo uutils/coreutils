@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime serde bincode gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested
+# spell-checker:ignore (libs) bigdecimal datetime serde bincode gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind zbus
 
 [package]
 name = "coreutils"
@@ -38,6 +38,14 @@ uudoc = ["zip", "dep:uuhelp_parser"]
 ## Optional feature for stdbuf
 # "feat_external_libstdbuf" == use an external libstdbuf.so for stdbuf instead of embedding it
 feat_external_libstdbuf = ["stdbuf/feat_external_libstdbuf"]
+# "feat_systemd_logind" == enable feat_systemd_logind support for utmpx replacement
+feat_systemd_logind = [
+  "pinky/feat_systemd_logind",
+  "uptime/feat_systemd_logind",
+  "users/feat_systemd_logind",
+  "uucore/feat_systemd_logind",
+  "who/feat_systemd_logind",
+]
 # "feat_acl" == enable support for ACLs (access control lists; by using`--features feat_acl`)
 # NOTE:
 # * On linux, the posix-acl/acl-sys crate requires `libacl` headers and shared library to be accessible in the C toolchain at compile time.
@@ -363,6 +371,10 @@ walkdir = "2.5"
 winapi-util = "0.1.8"
 windows-sys = { version = "0.60.1", default-features = false }
 xattr = "1.3.1"
+zbus = { version = "5.9.0", default-features = false, features = [
+  "blocking-api",
+  "async-io",
+] }
 zip = { version = "4.0.0", default-features = false, features = ["deflate"] }
 
 hex = "0.4.3"

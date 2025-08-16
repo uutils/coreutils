@@ -5,7 +5,7 @@
 //! library ~ (core/bundler file)
 // #![deny(missing_docs)] //TODO: enable this
 //
-// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil
+// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil logind
 
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
@@ -67,6 +67,8 @@ pub use crate::features::ranges;
 pub use crate::features::ringbuffer;
 #[cfg(feature = "sum")]
 pub use crate::features::sum;
+#[cfg(feature = "feat_systemd_logind")]
+pub use crate::features::systemd_logind;
 #[cfg(feature = "time")]
 pub use crate::features::time;
 #[cfg(feature = "update-control")]

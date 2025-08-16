@@ -14,7 +14,7 @@ use uucore::libc::{S_IWGRP, STDIN_FILENO, ttyname};
 use uucore::translate;
 
 use uucore::LocalizedCommand;
-use uucore::utmpx::{self, Utmpx, time};
+use uucore::utmpx::{self, UtmpxRecord, time};
 
 use std::borrow::Cow;
 use std::ffi::CStr;
@@ -162,7 +162,7 @@ fn idle_string<'a>(when: i64, boottime: i64) -> Cow<'a, str> {
     })
 }
 
-fn time_string(ut: &Utmpx) -> String {
+fn time_string(ut: &UtmpxRecord) -> String {
     // "%b %e %H:%M"
     let time_format: Vec<time::format_description::FormatItem> =
         time::format_description::parse("[month repr:short] [day padding:space] [hour]:[minute]")
@@ -202,14 +202,14 @@ impl Who {
             utmpx::DEFAULT_FILE
         };
         if self.short_list {
-            let users = Utmpx::iter_all_records_from(f)
-                .filter(Utmpx::is_user_process)
+            let users = utmpx::Utmpx::iter_all_records_from(f)
+                .filter(|ut| ut.is_user_process())
                 .map(|ut| ut.user())
                 .collect::<Vec<_>>();
             println!("{}", users.join(" "));
             println!("{}", translate!("who-user-count", "count" => users.len()));
         } else {
-            let records = Utmpx::iter_all_records_from(f);
+            let records = utmpx::Utmpx::iter_all_records_from(f);
 
             if self.include_heading {
                 self.print_heading();
@@ -248,7 +248,7 @@ impl Who {
     }
 
     #[inline]
-    fn print_runlevel(&self, ut: &Utmpx) {
+    fn print_runlevel(&self, ut: &UtmpxRecord) {
         let last = (ut.pid() / 256) as u8 as char;
         let curr = (ut.pid() % 256) as u8 as char;
         let runlevel_line = translate!("who-runlevel", "level" => curr);
@@ -268,7 +268,7 @@ impl Who {
     }
 
     #[inline]
-    fn print_clockchange(&self, ut: &Utmpx) {
+    fn print_clockchange(&self, ut: &UtmpxRecord) {
         self.print_line(
             "",
             ' ',
@@ -282,7 +282,7 @@ impl Who {
     }
 
     #[inline]
-    fn print_login(&self, ut: &Utmpx) {
+    fn print_login(&self, ut: &UtmpxRecord) {
         let comment = translate!("who-login-id", "id" => ut.terminal_suffix());
         let pidstr = format!("{}", ut.pid());
         self.print_line(
@@ -298,7 +298,7 @@ impl Who {
     }
 
     #[inline]
-    fn print_deadprocs(&self, ut: &Utmpx) {
+    fn print_deadprocs(&self, ut: &UtmpxRecord) {
         let comment = translate!("who-login-id", "id" => ut.terminal_suffix());
         let pidstr = format!("{}", ut.pid());
         let e = ut.exit_status();
@@ -316,7 +316,7 @@ impl Who {
     }
 
     #[inline]
-    fn print_initspawn(&self, ut: &Utmpx) {
+    fn print_initspawn(&self, ut: &UtmpxRecord) {
         let comment = translate!("who-login-id", "id" => ut.terminal_suffix());
         let pidstr = format!("{}", ut.pid());
         self.print_line(
@@ -332,7 +332,7 @@ impl Who {
     }
 
     #[inline]
-    fn print_boottime(&self, ut: &Utmpx) {
+    fn print_boottime(&self, ut: &UtmpxRecord) {
         self.print_line(
             "",
             ' ',
@@ -345,7 +345,7 @@ impl Who {
         );
     }
 
-    fn print_user(&self, ut: &Utmpx) -> UResult<()> {
+    fn print_user(&self, ut: &UtmpxRecord) -> UResult<()> {
         let mut p = PathBuf::from("/dev");
         p.push(ut.tty_device().as_str());
         let mesg;

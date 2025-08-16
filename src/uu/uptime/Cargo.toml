@@ -1,3 +1,5 @@
+# spell-checker:ignore logind
+
 [package]
 name = "uu_uptime"
 description = "uptime ~ (uutils) display dynamic system information"
@@ -13,6 +15,9 @@ readme.workspace = true
 
 [lints]
 workspace = true
+
+[features]
+feat_systemd_logind = ["uucore/feat_systemd_logind"]
 
 [lib]
 path = "src/uptime.rs"

@@ -14,7 +14,7 @@ use uucore::entries::{Locate, Passwd};
 use uucore::error::{FromIo, UResult};
 use uucore::libc::S_IWGRP;
 use uucore::translate;
-use uucore::utmpx::{self, Utmpx, time};
+use uucore::utmpx::{self, Utmpx, UtmpxRecord, time};
 
 use std::io::BufReader;
 use std::io::prelude::*;
@@ -137,7 +137,7 @@ fn idle_string(when: i64) -> String {
     })
 }
 
-fn time_string(ut: &Utmpx) -> String {
+fn time_string(ut: &UtmpxRecord) -> String {
     // "%b %e %H:%M"
     let time_format: Vec<time::format_description::FormatItem> =
         time::format_description::parse("[month repr:short] [day padding:space] [hour]:[minute]")
@@ -158,7 +158,7 @@ fn gecos_to_fullname(pw: &Passwd) -> Option<String> {
 }
 
 impl Pinky {
-    fn print_entry(&self, ut: &Utmpx) -> std::io::Result<()> {
+    fn print_entry(&self, ut: &UtmpxRecord) -> std::io::Result<()> {
         let mut pts_path = PathBuf::from("/dev");
         pts_path.push(ut.tty_device().as_str());
 
@@ -176,7 +176,7 @@ impl Pinky {
                 last_change = meta.atime();
             }
             _ => {
-                mesg = '?';
+                mesg = ' ';
                 last_change = 0;
             }
         }
@@ -238,12 +238,19 @@ impl Pinky {
         if self.include_heading {
             self.print_heading();
         }
-        for ut in Utmpx::iter_all_records() {
-            if ut.is_user_process()
-                && (self.names.is_empty() || self.names.iter().any(|n| n.as_str() == ut.user()))
-            {
-                self.print_entry(&ut)?;
-            }
+
+        let mut records: Vec<_> = Utmpx::iter_all_records()
+            .filter(|ut| {
+                ut.is_user_process()
+                    && (self.names.is_empty() || self.names.iter().any(|n| n.as_str() == ut.user()))
+            })
+            .collect();
+
+        // Sort by TTY device name to match GNU pinky's output order.
+        records.sort_by_key(|ut| ut.tty_device());
+
+        for ut in records {
+            self.print_entry(&ut)?;
         }
         Ok(())
     }

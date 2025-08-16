@@ -1,4 +1,4 @@
-# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal tzdb zoneinfo
+# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal tzdb zoneinfo logind zbus
 
 [package]
 name = "uucore"
@@ -81,6 +81,7 @@ thiserror = { workspace = true }
 walkdir = { workspace = true, optional = true }
 nix = { workspace = true, features = ["fs", "uio", "zerocopy", "signal"] }
 xattr = { workspace = true, optional = true }
+zbus = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
@@ -150,6 +151,7 @@ sum = [
   "sm3",
   "crc32fast",
 ]
+feat_systemd_logind = ["dep:zbus", "utmpx", "libc"]
 update-control = ["parser"]
 utf8 = []
 utmpx = ["time", "time/macros", "libc", "dns-lookup"]

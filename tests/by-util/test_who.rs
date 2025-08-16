@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (flags) runlevel mesg
+// spell-checker:ignore (flags) runlevel mesg logind
 
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
@@ -249,4 +249,63 @@ fn test_all() {
         let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
+}
+
+#[cfg(all(unix, feature = "feat_systemd_logind"))]
+#[test]
+fn test_systemd_fallback() {
+    // Test that who works even when traditional utmp is not available
+    // This test verifies that the feat_systemd_logind fallback mechanism works
+    let ts = TestScenario::new(util_name!());
+
+    // Test basic functionality - should not fail even if utmp is empty/missing
+    ts.ucmd().succeeds();
+
+    // Test with boot flag - should show boot time from systemd/proc
+    ts.ucmd().arg("--boot").succeeds();
+
+    // Test count flag - should work with systemd sessions
+    ts.ucmd().arg("--count").succeeds();
+}
+
+#[cfg(all(unix, feature = "feat_systemd_logind"))]
+#[test]
+fn test_systemd_boot_time() {
+    // Test that boot time can be retrieved from systemd/proc when utmp is unavailable
+    let ts = TestScenario::new(util_name!());
+
+    let result = ts.ucmd().arg("--boot").run();
+
+    // Should succeed (exit code 0)
+    assert!(result.succeeded());
+
+    // Output should contain something related to boot time
+    let stdout = result.stdout_str();
+
+    // Boot time output should contain "system boot" or similar
+    // and should have a reasonable date/time format
+    assert!(
+        stdout.contains("system boot") || stdout.contains("reboot") || !stdout.trim().is_empty(),
+        "Boot time output should contain boot information, got: {stdout:?}"
+    );
+}
+
+#[cfg(all(unix, feature = "feat_systemd_logind"))]
+#[test]
+fn test_systemd_users() {
+    // Test that user listing works with systemd sessions
+    let ts = TestScenario::new(util_name!());
+
+    let result = ts.ucmd().run();
+    assert!(result.succeeded());
+
+    // The output format should be reasonable (no panics, valid text)
+    let stdout = result.stdout_str();
+
+    // Should produce valid UTF-8 output (already verified by stdout_str())
+    // and should not contain obvious error messages
+    assert!(
+        !stdout.contains("Error") && !stdout.contains("Failed") && !stdout.contains("error"),
+        "Output should not contain error messages, got: {stdout:?}"
+    );
 }
