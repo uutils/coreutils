@@ -209,7 +209,7 @@ impl FromStr for FormatOptions {
             }
 
             if precision.is_empty() {
-                options.precision = Some(0);
+                options.precision = None;
             } else if let Ok(p) = precision.parse() {
                 options.precision = Some(p);
             } else {
@@ -319,9 +319,9 @@ mod tests {
         let mut expected_options = FormatOptions::default();
         let formats = vec![
             ("%6.2f", Some(6), Some(2)),
-            ("%6.f", Some(6), Some(0)),
+            ("%6.f", Some(6), None),
             ("%.2f", None, Some(2)),
-            ("%.f", None, Some(0)),
+            ("%.f", None, None),
         ];
 
         for (format, expected_padding, expected_precision) in formats {
