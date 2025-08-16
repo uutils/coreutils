@@ -25,6 +25,9 @@ This section will explain how to install and configure these tools.
 We also have an extensive CI that uses these tools and will check your code before it can be merged.
 The next section [Testing](#testing) will explain how to run those checks locally to avoid waiting for the CI.
 
+As an alternative to host installation of the tools, you can open the project with the provided development container configuration.
+For more information about development containers, see the [Visual Studio Code Dev Containers documentation](https://code.visualstudio.com/docs/devcontainers/containers).
+
 ### Rust toolchain
 
 [Install Rust](https://www.rust-lang.org/tools/install)
