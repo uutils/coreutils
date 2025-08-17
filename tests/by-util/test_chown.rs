@@ -850,10 +850,11 @@ fn test_chown_reference_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
     at.touch("b");
-    ucmd.arg("--reference")
+    ucmd.arg("--verbose")
+        .arg("--reference")
         .arg("a")
         .arg("b")
         .succeeds()
-        .no_stderr()
+        .stderr_contains("ownership of 'b' retained as")
         .no_stdout();
 }
