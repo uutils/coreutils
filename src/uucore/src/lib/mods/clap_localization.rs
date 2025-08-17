@@ -111,7 +111,7 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
             let usage_label = translate!("common-usage");
             let localized_help = help_text.replace("Usage:", &format!("{usage_label}:"));
 
-            print!("{}", localized_help);
+            print!("{localized_help}");
             std::process::exit(0);
         }
         ErrorKind::DisplayVersion => {
@@ -174,7 +174,7 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                     // These usually start with "  tip:" and contain useful information
                     for line in _lines.iter() {
                         if line.trim().starts_with("tip:") && !line.contains("similar argument") {
-                            eprintln!("{}", line);
+                            eprintln!("{line}");
                             eprintln!();
                         }
                     }
@@ -185,7 +185,7 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                 let usage_text = translate!(&usage_key);
                 let formatted_usage = crate::format_usage(&usage_text);
                 let usage_label = translate!("common-usage");
-                eprintln!("{}: {}", usage_label, formatted_usage);
+                eprintln!("{usage_label}: {formatted_usage}");
                 eprintln!();
                 eprintln!("{}", translate!("common-help-suggestion"));
 
@@ -243,7 +243,7 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                         if matches!(kind, ErrorKind::ValueValidation) {
                             if let Some(source) = err.source() {
                                 // Print error with validation detail on same line
-                                eprintln!("{error_msg}: {}", source);
+                                eprintln!("{error_msg}: {source}");
                             } else {
                                 // Print localized error message
                                 eprintln!("{error_msg}");
@@ -262,7 +262,7 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                         if let Some(valid_values) = err.get(ContextKind::ValidValue) {
                             eprintln!();
                             let possible_values_label = translate!("clap-error-possible-values");
-                            eprintln!("  [{}: {}]", possible_values_label, valid_values);
+                            eprintln!("  [{possible_values_label}: {valid_values}]");
                         }
                     }
 
@@ -273,7 +273,7 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
                     // Fallback if we can't extract context - use clap's default formatting
                     let lines: Vec<&str> = rendered_str.lines().collect();
                     if let Some(main_error_line) = lines.first() {
-                        eprintln!("{}", main_error_line);
+                        eprintln!("{main_error_line}");
                         eprintln!();
                         eprintln!("{}", translate!("common-help-suggestion"));
                     } else {
@@ -287,7 +287,7 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
             let lines: Vec<&str> = rendered_str.lines().collect();
             if let Some(main_error_line) = lines.first() {
                 // Keep the "error: " prefix for test compatibility
-                eprintln!("{}", main_error_line);
+                eprintln!("{main_error_line}");
                 eprintln!();
                 // Use the execution phrase for the help suggestion to match test expectations
                 eprintln!("{}", translate!("common-help-suggestion"));
@@ -327,7 +327,7 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
 
             // Print error message (first line)
             if let Some(first_line) = lines.first() {
-                eprintln!("{}", first_line);
+                eprintln!("{first_line}");
             }
 
             // For other errors, just show help suggestion
