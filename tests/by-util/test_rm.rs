@@ -838,27 +838,6 @@ fn test_fifo_removal() {
 }
 
 #[test]
-#[cfg(any(unix, target_os = "wasi"))]
-#[cfg(not(target_os = "macos"))]
-fn test_non_utf8() {
-    use std::ffi::OsStr;
-    #[cfg(unix)]
-    use std::os::unix::ffi::OsStrExt;
-    #[cfg(target_os = "wasi")]
-    use std::os::wasi::ffi::OsStrExt;
-
-    let file = OsStr::from_bytes(b"not\xffutf8"); // spell-checker:disable-line
-
-    let (at, mut ucmd) = at_and_ucmd!();
-
-    at.touch(file);
-    assert!(at.file_exists(file));
-
-    ucmd.arg(file).succeeds();
-    assert!(!at.file_exists(file));
-}
-
-#[test]
 fn test_uchild_when_run_no_wait_with_a_blocking_command() {
     let ts = TestScenario::new("rm");
     let at = &ts.fixtures;
@@ -1039,10 +1018,13 @@ fn test_inaccessible_dir_recursive() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
-fn test_rm_non_utf8_paths() {
+#[cfg(any(target_os = "linux", target_os = "wasi"))]
+fn test_non_utf8_paths() {
     use std::ffi::OsStr;
+    #[cfg(target_os = "linux")]
     use std::os::unix::ffi::OsStrExt;
+    #[cfg(target_os = "wasi")]
+    use std::os::wasi::ffi::OsStrExt;
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
