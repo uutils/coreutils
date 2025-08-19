@@ -749,7 +749,7 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
 // I have this here for completeness but it will always return "remove directory {}" because metadata.permissions().readonly() only works for file not directories
 #[cfg(not(windows))]
 #[cfg(not(unix))]
-fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
+fn handle_writable_directory(path: &Path, options: &Options, _metadata: &Metadata) -> bool {
     if options.interactive == InteractiveMode::Always {
         prompt_yes!("remove directory {}?", path.quote())
     } else {
