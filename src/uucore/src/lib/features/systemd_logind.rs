@@ -367,13 +367,24 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
 
         // Get username from UID
         let user = unsafe {
-            let passwd = libc::getpwuid(uid);
-            if passwd.is_null() {
-                format!("{}", uid) // fallback to UID if username not found
-            } else {
-                CStr::from_ptr((*passwd).pw_name)
+            let mut passwd: libc::passwd = std::mem::zeroed();
+            let mut buf = vec![0u8; 1024];
+            let mut result: *mut libc::passwd = std::ptr::null_mut();
+
+            let ret = libc::getpwuid_r(
+                uid,
+                &mut passwd,
+                buf.as_mut_ptr() as *mut libc::c_char,
+                buf.len(),
+                &mut result,
+            );
+
+            if ret == 0 && !result.is_null() {
+                CStr::from_ptr(passwd.pw_name)
                     .to_string_lossy()
                     .into_owned()
+            } else {
+                format!("{}", uid) // fallback to UID if username not found
             }
         };
 
