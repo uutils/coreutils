@@ -26,6 +26,11 @@ use uucore::translate;
 
 use uucore::show_warning;
 
+/// Common trait for operations that can process chunks of data
+pub trait ChunkProcessor {
+    fn process_chunk(&self, input: &[u8], output: &mut Vec<u8>);
+}
+
 #[derive(Debug, Clone)]
 pub enum BadSequence {
     MissingCharClassName,
@@ -592,7 +597,7 @@ fn set_to_bitmap(set: &[u8]) -> [bool; 256] {
 
 #[derive(Debug)]
 pub struct DeleteOperation {
-    delete_table: [bool; 256],
+    pub(crate) delete_table: [bool; 256],
 }
 
 impl DeleteOperation {
@@ -610,9 +615,30 @@ impl SymbolTranslator for DeleteOperation {
     }
 }
 
+impl ChunkProcessor for DeleteOperation {
+    fn process_chunk(&self, input: &[u8], output: &mut Vec<u8>) {
+        use crate::simd::{find_single_change, process_single_delete};
+
+        // Check if this is single character deletion
+        if let Some((delete_char, _)) =
+            find_single_change(&self.delete_table, |_, &should_delete| should_delete)
+        {
+            process_single_delete(input, output, delete_char);
+        } else {
+            // Standard deletion
+            output.extend(
+                input
+                    .iter()
+                    .filter(|&&b| !self.delete_table[b as usize])
+                    .copied(),
+            );
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct TranslateOperation {
-    translation_table: [u8; 256],
+    pub(crate) translation_table: [u8; 256],
 }
 
 impl TranslateOperation {
@@ -642,6 +668,23 @@ impl TranslateOperation {
 impl SymbolTranslator for TranslateOperation {
     fn translate(&mut self, current: u8) -> Option<u8> {
         Some(self.translation_table[current as usize])
+    }
+}
+
+impl ChunkProcessor for TranslateOperation {
+    fn process_chunk(&self, input: &[u8], output: &mut Vec<u8>) {
+        use crate::simd::{find_single_change, process_single_char_replace};
+
+        // Check if this is a simple single-character translation
+        if let Some((source, target)) =
+            find_single_change(&self.translation_table, |i, &val| val != i as u8)
+        {
+            // Use SIMD-optimized single character replacement
+            process_single_char_replace(input, output, source, target);
+        } else {
+            // Standard translation using table lookup
+            output.extend(input.iter().map(|&b| self.translation_table[b as usize]));
+        }
     }
 }
 
@@ -683,7 +726,7 @@ where
 {
     const BUFFER_SIZE: usize = 32768; // Large buffer for better throughput
     let mut buf = [0; BUFFER_SIZE];
-    let mut output_buf = Vec::with_capacity(buf.len());
+    let mut output_buf = Vec::with_capacity(BUFFER_SIZE);
 
     loop {
         let length = match input.read(&mut buf[..]) {
@@ -701,21 +744,28 @@ where
             }
         }
 
-        #[cfg(not(target_os = "windows"))]
-        output
-            .write_all(&output_buf)
-            .map_err_context(|| translate!("tr-error-write-error"))?;
-
-        // SIGPIPE is not available on Windows.
-        #[cfg(target_os = "windows")]
-        if let Err(err) = output.write_all(&output_buf) {
-            if err.kind() == std::io::ErrorKind::BrokenPipe {
-                std::process::exit(13);
-            } else {
-                return Err(err.map_err_context(|| translate!("tr-error-write-error")));
-            }
+        if !output_buf.is_empty() {
+            crate::simd::write_output(output, &output_buf)?;
         }
     }
 
     Ok(())
+}
+
+/// Platform-specific flush operation
+#[inline]
+pub fn flush_output<W: Write>(output: &mut W) -> UResult<()> {
+    #[cfg(not(target_os = "windows"))]
+    return output
+        .flush()
+        .map_err_context(|| translate!("tr-error-write-error"));
+
+    #[cfg(target_os = "windows")]
+    match output.flush() {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
+            std::process::exit(13);
+        }
+        Err(err) => Err(err.map_err_context(|| translate!("tr-error-write-error"))),
+    }
 }
