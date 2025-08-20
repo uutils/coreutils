@@ -503,6 +503,9 @@ impl Iterator for UtmpxIter {
             if let Some(ref mut systemd_iter) = self.systemd_iter {
                 if let Some(systemd_record) = systemd_iter.next() {
                     return Some(UtmpxRecord::Systemd(systemd_record));
+                } else {
+                    // When systemd iterator is exhausted, don't fall back to traditional utmp
+                    return None;
                 }
             }
         }
