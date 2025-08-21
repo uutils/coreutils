@@ -590,6 +590,14 @@ impl SystemdUtmpxIter {
         })
     }
 
+    /// Create empty iterator (for when systemd initialization fails)
+    pub fn empty() -> Self {
+        SystemdUtmpxIter {
+            records: Vec::new(),
+            current_index: 0,
+        }
+    }
+
     /// Get next record (similar to getutxent)
     pub fn next_record(&mut self) -> Option<SystemdUtmpxCompat> {
         if self.current_index >= self.records.len() {

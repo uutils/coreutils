@@ -385,11 +385,18 @@ impl UtmpxIter {
     fn new_systemd() -> Self {
         // PoisonErrors can safely be ignored
         let guard = LOCK.lock().unwrap_or_else(|err| err.into_inner());
-        let systemd_iter = systemd_logind::SystemdUtmpxIter::new().ok();
+        let systemd_iter = match systemd_logind::SystemdUtmpxIter::new() {
+            Ok(iter) => iter,
+            Err(_) => {
+                // Like GNU coreutils: graceful degradation, not fallback to traditional utmp
+                // Return empty iterator rather than falling back  (GNU coreutils also returns 0 when /var/run/utmp is not present, so we don't need to propagate the error here)
+                systemd_logind::SystemdUtmpxIter::empty()
+            }
+        };
         Self {
             guard,
             phantom: PhantomData,
-            systemd_iter,
+            systemd_iter: Some(systemd_iter),
         }
     }
 }
@@ -501,15 +508,12 @@ impl Iterator for UtmpxIter {
         #[cfg(feature = "feat_systemd_logind")]
         {
             if let Some(ref mut systemd_iter) = self.systemd_iter {
-                if let Some(systemd_record) = systemd_iter.next() {
-                    return Some(UtmpxRecord::Systemd(systemd_record));
-                } else {
-                    // When systemd iterator is exhausted, don't fall back to traditional utmp
-                    return None;
-                }
+                // We have a systemd iterator - use it exclusively (never fall back to traditional utmp)
+                return systemd_iter.next().map(UtmpxRecord::Systemd);
             }
         }
 
+        // Traditional utmp path
         unsafe {
             #[cfg_attr(target_env = "musl", allow(deprecated))]
             let res = getutxent();
