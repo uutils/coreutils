@@ -421,10 +421,10 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
             .unwrap_or_default();
 
         // Determine host (use remote_host if available)
-        let host = if !remote_host.is_empty() {
-            remote_host
-        } else {
+        let host = if remote_host.is_empty() {
             String::new()
+        } else {
+            remote_host
         };
 
         // Skip sessions that have neither TTY nor seat (e.g., manager sessions)
