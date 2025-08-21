@@ -324,7 +324,7 @@ impl Utmpx {
         #[cfg(feature = "feat_systemd_logind")]
         {
             // Use systemd-logind for default utmp file when feature is enabled
-            if path.as_ref().to_str() == Some(DEFAULT_FILE) {
+            if path.as_ref() == Path::new(DEFAULT_FILE) {
                 return UtmpxIter::new_systemd();
             }
         }
