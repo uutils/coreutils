@@ -350,15 +350,8 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
     }
 
     // Get all active sessions using safe wrapper
-    let mut sessions = match login::get_sessions() {
-        Ok(sessions) => sessions,
-        Err(e) => {
-            return Err(USimpleError::new(
-                1,
-                format!("Failed to get systemd sessions: {}", e),
-            ));
-        }
-    };
+    let mut sessions = login::get_sessions()
+        .map_err(|e| USimpleError::new(1, format!("Failed to get systemd sessions: {e}")))?;
 
     // Sort sessions consistently for reproducible output (reverse for TTY sessions first)
     sessions.sort();
