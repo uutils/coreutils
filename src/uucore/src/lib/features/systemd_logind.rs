@@ -448,56 +448,66 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
         // We replicate that behavior here.
         // Order: seat first, then TTY to match expected output
 
-        // Create a record for the seat if it's not empty.
-        // The seat is prefixed with '?' to match GNU's output.
-        if !seat.is_empty() {
-            let seat_formatted = format!("?{}", seat);
-            records.push(SystemdLoginRecord {
-                user: user.clone(),
-                session_id: session_id.clone(),
-                seat_or_tty: seat_formatted,
-                raw_device: seat.clone(), // Store raw seat name for device access
-                host: host.clone(),
+        // Helper closure to create a record
+        let create_record = |seat_or_tty: String,
+                             raw_device: String,
+                             user: String,
+                             session_id: String,
+                             host: String| {
+            SystemdLoginRecord {
+                user,
+                session_id,
+                seat_or_tty,
+                raw_device,
+                host,
                 login_time: start_time,
-                pid: 0,
+                pid: 0, // systemd doesn't directly provide session leader PID in this context
                 session_leader_pid: 0,
                 record_type: SystemdRecordType::UserProcess,
-            });
-        }
+            }
+        };
 
-        if !tty.is_empty() {
+        // Create records based on available seat/tty/display
+        if !seat.is_empty() && !tty.is_empty() {
+            // Both seat and tty - need 2 records, clone for first.
+            // The seat is prefixed with '?' to match GNU's output.
+            let seat_formatted = format!("?{}", seat);
+            records.push(create_record(
+                seat_formatted,
+                seat,
+                user.clone(),
+                session_id.clone(),
+                host.clone(),
+            ));
+
             let tty_formatted = if tty.starts_with("tty") {
                 format!("*{}", tty)
             } else {
                 tty.clone()
             };
-
-            records.push(SystemdLoginRecord {
-                user: user.clone(),
-                session_id: session_id.clone(),
-                seat_or_tty: tty_formatted,
-                raw_device: tty.clone(), // Store raw TTY for device access
-                host: host.clone(),
-                login_time: start_time,
-                pid: 0, // systemd doesn't directly provide session leader PID in this context
-                session_leader_pid: 0,
-                record_type: SystemdRecordType::UserProcess,
-            });
-        }
-
-        // If only display session, create a fallback record
-        if tty.is_empty() && seat.is_empty() && !display.is_empty() {
-            records.push(SystemdLoginRecord {
+            records.push(create_record(tty_formatted, tty, user, session_id, host)); // Move for second (and last) record
+        } else if !seat.is_empty() {
+            // Only seat
+            let seat_formatted = format!("?{}", seat);
+            records.push(create_record(seat_formatted, seat, user, session_id, host));
+        } else if !tty.is_empty() {
+            // Only tty
+            let tty_formatted = if tty.starts_with("tty") {
+                format!("*{}", tty)
+            } else {
+                tty.clone()
+            };
+            records.push(create_record(tty_formatted, tty, user, session_id, host));
+        } else if !display.is_empty() {
+            // Only display
+            // No raw device for display sessions
+            records.push(create_record(
+                display,
+                String::new(),
                 user,
-                session_id: session_id.clone(),
-                seat_or_tty: display,
-                raw_device: String::new(), // No raw device for display sessions
+                session_id,
                 host,
-                login_time: start_time,
-                pid: 0,
-                session_leader_pid: 0,
-                record_type: SystemdRecordType::UserProcess,
-            });
+            ));
         }
     }
 
