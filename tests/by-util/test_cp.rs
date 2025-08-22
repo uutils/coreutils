@@ -6880,25 +6880,19 @@ fn test_cp_dest_in_use() {
     std::fs::copy(get_tests_binary(), &copy_coreutils)
         .expect("Failed to copy coreutils binary to test directory");
 
+    // Ensure the file is ready for execution
+    std::fs::File::open(&copy_coreutils)
+        .and_then(|file| file.sync_all())
+        .expect("Failed to sync copied binary to disk");
+
     // Now try to copy a file over ourself
     // As copy_coreutils is in use, this should fail with "Text file busy"
-    let mut retry_count = 0;
-    let result = loop {
-        // The start of the command fails in case the copy is not complete yet, so we retry a few times
-        let result = Command::new(&copy_coreutils)
-            .arg("cp")
-            .arg(at.plus(TEST_HELLO_WORLD_SOURCE))
-            .arg(&copy_coreutils)
-            .output();
-
-        match result {
-            Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy && retry_count < 5 => {
-                retry_count += 1;
-                sleep(Duration::from_millis(500));
-            }
-            _ => break result.expect("Failed to execute command"),
-        }
-    };
+    let result = Command::new(&copy_coreutils)
+        .arg("cp")
+        .arg(at.plus(TEST_HELLO_WORLD_SOURCE))
+        .arg(&copy_coreutils)
+        .output()
+        .expect("Failed to execute command");
 
     // Verify that the command failed
     assert!(!result.status.success());
@@ -6917,26 +6911,20 @@ fn test_cp_dest_in_use_forced() {
     std::fs::copy(get_tests_binary(), &copy_coreutils)
         .expect("Failed to copy coreutils binary to test directory");
 
+    // Ensure the file is ready for execution
+    std::fs::File::open(&copy_coreutils)
+        .and_then(|file| file.sync_all())
+        .expect("Failed to sync copied binary to disk");
+
     // Now try to copy a file over ourself
     // With force argument, this should succeed as the destination is deleted first
-    let mut retry_count = 0;
-    let result = loop {
-        // The start of the command fails in case the copy is not complete yet, so we retry a few times
-        let result = Command::new(&copy_coreutils)
-            .arg("cp")
-            .arg("-f")
-            .arg(at.plus(TEST_HELLO_WORLD_SOURCE))
-            .arg(&copy_coreutils)
-            .output();
-
-        match result {
-            Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy && retry_count < 5 => {
-                retry_count += 1;
-                sleep(Duration::from_millis(500));
-            }
-            _ => break result.expect("Failed to execute command"),
-        }
-    };
+    let result = Command::new(&copy_coreutils)
+        .arg("cp")
+        .arg("-f")
+        .arg(at.plus(TEST_HELLO_WORLD_SOURCE))
+        .arg(&copy_coreutils)
+        .output()
+        .expect("Failed to execute command");
 
     // Verify that the command succeeded
     assert!(result.status.success());
