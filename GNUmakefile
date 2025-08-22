@@ -1,4 +1,4 @@
-# spell-checker:ignore (misc) testsuite runtest findstring (targets) busytest toybox distclean pkgs nextest logind ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MULTICALL DATAROOTDIR TESTDIR manpages
+# spell-checker:ignore (misc) testsuite runtest findstring (targets) busytest toybox distclean pkgs nextest ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MULTICALL DATAROOTDIR TESTDIR manpages
 
 # Config options
 PROFILE         ?= debug
@@ -290,14 +290,6 @@ else ifeq ($(SELINUX_ENABLED),1)
 TEST_NO_FAIL_FAST :=
 TEST_SPEC_FEATURE := selinux
 BUILD_SPEC_FEATURE := selinux
-endif
-
-# Auto-enable systemd-logind support on systemd systems to prevent utmp compatibility issues
-# (systemd 256.7+ removes utmp support, so feat_systemd_logind is required for who/pinky/users/uptime)
-ifeq ($(OS),Linux)
-ifneq ($(wildcard /run/systemd/system),)
-    BUILD_SPEC_FEATURE += feat_systemd_logind
-endif
 endif
 
 define TEST_BUSYBOX
