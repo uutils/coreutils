@@ -654,3 +654,114 @@ impl Iterator for SystemdUtmpxIter {
         self.next_record()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_empty_iterator() {
+        let mut iter = SystemdUtmpxIter::empty();
+
+        assert_eq!(iter.len(), 0);
+        assert!(iter.is_empty());
+        assert!(iter.next().is_none());
+        assert!(iter.next_record().is_none());
+    }
+
+    #[test]
+    fn test_iterator_with_mock_data() {
+        // Create iterator with mock records
+        let mock_records = vec![
+            SystemdLoginRecord {
+                session_id: "session1".to_string(),
+                user: "user1".to_string(),
+                seat_or_tty: "tty1".to_string(),
+                raw_device: "tty1".to_string(),
+                host: "host1".to_string(),
+                login_time: std::time::UNIX_EPOCH,
+                pid: 1234,
+                session_leader_pid: 1234,
+                record_type: SystemdRecordType::UserProcess,
+            },
+            SystemdLoginRecord {
+                session_id: "session2".to_string(),
+                user: "user2".to_string(),
+                seat_or_tty: "pts/0".to_string(),
+                raw_device: "pts/0".to_string(),
+                host: "host2".to_string(),
+                login_time: std::time::UNIX_EPOCH,
+                pid: 5678,
+                session_leader_pid: 5678,
+                record_type: SystemdRecordType::UserProcess,
+            },
+        ];
+
+        let mut iter = SystemdUtmpxIter {
+            records: mock_records,
+            current_index: 0,
+        };
+
+        assert_eq!(iter.len(), 2);
+        assert!(!iter.is_empty());
+
+        // Test iterator behavior
+        let first = iter.next();
+        assert!(first.is_some());
+
+        let second = iter.next();
+        assert!(second.is_some());
+
+        let third = iter.next();
+        assert!(third.is_none());
+
+        // Iterator should be exhausted
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn test_get_all_records() {
+        let mock_records = vec![SystemdLoginRecord {
+            session_id: "session1".to_string(),
+            user: "user1".to_string(),
+            seat_or_tty: "tty1".to_string(),
+            raw_device: "tty1".to_string(),
+            host: "host1".to_string(),
+            login_time: std::time::UNIX_EPOCH,
+            pid: 1234,
+            session_leader_pid: 1234,
+            record_type: SystemdRecordType::UserProcess,
+        }];
+
+        let iter = SystemdUtmpxIter {
+            records: mock_records,
+            current_index: 0,
+        };
+
+        let all_records = iter.get_all_records();
+        assert_eq!(all_records.len(), 1);
+    }
+
+    #[test]
+    fn test_systemd_record_conversion() {
+        // Test that SystemdLoginRecord converts correctly to SystemdUtmpxCompat
+        let record = SystemdLoginRecord {
+            session_id: "c1".to_string(),
+            user: "testuser".to_string(),
+            seat_or_tty: "seat0".to_string(),
+            raw_device: "seat0".to_string(),
+            host: "localhost".to_string(),
+            login_time: std::time::UNIX_EPOCH + std::time::Duration::from_secs(1000),
+            pid: 9999,
+            session_leader_pid: 9999,
+            record_type: SystemdRecordType::UserProcess,
+        };
+
+        let compat = SystemdUtmpxCompat::new(record);
+
+        // Test the actual conversion logic
+        assert_eq!(compat.user(), "testuser");
+        assert_eq!(compat.tty_device().as_str(), "seat0");
+        assert_eq!(compat.host(), "localhost");
+    }
+}
