@@ -275,6 +275,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_DATE)
                 .value_name("STRING")
                 .allow_hyphen_values(true)
+                .overrides_with(OPT_DATE)
                 .help(translate!("date-help-date")),
         )
         .arg(

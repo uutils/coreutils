@@ -505,6 +505,19 @@ fn test_invalid_date_string() {
 }
 
 #[test]
+fn test_multiple_dates() {
+    new_ucmd!()
+        .arg("-d")
+        .arg("invalid")
+        .arg("-d")
+        .arg("2000-02-02")
+        .arg("+%Y")
+        .succeeds()
+        .stdout_is("2000\n")
+        .no_stderr();
+}
+
+#[test]
 fn test_date_one_digit_date() {
     new_ucmd!()
         .env("TZ", "UTC0")
