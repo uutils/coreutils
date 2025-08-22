@@ -13,6 +13,7 @@
 //! this will be used instead of traditional utmp files.
 
 use std::ffi::CStr;
+use std::mem::MaybeUninit;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{UResult, USimpleError};
@@ -367,19 +368,20 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
 
         // Get username from UID
         let user = unsafe {
-            let mut passwd: libc::passwd = std::mem::zeroed();
+            let mut passwd = MaybeUninit::<libc::passwd>::uninit();
             let mut buf = vec![0u8; 1024];
             let mut result: *mut libc::passwd = std::ptr::null_mut();
 
             let ret = libc::getpwuid_r(
                 uid,
-                &mut passwd,
+                passwd.as_mut_ptr(),
                 buf.as_mut_ptr() as *mut libc::c_char,
                 buf.len(),
                 &mut result,
             );
 
             if ret == 0 && !result.is_null() {
+                let passwd = passwd.assume_init();
                 CStr::from_ptr(passwd.pw_name)
                     .to_string_lossy()
                     .into_owned()
