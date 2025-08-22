@@ -51,7 +51,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup shfmt
-        uses: mfinelli/setup-shfmt@v3
+        uses: mfinelli/setup-shfmt@v4
       - name: Run shfmt
         shell: bash
         run: |
