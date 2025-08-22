@@ -369,7 +369,17 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
         // Get username from UID
         let user = unsafe {
             let mut passwd = MaybeUninit::<libc::passwd>::uninit();
-            let mut buf = vec![0u8; 1024];
+
+            // Get recommended buffer size, fall back if indeterminate
+            let buf_size = {
+                let size = libc::sysconf(libc::_SC_GETPW_R_SIZE_MAX);
+                if size == -1 {
+                    16384 // Value was indeterminate, use fallback from getpwuid_r man page
+                } else {
+                    size as usize
+                }
+            };
+            let mut buf = vec![0u8; buf_size];
             let mut result: *mut libc::passwd = std::ptr::null_mut();
 
             let ret = libc::getpwuid_r(
