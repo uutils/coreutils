@@ -24,12 +24,12 @@ use uucore::{format_usage, show};
 const BUF_SIZE: usize = 65536;
 
 mod options {
-    pub const BYTES_NAME: &str = "BYTES";
-    pub const LINES_NAME: &str = "LINES";
-    pub const QUIET_NAME: &str = "QUIET";
-    pub const VERBOSE_NAME: &str = "VERBOSE";
-    pub const ZERO_NAME: &str = "ZERO";
-    pub const FILES_NAME: &str = "FILE";
+    pub const BYTES: &str = "BYTES";
+    pub const LINES: &str = "LINES";
+    pub const QUIET: &str = "QUIET";
+    pub const VERBOSE: &str = "VERBOSE";
+    pub const ZERO: &str = "ZERO";
+    pub const FILES: &str = "FILE";
     pub const PRESUME_INPUT_PIPE: &str = "-PRESUME-INPUT-PIPE";
 }
 
@@ -74,38 +74,38 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(&translate!("head-usage")))
         .infer_long_args(true)
         .arg(
-            Arg::new(options::BYTES_NAME)
+            Arg::new(options::BYTES)
                 .short('c')
                 .long("bytes")
                 .value_name("[-]NUM")
                 .help(translate!("head-help-bytes"))
-                .overrides_with_all([options::BYTES_NAME, options::LINES_NAME])
+                .overrides_with_all([options::BYTES, options::LINES])
                 .allow_hyphen_values(true),
         )
         .arg(
-            Arg::new(options::LINES_NAME)
+            Arg::new(options::LINES)
                 .short('n')
                 .long("lines")
                 .value_name("[-]NUM")
                 .help(translate!("head-help-lines"))
-                .overrides_with_all([options::LINES_NAME, options::BYTES_NAME])
+                .overrides_with_all([options::LINES, options::BYTES])
                 .allow_hyphen_values(true),
         )
         .arg(
-            Arg::new(options::QUIET_NAME)
+            Arg::new(options::QUIET)
                 .short('q')
                 .long("quiet")
                 .visible_alias("silent")
                 .help(translate!("head-help-quiet"))
-                .overrides_with_all([options::VERBOSE_NAME, options::QUIET_NAME])
+                .overrides_with_all([options::VERBOSE, options::QUIET])
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(options::VERBOSE_NAME)
+            Arg::new(options::VERBOSE)
                 .short('v')
                 .long("verbose")
                 .help(translate!("head-help-verbose"))
-                .overrides_with_all([options::QUIET_NAME, options::VERBOSE_NAME])
+                .overrides_with_all([options::QUIET, options::VERBOSE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -116,15 +116,15 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(options::ZERO_NAME)
+            Arg::new(options::ZERO)
                 .short('z')
                 .long("zero-terminated")
                 .help(translate!("head-help-zero-terminated"))
-                .overrides_with(options::ZERO_NAME)
+                .overrides_with(options::ZERO)
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(options::FILES_NAME)
+            Arg::new(options::FILES)
                 .action(ArgAction::Append)
                 .value_parser(clap::value_parser!(OsString))
                 .value_hint(clap::ValueHint::FilePath),
@@ -147,7 +147,7 @@ impl Default for Mode {
 
 impl Mode {
     fn from(matches: &ArgMatches) -> Result<Self, String> {
-        if let Some(v) = matches.get_one::<String>(options::BYTES_NAME) {
+        if let Some(v) = matches.get_one::<String>(options::BYTES) {
             let (n, all_but_last) = parse::parse_num(v)
                 .map_err(|err| translate!("head-error-invalid-bytes", "err" => err))?;
             if all_but_last {
@@ -155,7 +155,7 @@ impl Mode {
             } else {
                 Ok(Self::FirstBytes(n))
             }
-        } else if let Some(v) = matches.get_one::<String>(options::LINES_NAME) {
+        } else if let Some(v) = matches.get_one::<String>(options::LINES) {
             let (n, all_but_last) = parse::parse_num(v)
                 .map_err(|err| translate!("head-error-invalid-lines", "err" => err))?;
             if all_but_last {
@@ -213,14 +213,14 @@ impl HeadOptions {
     pub fn get_from(matches: &ArgMatches) -> Result<Self, String> {
         let mut options = Self::default();
 
-        options.quiet = matches.get_flag(options::QUIET_NAME);
-        options.verbose = matches.get_flag(options::VERBOSE_NAME);
-        options.line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_NAME));
+        options.quiet = matches.get_flag(options::QUIET);
+        options.verbose = matches.get_flag(options::VERBOSE);
+        options.line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
         options.presume_input_pipe = matches.get_flag(options::PRESUME_INPUT_PIPE);
 
         options.mode = Mode::from(matches)?;
 
-        options.files = match matches.get_many::<OsString>(options::FILES_NAME) {
+        options.files = match matches.get_many::<OsString>(options::FILES) {
             Some(v) => v.cloned().collect(),
             None => vec![OsString::from("-")],
         };
@@ -554,15 +554,10 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args_vec: Vec<_> = arg_iterate(args)?.collect();
-    let matches = uu_app().get_matches_from_localized(args_vec);
-    let args = match HeadOptions::get_from(&matches) {
-        Ok(o) => o,
-        Err(s) => {
-            return Err(HeadError::MatchOption(s).into());
-        }
-    };
-    uu_head(&args)
+    let args: Vec<_> = arg_iterate(args)?.collect();
+    let matches = uu_app().get_matches_from_localized(args);
+    let options = HeadOptions::get_from(&matches).map_err(HeadError::MatchOption)?;
+    uu_head(&options)
 }
 
 #[cfg(test)]

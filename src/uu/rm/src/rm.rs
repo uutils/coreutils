@@ -11,7 +11,7 @@ use std::ffi::{OsStr, OsString};
 use std::fs::{self, Metadata};
 use std::io::{IsTerminal, stdin};
 use std::ops::BitOr;
-#[cfg(not(windows))]
+#[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -690,6 +690,21 @@ fn prompt_file_permission_readonly(path: &Path, options: &Options) -> bool {
     }
 }
 
+/// Checks if the path is referring to current or parent directory , if it is referring to current or any parent directory in the file tree e.g  '/../..' , '../..'
+fn path_is_current_or_parent_directory(path: &Path) -> bool {
+    let path_str = os_str_as_bytes(path.as_os_str());
+    let dir_separator = MAIN_SEPARATOR as u8;
+    if let Ok(path_bytes) = path_str {
+        return path_bytes == ([b'.'])
+            || path_bytes == ([b'.', b'.'])
+            || path_bytes.ends_with(&[dir_separator, b'.'])
+            || path_bytes.ends_with(&[dir_separator, b'.', b'.'])
+            || path_bytes.ends_with(&[dir_separator, b'.', dir_separator])
+            || path_bytes.ends_with(&[dir_separator, b'.', b'.', dir_separator]);
+    }
+    false
+}
+
 // For directories finding if they are writable or not is a hassle. In Unix we can use the built-in rust crate to check mode bits. But other os don't have something similar afaik
 // Most cases are covered by keep eye out for edge cases
 #[cfg(unix)]
@@ -716,21 +731,6 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
     }
 }
 
-/// Checks if the path is referring to current or parent directory , if it is referring to current or any parent directory in the file tree e.g  '/../..' , '../..'
-fn path_is_current_or_parent_directory(path: &Path) -> bool {
-    let path_str = os_str_as_bytes(path.as_os_str());
-    let dir_separator = MAIN_SEPARATOR as u8;
-    if let Ok(path_bytes) = path_str {
-        return path_bytes == ([b'.'])
-            || path_bytes == ([b'.', b'.'])
-            || path_bytes.ends_with(&[dir_separator, b'.'])
-            || path_bytes.ends_with(&[dir_separator, b'.', b'.'])
-            || path_bytes.ends_with(&[dir_separator, b'.', dir_separator])
-            || path_bytes.ends_with(&[dir_separator, b'.', b'.', dir_separator]);
-    }
-    false
-}
-
 // For windows we can use windows metadata trait and file attributes to see if a directory is readonly
 #[cfg(windows)]
 fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
@@ -749,7 +749,7 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
 // I have this here for completeness but it will always return "remove directory {}" because metadata.permissions().readonly() only works for file not directories
 #[cfg(not(windows))]
 #[cfg(not(unix))]
-fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
+fn handle_writable_directory(path: &Path, options: &Options, _metadata: &Metadata) -> bool {
     if options.interactive == InteractiveMode::Always {
         prompt_yes!("remove directory {}?", path.quote())
     } else {
