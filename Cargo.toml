@@ -33,7 +33,7 @@ expensive_tests = []
 # "test_risky_names" == enable tests that create problematic file names (would make a network share inaccessible to Windows, breaks SVN on Mac OS, etc.)
 test_risky_names = []
 # * only build `uudoc` when `--feature uudoc` is activated
-uudoc = ["zip", "dep:uuhelp_parser"]
+uudoc = ["zip", "dep:uuhelp_parser", "clap_mangen"]
 ## features
 ## Optional feature for stdbuf
 # "feat_external_libstdbuf" == use an external libstdbuf.so for stdbuf instead of embedding it
@@ -295,7 +295,6 @@ chrono = { version = "0.4.41", default-features = false, features = [
 ] }
 clap = { version = "4.5", features = ["wrap_help", "cargo"] }
 clap_complete = "4.4"
-clap_mangen = "0.2"
 compare = "0.1.0"
 crossterm = "0.29.0"
 ctor = "0.4.1"
@@ -392,7 +391,7 @@ uutests = { version = "0.1.0", package = "uutests", path = "tests/uutests" }
 clap.workspace = true
 uucore.workspace = true
 clap_complete.workspace = true
-clap_mangen.workspace = true
+clap_mangen = { version = "0.2", optional = true }
 phf.workspace = true
 selinux = { workspace = true, optional = true }
 textwrap.workspace = true

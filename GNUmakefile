@@ -4,7 +4,7 @@
 PROFILE         ?= debug
 MULTICALL       ?= n
 COMPLETIONS     ?= y
-MANPAGES        ?= y
+MANPAGES        ?= n
 LOCALES         ?= y
 INSTALL         ?= install
 ifneq (,$(filter install, $(MAKECMDGOALS)))
@@ -379,10 +379,13 @@ distclean: clean
 	$(CARGO) clean $(CARGOFLAGS) && $(CARGO) update $(CARGOFLAGS)
 
 ifeq ($(MANPAGES),y)
-manpages: build-coreutils
+build-uudoc:
+	${CARGO} build ${CARGOFLAGS} --features uudoc ${PROFILE_CMD}
+
+manpages: build-coreutils build-uudoc
 	mkdir -p $(BUILDDIR)/man/
 	$(foreach prog, $(INSTALLEES), \
-		$(BUILDDIR)/coreutils manpage $(prog) > $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(newline) \
+		$(BUILDDIR)/uudoc manpage $(prog) > $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(newline) \
 	)
 
 install-manpages: manpages
@@ -479,4 +482,4 @@ endif
 	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX),$(addsuffix .fish,$(PROGS)))
 	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/man/man1/$(PROG_PREFIX),$(addsuffix .1,$(PROGS)))
 
-.PHONY: all build build-coreutils build-pkgs test distclean clean busytest install uninstall
+.PHONY: all build build-coreutils build-pkgs build-uudoc test distclean clean busytest install uninstall
