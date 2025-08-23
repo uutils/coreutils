@@ -136,6 +136,7 @@ proc-info = ["tty", "walkdir"]
 quoting-style = ["i18n-common"]
 ranges = []
 ringbuffer = []
+safe-traversal = ["libc"]
 selinux = ["dep:selinux"]
 signals = []
 sum = [
