@@ -339,7 +339,7 @@ number_prefix = "0.4"
 onig = { version = "~6.5.1", default-features = false }
 parse_datetime = "0.11.0"
 phf = "0.12.1"
-phf_codegen = "0.12.1"
+phf_codegen = "0.13.0"
 platform-info = "2.0.3"
 rand = { version = "0.9.0", features = ["small_rng"] }
 rand_core = "0.9.0"
