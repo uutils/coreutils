@@ -255,8 +255,35 @@ impl DirFd {
         })
     }
 
-    pub fn as_raw_fd(&self) -> RawFd {
-        self.fd
+    /// Remove a file or empty directory relative to this directory
+    pub fn unlink_at(&self, name: &OsStr, is_dir: bool) -> io::Result<()> {
+        let name_str = name.to_string_lossy();
+        let name_cstr =
+            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        let flags = if is_dir { libc::AT_REMOVEDIR } else { 0 };
+
+        let ret = unsafe { libc::unlinkat(self.fd, name_cstr.as_ptr(), flags) };
+
+        if ret < 0 {
+            Err(SafeTraversalError::UnlinkFailed {
+                path: name_str.to_string(),
+                source: io::Error::last_os_error(),
+            }
+            .into())
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Create a DirFd from an existing file descriptor (does not take ownership)
+    pub fn from_raw_fd(fd: RawFd) -> io::Result<Self> {
+        if fd < 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "invalid file descriptor",
+            ));
+        }
+        Ok(DirFd { fd, owned: false })
     }
 }
 
