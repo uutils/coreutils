@@ -1,7 +1,8 @@
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
 // Only available on Linux
-// spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat
+// spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat
+// spell-checker:ignore  RAII dirfd
 
 #![cfg(target_os = "linux")]
 
@@ -291,7 +292,6 @@ impl FileInfo {
             ino: stat.st_ino as u64,
         }
     }
-}
 
     /// Create FileInfo from device and inode numbers
     pub fn new(dev: u64, ino: u64) -> Self {
@@ -383,6 +383,144 @@ impl Metadata {
     /// Get the raw libc::stat for compatibility with existing code
     pub fn as_raw_stat(&self) -> &libc::stat {
         &self.stat
+    }
+
+    /// Compatibility methods to match std::fs::Metadata interface
+    pub fn is_dir(&self) -> bool {
+        self.file_type().is_directory()
+    }
+
+    pub fn len(&self) -> u64 {
+        self.size()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+// Add MetadataExt trait implementation for compatibility
+#[cfg(not(windows))]
+impl std::os::unix::fs::MetadataExt for Metadata {
+    fn dev(&self) -> u64 {
+        self.stat.st_dev
+    }
+
+    fn ino(&self) -> u64 {
+        #[cfg(target_pointer_width = "32")]
+        {
+            self.stat.st_ino.into()
+        }
+        #[cfg(not(target_pointer_width = "32"))]
+        {
+            self.stat.st_ino
+        }
+    }
+
+    fn mode(&self) -> u32 {
+        self.stat.st_mode
+    }
+
+    fn nlink(&self) -> u64 {
+        // st_nlink is u32 on most platforms except x86_64
+        #[cfg(target_arch = "x86_64")]
+        {
+            self.stat.st_nlink
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            self.stat.st_nlink.into()
+        }
+    }
+
+    fn uid(&self) -> u32 {
+        self.stat.st_uid
+    }
+
+    fn gid(&self) -> u32 {
+        self.stat.st_gid
+    }
+
+    fn rdev(&self) -> u64 {
+        self.stat.st_rdev
+    }
+
+    fn size(&self) -> u64 {
+        self.stat.st_size as u64
+    }
+
+    fn atime(&self) -> i64 {
+        #[cfg(target_pointer_width = "32")]
+        {
+            self.stat.st_atime.into()
+        }
+        #[cfg(not(target_pointer_width = "32"))]
+        {
+            self.stat.st_atime
+        }
+    }
+
+    fn atime_nsec(&self) -> i64 {
+        #[cfg(target_pointer_width = "32")]
+        {
+            self.stat.st_atime_nsec.into()
+        }
+        #[cfg(not(target_pointer_width = "32"))]
+        {
+            self.stat.st_atime_nsec
+        }
+    }
+
+    fn mtime(&self) -> i64 {
+        #[cfg(target_pointer_width = "32")]
+        {
+            self.stat.st_mtime.into()
+        }
+        #[cfg(not(target_pointer_width = "32"))]
+        {
+            self.stat.st_mtime
+        }
+    }
+
+    fn mtime_nsec(&self) -> i64 {
+        #[cfg(target_pointer_width = "32")]
+        {
+            self.stat.st_mtime_nsec.into()
+        }
+        #[cfg(not(target_pointer_width = "32"))]
+        {
+            self.stat.st_mtime_nsec
+        }
+    }
+
+    fn ctime(&self) -> i64 {
+        #[cfg(target_pointer_width = "32")]
+        {
+            self.stat.st_ctime.into()
+        }
+        #[cfg(not(target_pointer_width = "32"))]
+        {
+            self.stat.st_ctime
+        }
+    }
+
+    fn ctime_nsec(&self) -> i64 {
+        #[cfg(target_pointer_width = "32")]
+        {
+            self.stat.st_ctime_nsec.into()
+        }
+        #[cfg(not(target_pointer_width = "32"))]
+        {
+            self.stat.st_ctime_nsec
+        }
+    }
+
+    fn blksize(&self) -> u64 {
+        self.stat.st_blksize as u64
+    }
+
+    fn blocks(&self) -> u64 {
+        self.stat.st_blocks as u64
     }
 }
 
@@ -647,3 +785,4 @@ mod tests {
             );
         }
     }
+}
