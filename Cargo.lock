@@ -875,9 +875,9 @@ dependencies = [
 
 [[package]]
 name = "dns-lookup"
-version = "2.1.0"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91adf1f5ae09290d87cca8f4f0a8e49bcc30672993eb8aa11a5c9d8872d16a98"
+checksum = "853d5bcf0b73bd5e6d945b976288621825c7166e9f06c5a035ae1aaf42d1b64f"
 dependencies = [
  "cfg-if",
  "libc",
@@ -940,7 +940,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cea14ef9355e3beab063703aa9dab15afd25f0667c341310c1e5274bb1d0da18"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1532,7 +1532,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2394,7 +2394,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.9.4",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2674,7 +2674,7 @@ dependencies = [
  "getrandom 0.3.3",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4314,7 +4314,7 @@ version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0978bf7171b3d90bac376700cb56d606feb40f251a475a5d6634613564460b22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
