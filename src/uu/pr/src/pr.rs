@@ -16,7 +16,6 @@ use std::os::unix::fs::FileTypeExt;
 use std::time::SystemTime;
 use thiserror::Error;
 
-use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::format_usage;
@@ -318,7 +317,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let opt_args = recreate_arguments(&args);
 
     let command = uu_app();
-    let matches = command.get_matches_from_mut_localized(opt_args);
+    let matches = uucore::clap_localization::handle_clap_result(command, opt_args)?;
 
     let mut files = matches
         .get_many::<String>(options::FILES)

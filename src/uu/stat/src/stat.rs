@@ -27,7 +27,6 @@ use std::path::Path;
 use std::{env, fs};
 
 use thiserror::Error;
-use uucore::LocalizedCommand;
 use uucore::time::{FormatSystemTimeFallback, format_system_time, system_time_to_sec};
 
 #[derive(Debug, Error)]
@@ -1219,9 +1218,7 @@ impl Stater {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(translate!("stat-after-help"))
-        .get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let stater = Stater::new(&matches)?;
     let exit_status = stater.exec();
@@ -1237,6 +1234,7 @@ pub fn uu_app() -> Command {
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("stat-about"))
+        .after_help(translate!("stat-after-help"))
         .override_usage(format_usage(&translate!("stat-usage")))
         .infer_long_args(true)
         .arg(

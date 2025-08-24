@@ -492,24 +492,27 @@ impl EnvAppData {
         let original_args: Vec<OsString> = original_args.collect();
         let args = self.process_all_string_arguments(&original_args)?;
         let app = uu_app();
-        let matches = app
-            .try_get_matches_from(args)
-            .map_err(|e| -> Box<dyn UError> {
+        let matches = match app.try_get_matches_from(args) {
+            Ok(matches) => matches,
+            Err(e) => {
                 match e.kind() {
                     clap::error::ErrorKind::DisplayHelp
-                    | clap::error::ErrorKind::DisplayVersion => e.into(),
+                    | clap::error::ErrorKind::DisplayVersion => return Err(e.into()),
                     _ => {
-                        // extent any real issue with parameter parsing by the ERROR_MSG_S_SHEBANG
-                        let s = format!("{e}");
-                        if !s.is_empty() {
-                            let s = s.trim_end();
-                            uucore::show_error!("{s}");
-                        }
-                        uucore::show_error!("{}", translate!("env-error-use-s-shebang"));
-                        ExitCode::new(125)
+                        // Use ErrorFormatter directly to handle error with shebang message callback
+                        let formatter =
+                            uucore::clap_localization::ErrorFormatter::new(uucore::util_name());
+                        formatter.print_error_and_exit_with_callback(&e, 125, || {
+                            eprintln!(
+                                "{}: {}",
+                                uucore::util_name(),
+                                translate!("env-error-use-s-shebang")
+                            );
+                        });
                     }
                 }
-            })?;
+            }
+        };
         Ok((original_args, matches))
     }
 

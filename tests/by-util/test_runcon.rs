@@ -51,7 +51,14 @@ fn invalid() {
         "unconfined_u:unconfined_r:unconfined_t:s0",
         "inexistent-file",
     ];
-    new_ucmd!().args(args).fails_with_code(127);
+    // When SELinux is enabled, this should fail with 127 (command not found)
+    // When SELinux is not enabled, this fails with 1 (SELinux not enabled error)
+    let expected_code = if uucore::selinux::is_selinux_enabled() {
+        127
+    } else {
+        1
+    };
+    new_ucmd!().args(args).fails_with_code(expected_code);
 
     let args = &["invalid", "/bin/true"];
     new_ucmd!().args(args).fails_with_code(1);

@@ -15,7 +15,6 @@ use std::io::{self, Read, Seek, Write};
 #[cfg(unix)]
 use std::os::unix::prelude::PermissionsExt;
 use std::path::{Path, PathBuf};
-use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parser::parse_size::parse_size_u64;
@@ -240,7 +239,7 @@ impl<'a> BytesWriter<'a> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     if !matches.contains_id(options::FILE) {
         return Err(UUsageError::new(

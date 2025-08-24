@@ -16,7 +16,6 @@ use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use thiserror::Error;
-use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::format_usage;
@@ -823,7 +822,7 @@ fn parse_settings(matches: &clap::ArgMatches) -> UResult<Settings> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let settings = parse_settings(&matches)?;
 

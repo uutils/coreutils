@@ -42,7 +42,7 @@ Index: gnu/tests/env/env-S.pl
 -      {ERR=>"env: invalid option -- ' '\n" .
 -            "env: use -[v]S to pass options in shebang lines\n" .
 -           "Try 'env --help' for more information.\n"}],
-+      {ERR=>"$prog: error: unexpected argument '- ' found\n\n" .
++      {ERR=>"error: unexpected argument '- ' found\n\n" .
 +            "  tip: to pass '- ' as a value, use '-- - '\n\n" .
 +            "Usage: $prog [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]\n\n" .
 +            "For more information, try '--help'.\n" .
@@ -51,7 +51,7 @@ Index: gnu/tests/env/env-S.pl
 -      {ERR=>"env: invalid option -- '\t'\n" .
 -            "env: use -[v]S to pass options in shebang lines\n" .
 -           "Try 'env --help' for more information.\n"}],
-+      {ERR=>"$prog: error: unexpected argument '-\t' found\n\n" .
++      {ERR=>"error: unexpected argument '-\t' found\n\n" .
 +            "  tip: to pass '-\t' as a value, use '-- -\t'\n\n" .
 +            "Usage: $prog [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]\n\n" .
 +            "For more information, try '--help'.\n" .

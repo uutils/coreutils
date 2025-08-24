@@ -7,7 +7,6 @@
 
 use clap::{Arg, ArgAction, Command};
 use uu_base32::base_common::{self, BASE_CMD_PARSE_ERROR, Config};
-use uucore::error::UClapError;
 use uucore::translate;
 use uucore::{
     encoding::Format,
@@ -64,9 +63,7 @@ pub fn uu_app() -> Command {
 }
 
 fn parse_cmd_args(args: impl uucore::Args) -> UResult<(Config, Format)> {
-    let matches = uu_app()
-        .try_get_matches_from(args.collect_lossy())
-        .with_exit_code(1)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args.collect_lossy())?;
 
     let encodings = get_encodings();
     let format = encodings

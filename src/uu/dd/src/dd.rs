@@ -55,7 +55,6 @@ use nix::{
     errno::Errno,
     fcntl::{PosixFadviseAdvice, posix_fadvise},
 };
-use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
 #[cfg(unix)]
@@ -1416,7 +1415,7 @@ fn is_fifo(filename: &str) -> bool {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let settings: Settings = Parser::new().parse(
         matches

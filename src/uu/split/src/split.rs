@@ -26,7 +26,6 @@ use uucore::translate;
 
 use uucore::parser::parse_size::parse_size_u64;
 
-use uucore::LocalizedCommand;
 use uucore::format_usage;
 use uucore::uio_error;
 
@@ -52,7 +51,7 @@ static ARG_PREFIX: &str = "prefix";
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, obs_lines) = handle_obsolete(args);
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     match Settings::from(&matches, obs_lines.as_deref()) {
         Ok(settings) => split(&settings),

@@ -84,16 +84,8 @@ pub mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(translate!("truncate-after-help"))
-        .try_get_matches_from(args)
-        .map_err(|e| {
-            e.print().expect("Error writing clap::Error");
-            match e.kind() {
-                clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => 0,
-                _ => 1,
-            }
-        })?;
+    let app = uu_app();
+    let matches = uucore::clap_localization::handle_clap_result(app, args)?;
 
     let files: Vec<OsString> = matches
         .get_many::<OsString>(options::ARG_FILES)
@@ -117,12 +109,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("truncate-about"))
         .override_usage(format_usage(&translate!("truncate-usage")))
-        .infer_long_args(true)
+        .after_help(translate!("truncate-after-help"))
+        .infer_long_args(true);
+    uucore::clap_localization::configure_localized_command(cmd)
         .arg(
             Arg::new(options::IO_BLOCKS)
                 .short('o')

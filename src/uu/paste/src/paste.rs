@@ -12,7 +12,6 @@ use std::iter::Cycle;
 use std::path::Path;
 use std::rc::Rc;
 use std::slice::Iter;
-use uucore::LocalizedCommand;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 use uucore::line_ending::LineEnding;
@@ -27,7 +26,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let serial = matches.get_flag(options::SERIAL);
     let delimiters = matches.get_one::<String>(options::DELIMITER).unwrap();

@@ -23,7 +23,6 @@ use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use thiserror::Error;
-use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::UResult;
 #[cfg(not(target_os = "windows"))]
@@ -232,7 +231,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
 
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let number_mode = if matches.get_flag(options::NUMBER_NONBLANK) {
         NumberingMode::NonEmpty

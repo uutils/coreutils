@@ -92,7 +92,8 @@ fn select_precision(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(split_short_args_with_value(args))?;
+    let matches =
+        uucore::clap_localization::handle_clap_result(uu_app(), split_short_args_with_value(args))?;
 
     let numbers_option = matches.get_many::<String>(ARG_NUMBERS);
 

@@ -889,12 +889,11 @@ fn gnu_tests() {
             input: "", // Note: Different from GNU test, but should not matter
             stdout: Some(""),
             stderr: Some(concat!(
-                "uniq: invalid argument 'badoption' for '--all-repeated'\n",
-                "Valid arguments are:\n",
-                "  - 'none'\n",
-                "  - 'prepend'\n",
-                "  - 'separate'\n",
-                "Try 'uniq --help' for more information.\n"
+                "error: invalid value 'badoption' for '--all-repeated[=<delimit-method>]'\n",
+                "\n",
+                "  [possible values: none, prepend, separate]\n",
+                "\n",
+                "For more information, try '--help'.\n"
             )),
             exit: Some(1),
         },
@@ -1067,8 +1066,9 @@ fn gnu_tests() {
             input: "",
             stdout: Some(""),
             stderr: Some(concat!(
-                "uniq: --group is mutually exclusive with -c/-d/-D/-u\n",
-                "Try 'uniq --help' for more information.\n"
+                "error: the argument '--group[=<group-method>]' cannot be used with '--count'\n",
+                "\n",
+                "For more information, try '--help'.\n"
             )),
             exit: Some(1),
         },
@@ -1078,8 +1078,9 @@ fn gnu_tests() {
             input: "",
             stdout: Some(""),
             stderr: Some(concat!(
-                "uniq: --group is mutually exclusive with -c/-d/-D/-u\n",
-                "Try 'uniq --help' for more information.\n"
+                "error: the argument '--group[=<group-method>]' cannot be used with '--repeated'\n",
+                "\n",
+                "For more information, try '--help'.\n"
             )),
             exit: Some(1),
         },
@@ -1089,8 +1090,9 @@ fn gnu_tests() {
             input: "",
             stdout: Some(""),
             stderr: Some(concat!(
-                "uniq: --group is mutually exclusive with -c/-d/-D/-u\n",
-                "Try 'uniq --help' for more information.\n"
+                "error: the argument '--group[=<group-method>]' cannot be used with '--unique'\n",
+                "\n",
+                "For more information, try '--help'.\n"
             )),
             exit: Some(1),
         },
@@ -1100,8 +1102,9 @@ fn gnu_tests() {
             input: "",
             stdout: Some(""),
             stderr: Some(concat!(
-                "uniq: --group is mutually exclusive with -c/-d/-D/-u\n",
-                "Try 'uniq --help' for more information.\n"
+                "error: the argument '--group[=<group-method>]' cannot be used with '--all-repeated[=<delimit-method>]'\n",
+                "\n",
+                "For more information, try '--help'.\n"
             )),
             exit: Some(1),
         },
@@ -1111,13 +1114,11 @@ fn gnu_tests() {
             input: "",
             stdout: Some(""),
             stderr: Some(concat!(
-                "uniq: invalid argument 'badoption' for '--group'\n",
-                "Valid arguments are:\n",
-                "  - 'prepend'\n",
-                "  - 'append'\n",
-                "  - 'separate'\n",
-                "  - 'both'\n",
-                "Try 'uniq --help' for more information.\n"
+                "error: invalid value 'badoption' for '--group[=<group-method>]'\n",
+                "\n",
+                "  [possible values: separate, prepend, append, both]\n",
+                "\n",
+                "For more information, try '--help'.\n"
             )),
             exit: Some(1),
         },

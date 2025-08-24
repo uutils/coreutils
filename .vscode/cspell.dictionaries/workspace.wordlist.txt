@@ -349,3 +349,12 @@ getcwd
 # * other
 weblate
 algs
+
+# translation tests
+CLICOLOR
+erreur
+Utilisation
+merror
+merreur
+verbo
+inattendu

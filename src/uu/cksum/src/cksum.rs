@@ -20,7 +20,6 @@ use uucore::checksum::{
 };
 use uucore::translate;
 
-use uucore::LocalizedCommand;
 use uucore::{
     encoding,
     error::{FromIo, UResult, USimpleError},
@@ -235,7 +234,7 @@ fn handle_tag_text_binary_flags<S: AsRef<OsStr>>(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let check = matches.get_flag(options::CHECK);
 

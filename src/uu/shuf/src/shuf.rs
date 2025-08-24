@@ -17,7 +17,6 @@ use std::io::{BufWriter, Error, Read, Write, stdin, stdout};
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use uucore::LocalizedCommand;
 use uucore::display::{OsWrite, Quotable};
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
@@ -52,7 +51,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let mode = if matches.get_flag(options::ECHO) {
         Mode::Echo(

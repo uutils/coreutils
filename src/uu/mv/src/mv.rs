@@ -52,7 +52,6 @@ use uucore::update_control;
 
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
 // requires these enums
-use uucore::LocalizedCommand;
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{format_usage, prompt_yes, show};
 
@@ -153,7 +152,7 @@ static OPT_SELINUX: &str = "selinux";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let files: Vec<OsString> = matches
         .get_many::<OsString>(ARG_FILES)
@@ -166,7 +165,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             ErrorKind::TooFewValues,
             translate!("mv-error-insufficient-arguments", "arg_files" => ARG_FILES),
         );
-        uucore::clap_localization::handle_clap_error_with_exit_code(err, uucore::util_name(), 1);
+        uucore::clap_localization::handle_clap_error_with_exit_code(err, 1);
     }
 
     let overwrite_mode = determine_overwrite_mode(&matches);

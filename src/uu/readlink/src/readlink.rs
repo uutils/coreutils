@@ -10,7 +10,6 @@ use std::ffi::OsString;
 use std::fs;
 use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
-use uucore::LocalizedCommand;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::line_ending::LineEnding;
@@ -30,7 +29,7 @@ const ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let mut no_trailing_delimiter = matches.get_flag(OPT_NO_NEWLINE);
     let use_zero = matches.get_flag(OPT_ZERO);

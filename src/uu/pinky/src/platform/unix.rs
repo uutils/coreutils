@@ -9,7 +9,6 @@ use crate::Capitalize;
 use crate::options;
 use crate::uu_app;
 
-use uucore::LocalizedCommand;
 use uucore::entries::{Locate, Passwd};
 use uucore::error::{FromIo, UResult};
 use uucore::libc::S_IWGRP;
@@ -33,9 +32,8 @@ fn get_long_usage() -> String {
 }
 
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(get_long_usage())
-        .get_matches_from_localized(args);
+    let matches =
+        uucore::clap_localization::handle_clap_result(uu_app().after_help(get_long_usage()), args)?;
 
     let users: Vec<String> = matches
         .get_many::<String>(options::USER)

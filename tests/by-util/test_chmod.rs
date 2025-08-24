@@ -1275,3 +1275,35 @@ fn test_chmod_non_utf8_paths() {
         0o644
     );
 }
+
+#[test]
+fn test_chmod_colored_output() {
+    // Test colored help message
+    new_ucmd!()
+        .arg("--help")
+        .env("CLICOLOR_FORCE", "1")
+        .env("LANG", "en_US.UTF-8")
+        .succeeds()
+        .stdout_contains("\x1b[1m\x1b[4mUsage:\x1b[0m") // Bold+underline "Usage:"
+        .stdout_contains("\x1b[1m\x1b[4mArguments:\x1b[0m"); // Bold+underline "Arguments:"
+
+    // Test colored error message for invalid option
+    new_ucmd!()
+        .arg("--invalid-option")
+        .env("CLICOLOR_FORCE", "1")
+        .env("LANG", "en_US.UTF-8")
+        .fails()
+        .code_is(1)
+        .stderr_contains("\x1b[31merror\x1b[0m") // Red "error"
+        .stderr_contains("\x1b[33m--invalid-option\x1b[0m"); // Yellow invalid option
+
+    // Test French localized colored error message
+    new_ucmd!()
+        .arg("--invalid-option")
+        .env("CLICOLOR_FORCE", "1")
+        .env("LANG", "fr_FR.UTF-8")
+        .fails()
+        .code_is(1)
+        .stderr_contains("\x1b[31merreur\x1b[0m") // Red "erreur" in French
+        .stderr_contains("\x1b[33m--invalid-option\x1b[0m"); // Yellow invalid option
+}

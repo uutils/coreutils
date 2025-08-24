@@ -20,7 +20,6 @@ use std::ffi::OsString;
 use std::fs::{self, File};
 use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
-use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
@@ -187,7 +186,7 @@ fn shr2(s: &str) -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let mut filenames: Vec<&OsString> = matches
         .get_many::<OsString>(ARG_FILES)

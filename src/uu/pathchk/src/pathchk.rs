@@ -9,7 +9,6 @@ use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs;
 use std::io::{ErrorKind, Write};
-use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError, set_exit_code};
 use uucore::format_usage;
@@ -36,7 +35,7 @@ const POSIX_NAME_MAX: usize = 14;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     // set working mode
     let is_posix = matches.get_flag(options::POSIX);
