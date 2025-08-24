@@ -210,6 +210,28 @@ fn test_number_separator() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_number_separator_non_utf8() {
+    use std::{
+        ffi::{OsStr, OsString},
+        os::unix::ffi::{OsStrExt, OsStringExt},
+    };
+
+    let separator_bytes = [0xFF, 0xFE];
+    let mut v = b"--number-separator=".to_vec();
+    v.extend_from_slice(&separator_bytes);
+
+    let arg = OsString::from_vec(v);
+    let separator = OsStr::from_bytes(&separator_bytes);
+
+    new_ucmd!()
+        .arg(arg)
+        .pipe_in("test")
+        .succeeds()
+        .stdout_is(format!("     1{}test\n", separator.to_string_lossy()));
+}
+
+#[test]
 fn test_starting_line_number() {
     for arg in ["-v10", "--starting-line-number=10"] {
         new_ucmd!()
