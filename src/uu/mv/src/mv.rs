@@ -676,7 +676,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
                 let e = e.map_err_context(|| translate!("mv-error-cannot-overwrite"));
-                match multi_progress {
+                match display_manager {
                     Some(ref pb) => pb.suspend(|| show!(e)),
                     None => show!(e),
                 }
