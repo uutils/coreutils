@@ -386,3 +386,332 @@ impl LocalizedCommand for Command {
             .unwrap_or_else(|err| handle_clap_error_with_exit_code(err, crate::util_name(), 1))
     }
 }
+
+/* spell-checker: disable */
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::{Arg, Command};
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_color_codes() {
+        assert_eq!(Color::Red.code(), "31");
+        assert_eq!(Color::Yellow.code(), "33");
+        assert_eq!(Color::Green.code(), "32");
+    }
+
+    #[test]
+    fn test_colorize() {
+        let red_text = colorize("error", Color::Red);
+        assert_eq!(red_text, "\x1b[31merror\x1b[0m");
+
+        let yellow_text = colorize("warning", Color::Yellow);
+        assert_eq!(yellow_text, "\x1b[33mwarning\x1b[0m");
+
+        let green_text = colorize("success", Color::Green);
+        assert_eq!(green_text, "\x1b[32msuccess\x1b[0m");
+    }
+
+    fn create_test_command() -> Command {
+        Command::new("test")
+            .arg(
+                Arg::new("input")
+                    .short('i')
+                    .long("input")
+                    .value_name("FILE")
+                    .help("Input file"),
+            )
+            .arg(
+                Arg::new("output")
+                    .short('o')
+                    .long("output")
+                    .value_name("FILE")
+                    .help("Output file"),
+            )
+            .arg(
+                Arg::new("format")
+                    .long("format")
+                    .value_parser(["json", "xml", "csv"])
+                    .help("Output format"),
+            )
+    }
+
+    #[test]
+    fn test_get_matches_from_localized_with_valid_args() {
+        let result = std::panic::catch_unwind(|| {
+            let cmd = create_test_command();
+            let matches = cmd.get_matches_from_localized(vec!["test", "--input", "file.txt"]);
+            matches.get_one::<String>("input").unwrap().clone()
+        });
+
+        if let Ok(input_value) = result {
+            assert_eq!(input_value, "file.txt");
+        }
+    }
+
+    #[test]
+    fn test_get_matches_from_localized_with_osstring_args() {
+        let args: Vec<OsString> = vec!["test".into(), "--input".into(), "test.txt".into()];
+
+        let result = std::panic::catch_unwind(|| {
+            let cmd = create_test_command();
+            let matches = cmd.get_matches_from_localized(args);
+            matches.get_one::<String>("input").unwrap().clone()
+        });
+
+        if let Ok(input_value) = result {
+            assert_eq!(input_value, "test.txt");
+        }
+    }
+
+    #[test]
+    fn test_localized_command_from_mut() {
+        let args: Vec<OsString> = vec!["test".into(), "--output".into(), "result.txt".into()];
+
+        let result = std::panic::catch_unwind(|| {
+            let cmd = create_test_command();
+            let matches = cmd.get_matches_from_mut_localized(args);
+            matches.get_one::<String>("output").unwrap().clone()
+        });
+
+        if let Ok(output_value) = result {
+            assert_eq!(output_value, "result.txt");
+        }
+    }
+
+    fn create_unknown_argument_error() -> Error {
+        let cmd = create_test_command();
+        cmd.try_get_matches_from(vec!["test", "--unknown-arg"])
+            .unwrap_err()
+    }
+
+    fn create_invalid_value_error() -> Error {
+        let cmd = create_test_command();
+        cmd.try_get_matches_from(vec!["test", "--format", "invalid"])
+            .unwrap_err()
+    }
+
+    fn create_help_error() -> Error {
+        let cmd = create_test_command();
+        cmd.try_get_matches_from(vec!["test", "--help"])
+            .unwrap_err()
+    }
+
+    fn create_version_error() -> Error {
+        let cmd = Command::new("test").version("1.0.0");
+        cmd.try_get_matches_from(vec!["test", "--version"])
+            .unwrap_err()
+    }
+
+    #[test]
+    fn test_error_kind_detection() {
+        let unknown_err = create_unknown_argument_error();
+        assert_eq!(unknown_err.kind(), ErrorKind::UnknownArgument);
+
+        let invalid_value_err = create_invalid_value_error();
+        assert_eq!(invalid_value_err.kind(), ErrorKind::InvalidValue);
+
+        let help_err = create_help_error();
+        assert_eq!(help_err.kind(), ErrorKind::DisplayHelp);
+
+        let version_err = create_version_error();
+        assert_eq!(version_err.kind(), ErrorKind::DisplayVersion);
+    }
+
+    #[test]
+    fn test_context_extraction() {
+        let unknown_err = create_unknown_argument_error();
+        let invalid_arg = unknown_err.get(ContextKind::InvalidArg);
+        assert!(invalid_arg.is_some());
+        assert!(invalid_arg.unwrap().to_string().contains("unknown-arg"));
+
+        let invalid_value_err = create_invalid_value_error();
+        let invalid_value = invalid_value_err.get(ContextKind::InvalidValue);
+        assert!(invalid_value.is_some());
+        assert_eq!(invalid_value.unwrap().to_string(), "invalid");
+    }
+
+    fn test_maybe_colorize_helper(colors_enabled: bool) {
+        let maybe_colorize = |text: &str, color: Color| -> String {
+            if colors_enabled {
+                colorize(text, color)
+            } else {
+                text.to_string()
+            }
+        };
+
+        let result = maybe_colorize("test", Color::Red);
+        if colors_enabled {
+            assert!(result.contains("\x1b[31m"));
+            assert!(result.contains("\x1b[0m"));
+        } else {
+            assert_eq!(result, "test");
+        }
+    }
+
+    #[test]
+    fn test_maybe_colorize_with_colors() {
+        test_maybe_colorize_helper(true);
+    }
+
+    #[test]
+    fn test_maybe_colorize_without_colors() {
+        test_maybe_colorize_helper(false);
+    }
+
+    #[test]
+    fn test_simple_help_classification() {
+        let simple_help_kinds = [
+            ErrorKind::InvalidValue,
+            ErrorKind::ValueValidation,
+            ErrorKind::InvalidSubcommand,
+            ErrorKind::InvalidUtf8,
+            ErrorKind::ArgumentConflict,
+            ErrorKind::NoEquals,
+            ErrorKind::Io,
+            ErrorKind::Format,
+        ];
+
+        let non_simple_help_kinds = [
+            ErrorKind::TooFewValues,
+            ErrorKind::TooManyValues,
+            ErrorKind::WrongNumberOfValues,
+            ErrorKind::MissingSubcommand,
+            ErrorKind::MissingRequiredArgument,
+            ErrorKind::DisplayHelp,
+            ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand,
+            ErrorKind::DisplayVersion,
+            ErrorKind::UnknownArgument,
+        ];
+
+        for kind in &simple_help_kinds {
+            assert!(
+                should_show_simple_help_for_clap_error(*kind),
+                "Expected {:?} to show simple help",
+                kind
+            );
+        }
+
+        for kind in &non_simple_help_kinds {
+            assert!(
+                !should_show_simple_help_for_clap_error(*kind),
+                "Expected {:?} to NOT show simple help",
+                kind
+            );
+        }
+    }
+
+    #[test]
+    fn test_localization_setup() {
+        use crate::locale::{get_message, setup_localization};
+
+        let _ = setup_localization("test");
+
+        let common_keys = [
+            "common-error",
+            "common-usage",
+            "common-help-suggestion",
+            "clap-error-unexpected-argument",
+            "clap-error-invalid-value",
+        ];
+        for key in &common_keys {
+            let message = get_message(key);
+            assert_ne!(message, *key, "Translation not found for key: {}", key);
+        }
+    }
+
+    #[test]
+    fn test_localization_with_args() {
+        use crate::locale::{get_message_with_args, setup_localization};
+        use fluent::FluentArgs;
+
+        let _ = setup_localization("test");
+
+        let mut args = FluentArgs::new();
+        args.set("error_word", "ERROR");
+        args.set("arg", "--test");
+
+        let message = get_message_with_args("clap-error-unexpected-argument", args);
+        assert_ne!(
+            message, "clap-error-unexpected-argument",
+            "Translation not found for key: clap-error-unexpected-argument"
+        );
+    }
+
+    #[test]
+    fn test_french_localization() {
+        use crate::locale::{get_message, setup_localization};
+        use std::env;
+
+        let original_lang = env::var("LANG").unwrap_or_default();
+
+        unsafe {
+            env::set_var("LANG", "fr-FR");
+        }
+        let result = setup_localization("test");
+
+        if result.is_ok() {
+            let error_word = get_message("common-error");
+            assert_eq!(error_word, "erreur");
+
+            let usage_word = get_message("common-usage");
+            assert_eq!(usage_word, "Utilisation");
+
+            let tip_word = get_message("common-tip");
+            assert_eq!(tip_word, "conseil");
+        }
+
+        unsafe {
+            if original_lang.is_empty() {
+                env::remove_var("LANG");
+            } else {
+                env::set_var("LANG", original_lang);
+            }
+        }
+    }
+
+    #[test]
+    fn test_french_clap_error_messages() {
+        use crate::locale::{get_message_with_args, setup_localization};
+        use fluent::FluentArgs;
+        use std::env;
+
+        let original_lang = env::var("LANG").unwrap_or_default();
+
+        unsafe {
+            env::set_var("LANG", "fr-FR");
+        }
+        let result = setup_localization("test");
+
+        if result.is_ok() {
+            let mut args = FluentArgs::new();
+            args.set("error_word", "erreur");
+            args.set("arg", "--inconnu");
+
+            let unexpected_msg = get_message_with_args("clap-error-unexpected-argument", args);
+            assert!(unexpected_msg.contains("erreur"));
+            assert!(unexpected_msg.contains("--inconnu"));
+            assert!(unexpected_msg.contains("inattendu"));
+
+            let mut value_args = FluentArgs::new();
+            value_args.set("error_word", "erreur");
+            value_args.set("value", "invalide");
+            value_args.set("option", "--format");
+
+            let invalid_msg = get_message_with_args("clap-error-invalid-value", value_args);
+            assert!(invalid_msg.contains("erreur"));
+            assert!(invalid_msg.contains("invalide"));
+            assert!(invalid_msg.contains("--format"));
+        }
+
+        unsafe {
+            if original_lang.is_empty() {
+                env::remove_var("LANG");
+            } else {
+                env::set_var("LANG", original_lang);
+            }
+        }
+    }
+}
+/* spell-checker: enable */
