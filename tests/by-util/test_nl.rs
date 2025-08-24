@@ -11,7 +11,7 @@ use uutests::util_name;
 
 #[test]
 #[cfg(target_os = "linux")]
-fn test_nl_non_utf8_paths() {
+fn test_non_utf8_paths() {
     use std::os::unix::ffi::OsStringExt;
     let (at, mut ucmd) = at_and_ucmd!();
 
