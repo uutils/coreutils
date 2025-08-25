@@ -108,7 +108,7 @@ cd "${path_UUTILS}" && echo "[ pwd:'${PWD}' ]"
 if [ "$(uname)" == "Linux" ]; then
     # Only attempt to enable SELinux features on Linux
     export SELINUX_ENABLED=1
-    CARGO_FEATURE_FLAGS="${CARGO_FEATURE_FLAGS} selinux"
+    CARGO_FEATURE_FLAGS="${CARGO_FEATURE_FLAGS} feat_selinux"
 fi
 
 # Trim leading whitespace from feature flags

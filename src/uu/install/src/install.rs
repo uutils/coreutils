@@ -27,7 +27,7 @@ use uucore::fs::dir_strip_dot_for_creation;
 use uucore::mode::get_umask;
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 use uucore::process::{getegid, geteuid};
-#[cfg(feature = "selinux")]
+#[cfg(feature = "feat_selinux")]
 use uucore::selinux::{contexts_differ, set_selinux_security_context};
 use uucore::translate;
 use uucore::{format_usage, show, show_error, show_if_err};
@@ -113,7 +113,7 @@ enum InstallError {
     #[error("{}", translate!("install-error-extra-operand", "operand" => .0.quote(), "usage" => .1.clone()))]
     ExtraOperand(String, String),
 
-    #[cfg(feature = "selinux")]
+    #[cfg(feature = "feat_selinux")]
     #[error("{}", .0)]
     SelinuxContextFailed(String),
 }
@@ -482,7 +482,7 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
             show_if_err!(chown_optional_user_group(path, b));
 
             // Set SELinux context for directory if needed
-            #[cfg(feature = "selinux")]
+            #[cfg(feature = "feat_selinux")]
             show_if_err!(set_selinux_context(path, b));
         }
         // If the exit code was set, or show! has been called at least once
@@ -956,7 +956,7 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
         preserve_timestamps(from, to)?;
     }
 
-    #[cfg(feature = "selinux")]
+    #[cfg(feature = "feat_selinux")]
     if b.preserve_context {
         uucore::selinux::preserve_security_context(from, to)
             .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
@@ -1071,7 +1071,7 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
         return true;
     }
 
-    #[cfg(feature = "selinux")]
+    #[cfg(feature = "feat_selinux")]
     if b.preserve_context && contexts_differ(from, to) {
         return true;
     }
@@ -1102,7 +1102,7 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     false
 }
 
-#[cfg(feature = "selinux")]
+#[cfg(feature = "feat_selinux")]
 fn set_selinux_context(path: &Path, behavior: &Behavior) -> UResult<()> {
     if !behavior.preserve_context && behavior.context.is_some() {
         // Use the provided context set by -Z/--context

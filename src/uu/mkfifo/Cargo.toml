@@ -24,7 +24,7 @@ uucore = { workspace = true, features = ["fs", "mode"] }
 fluent = { workspace = true }
 
 [features]
-selinux = ["uucore/selinux"]
+feat_selinux = ["uucore/selinux"]
 
 [[bin]]
 name = "mkfifo"

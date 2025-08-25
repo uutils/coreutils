@@ -34,8 +34,12 @@ uucore = { workspace = true, features = [
 ] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+selinux = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["process", "signal", "user", "term"] }
 rlimit = "0.10.1"
 xattr = { workspace = true }
+
+[features]
+feat_selinux = ["selinux"]

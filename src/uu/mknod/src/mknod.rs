@@ -93,7 +93,7 @@ fn mknod(file_name: &str, config: Config) -> i32 {
         }
 
         // Apply SELinux context if requested
-        #[cfg(feature = "selinux")]
+        #[cfg(feature = "feat_selinux")]
         if config.set_selinux_context {
             if let Err(e) = uucore::selinux::set_selinux_security_context(
                 std::path::Path::new(file_name),

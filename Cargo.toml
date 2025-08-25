@@ -56,16 +56,16 @@ feat_acl = ["cp/feat_acl"]
 # * The selinux(-sys) crate requires `libselinux` headers and shared library to be accessible in the C toolchain at compile time.
 # * Running a uutils compiled with `feat_selinux` requires an SELinux enabled Kernel at run time.
 feat_selinux = [
-  "cp/selinux",
+  "cp/feat_selinux",
   "feat_require_selinux",
-  "id/selinux",
-  "install/selinux",
-  "ls/selinux",
-  "mkdir/selinux",
-  "mkfifo/selinux",
-  "mknod/selinux",
-  "selinux",
-  "stat/selinux",
+  "id/feat_selinux",
+  "install/feat_selinux",
+  "ls/feat_selinux",
+  "mkdir/feat_selinux",
+  "mkfifo/feat_selinux",
+  "mknod/feat_selinux",
+  "stat/feat_selinux",
+  "uutests/feat_selinux",
 ]
 ##
 ## feature sets
@@ -532,6 +532,7 @@ num-prime.workspace = true
 pretty_assertions = "1.4.0"
 rand.workspace = true
 regex.workspace = true
+selinux = { workspace = true }
 sha1 = { workspace = true, features = ["std"] }
 tempfile.workspace = true
 time = { workspace = true, features = ["local-offset"] }

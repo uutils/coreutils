@@ -1116,7 +1116,7 @@ impl Options {
             }
         }
 
-        #[cfg(not(feature = "selinux"))]
+        #[cfg(not(feature = "feat_selinux"))]
         if let Preserve::Yes { required } = attributes.context {
             let selinux_disabled_error = CpError::Error(translate!("cp-error-selinux-not-enabled"));
             if required {
@@ -1713,7 +1713,7 @@ pub(crate) fn copy_attributes(
         Ok(())
     })?;
 
-    #[cfg(feature = "selinux")]
+    #[cfg(feature = "feat_selinux")]
     handle_preserve(&attributes.context, || -> CopyResult<()> {
         // Get the source context and apply it to the destination
         if let Ok(context) = selinux::SecurityContext::of_path(source, false, false) {
@@ -2469,7 +2469,7 @@ fn copy_file(
         copy_attributes(source, dest, &options.attributes)?;
     }
 
-    #[cfg(feature = "selinux")]
+    #[cfg(feature = "feat_selinux")]
     if options.set_selinux_context && uucore::selinux::is_selinux_enabled() {
         // Set the given selinux permissions on the copied file.
         if let Err(e) =

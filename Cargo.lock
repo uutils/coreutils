@@ -4154,6 +4154,7 @@ dependencies = [
  "rand 0.9.2",
  "regex",
  "rlimit",
+ "selinux",
  "tempfile",
  "uucore",
  "xattr",

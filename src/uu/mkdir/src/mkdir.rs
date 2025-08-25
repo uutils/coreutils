@@ -277,7 +277,7 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
             chmod(path, new_mode)?;
 
             // Apply SELinux context if requested
-            #[cfg(feature = "selinux")]
+            #[cfg(feature = "feat_selinux")]
             if config.set_selinux_context && uucore::selinux::is_selinux_enabled() {
                 if let Err(e) = uucore::selinux::set_selinux_security_context(path, config.context)
                 {

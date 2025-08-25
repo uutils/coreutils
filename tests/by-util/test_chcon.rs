@@ -10,6 +10,7 @@ use std::ffi::CString;
 use std::path::Path;
 use std::{io, iter, str};
 
+use selinux::{SecurityContext, errors};
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
@@ -590,9 +591,9 @@ fn valid_reference_multi() {
     );
 }
 
-fn get_file_context(path: impl AsRef<Path>) -> Result<Option<String>, selinux::errors::Error> {
+fn get_file_context(path: impl AsRef<Path>) -> Result<Option<String>, errors::Error> {
     let path = path.as_ref();
-    match selinux::SecurityContext::of_path(path, false, false) {
+    match SecurityContext::of_path(path, false, false) {
         Err(r) => {
             println!("get_file_context failed: '{}': {r}.", path.display());
             Err(r)
@@ -619,15 +620,14 @@ fn get_file_context(path: impl AsRef<Path>) -> Result<Option<String>, selinux::e
     }
 }
 
-fn set_file_context(path: impl AsRef<Path>, context: &str) -> Result<(), selinux::errors::Error> {
-    let c_context = CString::new(context.as_bytes()).map_err(|_r| selinux::errors::Error::IO {
+fn set_file_context(path: impl AsRef<Path>, context: &str) -> Result<(), errors::Error> {
+    let c_context = CString::new(context.as_bytes()).map_err(|_r| errors::Error::IO {
         source: io::Error::from(io::ErrorKind::InvalidInput),
         operation: "CString::new",
     })?;
 
     let path = path.as_ref();
-    let r =
-        selinux::SecurityContext::from_c_str(&c_context, false).set_for_path(path, false, false);
+    let r = SecurityContext::from_c_str(&c_context, false).set_for_path(path, false, false);
     if let Err(r) = &r {
         println!(
             "set_file_context failed: '{context}' => '{}': {r}.",

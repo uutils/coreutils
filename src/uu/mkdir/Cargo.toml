@@ -23,7 +23,7 @@ uucore = { workspace = true, features = ["fs", "mode", "fsxattr"] }
 fluent = { workspace = true }
 
 [features]
-selinux = ["uucore/selinux"]
+feat_selinux = ["uucore/selinux"]
 
 [[bin]]
 name = "mkdir"

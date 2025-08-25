@@ -42,7 +42,7 @@ windows-sys = { workspace = true, features = [
 libc = { workspace = true }
 
 [features]
-selinux = ["uucore/selinux"]
+feat_selinux = ["uucore/selinux"]
 
 [[bin]]
 name = "mv"

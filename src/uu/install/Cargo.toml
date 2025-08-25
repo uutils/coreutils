@@ -34,7 +34,7 @@ uucore = { workspace = true, default-features = true, features = [
 fluent = { workspace = true }
 
 [features]
-selinux = ["uucore/selinux"]
+feat_selinux = ["uucore/selinux"]
 
 [[bin]]
 name = "install"

@@ -63,9 +63,9 @@ macro_rules! cstr2cow {
 }
 
 fn get_context_help_text() -> String {
-    #[cfg(not(feature = "selinux"))]
+    #[cfg(not(feature = "feat_selinux"))]
     return translate!("id-context-help-disabled");
-    #[cfg(feature = "selinux")]
+    #[cfg(feature = "feat_selinux")]
     return translate!("id-context-help-enabled");
 }
 
@@ -139,11 +139,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         cflag: matches.get_flag(options::OPT_CONTEXT),
 
         selinux_supported: {
-            #[cfg(feature = "selinux")]
+            #[cfg(feature = "feat_selinux")]
             {
                 uucore::selinux::is_selinux_enabled()
             }
-            #[cfg(not(feature = "selinux"))]
+            #[cfg(not(feature = "feat_selinux"))]
             {
                 false
             }
@@ -183,7 +183,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if state.cflag {
         return if state.selinux_supported {
             // print SElinux context and exit
-            #[cfg(all(any(target_os = "linux", target_os = "android"), feature = "selinux"))]
+            #[cfg(all(
+                any(target_os = "linux", target_os = "android"),
+                feature = "feat_selinux"
+            ))]
             if let Ok(context) = selinux::SecurityContext::current(false) {
                 let bytes = context.as_bytes();
                 print!("{}{line_ending}", String::from_utf8_lossy(bytes));
@@ -644,7 +647,10 @@ fn id_print(state: &State, groups: &[u32]) {
             .join(",")
     );
 
-    #[cfg(all(any(target_os = "linux", target_os = "android"), feature = "selinux"))]
+    #[cfg(all(
+        any(target_os = "linux", target_os = "android"),
+        feature = "feat_selinux"
+    ))]
     if state.selinux_supported
         && !state.user_specified
         && std::env::var_os("POSIXLY_CORRECT").is_none()
