@@ -4,19 +4,92 @@
 // file that was distributed with this source code.
 // spell-checker:ignore tldr uuhelp
 
-use clap::Command;
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, Read, Seek, Write};
+
+use clap::{Arg, Command};
 use zip::ZipArchive;
 
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
+
+#[cfg(feature = "uudoc")]
+/// Generate the manpage for the utility in the first parameter
+/// # Panics
+/// Panics if the utility map is empty
+fn gen_manpage<T: uucore::Args>(
+    args: impl Iterator<Item = OsString>,
+    util_map: &UtilityMap<T>,
+) -> ! {
+    let all_utilities: Vec<_> = std::iter::once("coreutils")
+        .chain(util_map.keys().copied())
+        .collect();
+
+    let matches = Command::new("manpage")
+        .about("Prints manpage to stdout")
+        .arg(
+            Arg::new("utility")
+                .value_parser(clap::builder::PossibleValuesParser::new(all_utilities))
+                .required(true),
+        )
+        .get_matches_from(std::iter::once(OsString::from("manpage")).chain(args));
+
+    let utility = matches.get_one::<String>("utility").unwrap();
+
+    let command = if utility == "coreutils" {
+        gen_coreutils_app(util_map)
+    } else {
+        uucore::locale::setup_localization(utility).unwrap_or_else(|err| {
+            match err {
+                uucore::locale::LocalizationError::ParseResource {
+                    error: err_msg,
+                    snippet,
+                } => eprintln!("Localization parse error at {snippet}: {err_msg}"),
+                other => eprintln!("Could not init the localization system: {other}"),
+            }
+            std::process::exit(99)
+        });
+        util_map.get(utility).unwrap().1()
+    };
+
+    let man = clap_mangen::Man::new(command);
+    man.render(&mut io::stdout())
+        .expect("Man page generation failed");
+    io::stdout().flush().unwrap();
+    std::process::exit(0);
+}
+
+/// # Panics
+/// Panics if the utility map is empty
+fn gen_coreutils_app<T: uucore::Args>(util_map: &UtilityMap<T>) -> Command {
+    let mut command = Command::new("coreutils");
+    for (name, (_, sub_app)) in util_map {
+        // Recreate a small subcommand with only the relevant info
+        // (name & short description)
+        let about = sub_app()
+            .get_about()
+            .expect("Could not get the 'about'")
+            .to_string();
+        let sub_app = Command::new(name).about(about);
+        command = command.subcommand(sub_app);
+    }
+    command
+}
 
 /// # Errors
 /// Returns an error if the writer fails.
 #[allow(clippy::too_many_lines)]
 fn main() -> io::Result<()> {
+    let args: Vec<OsString> = std::env::args_os().collect();
+
+    // Check if this is a manpage generation request
+    #[cfg(feature = "uudoc")]
+    if args.len() > 1 && args[1] == "manpage" {
+        let utils = util_map::<Box<dyn Iterator<Item = OsString>>>();
+        gen_manpage(args.into_iter().skip(2), &utils);
+    }
+
     let mut tldr_zip = File::open("docs/tldr.zip")
         .ok()
         .and_then(|f| ZipArchive::new(f).ok());

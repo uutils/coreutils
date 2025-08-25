@@ -382,7 +382,7 @@ ifeq ($(MANPAGES),y)
 manpages: build-coreutils
 	mkdir -p $(BUILDDIR)/man/
 	$(foreach prog, $(INSTALLEES), \
-		$(BUILDDIR)/coreutils manpage $(prog) > $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(newline) \
+		$(BUILDDIR)/uudoc manpage $(prog) > $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(newline) \
 	)
 
 install-manpages: manpages
