@@ -742,7 +742,7 @@ fn rename(
         backup_path = backup_control::get_backup_path(opts.backup, to, &opts.suffix);
         if let Some(ref backup_path) = backup_path {
             // For backup renames, we don't need to track hardlinks as we're just moving the existing file
-            rename_with_fallback(to, backup_path, multi_progress, None, None)?;
+            rename_with_fallback(to, backup_path, multi_progress, false, None, None)?;
         }
     }
 
@@ -760,11 +760,18 @@ fn rename(
 
     #[cfg(unix)]
     {
-        rename_with_fallback(from, to, multi_progress, hardlink_tracker, hardlink_scanner)?;
+        rename_with_fallback(
+            from,
+            to,
+            multi_progress,
+            opts.verbose,
+            hardlink_tracker,
+            hardlink_scanner,
+        )?;
     }
     #[cfg(not(unix))]
     {
-        rename_with_fallback(from, to, multi_progress, None, None)?;
+        rename_with_fallback(from, to, multi_progress, opts.verbose, None, None)?;
     }
 
     #[cfg(feature = "selinux")]
@@ -807,6 +814,7 @@ fn rename_with_fallback(
     from: &Path,
     to: &Path,
     multi_progress: Option<&MultiProgress>,
+    verbose: bool,
     #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
     #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
     #[cfg(not(unix))] _hardlink_tracker: Option<()>,
@@ -839,13 +847,20 @@ fn rename_with_fallback(
                     hardlink_tracker,
                     hardlink_scanner,
                     |tracker, scanner| {
-                        rename_dir_fallback(from, to, multi_progress, Some(tracker), Some(scanner))
+                        rename_dir_fallback(
+                            from,
+                            to,
+                            multi_progress,
+                            verbose,
+                            Some(tracker),
+                            Some(scanner),
+                        )
                     },
                 )
             }
             #[cfg(not(unix))]
             {
-                rename_dir_fallback(from, to, multi_progress)
+                rename_dir_fallback(from, to, multi_progress, verbose)
             }
         } else if is_fifo(file_type) {
             rename_fifo_fallback(from, to)
@@ -919,6 +934,7 @@ fn rename_dir_fallback(
     from: &Path,
     to: &Path,
     multi_progress: Option<&MultiProgress>,
+    verbose: bool,
     #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
     #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
 ) -> io::Result<()> {
@@ -958,6 +974,8 @@ fn rename_dir_fallback(
         #[cfg(unix)]
         hardlink_scanner,
         progress_bar.as_ref(),
+        verbose,
+        multi_progress,
     );
 
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
@@ -978,6 +996,8 @@ fn copy_dir_contents(
     #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
     #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
     progress_bar: Option<&ProgressBar>,
+    verbose: bool,
+    multi_progress: Option<&MultiProgress>,
 ) -> io::Result<()> {
     // Create the destination directory
     fs::create_dir_all(to)?;
@@ -986,12 +1006,20 @@ fn copy_dir_contents(
     #[cfg(unix)]
     {
         if let (Some(tracker), Some(scanner)) = (hardlink_tracker, hardlink_scanner) {
-            copy_dir_contents_recursive(from, to, tracker, scanner, progress_bar)?;
+            copy_dir_contents_recursive(
+                from,
+                to,
+                tracker,
+                scanner,
+                progress_bar,
+                verbose,
+                multi_progress,
+            )?;
         }
     }
     #[cfg(not(unix))]
     {
-        copy_dir_contents_recursive(from, to, progress_bar)?;
+        copy_dir_contents_recursive(from, to, None, None, progress_bar, verbose, multi_progress)?;
     }
 
     Ok(())
@@ -1002,7 +1030,11 @@ fn copy_dir_contents_recursive(
     to_dir: &Path,
     #[cfg(unix)] hardlink_tracker: &mut HardlinkTracker,
     #[cfg(unix)] hardlink_scanner: &HardlinkGroupScanner,
+    #[cfg(not(unix))] _hardlink_tracker: Option<()>,
+    #[cfg(not(unix))] _hardlink_scanner: Option<()>,
     progress_bar: Option<&ProgressBar>,
+    verbose: bool,
+    multi_progress: Option<&MultiProgress>,
 ) -> io::Result<()> {
     let entries = fs::read_dir(from_dir)?;
 
@@ -1019,6 +1051,18 @@ fn copy_dir_contents_recursive(
         if from_path.is_dir() {
             // Recursively copy subdirectory
             fs::create_dir_all(&to_path)?;
+
+            // Print verbose message for directory
+            if verbose {
+                let message = translate!("mv-verbose-renamed", "from" => from_path.quote(), "to" => to_path.quote());
+                match multi_progress {
+                    Some(pb) => pb.suspend(|| {
+                        println!("{message}");
+                    }),
+                    None => println!("{message}"),
+                }
+            }
+
             copy_dir_contents_recursive(
                 &from_path,
                 &to_path,
@@ -1026,7 +1070,13 @@ fn copy_dir_contents_recursive(
                 hardlink_tracker,
                 #[cfg(unix)]
                 hardlink_scanner,
+                #[cfg(not(unix))]
+                _hardlink_tracker,
+                #[cfg(not(unix))]
+                _hardlink_scanner,
                 progress_bar,
+                verbose,
+                multi_progress,
             )?;
         } else {
             // Copy file with or without hardlink support based on platform
@@ -1042,6 +1092,17 @@ fn copy_dir_contents_recursive(
             #[cfg(not(unix))]
             {
                 fs::copy(&from_path, &to_path)?;
+            }
+
+            // Print verbose message for file
+            if verbose {
+                let message = translate!("mv-verbose-renamed", "from" => from_path.quote(), "to" => to_path.quote());
+                match multi_progress {
+                    Some(pb) => pb.suspend(|| {
+                        println!("{message}");
+                    }),
+                    None => println!("{message}"),
+                }
             }
         }
 
