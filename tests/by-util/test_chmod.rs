@@ -232,14 +232,21 @@ fn test_chmod_ugoa() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-// TODO fix android, it has 0777
-// We should force for the umask on startup
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
+#[allow(clippy::cast_lossless)]
 fn test_chmod_umask_expected() {
+    // Get the actual system umask using libc
+    let system_umask = unsafe {
+        let mask = libc::umask(0);
+        libc::umask(mask);
+        mask
+    };
+
+    // Now verify that get_umask() returns the same value
     let current_umask = uucore::mode::get_umask();
     assert_eq!(
-        current_umask, 0o022,
-        "Unexpected umask value: expected 022 (octal), but got {current_umask:03o}. Please adjust the test environment.",
+        current_umask, system_umask as u32,
+        "get_umask() returned {current_umask:03o}, but system umask is {system_umask:03o}",
     );
 }
 
