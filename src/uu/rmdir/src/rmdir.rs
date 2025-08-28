@@ -7,15 +7,15 @@
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
-use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::{read_dir, remove_dir};
 use std::io;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{UResult, set_exit_code, strip_errno};
+use uucore::translate;
 
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::LocalizedCommand;
 use uucore::{format_usage, show_error, util_name};
 
 static OPT_IGNORE_FAIL_NON_EMPTY: &str = "ignore-fail-on-non-empty";
@@ -26,7 +26,7 @@ static ARG_DIRS: &str = "dirs";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let opts = Opts {
         ignore: matches.get_flag(OPT_IGNORE_FAIL_NON_EMPTY),
@@ -74,10 +74,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     if no_slash.is_symlink() && points_to_directory(no_slash).unwrap_or(true) {
                         show_error!(
                             "{}",
-                            get_message_with_args(
-                                "rmdir-error-symbolic-link-not-followed",
-                                HashMap::from([("path".to_string(), path.quote().to_string())])
-                            )
+                            translate!("rmdir-error-symbolic-link-not-followed", "path" => path.quote())
                         );
                         continue;
                     }
@@ -86,13 +83,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
             show_error!(
                 "{}",
-                get_message_with_args(
-                    "rmdir-error-failed-to-remove",
-                    HashMap::from([
-                        ("path".to_string(), path.quote().to_string()),
-                        ("err".to_string(), strip_errno(&error).to_string())
-                    ])
-                )
+                translate!("rmdir-error-failed-to-remove", "path" => path.quote(), "err" => strip_errno(&error))
             );
         }
     }
@@ -123,13 +114,7 @@ fn remove_single(path: &Path, opts: Opts) -> Result<(), Error<'_>> {
     if opts.verbose {
         println!(
             "{}",
-            get_message_with_args(
-                "rmdir-verbose-removing-directory",
-                HashMap::from([
-                    ("util_name".to_string(), util_name().to_string()),
-                    ("path".to_string(), path.quote().to_string())
-                ])
-            )
+            translate!("rmdir-verbose-removing-directory", "util_name" => util_name(), "path" => path.quote())
         );
     }
     remove_dir(path).map_err(|error| Error { error, path })
@@ -186,27 +171,28 @@ struct Opts {
 pub fn uu_app() -> Command {
     Command::new(util_name())
         .version(uucore::crate_version!())
-        .about(get_message("rmdir-about"))
-        .override_usage(format_usage(&get_message("rmdir-usage")))
+        .help_template(uucore::localized_help_template(util_name()))
+        .about(translate!("rmdir-about"))
+        .override_usage(format_usage(&translate!("rmdir-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_IGNORE_FAIL_NON_EMPTY)
                 .long(OPT_IGNORE_FAIL_NON_EMPTY)
-                .help(get_message("rmdir-help-ignore-fail-non-empty"))
+                .help(translate!("rmdir-help-ignore-fail-non-empty"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_PARENTS)
                 .short('p')
                 .long(OPT_PARENTS)
-                .help(get_message("rmdir-help-parents"))
+                .help(translate!("rmdir-help-parents"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
                 .short('v')
                 .long(OPT_VERBOSE)
-                .help(get_message("rmdir-help-verbose"))
+                .help(translate!("rmdir-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

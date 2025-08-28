@@ -6,7 +6,6 @@
 // spell-checker:ignore (ToDO) ctype cwidth iflag nbytes nspaces nums tspaces uflag Preprocess
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
@@ -17,9 +16,8 @@ use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
+use uucore::translate;
 use uucore::{format_usage, show_error};
-
-use uucore::locale::{get_message, get_message_with_args};
 
 pub mod options {
     pub static TABS: &str = "tabs";
@@ -62,17 +60,17 @@ fn is_digit_or_comma(c: char) -> bool {
 /// Errors that can occur when parsing a `--tabs` argument.
 #[derive(Debug, Error)]
 enum ParseError {
-    #[error("{}", get_message_with_args("expand-error-invalid-character", HashMap::from([("char".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("expand-error-invalid-character", "char" => .0.quote()))]
     InvalidCharacter(String),
-    #[error("{}", get_message_with_args("expand-error-specifier-not-at-start", HashMap::from([("specifier".to_string(), .0.quote().to_string()), ("number".to_string(), .1.quote().to_string())])))]
+    #[error("{}", translate!("expand-error-specifier-not-at-start", "specifier" => .0.quote(), "number" => .1.quote()))]
     SpecifierNotAtStartOfNumber(String, String),
-    #[error("{}", get_message_with_args("expand-error-specifier-only-allowed-with-last", HashMap::from([("specifier".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("expand-error-specifier-only-allowed-with-last", "specifier" => .0.quote()))]
     SpecifierOnlyAllowedWithLastValue(String),
-    #[error("{}", get_message("expand-error-tab-size-cannot-be-zero"))]
+    #[error("{}", translate!("expand-error-tab-size-cannot-be-zero"))]
     TabSizeCannotBeZero,
-    #[error("{}", get_message_with_args("expand-error-tab-size-too-large", HashMap::from([("size".to_string(), .0.quote().to_string())])))]
+    #[error("{}", translate!("expand-error-tab-size-too-large", "size" => .0.quote()))]
     TabSizeTooLarge(String),
-    #[error("{}", get_message("expand-error-tab-sizes-must-be-ascending"))]
+    #[error("{}", translate!("expand-error-tab-sizes-must-be-ascending"))]
     TabSizesMustBeAscending,
 }
 
@@ -172,7 +170,7 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
 }
 
 struct Options {
-    files: Vec<String>,
+    files: Vec<OsString>,
     tabstops: Vec<usize>,
     tspaces: String,
     iflag: bool,
@@ -206,9 +204,9 @@ impl Options {
             .unwrap(); // length of tabstops is guaranteed >= 1
         let tspaces = " ".repeat(nspaces);
 
-        let files: Vec<String> = match matches.get_many::<String>(options::FILES) {
-            Some(s) => s.map(|v| v.to_string()).collect(),
-            None => vec!["-".to_owned()],
+        let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILES) {
+            Some(s) => s.cloned().collect(),
+            None => vec![OsString::from("-")],
         };
 
         Ok(Self {
@@ -253,16 +251,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("expand-about"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("expand-about"))
         .after_help(LONG_HELP)
-        .override_usage(format_usage(&get_message("expand-usage")))
+        .override_usage(format_usage(&translate!("expand-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
             Arg::new(options::INITIAL)
                 .long(options::INITIAL)
                 .short('i')
-                .help(get_message("expand-help-initial"))
+                .help(translate!("expand-help-initial"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -271,29 +270,31 @@ pub fn uu_app() -> Command {
                 .short('t')
                 .value_name("N, LIST")
                 .action(ArgAction::Append)
-                .help(get_message("expand-help-tabs")),
+                .help(translate!("expand-help-tabs")),
         )
         .arg(
             Arg::new(options::NO_UTF8)
                 .long(options::NO_UTF8)
                 .short('U')
-                .help(get_message("expand-help-no-utf8"))
+                .help(translate!("expand-help-no-utf8"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILES)
                 .action(ArgAction::Append)
                 .hide(true)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
 }
 
-fn open(path: &str) -> UResult<BufReader<Box<dyn Read + 'static>>> {
+fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     let file_buf;
     if path == "-" {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
     } else {
-        file_buf = File::open(path).map_err_context(|| path.to_string())?;
+        let path_ref = Path::new(path);
+        file_buf = File::open(path_ref).map_err_context(|| path.to_string_lossy().to_string())?;
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
 }
@@ -447,10 +448,7 @@ fn expand(options: &Options) -> UResult<()> {
         if Path::new(file).is_dir() {
             show_error!(
                 "{}",
-                get_message_with_args(
-                    "expand-error-is-directory",
-                    HashMap::from([("file".to_string(), file.to_string())])
-                )
+                translate!("expand-error-is-directory", "file" => file.to_string_lossy())
             );
             set_exit_code(1);
             continue;
@@ -462,7 +460,7 @@ fn expand(options: &Options) -> UResult<()> {
                     Err(_) => buf.is_empty(),
                 } {
                     expand_line(&mut buf, &mut output, ts, options)
-                        .map_err_context(|| get_message("expand-error-failed-to-write-output"))?;
+                        .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
                 }
             }
             Err(e) => {

@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) tempdir dyld dylib optgrps libstdbuf
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use std::collections::HashMap;
+use std::ffi::OsString;
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process;
@@ -16,8 +16,7 @@ use thiserror::Error;
 use uucore::error::{FromIo, UClapError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::parser::parse_size::parse_size_u64;
-
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 mod options {
     pub const INPUT: &str = "input";
@@ -70,11 +69,11 @@ impl TryFrom<&ArgMatches> for ProgramOptions {
 
 #[derive(Debug, Error)]
 enum ProgramOptionsError {
-    #[error("{}", get_message("stdbuf-error-line-buffering-stdin-meaningless"))]
+    #[error("{}", translate!("stdbuf-error-line-buffering-stdin-meaningless"))]
     LineBufferingStdinMeaningless,
-    #[error("{}", get_message_with_args("stdbuf-error-invalid-mode", HashMap::from([("error".to_string(), _0.clone())])))]
+    #[error("{}", translate!("stdbuf-error-invalid-mode", "error" => _0.clone()))]
     InvalidMode(String),
-    #[error("{}", get_message_with_args("stdbuf-error-value-too-large", HashMap::from([("value".to_string(), _0.clone())])))]
+    #[error("{}", translate!("stdbuf-error-value-too-large", "value" => _0.clone()))]
     ValueTooLarge(String),
 }
 
@@ -105,7 +104,7 @@ fn preload_strings() -> UResult<(&'static str, &'static str)> {
 fn preload_strings() -> UResult<(&'static str, &'static str)> {
     Err(USimpleError::new(
         1,
-        get_message("stdbuf-error-command-not-supported"),
+        translate!("stdbuf-error-command-not-supported"),
     ))
 }
 
@@ -174,10 +173,7 @@ fn get_preload_env(_tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
 
     Err(USimpleError::new(
         1,
-        get_message_with_args(
-            "stdbuf-error-external-libstdbuf-not-found",
-            HashMap::from([("path".to_string(), path_buf.display().to_string())]),
-        ),
+        translate!("stdbuf-error-external-libstdbuf-not-found", "path" => path_buf.display()),
     ))
 }
 
@@ -188,9 +184,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let options =
         ProgramOptions::try_from(&matches).map_err(|e| UUsageError::new(125, e.to_string()))?;
 
-    let mut command_values = matches.get_many::<String>(options::COMMAND).unwrap();
+    let mut command_values = matches.get_many::<OsString>(options::COMMAND).unwrap();
     let mut command = process::Command::new(command_values.next().unwrap());
-    let command_params: Vec<&str> = command_values.map(|s| s.as_ref()).collect();
+    let command_params: Vec<&OsString> = command_values.collect();
 
     let tmp_dir = tempdir().unwrap();
     let (preload_env, libstdbuf) = get_preload_env(&tmp_dir)?;
@@ -206,18 +202,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             return match e.kind() {
                 std::io::ErrorKind::PermissionDenied => Err(USimpleError::new(
                     126,
-                    get_message("stdbuf-error-permission-denied"),
+                    translate!("stdbuf-error-permission-denied"),
                 )),
                 std::io::ErrorKind::NotFound => Err(USimpleError::new(
                     127,
-                    get_message("stdbuf-error-no-such-file"),
+                    translate!("stdbuf-error-no-such-file"),
                 )),
                 _ => Err(USimpleError::new(
                     1,
-                    get_message_with_args(
-                        "stdbuf-error-failed-to-execute",
-                        HashMap::from([("error".to_string(), e.to_string())]),
-                    ),
+                    translate!("stdbuf-error-failed-to-execute", "error" => e),
                 )),
             };
         }
@@ -234,10 +227,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
         None => Err(USimpleError::new(
             1,
-            get_message_with_args(
-                "stdbuf-error-killed-by-signal",
-                HashMap::from([("signal".to_string(), status.signal().unwrap().to_string())]),
-            ),
+            translate!("stdbuf-error-killed-by-signal", "signal" => status.signal().unwrap()),
         )),
     }
 }
@@ -245,16 +235,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("stdbuf-about"))
-        .after_help(get_message("stdbuf-after-help"))
-        .override_usage(format_usage(&get_message("stdbuf-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("stdbuf-about"))
+        .after_help(translate!("stdbuf-after-help"))
+        .override_usage(format_usage(&translate!("stdbuf-usage")))
         .trailing_var_arg(true)
         .infer_long_args(true)
         .arg(
             Arg::new(options::INPUT)
                 .long(options::INPUT)
                 .short(options::INPUT_SHORT)
-                .help(get_message("stdbuf-help-input"))
+                .help(translate!("stdbuf-help-input"))
                 .value_name("MODE")
                 .required_unless_present_any([options::OUTPUT, options::ERROR]),
         )
@@ -262,7 +253,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::OUTPUT)
                 .long(options::OUTPUT)
                 .short(options::OUTPUT_SHORT)
-                .help(get_message("stdbuf-help-output"))
+                .help(translate!("stdbuf-help-output"))
                 .value_name("MODE")
                 .required_unless_present_any([options::INPUT, options::ERROR]),
         )
@@ -270,7 +261,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::ERROR)
                 .long(options::ERROR)
                 .short(options::ERROR_SHORT)
-                .help(get_message("stdbuf-help-error"))
+                .help(translate!("stdbuf-help-error"))
                 .value_name("MODE")
                 .required_unless_present_any([options::INPUT, options::OUTPUT]),
         )
@@ -279,6 +270,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Append)
                 .hide(true)
                 .required(true)
-                .value_hint(clap::ValueHint::CommandName),
+                .value_hint(clap::ValueHint::CommandName)
+                .value_parser(clap::value_parser!(OsString)),
         )
 }

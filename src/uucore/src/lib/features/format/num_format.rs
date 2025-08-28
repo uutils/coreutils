@@ -374,6 +374,41 @@ fn format_float_decimal(
     format!("{bd:.precision$}")
 }
 
+/// Converts a `&BigDecimal` to a scientific-like `X.XX * 10^e`.
+/// - The returned `String` contains the digits `XXX`, _without_ the separating
+///   `.` (the caller must add that to get a valid scientific format number).
+/// - `e` is an integer exponent.
+fn bd_to_string_exp_with_prec(bd: &BigDecimal, precision: usize) -> (String, i64) {
+    // TODO: A lot of time is spent in `with_prec` computing the exact number
+    // of digits, it might be possible to save computation time by doing a rough
+    // division followed by arithmetics on `digits` to round if necessary (using
+    // `fast_inc`).
+
+    // Round bd to precision digits (including the leading digit)
+    // Note that `with_prec` will produce an extra digit if rounding overflows
+    // (e.g. 9995.with_prec(3) => 1000 * 10^1, but we want 100 * 10^2), we compensate
+    // for that later.
+    let bd_round = bd.with_prec(precision as u64);
+
+    // Convert to the form XXX * 10^-p (XXX is precision digit long)
+    let (frac, mut p) = bd_round.as_bigint_and_exponent();
+
+    let mut digits = frac.to_str_radix(10);
+
+    // In the unlikely case we had an overflow, correct for that.
+    if digits.len() == precision + 1 {
+        debug_assert!(&digits[precision..] == "0");
+        digits.truncate(precision);
+        p -= 1;
+    }
+
+    // If we end up with scientific formatting, we would convert XXX to X.XX:
+    // that divides by 10^(precision-1), so add that to the exponent.
+    let exponent = -p + precision as i64 - 1;
+
+    (digits, exponent)
+}
+
 fn format_float_scientific(
     bd: &BigDecimal,
     precision: Option<usize>,
@@ -395,20 +430,10 @@ fn format_float_scientific(
         };
     }
 
-    // Round bd to (1 + precision) digits (including the leading digit)
-    // We call `with_prec` twice as it will produce an extra digit if rounding overflows
-    // (e.g. 9995.with_prec(3) => 1000 * 10^1, but we want 100 * 10^2).
-    let bd_round = bd
-        .with_prec(precision as u64 + 1)
-        .with_prec(precision as u64 + 1);
+    let (digits, exponent) = bd_to_string_exp_with_prec(bd, precision + 1);
 
-    // Convert to the form XXX * 10^-e (XXX is 1+precision digit long)
-    let (frac, e) = bd_round.as_bigint_and_exponent();
-
-    // Scale down "XXX" to "X.XX": that divides by 10^precision, so add that to the exponent.
-    let digits = frac.to_str_radix(10);
+    // TODO: Optimizations in format_float_shortest can be made here as well
     let (first_digit, remaining_digits) = digits.split_at(1);
-    let exponent = -e + precision as i64;
 
     let dot =
         if !remaining_digits.is_empty() || (precision == 0 && ForceDecimal::Yes == force_decimal) {
@@ -445,18 +470,8 @@ fn format_float_shortest(
         };
     }
 
-    // Round bd to precision digits (including the leading digit)
-    // We call `with_prec` twice as it will produce an extra digit if rounding overflows
-    // (e.g. 9995.with_prec(3) => 1000 * 10^1, but we want 100 * 10^2).
-    let bd_round = bd.with_prec(precision as u64).with_prec(precision as u64);
-
-    // Convert to the form XXX * 10^-p (XXX is precision digit long)
-    let (frac, e) = bd_round.as_bigint_and_exponent();
-
-    let digits = frac.to_str_radix(10);
-    // If we end up with scientific formatting, we would convert XXX to X.XX:
-    // that divides by 10^(precision-1), so add that to the exponent.
-    let exponent = -e + precision as i64 - 1;
+    let mut output = String::with_capacity(precision);
+    let (digits, exponent) = bd_to_string_exp_with_prec(bd, precision);
 
     if exponent < -4 || exponent >= precision as i64 {
         // Scientific-ish notation (with a few differences)
@@ -465,42 +480,53 @@ fn format_float_shortest(
         let (first_digit, remaining_digits) = digits.split_at(1);
 
         // Always add the dot, we might trim it later.
-        let mut normalized = format!("{first_digit}.{remaining_digits}");
+        output.push_str(first_digit);
+        output.push('.');
+        output.push_str(remaining_digits);
 
         if force_decimal == ForceDecimal::No {
-            strip_fractional_zeroes_and_dot(&mut normalized);
+            strip_fractional_zeroes_and_dot(&mut output);
         }
 
-        let exp_char = match case {
+        output.push(match case {
             Case::Lowercase => 'e',
             Case::Uppercase => 'E',
-        };
+        });
 
-        format!("{normalized}{exp_char}{exponent:+03}")
+        // Format the exponent
+        let exponent_abs = exponent.abs();
+        output.push(if exponent < 0 { '-' } else { '+' });
+        if exponent_abs < 10 {
+            output.push('0');
+        }
+        output.push_str(&exponent_abs.to_string());
     } else {
         // Decimal-ish notation with a few differences:
         //  - The precision works differently and specifies the total number
         //    of digits instead of the digits in the fractional part.
         //  - If we don't force the decimal, `.` and trailing `0` in the fractional part
         //    are trimmed.
-        let mut formatted = if exponent < 0 {
+        if exponent < 0 {
             // Small number, prepend some "0.00" string
-            let zeros = "0".repeat(-exponent as usize - 1);
-            format!("0.{zeros}{digits}")
+            output.push_str("0.");
+            output.extend(std::iter::repeat_n('0', -exponent as usize - 1));
+            output.push_str(&digits);
         } else {
             // exponent >= 0, slot in a dot at the right spot
             let (first_digits, remaining_digits) = digits.split_at(exponent as usize + 1);
 
             // Always add `.` even if it's trailing, we might trim it later
-            format!("{first_digits}.{remaining_digits}")
+            output.push_str(first_digits);
+            output.push('.');
+            output.push_str(remaining_digits);
         };
 
         if force_decimal == ForceDecimal::No {
-            strip_fractional_zeroes_and_dot(&mut formatted);
+            strip_fractional_zeroes_and_dot(&mut output);
         }
-
-        formatted
     }
+
+    output
 }
 
 fn format_float_hexadecimal(

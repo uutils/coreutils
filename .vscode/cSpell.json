@@ -27,7 +27,9 @@
     "src/uu/dd/test-resources/**",
     "vendor/**",
     "**/*.svg",
-    "src/uu/*/locales/*.ftl"
+    "src/uu/*/locales/*.ftl",
+    "src/uucore/locales/*.ftl",
+    ".devcontainer/**"
   ],
 
   "enableGlobDot": true,

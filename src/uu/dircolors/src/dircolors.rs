@@ -6,8 +6,8 @@
 // spell-checker:ignore (ToDO) clrtoeol dircolors eightbit endcode fnmatch leftcode multihardlink rightcode setenv sgid suid colorterm disp
 
 use std::borrow::Borrow;
-use std::collections::HashMap;
 use std::env;
+use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -17,7 +17,9 @@ use clap::{Arg, ArgAction, Command};
 use uucore::colors::{FILE_ATTRIBUTE_CODES, FILE_COLORS, FILE_TYPES, TERMS};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
+
+use uucore::LocalizedCommand;
 use uucore::{format_usage, parser::parse_glob};
 
 mod options {
@@ -120,10 +122,10 @@ fn generate_ls_colors(fmt: &OutputFmt, sep: &str) -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let files = matches
-        .get_many::<String>(options::FILE)
+        .get_many::<OsString>(options::FILE)
         .map_or(vec![], |file_values| file_values.collect());
 
     // clap provides .conflicts_with / .conflicts_with_all, but we want to
@@ -133,14 +135,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     {
         return Err(UUsageError::new(
             1,
-            get_message("dircolors-error-shell-and-output-exclusive"),
+            translate!("dircolors-error-shell-and-output-exclusive"),
         ));
     }
 
     if matches.get_flag(options::PRINT_DATABASE) && matches.get_flag(options::PRINT_LS_COLORS) {
         return Err(UUsageError::new(
             1,
-            get_message("dircolors-error-print-database-and-ls-colors-exclusive"),
+            translate!("dircolors-error-print-database-and-ls-colors-exclusive"),
         ));
     }
 
@@ -148,10 +150,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if !files.is_empty() {
             return Err(UUsageError::new(
                 1,
-                get_message_with_args(
-                    "dircolors-error-extra-operand-print-database",
-                    HashMap::from([("operand".to_string(), files[0].quote().to_string())]),
-                ),
+                translate!("dircolors-error-extra-operand-print-database", "operand" => files[0].to_string_lossy().quote()),
             ));
         }
 
@@ -174,7 +173,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             OutputFmt::Unknown => {
                 return Err(USimpleError::new(
                     1,
-                    get_message("dircolors-error-no-shell-environment"),
+                    translate!("dircolors-error-no-shell-environment"),
                 ));
             }
             fmt => out_format = fmt,
@@ -200,24 +199,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if files.len() > 1 {
         return Err(UUsageError::new(
             1,
-            get_message_with_args(
-                "dircolors-error-extra-operand",
-                HashMap::from([("operand".to_string(), files[1].quote().to_string())]),
-            ),
+            translate!("dircolors-error-extra-operand", "operand" => files[1].to_string_lossy().quote()),
         ));
-    } else if files[0].eq("-") {
+    } else if files[0] == "-" {
         let fin = BufReader::new(std::io::stdin());
         // For example, for echo "owt 40;33"|dircolors -b -
-        result = parse(fin.lines().map_while(Result::ok), &out_format, files[0]);
+        result = parse(
+            fin.lines().map_while(Result::ok),
+            &out_format,
+            &files[0].to_string_lossy(),
+        );
     } else {
-        let path = Path::new(files[0]);
+        let path = Path::new(&files[0]);
         if path.is_dir() {
             return Err(USimpleError::new(
                 2,
-                get_message_with_args(
-                    "dircolors-error-expected-file-got-directory",
-                    HashMap::from([("path".to_string(), path.quote().to_string())]),
-                ),
+                translate!("dircolors-error-expected-file-got-directory", "path" => path.quote()),
             ));
         }
         match File::open(path) {
@@ -247,9 +244,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("dircolors-about"))
-        .after_help(get_message("dircolors-after-help"))
-        .override_usage(format_usage(&get_message("dircolors-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("dircolors-about"))
+        .after_help(translate!("dircolors-after-help"))
+        .override_usage(format_usage(&translate!("dircolors-usage")))
         .args_override_self(true)
         .infer_long_args(true)
         .arg(
@@ -258,7 +256,7 @@ pub fn uu_app() -> Command {
                 .short('b')
                 .visible_alias("bourne-shell")
                 .overrides_with(options::C_SHELL)
-                .help(get_message("dircolors-help-bourne-shell"))
+                .help(translate!("dircolors-help-bourne-shell"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -267,26 +265,27 @@ pub fn uu_app() -> Command {
                 .short('c')
                 .visible_alias("c-shell")
                 .overrides_with(options::BOURNE_SHELL)
-                .help(get_message("dircolors-help-c-shell"))
+                .help(translate!("dircolors-help-c-shell"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PRINT_DATABASE)
                 .long("print-database")
                 .short('p')
-                .help(get_message("dircolors-help-print-database"))
+                .help(translate!("dircolors-help-print-database"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PRINT_LS_COLORS)
                 .long("print-ls-colors")
-                .help(get_message("dircolors-help-print-ls-colors"))
+                .help(translate!("dircolors-help-print-ls-colors"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
                 .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString))
                 .action(ArgAction::Append),
         )
 }
@@ -380,13 +379,9 @@ where
 
         let (key, val) = line.split_two();
         if val.is_empty() {
-            return Err(get_message_with_args(
-                "dircolors-error-invalid-line-missing-token",
-                HashMap::from([
-                    ("file".to_string(), fp.maybe_quote().to_string()),
-                    ("line".to_string(), num.to_string()),
-                ]),
-            ));
+            return Err(
+                translate!("dircolors-error-invalid-line-missing-token", "file" => fp.maybe_quote(), "line" => num),
+            );
         }
 
         let lower = key.to_lowercase();
@@ -468,10 +463,7 @@ fn append_entry(
                 result.push_str(&disp);
                 Ok(())
             } else {
-                Err(get_message_with_args(
-                    "dircolors-error-unrecognized-keyword",
-                    HashMap::from([("keyword".to_string(), key.to_string())]),
-                ))
+                Err(translate!("dircolors-error-unrecognized-keyword", "keyword" => key))
             }
         }
     }

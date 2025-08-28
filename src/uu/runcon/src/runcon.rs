@@ -7,7 +7,7 @@
 
 use clap::builder::ValueParser;
 use uucore::error::{UClapError, UError, UResult};
-use uucore::locale::get_message;
+use uucore::translate;
 
 use clap::{Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
@@ -87,15 +87,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("runcon-about"))
-        .after_help(get_message("runcon-after-help"))
-        .override_usage(format_usage(&get_message("runcon-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("runcon-about"))
+        .after_help(translate!("runcon-after-help"))
+        .override_usage(format_usage(&translate!("runcon-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::COMPUTE)
                 .short('c')
                 .long(options::COMPUTE)
-                .help(get_message("runcon-help-compute"))
+                .help(translate!("runcon-help-compute"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -103,7 +104,7 @@ pub fn uu_app() -> Command {
                 .short('u')
                 .long(options::USER)
                 .value_name("USER")
-                .help(get_message("runcon-help-user"))
+                .help(translate!("runcon-help-user"))
                 .value_parser(ValueParser::os_string()),
         )
         .arg(
@@ -111,7 +112,7 @@ pub fn uu_app() -> Command {
                 .short('r')
                 .long(options::ROLE)
                 .value_name("ROLE")
-                .help(get_message("runcon-help-role"))
+                .help(translate!("runcon-help-role"))
                 .value_parser(ValueParser::os_string()),
         )
         .arg(
@@ -119,7 +120,7 @@ pub fn uu_app() -> Command {
                 .short('t')
                 .long(options::TYPE)
                 .value_name("TYPE")
-                .help(get_message("runcon-help-type"))
+                .help(translate!("runcon-help-type"))
                 .value_parser(ValueParser::os_string()),
         )
         .arg(
@@ -127,7 +128,7 @@ pub fn uu_app() -> Command {
                 .short('l')
                 .long(options::RANGE)
                 .value_name("RANGE")
-                .help(get_message("runcon-help-range"))
+                .help(translate!("runcon-help-range"))
                 .value_parser(ValueParser::os_string()),
         )
         .arg(
@@ -282,7 +283,7 @@ fn get_plain_context(context: &OsStr) -> Result<OpaqueSecurityContext> {
         .map_err(|r| Error::from_selinux("runcon-operation-creating-context", r))
 }
 
-fn get_transition_context(command: &OsStr) -> Result<SecurityContext> {
+fn get_transition_context(command: &OsStr) -> Result<SecurityContext<'_>> {
     // Generate context based on process transition.
     let sec_class = SecurityClass::from_name("process")
         .map_err(|r| Error::from_selinux("runcon-operation-getting-process-class", r))?;

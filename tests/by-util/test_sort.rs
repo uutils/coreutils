@@ -1350,6 +1350,29 @@ fn test_multiple_output_files() {
 }
 
 #[test]
+fn test_output_file_with_leading_dash() {
+    let test_cases = [
+        (
+            ["--output", "--dash-file"],
+            "banana\napple\ncherry\n",
+            "apple\nbanana\ncherry\n",
+        ),
+        (
+            ["-o", "--another-dash-file"],
+            "zebra\nxray\nyak\n",
+            "xray\nyak\nzebra\n",
+        ),
+    ];
+
+    for (args, input, expected) in test_cases {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&args).pipe_in(input).succeeds().no_stdout();
+
+        assert_eq!(at.read(args[1]), expected);
+    }
+}
+
+#[test]
 // Test for GNU tests/sort/sort-files0-from.pl "f-extra-arg"
 fn test_files0_from_extra_arg() {
     new_ucmd!()
@@ -1568,3 +1591,134 @@ fn test_g_float_hex() {
         .succeeds()
         .stdout_is(output);
 }
+
+/* spell-checker: disable */
+#[test]
+fn test_french_translations() {
+    // Test that French translations work for clap error messages
+    // Set LANG to French and test with an invalid argument
+    let result = new_ucmd!()
+        .env("LANG", "fr_FR.UTF-8")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("--invalid-arg")
+        .fails();
+
+    let stderr = result.stderr_str();
+    assert!(stderr.contains("erreur"));
+    assert!(stderr.contains("argument inattendu"));
+    assert!(stderr.contains("trouvé"));
+}
+
+#[test]
+fn test_argument_suggestion() {
+    let test_cases = vec![
+        ("en_US.UTF-8", vec!["tip", "similar", "--reverse"]),
+        ("fr_FR.UTF-8", vec!["conseil", "similaire", "--reverse"]),
+    ];
+
+    for (locale, expected_strings) in test_cases {
+        let result = new_ucmd!()
+            .env("LANG", locale)
+            .env("LC_ALL", locale)
+            .arg("--revrse") // Typo
+            .fails();
+
+        let stderr = result.stderr_str();
+        for expected in expected_strings {
+            assert!(stderr.contains(expected));
+        }
+    }
+}
+
+#[test]
+fn test_clap_localization_unknown_argument() {
+    let test_cases = vec![
+        (
+            "en_US.UTF-8",
+            vec![
+                "error: unexpected argument '--unknown-option' found",
+                "Usage:",
+                "For more information, try '--help'.",
+            ],
+        ),
+        (
+            "fr_FR.UTF-8",
+            vec![
+                "erreur : argument inattendu '--unknown-option' trouvé",
+                "Utilisation:",
+                "Pour plus d'informations, essayez '--help'.",
+            ],
+        ),
+    ];
+
+    for (locale, expected_strings) in test_cases {
+        let result = new_ucmd!()
+            .env("LANG", locale)
+            .env("LC_ALL", locale)
+            .arg("--unknown-option")
+            .fails();
+
+        result.code_is(2); // sort uses exit code 2 for invalid options
+        let stderr = result.stderr_str();
+        for expected in expected_strings {
+            assert!(stderr.contains(expected));
+        }
+    }
+}
+
+#[test]
+fn test_clap_localization_help_message() {
+    // Test help message in English
+    let result_en = new_ucmd!()
+        .env("LANG", "en_US.UTF-8")
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("--help")
+        .succeeds();
+
+    let stdout_en = result_en.stdout_str();
+    assert!(stdout_en.contains("Usage:"));
+    assert!(stdout_en.contains("Options:"));
+
+    // Test help message in French
+    let result_fr = new_ucmd!()
+        .env("LANG", "fr_FR.UTF-8")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("--help")
+        .succeeds();
+
+    let stdout_fr = result_fr.stdout_str();
+    assert!(stdout_fr.contains("Utilisation:"));
+    assert!(stdout_fr.contains("Options:"));
+}
+
+#[test]
+fn test_clap_localization_missing_required_argument() {
+    // Test missing required argument
+    let result_en = new_ucmd!().env("LC_ALL", "en_US.UTF-8").arg("-k").fails();
+
+    let stderr_en = result_en.stderr_str();
+    assert!(stderr_en.contains(" a value is required for '--key <key>' but none was supplied"));
+    assert!(stderr_en.contains("-k"));
+}
+
+#[test]
+fn test_clap_localization_invalid_value() {
+    let test_cases = vec![
+        ("en_US.UTF-8", "sort: failed to parse key 'invalid'"),
+        ("fr_FR.UTF-8", "sort: échec d'analyse de la clé 'invalid'"),
+    ];
+
+    for (locale, expected_message) in test_cases {
+        let result = new_ucmd!()
+            .env("LANG", locale)
+            .env("LC_ALL", locale)
+            .arg("-k")
+            .arg("invalid")
+            .fails();
+
+        let stderr = result.stderr_str();
+        assert!(stderr.contains(expected_message));
+    }
+}
+
+/* spell-checker: enable */

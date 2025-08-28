@@ -7,18 +7,21 @@
 
 use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::ffi::{OsStr, OsString};
 use std::fmt::Write as FmtWrite;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::ParseIntError;
+use std::path::Path;
 
 use clap::{Arg, ArgAction, Command};
 use regex::Regex;
 use thiserror::Error;
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::format_usage;
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 #[derive(Debug)]
 enum OutFormat {
@@ -65,13 +68,12 @@ fn read_word_filter_file(
     option: &str,
 ) -> std::io::Result<HashSet<String>> {
     let filename = matches
-        .get_one::<String>(option)
-        .expect("parsing options failed!")
-        .to_string();
+        .get_one::<OsString>(option)
+        .expect("parsing options failed!");
     let reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
         Box::new(stdin())
     } else {
-        let file = File::open(filename)?;
+        let file = File::open(Path::new(filename))?;
         Box::new(file)
     });
     let mut words: HashSet<String> = HashSet::new();
@@ -87,12 +89,12 @@ fn read_char_filter_file(
     option: &str,
 ) -> std::io::Result<HashSet<char>> {
     let filename = matches
-        .get_one::<String>(option)
+        .get_one::<OsString>(option)
         .expect("parsing options failed!");
     let mut reader: Box<dyn Read> = if filename == "-" {
         Box::new(stdin())
     } else {
-        let file = File::open(filename)?;
+        let file = File::open(Path::new(filename))?;
         Box::new(file)
     };
     let mut buffer = String::new();
@@ -190,15 +192,15 @@ struct WordRef {
     local_line_nr: usize,
     position: usize,
     position_end: usize,
-    filename: String,
+    filename: OsString,
 }
 
 #[derive(Debug, Error)]
 enum PtxError {
-    #[error("{}", get_message("ptx-error-dumb-format"))]
+    #[error("{}", translate!("ptx-error-dumb-format"))]
     DumbFormat,
 
-    #[error("{}", get_message_with_args("ptx-error-not-implemented", HashMap::from([("feature".to_string(), (*.0).to_string())])))]
+    #[error("{}", translate!("ptx-error-not-implemented", "feature" => (*.0)))]
     NotImplemented(&'static str),
 
     #[error("{0}")]
@@ -272,16 +274,16 @@ struct FileContent {
     offset: usize,
 }
 
-type FileMap = HashMap<String, FileContent>;
+type FileMap = HashMap<OsString, FileContent>;
 
-fn read_input(input_files: &[String]) -> std::io::Result<FileMap> {
+fn read_input(input_files: &[OsString]) -> std::io::Result<FileMap> {
     let mut file_map: FileMap = HashMap::new();
     let mut offset: usize = 0;
     for filename in input_files {
         let reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
             Box::new(stdin())
         } else {
-            let file = File::open(filename)?;
+            let file = File::open(Path::new(filename))?;
             Box::new(file)
         });
         let lines: Vec<String> = reader.lines().collect::<std::io::Result<Vec<String>>>()?;
@@ -291,7 +293,7 @@ fn read_input(input_files: &[String]) -> std::io::Result<FileMap> {
         let chars_lines: Vec<Vec<char>> = lines.iter().map(|x| x.chars().collect()).collect();
         let size = lines.len();
         file_map.insert(
-            filename.to_owned(),
+            filename.clone(),
             FileContent {
                 lines,
                 chars_lines,
@@ -645,21 +647,22 @@ fn write_traditional_output(
     config: &Config,
     file_map: &FileMap,
     words: &BTreeSet<WordRef>,
-    output_filename: &str,
+    output_filename: &OsStr,
 ) -> UResult<()> {
-    let mut writer: BufWriter<Box<dyn Write>> = BufWriter::new(if output_filename == "-" {
-        Box::new(stdout())
-    } else {
-        let file = File::create(output_filename)
-            .map_err_context(|| output_filename.maybe_quote().to_string())?;
-        Box::new(file)
-    });
+    let mut writer: BufWriter<Box<dyn Write>> =
+        BufWriter::new(if output_filename == OsStr::new("-") {
+            Box::new(stdout())
+        } else {
+            let file = File::create(output_filename)
+                .map_err_context(|| output_filename.to_string_lossy().quote().to_string())?;
+            Box::new(file)
+        });
 
     let context_reg = Regex::new(&config.context_regex).unwrap();
 
     for word_ref in words {
         let file_map_value: &FileContent = file_map
-            .get(&(word_ref.filename))
+            .get(&word_ref.filename)
             .expect("Missing file in file map");
         let FileContent {
             ref lines,
@@ -692,12 +695,12 @@ fn write_traditional_output(
             }
         };
         writeln!(writer, "{output_line}")
-            .map_err_context(|| get_message("ptx-error-write-failed"))?;
+            .map_err_context(|| translate!("ptx-error-write-failed"))?;
     }
 
     writer
         .flush()
-        .map_err_context(|| get_message("ptx-error-write-failed"))?;
+        .map_err_context(|| translate!("ptx-error-write-failed"))?;
 
     Ok(())
 }
@@ -728,14 +731,14 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
     let config = get_config(&matches)?;
 
     let input_files;
-    let output_file;
+    let output_file: OsString;
 
     let mut files = matches
-        .get_many::<String>(options::FILE)
+        .get_many::<OsString>(options::FILE)
         .into_iter()
         .flatten()
         .cloned();
@@ -744,21 +747,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         input_files = {
             let mut files = files.collect::<Vec<_>>();
             if files.is_empty() {
-                files.push("-".to_string());
+                files.push(OsString::from("-"));
             }
             files
         };
-        output_file = "-".to_string();
+        output_file = OsString::from("-");
     } else {
-        input_files = vec![files.next().unwrap_or("-".to_string())];
-        output_file = files.next().unwrap_or("-".to_string());
+        input_files = vec![files.next().unwrap_or(OsString::from("-"))];
+        output_file = files.next().unwrap_or(OsString::from("-"));
         if let Some(file) = files.next() {
             return Err(UUsageError::new(
                 1,
-                get_message_with_args(
-                    "ptx-error-extra-operand",
-                    HashMap::from([("operand".to_string(), file.quote().to_string())]),
-                ),
+                translate!("ptx-error-extra-operand", "operand" => file.to_string_lossy().quote()),
             ));
         }
     }
@@ -771,42 +771,44 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about(get_message("ptx-about"))
+        .about(translate!("ptx-about"))
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("ptx-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .override_usage(format_usage(&translate!("ptx-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::AUTO_REFERENCE)
                 .short('A')
                 .long(options::AUTO_REFERENCE)
-                .help(get_message("ptx-help-auto-reference"))
+                .help(translate!("ptx-help-auto-reference"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TRADITIONAL)
                 .short('G')
                 .long(options::TRADITIONAL)
-                .help(get_message("ptx-help-traditional"))
+                .help(translate!("ptx-help-traditional"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FLAG_TRUNCATION)
                 .short('F')
                 .long(options::FLAG_TRUNCATION)
-                .help(get_message("ptx-help-flag-truncation"))
+                .help(translate!("ptx-help-flag-truncation"))
                 .value_name("STRING"),
         )
         .arg(
             Arg::new(options::MACRO_NAME)
                 .short('M')
                 .long(options::MACRO_NAME)
-                .help(get_message("ptx-help-macro-name"))
+                .help(translate!("ptx-help-macro-name"))
                 .value_name("STRING"),
         )
         .arg(
@@ -819,14 +821,14 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::format::ROFF)
                 .short('O')
-                .help(get_message("ptx-help-roff"))
+                .help(translate!("ptx-help-roff"))
                 .overrides_with_all([options::FORMAT, options::format::ROFF, options::format::TEX])
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::format::TEX)
                 .short('T')
-                .help(get_message("ptx-help-tex"))
+                .help(translate!("ptx-help-tex"))
                 .overrides_with_all([options::FORMAT, options::format::ROFF, options::format::TEX])
                 .action(ArgAction::SetTrue),
         )
@@ -834,66 +836,69 @@ pub fn uu_app() -> Command {
             Arg::new(options::RIGHT_SIDE_REFS)
                 .short('R')
                 .long(options::RIGHT_SIDE_REFS)
-                .help(get_message("ptx-help-right-side-refs"))
+                .help(translate!("ptx-help-right-side-refs"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SENTENCE_REGEXP)
                 .short('S')
                 .long(options::SENTENCE_REGEXP)
-                .help(get_message("ptx-help-sentence-regexp"))
+                .help(translate!("ptx-help-sentence-regexp"))
                 .value_name("REGEXP"),
         )
         .arg(
             Arg::new(options::WORD_REGEXP)
                 .short('W')
                 .long(options::WORD_REGEXP)
-                .help(get_message("ptx-help-word-regexp"))
+                .help(translate!("ptx-help-word-regexp"))
                 .value_name("REGEXP"),
         )
         .arg(
             Arg::new(options::BREAK_FILE)
                 .short('b')
                 .long(options::BREAK_FILE)
-                .help(get_message("ptx-help-break-file"))
+                .help(translate!("ptx-help-break-file"))
                 .value_name("FILE")
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::IGNORE_CASE)
                 .short('f')
                 .long(options::IGNORE_CASE)
-                .help(get_message("ptx-help-ignore-case"))
+                .help(translate!("ptx-help-ignore-case"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::GAP_SIZE)
                 .short('g')
                 .long(options::GAP_SIZE)
-                .help(get_message("ptx-help-gap-size"))
+                .help(translate!("ptx-help-gap-size"))
                 .value_name("NUMBER"),
         )
         .arg(
             Arg::new(options::IGNORE_FILE)
                 .short('i')
                 .long(options::IGNORE_FILE)
-                .help(get_message("ptx-help-ignore-file"))
+                .help(translate!("ptx-help-ignore-file"))
                 .value_name("FILE")
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::ONLY_FILE)
                 .short('o')
                 .long(options::ONLY_FILE)
-                .help(get_message("ptx-help-only-file"))
+                .help(translate!("ptx-help-only-file"))
                 .value_name("FILE")
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::REFERENCES)
                 .short('r')
                 .long(options::REFERENCES)
-                .help(get_message("ptx-help-references"))
+                .help(translate!("ptx-help-references"))
                 .value_name("FILE")
                 .action(ArgAction::SetTrue),
         )
@@ -901,7 +906,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::WIDTH)
                 .short('w')
                 .long(options::WIDTH)
-                .help(get_message("ptx-help-width"))
+                .help(translate!("ptx-help-width"))
                 .value_name("NUMBER"),
         )
 }

@@ -829,9 +829,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.174"
+version = "0.2.175"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1171693293099992e19cddea4e8b849964e9846f4acee11b3948bcc337be8776"
+checksum = "6a82ae493e598baaea5209805c49bbf2ea7de956d50d7da0da1164f9c6d28543"
 
 [[package]]
 name = "libfuzzer-sys"
@@ -993,13 +993,14 @@ dependencies = [
 
 [[package]]
 name = "parse_datetime"
-version = "0.9.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2fd3830b49ee3a0dcc8fdfadc68c6354c97d00101ac1cac5b2eee25d35c42066"
+checksum = "c5b77d27257a460cefd73a54448e5f3fd4db224150baf6ca3e02eedf4eb2b3e9"
 dependencies = [
  "chrono",
- "nom",
+ "num-traits",
  "regex",
+ "winnow",
 ]
 
 [[package]]
@@ -1301,15 +1302,15 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.20.0"
+version = "3.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8a64e3985349f2441a1a9ef0b853f869006c3855f2cda6862a94d26ebb9d6a1"
+checksum = "15b61f8f20e3a6f7e0649d825294eaf317edce30f82cf6026e7e4cb9222a7d1e"
 dependencies = [
  "fastrand",
  "getrandom 0.3.3",
  "once_cell",
  "rustix",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1435,6 +1436,7 @@ name = "uu_cksum"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "fluent",
  "hex",
  "uucore",
 ]
@@ -1445,6 +1447,7 @@ version = "0.1.0"
 dependencies = [
  "bstr",
  "clap",
+ "fluent",
  "memchr",
  "uucore",
 ]
@@ -1455,6 +1458,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "clap",
+ "fluent",
  "jiff",
  "libc",
  "parse_datetime",
@@ -1467,6 +1471,7 @@ name = "uu_echo"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "fluent",
  "uucore",
 ]
 
@@ -1475,6 +1480,7 @@ name = "uu_env"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "fluent",
  "nix",
  "rust-ini",
  "thiserror",
@@ -1486,6 +1492,7 @@ name = "uu_expr"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "fluent",
  "num-bigint",
  "num-traits",
  "onig",
@@ -1498,6 +1505,7 @@ name = "uu_printf"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "fluent",
  "uucore",
 ]
 
@@ -1507,6 +1515,7 @@ version = "0.1.0"
 dependencies = [
  "bigdecimal",
  "clap",
+ "fluent",
  "num-bigint",
  "num-traits",
  "thiserror",
@@ -1522,6 +1531,7 @@ dependencies = [
  "clap",
  "compare",
  "ctrlc",
+ "fluent",
  "fnv",
  "itertools",
  "memchr",
@@ -1540,6 +1550,7 @@ name = "uu_split"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "fluent",
  "memchr",
  "thiserror",
  "uucore",
@@ -1550,6 +1561,7 @@ name = "uu_test"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "fluent",
  "libc",
  "thiserror",
  "uucore",
@@ -1559,7 +1571,9 @@ dependencies = [
 name = "uu_tr"
 version = "0.1.0"
 dependencies = [
+ "bytecount",
  "clap",
+ "fluent",
  "nom",
  "uucore",
 ]
@@ -1570,6 +1584,7 @@ version = "0.1.0"
 dependencies = [
  "bytecount",
  "clap",
+ "fluent",
  "libc",
  "nix",
  "thiserror",
@@ -1592,6 +1607,7 @@ dependencies = [
  "digest",
  "dunce",
  "fluent",
+ "fluent-bundle",
  "fluent-syntax",
  "glob",
  "hex",
@@ -1967,6 +1983,15 @@ name = "windows_x86_64_msvc"
 version = "0.53.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "271414315aff87387382ec3d271b52d7ae78726f5d44ac98b4f4030c91880486"
+
+[[package]]
+name = "winnow"
+version = "0.7.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3edebf492c8125044983378ecb5766203ad3b4c2f7a922bd7dd207f6d443e95"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "wit-bindgen-rt"

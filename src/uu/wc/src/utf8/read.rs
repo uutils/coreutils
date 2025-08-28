@@ -4,10 +4,9 @@
 // file that was distributed with this source code.
 // spell-checker:ignore bytestream
 use super::*;
-use std::collections::HashMap;
 use std::io::{self, BufRead};
 use thiserror::Error;
-use uucore::locale::get_message_with_args;
+use uucore::translate;
 
 /// Wraps a `std::io::BufRead` buffered byte stream and decode it as UTF-8.
 pub struct BufReadDecoder<B: BufRead> {
@@ -22,11 +21,11 @@ pub enum BufReadDecoderError<'a> {
     ///
     /// In lossy decoding, each such error should be replaced with U+FFFD.
     /// (See `BufReadDecoder::next_lossy` and `BufReadDecoderError::lossy`.)
-    #[error("{}", get_message_with_args("decoder-error-invalid-byte-sequence", HashMap::from([("bytes".to_string(), format!("{:02x?}", .0))])))]
+    #[error("{}", translate!("decoder-error-invalid-byte-sequence", "bytes" => format!("{:02x?}", .0)))]
     InvalidByteSequence(&'a [u8]),
 
     /// An I/O error from the underlying byte stream
-    #[error("{}", get_message_with_args("decoder-error-io", HashMap::from([("error".to_string(), .0.to_string())])))]
+    #[error("{}", translate!("decoder-error-io", "error" => .0))]
     Io(#[source] io::Error),
 }
 
@@ -47,7 +46,7 @@ impl<B: BufRead> BufReadDecoder<B> {
     /// except that decoded chunks borrow the decoder (~iterator)
     /// so they need to be handled or copied before the next chunk can start decoding.
     #[allow(clippy::cognitive_complexity)]
-    pub fn next_strict(&mut self) -> Option<Result<&str, BufReadDecoderError>> {
+    pub fn next_strict(&mut self) -> Option<Result<&str, BufReadDecoderError<'_>>> {
         enum BytesSource {
             BufRead(usize),
             Incomplete,

@@ -13,7 +13,6 @@ mod word_count;
 use std::{
     borrow::{Borrow, Cow},
     cmp::max,
-    collections::HashMap,
     ffi::{OsStr, OsString},
     fs::{self, File},
     io::{self, Write},
@@ -25,8 +24,9 @@ use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
+use uucore::LocalizedCommand;
 use uucore::{
     error::{FromIo, UError, UResult},
     format_usage,
@@ -243,7 +243,7 @@ impl<'a> Input<'a> {
     }
 
     /// Converts input to title that appears in stats.
-    fn to_title(&self) -> Option<Cow<OsStr>> {
+    fn to_title(&self) -> Option<Cow<'_, OsStr>> {
         match self {
             Self::Path(path) => {
                 let path = path.as_os_str();
@@ -265,7 +265,7 @@ impl<'a> Input<'a> {
     fn path_display(&self) -> String {
         match self {
             Self::Path(path) => escape_name_wrapper(path.as_os_str()),
-            Self::Stdin(_) => get_message("wc-standard-input"),
+            Self::Stdin(_) => translate!("wc-standard-input"),
         }
     }
 
@@ -340,13 +340,13 @@ impl TotalWhen {
 
 #[derive(Debug, Error)]
 enum WcError {
-    #[error("{}", get_message_with_args("wc-error-files-disabled", HashMap::from([("extra".to_string(), extra.to_string())])))]
+    #[error("{}", translate!("wc-error-files-disabled", "extra" => extra))]
     FilesDisabled { extra: Cow<'static, str> },
-    #[error("{}", get_message("wc-error-stdin-repr-not-allowed"))]
+    #[error("{}", translate!("wc-error-stdin-repr-not-allowed"))]
     StdinReprNotAllowed,
-    #[error("{}", get_message("wc-error-zero-length-filename"))]
+    #[error("{}", translate!("wc-error-zero-length-filename"))]
     ZeroLengthFileName,
-    #[error("{}", get_message_with_args("wc-error-zero-length-filename-ctx", HashMap::from([("path".to_string(), path.to_string()), ("idx".to_string(), idx.to_string())])))]
+    #[error("{}", translate!("wc-error-zero-length-filename-ctx", "path" => path, "idx" => idx))]
     ZeroLengthFileNameCtx { path: Cow<'static, str>, idx: usize },
 }
 
@@ -377,7 +377,7 @@ impl UError for WcError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let settings = Settings::new(&matches);
     let inputs = Inputs::new(&matches)?;
@@ -388,29 +388,30 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("wc-about"))
-        .override_usage(format_usage(&get_message("wc-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("wc-about"))
+        .override_usage(format_usage(&translate!("wc-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
             Arg::new(options::BYTES)
                 .short('c')
                 .long(options::BYTES)
-                .help(get_message("wc-help-bytes"))
+                .help(translate!("wc-help-bytes"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CHAR)
                 .short('m')
                 .long(options::CHAR)
-                .help(get_message("wc-help-chars"))
+                .help(translate!("wc-help-chars"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILES0_FROM)
                 .long(options::FILES0_FROM)
                 .value_name("F")
-                .help(get_message("wc-help-files0-from"))
+                .help(translate!("wc-help-files0-from"))
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -418,14 +419,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::LINES)
                 .short('l')
                 .long(options::LINES)
-                .help(get_message("wc-help-lines"))
+                .help(translate!("wc-help-lines"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::MAX_LINE_LENGTH)
                 .short('L')
                 .long(options::MAX_LINE_LENGTH)
-                .help(get_message("wc-help-max-line-length"))
+                .help(translate!("wc-help-max-line-length"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -436,13 +437,13 @@ pub fn uu_app() -> Command {
                 ]))
                 .value_name("WHEN")
                 .hide_possible_values(true)
-                .help(get_message("wc-help-total")),
+                .help(translate!("wc-help-total")),
         )
         .arg(
             Arg::new(options::WORDS)
                 .short('w')
                 .long(options::WORDS)
-                .help(get_message("wc-help-words"))
+                .help(translate!("wc-help-words"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -747,17 +748,13 @@ fn files0_iter_file<'a>(path: &Path) -> UResult<impl Iterator<Item = InputIterIt
     match File::open(path) {
         Ok(f) => Ok(files0_iter(f, path.into())),
         Err(e) => Err(e.map_err_context(|| {
-            get_message_with_args(
-                "wc-error-cannot-open-for-reading",
-                HashMap::from([(
-                    "path".to_string(),
-                    quoting_style::locale_aware_escape_name(
-                        path.as_os_str(),
-                        QuotingStyle::SHELL_ESCAPE_QUOTE,
-                    )
-                    .into_string()
-                    .expect("All escaped names with the escaping option return valid strings."),
-                )]),
+            translate!("wc-error-cannot-open-for-reading",
+                "path" => quoting_style::locale_aware_escape_name(
+                    path.as_os_str(),
+                    QuotingStyle::SHELL_ESCAPE_QUOTE,
+                )
+                .into_string()
+                .expect("All escaped names with the escaping option return valid strings.")
             )
         })),
     }
@@ -788,12 +785,9 @@ fn files0_iter<'a>(
                         Ok(Input::Path(PathBuf::from(s).into()))
                     }
                 }
-                Err(e) => Err(e.map_err_context(|| {
-                    get_message_with_args(
-                        "wc-error-read-error",
-                        HashMap::from([("path".to_string(), escape_name_wrapper(&err_path))]),
-                    )
-                }) as Box<dyn UError>),
+                Err(e) => Err(e.map_err_context(
+                    || translate!("wc-error-read-error", "path" => escape_name_wrapper(&err_path)),
+                ) as Box<dyn UError>),
             }),
     );
     // Loop until there is an error; yield that error and then nothing else.
@@ -849,19 +843,16 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
             let maybe_title_str = maybe_title.as_deref();
             if let Err(err) = print_stats(settings, &word_count, maybe_title_str, number_width) {
                 let title = maybe_title_str.unwrap_or(OsStr::new("<stdin>"));
-                show!(err.map_err_context(|| get_message_with_args(
-                    "wc-error-failed-to-print-result",
-                    HashMap::from([("title".to_string(), title.to_string_lossy().to_string())])
-                )));
+                show!(err.map_err_context(|| translate!("wc-error-failed-to-print-result", "title" => title.to_string_lossy())));
             }
         }
     }
 
     if settings.total_when.is_total_row_visible(num_inputs) {
-        let wc_total_msg = get_message("wc-total");
+        let wc_total_msg = translate!("wc-total");
         let title = are_stats_visible.then_some(OsStr::new(&wc_total_msg));
         if let Err(err) = print_stats(settings, &total_word_count, title, number_width) {
-            show!(err.map_err_context(|| get_message("wc-error-failed-to-print-total")));
+            show!(err.map_err_context(|| translate!("wc-error-failed-to-print-total")));
         }
     }
 

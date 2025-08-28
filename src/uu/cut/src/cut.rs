@@ -18,8 +18,9 @@ use uucore::os_str_as_bytes;
 
 use self::searcher::Searcher;
 use matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
-use uucore::locale::get_message;
+use uucore::LocalizedCommand;
 use uucore::ranges::Range;
+use uucore::translate;
 use uucore::{format_usage, show_error, show_if_err};
 
 mod matcher;
@@ -342,11 +343,11 @@ fn cut_fields<R: Read, W: Write>(
     }
 }
 
-fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
+fn cut_files(mut filenames: Vec<OsString>, mode: &Mode) {
     let mut stdin_read = false;
 
     if filenames.is_empty() {
-        filenames.push("-".to_owned());
+        filenames.push(OsString::from("-"));
     }
 
     let mut out: Box<dyn Write> = if stdout().is_terminal() {
@@ -369,13 +370,13 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
 
             stdin_read = true;
         } else {
-            let path = Path::new(&filename[..]);
+            let path = Path::new(filename);
 
             if path.is_dir() {
                 show_error!(
                     "{}: {}",
-                    filename.maybe_quote(),
-                    get_message("cut-error-is-directory")
+                    filename.to_string_lossy().maybe_quote(),
+                    translate!("cut-error-is-directory")
                 );
                 set_exit_code(1);
                 continue;
@@ -383,7 +384,7 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
 
             show_if_err!(
                 File::open(path)
-                    .map_err_context(|| filename.maybe_quote().to_string())
+                    .map_err_context(|| filename.to_string_lossy().to_string())
                     .and_then(|file| {
                         match &mode {
                             Mode::Bytes(ranges, opts) | Mode::Characters(ranges, opts) => {
@@ -398,20 +399,20 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
 
     show_if_err!(
         out.flush()
-            .map_err_context(|| get_message("cut-error-write-error"))
+            .map_err_context(|| translate!("cut-error-write-error"))
     );
 }
 
 /// Get delimiter and output delimiter from `-d`/`--delimiter` and `--output-delimiter` options respectively
 /// Allow either delimiter to have a value that is neither UTF-8 nor ASCII to align with GNU behavior
-fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter, Option<&[u8]>)> {
+fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter<'_>, Option<&[u8]>)> {
     let whitespace_delimited = matches.get_flag(options::WHITESPACE_DELIMITED);
     let delim_opt = matches.get_one::<OsString>(options::DELIMITER);
     let delim = match delim_opt {
         Some(_) if whitespace_delimited => {
             return Err(USimpleError::new(
                 1,
-                get_message("cut-error-delimiter-and-whitespace-conflict"),
+                translate!("cut-error-delimiter-and-whitespace-conflict"),
             ));
         }
         Some(os_string) => {
@@ -427,7 +428,7 @@ fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter, Option<&[u8]>)> {
                 {
                     return Err(USimpleError::new(
                         1,
-                        get_message("cut-error-delimiter-must-be-single-character"),
+                        translate!("cut-error-delimiter-must-be-single-character"),
                     ));
                 }
                 Delimiter::from(os_string)
@@ -482,7 +483,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         })
         .collect();
 
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let complement = matches.get_flag(options::COMPLEMENT);
     let only_delimited = matches.get_flag(options::ONLY_DELIMITED);
@@ -550,8 +551,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             })
         }
 
-        (2.., _, _, _) => Err(get_message("cut-error-multiple-mode-args")),
-        _ => Err(get_message("cut-error-missing-mode-arg")),
+        (2.., _, _, _) => Err(translate!("cut-error-multiple-mode-args")),
+        _ => Err(translate!("cut-error-missing-mode-arg")),
     };
 
     let mode_parse = match mode_parse {
@@ -560,24 +561,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Mode::Bytes(_, _) | Mode::Characters(_, _)
                 if matches.contains_id(options::DELIMITER) =>
             {
-                Err(get_message("cut-error-delimiter-only-with-fields"))
+                Err(translate!("cut-error-delimiter-only-with-fields"))
             }
             Mode::Bytes(_, _) | Mode::Characters(_, _)
                 if matches.get_flag(options::WHITESPACE_DELIMITED) =>
             {
-                Err(get_message("cut-error-whitespace-only-with-fields"))
+                Err(translate!("cut-error-whitespace-only-with-fields"))
             }
             Mode::Bytes(_, _) | Mode::Characters(_, _)
                 if matches.get_flag(options::ONLY_DELIMITED) =>
             {
-                Err(get_message("cut-error-only-delimited-only-with-fields"))
+                Err(translate!("cut-error-only-delimited-only-with-fields"))
             }
             _ => Ok(mode),
         },
     };
 
-    let files: Vec<String> = matches
-        .get_many::<String>(options::FILE)
+    let files: Vec<OsString> = matches
+        .get_many::<OsString>(options::FILE)
         .unwrap_or_default()
         .cloned()
         .collect();
@@ -594,9 +595,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("cut-usage")))
-        .about(get_message("cut-about"))
-        .after_help(get_message("cut-after-help"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .override_usage(format_usage(&translate!("cut-usage")))
+        .about(translate!("cut-about"))
+        .after_help(translate!("cut-after-help"))
         .infer_long_args(true)
         // While `args_override_self(true)` for some arguments, such as `-d`
         // and `--output-delimiter`, is consistent to the behavior of GNU cut,
@@ -610,7 +612,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::BYTES)
                 .short('b')
                 .long(options::BYTES)
-                .help(get_message("cut-help-bytes"))
+                .help(translate!("cut-help-bytes"))
                 .allow_hyphen_values(true)
                 .value_name("LIST")
                 .action(ArgAction::Append),
@@ -619,7 +621,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::CHARACTERS)
                 .short('c')
                 .long(options::CHARACTERS)
-                .help(get_message("cut-help-characters"))
+                .help(translate!("cut-help-characters"))
                 .allow_hyphen_values(true)
                 .value_name("LIST")
                 .action(ArgAction::Append),
@@ -629,13 +631,13 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(options::DELIMITER)
                 .value_parser(ValueParser::os_string())
-                .help(get_message("cut-help-delimiter"))
+                .help(translate!("cut-help-delimiter"))
                 .value_name("DELIM"),
         )
         .arg(
             Arg::new(options::WHITESPACE_DELIMITED)
                 .short('w')
-                .help(get_message("cut-help-whitespace-delimited"))
+                .help(translate!("cut-help-whitespace-delimited"))
                 .value_name("WHITESPACE")
                 .action(ArgAction::SetTrue),
         )
@@ -643,7 +645,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::FIELDS)
                 .short('f')
                 .long(options::FIELDS)
-                .help(get_message("cut-help-fields"))
+                .help(translate!("cut-help-fields"))
                 .allow_hyphen_values(true)
                 .value_name("LIST")
                 .action(ArgAction::Append),
@@ -651,34 +653,35 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::COMPLEMENT)
                 .long(options::COMPLEMENT)
-                .help(get_message("cut-help-complement"))
+                .help(translate!("cut-help-complement"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ONLY_DELIMITED)
                 .short('s')
                 .long(options::ONLY_DELIMITED)
-                .help(get_message("cut-help-only-delimited"))
+                .help(translate!("cut-help-only-delimited"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ZERO_TERMINATED)
                 .short('z')
                 .long(options::ZERO_TERMINATED)
-                .help(get_message("cut-help-zero-terminated"))
+                .help(translate!("cut-help-zero-terminated"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OUTPUT_DELIMITER)
                 .long(options::OUTPUT_DELIMITER)
                 .value_parser(ValueParser::os_string())
-                .help(get_message("cut-help-output-delimiter"))
+                .help(translate!("cut-help-output-delimiter"))
                 .value_name("NEW_DELIM"),
         )
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
 }

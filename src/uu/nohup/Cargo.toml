@@ -22,6 +22,7 @@ clap = { workspace = true }
 libc = { workspace = true }
 uucore = { workspace = true, features = ["fs"] }
 thiserror = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "nohup"

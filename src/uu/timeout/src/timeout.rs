@@ -8,7 +8,6 @@ mod status;
 
 use crate::status::ExitStatus;
 use clap::{Arg, ArgAction, Command};
-use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
@@ -18,8 +17,8 @@ use uucore::display::Quotable;
 use uucore::error::{UClapError, UResult, USimpleError, UUsageError};
 use uucore::parser::parse_time;
 use uucore::process::ChildExt;
+use uucore::translate;
 
-use uucore::locale::{get_message, get_message_with_args};
 #[cfg(unix)]
 use uucore::signals::enable_pipe_errors;
 
@@ -60,13 +59,7 @@ impl Config {
                     None => {
                         return Err(UUsageError::new(
                             ExitStatus::TimeoutFailed.into(),
-                            get_message_with_args(
-                                "timeout-error-invalid-signal",
-                                HashMap::from([(
-                                    "signal".to_string(),
-                                    signal_.quote().to_string(),
-                                )]),
-                            ),
+                            translate!("timeout-error-invalid-signal", "signal" => signal_.quote()),
                         ));
                     }
                     Some(signal_value) => signal_value,
@@ -128,40 +121,41 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new("timeout")
         .version(uucore::crate_version!())
-        .about(get_message("timeout-about"))
-        .override_usage(format_usage(&get_message("timeout-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("timeout-about"))
+        .override_usage(format_usage(&translate!("timeout-usage")))
         .arg(
             Arg::new(options::FOREGROUND)
                 .long(options::FOREGROUND)
                 .short('f')
-                .help(get_message("timeout-help-foreground"))
+                .help(translate!("timeout-help-foreground"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::KILL_AFTER)
                 .long(options::KILL_AFTER)
                 .short('k')
-                .help(get_message("timeout-help-kill-after")),
+                .help(translate!("timeout-help-kill-after")),
         )
         .arg(
             Arg::new(options::PRESERVE_STATUS)
                 .long(options::PRESERVE_STATUS)
                 .short('p')
-                .help(get_message("timeout-help-preserve-status"))
+                .help(translate!("timeout-help-preserve-status"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SIGNAL)
                 .short('s')
                 .long(options::SIGNAL)
-                .help(get_message("timeout-help-signal"))
+                .help(translate!("timeout-help-signal"))
                 .value_name("SIGNAL"),
         )
         .arg(
             Arg::new(options::VERBOSE)
                 .short('v')
                 .long(options::VERBOSE)
-                .help(get_message("timeout-help-verbose"))
+                .help(translate!("timeout-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(Arg::new(options::DURATION).required(true))
@@ -209,13 +203,7 @@ fn report_if_verbose(signal: usize, cmd: &str, verbose: bool) {
         let s = signal_name_by_value(signal).unwrap();
         show_error!(
             "{}",
-            get_message_with_args(
-                "timeout-verbose-sending-signal",
-                HashMap::from([
-                    ("signal".to_string(), s.to_string()),
-                    ("command".to_string(), cmd.quote().to_string())
-                ])
-            )
+            translate!("timeout-verbose-sending-signal", "signal" => s, "command" => cmd.quote())
         );
     }
 }
@@ -342,10 +330,7 @@ fn timeout(
             };
             USimpleError::new(
                 status_code,
-                get_message_with_args(
-                    "timeout-error-failed-to-execute-process",
-                    HashMap::from([("error".to_string(), err.to_string())]),
-                ),
+                translate!("timeout-error-failed-to-execute-process", "error" => err),
             )
         })?;
     unblock_sigchld();

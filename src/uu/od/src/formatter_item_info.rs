@@ -7,6 +7,7 @@
 use std::fmt;
 
 #[allow(clippy::enum_variant_names)]
+#[allow(unpredictable_function_pointer_comparisons)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum FormatWriter {
     IntWriter(fn(u64) -> String),

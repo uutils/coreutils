@@ -6,16 +6,15 @@
 // cSpell:ignore strs
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser};
-use std::collections::HashMap;
 use std::error::Error;
 use std::ffi::OsString;
 use std::io::{self, Write};
+use uucore::LocalizedCommand;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 #[cfg(unix)]
 use uucore::signals::enable_pipe_errors;
-
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 // it's possible that using a smaller or larger buffer might provide better performance on some
 // systems, but honestly this is good enough
@@ -23,7 +22,7 @@ const BUF_SIZE: usize = 16 * 1024;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let mut buffer = Vec::with_capacity(BUF_SIZE);
     args_into_buffer(&mut buffer, matches.get_many::<OsString>("STRING")).unwrap();
@@ -34,10 +33,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
         Err(err) => Err(USimpleError::new(
             1,
-            get_message_with_args(
-                "yes-error-standard-output",
-                HashMap::from([("error".to_string(), err.to_string())]),
-            ),
+            translate!("yes-error-standard-output", "error" => err),
         )),
     }
 }
@@ -45,8 +41,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("yes-about"))
-        .override_usage(format_usage(&get_message("yes-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("yes-about"))
+        .override_usage(format_usage(&translate!("yes-usage")))
         .arg(
             Arg::new("STRING")
                 .value_parser(ValueParser::os_string())
@@ -84,7 +81,7 @@ fn args_into_buffer<'a>(
         for part in itertools::intersperse(i.map(|a| a.to_str()), Some(" ")) {
             let bytes = match part {
                 Some(part) => part.as_bytes(),
-                None => return Err(get_message("yes-error-invalid-utf8").into()),
+                None => return Err(translate!("yes-error-invalid-utf8").into()),
             };
             buf.extend_from_slice(bytes);
         }

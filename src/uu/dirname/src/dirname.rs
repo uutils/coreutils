@@ -4,13 +4,15 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command};
+use std::ffi::OsString;
 use std::path::Path;
+use uucore::LocalizedCommand;
 use uucore::display::print_verbatim;
 use uucore::error::{UResult, UUsageError};
 use uucore::format_usage;
 use uucore::line_ending::LineEnding;
 
-use uucore::locale::get_message;
+use uucore::translate;
 
 mod options {
     pub const ZERO: &str = "zero";
@@ -20,19 +22,19 @@ mod options {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app()
-        .after_help(get_message("dirname-after-help"))
-        .try_get_matches_from(args)?;
+        .after_help(translate!("dirname-after-help"))
+        .get_matches_from_localized(args);
 
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
-    let dirnames: Vec<String> = matches
-        .get_many::<String>(options::DIR)
+    let dirnames: Vec<OsString> = matches
+        .get_many::<OsString>(options::DIR)
         .unwrap_or_default()
         .cloned()
         .collect();
 
     if dirnames.is_empty() {
-        return Err(UUsageError::new(1, get_message("dirname-missing-operand")));
+        return Err(UUsageError::new(1, translate!("dirname-missing-operand")));
     }
 
     for path in &dirnames {
@@ -46,7 +48,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
             }
             None => {
-                if p.is_absolute() || path == "/" {
+                if p.is_absolute() || path.as_os_str() == "/" {
                     print!("/");
                 } else {
                     print!(".");
@@ -61,22 +63,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about(get_message("dirname-about"))
+        .about(translate!("dirname-about"))
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("dirname-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .override_usage(format_usage(&translate!("dirname-usage")))
         .args_override_self(true)
         .infer_long_args(true)
         .arg(
             Arg::new(options::ZERO)
                 .long(options::ZERO)
                 .short('z')
-                .help(get_message("dirname-zero-help"))
+                .help(translate!("dirname-zero-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DIR)
                 .hide(true)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::AnyPath),
+                .value_hint(clap::ValueHint::AnyPath)
+                .value_parser(clap::value_parser!(OsString)),
         )
 }

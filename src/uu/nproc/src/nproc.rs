@@ -6,12 +6,12 @@
 // spell-checker:ignore (ToDO) NPROCESSORS nprocs numstr sysconf
 
 use clap::{Arg, ArgAction, Command};
-use std::collections::HashMap;
 use std::{env, thread};
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 83;
@@ -27,7 +27,7 @@ static OPT_IGNORE: &str = "ignore";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let ignore = match matches.get_one::<String>(OPT_IGNORE) {
         Some(numstr) => match numstr.trim().parse::<usize>() {
@@ -35,13 +35,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Err(e) => {
                 return Err(USimpleError::new(
                     1,
-                    get_message_with_args(
-                        "nproc-error-invalid-number",
-                        HashMap::from([
-                            ("value".to_string(), numstr.quote().to_string()),
-                            ("error".to_string(), e.to_string()),
-                        ]),
-                    ),
+                    translate!("nproc-error-invalid-number", "value" => numstr.quote(), "error" => e),
                 ));
             }
         },
@@ -99,20 +93,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("nproc-about"))
-        .override_usage(format_usage(&get_message("nproc-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("nproc-about"))
+        .override_usage(format_usage(&translate!("nproc-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_ALL)
                 .long(OPT_ALL)
-                .help(get_message("nproc-help-all"))
+                .help(translate!("nproc-help-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_IGNORE)
                 .long(OPT_IGNORE)
                 .value_name("N")
-                .help(get_message("nproc-help-ignore")),
+                .help(translate!("nproc-help-ignore")),
         )
 }
 

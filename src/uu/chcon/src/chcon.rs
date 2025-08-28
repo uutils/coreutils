@@ -7,14 +7,15 @@
 #![allow(clippy::upper_case_acronyms)]
 
 use clap::builder::ValueParser;
+use uucore::LocalizedCommand;
 use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::translate;
 use uucore::{display::Quotable, format_usage, show_error, show_warning};
 
 use clap::{Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityContext};
 
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::ffi::{CStr, CString, OsStr, OsString};
 use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
@@ -24,8 +25,6 @@ mod errors;
 mod fts;
 
 use errors::*;
-
-use uucore::locale::{get_message, get_message_with_args};
 
 pub mod options {
     pub static HELP: &str = "help";
@@ -80,14 +79,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Ok(None) => {
                     let err = io::Error::from_raw_os_error(libc::ENODATA);
                     Err(Error::from_io1(
-                        get_message("chcon-op-getting-security-context"),
+                        translate!("chcon-op-getting-security-context"),
                         reference,
                         err,
                     ))
                 }
 
                 Err(r) => Err(Error::from_selinux(
-                    get_message("chcon-op-getting-security-context"),
+                    translate!("chcon-op-getting-security-context"),
                     r,
                 )),
             };
@@ -111,10 +110,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Err(_r) => {
                     return Err(USimpleError::new(
                         libc::EXIT_FAILURE,
-                        get_message_with_args(
-                            "chcon-error-invalid-context",
-                            HashMap::from([("context".to_string(), context.quote().to_string())]),
-                        ),
+                        translate!("chcon-error-invalid-context", "context" => context.quote()),
                     ));
                 }
             };
@@ -122,10 +118,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if SecurityContext::from_c_str(&c_context, false).check() == Some(false) {
                 return Err(USimpleError::new(
                     libc::EXIT_FAILURE,
-                    get_message_with_args(
-                        "chcon-error-invalid-context",
-                        HashMap::from([("context".to_string(), context.quote().to_string())]),
-                    ),
+                    translate!("chcon-error-invalid-context", "context" => context.quote()),
                 ));
             }
 
@@ -164,42 +157,43 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("chcon-about"))
-        .override_usage(format_usage(&get_message("chcon-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("chcon-about"))
+        .override_usage(format_usage(&translate!("chcon-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .args_override_self(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help(get_message("chcon-help-help"))
+                .help(translate!("chcon-help-help"))
                 .action(ArgAction::Help),
         )
         .arg(
             Arg::new(options::dereference::DEREFERENCE)
                 .long(options::dereference::DEREFERENCE)
                 .overrides_with(options::dereference::NO_DEREFERENCE)
-                .help(get_message("chcon-help-dereference"))
+                .help(translate!("chcon-help-dereference"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::dereference::NO_DEREFERENCE)
                 .short('h')
                 .long(options::dereference::NO_DEREFERENCE)
-                .help(get_message("chcon-help-no-dereference"))
+                .help(translate!("chcon-help-no-dereference"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::preserve_root::PRESERVE_ROOT)
                 .long(options::preserve_root::PRESERVE_ROOT)
                 .overrides_with(options::preserve_root::NO_PRESERVE_ROOT)
-                .help(get_message("chcon-help-preserve-root"))
+                .help(translate!("chcon-help-preserve-root"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::preserve_root::NO_PRESERVE_ROOT)
                 .long(options::preserve_root::NO_PRESERVE_ROOT)
-                .help(get_message("chcon-help-no-preserve-root"))
+                .help(translate!("chcon-help-no-preserve-root"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -208,7 +202,7 @@ pub fn uu_app() -> Command {
                 .value_name("RFILE")
                 .value_hint(clap::ValueHint::FilePath)
                 .conflicts_with_all([options::USER, options::ROLE, options::TYPE, options::RANGE])
-                .help(get_message("chcon-help-reference"))
+                .help(translate!("chcon-help-reference"))
                 .value_parser(ValueParser::os_string()),
         )
         .arg(
@@ -217,7 +211,7 @@ pub fn uu_app() -> Command {
                 .long(options::USER)
                 .value_name("USER")
                 .value_hint(clap::ValueHint::Username)
-                .help(get_message("chcon-help-user"))
+                .help(translate!("chcon-help-user"))
                 .value_parser(ValueParser::os_string()),
         )
         .arg(
@@ -225,7 +219,7 @@ pub fn uu_app() -> Command {
                 .short('r')
                 .long(options::ROLE)
                 .value_name("ROLE")
-                .help(get_message("chcon-help-role"))
+                .help(translate!("chcon-help-role"))
                 .value_parser(ValueParser::os_string()),
         )
         .arg(
@@ -233,7 +227,7 @@ pub fn uu_app() -> Command {
                 .short('t')
                 .long(options::TYPE)
                 .value_name("TYPE")
-                .help(get_message("chcon-help-type"))
+                .help(translate!("chcon-help-type"))
                 .value_parser(ValueParser::os_string()),
         )
         .arg(
@@ -241,14 +235,14 @@ pub fn uu_app() -> Command {
                 .short('l')
                 .long(options::RANGE)
                 .value_name("RANGE")
-                .help(get_message("chcon-help-range"))
+                .help(translate!("chcon-help-range"))
                 .value_parser(ValueParser::os_string()),
         )
         .arg(
             Arg::new(options::RECURSIVE)
                 .short('R')
                 .long(options::RECURSIVE)
-                .help(get_message("chcon-help-recursive"))
+                .help(translate!("chcon-help-recursive"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -259,7 +253,7 @@ pub fn uu_app() -> Command {
                     options::sym_links::FOLLOW_DIR_SYM_LINKS,
                     options::sym_links::NO_FOLLOW_SYM_LINKS,
                 ])
-                .help(get_message("chcon-help-follow-arg-dir-symlink"))
+                .help(translate!("chcon-help-follow-arg-dir-symlink"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -270,7 +264,7 @@ pub fn uu_app() -> Command {
                     options::sym_links::FOLLOW_ARG_DIR_SYM_LINK,
                     options::sym_links::NO_FOLLOW_SYM_LINKS,
                 ])
-                .help(get_message("chcon-help-follow-dir-symlinks"))
+                .help(translate!("chcon-help-follow-dir-symlinks"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -281,14 +275,14 @@ pub fn uu_app() -> Command {
                     options::sym_links::FOLLOW_ARG_DIR_SYM_LINK,
                     options::sym_links::FOLLOW_DIR_SYM_LINKS,
                 ])
-                .help(get_message("chcon-help-no-follow-symlinks"))
+                .help(translate!("chcon-help-no-follow-symlinks"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::VERBOSE)
                 .short('v')
                 .long(options::VERBOSE)
-                .help(get_message("chcon-help-verbose"))
+                .help(translate!("chcon-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -311,31 +305,31 @@ struct Options {
 }
 
 fn parse_command_line(config: Command, args: impl uucore::Args) -> Result<Options> {
-    let matches = config.try_get_matches_from(args)?;
+    let matches = config.get_matches_from_localized(args);
 
     let verbose = matches.get_flag(options::VERBOSE);
 
     let (recursive_mode, affect_symlink_referent) = if matches.get_flag(options::RECURSIVE) {
         if matches.get_flag(options::sym_links::FOLLOW_DIR_SYM_LINKS) {
             if matches.get_flag(options::dereference::NO_DEREFERENCE) {
-                return Err(Error::ArgumentsMismatch(get_message(
-                    "chcon-error-recursive-no-dereference-require-p",
+                return Err(Error::ArgumentsMismatch(translate!(
+                    "chcon-error-recursive-no-dereference-require-p"
                 )));
             }
 
             (RecursiveMode::RecursiveAndFollowAllDirSymLinks, true)
         } else if matches.get_flag(options::sym_links::FOLLOW_ARG_DIR_SYM_LINK) {
             if matches.get_flag(options::dereference::NO_DEREFERENCE) {
-                return Err(Error::ArgumentsMismatch(get_message(
-                    "chcon-error-recursive-no-dereference-require-p",
+                return Err(Error::ArgumentsMismatch(translate!(
+                    "chcon-error-recursive-no-dereference-require-p"
                 )));
             }
 
             (RecursiveMode::RecursiveAndFollowArgDirSymLinks, true)
         } else {
             if matches.get_flag(options::dereference::DEREFERENCE) {
-                return Err(Error::ArgumentsMismatch(get_message(
-                    "chcon-error-recursive-dereference-require-h-or-l",
+                return Err(Error::ArgumentsMismatch(translate!(
+                    "chcon-error-recursive-dereference-require-h-or-l"
                 )));
             }
 
@@ -510,7 +504,7 @@ fn process_file(
 
     let file_full_name = entry.path().map(PathBuf::from).ok_or_else(|| {
         Error::from_io(
-            get_message("chcon-op-file-name-validation"),
+            translate!("chcon-op-file-name-validation"),
             io::ErrorKind::InvalidInput.into(),
         )
     })?;
@@ -518,7 +512,7 @@ fn process_file(
     let fts_access_path = entry.access_path().ok_or_else(|| {
         let err = io::ErrorKind::InvalidInput.into();
         Error::from_io1(
-            get_message("chcon-op-file-name-validation"),
+            translate!("chcon-op-file-name-validation"),
             &file_full_name,
             err,
         )
@@ -536,7 +530,7 @@ fn process_file(
         st.try_into()?
     } else {
         return Err(err(
-            get_message("chcon-op-getting-meta-data"),
+            translate!("chcon-op-getting-meta-data"),
             io::ErrorKind::InvalidInput,
         ));
     };
@@ -558,7 +552,7 @@ fn process_file(
                     let _ignored = fts.read_next_entry();
 
                     return Err(err(
-                        get_message("chcon-op-modifying-root-path"),
+                        translate!("chcon-op-modifying-root-path"),
                         io::ErrorKind::PermissionDenied,
                     ));
                 }
@@ -585,18 +579,18 @@ fn process_file(
                 return Ok(());
             }
 
-            result = fts_err(get_message("chcon-op-accessing"));
+            result = fts_err(translate!("chcon-op-accessing"));
         }
 
-        fts_sys::FTS_ERR => result = fts_err(get_message("chcon-op-accessing")),
+        fts_sys::FTS_ERR => result = fts_err(translate!("chcon-op-accessing")),
 
-        fts_sys::FTS_DNR => result = fts_err(get_message("chcon-op-reading-directory")),
+        fts_sys::FTS_DNR => result = fts_err(translate!("chcon-op-reading-directory")),
 
         fts_sys::FTS_DC => {
             if cycle_warning_required(options.recursive_mode.fts_open_options(), &entry) {
                 emit_cycle_warning(&file_full_name);
                 return Err(err(
-                    get_message("chcon-op-reading-cyclic-directory"),
+                    translate!("chcon-op-reading-cyclic-directory"),
                     io::ErrorKind::InvalidData,
                 ));
             }
@@ -611,7 +605,7 @@ fn process_file(
     {
         root_dev_ino_warn(&file_full_name);
         result = Err(err(
-            get_message("chcon-op-modifying-root-path"),
+            translate!("chcon-op-modifying-root-path"),
             io::ErrorKind::PermissionDenied,
         ));
     }
@@ -620,13 +614,7 @@ fn process_file(
         if options.verbose {
             println!(
                 "{}",
-                get_message_with_args(
-                    "chcon-verbose-changing-context",
-                    HashMap::from([
-                        ("util_name".to_string(), uucore::util_name().to_string()),
-                        ("file".to_string(), file_full_name.quote().to_string())
-                    ])
-                )
+                translate!("chcon-verbose-changing-context", "util_name" => uucore::util_name(), "file" => file_full_name.quote())
             );
         }
 
@@ -654,7 +642,7 @@ fn change_file_context(
             let err0 = || -> Result<()> {
                 // If the file doesn't have a context, and we're not setting all of the context
                 // components, there isn't really an obvious default. Thus, we just give up.
-                let op = get_message("chcon-op-applying-partial-context");
+                let op = translate!("chcon-op-applying-partial-context");
                 let err = io::ErrorKind::InvalidInput.into();
                 Err(Error::from_io1(op, path, err))
             };
@@ -666,7 +654,7 @@ fn change_file_context(
                     Ok(None) => return err0(),
                     Err(r) => {
                         return Err(Error::from_selinux(
-                            get_message("chcon-op-getting-security-context"),
+                            translate!("chcon-op-getting-security-context"),
                             r,
                         ));
                     }
@@ -678,7 +666,7 @@ fn change_file_context(
                 Ok(None) => return err0(),
                 Err(r) => {
                     return Err(Error::from_selinux(
-                        get_message("chcon-op-getting-security-context"),
+                        translate!("chcon-op-getting-security-context"),
                         r,
                     ));
                 }
@@ -687,7 +675,7 @@ fn change_file_context(
             let se_context =
                 OpaqueSecurityContext::from_c_str(c_file_context.as_ref()).map_err(|_r| {
                     let err = io::ErrorKind::InvalidInput.into();
-                    Error::from_io1(get_message("chcon-op-creating-security-context"), path, err)
+                    Error::from_io1(translate!("chcon-op-creating-security-context"), path, err)
                 })?;
 
             type SetValueProc = fn(&OpaqueSecurityContext, &CStr) -> selinux::errors::Result<()>;
@@ -703,24 +691,17 @@ fn change_file_context(
                 if let Some(new_value) = new_value {
                     let c_new_value = os_str_to_c_string(new_value).map_err(|_r| {
                         let err = io::ErrorKind::InvalidInput.into();
-                        Error::from_io1(
-                            get_message("chcon-op-creating-security-context"),
-                            path,
-                            err,
-                        )
+                        Error::from_io1(translate!("chcon-op-creating-security-context"), path, err)
                     })?;
 
                     set_value_proc(&se_context, &c_new_value).map_err(|r| {
-                        Error::from_selinux(
-                            get_message("chcon-op-setting-security-context-user"),
-                            r,
-                        )
+                        Error::from_selinux(translate!("chcon-op-setting-security-context-user"), r)
                     })?;
                 }
             }
 
             let context_string = se_context.to_c_string().map_err(|r| {
-                Error::from_selinux(get_message("chcon-op-getting-security-context"), r)
+                Error::from_selinux(translate!("chcon-op-getting-security-context"), r)
             })?;
 
             if c_file_context.as_ref().to_bytes() == context_string.as_ref().to_bytes() {
@@ -729,7 +710,7 @@ fn change_file_context(
                 SecurityContext::from_c_str(&context_string, false)
                     .set_for_path(path, options.affect_symlink_referent, false)
                     .map_err(|r| {
-                        Error::from_selinux(get_message("chcon-op-setting-security-context"), r)
+                        Error::from_selinux(translate!("chcon-op-setting-security-context"), r)
                     })
             }
         }
@@ -739,12 +720,12 @@ fn change_file_context(
                 SecurityContext::from_c_str(c_context.as_ref(), false)
                     .set_for_path(path, options.affect_symlink_referent, false)
                     .map_err(|r| {
-                        Error::from_selinux(get_message("chcon-op-setting-security-context"), r)
+                        Error::from_selinux(translate!("chcon-op-setting-security-context"), r)
                     })
             } else {
                 let err = io::ErrorKind::InvalidInput.into();
                 Err(Error::from_io1(
-                    get_message("chcon-op-setting-security-context"),
+                    translate!("chcon-op-setting-security-context"),
                     path,
                     err,
                 ))
@@ -777,27 +758,12 @@ fn root_dev_ino_warn(dir_name: &Path) {
     if dir_name.as_os_str() == "/" {
         show_warning!(
             "{}",
-            get_message_with_args(
-                "chcon-warning-dangerous-recursive-root",
-                HashMap::from([(
-                    "option".to_string(),
-                    options::preserve_root::NO_PRESERVE_ROOT.to_string()
-                )])
-            )
+            translate!("chcon-warning-dangerous-recursive-root", "option" => options::preserve_root::NO_PRESERVE_ROOT)
         );
     } else {
         show_warning!(
             "{}",
-            get_message_with_args(
-                "chcon-warning-dangerous-recursive-dir",
-                HashMap::from([
-                    ("dir".to_string(), dir_name.to_string_lossy().to_string()),
-                    (
-                        "option".to_string(),
-                        options::preserve_root::NO_PRESERVE_ROOT.to_string()
-                    )
-                ])
-            )
+            translate!("chcon-warning-dangerous-recursive-dir", "dir" => dir_name.to_string_lossy(), "option" => options::preserve_root::NO_PRESERVE_ROOT)
         );
     }
 }
@@ -819,10 +785,7 @@ fn cycle_warning_required(fts_options: c_int, entry: &fts::EntryRef) -> bool {
 fn emit_cycle_warning(file_name: &Path) {
     show_warning!(
         "{}",
-        get_message_with_args(
-            "chcon-warning-circular-directory",
-            HashMap::from([("file".to_string(), file_name.to_string_lossy().to_string())])
-        )
+        translate!("chcon-warning-circular-directory", "file" => file_name.to_string_lossy())
     );
 }
 
@@ -833,7 +796,7 @@ enum SELinuxSecurityContext<'t> {
 }
 
 impl SELinuxSecurityContext<'_> {
-    fn to_c_string(&self) -> Result<Option<Cow<CStr>>> {
+    fn to_c_string(&self) -> Result<Option<Cow<'_, CStr>>> {
         match self {
             Self::File(context) => context
                 .to_c_string()

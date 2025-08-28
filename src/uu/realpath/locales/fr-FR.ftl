@@ -11,3 +11,6 @@ realpath-help-canonicalize-existing = canonicaliser en suivant récursivement ch
 realpath-help-canonicalize-missing = canonicaliser en suivant récursivement chaque lien symbolique dans chaque composant du nom donné, sans exigences sur l'existence des composants
 realpath-help-relative-to = afficher le chemin résolu relativement à RÉP
 realpath-help-relative-base = afficher les chemins absolus sauf pour les chemins sous RÉP
+
+# Messages d'erreur
+realpath-invalid-empty-operand = opérande invalide : chaîne vide

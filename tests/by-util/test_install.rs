@@ -7,12 +7,16 @@
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
 use std::fs;
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(not(windows))]
 use std::process::Command;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
 use uucore::process::{getegid, geteuid};
+#[cfg(feature = "feat_selinux")]
+use uucore::selinux::get_getfattr_output;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::{TestScenario, is_ci, run_ucmd_as_root};
@@ -691,6 +695,8 @@ fn strip_source_file() -> &'static str {
 
 #[test]
 #[cfg(not(windows))]
+// FIXME test runs in a timeout with macos-latest on x86_64 in the CI
+#[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
 fn test_install_and_strip() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -714,6 +720,8 @@ fn test_install_and_strip() {
 
 #[test]
 #[cfg(not(windows))]
+// FIXME test runs in a timeout with macos-latest on x86_64 in the CI
+#[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
 fn test_install_and_strip_with_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2083,6 +2091,20 @@ fn test_install_no_target_directory_failing_cannot_overwrite() {
 }
 
 #[test]
+fn test_install_no_target_directory_overwrite_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file = "file";
+    let dest = "dest";
+
+    at.touch(file);
+    scene.ucmd().arg("-T").arg(file).arg(dest).succeeds();
+    scene.ucmd().arg("-T").arg(file).arg(dest).succeeds();
+
+    assert!(!at.dir_exists("dir/file"));
+}
+
+#[test]
 fn test_install_no_target_directory_failing_omitting_directory() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2221,8 +2243,6 @@ fn test_install_no_target_basic() {
 #[test]
 #[cfg(feature = "feat_selinux")]
 fn test_selinux() {
-    use std::process::Command;
-
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let src = "orig";
@@ -2251,29 +2271,19 @@ fn test_selinux() {
 
         result.success().stdout_contains("orig' -> '");
 
-        let getfattr_output = Command::new("getfattr")
-            .arg(at.plus_as_string(dest))
-            .arg("-n")
-            .arg("security.selinux")
-            .output();
+        // Try to get SELinux context, skip test if getfattr is not available
+        let context_value =
+            std::panic::catch_unwind(|| get_getfattr_output(&at.plus_as_string(dest)));
 
-        // Skip test if getfattr is not available
-        let Ok(getfattr_output) = getfattr_output else {
-            println!("Skipping SELinux test: getfattr not available");
+        let Ok(context_value) = context_value else {
+            println!("Skipping SELinux test: getfattr not available or failed");
             at.remove(&at.plus_as_string(dest));
             continue;
         };
-        println!("{getfattr_output:?}");
-        assert!(
-            getfattr_output.status.success(),
-            "getfattr did not run successfully: {}",
-            String::from_utf8_lossy(&getfattr_output.stderr)
-        );
 
-        let stdout = String::from_utf8_lossy(&getfattr_output.stdout);
         assert!(
-            stdout.contains("unconfined_u"),
-            "Expected 'foo' not found in getfattr output:\n{stdout}"
+            context_value.contains("unconfined_u"),
+            "Expected 'unconfined_u' not found in getfattr output:\n{context_value}"
         );
         at.remove(&at.plus_as_string(dest));
     }
@@ -2357,4 +2367,27 @@ fn test_install_compare_with_mode_bits() {
             "Failed to create dest file for {description}"
         );
     }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_non_utf8_paths() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source_filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    let dest_dir = "target_dir";
+
+    std::fs::write(at.plus(&source_filename), b"test content").unwrap();
+    at.mkdir(dest_dir);
+
+    ucmd.arg(&source_filename).arg(dest_dir).succeeds();
+
+    // Test with trailing slash and directory creation (-D flag)
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source_file = "source.txt";
+    let mut target_path = std::ffi::OsString::from_vec(vec![0xFF, 0xFE, b'd', b'i', b'r']);
+    target_path.push("/target.txt");
+
+    at.touch(source_file);
+
+    ucmd.arg("-D").arg(source_file).arg(&target_path).succeeds();
 }

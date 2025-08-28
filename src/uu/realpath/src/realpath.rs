@@ -5,13 +5,17 @@
 
 // spell-checker:ignore (ToDO) retcode
 
-use clap::{Arg, ArgAction, ArgMatches, Command, builder::NonEmptyStringValueParser};
+use clap::{
+    Arg, ArgAction, ArgMatches, Command,
+    builder::{TypedValueParser, ValueParserFactory},
+};
 use std::{
+    ffi::{OsStr, OsString},
     io::{Write, stdout},
     path::{Path, PathBuf},
 };
 use uucore::fs::make_path_relative_to;
-use uucore::locale::get_message;
+use uucore::translate;
 use uucore::{
     display::{Quotable, print_verbatim},
     error::{FromIo, UClapError, UResult},
@@ -33,6 +37,39 @@ const OPT_RELATIVE_BASE: &str = "relative-base";
 
 const ARG_FILES: &str = "files";
 
+/// Custom parser that validates `OsString` is not empty
+#[derive(Clone, Debug)]
+struct NonEmptyOsStringParser;
+
+impl TypedValueParser for NonEmptyOsStringParser {
+    type Value = OsString;
+
+    fn parse_ref(
+        &self,
+        _cmd: &Command,
+        _arg: Option<&Arg>,
+        value: &OsStr,
+    ) -> Result<Self::Value, clap::Error> {
+        if value.is_empty() {
+            let mut err = clap::Error::new(clap::error::ErrorKind::ValueValidation);
+            err.insert(
+                clap::error::ContextKind::Custom,
+                clap::error::ContextValue::String(translate!("realpath-invalid-empty-operand")),
+            );
+            return Err(err);
+        }
+        Ok(value.to_os_string())
+    }
+}
+
+impl ValueParserFactory for NonEmptyOsStringParser {
+    type Parser = Self;
+
+    fn value_parser() -> Self::Parser {
+        Self
+    }
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args).with_exit_code(1)?;
@@ -40,7 +77,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     /*  the list of files */
 
     let paths: Vec<PathBuf> = matches
-        .get_many::<String>(ARG_FILES)
+        .get_many::<OsString>(ARG_FILES)
         .unwrap()
         .map(PathBuf::from)
         .collect();
@@ -86,14 +123,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("realpath-about"))
-        .override_usage(format_usage(&get_message("realpath-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("realpath-about"))
+        .override_usage(format_usage(&translate!("realpath-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_QUIET)
                 .short('q')
                 .long(OPT_QUIET)
-                .help(get_message("realpath-help-quiet"))
+                .help(translate!("realpath-help-quiet"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -101,21 +139,21 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(OPT_STRIP)
                 .visible_alias("no-symlinks")
-                .help(get_message("realpath-help-strip"))
+                .help(translate!("realpath-help-strip"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_ZERO)
                 .short('z')
                 .long(OPT_ZERO)
-                .help(get_message("realpath-help-zero"))
+                .help(translate!("realpath-help-zero"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_LOGICAL)
                 .short('L')
                 .long(OPT_LOGICAL)
-                .help(get_message("realpath-help-logical"))
+                .help(translate!("realpath-help-logical"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -123,42 +161,42 @@ pub fn uu_app() -> Command {
                 .short('P')
                 .long(OPT_PHYSICAL)
                 .overrides_with_all([OPT_STRIP, OPT_LOGICAL])
-                .help(get_message("realpath-help-physical"))
+                .help(translate!("realpath-help-physical"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_CANONICALIZE_EXISTING)
                 .short('e')
                 .long(OPT_CANONICALIZE_EXISTING)
-                .help(get_message("realpath-help-canonicalize-existing"))
+                .help(translate!("realpath-help-canonicalize-existing"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_CANONICALIZE_MISSING)
                 .short('m')
                 .long(OPT_CANONICALIZE_MISSING)
-                .help(get_message("realpath-help-canonicalize-missing"))
+                .help(translate!("realpath-help-canonicalize-missing"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_RELATIVE_TO)
                 .long(OPT_RELATIVE_TO)
                 .value_name("DIR")
-                .value_parser(NonEmptyStringValueParser::new())
-                .help(get_message("realpath-help-relative-to")),
+                .value_parser(NonEmptyOsStringParser)
+                .help(translate!("realpath-help-relative-to")),
         )
         .arg(
             Arg::new(OPT_RELATIVE_BASE)
                 .long(OPT_RELATIVE_BASE)
                 .value_name("DIR")
-                .value_parser(NonEmptyStringValueParser::new())
-                .help(get_message("realpath-help-relative-base")),
+                .value_parser(NonEmptyOsStringParser)
+                .help(translate!("realpath-help-relative-base")),
         )
         .arg(
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .required(true)
-                .value_parser(NonEmptyStringValueParser::new())
+                .value_parser(NonEmptyOsStringParser)
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }
@@ -173,10 +211,10 @@ fn prepare_relative_options(
     resolve_mode: ResolveMode,
 ) -> UResult<(Option<PathBuf>, Option<PathBuf>)> {
     let relative_to = matches
-        .get_one::<String>(OPT_RELATIVE_TO)
+        .get_one::<OsString>(OPT_RELATIVE_TO)
         .map(PathBuf::from);
     let relative_base = matches
-        .get_one::<String>(OPT_RELATIVE_BASE)
+        .get_one::<OsString>(OPT_RELATIVE_BASE)
         .map(PathBuf::from);
     let relative_to = canonicalize_relative_option(relative_to, can_mode, resolve_mode)?;
     let relative_base = canonicalize_relative_option(relative_base, can_mode, resolve_mode)?;

@@ -69,8 +69,16 @@ use std::io::Error as IOError;
 use std::mem;
 #[cfg(windows)]
 use std::path::Path;
+use std::time::SystemTime;
+#[cfg(not(windows))]
 use std::time::UNIX_EPOCH;
 use std::{borrow::Cow, ffi::OsString};
+
+use std::fs::Metadata;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+#[cfg(unix)]
+use std::time::Duration;
 
 #[cfg(any(
     target_os = "linux",
@@ -108,17 +116,60 @@ pub use libc::statfs as statfs_fn;
 ))]
 pub use libc::statvfs as statfs_fn;
 
-pub trait BirthTime {
-    fn birth(&self) -> Option<(u64, u32)>;
+#[derive(Debug, Copy, Clone)]
+pub enum MetadataTimeField {
+    Modification,
+    Access,
+    Change,
+    Birth,
 }
 
-use std::fs::Metadata;
-impl BirthTime for Metadata {
-    fn birth(&self) -> Option<(u64, u32)> {
-        self.created()
-            .ok()
-            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-            .map(|e| (e.as_secs(), e.subsec_nanos()))
+impl From<&str> for MetadataTimeField {
+    /// Get a `MetadataTimeField` from a string, we expect the value
+    /// to come from clap, and be constrained there (e.g. if Modification is
+    /// not supported), and the default branch should not be reached.
+    fn from(value: &str) -> Self {
+        match value {
+            "ctime" | "status" => MetadataTimeField::Change,
+            "access" | "atime" | "use" => MetadataTimeField::Access,
+            "mtime" | "modification" => MetadataTimeField::Modification,
+            "birth" | "creation" => MetadataTimeField::Birth,
+            // below should never happen as clap already restricts the values.
+            _ => unreachable!("Invalid metadata time field."),
+        }
+    }
+}
+
+#[cfg(unix)]
+fn metadata_get_change_time(md: &Metadata) -> Option<SystemTime> {
+    let mut st = UNIX_EPOCH;
+    let (secs, nsecs) = (md.ctime(), md.ctime_nsec());
+    if secs >= 0 {
+        st += Duration::from_secs(secs as u64);
+    } else {
+        st -= Duration::from_secs(-secs as u64);
+    }
+    if nsecs >= 0 {
+        st += Duration::from_nanos(nsecs as u64);
+    } else {
+        // Probably never the case, but cover just in case.
+        st -= Duration::from_nanos(-nsecs as u64);
+    }
+    Some(st)
+}
+
+#[cfg(not(unix))]
+fn metadata_get_change_time(_md: &Metadata) -> Option<SystemTime> {
+    // Not available.
+    None
+}
+
+pub fn metadata_get_time(md: &Metadata, md_time: MetadataTimeField) -> Option<SystemTime> {
+    match md_time {
+        MetadataTimeField::Change => metadata_get_change_time(md),
+        MetadataTimeField::Modification => md.modified().ok(),
+        MetadataTimeField::Access => md.accessed().ok(),
+        MetadataTimeField::Birth => md.created().ok(),
     }
 }
 

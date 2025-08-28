@@ -5,13 +5,13 @@
 
 // spell-checker:ignore (path) eacces inacc rm-r4
 
-use clap::{Arg, ArgAction, Command, builder::ValueParser, parser::ValueSource};
-use std::collections::HashMap;
+use clap::builder::{PossibleValue, ValueParser};
+use clap::{Arg, ArgAction, Command, parser::ValueSource};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, Metadata};
 use std::io::{IsTerminal, stdin};
 use std::ops::BitOr;
-#[cfg(not(windows))]
+#[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -20,31 +20,28 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+use uucore::translate;
+
+use uucore::LocalizedCommand;
 use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
 
 #[derive(Debug, Error)]
 enum RmError {
-    #[error("{}", get_message_with_args("rm-error-missing-operand",
-                                        HashMap::from([
-                                            ("util_name".to_string(),
-                                             uucore::execution_phrase().to_string())
-                                        ])))]
+    #[error("{}", translate!("rm-error-missing-operand", "util_name" => uucore::execution_phrase()))]
     MissingOperand,
-    #[error("{}", get_message_with_args("rm-error-invalid-interactive-argument", HashMap::from([("arg".to_string(), _0.clone())])))]
-    InvalidInteractiveArgument(String),
-    #[error("{}", get_message_with_args("rm-error-cannot-remove-no-such-file", HashMap::from([("file".to_string(), _0.quote().to_string())])))]
-    CannotRemoveNoSuchFile(String),
-    #[error("{}", get_message_with_args("rm-error-cannot-remove-permission-denied", HashMap::from([("file".to_string(), _0.quote().to_string())])))]
-    CannotRemovePermissionDenied(String),
-    #[error("{}", get_message_with_args("rm-error-cannot-remove-is-directory", HashMap::from([("file".to_string(), _0.quote().to_string())])))]
-    CannotRemoveIsDirectory(String),
-    #[error("{}", get_message("rm-error-dangerous-recursive-operation"))]
+    #[error("{}", translate!("rm-error-cannot-remove-no-such-file", "file" => _0.quote()))]
+    CannotRemoveNoSuchFile(OsString),
+    #[error("{}", translate!("rm-error-cannot-remove-permission-denied", "file" => _0.quote()))]
+    CannotRemovePermissionDenied(OsString),
+    #[error("{}", translate!("rm-error-cannot-remove-is-directory", "file" => _0.quote()))]
+    CannotRemoveIsDirectory(OsString),
+    #[error("{}", translate!("rm-error-dangerous-recursive-operation"))]
     DangerousRecursiveOperation,
-    #[error("{}", get_message("rm-error-use-no-preserve-root"))]
+    #[error("{}", translate!("rm-error-use-no-preserve-root"))]
     UseNoPreserveRoot,
-    #[error("{}", get_message_with_args("rm-error-refusing-to-remove-directory", HashMap::from([("path".to_string(), _0.to_string())])))]
-    RefusingToRemoveDirectory(String),
+    #[error("{}", translate!("rm-error-refusing-to-remove-directory", "path" => _0.to_string_lossy()))]
+    RefusingToRemoveDirectory(OsString),
 }
 
 impl UError for RmError {}
@@ -61,6 +58,20 @@ pub enum InteractiveMode {
     Always,
     /// Prompt only on write-protected files
     PromptProtected,
+}
+
+// We implement `From` instead of `TryFrom` because clap guarantees that we only receive valid values.
+//
+// The `PromptProtected` variant is not supposed to be created from a string.
+impl From<&str> for InteractiveMode {
+    fn from(s: &str) -> Self {
+        match s {
+            "never" => Self::Never,
+            "once" => Self::Once,
+            "always" => Self::Always,
+            _ => unreachable!("should be prevented by clap"),
+        }
+    }
 }
 
 /// Options for the `rm` command
@@ -133,7 +144,7 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let files: Vec<_> = matches
         .get_many::<OsString>(ARG_FILES)
@@ -169,14 +180,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             } else if matches.get_flag(OPT_PROMPT_ONCE) {
                 InteractiveMode::Once
             } else if matches.contains_id(OPT_INTERACTIVE) {
-                match matches.get_one::<String>(OPT_INTERACTIVE).unwrap().as_str() {
-                    "never" => InteractiveMode::Never,
-                    "once" => InteractiveMode::Once,
-                    "always" => InteractiveMode::Always,
-                    val => {
-                        return Err(RmError::InvalidInteractiveArgument(val.to_string()).into());
-                    }
-                }
+                InteractiveMode::from(matches.get_one::<String>(OPT_INTERACTIVE).unwrap().as_str())
             } else {
                 InteractiveMode::PromptProtected
             }
@@ -222,37 +226,43 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("rm-about"))
-        .override_usage(format_usage(&get_message("rm-usage")))
-        .after_help(get_message("rm-after-help"))
+        .about(translate!("rm-about"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .override_usage(format_usage(&translate!("rm-usage")))
+        .after_help(translate!("rm-after-help"))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
             Arg::new(OPT_FORCE)
                 .short('f')
                 .long(OPT_FORCE)
-                .help(get_message("rm-help-force"))
+                .help(translate!("rm-help-force"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_PROMPT_ALWAYS)
                 .short('i')
-                .help(get_message("rm-help-prompt-always"))
+                .help(translate!("rm-help-prompt-always"))
                 .overrides_with_all([OPT_PROMPT_ONCE, OPT_INTERACTIVE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_PROMPT_ONCE)
                 .short('I')
-                .help(get_message("rm-help-prompt-once"))
+                .help(translate!("rm-help-prompt-once"))
                 .overrides_with_all([OPT_PROMPT_ALWAYS, OPT_INTERACTIVE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_INTERACTIVE)
                 .long(OPT_INTERACTIVE)
-                .help(get_message("rm-help-interactive"))
+                .help(translate!("rm-help-interactive"))
                 .value_name("WHEN")
+                .value_parser(ShortcutValueParser::new([
+                    PossibleValue::new("always").alias("yes"),
+                    PossibleValue::new("once"),
+                    PossibleValue::new("never").alias("no").alias("none"),
+                ]))
                 .num_args(0..=1)
                 .require_equals(true)
                 .default_missing_value("always")
@@ -261,19 +271,19 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_ONE_FILE_SYSTEM)
                 .long(OPT_ONE_FILE_SYSTEM)
-                .help(get_message("rm-help-one-file-system"))
+                .help(translate!("rm-help-one-file-system"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_NO_PRESERVE_ROOT)
                 .long(OPT_NO_PRESERVE_ROOT)
-                .help(get_message("rm-help-no-preserve-root"))
+                .help(translate!("rm-help-no-preserve-root"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_PRESERVE_ROOT)
                 .long(OPT_PRESERVE_ROOT)
-                .help(get_message("rm-help-preserve-root"))
+                .help(translate!("rm-help-preserve-root"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -281,21 +291,21 @@ pub fn uu_app() -> Command {
                 .short('r')
                 .visible_short_alias('R')
                 .long(OPT_RECURSIVE)
-                .help(get_message("rm-help-recursive"))
+                .help(translate!("rm-help-recursive"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_DIR)
                 .short('d')
                 .long(OPT_DIR)
-                .help(get_message("rm-help-dir"))
+                .help(translate!("rm-help-dir"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
                 .short('v')
                 .long(OPT_VERBOSE)
-                .help(get_message("rm-help-verbose"))
+                .help(translate!("rm-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         // From the GNU source code:
@@ -356,7 +366,7 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
                 } else {
                     show_error!(
                         "{}",
-                        RmError::CannotRemoveNoSuchFile(filename.to_string_lossy().to_string())
+                        RmError::CannotRemoveNoSuchFile(filename.to_os_string())
                     );
                     true
                 }
@@ -459,12 +469,9 @@ fn remove_dir_recursive(path: &Path, options: &Options) -> bool {
             match fs::remove_dir_all(path) {
                 Ok(_) => return false,
                 Err(e) => {
-                    let e = e.map_err_context(|| {
-                        get_message_with_args(
-                            "rm-error-cannot-remove",
-                            HashMap::from([("file".to_string(), path.quote().to_string())]),
-                        )
-                    });
+                    let e = e.map_err_context(
+                        || translate!("rm-error-cannot-remove", "file" => path.quote()),
+                    );
                     show_error!("{e}");
                     return true;
                 }
@@ -507,12 +514,8 @@ fn remove_dir_recursive(path: &Path, options: &Options) -> bool {
             error = true;
         }
         Err(e) if !error => {
-            let e = e.map_err_context(|| {
-                get_message_with_args(
-                    "rm-error-cannot-remove",
-                    HashMap::from([("file".to_string(), path.quote().to_string())]),
-                )
-            });
+            let e =
+                e.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
             show_error!("{e}");
             error = true;
         }
@@ -524,10 +527,7 @@ fn remove_dir_recursive(path: &Path, options: &Options) -> bool {
         }
         Ok(_) if options.verbose => println!(
             "{}",
-            get_message_with_args(
-                "rm-verbose-removed-directory",
-                HashMap::from([("file".to_string(), normalize(path).quote().to_string())])
-            )
+            translate!("rm-verbose-removed-directory", "file" => normalize(path).quote())
         ),
         Ok(_) => {}
     }
@@ -542,7 +542,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     if path_is_current_or_parent_directory(path) {
         show_error!(
             "{}",
-            RmError::RefusingToRemoveDirectory(path.display().to_string())
+            RmError::RefusingToRemoveDirectory(path.as_os_str().to_os_string())
         );
         return true;
     }
@@ -559,7 +559,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     } else {
         show_error!(
             "{}",
-            RmError::CannotRemoveIsDirectory(path.to_string_lossy().to_string())
+            RmError::CannotRemoveIsDirectory(path.as_os_str().to_os_string())
         );
         had_err = true;
     }
@@ -580,7 +580,7 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
     if !options.dir && !options.recursive {
         show_error!(
             "{}",
-            RmError::CannotRemoveIsDirectory(path.to_string_lossy().to_string())
+            RmError::CannotRemoveIsDirectory(path.as_os_str().to_os_string())
         );
         return true;
     }
@@ -591,21 +591,14 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
             if options.verbose {
                 println!(
                     "{}",
-                    get_message_with_args(
-                        "rm-verbose-removed-directory",
-                        HashMap::from([("file".to_string(), normalize(path).quote().to_string())])
-                    )
+                    translate!("rm-verbose-removed-directory", "file" => normalize(path).quote())
                 );
             }
             false
         }
         Err(e) => {
-            let e = e.map_err_context(|| {
-                get_message_with_args(
-                    "rm-error-cannot-remove",
-                    HashMap::from([("file".to_string(), path.quote().to_string())]),
-                )
-            });
+            let e =
+                e.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
             show_error!("{e}");
             true
         }
@@ -619,13 +612,7 @@ fn remove_file(path: &Path, options: &Options) -> bool {
                 if options.verbose {
                     println!(
                         "{}",
-                        get_message_with_args(
-                            "rm-verbose-removed",
-                            HashMap::from([(
-                                "file".to_string(),
-                                normalize(path).quote().to_string()
-                            )])
-                        )
+                        translate!("rm-verbose-removed", "file" => normalize(path).quote())
                     );
                 }
             }
@@ -634,7 +621,7 @@ fn remove_file(path: &Path, options: &Options) -> bool {
                     // GNU compatibility (rm/fail-eacces.sh)
                     show_error!(
                         "{}",
-                        RmError::CannotRemovePermissionDenied(path.to_string_lossy().to_string())
+                        RmError::CannotRemovePermissionDenied(path.as_os_str().to_os_string())
                     );
                 } else {
                     show_error!("cannot remove {}: {e}", path.quote());
@@ -703,6 +690,21 @@ fn prompt_file_permission_readonly(path: &Path, options: &Options) -> bool {
     }
 }
 
+/// Checks if the path is referring to current or parent directory , if it is referring to current or any parent directory in the file tree e.g  '/../..' , '../..'
+fn path_is_current_or_parent_directory(path: &Path) -> bool {
+    let path_str = os_str_as_bytes(path.as_os_str());
+    let dir_separator = MAIN_SEPARATOR as u8;
+    if let Ok(path_bytes) = path_str {
+        return path_bytes == ([b'.'])
+            || path_bytes == ([b'.', b'.'])
+            || path_bytes.ends_with(&[dir_separator, b'.'])
+            || path_bytes.ends_with(&[dir_separator, b'.', b'.'])
+            || path_bytes.ends_with(&[dir_separator, b'.', dir_separator])
+            || path_bytes.ends_with(&[dir_separator, b'.', b'.', dir_separator]);
+    }
+    false
+}
+
 // For directories finding if they are writable or not is a hassle. In Unix we can use the built-in rust crate to check mode bits. But other os don't have something similar afaik
 // Most cases are covered by keep eye out for edge cases
 #[cfg(unix)]
@@ -729,21 +731,6 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
     }
 }
 
-/// Checks if the path is referring to current or parent directory , if it is referring to current or any parent directory in the file tree e.g  '/../..' , '../..'
-fn path_is_current_or_parent_directory(path: &Path) -> bool {
-    let path_str = os_str_as_bytes(path.as_os_str());
-    let dir_separator = MAIN_SEPARATOR as u8;
-    if let Ok(path_bytes) = path_str {
-        return path_bytes == ([b'.'])
-            || path_bytes == ([b'.', b'.'])
-            || path_bytes.ends_with(&[dir_separator, b'.'])
-            || path_bytes.ends_with(&[dir_separator, b'.', b'.'])
-            || path_bytes.ends_with(&[dir_separator, b'.', dir_separator])
-            || path_bytes.ends_with(&[dir_separator, b'.', b'.', dir_separator]);
-    }
-    false
-}
-
 // For windows we can use windows metadata trait and file attributes to see if a directory is readonly
 #[cfg(windows)]
 fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
@@ -762,7 +749,7 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
 // I have this here for completeness but it will always return "remove directory {}" because metadata.permissions().readonly() only works for file not directories
 #[cfg(not(windows))]
 #[cfg(not(unix))]
-fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
+fn handle_writable_directory(path: &Path, options: &Options, _metadata: &Metadata) -> bool {
     if options.interactive == InteractiveMode::Always {
         prompt_yes!("remove directory {}?", path.quote())
     } else {

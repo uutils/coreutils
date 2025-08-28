@@ -684,7 +684,8 @@ fn test_touch_set_date_relative_smoke() {
         "2 seconds",
         "2 years 1 week",
         "2 days ago",
-        "2 months and 1 second",
+        "2 months 1 second",
+        "a",
     ];
     for time in times {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -694,11 +695,6 @@ fn test_touch_set_date_relative_smoke() {
             .no_stderr()
             .no_stdout();
     }
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.touch("f");
-    ucmd.args(&["-d", "a", "f"])
-        .fails()
-        .stderr_contains("touch: Unable to parse date");
 }
 
 #[test]
@@ -1016,4 +1012,20 @@ fn test_touch_f_option() {
 
     assert!(at.file_exists(file));
     at.remove(file);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_touch_non_utf8_paths() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let non_utf8_bytes = b"test_\xFF\xFE.txt";
+    let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
+
+    scene.ucmd().arg(non_utf8_name).succeeds().no_output();
+    assert!(std::fs::metadata(at.plus(non_utf8_name)).is_ok());
 }

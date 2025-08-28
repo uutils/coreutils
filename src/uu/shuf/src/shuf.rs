@@ -10,17 +10,18 @@ use clap::{Arg, ArgAction, Command};
 use rand::prelude::SliceRandom;
 use rand::seq::IndexedRandom;
 use rand::{Rng, RngCore};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufWriter, Error, Read, Write, stdin, stdout};
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use uucore::LocalizedCommand;
 use uucore::display::{OsWrite, Quotable};
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 mod rand_read_adapter;
 
@@ -51,7 +52,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let mode = if matches.get_flag(options::ECHO) {
         Mode::Echo(
@@ -71,10 +72,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if let Some(second_file) = operands.next() {
             return Err(UUsageError::new(
                 1,
-                get_message_with_args(
-                    "shuf-error-unexpected-argument",
-                    HashMap::from([("arg".to_string(), second_file.quote().to_string())]),
-                ),
+                translate!("shuf-error-unexpected-argument", "arg" => second_file.quote()),
             ));
         }
         Mode::Default(file.into())
@@ -104,12 +102,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut output = BufWriter::new(match options.output {
         None => Box::new(stdout()) as Box<dyn OsWrite>,
         Some(ref s) => {
-            let file = File::create(s).map_err_context(|| {
-                get_message_with_args(
-                    "shuf-error-failed-to-open-for-writing",
-                    HashMap::from([("file".to_string(), s.quote().to_string())]),
-                )
-            })?;
+            let file = File::create(s).map_err_context(
+                || translate!("shuf-error-failed-to-open-for-writing", "file" => s.quote()),
+            )?;
             Box::new(file) as Box<dyn OsWrite>
         }
     });
@@ -121,12 +116,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut rng = match options.random_source {
         Some(ref r) => {
-            let file = File::open(r).map_err_context(|| {
-                get_message_with_args(
-                    "shuf-error-failed-to-open-random-source",
-                    HashMap::from([("file".to_string(), r.quote().to_string())]),
-                )
-            })?;
+            let file = File::open(r).map_err_context(
+                || translate!("shuf-error-failed-to-open-random-source", "file" => r.quote()),
+            )?;
             WrappedRng::RngFile(rand_read_adapter::ReadRng::new(file))
         }
         None => WrappedRng::RngDefault(rand::rng()),
@@ -152,15 +144,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about(get_message("shuf-about"))
+        .about(translate!("shuf-about"))
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("shuf-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .override_usage(format_usage(&translate!("shuf-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::ECHO)
                 .short('e')
                 .long(options::ECHO)
-                .help(get_message("shuf-help-echo"))
+                .help(translate!("shuf-help-echo"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::ECHO)
                 .conflicts_with(options::INPUT_RANGE),
@@ -170,7 +163,7 @@ pub fn uu_app() -> Command {
                 .short('i')
                 .long(options::INPUT_RANGE)
                 .value_name("LO-HI")
-                .help(get_message("shuf-help-input-range"))
+                .help(translate!("shuf-help-input-range"))
                 .value_parser(parse_range)
                 .conflicts_with(options::FILE_OR_ARGS),
         )
@@ -180,7 +173,7 @@ pub fn uu_app() -> Command {
                 .long(options::HEAD_COUNT)
                 .value_name("COUNT")
                 .action(ArgAction::Append)
-                .help(get_message("shuf-help-head-count"))
+                .help(translate!("shuf-help-head-count"))
                 .value_parser(usize::from_str),
         )
         .arg(
@@ -188,7 +181,7 @@ pub fn uu_app() -> Command {
                 .short('o')
                 .long(options::OUTPUT)
                 .value_name("FILE")
-                .help(get_message("shuf-help-output"))
+                .help(translate!("shuf-help-output"))
                 .value_parser(ValueParser::path_buf())
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -196,7 +189,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::RANDOM_SOURCE)
                 .long(options::RANDOM_SOURCE)
                 .value_name("FILE")
-                .help(get_message("shuf-help-random-source"))
+                .help(translate!("shuf-help-random-source"))
                 .value_parser(ValueParser::path_buf())
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -204,7 +197,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::REPEAT)
                 .short('r')
                 .long(options::REPEAT)
-                .help(get_message("shuf-help-repeat"))
+                .help(translate!("shuf-help-repeat"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::REPEAT),
         )
@@ -212,7 +205,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::ZERO_TERMINATED)
                 .short('z')
                 .long(options::ZERO_TERMINATED)
-                .help(get_message("shuf-help-zero-terminated"))
+                .help(translate!("shuf-help-zero-terminated"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::ZERO_TERMINATED),
         )
@@ -229,7 +222,7 @@ fn read_input_file(filename: &Path) -> UResult<Vec<u8>> {
         let mut data = Vec::new();
         stdin()
             .read_to_end(&mut data)
-            .map_err_context(|| get_message("shuf-error-read-error"))?;
+            .map_err_context(|| translate!("shuf-error-read-error"))?;
         Ok(data)
     } else {
         std::fs::read(filename).map_err_context(|| filename.maybe_quote().to_string())
@@ -440,13 +433,13 @@ fn shuf_exec(
     rng: &mut WrappedRng,
     output: &mut BufWriter<Box<dyn OsWrite>>,
 ) -> UResult<()> {
-    let ctx = || get_message("shuf-error-write-failed");
+    let ctx = || translate!("shuf-error-write-failed");
 
     if opts.repeat {
         if input.is_empty() {
             return Err(USimpleError::new(
                 1,
-                get_message("shuf-error-no-lines-to-repeat"),
+                translate!("shuf-error-no-lines-to-repeat"),
             ));
         }
         for _ in 0..opts.head_count {
@@ -473,10 +466,10 @@ fn parse_range(input_range: &str) -> Result<RangeInclusive<usize>, String> {
         if begin <= end || begin == end + 1 {
             Ok(begin..=end)
         } else {
-            Err(get_message("shuf-error-start-exceeds-end"))
+            Err(translate!("shuf-error-start-exceeds-end"))
         }
     } else {
-        Err(get_message("shuf-error-missing-dash"))
+        Err(translate!("shuf-error-missing-dash"))
     }
 }
 

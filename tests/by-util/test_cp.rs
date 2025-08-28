@@ -4,8 +4,10 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile uufs xattrs
-// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel
+// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx
 use uucore::display::Quotable;
+#[cfg(feature = "feat_selinux")]
+use uucore::selinux::get_getfattr_output;
 use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, new_ucmd, path_concat, util_name};
 
@@ -17,9 +19,9 @@ use std::io::Write;
 use std::os::unix::fs;
 
 #[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
-#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+#[cfg(unix)]
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file;
 #[cfg(not(windows))]
@@ -3087,13 +3089,110 @@ fn test_cp_link_backup() {
 fn test_cp_fifo() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("fifo");
-    ucmd.arg("-r")
+    // Also test that permissions are preserved
+    at.set_mode("fifo", 0o731);
+    ucmd.arg("--preserve=mode")
+        .arg("-r")
         .arg("fifo")
         .arg("fifo2")
         .succeeds()
         .no_stderr()
         .no_stdout();
     assert!(at.is_fifo("fifo2"));
+
+    let metadata = std::fs::metadata(at.subdir.join("fifo2")).unwrap();
+    let permission = uucore::fs::display_permissions(&metadata, true);
+    assert_eq!(permission, "prwx-wx--x".to_string());
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_socket() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mksocket("socket");
+    // Also test that permissions are preserved
+    at.set_mode("socket", 0o731);
+    ucmd.arg("--preserve=mode")
+        .arg("-r")
+        .arg("socket")
+        .arg("socket2")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    let metadata = std::fs::metadata(at.subdir.join("socket2")).unwrap();
+    let permission = uucore::fs::display_permissions(&metadata, true);
+    assert!(metadata.file_type().is_socket());
+    assert_eq!(permission, "srwx-wx--x".to_string());
+}
+
+#[cfg(all(unix, not(target_vendor = "apple")))]
+fn find_other_group(current: u32) -> Option<u32> {
+    // Get the first group that doesn't match current
+    nix::unistd::getgroups().ok()?.iter().find_map(|group| {
+        let gid = group.as_raw();
+        (gid != current).then_some(gid)
+    })
+}
+
+#[cfg(target_vendor = "apple")]
+fn find_other_group(_current: u32) -> Option<u32> {
+    None
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_r_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // Specifically test copying a link in a subdirectory, as the internal path
+    // is slightly different.
+    at.mkdir("tmp");
+    // Create a symlink to a non-existent file to make sure
+    // we don't try to resolve it.
+    at.symlink_file("doesnotexist", "tmp/symlink");
+    let symlink = at.subdir.join("tmp").join("symlink");
+
+    // If we can find such a group, change the owner to a non-default to test
+    // that (group) ownership is preserved.
+    let metadata = std::fs::symlink_metadata(&symlink).unwrap();
+    let other_gid = find_other_group(metadata.gid());
+    if let Some(gid) = other_gid {
+        uucore::perms::wrap_chown(
+            &symlink,
+            &metadata,
+            None,
+            Some(gid),
+            false,
+            uucore::perms::Verbosity::default(),
+        )
+        .expect("Cannot chgrp symlink.");
+    } else {
+        println!("Cannot find a second group to chgrp to.");
+    }
+
+    // Use -r to make sure we copy the symlink itself
+    // --preserve will include ownership
+    ucmd.arg("--preserve")
+        .arg("-r")
+        .arg("tmp")
+        .arg("tmp2")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    // Is symlink2 still a symlink, and does it point at the same place?
+    assert!(at.is_symlink("tmp2/symlink"));
+    let symlink2 = at.subdir.join("tmp2/symlink");
+    assert_eq!(
+        std::fs::read_link(&symlink).unwrap(),
+        std::fs::read_link(&symlink2).unwrap(),
+    );
+
+    // If we found a suitable group, is the group correct after the copy.
+    if let Some(gid) = other_gid {
+        let metadata2 = std::fs::symlink_metadata(&symlink2).unwrap();
+        assert_eq!(metadata2.gid(), gid);
+    }
 }
 
 #[test]
@@ -4322,6 +4421,13 @@ fn test_cp_default_virtual_file() {
 
     use std::os::unix::prelude::MetadataExt;
     let ts = TestScenario::new(util_name!());
+
+    // in case the kernel was not built with profiling support, e.g. WSL
+    if !ts.fixtures.file_exists("/sys/kernel/profiling") {
+        println!("test skipped: /sys/kernel/profiling does not exist");
+        return;
+    }
+
     let at = &ts.fixtures;
     ts.ucmd().arg("/sys/kernel/profiling").arg("b").succeeds();
 
@@ -4405,6 +4511,13 @@ fn test_cp_debug_sparse_always_sparse_virtual_file() {
     // This file has existed at least since 2008, so we assume that it is present on "all" Linux kernels.
     // https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-profiling
     let ts = TestScenario::new(util_name!());
+
+    // in case the kernel was not built with profiling support, e.g. WSL
+    if !ts.fixtures.file_exists("/sys/kernel/profiling") {
+        println!("test skipped: /sys/kernel/profiling does not exist");
+        return;
+    }
+
     ts.ucmd()
         .arg("--debug")
         .arg("--sparse=always")
@@ -4579,6 +4692,13 @@ fn test_cp_debug_default_sparse_virtual_file() {
     // This file has existed at least since 2008, so we assume that it is present on "all" Linux kernels.
     // https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-profiling
     let ts = TestScenario::new(util_name!());
+
+    // in case the kernel was not built with profiling support, e.g. WSL
+    if !ts.fixtures.file_exists("/sys/kernel/profiling") {
+        println!("test skipped: /sys/kernel/profiling does not exist");
+        return;
+    }
+
     ts.ucmd()
         .arg("--debug")
         .arg("/sys/kernel/profiling")
@@ -6182,6 +6302,48 @@ fn test_cp_preserve_xattr_readonly_source() {
 
 #[test]
 #[cfg(unix)]
+fn test_cp_archive_preserves_directory_permissions() {
+    // Test for issue #8407
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("test-images");
+
+    let subdirs = ["fail", "gif-test-suite", "randomly-modified", "reftests"];
+    let mode = 0o755;
+
+    for (i, subdir) in subdirs.iter().enumerate() {
+        let path = format!("test-images/{subdir}");
+        at.mkdir(&path);
+        at.set_mode(&path, mode);
+        at.write(&format!("{path}/test{}.txt", i + 1), "test content");
+    }
+
+    ucmd.arg("-a")
+        .arg("test-images")
+        .arg("test-images-copy")
+        .succeeds();
+
+    let check_mode = |path: &str| {
+        let metadata = at.metadata(path);
+        let mode = metadata.permissions().mode();
+        // Check that the permissions are 755 (only checking the last 9 bits)
+        assert_eq!(
+            mode & 0o777,
+            0o755,
+            "Directory {} has incorrect permissions: {:o}",
+            path,
+            mode & 0o777
+        );
+    };
+
+    for subdir in subdirs {
+        check_mode(&format!("test-images-copy/{subdir}"));
+    }
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(target_os = "macos", ignore = "Flaky on MacOS, see #8453")]
 fn test_cp_from_stdin() {
     let (at, mut ucmd) = at_and_ucmd!();
     let target = "target";
@@ -6249,6 +6411,7 @@ fn test_cp_update_none_interactive_prompt_no() {
 
 /// only unix has `/dev/fd/0`
 #[cfg(unix)]
+#[cfg_attr(target_os = "macos", ignore = "Flaky on MacOS, see #8453")]
 #[test]
 fn test_cp_from_stream() {
     let target = "target";
@@ -6275,6 +6438,7 @@ fn test_cp_from_stream() {
 
 /// only unix has `/dev/fd/0`
 #[cfg(unix)]
+#[cfg_attr(target_os = "macos", ignore = "Flaky on MacOS, see #8453")]
 #[test]
 fn test_cp_from_stream_permission() {
     let target = "target";
@@ -6294,30 +6458,6 @@ fn test_cp_from_stream_permission() {
 
     assert_eq!(at.read(target), test_string);
     assert_eq!(at.metadata(target).permissions().mode(), 0o100_777);
-}
-
-#[cfg(feature = "feat_selinux")]
-fn get_getfattr_output(f: &str) -> String {
-    use std::process::Command;
-
-    let getfattr_output = Command::new("getfattr")
-        .arg(f)
-        .arg("-n")
-        .arg("security.selinux")
-        .output()
-        .expect("Failed to run `getfattr` on the destination file");
-    println!("{getfattr_output:?}");
-    assert!(
-        getfattr_output.status.success(),
-        "getfattr did not run successfully: {}",
-        String::from_utf8_lossy(&getfattr_output.stderr)
-    );
-
-    String::from_utf8_lossy(&getfattr_output.stdout)
-        .split('"')
-        .nth(1)
-        .unwrap_or("")
-        .to_string()
 }
 
 #[test]

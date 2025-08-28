@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
-//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV sigbus tmpfs
+//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV sigbus tmpfs mksocket
 
 #![allow(dead_code)]
 #![allow(
@@ -33,6 +33,8 @@ use std::io::{self, BufWriter, Read, Result, Write};
 use std::os::fd::OwnedFd;
 #[cfg(unix)]
 use std::os::unix::fs::{PermissionsExt, symlink as symlink_dir, symlink as symlink_file};
+#[cfg(unix)]
+use std::os::unix::net::UnixListener;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 #[cfg(unix)]
@@ -1132,6 +1134,13 @@ impl AtPath {
         }
     }
 
+    #[cfg(unix)]
+    pub fn mksocket(&self, socket: &str) {
+        let full_path = self.plus_as_string(socket);
+        log_info("mksocket", &full_path);
+        UnixListener::bind(full_path).expect("Socket file creation failed.");
+    }
+
     #[cfg(not(windows))]
     pub fn is_fifo(&self, fifo: &str) -> bool {
         unsafe {
@@ -1139,6 +1148,19 @@ impl AtPath {
             let mut stat: libc::stat = std::mem::zeroed();
             if libc::stat(name.as_ptr(), &mut stat) >= 0 {
                 libc::S_IFIFO & stat.st_mode as libc::mode_t != 0
+            } else {
+                false
+            }
+        }
+    }
+
+    #[cfg(not(windows))]
+    pub fn is_char_device(&self, char_dev: &str) -> bool {
+        unsafe {
+            let name = CString::new(self.plus_as_string(char_dev)).unwrap();
+            let mut stat: libc::stat = std::mem::zeroed();
+            if libc::stat(name.as_ptr(), &mut stat) >= 0 {
+                libc::S_IFCHR & stat.st_mode as libc::mode_t != 0
             } else {
                 false
             }
@@ -2305,12 +2327,12 @@ impl UChild {
     }
 
     /// Return a [`UChildAssertion`]
-    pub fn make_assertion(&mut self) -> UChildAssertion {
+    pub fn make_assertion(&mut self) -> UChildAssertion<'_> {
         UChildAssertion::new(self)
     }
 
     /// Convenience function for calling [`UChild::delay`] and then [`UChild::make_assertion`]
-    pub fn make_assertion_with_delay(&mut self, millis: u64) -> UChildAssertion {
+    pub fn make_assertion_with_delay(&mut self, millis: u64) -> UChildAssertion<'_> {
         self.delay(millis).make_assertion()
     }
 
@@ -2866,7 +2888,7 @@ pub fn whoami() -> String {
 
 /// Add prefix 'g' for `util_name` if not on linux
 #[cfg(unix)]
-pub fn host_name_for(util_name: &str) -> Cow<str> {
+pub fn host_name_for(util_name: &str) -> Cow<'_, str> {
     // In some environments, e.g. macOS/freebsd, the GNU coreutils are prefixed with "g"
     // to not interfere with the BSD counterparts already in `$PATH`.
     #[cfg(not(target_os = "linux"))]

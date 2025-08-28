@@ -7,7 +7,8 @@
 
 use clap::Command;
 use std::ffi::CStr;
-use uucore::locale::get_message;
+use uucore::LocalizedCommand;
+use uucore::translate;
 use uucore::{error::UResult, show_error};
 
 fn get_userlogin() -> Option<String> {
@@ -23,11 +24,11 @@ fn get_userlogin() -> Option<String> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let _ = uu_app().try_get_matches_from(args)?;
+    let _ = uu_app().get_matches_from_localized(args);
 
     match get_userlogin() {
         Some(userlogin) => println!("{userlogin}"),
-        None => show_error!("{}", get_message("logname-error-no-login-name")),
+        None => show_error!("{}", translate!("logname-error-no-login-name")),
     }
 
     Ok(())
@@ -36,7 +37,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .override_usage(uucore::util_name())
-        .about(get_message("logname-about"))
+        .about(translate!("logname-about"))
         .infer_long_args(true)
 }

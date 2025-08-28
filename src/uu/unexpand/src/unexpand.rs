@@ -6,7 +6,6 @@
 // spell-checker:ignore (ToDO) nums aflag uflag scol prevtab amode ctype cwidth nbytes lastcol pctype Preprocess
 
 use clap::{Arg, ArgAction, Command};
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
@@ -16,21 +15,20 @@ use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::translate;
 use uucore::{format_usage, show};
-
-use uucore::locale::{get_message, get_message_with_args};
 
 const DEFAULT_TABSTOP: usize = 8;
 
 #[derive(Debug, Error)]
 enum ParseError {
-    #[error("{}", get_message_with_args("unexpand-error-invalid-character", HashMap::from([("char".to_string(), _0.quote().to_string())])))]
+    #[error("{}", translate!("unexpand-error-invalid-character", "char" => _0.quote()))]
     InvalidCharacter(String),
-    #[error("{}", get_message("unexpand-error-tab-size-cannot-be-zero"))]
+    #[error("{}", translate!("unexpand-error-tab-size-cannot-be-zero"))]
     TabSizeCannotBeZero,
-    #[error("{}", get_message("unexpand-error-tab-size-too-large"))]
+    #[error("{}", translate!("unexpand-error-tab-size-too-large"))]
     TabSizeTooLarge,
-    #[error("{}", get_message("unexpand-error-tab-sizes-must-be-ascending"))]
+    #[error("{}", translate!("unexpand-error-tab-sizes-must-be-ascending"))]
     TabSizesMustBeAscending,
 }
 
@@ -157,8 +155,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("unexpand-usage")))
-        .about(get_message("unexpand-about"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .override_usage(format_usage(&translate!("unexpand-usage")))
+        .about(translate!("unexpand-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE)
@@ -170,21 +169,21 @@ pub fn uu_app() -> Command {
             Arg::new(options::ALL)
                 .short('a')
                 .long(options::ALL)
-                .help(get_message("unexpand-help-all"))
+                .help(translate!("unexpand-help-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FIRST_ONLY)
                 .short('f')
                 .long(options::FIRST_ONLY)
-                .help(get_message("unexpand-help-first-only"))
+                .help(translate!("unexpand-help-first-only"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TABS)
                 .short('t')
                 .long(options::TABS)
-                .help(get_message("unexpand-help-tabs"))
+                .help(translate!("unexpand-help-tabs"))
                 .action(ArgAction::Append)
                 .value_name("N, LIST"),
         )
@@ -192,7 +191,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::NO_UTF8)
                 .short('U')
                 .long(options::NO_UTF8)
-                .help(get_message("unexpand-help-no-utf8"))
+                .help(translate!("unexpand-help-no-utf8"))
                 .action(ArgAction::SetTrue),
         )
 }
@@ -203,10 +202,7 @@ fn open(path: &str) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     if filename.is_dir() {
         Err(Box::new(USimpleError {
             code: 1,
-            message: get_message_with_args(
-                "unexpand-error-is-directory",
-                HashMap::from([("path".to_string(), filename.display().to_string())]),
-            ),
+            message: translate!("unexpand-error-is-directory", "path" => filename.display()),
         }))
     } else if path == "-" {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))

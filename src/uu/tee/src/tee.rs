@@ -6,21 +6,21 @@
 // cSpell:ignore POLLERR POLLRDBAND pfds revents
 
 use clap::{Arg, ArgAction, Command, builder::PossibleValue};
+use std::ffi::OsString;
 use std::fs::OpenOptions;
 use std::io::{Error, ErrorKind, Read, Result, Write, stdin, stdout};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+use uucore::translate;
 use uucore::{format_usage, show_error};
 
 // spell-checker:ignore nopipe
 
+use uucore::LocalizedCommand;
 #[cfg(unix)]
 use uucore::signals::{enable_pipe_errors, ignore_interrupts};
-
-use std::collections::HashMap;
-use uucore::locale::{get_message, get_message_with_args};
 
 mod options {
     pub const APPEND: &str = "append";
@@ -35,7 +35,7 @@ struct Options {
     append: bool,
     ignore_interrupts: bool,
     ignore_pipe_errors: bool,
-    files: Vec<String>,
+    files: Vec<OsString>,
     output_error: Option<OutputErrorMode>,
 }
 
@@ -53,7 +53,7 @@ enum OutputErrorMode {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let append = matches.get_flag(options::APPEND);
     let ignore_interrupts = matches.get_flag(options::IGNORE_INTERRUPTS);
@@ -78,8 +78,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let files = matches
-        .get_many::<String>(options::FILE)
-        .map(|v| v.map(ToString::to_string).collect())
+        .get_many::<OsString>(options::FILE)
+        .map(|v| v.cloned().collect())
         .unwrap_or_default();
 
     let options = Options {
@@ -96,9 +96,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("tee-about"))
-        .override_usage(format_usage(&get_message("tee-usage")))
-        .after_help(get_message("tee-after-help"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("tee-about"))
+        .override_usage(format_usage(&translate!("tee-usage")))
+        .after_help(translate!("tee-after-help"))
         .infer_long_args(true)
         // Since we use value-specific help texts for "--output-error", clap's "short help" and "long help" differ.
         // However, this is something that the GNU tests explicitly test for, so we *always* show the long help instead.
@@ -107,32 +108,33 @@ pub fn uu_app() -> Command {
             Arg::new("--help")
                 .short('h')
                 .long("help")
-                .help(get_message("tee-help-help"))
+                .help(translate!("tee-help-help"))
                 .action(ArgAction::HelpLong),
         )
         .arg(
             Arg::new(options::APPEND)
                 .long(options::APPEND)
                 .short('a')
-                .help(get_message("tee-help-append"))
+                .help(translate!("tee-help-append"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::IGNORE_INTERRUPTS)
                 .long(options::IGNORE_INTERRUPTS)
                 .short('i')
-                .help(get_message("tee-help-ignore-interrupts"))
+                .help(translate!("tee-help-ignore-interrupts"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILE)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::IGNORE_PIPE_ERRORS)
                 .short('p')
-                .help(get_message("tee-help-ignore-pipe-errors"))
+                .help(translate!("tee-help-ignore-pipe-errors"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -141,14 +143,14 @@ pub fn uu_app() -> Command {
                 .require_equals(true)
                 .num_args(0..=1)
                 .value_parser(ShortcutValueParser::new([
-                    PossibleValue::new("warn").help(get_message("tee-help-output-error-warn")),
+                    PossibleValue::new("warn").help(translate!("tee-help-output-error-warn")),
                     PossibleValue::new("warn-nopipe")
-                        .help(get_message("tee-help-output-error-warn-nopipe")),
-                    PossibleValue::new("exit").help(get_message("tee-help-output-error-exit")),
+                        .help(translate!("tee-help-output-error-warn-nopipe")),
+                    PossibleValue::new("exit").help(translate!("tee-help-output-error-exit")),
                     PossibleValue::new("exit-nopipe")
-                        .help(get_message("tee-help-output-error-exit-nopipe")),
+                        .help(translate!("tee-help-output-error-exit-nopipe")),
                 ]))
-                .help(get_message("tee-help-output-error")),
+                .help(translate!("tee-help-output-error")),
         )
 }
 
@@ -175,7 +177,7 @@ fn tee(options: &Options) -> Result<()> {
     writers.insert(
         0,
         NamedWriter {
-            name: get_message("tee-standard-output"),
+            name: translate!("tee-standard-output"),
             inner: Box::new(stdout()),
         },
     );
@@ -252,7 +254,7 @@ fn copy(mut input: impl Read, mut output: impl Write) -> Result<usize> {
 /// If that error should lead to program termination, this function returns Some(Err()),
 /// otherwise it returns None.
 fn open(
-    name: &str,
+    name: &OsString,
     append: bool,
     output_error: Option<&OutputErrorMode>,
 ) -> Option<Result<NamedWriter>> {
@@ -266,10 +268,10 @@ fn open(
     match mode.write(true).create(true).open(path.as_path()) {
         Ok(file) => Some(Ok(NamedWriter {
             inner: Box::new(file),
-            name: name.to_owned(),
+            name: name.to_string_lossy().to_string(),
         })),
         Err(f) => {
-            show_error!("{}: {f}", name.maybe_quote());
+            show_error!("{}: {f}", name.to_string_lossy().maybe_quote());
             match output_error {
                 Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) => Some(Err(f)),
                 _ => None,
@@ -414,13 +416,7 @@ impl Read for NamedReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         match self.inner.read(buf) {
             Err(f) => {
-                show_error!(
-                    "{}",
-                    get_message_with_args(
-                        "tee-error-stdin",
-                        HashMap::from([("error".to_string(), f.to_string())])
-                    )
-                );
+                show_error!("{}", translate!("tee-error-stdin", "error" => f));
                 Err(f)
             }
             okay => okay,

@@ -71,7 +71,9 @@ fi
 
 release_tag_GNU="v9.7"
 
-if test ! -d "${path_GNU}"; then
+# check if the GNU coreutils has been cloned, if not print instructions
+# note: the ${path_GNU} might already exist, so we check for the .git directory
+if test ! -d "${path_GNU}/.git"; then
     echo "Could not find GNU coreutils (expected at '${path_GNU}')"
     echo "Run the following to download into the expected path:"
     echo "git clone --recurse-submodules https://github.com/coreutils/coreutils.git \"${path_GNU}\""
@@ -136,7 +138,7 @@ cd -
 touch g
 echo "stat with selinux support"
 ./target/debug/stat -c%C g || true
-
+rm g
 
 cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
 # Create *sum binaries
@@ -329,8 +331,10 @@ sed -i -e "s|44 45|48 49|" tests/ls/stat-failed.sh
 
 # small difference in the error message
 # Use GNU sed for /c command
-"${SED}" -i -e "/ls: invalid argument 'XX' for 'time style'/,/Try 'ls --help' for more information\./c\
-ls: invalid --time-style argument 'XX'\nPossible values are: [\"full-iso\", \"long-iso\", \"iso\", \"locale\", \"+FORMAT (e.g., +%H:%M) for a 'date'-style format\"]\n\nFor more information try --help" tests/ls/time-style-diag.sh
+"${SED}" -i -e "s/ls: invalid argument 'XX' for 'time style'/ls: invalid --time-style argument 'XX'/" \
+    -e "s/Valid arguments are:/Possible values are:/" \
+    -e "s/Try 'ls --help' for more information./\nFor more information try --help/" \
+    tests/ls/time-style-diag.sh
 
 # disable two kind of tests:
 # "hostid BEFORE --help" doesn't fail for GNU. we fail. we are probably doing better

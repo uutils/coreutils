@@ -15,6 +15,7 @@ use std::io::{BufReader, Read, stdin};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
+use uucore::LocalizedCommand;
 use uucore::checksum::ChecksumError;
 use uucore::checksum::ChecksumOptions;
 use uucore::checksum::ChecksumVerbose;
@@ -27,8 +28,8 @@ use uucore::checksum::escape_filename;
 use uucore::checksum::perform_checksum_validation;
 use uucore::error::{FromIo, UResult};
 use uucore::format_usage;
-use uucore::locale::get_message;
 use uucore::sum::{Digest, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
+use uucore::translate;
 
 const NAME: &str = "hashsum";
 
@@ -181,7 +182,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     //        causes "error: " to be printed twice (once from crash!() and once from clap).  With
     //        the current setup, the name of the utility is not printed, but I think this is at
     //        least somewhat better from a user's perspective.
-    let matches = command.try_get_matches_from(args)?;
+    let matches = command.get_matches_from_localized(args);
 
     let input_length: Option<&usize> = if binary_name == "b2sum" {
         matches.get_one::<usize>(options::LENGTH)
@@ -311,8 +312,9 @@ mod options {
 pub fn uu_app_common() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("hashsum-about"))
-        .override_usage(format_usage(&get_message("hashsum-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("hashsum-about"))
+        .override_usage(format_usage(&translate!("hashsum-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
@@ -322,11 +324,11 @@ pub fn uu_app_common() -> Command {
                 .help({
                     #[cfg(windows)]
                     {
-                        get_message("hashsum-help-binary-windows")
+                        translate!("hashsum-help-binary-windows")
                     }
                     #[cfg(not(windows))]
                     {
-                        get_message("hashsum-help-binary-other")
+                        translate!("hashsum-help-binary-other")
                     }
                 })
                 .action(ArgAction::SetTrue),
@@ -335,14 +337,14 @@ pub fn uu_app_common() -> Command {
             Arg::new(options::CHECK)
                 .short('c')
                 .long("check")
-                .help(get_message("hashsum-help-check"))
+                .help(translate!("hashsum-help-check"))
                 .action(ArgAction::SetTrue)
                 .conflicts_with("tag"),
         )
         .arg(
             Arg::new(options::TAG)
                 .long("tag")
-                .help(get_message("hashsum-help-tag"))
+                .help(translate!("hashsum-help-tag"))
                 .action(ArgAction::SetTrue)
                 .conflicts_with("text"),
         )
@@ -353,11 +355,11 @@ pub fn uu_app_common() -> Command {
                 .help({
                     #[cfg(windows)]
                     {
-                        get_message("hashsum-help-text-windows")
+                        translate!("hashsum-help-text-windows")
                     }
                     #[cfg(not(windows))]
                     {
-                        get_message("hashsum-help-text-other")
+                        translate!("hashsum-help-text-other")
                     }
                 })
                 .conflicts_with("binary")
@@ -367,7 +369,7 @@ pub fn uu_app_common() -> Command {
             Arg::new(options::QUIET)
                 .short('q')
                 .long(options::QUIET)
-                .help(get_message("hashsum-help-quiet"))
+                .help(translate!("hashsum-help-quiet"))
                 .action(ArgAction::SetTrue)
                 .overrides_with_all([options::STATUS, options::WARN]),
         )
@@ -375,27 +377,27 @@ pub fn uu_app_common() -> Command {
             Arg::new(options::STATUS)
                 .short('s')
                 .long("status")
-                .help(get_message("hashsum-help-status"))
+                .help(translate!("hashsum-help-status"))
                 .action(ArgAction::SetTrue)
                 .overrides_with_all([options::QUIET, options::WARN]),
         )
         .arg(
             Arg::new(options::STRICT)
                 .long("strict")
-                .help(get_message("hashsum-help-strict"))
+                .help(translate!("hashsum-help-strict"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("ignore-missing")
                 .long("ignore-missing")
-                .help(get_message("hashsum-help-ignore-missing"))
+                .help(translate!("hashsum-help-ignore-missing"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::WARN)
                 .short('w')
                 .long("warn")
-                .help(get_message("hashsum-help-warn"))
+                .help(translate!("hashsum-help-warn"))
                 .action(ArgAction::SetTrue)
                 .overrides_with_all([options::QUIET, options::STATUS]),
         )
@@ -403,7 +405,7 @@ pub fn uu_app_common() -> Command {
             Arg::new("zero")
                 .short('z')
                 .long("zero")
-                .help(get_message("hashsum-help-zero"))
+                .help(translate!("hashsum-help-zero"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -426,7 +428,7 @@ fn uu_app_opt_length(command: Command) -> Command {
             .long(options::LENGTH)
             .value_parser(value_parser!(usize))
             .short('l')
-            .help(get_message("hashsum-help-length"))
+            .help(translate!("hashsum-help-length"))
             .overrides_with(options::LENGTH)
             .action(ArgAction::Set),
     )
@@ -440,7 +442,7 @@ fn uu_app_b3sum_opts(command: Command) -> Command {
     command.arg(
         Arg::new("no-names")
             .long("no-names")
-            .help(get_message("hashsum-help-no-names"))
+            .help(translate!("hashsum-help-no-names"))
             .action(ArgAction::SetTrue),
     )
 }
@@ -454,7 +456,7 @@ fn uu_app_opt_bits(command: Command) -> Command {
     command.arg(
         Arg::new("bits")
             .long("bits")
-            .help(get_message("hashsum-help-bits"))
+            .help(translate!("hashsum-help-bits"))
             .value_name("BITS")
             // XXX: should we actually use validators?  they're not particularly efficient
             .value_parser(parse_bit_num),
@@ -464,21 +466,21 @@ fn uu_app_opt_bits(command: Command) -> Command {
 pub fn uu_app_custom() -> Command {
     let mut command = uu_app_b3sum_opts(uu_app_opt_bits(uu_app_common()));
     let algorithms = &[
-        ("md5", get_message("hashsum-help-md5")),
-        ("sha1", get_message("hashsum-help-sha1")),
-        ("sha224", get_message("hashsum-help-sha224")),
-        ("sha256", get_message("hashsum-help-sha256")),
-        ("sha384", get_message("hashsum-help-sha384")),
-        ("sha512", get_message("hashsum-help-sha512")),
-        ("sha3", get_message("hashsum-help-sha3")),
-        ("sha3-224", get_message("hashsum-help-sha3-224")),
-        ("sha3-256", get_message("hashsum-help-sha3-256")),
-        ("sha3-384", get_message("hashsum-help-sha3-384")),
-        ("sha3-512", get_message("hashsum-help-sha3-512")),
-        ("shake128", get_message("hashsum-help-shake128")),
-        ("shake256", get_message("hashsum-help-shake256")),
-        ("b2sum", get_message("hashsum-help-b2sum")),
-        ("b3sum", get_message("hashsum-help-b3sum")),
+        ("md5", translate!("hashsum-help-md5")),
+        ("sha1", translate!("hashsum-help-sha1")),
+        ("sha224", translate!("hashsum-help-sha224")),
+        ("sha256", translate!("hashsum-help-sha256")),
+        ("sha384", translate!("hashsum-help-sha384")),
+        ("sha512", translate!("hashsum-help-sha512")),
+        ("sha3", translate!("hashsum-help-sha3")),
+        ("sha3-224", translate!("hashsum-help-sha3-224")),
+        ("sha3-256", translate!("hashsum-help-sha3-256")),
+        ("sha3-384", translate!("hashsum-help-sha3-384")),
+        ("sha3-512", translate!("hashsum-help-sha3-512")),
+        ("shake128", translate!("hashsum-help-shake128")),
+        ("shake256", translate!("hashsum-help-shake256")),
+        ("b2sum", translate!("hashsum-help-b2sum")),
+        ("b3sum", translate!("hashsum-help-b3sum")),
     ];
 
     for (name, desc) in algorithms {
@@ -550,7 +552,7 @@ where
             options.binary,
             options.output_bits,
         )
-        .map_err_context(|| get_message("hashsum-error-failed-to-read-input"))?;
+        .map_err_context(|| translate!("hashsum-error-failed-to-read-input"))?;
         let (escaped_filename, prefix) = escape_filename(filename);
         if options.tag {
             if options.algoname == "blake2b" {

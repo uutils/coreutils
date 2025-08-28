@@ -12,7 +12,7 @@ use uucore::error::UResult;
 use uucore::format::{FormatChar, OctalParsing, parse_escape_only};
 use uucore::{format_usage, os_str_as_bytes};
 
-use uucore::locale::get_message;
+use uucore::translate;
 
 mod options {
     pub const STRING: &str = "STRING";
@@ -190,26 +190,27 @@ pub fn uu_app() -> Command {
         .trailing_var_arg(true)
         .allow_hyphen_values(true)
         .version(uucore::crate_version!())
-        .about(get_message("echo-about"))
-        .after_help(get_message("echo-after-help"))
-        .override_usage(format_usage(&get_message("echo-usage")))
+        .about(translate!("echo-about"))
+        .after_help(translate!("echo-after-help"))
+        .override_usage(format_usage(&translate!("echo-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .arg(
             Arg::new(options::NO_NEWLINE)
                 .short('n')
-                .help(get_message("echo-help-no-newline"))
+                .help(translate!("echo-help-no-newline"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ENABLE_BACKSLASH_ESCAPE)
                 .short('e')
-                .help(get_message("echo-help-enable-escapes"))
+                .help(translate!("echo-help-enable-escapes"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::DISABLE_BACKSLASH_ESCAPE),
         )
         .arg(
             Arg::new(options::DISABLE_BACKSLASH_ESCAPE)
                 .short('E')
-                .help(get_message("echo-help-disable-escapes"))
+                .help(translate!("echo-help-disable-escapes"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::ENABLE_BACKSLASH_ESCAPE),
         )

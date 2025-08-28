@@ -33,6 +33,7 @@ uucore = { workspace = true, features = [
   "entries",
   "format",
   "fs",
+  "fsext",
   "fsxattr",
   "parser",
   "quoting-style",
@@ -40,6 +41,7 @@ uucore = { workspace = true, features = [
   "version-cmp",
 ] }
 uutils_term_grid = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "ls"

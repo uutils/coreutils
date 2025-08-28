@@ -30,6 +30,7 @@
 #![allow(dead_code)]
 
 use crate::features::tty::Teletype;
+
 use std::hash::Hash;
 use std::{
     collections::HashMap,
@@ -38,6 +39,7 @@ use std::{
     path::PathBuf,
     rc::Rc,
 };
+
 use walkdir::{DirEntry, WalkDir};
 
 /// State or process

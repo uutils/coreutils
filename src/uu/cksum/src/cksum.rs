@@ -7,7 +7,6 @@
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command, value_parser};
-use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write, stdin, stdout};
@@ -19,7 +18,9 @@ use uucore::checksum::{
     ChecksumVerbose, SUPPORTED_ALGORITHMS, calculate_blake2b_length, detect_algo, digest_reader,
     perform_checksum_validation,
 };
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
+
+use uucore::LocalizedCommand;
 use uucore::{
     encoding,
     error::{FromIo, UResult, USimpleError},
@@ -89,17 +90,14 @@ where
         if filename.is_dir() {
             show!(USimpleError::new(
                 1,
-                get_message_with_args(
-                    "cksum-error-is-directory",
-                    HashMap::from([("file".to_string(), filename.display().to_string())])
-                )
+                translate!("cksum-error-is-directory", "file" => filename.display())
             ));
             continue;
         }
 
         let (sum_hex, sz) =
             digest_reader(&mut options.digest, &mut file, false, options.output_bits)
-                .map_err_context(|| get_message("cksum-error-failed-to-read-input"))?;
+                .map_err_context(|| translate!("cksum-error-failed-to-read-input"))?;
 
         let sum = match options.output_format {
             OutputFormat::Raw => {
@@ -239,7 +237,7 @@ fn handle_tag_text_binary_flags<S: AsRef<OsStr>>(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let check = matches.get_flag(options::CHECK);
 
@@ -346,8 +344,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("cksum-about"))
-        .override_usage(format_usage(&get_message("cksum-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("cksum-about"))
+        .override_usage(format_usage(&translate!("cksum-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
@@ -361,21 +360,21 @@ pub fn uu_app() -> Command {
             Arg::new(options::ALGORITHM)
                 .long(options::ALGORITHM)
                 .short('a')
-                .help(get_message("cksum-help-algorithm"))
+                .help(translate!("cksum-help-algorithm"))
                 .value_name("ALGORITHM")
                 .value_parser(SUPPORTED_ALGORITHMS),
         )
         .arg(
             Arg::new(options::UNTAGGED)
                 .long(options::UNTAGGED)
-                .help(get_message("cksum-help-untagged"))
+                .help(translate!("cksum-help-untagged"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::TAG),
         )
         .arg(
             Arg::new(options::TAG)
                 .long(options::TAG)
-                .help(get_message("cksum-help-tag"))
+                .help(translate!("cksum-help-tag"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::UNTAGGED),
         )
@@ -384,32 +383,32 @@ pub fn uu_app() -> Command {
                 .long(options::LENGTH)
                 .value_parser(value_parser!(usize))
                 .short('l')
-                .help(get_message("cksum-help-length"))
+                .help(translate!("cksum-help-length"))
                 .action(ArgAction::Set),
         )
         .arg(
             Arg::new(options::RAW)
                 .long(options::RAW)
-                .help(get_message("cksum-help-raw"))
+                .help(translate!("cksum-help-raw"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::STRICT)
                 .long(options::STRICT)
-                .help(get_message("cksum-help-strict"))
+                .help(translate!("cksum-help-strict"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CHECK)
                 .short('c')
                 .long(options::CHECK)
-                .help(get_message("cksum-help-check"))
+                .help(translate!("cksum-help-check"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::BASE64)
                 .long(options::BASE64)
-                .help(get_message("cksum-help-base64"))
+                .help(translate!("cksum-help-base64"))
                 .action(ArgAction::SetTrue)
                 // Even though this could easily just override an earlier '--raw',
                 // GNU cksum does not permit these flags to be combined:
@@ -435,36 +434,36 @@ pub fn uu_app() -> Command {
             Arg::new(options::WARN)
                 .short('w')
                 .long("warn")
-                .help(get_message("cksum-help-warn"))
+                .help(translate!("cksum-help-warn"))
                 .action(ArgAction::SetTrue)
                 .overrides_with_all([options::STATUS, options::QUIET]),
         )
         .arg(
             Arg::new(options::STATUS)
                 .long("status")
-                .help(get_message("cksum-help-status"))
+                .help(translate!("cksum-help-status"))
                 .action(ArgAction::SetTrue)
                 .overrides_with_all([options::WARN, options::QUIET]),
         )
         .arg(
             Arg::new(options::QUIET)
                 .long(options::QUIET)
-                .help(get_message("cksum-help-quiet"))
+                .help(translate!("cksum-help-quiet"))
                 .action(ArgAction::SetTrue)
                 .overrides_with_all([options::WARN, options::STATUS]),
         )
         .arg(
             Arg::new(options::IGNORE_MISSING)
                 .long(options::IGNORE_MISSING)
-                .help(get_message("cksum-help-ignore-missing"))
+                .help(translate!("cksum-help-ignore-missing"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ZERO)
                 .long(options::ZERO)
                 .short('z')
-                .help(get_message("cksum-help-zero"))
+                .help(translate!("cksum-help-zero"))
                 .action(ArgAction::SetTrue),
         )
-        .after_help(get_message("cksum-after-help"))
+        .after_help(translate!("cksum-after-help"))
 }

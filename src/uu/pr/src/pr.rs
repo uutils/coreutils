@@ -6,7 +6,6 @@
 
 // spell-checker:ignore (ToDO) adFfmprt, kmerge
 
-use chrono::{DateTime, Local};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
 use regex::Regex;
@@ -14,14 +13,16 @@ use std::fs::{File, metadata};
 use std::io::{BufRead, BufReader, Lines, Read, Write, stdin, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
+use std::time::SystemTime;
 use thiserror::Error;
 
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::format_usage;
+use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
+use uucore::translate;
 
-use std::collections::HashMap;
-use uucore::locale::{get_message, get_message_with_args};
 const TAB: char = '\t';
 const LINES_PER_PAGE: usize = 66;
 const LINES_PER_PAGE_FOR_FORM_FEED: usize = 63;
@@ -33,10 +34,10 @@ const DEFAULT_COLUMN_WIDTH: usize = 72;
 const DEFAULT_COLUMN_WIDTH_WITH_S_OPTION: usize = 512;
 const DEFAULT_COLUMN_SEPARATOR: &char = &TAB;
 const FF: u8 = 0x0C_u8;
-const DATE_TIME_FORMAT: &str = "%b %d %H:%M %Y";
 
 mod options {
     pub const HEADER: &str = "header";
+    pub const DATE_FORMAT: &str = "date-format";
     pub const DOUBLE_SPACE: &str = "double-space";
     pub const NUMBER_LINES: &str = "number-lines";
     pub const FIRST_LINE_NUMBER: &str = "first-line-number";
@@ -136,59 +137,67 @@ impl From<std::io::Error> for PrError {
 
 #[derive(Debug, Error)]
 enum PrError {
-    #[error("{}", get_message_with_args("pr-error-reading-input", HashMap::from([("file".to_string(), file.clone())])))]
+    #[error("{}", translate!("pr-error-reading-input", "file" => file.clone()))]
     Input {
         #[source]
         source: std::io::Error,
         file: String,
     },
-    #[error("{}", get_message_with_args("pr-error-unknown-filetype", HashMap::from([("file".to_string(), file.clone())])))]
+    #[error("{}", translate!("pr-error-unknown-filetype", "file" => file.clone()))]
     UnknownFiletype { file: String },
     #[error("pr: {msg}")]
     EncounteredErrors { msg: String },
-    #[error("{}", get_message_with_args("pr-error-is-directory", HashMap::from([("file".to_string(), file.clone())])))]
+    #[error("{}", translate!("pr-error-is-directory", "file" => file.clone()))]
     IsDirectory { file: String },
     #[cfg(not(windows))]
-    #[error("{}", get_message_with_args("pr-error-socket-not-supported", HashMap::from([("file".to_string(), file.clone())])))]
+    #[error("{}", translate!("pr-error-socket-not-supported", "file" => file.clone()))]
     IsSocket { file: String },
-    #[error("{}", get_message_with_args("pr-error-no-such-file", HashMap::from([("file".to_string(), file.clone())])))]
+    #[error("{}", translate!("pr-error-no-such-file", "file" => file.clone()))]
     NotExists { file: String },
 }
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("pr-about"))
-        .after_help(get_message("pr-after-help"))
-        .override_usage(format_usage(&get_message("pr-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("pr-about"))
+        .after_help(translate!("pr-after-help"))
+        .override_usage(format_usage(&translate!("pr-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .disable_help_flag(true)
         .arg(
             Arg::new(options::PAGES)
                 .long(options::PAGES)
-                .help(get_message("pr-help-pages"))
+                .help(translate!("pr-help-pages"))
                 .value_name("FIRST_PAGE[:LAST_PAGE]"),
         )
         .arg(
             Arg::new(options::HEADER)
                 .short('h')
                 .long(options::HEADER)
-                .help(get_message("pr-help-header"))
+                .help(translate!("pr-help-header"))
                 .value_name("STRING"),
+        )
+        .arg(
+            Arg::new(options::DATE_FORMAT)
+                .short('D')
+                .long(options::DATE_FORMAT)
+                .value_name("FORMAT")
+                .help(translate!("pr-help-date-format")),
         )
         .arg(
             Arg::new(options::DOUBLE_SPACE)
                 .short('d')
                 .long(options::DOUBLE_SPACE)
-                .help(get_message("pr-help-double-space"))
+                .help(translate!("pr-help-double-space"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NUMBER_LINES)
                 .short('n')
                 .long(options::NUMBER_LINES)
-                .help(get_message("pr-help-number-lines"))
+                .help(translate!("pr-help-number-lines"))
                 .allow_hyphen_values(true)
                 .value_name("[char][width]"),
         )
@@ -196,28 +205,28 @@ pub fn uu_app() -> Command {
             Arg::new(options::FIRST_LINE_NUMBER)
                 .short('N')
                 .long(options::FIRST_LINE_NUMBER)
-                .help(get_message("pr-help-first-line-number"))
+                .help(translate!("pr-help-first-line-number"))
                 .value_name("NUMBER"),
         )
         .arg(
             Arg::new(options::OMIT_HEADER)
                 .short('t')
                 .long(options::OMIT_HEADER)
-                .help(get_message("pr-help-omit-header"))
+                .help(translate!("pr-help-omit-header"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PAGE_LENGTH)
                 .short('l')
                 .long(options::PAGE_LENGTH)
-                .help(get_message("pr-help-page-length"))
+                .help(translate!("pr-help-page-length"))
                 .value_name("PAGE_LENGTH"),
         )
         .arg(
             Arg::new(options::NO_FILE_WARNINGS)
                 .short('r')
                 .long(options::NO_FILE_WARNINGS)
-                .help(get_message("pr-help-no-file-warnings"))
+                .help(translate!("pr-help-no-file-warnings"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -225,74 +234,74 @@ pub fn uu_app() -> Command {
                 .short('F')
                 .short_alias('f')
                 .long(options::FORM_FEED)
-                .help(get_message("pr-help-form-feed"))
+                .help(translate!("pr-help-form-feed"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COLUMN_WIDTH)
                 .short('w')
                 .long(options::COLUMN_WIDTH)
-                .help(get_message("pr-help-column-width"))
+                .help(translate!("pr-help-column-width"))
                 .value_name("width"),
         )
         .arg(
             Arg::new(options::PAGE_WIDTH)
                 .short('W')
                 .long(options::PAGE_WIDTH)
-                .help(get_message("pr-help-page-width"))
+                .help(translate!("pr-help-page-width"))
                 .value_name("width"),
         )
         .arg(
             Arg::new(options::ACROSS)
                 .short('a')
                 .long(options::ACROSS)
-                .help(get_message("pr-help-across"))
+                .help(translate!("pr-help-across"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COLUMN)
                 .long(options::COLUMN)
-                .help(get_message("pr-help-column"))
+                .help(translate!("pr-help-column"))
                 .value_name("column"),
         )
         .arg(
             Arg::new(options::COLUMN_CHAR_SEPARATOR)
                 .short('s')
                 .long(options::COLUMN_CHAR_SEPARATOR)
-                .help(get_message("pr-help-column-char-separator"))
+                .help(translate!("pr-help-column-char-separator"))
                 .value_name("char"),
         )
         .arg(
             Arg::new(options::COLUMN_STRING_SEPARATOR)
                 .short('S')
                 .long(options::COLUMN_STRING_SEPARATOR)
-                .help(get_message("pr-help-column-string-separator"))
+                .help(translate!("pr-help-column-string-separator"))
                 .value_name("string"),
         )
         .arg(
             Arg::new(options::MERGE)
                 .short('m')
                 .long(options::MERGE)
-                .help(get_message("pr-help-merge"))
+                .help(translate!("pr-help-merge"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::INDENT)
                 .short('o')
                 .long(options::INDENT)
-                .help(get_message("pr-help-indent"))
+                .help(translate!("pr-help-indent"))
                 .value_name("margin"),
         )
         .arg(
             Arg::new(options::JOIN_LINES)
                 .short('J')
-                .help(get_message("pr-help-join-lines"))
+                .help(translate!("pr-help-join-lines"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help(get_message("pr-help-help"))
+                .help(translate!("pr-help-help"))
                 .action(ArgAction::Help),
         )
         .arg(
@@ -308,8 +317,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let opt_args = recreate_arguments(&args);
 
-    let mut command = uu_app();
-    let matches = command.try_get_matches_from_mut(opt_args)?;
+    let command = uu_app();
+    let matches = command.get_matches_from_mut_localized(opt_args);
 
     let mut files = matches
         .get_many::<String>(options::FILES)
@@ -402,6 +411,25 @@ fn parse_usize(matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>
         .map(from_parse_error_to_pr_error)
 }
 
+fn get_date_format(matches: &ArgMatches) -> String {
+    match matches.get_one::<String>(options::DATE_FORMAT) {
+        Some(format) => format,
+        None => {
+            // Replicate behavior from GNU manual.
+            if std::env::var("POSIXLY_CORRECT").is_ok()
+                // TODO: This needs to be moved to uucore and handled by icu?
+                && (std::env::var("LC_TIME").unwrap_or_default() == "POSIX"
+                    || std::env::var("LC_ALL").unwrap_or_default() == "POSIX")
+            {
+                "%b %e %H:%M %Y"
+            } else {
+                format::LONG_ISO
+            }
+        }
+    }
+    .to_string()
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn build_options(
     matches: &ArgMatches,
@@ -414,13 +442,13 @@ fn build_options(
 
     if is_merge_mode && matches.contains_id(options::COLUMN) {
         return Err(PrError::EncounteredErrors {
-            msg: get_message("pr-error-column-merge-conflict"),
+            msg: translate!("pr-error-column-merge-conflict"),
         });
     }
 
     if is_merge_mode && matches.get_flag(options::ACROSS) {
         return Err(PrError::EncounteredErrors {
-            msg: get_message("pr-error-across-merge-conflict"),
+            msg: translate!("pr-error-across-merge-conflict"),
         });
     }
 
@@ -488,11 +516,26 @@ fn build_options(
 
     let line_separator = "\n".to_string();
 
-    let last_modified_time = if is_merge_mode || paths[0].eq(FILE_STDIN) {
-        let date_time = Local::now();
-        date_time.format(DATE_TIME_FORMAT).to_string()
-    } else {
-        file_last_modified_time(paths.first().unwrap())
+    let last_modified_time = {
+        let time = if is_merge_mode || paths[0].eq(FILE_STDIN) {
+            Some(SystemTime::now())
+        } else {
+            metadata(paths.first().unwrap())
+                .ok()
+                .and_then(|i| i.modified().ok())
+        };
+        time.and_then(|time| {
+            let mut v = Vec::new();
+            format_system_time(
+                &mut v,
+                time,
+                &get_date_format(matches),
+                FormatSystemTimeFallback::Integer,
+            )
+            .ok()
+            .map(|()| String::from_utf8_lossy(&v).to_string())
+        })
+        .unwrap_or_default()
     };
 
     // +page option is less priority than --pages
@@ -563,13 +606,7 @@ fn build_options(
     if let Some(end_page) = end_page {
         if start_page > end_page {
             return Err(PrError::EncounteredErrors {
-                msg: get_message_with_args(
-                    "pr-error-invalid-pages-range",
-                    HashMap::from([
-                        ("start".to_string(), start_page.to_string()),
-                        ("end".to_string(), end_page.to_string()),
-                    ]),
-                ),
+                msg: translate!("pr-error-invalid-pages-range", "start" => start_page, "end" => end_page),
             });
         }
     }
@@ -1119,7 +1156,7 @@ fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
             "{} {} {} {page}",
             options.last_modified_time,
             options.header,
-            get_message("pr-page")
+            translate!("pr-page")
         );
         vec![
             String::new(),
@@ -1131,19 +1168,6 @@ fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
     } else {
         Vec::new()
     }
-}
-
-fn file_last_modified_time(path: &str) -> String {
-    metadata(path)
-        .map(|i| {
-            i.modified()
-                .map(|x| {
-                    let date_time: DateTime<Local> = x.into();
-                    date_time.format(DATE_TIME_FORMAT).to_string()
-                })
-                .unwrap_or_default()
-        })
-        .unwrap_or_default()
 }
 
 /// Returns five empty lines as trailer content if displaying trailer

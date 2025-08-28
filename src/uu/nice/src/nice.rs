@@ -7,12 +7,11 @@
 
 use clap::{Arg, ArgAction, Command};
 use libc::{PRIO_PROCESS, c_char, c_int, execvp};
-use std::collections::HashMap;
 use std::ffi::{CString, OsString};
 use std::io::{Error, Write};
 use std::ptr;
 
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 use uucore::{
     error::{UClapError, UResult, USimpleError, UUsageError, set_exit_code},
     format_usage, show_error,
@@ -120,7 +119,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if !matches.contains_id(options::COMMAND) {
                 return Err(UUsageError::new(
                     125,
-                    get_message("nice-error-command-required-with-adjustment"),
+                    translate!("nice-error-command-required-with-adjustment"),
                 ));
             }
             match nstr.parse::<i32>() {
@@ -128,13 +127,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Err(e) => {
                     return Err(USimpleError::new(
                         125,
-                        get_message_with_args(
-                            "nice-error-invalid-number",
-                            HashMap::from([
-                                ("value".to_string(), nstr.clone()),
-                                ("error".to_string(), e.to_string()),
-                            ]),
-                        ),
+                        translate!("nice-error-invalid-number", "value" => nstr.clone(), "error" => e),
                     ));
                 }
             }
@@ -154,13 +147,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // exit code when failing to write the advisory is 125, but Rust
     // will produce an exit code of 101 when it panics.
     if unsafe { libc::setpriority(PRIO_PROCESS, 0, niceness) } == -1 {
-        let warning_msg = get_message_with_args(
-            "nice-warning-setpriority",
-            HashMap::from([
-                ("util_name".to_string(), uucore::util_name().to_string()),
-                ("error".to_string(), Error::last_os_error().to_string()),
-            ]),
-        );
+        let warning_msg = translate!("nice-warning-setpriority", "util_name" => uucore::util_name(), "error" => Error::last_os_error());
 
         if write!(std::io::stderr(), "{warning_msg}").is_err() {
             set_exit_code(125);
@@ -193,16 +180,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about(get_message("nice-about"))
-        .override_usage(format_usage(&get_message("nice-usage")))
+        .about(translate!("nice-about"))
+        .override_usage(format_usage(&translate!("nice-usage")))
         .trailing_var_arg(true)
         .infer_long_args(true)
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .arg(
             Arg::new(options::ADJUSTMENT)
                 .short('n')
                 .long(options::ADJUSTMENT)
-                .help(get_message("nice-help-adjustment"))
+                .help(translate!("nice-help-adjustment"))
                 .action(ArgAction::Set)
                 .overrides_with(options::ADJUSTMENT)
                 .allow_hyphen_values(true),

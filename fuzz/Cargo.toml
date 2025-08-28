@@ -138,3 +138,9 @@ name = "fuzz_cksum"
 path = "fuzz_targets/fuzz_cksum.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "fuzz_non_utf8_paths"
+path = "fuzz_targets/fuzz_non_utf8_paths.rs"
+test = false
+doc = false

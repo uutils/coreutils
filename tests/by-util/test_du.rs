@@ -591,9 +591,12 @@ fn test_du_h_precision() {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 #[cfg(feature = "touch")]
 #[test]
 fn test_du_time() {
+    use regex::Regex;
+
     let ts = TestScenario::new(util_name!());
 
     // du --time formats the timestamp according to the local timezone. We set the TZ
@@ -624,6 +627,107 @@ fn test_du_time() {
         .succeeds();
     result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
 
+    // long-iso (same as default)
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("--time-style=long-iso")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
+
+    // full-iso
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("--time-style=full-iso")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016-06-16 00:00:00.000000000 +0000\tdate_test\n");
+
+    // iso
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("--time-style=iso")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016-06-16\tdate_test\n");
+
+    // custom +FORMAT
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("--time-style=+%Y__%H")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016__00\tdate_test\n");
+
+    // ls has special handling for new line in format, du doesn't.
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("--time-style=+%Y_\n_%H")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016_\n_00\tdate_test\n");
+
+    // Time style can also be setup from environment
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .env("TIME_STYLE", "full-iso")
+        .arg("--time")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016-06-16 00:00:00.000000000 +0000\tdate_test\n");
+
+    // For compatibility reason, we also allow posix- prefix.
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .env("TIME_STYLE", "posix-full-iso")
+        .arg("--time")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016-06-16 00:00:00.000000000 +0000\tdate_test\n");
+
+    // ... and we strip content after a new line
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .env("TIME_STYLE", "+XXX\nYYY")
+        .arg("--time")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\tXXX\tdate_test\n");
+
+    // ... and we ignore "locale", fall back to full-iso.
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .env("TIME_STYLE", "locale")
+        .arg("--time")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
+
+    // Command line option takes precedence
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .env("TIME_STYLE", "full-iso")
+        .arg("--time")
+        .arg("--time-style=iso")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016-06-16\tdate_test\n");
+
     for argument in ["--time=atime", "--time=atim", "--time=a"] {
         let result = ts
             .ucmd()
@@ -634,21 +738,18 @@ fn test_du_time() {
         result.stdout_only("0\t2015-05-15 00:00\tdate_test\n");
     }
 
-    let result = ts
-        .ucmd()
-        .env("TZ", "UTC")
-        .arg("--time=ctime")
-        .arg("date_test")
-        .succeeds();
-    result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
+    // Change (and birth) times can't be easily modified, so we just do a regex
+    let re_change_birth =
+        Regex::new(r"0\t[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}\tdate_test").unwrap();
+    let result = ts.ucmd().arg("--time=ctime").arg("date_test").succeeds();
+    #[cfg(windows)]
+    result.stdout_only("0\t???\tdate_test\n"); // ctime not supported on Windows
+    #[cfg(not(windows))]
+    result.stdout_matches(&re_change_birth);
 
     if birth_supported() {
-        use regex::Regex;
-
-        let re_birth =
-            Regex::new(r"0\t[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}\tdate_test").unwrap();
         let result = ts.ucmd().arg("--time=birth").arg("date_test").succeeds();
-        result.stdout_matches(&re_birth);
+        result.stdout_matches(&re_change_birth);
     }
 }
 
@@ -753,6 +854,18 @@ fn test_du_invalid_threshold() {
     let threshold = "-0";
 
     ts.ucmd().arg(format!("--threshold={threshold}")).fails();
+}
+
+#[test]
+fn test_du_threshold_error_handling() {
+    // Test missing threshold value - the specific case from GNU test
+    new_ucmd!()
+        .arg("--threshold")
+        .fails()
+        .stderr_contains(
+            "error: a value is required for '--threshold <SIZE>' but none was supplied",
+        )
+        .stderr_contains("For more information, try '--help'.");
 }
 
 #[test]
@@ -1316,4 +1429,13 @@ fn test_du_inodes_total_text() {
     assert_eq!(parts.len(), 2);
 
     assert!(parts[0].parse::<u64>().is_ok());
+}
+
+#[test]
+fn test_du_threshold_no_suggested_values() {
+    // tested by tests/du/threshold
+    let ts = TestScenario::new(util_name!());
+
+    let result = ts.ucmd().arg("--threshold").fails();
+    assert!(!result.stderr_str().contains("[possible values: ]"));
 }

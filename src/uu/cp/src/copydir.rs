@@ -20,7 +20,8 @@ use uucore::error::UIoError;
 use uucore::fs::{
     FileInformation, MissingHandling, ResolveMode, canonicalize, path_ends_with_terminator,
 };
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
+
 use uucore::show;
 use uucore::show_error;
 use uucore::uio_error;
@@ -33,7 +34,7 @@ use crate::{
 
 /// Ensure a Windows path starts with a `\\?`.
 #[cfg(target_os = "windows")]
-fn adjust_canonicalization(p: &Path) -> Cow<Path> {
+fn adjust_canonicalization(p: &Path) -> Cow<'_, Path> {
     // In some cases, \\? can be missing on some Windows paths.  Add it at the
     // beginning unless the path is prefixed with a device namespace.
     const VERBATIM_PREFIX: &str = r"\\?";
@@ -186,10 +187,7 @@ impl Entry {
                 if let Err(e) = fs::create_dir_all(context.target) {
                     eprintln!(
                         "{}",
-                        get_message_with_args(
-                            "cp-error-failed-to-create-directory",
-                            HashMap::from([("error".to_string(), e.to_string())])
-                        )
+                        translate!("cp-error-failed-to-create-directory", "error" => e)
                     );
                 }
             } else {
@@ -229,14 +227,14 @@ fn copy_direntry(
     // If the source is a symbolic link and the options tell us not to
     // dereference the link, then copy the link object itself.
     if source_absolute.is_symlink() && !options.dereference {
-        return copy_link(&source_absolute, &local_to_target, symlinked_files);
+        return copy_link(&source_absolute, &local_to_target, symlinked_files, options);
     }
 
     // If the source is a directory and the destination does not
     // exist, ...
     if source_absolute.is_dir() && !local_to_target.exists() {
         return if target_is_file {
-            Err(get_message("cp-error-cannot-overwrite-non-directory-with-directory").into())
+            Err(translate!("cp-error-cannot-overwrite-non-directory-with-directory").into())
         } else {
             build_dir(&local_to_target, false, options, Some(&source_absolute))?;
             if options.verbose {
@@ -277,13 +275,7 @@ fn copy_direntry(
                         show!(uio_error!(
                             e,
                             "{}",
-                            get_message_with_args(
-                                "cp-error-cannot-open-for-reading",
-                                HashMap::from([(
-                                    "source".to_string(),
-                                    source_relative.quote().to_string()
-                                )])
-                            ),
+                            translate!("cp-error-cannot-open-for-reading", "source" => source_relative.quote()),
                         ));
                     }
                     e => return Err(e),
@@ -328,25 +320,12 @@ pub(crate) fn copy_directory(
     }
 
     if !options.recursive {
-        return Err(get_message_with_args(
-            "cp-error-omitting-directory",
-            HashMap::from([("dir".to_string(), root.quote().to_string())]),
-        )
-        .into());
+        return Err(translate!("cp-error-omitting-directory", "dir" => root.quote()).into());
     }
 
     // check if root is a prefix of target
     if path_has_prefix(target, root)? {
-        return Err(get_message_with_args(
-            "cp-error-cannot-copy-directory-into-itself",
-            HashMap::from([
-                ("source".to_string(), root.quote().to_string()),
-                (
-                    "dest".to_string(),
-                    target.join(root.file_name().unwrap()).quote().to_string(),
-                ),
-            ]),
-        )
+        return Err(translate!("cp-error-cannot-copy-directory-into-itself", "source" => root.quote(), "dest" => target.join(root.file_name().unwrap()).quote())
         .into());
     }
 
@@ -391,16 +370,15 @@ pub(crate) fn copy_directory(
     let context = match Context::new(root, target) {
         Ok(c) => c,
         Err(e) => {
-            return Err(get_message_with_args(
-                "cp-error-failed-get-current-dir",
-                HashMap::from([("error".to_string(), e.to_string())]),
-            )
-            .into());
+            return Err(translate!("cp-error-failed-get-current-dir", "error" => e).into());
         }
     };
 
     // The directory we were in during the previous iteration
     let mut last_iter: Option<DirEntry> = None;
+
+    // Keep track of all directories we've created that need permission fixes
+    let mut dirs_needing_permissions: Vec<(PathBuf, PathBuf)> = Vec::new();
 
     // Traverse the contents of the directory, copying each one.
     for direntry_result in WalkDir::new(root)
@@ -433,6 +411,14 @@ pub(crate) fn copy_directory(
                 // `./a/b/c` into `./a/`, in which case we'll need to fix the
                 // permissions of both `./a/b/c` and `./a/b`, in that order.)
                 if direntry.file_type().is_dir() {
+                    // Add this directory to our list for permission fixing later
+                    let entry_for_tracking =
+                        Entry::new(&context, direntry.path(), options.no_target_dir)?;
+                    dirs_needing_permissions.push((
+                        entry_for_tracking.source_absolute,
+                        entry_for_tracking.local_to_target,
+                    ));
+
                     // If true, last_iter is not a parent of this iter.
                     // The means we just exited a directory.
                     let went_up = if let Some(last_iter) = &last_iter {
@@ -477,25 +463,10 @@ pub(crate) fn copy_directory(
         }
     }
 
-    // Handle final directory permission fixes.
-    // This is almost the same as the permission-fixing code above,
-    // with minor differences (commented)
-    if let Some(last_iter) = last_iter {
-        let diff = last_iter.path().strip_prefix(root).unwrap();
-
-        // Do _not_ skip `.` this time, since we know we're done.
-        // This is where we fix the permissions of the top-level
-        // directory we just copied.
-        for p in diff.ancestors() {
-            let src = root.join(p);
-            let entry = Entry::new(&context, &src, options.no_target_dir)?;
-
-            copy_attributes(
-                &entry.source_absolute,
-                &entry.local_to_target,
-                &options.attributes,
-            )?;
-        }
+    // Fix permissions for all directories we created
+    // This ensures that even sibling directories get their permissions fixed
+    for (source_path, dest_path) in dirs_needing_permissions {
+        copy_attributes(&source_path, &dest_path, &options.attributes)?;
     }
 
     // Also fix permissions for parent directories,

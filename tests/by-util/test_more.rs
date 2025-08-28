@@ -46,14 +46,22 @@ fn test_valid_arg() {
 
 fn test_alive(args: &[&str]) {
     let (at, mut ucmd) = at_and_ucmd!();
-    let file = "test_file";
-    at.touch(file);
 
-    ucmd.args(args)
-        .arg(file)
-        .run_no_wait()
-        .make_assertion()
-        .is_alive();
+    let content = "test content";
+    let file = "test_file";
+    at.write(file, content);
+
+    let mut cmd = ucmd.args(args).arg(file).run_no_wait();
+
+    // wait for more to start and display the file
+    while cmd.is_alive() && !cmd.stdout_all().contains(content) {
+        cmd.delay(50);
+    }
+
+    assert!(cmd.is_alive(), "Command should still be alive");
+
+    // cleanup
+    cmd.kill();
 }
 
 #[test]
@@ -116,5 +124,23 @@ fn test_invalid_file_perms() {
         ucmd.arg("invalid-perms.txt")
             .succeeds()
             .stderr_contains("permission denied");
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_more_non_utf8_paths() {
+    use std::os::unix::ffi::OsStrExt;
+    if std::io::stdout().is_terminal() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let file_name = std::ffi::OsStr::from_bytes(b"test_\xFF\xFE.txt");
+        // Create test file with normal name first
+        at.write(
+            &file_name.to_string_lossy(),
+            "test content for non-UTF-8 file",
+        );
+
+        // Test that more can handle non-UTF-8 filenames without crashing
+        ucmd.arg(file_name).succeeds();
     }
 }

@@ -8,11 +8,12 @@
 use clap::{Arg, ArgAction, Command};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
-use std::collections::HashMap;
 use std::io::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
+
+use uucore::LocalizedCommand;
 use uucore::signals::{ALL_SIGNALS, signal_by_name_or_value, signal_name_by_value};
 use uucore::{format_usage, show};
 
@@ -40,7 +41,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut args = args.collect_ignore();
     let obs_signal = handle_obsolete(&mut args);
 
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let mode = if matches.get_flag(options::TABLE) {
         Mode::Table
@@ -79,10 +80,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
             let pids = parse_pids(&pids_or_signals)?;
             if pids.is_empty() {
-                Err(USimpleError::new(
-                    1,
-                    get_message("kill-error-no-process-id"),
-                ))
+                Err(USimpleError::new(1, translate!("kill-error-no-process-id")))
             } else {
                 kill(sig, &pids);
                 Ok(())
@@ -102,15 +100,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("kill-about"))
-        .override_usage(format_usage(&get_message("kill-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("kill-about"))
+        .override_usage(format_usage(&translate!("kill-usage")))
         .infer_long_args(true)
         .allow_negative_numbers(true)
         .arg(
             Arg::new(options::LIST)
                 .short('l')
                 .long(options::LIST)
-                .help(get_message("kill-help-list"))
+                .help(translate!("kill-help-list"))
                 .conflicts_with(options::TABLE)
                 .action(ArgAction::SetTrue),
         )
@@ -119,7 +118,7 @@ pub fn uu_app() -> Command {
                 .short('t')
                 .short_alias('L')
                 .long(options::TABLE)
-                .help(get_message("kill-help-table"))
+                .help(translate!("kill-help-table"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -128,7 +127,7 @@ pub fn uu_app() -> Command {
                 .short_alias('n') // For bash compatibility, like in GNU coreutils
                 .long(options::SIGNAL)
                 .value_name("signal")
-                .help(get_message("kill-help-signal"))
+                .help(translate!("kill-help-signal"))
                 .conflicts_with_all([options::LIST, options::TABLE]),
         )
         .arg(
@@ -191,13 +190,7 @@ fn print_signal(signal_name_or_value: &str) -> UResult<()> {
     }
     Err(USimpleError::new(
         1,
-        get_message_with_args(
-            "kill-error-invalid-signal",
-            HashMap::from([(
-                "signal".to_string(),
-                signal_name_or_value.quote().to_string(),
-            )]),
-        ),
+        translate!("kill-error-invalid-signal", "signal" => signal_name_or_value.quote()),
     ))
 }
 
@@ -225,10 +218,7 @@ fn parse_signal_value(signal_name: &str) -> UResult<usize> {
         Some(x) => Ok(x),
         None => Err(USimpleError::new(
             1,
-            get_message_with_args(
-                "kill-error-invalid-signal",
-                HashMap::from([("signal".to_string(), signal_name.quote().to_string())]),
-            ),
+            translate!("kill-error-invalid-signal", "signal" => signal_name.quote()),
         )),
     }
 }
@@ -239,13 +229,7 @@ fn parse_pids(pids: &[String]) -> UResult<Vec<i32>> {
             x.parse::<i32>().map_err(|e| {
                 USimpleError::new(
                     1,
-                    get_message_with_args(
-                        "kill-error-parse-argument",
-                        HashMap::from([
-                            ("argument".to_string(), x.quote().to_string()),
-                            ("error".to_string(), e.to_string()),
-                        ]),
-                    ),
+                    translate!("kill-error-parse-argument", "argument" => x.quote(), "error" => e),
                 )
             })
         })
@@ -255,12 +239,10 @@ fn parse_pids(pids: &[String]) -> UResult<Vec<i32>> {
 fn kill(sig: Option<Signal>, pids: &[i32]) {
     for &pid in pids {
         if let Err(e) = signal::kill(Pid::from_raw(pid), sig) {
-            show!(Error::from_raw_os_error(e as i32).map_err_context(|| {
-                get_message_with_args(
-                    "kill-error-sending-signal",
-                    HashMap::from([("pid".to_string(), pid.to_string())]),
-                )
-            }));
+            show!(
+                Error::from_raw_os_error(e as i32)
+                    .map_err_context(|| { translate!("kill-error-sending-signal", "pid" => pid) })
+            );
         }
     }
 }

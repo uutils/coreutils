@@ -15,13 +15,14 @@ use std::ffi::{OsStr, OsString};
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 #[cfg(not(windows))]
 use uucore::process::{getegid, geteuid};
 
-use uucore::locale::get_message;
+use uucore::translate;
 
 // The help_usage method replaces util name (the first word) with {}.
 // And, The format_usage method replaces {} with execution_phrase ( e.g. test or [ ).
@@ -35,9 +36,10 @@ pub fn uu_app() -> Command {
     // since we don't recognize -h and -v as help/version flags.
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("test-about"))
-        .override_usage(format_usage(&get_message("test-usage")))
-        .after_help(get_message("test-after-help"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("test-about"))
+        .override_usage(format_usage(&translate!("test-usage")))
+        .after_help(translate!("test-after-help"))
 }
 
 #[uucore::main]
@@ -49,7 +51,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     if binary_name.ends_with('[') {
         // If invoked as [ we should recognize --help and --version (but not -h or -v)
         if args.len() == 1 && (args[0] == "--help" || args[0] == "--version") {
-            uu_app().get_matches_from(std::iter::once(program).chain(args.into_iter()));
+            uu_app().get_matches_from_localized(std::iter::once(program).chain(args.into_iter()));
             return Ok(());
         }
         // If invoked via name '[', matching ']' must be in the last arg
@@ -57,7 +59,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         if last.as_deref() != Some(OsStr::new("]")) {
             return Err(USimpleError::new(
                 2,
-                get_message("test-error-missing-closing-bracket"),
+                translate!("test-error-missing-closing-bracket"),
             ));
         }
     }

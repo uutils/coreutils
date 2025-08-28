@@ -16,12 +16,12 @@ use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
+use uucore::translate;
 use uucore::{format_usage, show};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
-use std::collections::HashMap;
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::LocalizedCommand;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 
 // Options
@@ -112,16 +112,13 @@ impl From<&str> for Rfc3339Format {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let format = if let Some(form) = matches.get_one::<String>(OPT_FORMAT) {
         if !form.starts_with('+') {
             return Err(USimpleError::new(
                 1,
-                get_message_with_args(
-                    "date-error-invalid-date",
-                    HashMap::from([("date".to_string(), form.to_string())]),
-                ),
+                translate!("date-error-invalid-date", "date" => form),
             ));
         }
         let form = form[1..].to_string();
@@ -162,10 +159,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(Err((input, _err))) => {
             return Err(USimpleError::new(
                 1,
-                get_message_with_args(
-                    "date-error-invalid-date",
-                    HashMap::from([("date".to_string(), input.to_string())]),
-                ),
+                translate!("date-error-invalid-date", "date" => input),
             ));
         }
         Some(Ok(date)) => Some(date),
@@ -214,10 +208,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Err(_) => {
                     return Err(USimpleError::new(
                         1,
-                        get_message_with_args(
-                            "date-error-date-overflow",
-                            HashMap::from([("date".to_string(), relative_time.to_string())]),
-                        ),
+                        translate!("date-error-date-overflow", "date" => relative_time),
                     ));
                 }
             }
@@ -231,10 +222,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if path.is_dir() {
                 return Err(USimpleError::new(
                     2,
-                    get_message_with_args(
-                        "date-error-expected-file-got-directory",
-                        HashMap::from([("path".to_string(), path.to_string_lossy().to_string())]),
-                    ),
+                    translate!("date-error-expected-file-got-directory", "path" => path.to_string_lossy()),
                 ));
             }
             let file = File::open(path)
@@ -260,22 +248,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Err(e) => {
                     return Err(USimpleError::new(
                         1,
-                        get_message_with_args(
-                            "date-error-invalid-format",
-                            HashMap::from([
-                                ("format".to_string(), format_string.to_string()),
-                                ("error".to_string(), e.to_string()),
-                            ]),
-                        ),
+                        translate!("date-error-invalid-format", "format" => format_string, "error" => e),
                     ));
                 }
             },
             Err((input, _err)) => show!(USimpleError::new(
                 1,
-                get_message_with_args(
-                    "date-error-invalid-date",
-                    HashMap::from([("date".to_string(), input.to_string())])
-                )
+                translate!("date-error-invalid-date", "date" => input)
             )),
         }
     }
@@ -286,8 +265,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("date-about"))
-        .override_usage(format_usage(&get_message("date-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("date-about"))
+        .override_usage(format_usage(&translate!("date-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_DATE)
@@ -295,7 +275,8 @@ pub fn uu_app() -> Command {
                 .long(OPT_DATE)
                 .value_name("STRING")
                 .allow_hyphen_values(true)
-                .help(get_message("date-help-date")),
+                .overrides_with(OPT_DATE)
+                .help(translate!("date-help-date")),
         )
         .arg(
             Arg::new(OPT_FILE)
@@ -303,7 +284,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_FILE)
                 .value_name("DATEFILE")
                 .value_hint(clap::ValueHint::FilePath)
-                .help(get_message("date-help-file")),
+                .help(translate!("date-help-file")),
         )
         .arg(
             Arg::new(OPT_ISO_8601)
@@ -315,13 +296,13 @@ pub fn uu_app() -> Command {
                 ]))
                 .num_args(0..=1)
                 .default_missing_value(OPT_DATE)
-                .help(get_message("date-help-iso-8601")),
+                .help(translate!("date-help-iso-8601")),
         )
         .arg(
             Arg::new(OPT_RFC_EMAIL)
                 .short('R')
                 .long(OPT_RFC_EMAIL)
-                .help(get_message("date-help-rfc-email"))
+                .help(translate!("date-help-rfc-email"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -329,12 +310,12 @@ pub fn uu_app() -> Command {
                 .long(OPT_RFC_3339)
                 .value_name("FMT")
                 .value_parser(ShortcutValueParser::new([DATE, SECONDS, NS]))
-                .help(get_message("date-help-rfc-3339")),
+                .help(translate!("date-help-rfc-3339")),
         )
         .arg(
             Arg::new(OPT_DEBUG)
                 .long(OPT_DEBUG)
-                .help(get_message("date-help-debug"))
+                .help(translate!("date-help-debug"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -343,7 +324,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_REFERENCE)
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::AnyPath)
-                .help(get_message("date-help-reference")),
+                .help(translate!("date-help-reference")),
         )
         .arg(
             Arg::new(OPT_SET)
@@ -353,15 +334,15 @@ pub fn uu_app() -> Command {
                 .help({
                     #[cfg(not(any(target_os = "macos", target_os = "redox")))]
                     {
-                        get_message("date-help-set")
+                        translate!("date-help-set")
                     }
                     #[cfg(target_os = "macos")]
                     {
-                        get_message("date-help-set-macos")
+                        translate!("date-help-set-macos")
                     }
                     #[cfg(target_os = "redox")]
                     {
-                        get_message("date-help-set-redox")
+                        translate!("date-help-set-redox")
                     }
                 }),
         )
@@ -370,7 +351,7 @@ pub fn uu_app() -> Command {
                 .short('u')
                 .long(OPT_UNIVERSAL)
                 .alias(OPT_UNIVERSAL_2)
-                .help(get_message("date-help-universal"))
+                .help(translate!("date-help-universal"))
                 .action(ArgAction::SetTrue),
         )
         .arg(Arg::new(OPT_FORMAT))
@@ -438,7 +419,7 @@ fn set_system_datetime(_date: Zoned) -> UResult<()> {
 fn set_system_datetime(_date: Zoned) -> UResult<()> {
     Err(USimpleError::new(
         1,
-        get_message("date-error-setting-date-not-supported-macos"),
+        translate!("date-error-setting-date-not-supported-macos"),
     ))
 }
 
@@ -446,7 +427,7 @@ fn set_system_datetime(_date: Zoned) -> UResult<()> {
 fn set_system_datetime(_date: Zoned) -> UResult<()> {
     Err(USimpleError::new(
         1,
-        get_message("date-error-setting-date-not-supported-redox"),
+        translate!("date-error-setting-date-not-supported-redox"),
     ))
 }
 
@@ -469,7 +450,7 @@ fn set_system_datetime(date: Zoned) -> UResult<()> {
         Ok(())
     } else {
         Err(std::io::Error::last_os_error()
-            .map_err_context(|| get_message("date-error-cannot-set-date")))
+            .map_err_context(|| translate!("date-error-cannot-set-date")))
     }
 }
 
@@ -496,7 +477,7 @@ fn set_system_datetime(date: Zoned) -> UResult<()> {
 
     if result == 0 {
         Err(std::io::Error::last_os_error()
-            .map_err_context(|| get_message("date-error-cannot-set-date")))
+            .map_err_context(|| translate!("date-error-cannot-set-date")))
     } else {
         Ok(())
     }

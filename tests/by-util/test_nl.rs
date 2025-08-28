@@ -10,6 +10,22 @@ use uutests::util::TestScenario;
 use uutests::util_name;
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_non_utf8_paths() {
+    use std::os::unix::ffi::OsStringExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    std::fs::write(at.plus(&filename), b"line 1\nline 2\nline 3\n").unwrap();
+
+    ucmd.arg(&filename)
+        .succeeds()
+        .stdout_contains("1\t")
+        .stdout_contains("2\t")
+        .stdout_contains("3\t");
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
@@ -191,6 +207,28 @@ fn test_number_separator() {
             .succeeds()
             .stdout_is("     1:-:test\n");
     }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_number_separator_non_utf8() {
+    use std::{
+        ffi::{OsStr, OsString},
+        os::unix::ffi::{OsStrExt, OsStringExt},
+    };
+
+    let separator_bytes = [0xFF, 0xFE];
+    let mut v = b"--number-separator=".to_vec();
+    v.extend_from_slice(&separator_bytes);
+
+    let arg = OsString::from_vec(v);
+    let separator = OsStr::from_bytes(&separator_bytes);
+
+    new_ucmd!()
+        .arg(arg)
+        .pipe_in("test")
+        .succeeds()
+        .stdout_is(format!("     1{}test\n", separator.to_string_lossy()));
 }
 
 #[test]

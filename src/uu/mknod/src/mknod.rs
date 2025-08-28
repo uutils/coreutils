@@ -8,13 +8,13 @@
 use clap::{Arg, ArgAction, Command, value_parser};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 use libc::{dev_t, mode_t};
-use std::collections::HashMap;
 use std::ffi::CString;
 
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::format_usage;
-use uucore::locale::{get_message, get_message_with_args};
+use uucore::translate;
 
 const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
 
@@ -50,9 +50,13 @@ impl FileType {
     }
 }
 
-/// Configuration for directory creation.
+/// Configuration for special inode creation.
 pub struct Config<'a> {
+    /// bitmask of inode mode (permissions and file type)
     pub mode: mode_t,
+
+    /// when false, the exact mode bits will be set
+    pub use_umask: bool,
 
     pub dev: dev_t,
 
@@ -66,18 +70,19 @@ pub struct Config<'a> {
 fn mknod(file_name: &str, config: Config) -> i32 {
     let c_str = CString::new(file_name).expect("Failed to convert to CString");
 
-    // the user supplied a mode
-    let set_umask = config.mode & MODE_RW_UGO != MODE_RW_UGO;
-
     unsafe {
-        // store prev umask
-        let last_umask = if set_umask { libc::umask(0) } else { 0 };
+        // set umask to 0 and store previous umask
+        let have_prev_umask = if config.use_umask {
+            None
+        } else {
+            Some(libc::umask(0))
+        };
 
         let errno = libc::mknod(c_str.as_ptr(), config.mode, config.dev);
 
         // set umask back to original value
-        if set_umask {
-            libc::umask(last_umask);
+        if let Some(prev_umask) = have_prev_umask {
+            libc::umask(prev_umask);
         }
 
         if errno == -1 {
@@ -107,11 +112,19 @@ fn mknod(file_name: &str, config: Config) -> i32 {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     let file_type = matches.get_one::<FileType>("type").unwrap();
-    let mode = get_mode(matches.get_one::<String>("mode")).map_err(|e| USimpleError::new(1, e))?
-        | file_type.as_mode();
+
+    let mut use_umask = true;
+    let mode_permissions = match matches.get_one::<String>("mode") {
+        None => MODE_RW_UGO,
+        Some(str_mode) => {
+            use_umask = false;
+            parse_mode(str_mode).map_err(|e| USimpleError::new(1, e))?
+        }
+    };
+    let mode = mode_permissions | file_type.as_mode();
 
     let file_name = matches
         .get_one::<String>("name")
@@ -130,20 +143,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         (FileType::Fifo, _, _) => {
             return Err(UUsageError::new(
                 1,
-                get_message("mknod-error-fifo-no-major-minor"),
+                translate!("mknod-error-fifo-no-major-minor"),
             ));
         }
         (_, Some(&major), Some(&minor)) => makedev(major, minor),
         _ => {
             return Err(UUsageError::new(
                 1,
-                get_message("mknod-error-special-require-major-minor"),
+                translate!("mknod-error-special-require-major-minor"),
             ));
         }
     };
 
     let config = Config {
         mode,
+        use_umask,
         dev,
         set_selinux_context: set_selinux_context || context.is_some(),
         context,
@@ -157,47 +171,48 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(&get_message("mknod-usage")))
-        .after_help(get_message("mknod-after-help"))
-        .about(get_message("mknod-about"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .override_usage(format_usage(&translate!("mknod-usage")))
+        .after_help(translate!("mknod-after-help"))
+        .about(translate!("mknod-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::MODE)
                 .short('m')
                 .long("mode")
                 .value_name("MODE")
-                .help(get_message("mknod-help-mode")),
+                .help(translate!("mknod-help-mode")),
         )
         .arg(
             Arg::new("name")
                 .value_name("NAME")
-                .help(get_message("mknod-help-name"))
+                .help(translate!("mknod-help-name"))
                 .required(true)
                 .value_hint(clap::ValueHint::AnyPath),
         )
         .arg(
             Arg::new(options::TYPE)
                 .value_name("TYPE")
-                .help(get_message("mknod-help-type"))
+                .help(translate!("mknod-help-type"))
                 .required(true)
                 .value_parser(parse_type),
         )
         .arg(
             Arg::new(options::MAJOR)
                 .value_name(options::MAJOR)
-                .help(get_message("mknod-help-major"))
+                .help(translate!("mknod-help-major"))
                 .value_parser(value_parser!(u64)),
         )
         .arg(
             Arg::new(options::MINOR)
                 .value_name(options::MINOR)
-                .help(get_message("mknod-help-minor"))
+                .help(translate!("mknod-help-minor"))
                 .value_parser(value_parser!(u64)),
         )
         .arg(
             Arg::new(options::SELINUX)
                 .short('Z')
-                .help(get_message("mknod-help-selinux"))
+                .help(translate!("mknod-help-selinux"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -207,28 +222,25 @@ pub fn uu_app() -> Command {
                 .value_parser(value_parser!(String))
                 .num_args(0..=1)
                 .require_equals(true)
-                .help(get_message("mknod-help-context")),
+                .help(translate!("mknod-help-context")),
         )
 }
 
-fn get_mode(str_mode: Option<&String>) -> Result<mode_t, String> {
-    match str_mode {
-        None => Ok(MODE_RW_UGO),
-        Some(str_mode) => uucore::mode::parse_mode(str_mode)
-            .map_err(|e| {
-                get_message_with_args(
-                    "mknod-error-invalid-mode",
-                    HashMap::from([("error".to_string(), e.to_string())]),
-                )
-            })
-            .and_then(|mode| {
-                if mode > 0o777 {
-                    Err(get_message("mknod-error-mode-permission-bits-only"))
-                } else {
-                    Ok(mode)
-                }
-            }),
-    }
+fn parse_mode(str_mode: &str) -> Result<mode_t, String> {
+    uucore::mode::parse_mode(str_mode)
+        .map_err(|e| {
+            translate!(
+                "mknod-error-invalid-mode",
+                "error" => e
+            )
+        })
+        .and_then(|mode| {
+            if mode > 0o777 {
+                Err(translate!("mknod-error-mode-permission-bits-only"))
+            } else {
+                Ok(mode)
+            }
+        })
 }
 
 fn parse_type(tpe: &str) -> Result<FileType, String> {
@@ -236,14 +248,11 @@ fn parse_type(tpe: &str) -> Result<FileType, String> {
     // 'mknod /dev/rst0 character 18 0'.
     tpe.chars()
         .next()
-        .ok_or_else(|| get_message("mknod-error-missing-device-type"))
+        .ok_or_else(|| translate!("mknod-error-missing-device-type"))
         .and_then(|first_char| match first_char {
             'b' => Ok(FileType::Block),
             'c' | 'u' => Ok(FileType::Character),
             'p' => Ok(FileType::Fifo),
-            _ => Err(get_message_with_args(
-                "mknod-error-invalid-device-type",
-                HashMap::from([("type".to_string(), tpe.quote().to_string())]),
-            )),
+            _ => Err(translate!("mknod-error-invalid-device-type", "type" => tpe.quote())),
         })
 }

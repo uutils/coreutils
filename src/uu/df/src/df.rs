@@ -11,10 +11,12 @@ mod table;
 use blocks::HumanReadable;
 use clap::builder::ValueParser;
 use table::HeaderMode;
+use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError, get_exit_code};
 use uucore::fsext::{MountInfo, read_fs_list};
 use uucore::parser::parse_size::ParseSizeError;
+use uucore::translate;
 use uucore::{format_usage, show};
 
 use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
@@ -29,9 +31,6 @@ use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
 use crate::filesystem::FsError;
 use crate::table::Table;
-
-use std::collections::HashMap;
-use uucore::locale::{get_message, get_message_with_args};
 
 static OPT_HELP: &str = "help";
 static OPT_ALL: &str = "all";
@@ -117,25 +116,25 @@ impl Default for Options {
 enum OptionsError {
     // TODO This needs to vary based on whether `--block-size`
     // or `-B` were provided.
-    #[error("{}", get_message_with_args("df-error-block-size-too-large", HashMap::from([("size".to_string(), .0.clone())])))]
+    #[error("{}", translate!("df-error-block-size-too-large", "size" => .0.clone()))]
     BlockSizeTooLarge(String),
     // TODO This needs to vary based on whether `--block-size`
     // or `-B` were provided.,
-    #[error("{}", get_message_with_args("df-error-invalid-block-size", HashMap::from([("size".to_string(), .0.clone())])))]
+    #[error("{}", translate!("df-error-invalid-block-size", "size" => .0.clone()))]
     InvalidBlockSize(String),
     // TODO This needs to vary based on whether `--block-size`
     // or `-B` were provided.
-    #[error("{}", get_message_with_args("df-error-invalid-suffix", HashMap::from([("size".to_string(), .0.clone())])))]
+    #[error("{}", translate!("df-error-invalid-suffix", "size" => .0.clone()))]
     InvalidSuffix(String),
 
     /// An error getting the columns to display in the output table.
-    #[error("{}", get_message_with_args("df-error-field-used-more-than-once", HashMap::from([("field".to_string(), format!("{}", .0))])))]
+    #[error("{}", translate!("df-error-field-used-more-than-once", "field" => format!("{}", .0)))]
     ColumnError(ColumnError),
 
     #[error(
         "{}",
         .0.iter()
-            .map(|t| get_message_with_args("df-error-filesystem-type-both-selected-and-excluded", HashMap::from([("type".to_string(), t.quote().to_string())])))
+            .map(|t| translate!("df-error-filesystem-type-both-selected-and-excluded", "type" => t.quote()))
             .collect::<Vec<_>>()
             .join(format!("\n{}: ", uucore::util_name()).as_str())
     )]
@@ -364,26 +363,20 @@ where
             Err(FsError::InvalidPath) => {
                 show!(USimpleError::new(
                     1,
-                    get_message_with_args(
-                        "df-error-no-such-file-or-directory",
-                        HashMap::from([("path".to_string(), path.as_ref().display().to_string())])
-                    )
+                    translate!("df-error-no-such-file-or-directory", "path" => path.as_ref().display())
                 ));
             }
             Err(FsError::MountMissing) => {
                 show!(USimpleError::new(
                     1,
-                    get_message("df-error-no-file-systems-processed")
+                    translate!("df-error-no-file-systems-processed")
                 ));
             }
             #[cfg(not(windows))]
             Err(FsError::OverMounted) => {
                 show!(USimpleError::new(
                     1,
-                    get_message_with_args(
-                        "df-error-cannot-access-over-mounted",
-                        HashMap::from([("path".to_string(), path.as_ref().quote().to_string())])
-                    )
+                    translate!("df-error-cannot-access-over-mounted", "path" => path.as_ref().quote())
                 ));
             }
         }
@@ -391,7 +384,7 @@ where
     if get_exit_code() == 0 && result.is_empty() {
         show!(USimpleError::new(
             1,
-            get_message("df-error-no-file-systems-processed")
+            translate!("df-error-no-file-systems-processed")
         ));
         return Ok(result);
     }
@@ -414,17 +407,14 @@ impl UError for DfError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().get_matches_from_localized(args);
 
     #[cfg(windows)]
     {
         if matches.get_flag(OPT_INODES) {
             println!(
                 "{}",
-                get_message_with_args(
-                    "df-error-inodes-not-supported-windows",
-                    HashMap::from([("program".to_string(), uucore::util_name().to_string())])
-                )
+                translate!("df-error-inodes-not-supported-windows", "program" => uucore::util_name())
             );
             return Ok(());
         }
@@ -435,14 +425,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let filesystems: Vec<Filesystem> = match matches.get_many::<OsString>(OPT_PATHS) {
         None => {
             let filesystems = get_all_filesystems(&opt).map_err(|e| {
-                let context = get_message("df-error-cannot-read-table-of-mounted-filesystems");
+                let context = translate!("df-error-cannot-read-table-of-mounted-filesystems");
                 USimpleError::new(e.code(), format!("{context}: {e}"))
             })?;
 
             if filesystems.is_empty() {
                 return Err(USimpleError::new(
                     1,
-                    get_message("df-error-no-file-systems-processed"),
+                    translate!("df-error-no-file-systems-processed"),
                 ));
             }
 
@@ -451,7 +441,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(paths) => {
             let paths: Vec<_> = paths.collect();
             let filesystems = get_named_filesystems(&paths, &opt).map_err(|e| {
-                let context = get_message("df-error-cannot-read-table-of-mounted-filesystems");
+                let context = translate!("df-error-cannot-read-table-of-mounted-filesystems");
                 USimpleError::new(e.code(), format!("{context}: {e}"))
             })?;
 
@@ -473,15 +463,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("df-about"))
-        .override_usage(format_usage(&get_message("df-usage")))
-        .after_help(get_message("df-after-help"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("df-about"))
+        .override_usage(format_usage(&translate!("df-usage")))
+        .after_help(translate!("df-after-help"))
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(
             Arg::new(OPT_HELP)
                 .long(OPT_HELP)
-                .help(get_message("df-help-print-help"))
+                .help(translate!("df-help-print-help"))
                 .action(ArgAction::Help),
         )
         .arg(
@@ -489,7 +480,7 @@ pub fn uu_app() -> Command {
                 .short('a')
                 .long("all")
                 .overrides_with(OPT_ALL)
-                .help(get_message("df-help-all"))
+                .help(translate!("df-help-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -498,13 +489,13 @@ pub fn uu_app() -> Command {
                 .long("block-size")
                 .value_name("SIZE")
                 .overrides_with_all([OPT_KILO, OPT_BLOCKSIZE])
-                .help(get_message("df-help-block-size")),
+                .help(translate!("df-help-block-size")),
         )
         .arg(
             Arg::new(OPT_TOTAL)
                 .long("total")
                 .overrides_with(OPT_TOTAL)
-                .help(get_message("df-help-total"))
+                .help(translate!("df-help-total"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -512,7 +503,7 @@ pub fn uu_app() -> Command {
                 .short('h')
                 .long("human-readable")
                 .overrides_with_all([OPT_HUMAN_READABLE_DECIMAL, OPT_HUMAN_READABLE_BINARY])
-                .help(get_message("df-help-human-readable"))
+                .help(translate!("df-help-human-readable"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -520,7 +511,7 @@ pub fn uu_app() -> Command {
                 .short('H')
                 .long("si")
                 .overrides_with_all([OPT_HUMAN_READABLE_BINARY, OPT_HUMAN_READABLE_DECIMAL])
-                .help(get_message("df-help-si"))
+                .help(translate!("df-help-si"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -528,13 +519,13 @@ pub fn uu_app() -> Command {
                 .short('i')
                 .long("inodes")
                 .overrides_with(OPT_INODES)
-                .help(get_message("df-help-inodes"))
+                .help(translate!("df-help-inodes"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_KILO)
                 .short('k')
-                .help(get_message("df-help-kilo"))
+                .help(translate!("df-help-kilo"))
                 .overrides_with_all([OPT_BLOCKSIZE, OPT_KILO])
                 .action(ArgAction::SetTrue),
         )
@@ -543,14 +534,14 @@ pub fn uu_app() -> Command {
                 .short('l')
                 .long("local")
                 .overrides_with(OPT_LOCAL)
-                .help(get_message("df-help-local"))
+                .help(translate!("df-help-local"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_NO_SYNC)
                 .long("no-sync")
                 .overrides_with_all([OPT_SYNC, OPT_NO_SYNC])
-                .help(get_message("df-help-no-sync"))
+                .help(translate!("df-help-no-sync"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -565,21 +556,21 @@ pub fn uu_app() -> Command {
                 .default_missing_values(OUTPUT_FIELD_LIST)
                 .default_values(["source", "size", "used", "avail", "pcent", "target"])
                 .conflicts_with_all([OPT_INODES, OPT_PORTABILITY, OPT_PRINT_TYPE])
-                .help(get_message("df-help-output")),
+                .help(translate!("df-help-output")),
         )
         .arg(
             Arg::new(OPT_PORTABILITY)
                 .short('P')
                 .long("portability")
                 .overrides_with(OPT_PORTABILITY)
-                .help(get_message("df-help-portability"))
+                .help(translate!("df-help-portability"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_SYNC)
                 .long("sync")
                 .overrides_with_all([OPT_NO_SYNC, OPT_SYNC])
-                .help(get_message("df-help-sync"))
+                .help(translate!("df-help-sync"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -589,14 +580,14 @@ pub fn uu_app() -> Command {
                 .value_parser(ValueParser::os_string())
                 .value_name("TYPE")
                 .action(ArgAction::Append)
-                .help(get_message("df-help-type")),
+                .help(translate!("df-help-type")),
         )
         .arg(
             Arg::new(OPT_PRINT_TYPE)
                 .short('T')
                 .long("print-type")
                 .overrides_with(OPT_PRINT_TYPE)
-                .help(get_message("df-help-print-type"))
+                .help(translate!("df-help-print-type"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -607,7 +598,7 @@ pub fn uu_app() -> Command {
                 .value_parser(ValueParser::os_string())
                 .value_name("TYPE")
                 .use_value_delimiter(true)
-                .help(get_message("df-help-exclude-type")),
+                .help(translate!("df-help-exclude-type")),
         )
         .arg(
             Arg::new(OPT_PATHS)
@@ -699,7 +690,7 @@ mod tests {
         fn test_different_dev_id() {
             let m1 = mount_info("0", "/mnt/bar");
             let m2 = mount_info("1", "/mnt/bar");
-            assert!(is_best(&[m1.clone()], &m2));
+            assert!(is_best(std::slice::from_ref(&m1), &m2));
             assert!(is_best(&[m2], &m1));
         }
 
@@ -710,7 +701,7 @@ mod tests {
             // one condition in this test.
             let m1 = mount_info("0", "/mnt/bar");
             let m2 = mount_info("0", "/mnt/bar/baz");
-            assert!(!is_best(&[m1.clone()], &m2));
+            assert!(!is_best(std::slice::from_ref(&m1), &m2));
             assert!(is_best(&[m2], &m1));
         }
     }

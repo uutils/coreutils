@@ -13,6 +13,8 @@ pr-help-pages = Begin and stop printing with page FIRST_PAGE[:LAST_PAGE]
 pr-help-header =
   Use the string header to replace the file name
                   in the header line.
+pr-help-date-format =
+  Use 'date'-style FORMAT for the header date.
 pr-help-double-space =
   Produce output that is double spaced. An extra <newline>
                   character is output following every <newline> found in the input.

@@ -5,7 +5,6 @@
 
 // spell-checker:ignore (paths) wtmp
 
-use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::Path;
 
@@ -13,13 +12,13 @@ use clap::builder::ValueParser;
 use clap::{Arg, Command};
 use uucore::error::UResult;
 use uucore::format_usage;
+use uucore::translate;
 
 #[cfg(target_os = "openbsd")]
 use utmp_classic::{UtmpEntry, parse_from_path};
+use uucore::LocalizedCommand;
 #[cfg(not(target_os = "openbsd"))]
 use uucore::utmpx::{self, Utmpx};
-
-use uucore::locale::{get_message, get_message_with_args};
 
 #[cfg(target_os = "openbsd")]
 const OPENBSD_UTMP_FILE: &str = "/var/run/utmp";
@@ -32,17 +31,14 @@ fn get_long_usage() -> String {
     #[cfg(target_os = "openbsd")]
     let default_path: &str = OPENBSD_UTMP_FILE;
 
-    get_message_with_args(
-        "users-long-usage",
-        HashMap::from([("default_path".to_string(), default_path.to_string())]),
-    )
+    translate!("users-long-usage", "default_path" => default_path)
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app()
         .after_help(get_long_usage())
-        .try_get_matches_from(args)?;
+        .get_matches_from_localized(args);
 
     let maybe_file: Option<&Path> = matches.get_one::<OsString>(ARG_FILE).map(AsRef::as_ref);
 
@@ -73,7 +69,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let filename = maybe_file.unwrap_or(utmpx::DEFAULT_FILE.as_ref());
 
         users = Utmpx::iter_all_records_from(filename)
-            .filter(Utmpx::is_user_process)
+            .filter(|ut| ut.is_user_process())
             .map(|ut| ut.user())
             .collect::<Vec<_>>();
     };
@@ -88,14 +84,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     #[cfg(not(target_env = "musl"))]
-    let about = get_message("users-about");
+    let about = translate!("users-about");
     #[cfg(target_env = "musl")]
-    let about = get_message("users-about") + &get_message("users-about-musl-warning");
+    let about = translate!("users-about") + &translate!("users-about-musl-warning");
 
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(about)
-        .override_usage(format_usage(&get_message("users-usage")))
+        .override_usage(format_usage(&translate!("users-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(ARG_FILE)

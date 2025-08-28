@@ -16,6 +16,7 @@ mv-after-help = When specifying more than one of -i, -f, -n, only the final one 
   - older This is the default operation when --update is specified, and results in files being replaced if they’re older than the corresponding source file.
 
 # Error messages
+mv-error-insufficient-arguments = The argument '<{$arg_files}>...' requires at least 2 values, but only 1 was provided
 mv-error-no-such-file = cannot stat {$path}: No such file or directory
 mv-error-cannot-stat-not-directory = cannot stat {$path}: Not a directory
 mv-error-same-file = {$source} and {$target} are the same file
@@ -48,6 +49,8 @@ mv-help-verbose = explain what is being done
 mv-help-progress = Display a progress bar.
   Note: this feature is not supported by GNU coreutils.
 mv-help-debug = explain how a file is copied. Implies -v
+mv-help-selinux = set SELinux security context of destination file to default type
+mv-help-context = like -Z, or if CTX is specified then set the SELinux security context to CTX
 
 # Verbose messages
 mv-verbose-renamed = renamed {$from} -> {$to}

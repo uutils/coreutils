@@ -21,6 +21,7 @@ path = "src/basenc.rs"
 clap = { workspace = true }
 uucore = { workspace = true, features = ["encoding"] }
 uu_base32 = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "basenc"
