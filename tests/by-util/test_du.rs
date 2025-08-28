@@ -1430,3 +1430,12 @@ fn test_du_inodes_total_text() {
 
     assert!(parts[0].parse::<u64>().is_ok());
 }
+
+#[test]
+fn test_du_threshold_no_suggested_values() {
+    // tested by tests/du/threshold
+    let ts = TestScenario::new(util_name!());
+
+    let result = ts.ucmd().arg("--threshold").fails();
+    assert!(!result.stderr_str().contains("[possible values: ]"));
+}
