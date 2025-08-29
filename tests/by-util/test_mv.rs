@@ -2570,3 +2570,60 @@ fn test_mv_error_usage_display_too_few() {
         .stderr_contains("Usage: mv [OPTION]... [-T] SOURCE DEST")
         .stderr_contains("For more information, try '--help'.");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_verbose_directory_recursive() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("mv-dir");
+    at.mkdir("mv-dir/a");
+    at.mkdir("mv-dir/a/b");
+    at.mkdir("mv-dir/a/b/c");
+    at.mkdir("mv-dir/d");
+    at.mkdir("mv-dir/d/e");
+    at.mkdir("mv-dir/d/e/f");
+    at.touch("mv-dir/a/b/c/file1");
+    at.touch("mv-dir/d/e/f/file2");
+
+    at.mkdir("target");
+
+    let result = scene
+        .ucmd()
+        .arg("--verbose")
+        .arg("mv-dir")
+        .arg("target")
+        .succeeds();
+
+    // Check that the directory structure was moved
+    assert!(!at.dir_exists("mv-dir"));
+    assert!(at.dir_exists("target/mv-dir"));
+    assert!(at.dir_exists("target/mv-dir/a"));
+    assert!(at.dir_exists("target/mv-dir/a/b"));
+    assert!(at.dir_exists("target/mv-dir/a/b/c"));
+    assert!(at.dir_exists("target/mv-dir/d"));
+    assert!(at.dir_exists("target/mv-dir/d/e"));
+    assert!(at.dir_exists("target/mv-dir/d/e/f"));
+    assert!(at.file_exists("target/mv-dir/a/b/c/file1"));
+    assert!(at.file_exists("target/mv-dir/d/e/f/file2"));
+
+    let stdout = result.stdout_str();
+
+    assert!(stdout.contains("'mv-dir' -> 'target/mv-dir'"));
+
+    // Should contain subdirectory moves when cross-filesystem fallback occurs
+    // Note: This test may pass without subdirectory output if mv uses a simple rename
+    // but will show the recursive verbose output when the fallback copy+delete is used
+    if stdout.lines().count() > 1 {
+        // If we see multiple lines, verify we have recursive output
+        assert!(stdout.contains("'mv-dir/a' -> 'target/mv-dir/a'"));
+        assert!(stdout.contains("'mv-dir/a/b' -> 'target/mv-dir/a/b'"));
+        assert!(stdout.contains("'mv-dir/a/b/c' -> 'target/mv-dir/a/b/c'"));
+        assert!(stdout.contains("'mv-dir/a/b/c/file1' -> 'target/mv-dir/a/b/c/file1'"));
+        assert!(stdout.contains("'mv-dir/d' -> 'target/mv-dir/d'"));
+        assert!(stdout.contains("'mv-dir/d/e' -> 'target/mv-dir/d/e'"));
+        assert!(stdout.contains("'mv-dir/d/e/f' -> 'target/mv-dir/d/e/f'"));
+        assert!(stdout.contains("'mv-dir/d/e/f/file2' -> 'target/mv-dir/d/e/f/file2'"));
+    }
+}
