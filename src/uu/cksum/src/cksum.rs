@@ -9,7 +9,7 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command, value_parser};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, BufReader, Read, Write, stdin, stdout};
+use std::io::{BufReader, Read, Write, stdin, stdout};
 use std::iter;
 use std::path::Path;
 use uucore::checksum::{
@@ -70,12 +70,18 @@ where
         let file_buf;
         let not_file = filename == OsStr::new("-");
 
+        if filename.is_dir() {
+            show!(USimpleError::new(
+                1,
+                translate!("cksum-error-is-directory", "file" => filename.display())
+            ));
+            continue;
+        }
+
         // Handle the file input
         let mut file = BufReader::new(if not_file {
             stdin_buf = stdin();
             Box::new(stdin_buf) as Box<dyn Read>
-        } else if filename.is_dir() {
-            Box::new(BufReader::new(io::empty())) as Box<dyn Read>
         } else {
             file_buf = match File::open(filename) {
                 Ok(file) => file,
@@ -86,14 +92,6 @@ where
             };
             Box::new(file_buf) as Box<dyn Read>
         });
-
-        if filename.is_dir() {
-            show!(USimpleError::new(
-                1,
-                translate!("cksum-error-is-directory", "file" => filename.display())
-            ));
-            continue;
-        }
 
         let (sum_hex, sz) =
             digest_reader(&mut options.digest, &mut file, false, options.output_bits)
