@@ -13,6 +13,7 @@ bytecount
 byteorder
 chacha
 chrono
+clap_mangen
 conv
 corasick
 crossterm
