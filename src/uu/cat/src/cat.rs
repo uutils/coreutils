@@ -97,16 +97,16 @@ enum CatError {
     #[error("{0}")]
     Nix(#[from] nix::Error),
     /// Unknown file type; it's not a regular file, socket, etc.
-    #[error("unknown filetype: {ft_debug}")]
+    #[error("{}", translate!("cat-error-unknown-filetype", "ft_debug" => .ft_debug))]
     UnknownFiletype {
         /// A debug print of the file type
         ft_debug: String,
     },
-    #[error("Is a directory")]
+    #[error("{}", translate!("cat-error-is-directory"))]
     IsDirectory,
-    #[error("input file is output file")]
+    #[error("{}", translate!("cat-error-input-file-is-output-file"))]
     OutputIsInput,
-    #[error("Too many levels of symbolic links")]
+    #[error("{}", translate!("cat-error-too-many-symbolic-links"))]
     TooManySymlinks,
 }
 
@@ -302,14 +302,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::SHOW_ALL)
                 .short('A')
                 .long(options::SHOW_ALL)
-                .help("equivalent to -vET")
+                .help(translate!("cat-help-show-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NUMBER_NONBLANK)
                 .short('b')
                 .long(options::NUMBER_NONBLANK)
-                .help("number nonempty output lines, overrides -n")
+                .help(translate!("cat-help-number-nonblank"))
                 // Note: This MUST NOT .overrides_with(options::NUMBER)!
                 // In clap, overriding is symmetric, so "-b -n" counts as "-n", which is not what we want.
                 .action(ArgAction::SetTrue),
@@ -317,54 +317,54 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::SHOW_NONPRINTING_ENDS)
                 .short('e')
-                .help("equivalent to -vE")
+                .help(translate!("cat-help-show-nonprinting-ends"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHOW_ENDS)
                 .short('E')
                 .long(options::SHOW_ENDS)
-                .help("display $ at end of each line")
+                .help(translate!("cat-help-show-ends"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NUMBER)
                 .short('n')
                 .long(options::NUMBER)
-                .help("number all output lines")
+                .help(translate!("cat-help-number"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SQUEEZE_BLANK)
                 .short('s')
                 .long(options::SQUEEZE_BLANK)
-                .help("suppress repeated empty output lines")
+                .help(translate!("cat-help-squeeze-blank"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHOW_NONPRINTING_TABS)
                 .short('t')
-                .help("equivalent to -vT")
+                .help(translate!("cat-help-show-nonprinting-tabs"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHOW_TABS)
                 .short('T')
                 .long(options::SHOW_TABS)
-                .help("display TAB characters at ^I")
+                .help(translate!("cat-help-show-tabs"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHOW_NONPRINTING)
                 .short('v')
                 .long(options::SHOW_NONPRINTING)
-                .help("use ^ and M- notation, except for LF (\\n) and TAB (\\t)")
+                .help(translate!("cat-help-show-nonprinting"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::IGNORED_U)
                 .short('u')
-                .help("(ignored)")
+                .help(translate!("cat-help-ignored-u"))
                 .action(ArgAction::SetTrue),
         )
 }
