@@ -375,8 +375,8 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         });
     }
 
-    let target_is_dir = target.is_dir();
-    let source_is_dir = source.is_dir();
+    let target_is_dir = target.is_dir() && !target.is_symlink();
+    let source_is_dir = source.is_dir() && !source.is_symlink();
 
     if path_ends_with_terminator(target)
         && (!target_is_dir && !source_is_dir)
@@ -415,7 +415,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         } else {
             move_files_into_dir(&[source.to_path_buf()], target, opts)
         }
-    } else if target.exists() && source.is_dir() {
+    } else if target.exists() && source_is_dir {
         match opts.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => {
@@ -747,7 +747,7 @@ fn rename(
     }
 
     // "to" may no longer exist if it was backed up
-    if to.exists() && to.is_dir() {
+    if to.exists() && to.is_dir() && !to.is_symlink() {
         // normalize behavior between *nix and windows
         if from.is_dir() {
             if is_empty_dir(to) {
