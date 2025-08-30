@@ -6,7 +6,6 @@
 // spell-checker:ignore getloadavg behaviour loadavg uptime upsecs updays upmins uphours boottime nusers utmpxname gettime clockid couldnt
 
 use chrono::{Local, TimeZone, Utc};
-#[cfg(unix)]
 use std::ffi::OsString;
 use std::io;
 use thiserror::Error;
@@ -15,13 +14,13 @@ use uucore::libc::time_t;
 use uucore::translate;
 use uucore::uptime::*;
 
-use clap::{Arg, ArgAction, Command, ValueHint, builder::ValueParser};
+use clap::{Arg, ArgAction, Command};
 
 use uucore::LocalizedCommand;
 use uucore::format_usage;
 
 #[cfg(unix)]
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(not(any(target_os = "openbsd", target_os = "redox", target_os = "android")))]
 use uucore::utmpx::*;
 
 pub mod options {
@@ -83,15 +82,26 @@ pub fn uu_app() -> Command {
                 .help(translate!("uptime-help-since"))
                 .action(ArgAction::SetTrue),
         );
+
     #[cfg(unix)]
-    cmd.arg(
-        Arg::new(options::PATH)
-            .help(translate!("uptime-help-path"))
-            .action(ArgAction::Set)
-            .num_args(0..=1)
-            .value_parser(ValueParser::os_string())
-            .value_hint(ValueHint::AnyPath),
-    )
+    let cmd = {
+        use clap::{ValueHint, builder::ValueParser};
+        cmd.arg(
+            Arg::new(options::PATH)
+                .help(translate!("uptime-help-path"))
+                .action(ArgAction::Set)
+                .num_args(0..=1)
+                .value_parser(ValueParser::os_string())
+                .value_hint(ValueHint::AnyPath),
+        )
+    };
+
+    cmd
+}
+
+#[cfg(windows)]
+fn uptime_with_file(_: &OsString) -> UResult<()> {
+    unreachable!("The function should never be called on Windows")
 }
 
 #[cfg(unix)]
@@ -153,7 +163,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
     print_time();
     let user_count;
 
-    #[cfg(not(target_os = "openbsd"))]
+    #[cfg(not(any(target_os = "openbsd", target_os = "redox", target_os = "android")))]
     {
         let (boot_time, count) = process_utmpx(Some(file_path));
         if let Some(time) = boot_time {
@@ -167,7 +177,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
         user_count = count;
     }
 
-    #[cfg(target_os = "openbsd")]
+    #[cfg(any(target_os = "openbsd", target_os = "redox", target_os = "android"))]
     {
         let upsecs = get_uptime(None);
         if upsecs >= 0 {
@@ -189,12 +199,17 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
 
 fn uptime_since() -> UResult<()> {
     #[cfg(unix)]
-    #[cfg(not(target_os = "openbsd"))]
+    #[cfg(not(any(target_os = "openbsd", target_os = "redox", target_os = "android")))]
     let uptime = {
         let (boot_time, _) = process_utmpx(None);
         get_uptime(boot_time)?
     };
-    #[cfg(any(windows, target_os = "openbsd"))]
+    #[cfg(any(
+        windows,
+        target_os = "openbsd",
+        target_os = "redox",
+        target_os = "android"
+    ))]
     let uptime = get_uptime(None)?;
 
     let since_date = Local
@@ -224,7 +239,7 @@ fn print_loadavg() {
 }
 
 #[cfg(unix)]
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(not(any(target_os = "openbsd", target_os = "redox", target_os = "android")))]
 fn process_utmpx(file: Option<&OsString>) -> (Option<time_t>, usize) {
     let mut nusers = 0;
     let mut boot_time = None;
