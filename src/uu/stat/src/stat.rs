@@ -415,27 +415,15 @@ fn print_os_str(s: &OsString, flags: &Flags, width: usize, precision: Precision)
 
         let bytes = s.as_bytes();
 
-        if let Err(e) = pad_and_print_bytes(bytes, flags.left, width, precision) {
-            show_warning!(
-                "Failed to print raw bytes: {}, falling back to lossy conversion",
-                e
-            );
+        if pad_and_print_bytes(bytes, flags.left, width, precision).is_err() {
             let lossy_string = s.to_string_lossy();
-            let truncated = match precision {
-                Precision::Number(p) if p < lossy_string.len() => &lossy_string[..p],
-                _ => &lossy_string,
-            };
-            pad_and_print(truncated, flags.left, width, Padding::Space);
+            print_str(&lossy_string, flags, width, precision);
         }
     }
     #[cfg(not(unix))]
     {
         let lossy_string = s.to_string_lossy();
-        let truncated = match precision {
-            Precision::Number(p) if p < lossy_string.len() => &lossy_string[..p],
-            _ => &lossy_string,
-        };
-        pad_and_print(truncated, flags.left, width, Padding::Space);
+        print_str(&lossy_string, flags, width, precision);
     }
 }
 
