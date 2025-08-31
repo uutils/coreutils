@@ -93,17 +93,16 @@ fn handle_display_errors(err: Error) -> ! {
             let usage_label = translate!("common-usage");
             let localized_help = help_text.replace("Usage:", &format!("{usage_label}:"));
 
-            print!("{}", localized_help);
-            std::process::exit(0);
+            print!("{localized_help}");
         }
         ErrorKind::DisplayVersion => {
             // For version, use clap's built-in formatting and exit with 0
             // Output to stdout as expected by tests
             print!("{}", err.render());
-            std::process::exit(0);
         }
         _ => unreachable!("handle_display_errors called with non-display error"),
     }
+    std::process::exit(0);
 }
 
 /// Handle UnknownArgument errors with localization and suggestions
@@ -243,8 +242,8 @@ fn handle_invalid_value_error(err: Error, maybe_colorize: impl Fn(&str, Color) -
     } else {
         // Fallback if we can't extract context - use clap's default formatting
         let rendered_str = err.render().to_string();
-        let lines: Vec<&str> = rendered_str.lines().collect();
-        if let Some(main_error_line) = lines.first() {
+
+        if let Some(main_error_line) = rendered_str.lines().next() {
             eprintln!("{main_error_line}");
             eprintln!();
             eprintln!("{}", translate!("common-help-suggestion"));
@@ -284,10 +283,9 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
             }
 
             // For other simple validation errors, use the same simple format as other errors
-            let lines: Vec<&str> = rendered_str.lines().collect();
-            if let Some(main_error_line) = lines.first() {
+            if let Some(main_error_line) = rendered_str.lines().next() {
                 // Keep the "error: " prefix for test compatibility
-                eprintln!("{}", main_error_line);
+                eprintln!("{main_error_line}");
                 eprintln!();
                 // Use the execution phrase for the help suggestion to match test expectations
                 eprintln!("{}", translate!("common-help-suggestion"));
@@ -323,11 +321,10 @@ pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: 
 
             // For other errors, show just the error and help suggestion
             let rendered_str = err.render().to_string();
-            let lines: Vec<&str> = rendered_str.lines().collect();
 
             // Print error message (first line)
-            if let Some(first_line) = lines.first() {
-                eprintln!("{}", first_line);
+            if let Some(first_line) = rendered_str.lines().next() {
+                eprintln!("{first_line}");
             }
 
             // For other errors, just show help suggestion
