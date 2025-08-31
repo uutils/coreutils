@@ -93,17 +93,16 @@ fn handle_display_errors(err: Error) -> ! {
             let usage_label = translate!("common-usage");
             let localized_help = help_text.replace("Usage:", &format!("{usage_label}:"));
 
-            print!("{}", localized_help);
-            std::process::exit(0);
+            print!("{localized_help}");
         }
         ErrorKind::DisplayVersion => {
             // For version, use clap's built-in formatting and exit with 0
             // Output to stdout as expected by tests
             print!("{}", err.render());
-            std::process::exit(0);
         }
         _ => unreachable!("handle_display_errors called with non-display error"),
     }
+    std::process::exit(0);
 }
 
 /// Handle UnknownArgument errors with localization and suggestions
