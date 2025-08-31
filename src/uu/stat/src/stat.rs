@@ -114,6 +114,7 @@ fn pad_and_print(result: &str, left: bool, width: usize, padding: Padding) {
 #[derive(Debug)]
 pub enum OutputType {
     Str(String),
+    OsStr(OsString),
     Integer(i64),
     Unsigned(u64),
     UnsignedHex(u64),
@@ -306,6 +307,7 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Precisio
 
     match output {
         OutputType::Str(s) => print_str(s, &flags, width, precision),
+        OutputType::OsStr(_s) => todo!(),
         OutputType::Integer(num) => print_integer(*num, &flags, width, precision, padding_char),
         OutputType::Unsigned(num) => print_unsigned(*num, &flags, width, precision, padding_char),
         OutputType::UnsignedOct(num) => {
@@ -890,13 +892,13 @@ impl Stater {
         })
     }
 
-    fn find_mount_point<P: AsRef<Path>>(&self, p: P) -> Option<String> {
+    fn find_mount_point<P: AsRef<Path>>(&self, p: P) -> Option<OsString> {
         let path = p.as_ref().canonicalize().ok()?;
 
         for root in self.mount_list.as_ref()? {
             if path.starts_with(root) {
                 // TODO: This is probably wrong, we should pass the OsString
-                return Some(root.to_string_lossy().into_owned());
+                return Some(root.clone());
             }
         }
         None
@@ -994,7 +996,7 @@ impl Stater {
                     // inode number
                     'i' => OutputType::Unsigned(meta.ino()),
                     // mount point: TODO: This should be an OsStr
-                    'm' => OutputType::Str(self.find_mount_point(file).unwrap()),
+                    'm' => OutputType::OsStr(self.find_mount_point(file).unwrap()),
                     // file name
                     'n' => OutputType::Str(display_name.to_string()),
                     // quoted file name with dereference if symbolic link
