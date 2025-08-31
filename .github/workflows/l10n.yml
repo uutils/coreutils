@@ -91,43 +91,38 @@ jobs:
     - name: Find and validate Fluent files
       shell: bash
       run: |
-        ## Find and validate Fluent files with Mozilla Fluent Linter
 
-        # Check if any .ftl files exist
-        fluent_files=$(find . -name "*.ftl" -type f 2>/dev/null || true)
+        fluent_dirs=$(find . -name "*.ftl" -type f -exec dirname {} \; | sort | uniq 2>/dev/null || true)
 
-        if [ -n "$fluent_files" ]; then
-          echo "Found Fluent files:"
-          echo "$fluent_files"
+        if [ -n "$fluent_dirs" ]; then
+          echo "Found Fluent directories:"
+          echo "$fluent_dirs"
+
+          # Count total files for informational purposes
+          total_files=$(find . -name "*.ftl" -type f | wc -l)
+          echo "Total Fluent files: $total_files"
         else
           echo "::notice::No Fluent (.ftl) files found in the repository"
           exit 0
         fi
 
-        # Use Mozilla Fluent Linter for comprehensive validation
-        echo "Running Mozilla Fluent Linter..."
+        echo "Running Fluent Linter on directories..."
 
         has_errors=false
 
-        while IFS= read -r file; do
-          echo "Checking $file with Mozilla Fluent Linter..."
+        while IFS= read -r dir; do
+          echo "Checking directory $dir with Fluent Linter..."
 
-          # Run fluent-linter on each file
-          if ! moz-fluent-lint "$file"; then
-            echo "::error file=$file::Fluent syntax errors found in $file"
-            has_errors=true
+          if ! moz-fluent-lint --config .github/fluent_linter_config.yml "$dir"; then
+            echo "::error::Fluent syntax errors found in $dir"
+            exit 1
           else
-            echo "✓ Fluent syntax check passed for $file"
+            echo "✓ Fluent syntax check passed for directory $dir"
           fi
 
-        done <<< "$fluent_files"
+        done <<< "$fluent_dirs"
 
-        if [ "$has_errors" = true ]; then
-          echo "::error::Fluent linting failed - please fix syntax errors"
-          exit 1
-        fi
-
-        echo "::notice::All Fluent files passed Mozilla Fluent Linter validation"
+        echo "::notice::All Fluent directories passed Fluent Linter validation"
 
   l10n_clap_error_localization:
     name: L10n/Clap Error Localization Test
