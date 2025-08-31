@@ -111,6 +111,47 @@ fn pad_and_print(result: &str, left: bool, width: usize, padding: Padding) {
     }
 }
 
+/// Pads and prints raw bytes (Unix-specific) or falls back to string printing
+///
+/// On Unix systems, this preserves non-UTF8 data by printing raw bytes
+/// On other platforms, falls back to lossy string conversion
+fn pad_and_print_bytes(
+    bytes: &[u8],
+    left: bool,
+    width: usize,
+    precision: Precision,
+) -> Result<(), std::io::Error> {
+    use std::io::{self, Write};
+
+    let display_bytes = match precision {
+        Precision::Number(p) if p < bytes.len() => &bytes[..p],
+        _ => bytes,
+    };
+
+    let display_string = String::from_utf8_lossy(display_bytes);
+    let display_len = display_string.chars().count();
+
+    if width > display_len {
+        let padding_needed = width - display_len;
+
+        if left {
+            io::stdout().write_all(display_bytes)?;
+            for _ in 0..padding_needed {
+                print!(" ");
+            }
+        } else {
+            for _ in 0..padding_needed {
+                print!(" ");
+            }
+            io::stdout().write_all(display_bytes)?;
+        }
+    } else {
+        io::stdout().write_all(display_bytes)?;
+    }
+
+    Ok(())
+}
+
 #[derive(Debug)]
 pub enum OutputType {
     Str(String),
@@ -307,7 +348,7 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Precisio
 
     match output {
         OutputType::Str(s) => print_str(s, &flags, width, precision),
-        OutputType::OsStr(_s) => todo!(),
+        OutputType::OsStr(s) => print_os_str(s, &flags, width, precision),
         OutputType::Integer(num) => print_integer(*num, &flags, width, precision, padding_char),
         OutputType::Unsigned(num) => print_unsigned(*num, &flags, width, precision, padding_char),
         OutputType::UnsignedOct(num) => {
@@ -354,6 +395,48 @@ fn print_str(s: &str, flags: &Flags, width: usize, precision: Precision) {
         _ => s,
     };
     pad_and_print(s, flags.left, width, Padding::Space);
+}
+
+/// Prints a `OsString` value based on the provided flags, width, and precision.
+/// for unix it converts it to bytes then tries to print it if failed print the lossy string version
+/// for windows, `OsString` uses UTF-16 internally which doesn't map directly to bytes like Unix,
+/// so we fall back to lossy string conversion to handle invalid UTF-8 sequences gracefully
+///
+/// # Arguments
+///
+/// * `s` - The `OsString` to be printed.
+/// * `flags` - A reference to the Flags struct containing formatting flags.
+/// * `width` - The width of the field for the printed string.
+/// * `precision` - How many digits of precision, if any.
+fn print_os_str(s: &OsString, flags: &Flags, width: usize, precision: Precision) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+
+        let bytes = s.as_bytes();
+
+        if let Err(e) = pad_and_print_bytes(bytes, flags.left, width, precision) {
+            show_warning!(
+                "Failed to print raw bytes: {}, falling back to lossy conversion",
+                e
+            );
+            let lossy_string = s.to_string_lossy();
+            let truncated = match precision {
+                Precision::Number(p) if p < lossy_string.len() => &lossy_string[..p],
+                _ => &lossy_string,
+            };
+            pad_and_print(truncated, flags.left, width, Padding::Space);
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let lossy_string = s.to_string_lossy();
+        let truncated = match precision {
+            Precision::Number(p) if p < lossy_string.len() => &lossy_string[..p],
+            _ => &lossy_string,
+        };
+        pad_and_print(truncated, flags.left, width, Padding::Space);
+    }
 }
 
 fn quote_file_name(file_name: &str, quoting_style: &QuotingStyle) -> String {
@@ -897,7 +980,6 @@ impl Stater {
 
         for root in self.mount_list.as_ref()? {
             if path.starts_with(root) {
-                // TODO: This is probably wrong, we should pass the OsString
                 return Some(root.clone());
             }
         }
@@ -995,8 +1077,8 @@ impl Stater {
                     'h' => OutputType::Unsigned(meta.nlink()),
                     // inode number
                     'i' => OutputType::Unsigned(meta.ino()),
-                    // mount point: TODO: This should be an OsStr
-                    'm' => OutputType::OsStr(self.find_mount_point(file).unwrap()),
+                    // mount point
+                    'm' => OutputType::OsStr(self.find_mount_point(file).unwrap_or_default()),
                     // file name
                     'n' => OutputType::Str(display_name.to_string()),
                     // quoted file name with dereference if symbolic link
