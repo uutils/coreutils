@@ -163,11 +163,20 @@ fn idle_string<'a>(when: i64, boottime: i64) -> Cow<'a, str> {
 }
 
 fn time_string(ut: &UtmpxRecord) -> String {
-    // "%b %e %H:%M"
-    let time_format: Vec<time::format_description::FormatItem> =
+    let lc_time = std::env::var("LC_ALL")
+        .or_else(|_| std::env::var("LC_TIME"))
+        .or_else(|_| std::env::var("LANG"))
+        .unwrap_or_default();
+
+    let time_format: Vec<time::format_description::FormatItem> = if lc_time == "C" {
+        // "%b %e %H:%M"
         time::format_description::parse("[month repr:short] [day padding:space] [hour]:[minute]")
-            .unwrap();
-    ut.login_time().format(&time_format).unwrap() // LC_ALL=C
+            .unwrap()
+    } else {
+        // "%Y-%m-%d %H:%M"
+        time::format_description::parse("[year]-[month]-[day] [hour]:[minute]").unwrap()
+    };
+    ut.login_time().format(&time_format).unwrap()
 }
 
 #[inline]
