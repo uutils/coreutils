@@ -3003,6 +3003,11 @@ fn parse_coreutil_version(version_string: &str) -> f32 {
 /// If the `util_name` in `$PATH` doesn't include a coreutils version string,
 /// or the version is too low, this returns an error and the test should be skipped.
 ///
+/// Arguments:
+/// - `ts`: The test context.
+/// - `args`: Command-line variables applied to the command.
+/// - `envs`: Environment variables applied to the command invocation.
+///
 /// Example:
 ///
 /// ```no_run
@@ -3019,7 +3024,11 @@ fn parse_coreutil_version(version_string: &str) -> f32 {
 /// }
 ///```
 #[cfg(unix)]
-pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<CmdResult, String> {
+pub fn gnu_cmd_result(
+    ts: &TestScenario,
+    args: &[&str],
+    envs: &[(&str, &str)],
+) -> std::result::Result<CmdResult, String> {
     let util_name = ts.util_name.as_str();
     println!("{}", check_coreutil_version(util_name, VERSION_MIN)?);
     let util_name = host_name_for(util_name);
@@ -3028,6 +3037,7 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
         .cmd(util_name.as_ref())
         .env("PATH", PATH)
         .envs(DEFAULT_ENV)
+        .envs(envs.iter().copied())
         .args(args)
         .run();
 
@@ -3054,6 +3064,31 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
         stdout.as_bytes(),
         stderr.as_bytes(),
     ))
+}
+
+/// This runs the GNU coreutils `util_name` binary in `$PATH` in order to
+/// dynamically gather reference values on the system.
+/// If the `util_name` in `$PATH` doesn't include a coreutils version string,
+/// or the version is too low, this returns an error and the test should be skipped.
+///
+/// Example:
+///
+/// ```no_run
+/// use uutests::util::*;
+/// #[test]
+/// fn test_xyz() {
+///     let ts = TestScenario::new(util_name!());
+///     let result = ts.ucmd().run();
+///     let exp_result = unwrap_or_return!(expected_result(&ts, &[]));
+///     result
+///         .stdout_is(exp_result.stdout_str())
+///         .stderr_is(exp_result.stderr_str())
+///         .code_is(exp_result.code());
+/// }
+///```
+#[cfg(unix)]
+pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<CmdResult, String> {
+    gnu_cmd_result(ts, args, &[])
 }
 
 /// This is a convenience wrapper to run a ucmd with root permissions.
