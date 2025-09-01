@@ -64,10 +64,8 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
         Some(num) if *num > 0 => settings.number_width = *num,
         Some(_) => errs.push(translate!("nl-error-invalid-line-width", "value" => "0")),
     }
-    match opts.get_one::<u64>(options::JOIN_BLANK_LINES) {
-        None => {}
-        Some(num) if *num > 0 => settings.join_blank_lines = *num,
-        Some(_) => errs.push(translate!("nl-error-invalid-blank-lines", "value" => "0")),
+    if let Some(num) = opts.get_one::<u64>(options::JOIN_BLANK_LINES) {
+        settings.join_blank_lines = *num;
     }
     if let Some(num) = opts.get_one::<i64>(options::LINE_INCREMENT) {
         settings.line_increment = *num;
