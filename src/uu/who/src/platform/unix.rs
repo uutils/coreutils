@@ -233,20 +233,20 @@ impl Who {
                 if !self.my_line_only || cur_tty == ut.tty_device() {
                     if self.need_users && ut.is_user_process() {
                         self.print_user(&ut)?;
-                    } else if self.need_runlevel && run_level_chk(ut.record_type()) {
-                        if cfg!(target_os = "linux") {
-                            self.print_runlevel(&ut);
+                    } else {
+                        match ut.record_type() {
+                            rt if self.need_runlevel && run_level_chk(rt) => {
+                                if cfg!(target_os = "linux") {
+                                    self.print_runlevel(&ut);
+                                }
+                            }
+                            utmpx::BOOT_TIME if self.need_boottime => self.print_boottime(&ut),
+                            utmpx::NEW_TIME if self.need_clockchange => self.print_clockchange(&ut),
+                            utmpx::INIT_PROCESS if self.need_initspawn => self.print_initspawn(&ut),
+                            utmpx::LOGIN_PROCESS if self.need_login => self.print_login(&ut),
+                            utmpx::DEAD_PROCESS if self.need_deadprocs => self.print_deadprocs(&ut),
+                            _ => {}
                         }
-                    } else if self.need_boottime && ut.record_type() == utmpx::BOOT_TIME {
-                        self.print_boottime(&ut);
-                    } else if self.need_clockchange && ut.record_type() == utmpx::NEW_TIME {
-                        self.print_clockchange(&ut);
-                    } else if self.need_initspawn && ut.record_type() == utmpx::INIT_PROCESS {
-                        self.print_initspawn(&ut);
-                    } else if self.need_login && ut.record_type() == utmpx::LOGIN_PROCESS {
-                        self.print_login(&ut);
-                    } else if self.need_deadprocs && ut.record_type() == utmpx::DEAD_PROCESS {
-                        self.print_deadprocs(&ut);
                     }
                 }
 
