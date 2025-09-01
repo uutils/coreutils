@@ -42,8 +42,15 @@ cargo install coreutils
 
 ## Goals
 
-uutils aims to be a drop-in replacement for the GNU utils. Differences with GNU
+uutils coreutils aims to be a drop-in replacement for the GNU utils. Differences with GNU
 are treated as bugs.
+
+Our key objectives include:
+- Matching GNU's output (stdout and error code) exactly
+- Better error messages
+- Providing comprehensive internationalization support (UTF-8)
+- Improved performances
+- [Extensions](docs/src/extensions.md) when relevant (example: --progress)
 
 uutils aims to work on as many platforms as possible, to be able to use the same
 utils on Linux, macOS, Windows and other platforms. This ensures, for example,
