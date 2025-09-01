@@ -347,4 +347,5 @@ uutils
 getcwd
 
 # * other
+weblate
 algs

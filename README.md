@@ -15,6 +15,7 @@
 
 [![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
 ![MSRV](https://img.shields.io/badge/MSRV-1.85.0-brightgreen)
+[![Weblate](https://hosted.weblate.org/widget/rust-coreutils/svg-badge.svg)](https://hosted.weblate.org/projects/rust-coreutils/)
 
 </div>
 
@@ -59,6 +60,7 @@ uutils has both user and developer documentation available:
 Both can also be generated locally, the instructions for that can be found in
 the [coreutils docs](https://github.com/uutils/uutils.github.io) repository.
 
+Use [weblate/rust-coreutils](https://hosted.weblate.org/projects/rust-coreutils/) to translate the Rust coreutils into your language.
 
 <!-- ANCHOR: build (this mark is needed for mdbook) -->
 
