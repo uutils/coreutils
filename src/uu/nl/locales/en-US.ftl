@@ -33,7 +33,6 @@ nl-error-invalid-arguments = Invalid arguments supplied.
 nl-error-could-not-read-line = could not read line
 nl-error-line-number-overflow = line number overflow
 nl-error-invalid-line-width = Invalid line number field width: ‘{ $value }’: Numerical result out of range
-nl-error-invalid-blank-lines = Invalid line number of blank lines: ‘{ $value }’: Numerical result out of range
 nl-error-invalid-regex = invalid regular expression
 nl-error-invalid-numbering-style = invalid numbering style: '{ $style }'
 nl-error-is-directory = { $path }: Is a directory

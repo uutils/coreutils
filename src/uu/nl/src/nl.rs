@@ -368,6 +368,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                 // for numbering, and only number the last one
                 NumberingStyle::All
                     if line.is_empty()
+                        && settings.join_blank_lines > 0
                         && stats.consecutive_empty_lines % settings.join_blank_lines != 0 =>
                 {
                     false
