@@ -130,23 +130,19 @@ fn pad_and_print_bytes(
 
     let display_string = String::from_utf8_lossy(display_bytes);
     let display_len = display_string.chars().count();
+    let padding_needed = width.saturating_sub(display_len);
 
-    if width > display_len {
-        let padding_needed = width - display_len;
-
-        if left {
-            io::stdout().write_all(display_bytes)?;
-            for _ in 0..padding_needed {
-                print!(" ");
-            }
-        } else {
-            for _ in 0..padding_needed {
-                print!(" ");
-            }
-            io::stdout().write_all(display_bytes)?;
+    if !left && padding_needed > 0 {
+        for _ in 0..padding_needed {
+            print!(" ");
         }
-    } else {
-        io::stdout().write_all(display_bytes)?;
+    }
+    io::stdout().write_all(display_bytes)?;
+
+    if left && padding_needed > 0 {
+        for _ in 0..padding_needed {
+            print!(" ");
+        }
     }
 
     Ok(())
