@@ -4,10 +4,7 @@
 // file that was distributed with this source code.
 //
 // spell-checker:ignore binvalid finvalid hinvalid iinvalid linvalid nabcabc nabcabcabc ninvalid vinvalid winvalid dabc näää
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
+use uutests::{at_and_ucmd, new_ucmd, util::TestScenario, util_name};
 
 #[test]
 #[cfg(target_os = "linux")]
@@ -701,4 +698,20 @@ fn test_directory_as_input() {
         .fails()
         .stderr_is(format!("nl: {dir}: Is a directory\n"))
         .stdout_contains(content);
+}
+
+#[test]
+fn test_file_with_non_utf8_content() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = "file";
+    let content: &[u8] = b"a\n\xFF\xFE\nb";
+    let invalid_utf8: &[u8] = b"\xFF\xFE";
+
+    at.write_bytes(filename, content);
+
+    ucmd.arg(filename).succeeds().stdout_is(format!(
+        "     1\ta\n     2\t{}\n     3\tb\n",
+        String::from_utf8_lossy(invalid_utf8)
+    ));
 }

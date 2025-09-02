@@ -9,10 +9,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Read, stdin};
 use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
-use uucore::translate;
-
-use uucore::LocalizedCommand;
-use uucore::{format_usage, show_error};
+use uucore::{LocalizedCommand, format_usage, show_error, translate};
 
 mod helper;
 
@@ -79,7 +76,7 @@ enum NumberingStyle {
     All,
     NonEmpty,
     None,
-    Regex(Box<regex::Regex>),
+    Regex(Box<regex::bytes::Regex>),
 }
 
 impl TryFrom<&str> for NumberingStyle {
@@ -90,7 +87,7 @@ impl TryFrom<&str> for NumberingStyle {
             "a" => Ok(Self::All),
             "t" => Ok(Self::NonEmpty),
             "n" => Ok(Self::None),
-            _ if s.starts_with('p') => match regex::Regex::new(&s[1..]) {
+            _ if s.starts_with('p') => match regex::bytes::Regex::new(&s[1..]) {
                 Ok(re) => Ok(Self::Regex(Box::new(re))),
                 Err(_) => Err(translate!("nl-error-invalid-regex")),
             },
@@ -143,19 +140,30 @@ enum SectionDelimiter {
 impl SectionDelimiter {
     /// A valid section delimiter contains the pattern one to three times,
     /// and nothing else.
-    fn parse(s: &str, pattern: &str) -> Option<Self> {
-        if s.is_empty() || pattern.is_empty() {
+    fn parse(bytes: &[u8], pattern: &str) -> Option<Self> {
+        let pattern = pattern.as_bytes();
+
+        if bytes.is_empty() || pattern.is_empty() || bytes.len() % pattern.len() != 0 {
             return None;
         }
 
-        let pattern_count = s.matches(pattern).count();
-        let is_length_ok = pattern_count * pattern.len() == s.len();
+        let count = bytes.len() / pattern.len();
+        if !(1..=3).contains(&count) {
+            return None;
+        }
 
-        match (pattern_count, is_length_ok) {
-            (3, true) => Some(Self::Header),
-            (2, true) => Some(Self::Body),
-            (1, true) => Some(Self::Footer),
-            _ => None,
+        if bytes
+            .chunks_exact(pattern.len())
+            .all(|chunk| chunk == pattern)
+        {
+            match count {
+                1 => Some(Self::Footer),
+                2 => Some(Self::Body),
+                3 => Some(Self::Header),
+                _ => unreachable!(),
+            }
+        } else {
+            None
         }
     }
 }
@@ -338,9 +346,21 @@ pub fn uu_app() -> Command {
 /// `nl` implements the main functionality for an individual buffer.
 fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings) -> UResult<()> {
     let mut current_numbering_style = &settings.body_numbering;
+    let mut line = Vec::new();
 
-    for line in reader.lines() {
-        let line = line.map_err_context(|| translate!("nl-error-could-not-read-line"))?;
+    loop {
+        line.clear();
+        // reads up to and including b'\n'; returns 0 on EOF
+        let n = reader
+            .read_until(b'\n', &mut line)
+            .map_err_context(|| translate!("nl-error-could-not-read-line"))?;
+        if n == 0 {
+            break;
+        }
+
+        if line.last().copied() == Some(b'\n') {
+            line.pop();
+        }
 
         if line.is_empty() {
             stats.consecutive_empty_lines += 1;
@@ -387,11 +407,12 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                     ));
                 };
                 println!(
-                    "{}{}{line}",
+                    "{}{}{}",
                     settings
                         .number_format
                         .format(line_number, settings.number_width),
                     settings.number_separator.to_string_lossy(),
+                    String::from_utf8_lossy(&line),
                 );
                 // update line number for the potential next line
                 match line_number.checked_add(settings.line_increment) {
@@ -400,7 +421,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                 }
             } else {
                 let spaces = " ".repeat(settings.number_width + 1);
-                println!("{spaces}{line}");
+                println!("{spaces}{}", String::from_utf8_lossy(&line));
             }
         }
     }
