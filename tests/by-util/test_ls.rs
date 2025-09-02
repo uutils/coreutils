@@ -6147,3 +6147,19 @@ fn test_acl_display_symlink() {
         .succeeds()
         .stdout_matches(&re_with_acl);
 }
+
+#[test]
+fn ls_emoji_alignment() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("a", "");
+    at.write("💐", "");
+    at.write("漢", "");
+    scene
+        .ucmd()
+        .succeeds()
+        .stdout_contains("a")
+        .stdout_contains("💐")
+        .stdout_contains("漢");
+}
