@@ -14,7 +14,7 @@ use uucore::libc::{S_IWGRP, STDIN_FILENO, ttyname};
 use uucore::translate;
 
 use uucore::LocalizedCommand;
-use uucore::utmpx::{self, Utmpx, time};
+use uucore::utmpx::{self, UtmpxRecord, time};
 
 use std::borrow::Cow;
 use std::ffi::CStr;
@@ -162,12 +162,21 @@ fn idle_string<'a>(when: i64, boottime: i64) -> Cow<'a, str> {
     })
 }
 
-fn time_string(ut: &Utmpx) -> String {
-    // "%b %e %H:%M"
-    let time_format: Vec<time::format_description::FormatItem> =
+fn time_string(ut: &UtmpxRecord) -> String {
+    let lc_time = std::env::var("LC_ALL")
+        .or_else(|_| std::env::var("LC_TIME"))
+        .or_else(|_| std::env::var("LANG"))
+        .unwrap_or_default();
+
+    let time_format: Vec<time::format_description::FormatItem> = if lc_time == "C" {
+        // "%b %e %H:%M"
         time::format_description::parse("[month repr:short] [day padding:space] [hour]:[minute]")
-            .unwrap();
-    ut.login_time().format(&time_format).unwrap() // LC_ALL=C
+            .unwrap()
+    } else {
+        // "%Y-%m-%d %H:%M"
+        time::format_description::parse("[year]-[month]-[day] [hour]:[minute]").unwrap()
+    };
+    ut.login_time().format(&time_format).unwrap()
 }
 
 #[inline]
@@ -202,14 +211,14 @@ impl Who {
             utmpx::DEFAULT_FILE
         };
         if self.short_list {
-            let users = Utmpx::iter_all_records_from(f)
-                .filter(Utmpx::is_user_process)
+            let users = utmpx::Utmpx::iter_all_records_from(f)
+                .filter(|ut| ut.is_user_process())
                 .map(|ut| ut.user())
                 .collect::<Vec<_>>();
             println!("{}", users.join(" "));
             println!("{}", translate!("who-user-count", "count" => users.len()));
         } else {
-            let records = Utmpx::iter_all_records_from(f);
+            let records = utmpx::Utmpx::iter_all_records_from(f);
 
             if self.include_heading {
                 self.print_heading();
@@ -224,20 +233,20 @@ impl Who {
                 if !self.my_line_only || cur_tty == ut.tty_device() {
                     if self.need_users && ut.is_user_process() {
                         self.print_user(&ut)?;
-                    } else if self.need_runlevel && run_level_chk(ut.record_type()) {
-                        if cfg!(target_os = "linux") {
-                            self.print_runlevel(&ut);
+                    } else {
+                        match ut.record_type() {
+                            rt if self.need_runlevel && run_level_chk(rt) => {
+                                if cfg!(target_os = "linux") {
+                                    self.print_runlevel(&ut);
+                                }
+                            }
+                            utmpx::BOOT_TIME if self.need_boottime => self.print_boottime(&ut),
+                            utmpx::NEW_TIME if self.need_clockchange => self.print_clockchange(&ut),
+                            utmpx::INIT_PROCESS if self.need_initspawn => self.print_initspawn(&ut),
+                            utmpx::LOGIN_PROCESS if self.need_login => self.print_login(&ut),
+                            utmpx::DEAD_PROCESS if self.need_deadprocs => self.print_deadprocs(&ut),
+                            _ => {}
                         }
-                    } else if self.need_boottime && ut.record_type() == utmpx::BOOT_TIME {
-                        self.print_boottime(&ut);
-                    } else if self.need_clockchange && ut.record_type() == utmpx::NEW_TIME {
-                        self.print_clockchange(&ut);
-                    } else if self.need_initspawn && ut.record_type() == utmpx::INIT_PROCESS {
-                        self.print_initspawn(&ut);
-                    } else if self.need_login && ut.record_type() == utmpx::LOGIN_PROCESS {
-                        self.print_login(&ut);
-                    } else if self.need_deadprocs && ut.record_type() == utmpx::DEAD_PROCESS {
-                        self.print_deadprocs(&ut);
                     }
                 }
 
@@ -248,7 +257,7 @@ impl Who {
     }
 
     #[inline]
-    fn print_runlevel(&self, ut: &Utmpx) {
+    fn print_runlevel(&self, ut: &UtmpxRecord) {
         let last = (ut.pid() / 256) as u8 as char;
         let curr = (ut.pid() % 256) as u8 as char;
         let runlevel_line = translate!("who-runlevel", "level" => curr);
@@ -268,7 +277,7 @@ impl Who {
     }
 
     #[inline]
-    fn print_clockchange(&self, ut: &Utmpx) {
+    fn print_clockchange(&self, ut: &UtmpxRecord) {
         self.print_line(
             "",
             ' ',
@@ -282,7 +291,7 @@ impl Who {
     }
 
     #[inline]
-    fn print_login(&self, ut: &Utmpx) {
+    fn print_login(&self, ut: &UtmpxRecord) {
         let comment = translate!("who-login-id", "id" => ut.terminal_suffix());
         let pidstr = format!("{}", ut.pid());
         self.print_line(
@@ -298,7 +307,7 @@ impl Who {
     }
 
     #[inline]
-    fn print_deadprocs(&self, ut: &Utmpx) {
+    fn print_deadprocs(&self, ut: &UtmpxRecord) {
         let comment = translate!("who-login-id", "id" => ut.terminal_suffix());
         let pidstr = format!("{}", ut.pid());
         let e = ut.exit_status();
@@ -316,7 +325,7 @@ impl Who {
     }
 
     #[inline]
-    fn print_initspawn(&self, ut: &Utmpx) {
+    fn print_initspawn(&self, ut: &UtmpxRecord) {
         let comment = translate!("who-login-id", "id" => ut.terminal_suffix());
         let pidstr = format!("{}", ut.pid());
         self.print_line(
@@ -332,7 +341,7 @@ impl Who {
     }
 
     #[inline]
-    fn print_boottime(&self, ut: &Utmpx) {
+    fn print_boottime(&self, ut: &UtmpxRecord) {
         self.print_line(
             "",
             ' ',
@@ -345,7 +354,7 @@ impl Who {
         );
     }
 
-    fn print_user(&self, ut: &Utmpx) -> UResult<()> {
+    fn print_user(&self, ut: &UtmpxRecord) -> UResult<()> {
         let mut p = PathBuf::from("/dev");
         p.push(ut.tty_device().as_str());
         let mesg;

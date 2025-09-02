@@ -11,8 +11,6 @@
 )]
 
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 use std::fmt::Write;
 use std::time::{Duration, SystemTime};
@@ -64,7 +62,10 @@ fn test_parallel() {
     use sha1::{Digest, Sha1};
     use std::{fs::OpenOptions, time::Duration};
     use tempfile::TempDir;
-    use uutests::util::AtPath;
+    use uutests::{
+        util::{AtPath, TestScenario},
+        util_name,
+    };
     // factor should only flush the buffer at line breaks
     let n_integers = 100_000;
     let mut input_string = String::new();

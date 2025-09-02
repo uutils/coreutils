@@ -34,7 +34,7 @@ pub struct Settings {
     number_format: NumberFormat,
     renumber: bool,
     // The string appended to each line number output.
-    number_separator: String,
+    number_separator: OsString,
 }
 
 impl Default for Settings {
@@ -50,7 +50,7 @@ impl Default for Settings {
             number_width: 6,
             number_format: NumberFormat::Right,
             renumber: true,
-            number_separator: String::from("\t"),
+            number_separator: OsString::from("\t"),
         }
     }
 }
@@ -314,6 +314,7 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(options::NUMBER_SEPARATOR)
                 .help(translate!("nl-help-number-separator"))
+                .value_parser(clap::value_parser!(OsString))
                 .value_name("STRING"),
         )
         .arg(
@@ -367,6 +368,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                 // for numbering, and only number the last one
                 NumberingStyle::All
                     if line.is_empty()
+                        && settings.join_blank_lines > 0
                         && stats.consecutive_empty_lines % settings.join_blank_lines != 0 =>
                 {
                     false
@@ -389,7 +391,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                     settings
                         .number_format
                         .format(line_number, settings.number_width),
-                    settings.number_separator,
+                    settings.number_separator.to_string_lossy(),
                 );
                 // update line number for the potential next line
                 match line_number.checked_add(settings.line_increment) {

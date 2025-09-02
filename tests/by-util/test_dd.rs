@@ -1559,7 +1559,9 @@ fn test_skip_past_dev() {
     // NOTE: This test intends to trigger code which can only be reached with root permissions.
     let ts = TestScenario::new(util_name!());
 
-    if let Ok(result) = run_ucmd_as_root_with_stdin_stdout(
+    if !ts.fixtures.file_exists("/dev/sda1") {
+        print!("Test skipped; no /dev/sda1 device found");
+    } else if let Ok(result) = run_ucmd_as_root_with_stdin_stdout(
         &ts,
         &["bs=1", "skip=10000000000000000", "count=0", "status=noxfer"],
         Some("/dev/sda1"),
@@ -1581,7 +1583,9 @@ fn test_seek_past_dev() {
     // NOTE: This test intends to trigger code which can only be reached with root permissions.
     let ts = TestScenario::new(util_name!());
 
-    if let Ok(result) = run_ucmd_as_root_with_stdin_stdout(
+    if !ts.fixtures.file_exists("/dev/sda1") {
+        print!("Test skipped; no /dev/sda1 device found");
+    } else if let Ok(result) = run_ucmd_as_root_with_stdin_stdout(
         &ts,
         &["bs=1", "seek=10000000000000000", "count=0", "status=noxfer"],
         None,

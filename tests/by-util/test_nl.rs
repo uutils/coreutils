@@ -11,7 +11,7 @@ use uutests::util_name;
 
 #[test]
 #[cfg(target_os = "linux")]
-fn test_nl_non_utf8_paths() {
+fn test_non_utf8_paths() {
     use std::os::unix::ffi::OsStringExt;
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -210,6 +210,28 @@ fn test_number_separator() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_number_separator_non_utf8() {
+    use std::{
+        ffi::{OsStr, OsString},
+        os::unix::ffi::{OsStrExt, OsStringExt},
+    };
+
+    let separator_bytes = [0xFF, 0xFE];
+    let mut v = b"--number-separator=".to_vec();
+    v.extend_from_slice(&separator_bytes);
+
+    let arg = OsString::from_vec(v);
+    let separator = OsStr::from_bytes(&separator_bytes);
+
+    new_ucmd!()
+        .arg(arg)
+        .pipe_in("test")
+        .succeeds()
+        .stdout_is(format!("     1{}test\n", separator.to_string_lossy()));
+}
+
+#[test]
 fn test_starting_line_number() {
     for arg in ["-v10", "--starting-line-number=10"] {
         new_ucmd!()
@@ -305,6 +327,25 @@ fn test_join_blank_lines() {
 }
 
 #[test]
+fn test_join_blank_lines_zero() {
+    for arg in ["-l0", "--join-blank-lines=0"] {
+        new_ucmd!()
+            .arg(arg)
+            .arg("--body-numbering=a")
+            .pipe_in("\n\n\n\n\n\n")
+            .succeeds()
+            .stdout_is(concat!(
+                "     1\t\n",
+                "     2\t\n",
+                "     3\t\n",
+                "     4\t\n",
+                "     5\t\n",
+                "     6\t\n",
+            ));
+    }
+}
+
+#[test]
 fn test_join_blank_lines_multiple_files() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -326,15 +367,6 @@ fn test_join_blank_lines_multiple_files() {
                 "       \n",
                 "     2\t\n",
             ));
-    }
-}
-
-#[test]
-fn test_join_blank_lines_zero() {
-    for arg in ["-l0", "--join-blank-lines=0"] {
-        new_ucmd!().arg(arg).fails().stderr_contains(
-            "Invalid line number of blank lines: ‘0’: Numerical result out of range",
-        );
     }
 }
 

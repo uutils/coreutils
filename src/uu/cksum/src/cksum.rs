@@ -9,7 +9,7 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command, value_parser};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, BufReader, Read, Write, stdin, stdout};
+use std::io::{BufReader, Read, Write, stdin, stdout};
 use std::iter;
 use std::path::Path;
 use uucore::checksum::{
@@ -68,14 +68,20 @@ where
         let filename = Path::new(filename);
         let stdin_buf;
         let file_buf;
-        let not_file = filename == OsStr::new("-");
+        let is_stdin = filename == OsStr::new("-");
+
+        if filename.is_dir() {
+            show!(USimpleError::new(
+                1,
+                translate!("cksum-error-is-directory", "file" => filename.display())
+            ));
+            continue;
+        }
 
         // Handle the file input
-        let mut file = BufReader::new(if not_file {
+        let mut file = BufReader::new(if is_stdin {
             stdin_buf = stdin();
             Box::new(stdin_buf) as Box<dyn Read>
-        } else if filename.is_dir() {
-            Box::new(BufReader::new(io::empty())) as Box<dyn Read>
         } else {
             file_buf = match File::open(filename) {
                 Ok(file) => file,
@@ -86,14 +92,6 @@ where
             };
             Box::new(file_buf) as Box<dyn Read>
         });
-
-        if filename.is_dir() {
-            show!(USimpleError::new(
-                1,
-                translate!("cksum-error-is-directory", "file" => filename.display())
-            ));
-            continue;
-        }
 
         let (sum_hex, sz) =
             digest_reader(&mut options.digest, &mut file, false, options.output_bits)
@@ -130,9 +128,9 @@ where
                     "{} {}{}",
                     sum.parse::<u16>().unwrap(),
                     sz.div_ceil(options.output_bits),
-                    if not_file { "" } else { " " }
+                    if is_stdin { "" } else { " " }
                 ),
-                !not_file,
+                !is_stdin,
                 String::new(),
             ),
             ALGORITHM_OPTIONS_BSD => (
@@ -140,14 +138,14 @@ where
                     "{:0bsd_width$} {:bsd_width$}{}",
                     sum.parse::<u16>().unwrap(),
                     sz.div_ceil(options.output_bits),
-                    if not_file { "" } else { " " }
+                    if is_stdin { "" } else { " " }
                 ),
-                !not_file,
+                !is_stdin,
                 String::new(),
             ),
             ALGORITHM_OPTIONS_CRC | ALGORITHM_OPTIONS_CRC32B => (
-                format!("{sum} {sz}{}", if not_file { "" } else { " " }),
-                !not_file,
+                format!("{sum} {sz}{}", if is_stdin { "" } else { " " }),
+                !is_stdin,
                 String::new(),
             ),
             ALGORITHM_OPTIONS_BLAKE2B if options.tag => {
