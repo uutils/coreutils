@@ -33,7 +33,6 @@ nl-error-invalid-arguments = Arguments fournis invalides.
 nl-error-could-not-read-line = impossible de lire la ligne
 nl-error-line-number-overflow = débordement du numéro de ligne
 nl-error-invalid-line-width = Largeur de champ de numéro de ligne invalide : ‘{ $value }’ : Résultat numérique hors limites
-nl-error-invalid-blank-lines = Nombre de lignes vides invalide : ‘{ $value }’ : Résultat numérique hors limites
 nl-error-invalid-regex = expression régulière invalide
 nl-error-invalid-numbering-style = style de numérotation invalide : '{ $style }'
 nl-error-is-directory = { $path } : Est un répertoire

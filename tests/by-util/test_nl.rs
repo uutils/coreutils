@@ -327,6 +327,25 @@ fn test_join_blank_lines() {
 }
 
 #[test]
+fn test_join_blank_lines_zero() {
+    for arg in ["-l0", "--join-blank-lines=0"] {
+        new_ucmd!()
+            .arg(arg)
+            .arg("--body-numbering=a")
+            .pipe_in("\n\n\n\n\n\n")
+            .succeeds()
+            .stdout_is(concat!(
+                "     1\t\n",
+                "     2\t\n",
+                "     3\t\n",
+                "     4\t\n",
+                "     5\t\n",
+                "     6\t\n",
+            ));
+    }
+}
+
+#[test]
 fn test_join_blank_lines_multiple_files() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -348,15 +367,6 @@ fn test_join_blank_lines_multiple_files() {
                 "       \n",
                 "     2\t\n",
             ));
-    }
-}
-
-#[test]
-fn test_join_blank_lines_zero() {
-    for arg in ["-l0", "--join-blank-lines=0"] {
-        new_ucmd!().arg(arg).fails().stderr_contains(
-            "Invalid line number of blank lines: ‘0’: Numerical result out of range",
-        );
     }
 }
 

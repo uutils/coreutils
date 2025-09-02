@@ -131,8 +131,7 @@ pub fn uu_app() -> Command {
                 .long(options::REFERENCE)
                 .help(translate!("chown-help-reference"))
                 .value_name("RFILE")
-                .value_hint(clap::ValueHint::FilePath)
-                .num_args(1..),
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::verbosity::SILENT)
