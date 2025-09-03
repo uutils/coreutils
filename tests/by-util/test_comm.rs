@@ -587,3 +587,19 @@ fn test_comm_extra_arg_error() {
         .stderr_contains("Usage: comm [OPTION]... FILE1 FILE2")
         .stderr_contains("For more information, try '--help'.");
 }
+
+#[test]
+fn comm_emoji_sorted_inputs() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("file1", "💐\n🦀\n");
+    at.write("file2", "🦀\n🪽\n");
+
+    scene
+        .ucmd()
+        .args(&["file1", "file2"])
+        .env("LC_ALL", "C.UTF-8")
+        .succeeds()
+        .stdout_only("💐\n\t\t🦀\n\t🪽\n");
+}
