@@ -146,9 +146,9 @@ fn pad_and_print_bytes(
 }
 
 #[derive(Debug)]
-pub enum OutputType {
+pub enum OutputType<'a> {
     Str(String),
-    OsStr(OsString),
+    OsStr(&'a OsString),
     Integer(i64),
     Unsigned(u64),
     UnsignedHex(u64),
@@ -957,15 +957,12 @@ impl Stater {
         })
     }
 
-    fn find_mount_point<P: AsRef<Path>>(&self, p: P) -> Option<OsString> {
+    fn find_mount_point<P: AsRef<Path>>(&self, p: P) -> Option<&OsString> {
         let path = p.as_ref().canonicalize().ok()?;
-
-        for root in self.mount_list.as_ref()? {
-            if path.starts_with(root) {
-                return Some(root.clone());
-            }
-        }
-        None
+        self.mount_list
+            .as_ref()?
+            .iter()
+            .find(|root| path.starts_with(root))
     }
 
     fn exec(&self) -> i32 {
@@ -1060,7 +1057,10 @@ impl Stater {
                     // inode number
                     'i' => OutputType::Unsigned(meta.ino()),
                     // mount point
-                    'm' => OutputType::OsStr(self.find_mount_point(file).unwrap_or_default()),
+                    'm' => match self.find_mount_point(file) {
+                        Some(s) => OutputType::OsStr(s),
+                        None => OutputType::Str(String::new()),
+                    },
                     // file name
                     'n' => OutputType::Str(display_name.to_string()),
                     // quoted file name with dereference if symbolic link
