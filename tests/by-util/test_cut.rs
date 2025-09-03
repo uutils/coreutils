@@ -374,6 +374,20 @@ fn test_output_delimiter_with_adjacent_ranges() {
         .stdout_only("ab:cd\n");
 }
 
+#[test]
+fn test_emoji_delim() {
+    new_ucmd!()
+        .args(&["-d🗿", "-f1"])
+        .pipe_in("💐🗿🌹\n")
+        .succeeds()
+        .stdout_only("💐\n");
+    new_ucmd!()
+        .args(&["-d🗿", "-f2"])
+        .pipe_in("💐🗿🌹\n")
+        .succeeds()
+        .stdout_only("🌹\n");
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn test_failed_write_is_reported() {

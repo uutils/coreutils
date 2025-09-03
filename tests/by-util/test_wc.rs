@@ -799,3 +799,12 @@ fn test_args_override() {
         .succeeds()
         .stdout_is("  5  57 302 alice_in_wonderland.txt\n");
 }
+
+#[test]
+fn wc_w_words_with_emoji_separator() {
+    new_ucmd!()
+        .args(&["-w"])
+        .pipe_in("foo 💐 bar\n")
+        .succeeds()
+        .stdout_contains("3");
+}
