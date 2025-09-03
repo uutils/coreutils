@@ -566,3 +566,17 @@ fn test_join_non_utf8_paths() {
             .stdout_only("a 1 2\n");
     }
 }
+
+#[test]
+fn join_emoji_delim_inner_key() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("file1", "a🗿b\n");
+    at.write("file2", "u🗿b\n");
+
+    ts.ucmd()
+        .args(&["-t🗿", "-1", "2", "-2", "2", "file1", "file2"])
+        .succeeds()
+        .stdout_only("b🗿a🗿u\n");
+}
