@@ -24,7 +24,7 @@ use std::fs::{FileType, Metadata};
 use std::io::Write;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::Path;
-use std::{env, fs};
+use std::{env, fs, vec};
 
 use thiserror::Error;
 use uucore::time::{FormatSystemTimeFallback, format_system_time, system_time_to_sec};
@@ -128,22 +128,19 @@ fn pad_and_print_bytes(
         _ => bytes,
     };
 
-    let display_string = String::from_utf8_lossy(display_bytes);
-    let display_len = display_string.chars().count();
+    let display_len = display_bytes.len();
     let padding_needed = width.saturating_sub(display_len);
 
-    if !left && padding_needed > 0 {
-        for _ in 0..padding_needed {
-            print!(" ");
-        }
-    }
-    io::stdout().write_all(display_bytes)?;
+    let (left_pad, right_pad) = if left {
+        (0, padding_needed)
+    } else {
+        (padding_needed, 0)
+    };
 
-    if left && padding_needed > 0 {
-        for _ in 0..padding_needed {
-            print!(" ");
-        }
-    }
+    let mut stdout = io::stdout().lock();
+    stdout.write_all(&vec![b' '; left_pad])?;
+    stdout.write_all(display_bytes)?;
+    stdout.write_all(&vec![b' '; right_pad])?;
 
     Ok(())
 }
