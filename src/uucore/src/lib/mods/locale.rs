@@ -140,26 +140,20 @@ fn create_bundle(
     // Disable Unicode directional isolate characters
     bundle.set_use_isolating(false);
 
-    // Load common strings from uucore locales directory
-    if let Some(common_dir) = find_uucore_locales_dir(locales_dir) {
-        let common_locale_path = common_dir.join(format!("{locale}.ftl"));
-        if let Ok(common_ftl) = fs::read_to_string(&common_locale_path) {
-            if let Ok(common_resource) = FluentResource::try_new(common_ftl) {
-                bundle.add_resource_overriding(common_resource);
-            }
+    let mut try_add_resource_from = |dir_opt: Option<std::path::PathBuf>| {
+        if let Some(resource) = dir_opt
+            .map(|dir| dir.join(format!("{locale}.ftl")))
+            .and_then(|locale_path| fs::read_to_string(locale_path).ok())
+            .and_then(|ftl| fluent_bundle::FluentResource::try_new(ftl).ok())
+        {
+            bundle.add_resource_overriding(resource);
         }
-    }
+    };
 
+    // Load common strings from uucore locales directory
+    try_add_resource_from(find_uucore_locales_dir(locales_dir));
     // Then, try to load utility-specific strings from the utility's locale directory
-    let util_locales_dir = get_locales_dir(util_name).ok();
-    if let Some(util_dir) = util_locales_dir {
-        let util_locale_path = util_dir.join(format!("{locale}.ftl"));
-        if let Ok(util_ftl) = fs::read_to_string(&util_locale_path) {
-            if let Ok(util_resource) = FluentResource::try_new(util_ftl) {
-                bundle.add_resource_overriding(util_resource);
-            }
-        }
-    }
+    try_add_resource_from(get_locales_dir(util_name).ok());
 
     // If we have at least one resource, return the bundle
     if bundle.has_message("common-error") || bundle.has_message(&format!("{util_name}-about")) {
