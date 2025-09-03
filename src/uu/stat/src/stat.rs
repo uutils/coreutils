@@ -409,8 +409,9 @@ fn print_os_str(s: &OsString, flags: &Flags, width: usize, precision: Precision)
         let bytes = s.as_bytes();
 
         if pad_and_print_bytes(bytes, flags.left, width, precision).is_err() {
-            let lossy_string = s.to_string_lossy();
-            print_str(&lossy_string, flags, width, precision);
+            // if an error occurred while trying to print bytes fall back to normal lossy string so it can be printed
+            let fallback_string = s.to_string_lossy();
+            print_str(&fallback_string, flags, width, precision);
         }
     }
     #[cfg(not(unix))]
