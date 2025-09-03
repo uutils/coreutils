@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (paths) atim sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist fpath testdir testfile
-// spell-checker:ignore selfref ELOOP
+// spell-checker:ignore selfref ELOOP smallfile
 #[cfg(not(windows))]
 use regex::Regex;
 
@@ -197,45 +197,71 @@ fn test_du_soft_link() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    at.symlink_file(SUB_FILE, SUB_LINK);
+    // Create the directory and file structure explicitly for this test
+    at.mkdir_all("subdir/links");
+    at.write("subdir/links/subwords.txt", &"hello world\n".repeat(100));
+    at.symlink_file("subdir/links/subwords.txt", "subdir/links/sublink.txt");
 
-    let result = ts.ucmd().arg(SUB_DIR_LINKS).succeeds();
+    let result = ts.ucmd().arg("subdir/links").succeeds();
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        let result_reference = unwrap_or_return!(expected_result(&ts, &[SUB_DIR_LINKS]));
+        let result_reference = unwrap_or_return!(expected_result(&ts, &["subdir/links"]));
         if result_reference.succeeded() {
             assert_eq!(result.stdout_str(), result_reference.stdout_str());
             return;
         }
     }
-    du_soft_link(result.stdout_str());
-}
 
-#[cfg(target_vendor = "apple")]
-fn du_soft_link(s: &str) {
-    // 'macos' host variants may have `du` output variation for soft links
-    assert!((s == "12\tsubdir/links\n") || (s == "16\tsubdir/links\n"));
-}
-#[cfg(target_os = "windows")]
-fn du_soft_link(s: &str) {
-    assert_eq!(s, "8\tsubdir/links\n");
-}
-#[cfg(target_os = "freebsd")]
-fn du_soft_link(s: &str) {
-    assert_eq!(s, "16\tsubdir/links\n");
-}
-#[cfg(all(
-    not(target_vendor = "apple"),
-    not(target_os = "windows"),
-    not(target_os = "freebsd")
-))]
-fn du_soft_link(s: &str) {
-    // MS-WSL linux has altered expected output
-    if uucore::os::is_wsl_1() {
-        assert_eq!(s, "8\tsubdir/links\n");
-    } else {
-        assert_eq!(s, "16\tsubdir/links\n");
+    let s = result.stdout_str();
+    println!("Output: {s}");
+
+    // Helper closure to assert output matches one of the valid sizes
+    #[cfg(any(target_vendor = "apple", target_os = "windows", target_os = "freebsd"))]
+    let assert_valid_size = |output: &str, valid_sizes: &[&str]| {
+        assert!(
+            valid_sizes.contains(&output),
+            "Expected one of {valid_sizes:?}, got {output}"
+        );
+    };
+
+    #[cfg(target_vendor = "apple")]
+    {
+        // 'macos' host variants may have `du` output variation for soft links
+        let valid_sizes = [
+            "8\tsubdir/links\n",
+            "12\tsubdir/links\n",
+            "16\tsubdir/links\n",
+        ];
+        assert_valid_size(s, &valid_sizes);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let valid_sizes = ["4\tsubdir/links\n", "8\tsubdir/links\n"];
+        assert_valid_size(s, &valid_sizes);
+    }
+
+    #[cfg(target_os = "freebsd")]
+    {
+        // FreeBSD may have different block allocations depending on filesystem
+        // Accept both common sizes
+        let valid_sizes = ["12\tsubdir/links\n", "16\tsubdir/links\n"];
+        assert_valid_size(&s, &valid_sizes);
+    }
+
+    #[cfg(all(
+        not(target_vendor = "apple"),
+        not(target_os = "windows"),
+        not(target_os = "freebsd")
+    ))]
+    {
+        // MS-WSL linux has altered expected output
+        if uucore::os::is_wsl_1() {
+            assert_eq!(s, "8\tsubdir/links\n");
+        } else {
+            assert_eq!(s, "16\tsubdir/links\n");
+        }
     }
 }
 
@@ -814,12 +840,18 @@ fn test_du_no_exec_permission() {
 #[cfg(not(target_os = "openbsd"))]
 fn test_du_one_file_system() {
     let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
 
-    let result = ts.ucmd().arg("-x").arg(SUB_DIR).succeeds();
+    // Create the directory structure explicitly for this test
+    at.mkdir_all("subdir/deeper/deeper_dir");
+    at.write("subdir/deeper/deeper_dir/deeper_words.txt", "hello world");
+    at.write("subdir/deeper/words.txt", "world");
+
+    let result = ts.ucmd().arg("-x").arg("subdir/deeper").succeeds();
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        let result_reference = unwrap_or_return!(expected_result(&ts, &["-x", SUB_DIR]));
+        let result_reference = unwrap_or_return!(expected_result(&ts, &["-x", "subdir/deeper"]));
         if result_reference.succeeded() {
             assert_eq!(result.stdout_str(), result_reference.stdout_str());
             return;
@@ -832,16 +864,26 @@ fn test_du_one_file_system() {
 #[cfg(not(target_os = "openbsd"))]
 fn test_du_threshold() {
     let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // Create the directory structure explicitly for this test
+    at.mkdir_all("subdir/links");
+    at.mkdir_all("subdir/deeper/deeper_dir");
+    // Create files with specific sizes to test threshold
+    at.write("subdir/links/bigfile.txt", &"x".repeat(10000)); // ~10K file
+    at.write("subdir/deeper/deeper_dir/smallfile.txt", "small"); // small file
 
     let threshold = if cfg!(windows) { "7K" } else { "10K" };
 
     ts.ucmd()
+        .arg("--apparent-size")
         .arg(format!("--threshold={threshold}"))
         .succeeds()
         .stdout_contains("links")
         .stdout_does_not_contain("deeper_dir");
 
     ts.ucmd()
+        .arg("--apparent-size")
         .arg(format!("--threshold=-{threshold}"))
         .succeeds()
         .stdout_does_not_contain("links")

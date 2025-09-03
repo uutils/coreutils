@@ -1,7 +1,7 @@
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
 // Only available on Linux
-// spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat
+// spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore  RAII dirfd
 
 #![cfg(target_os = "linux")]
@@ -708,6 +708,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unnecessary_cast)]
     fn test_file_info() {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("test_file");
@@ -716,7 +717,6 @@ mod tests {
         let dir_fd = DirFd::open(temp_dir.path()).unwrap();
         let stat = dir_fd.stat_at(OsStr::new("test_file"), true).unwrap();
         let file_info = FileInfo::from_stat(&stat);
-
         assert_eq!(file_info.device(), stat.st_dev as u64);
         assert_eq!(file_info.inode(), stat.st_ino as u64);
     }
@@ -756,6 +756,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unnecessary_cast)]
     fn test_metadata_wrapper() {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("test_file");
