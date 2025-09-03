@@ -37,6 +37,8 @@ const OPT_FILE: &str = "file";
 const OPT_DEBUG: &str = "debug";
 const OPT_ISO_8601: &str = "iso-8601";
 const OPT_RFC_EMAIL: &str = "rfc-email";
+const OPT_RFC_822: &str = "rfc-822";
+const OPT_RFC_2822: &str = "rfc-2822";
 const OPT_RFC_3339: &str = "rfc-3339";
 const OPT_SET: &str = "set";
 const OPT_REFERENCE: &str = "reference";
@@ -302,6 +304,8 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_RFC_EMAIL)
                 .short('R')
                 .long(OPT_RFC_EMAIL)
+                .alias(OPT_RFC_2822)
+                .alias(OPT_RFC_822)
                 .help(translate!("date-help-rfc-email"))
                 .action(ArgAction::SetTrue),
         )

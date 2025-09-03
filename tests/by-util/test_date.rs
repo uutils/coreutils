@@ -19,7 +19,7 @@ fn test_invalid_arg() {
 
 #[test]
 fn test_date_email() {
-    for param in ["--rfc-email", "--rfc-e", "-R"] {
+    for param in ["--rfc-email", "--rfc-e", "-R", "--rfc-2822", "--rfc-822"] {
         new_ucmd!().arg(param).succeeds();
     }
 }
