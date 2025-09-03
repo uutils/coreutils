@@ -6153,9 +6153,9 @@ fn ls_emoji_alignment() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    at.write("a", "");
-    at.write("💐", "");
-    at.write("漢", "");
+    at.touch("a");
+    at.touch("💐");
+    at.touch("漢");
     scene
         .ucmd()
         .succeeds()
