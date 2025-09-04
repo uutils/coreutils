@@ -115,14 +115,13 @@ fn pad_and_print(result: &str, left: bool, width: usize, padding: Padding) {
 ///
 /// On Unix systems, this preserves non-UTF8 data by printing raw bytes
 /// On other platforms, falls back to lossy string conversion
-fn pad_and_print_bytes(
+fn pad_and_print_bytes<W: Write>(
+    mut writer: W,
     bytes: &[u8],
     left: bool,
     width: usize,
     precision: Precision,
 ) -> Result<(), std::io::Error> {
-    use std::io::{self, Write};
-
     let display_bytes = match precision {
         Precision::Number(p) if p < bytes.len() => &bytes[..p],
         _ => bytes,
@@ -137,10 +136,9 @@ fn pad_and_print_bytes(
         (padding_needed, 0)
     };
 
-    let mut stdout = io::stdout().lock();
-    stdout.write_all(&vec![b' '; left_pad])?;
-    stdout.write_all(display_bytes)?;
-    stdout.write_all(&vec![b' '; right_pad])?;
+    writer.write_all(&vec![b' '; left_pad])?;
+    writer.write_all(display_bytes)?;
+    writer.write_all(&vec![b' '; right_pad])?;
 
     Ok(())
 }
@@ -408,7 +406,7 @@ fn print_os_str(s: &OsString, flags: &Flags, width: usize, precision: Precision)
 
         let bytes = s.as_bytes();
 
-        if pad_and_print_bytes(bytes, flags.left, width, precision).is_err() {
+        if pad_and_print_bytes(std::io::stdout(), bytes, flags.left, width, precision).is_err() {
             // if an error occurred while trying to print bytes fall back to normal lossy string so it can be printed
             let fallback_string = s.to_string_lossy();
             print_str(&fallback_string, flags, width, precision);
