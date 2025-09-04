@@ -1364,6 +1364,8 @@ fn pretty_time(meta: &Metadata, md_time_field: MetadataTimeField) -> String {
 
 #[cfg(test)]
 mod tests {
+    use crate::pad_and_print_bytes;
+
     use super::{Flags, Precision, ScanUtil, Stater, Token, group_num, precision_trunc};
 
     #[test]
@@ -1484,5 +1486,26 @@ mod tests {
         assert_eq!(precision_trunc(123.456, Precision::Number(3)), "123.456");
         assert_eq!(precision_trunc(123.456, Precision::Number(4)), "123.4560");
         assert_eq!(precision_trunc(123.456, Precision::Number(5)), "123.45600");
+    }
+
+    #[test]
+    fn test_pad_and_print_bytes() {
+        // testing non-utf8 with normal settings
+        let mut buffer = Vec::new();
+        let bytes = b"\x80\xFF\x80";
+        pad_and_print_bytes(&mut buffer, bytes, false, 3, Precision::NotSpecified).unwrap();
+        assert_eq!(&buffer, b"\x80\xFF\x80");
+
+        // testing left padding
+        let mut buffer = Vec::new();
+        let bytes = b"\x80\xFF\x80";
+        pad_and_print_bytes(&mut buffer, bytes, false, 5, Precision::NotSpecified).unwrap();
+        assert_eq!(&buffer, b"  \x80\xFF\x80");
+
+        // testing right padding
+        let mut buffer = Vec::new();
+        let bytes = b"\x80\xFF\x80";
+        pad_and_print_bytes(&mut buffer, bytes, true, 5, Precision::NotSpecified).unwrap();
+        assert_eq!(&buffer, b"\x80\xFF\x80  ");
     }
 }
