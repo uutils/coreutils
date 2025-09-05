@@ -370,7 +370,7 @@ utmp-classic = "0.1.6"
 uutils_term_grid = "0.7"
 walkdir = "2.5"
 winapi-util = "0.1.8"
-windows-sys = { version = "0.60.1", default-features = false }
+windows-sys = { version = "0.61.0", default-features = false }
 xattr = "1.3.1"
 zip = { version = "4.0.0", default-features = false, features = ["deflate"] }
 
