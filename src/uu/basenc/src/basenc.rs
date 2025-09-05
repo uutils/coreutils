@@ -63,7 +63,7 @@ pub fn uu_app() -> Command {
 }
 
 fn parse_cmd_args(args: impl uucore::Args) -> UResult<(Config, Format)> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args.collect_lossy())?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let encodings = get_encodings();
     let format = encodings
