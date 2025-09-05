@@ -388,9 +388,10 @@ pub fn compare_result(
 
 pub fn generate_random_string(max_length: usize) -> String {
     let mut rng = rand::rng();
-    let valid_utf8: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-        .chars()
-        .collect();
+    let valid_utf8: Vec<char> =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789🔩🪛🪓⚙️🔗🧰"
+            .chars()
+            .collect();
     let invalid_utf8 = [0xC3, 0x28]; // Invalid UTF-8 sequence
     let mut result = String::new();
 
