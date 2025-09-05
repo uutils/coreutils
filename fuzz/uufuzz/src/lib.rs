@@ -423,7 +423,7 @@ pub fn generate_random_file() -> Result<String, std::io::Error> {
 
     let content_length = rng.random_range(10..1000);
     let content: String = (0..content_length)
-        .map(|_| (rng.random_range(b' '..=b'~') as char))
+        .map(|_| rng.random_range(b' '..=b'~') as char)
         .collect();
 
     file.write_all(content.as_bytes())?;
