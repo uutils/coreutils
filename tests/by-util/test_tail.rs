@@ -4946,3 +4946,12 @@ fn test_dev_zero() {
         .succeeds()
         .stdout_only("\0");
 }
+
+#[test]
+fn tail_n_lines_with_emoji() {
+    new_ucmd!()
+        .args(&["-n", "1"])
+        .pipe_in("a\n💐\n")
+        .succeeds()
+        .stdout_only("💐\n");
+}

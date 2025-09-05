@@ -58,6 +58,16 @@ fn test_simple_arithmetic() {
         .args(&["4", "/", "2"])
         .succeeds()
         .stdout_only("2\n");
+
+    new_ucmd!()
+        .args(&["4", "=", "2"])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["4", "=", "4"])
+        .succeeds()
+        .stdout_only("1\n");
 }
 
 #[test]
@@ -1926,4 +1936,33 @@ mod gnu_expr_multibyte {
             check_test_case(args, tc);
         }
     }
+}
+
+#[test]
+fn test_emoji_operations() {
+    new_ucmd!()
+        .args(&["🚀", "=", "🚀"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["🚀", "!=", "🚀"])
+        .fails()
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["🚀", "=", "🧨"])
+        .fails()
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["length", "🦀🚀🎯"])
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .succeeds()
+        .stdout_only("3\n");
+
+    new_ucmd!()
+        .args(&["🌍", "!=", "🌎"])
+        .succeeds()
+        .stdout_only("1\n");
 }

@@ -388,3 +388,12 @@ fn test_fmt_non_utf8_paths() {
 
     ucmd.arg(&filename).succeeds();
 }
+
+#[test]
+fn fmt_reflow_unicode() {
+    new_ucmd!()
+        .args(&["-w", "4"])
+        .pipe_in("漢字漢字 💐 日本語の文字\n")
+        .succeeds()
+        .stdout_is("漢字漢字\n💐\n日本語の文字\n");
+}

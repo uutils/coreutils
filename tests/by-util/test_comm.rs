@@ -594,3 +594,19 @@ fn test_comm_arg_error() {
         .code_is(1)
         .stderr_is("error: the following required arguments were not provided:\n  <FILE2>\n\nUsage: comm [OPTION]... FILE1 FILE2\n\nFor more information, try '--help'.\n");
 }
+
+#[test]
+fn comm_emoji_sorted_inputs() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("file1", "💐\n🦀\n");
+    at.write("file2", "🦀\n🪽\n");
+
+    scene
+        .ucmd()
+        .args(&["file1", "file2"])
+        .env("LC_ALL", "C.UTF-8")
+        .succeeds()
+        .stdout_only("💐\n\t\t🦀\n\t🪽\n");
+}

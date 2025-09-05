@@ -84,3 +84,21 @@ fn test_dirname_non_utf8_paths() {
     assert!(!output.is_empty());
     assert!(output.contains("test_"));
 }
+
+#[test]
+fn test_emoji_handling() {
+    new_ucmd!()
+        .arg("/🌍/path/to/🦀.txt")
+        .succeeds()
+        .stdout_is("/🌍/path/to\n");
+
+    new_ucmd!()
+        .arg("/🎉/path/to/🚀/")
+        .succeeds()
+        .stdout_is("/🎉/path/to\n");
+
+    new_ucmd!()
+        .args(&["-z", "/🌟/emoji/path/🦋.file"])
+        .succeeds()
+        .stdout_is("/🌟/emoji/path\u{0}");
+}
