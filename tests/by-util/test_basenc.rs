@@ -5,7 +5,7 @@
 
 // spell-checker: ignore (encodings) lsbf msbf
 
-use uutests::new_ucmd;
+use uutests::{at_and_ucmd, new_ucmd};
 
 #[test]
 fn test_z85_not_padded_decode() {
@@ -269,4 +269,32 @@ fn test_z85_length_check() {
         .pipe_in("f!$Kwh8WxM")
         .succeeds()
         .stdout_only("12345678");
+}
+
+#[test]
+fn test_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let filename = "file";
+
+    at.write(filename, "foo");
+
+    ucmd.arg(filename)
+        .arg("--base64")
+        .succeeds()
+        .stdout_is("Zm9v\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_file_with_non_utf8_name() {
+    use std::os::unix::ffi::OsStringExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    std::fs::write(at.plus(&filename), b"foo").unwrap();
+
+    ucmd.arg(filename)
+        .arg("--base64")
+        .succeeds()
+        .stdout_is("Zm9v\n");
 }
