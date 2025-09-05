@@ -54,10 +54,14 @@ highlight = "all"
 # introduces it.
 # spell-checker: disable
 skip = [
-  # mio, nu-ansi-term, socket2
+  # nu-ansi-term
   { name = "windows-sys", version = "0.52.0" },
-  # anstyle-query
+  # various crates
   { name = "windows-sys", version = "0.59.0" },
+  # various crates
+  { name = "windows-sys", version = "0.60.2" },
+  # various crates
+  { name = "windows-link", version = "0.1.3" },
   # parking_lot_core
   { name = "windows-targets", version = "0.52.6" },
   # windows-targets
