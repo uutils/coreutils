@@ -601,7 +601,7 @@ pub fn chown_base(
             .num_args(1..)
             .value_parser(clap::value_parser!(std::ffi::OsString)),
     );
-    let matches = command.try_get_matches_from(args)?;
+    let matches = crate::clap_localization::handle_clap_result(command, args)?;
 
     let files: Vec<OsString> = matches
         .get_many::<OsString>(options::ARG_FILES)

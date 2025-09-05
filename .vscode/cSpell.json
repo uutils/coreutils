@@ -29,7 +29,8 @@
     "**/*.svg",
     "src/uu/*/locales/*.ftl",
     "src/uucore/locales/*.ftl",
-    ".devcontainer/**"
+    ".devcontainer/**",
+    "util/gnu-patches/**",
   ],
 
   "enableGlobDot": true,

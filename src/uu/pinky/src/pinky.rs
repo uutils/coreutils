@@ -34,12 +34,12 @@ pub fn uu_app() -> Command {
     #[cfg(target_env = "musl")]
     let about = translate!("pinky-about") + &translate!("pinky-about-musl-warning");
 
-    Command::new(uucore::util_name())
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(about)
         .override_usage(format_usage(&translate!("pinky-usage")))
-        .infer_long_args(true)
+        .infer_long_args(true);
+    uucore::clap_localization::configure_localized_command(cmd)
         .disable_help_flag(true)
         .arg(
             Arg::new(options::LONG_FORMAT)

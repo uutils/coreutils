@@ -44,7 +44,6 @@ use uucore::libc::{getlogin, uid_t};
 use uucore::line_ending::LineEnding;
 use uucore::translate;
 
-use uucore::LocalizedCommand;
 use uucore::process::{getegid, geteuid, getgid, getuid};
 use uucore::{format_usage, show_error};
 
@@ -120,9 +119,7 @@ struct State {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(translate!("id-after-help"))
-        .get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let users: Vec<String> = matches
         .get_many::<String>(options::ARG_USERS)
@@ -355,6 +352,7 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(&translate!("id-usage")))
         .infer_long_args(true)
         .args_override_self(true)
+        .after_help(translate!("id-after-help"))
         .arg(
             Arg::new(options::OPT_AUDIT)
                 .short('A')

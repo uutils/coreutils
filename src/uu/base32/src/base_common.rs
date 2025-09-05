@@ -10,7 +10,6 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::encoding::{
     BASE2LSBF, BASE2MSBF, EncodingWrapper, Format, SupportsFastDecodeAndEncode, Z85Wrapper,
@@ -101,17 +100,17 @@ pub fn parse_base_cmd_args(
     usage: &str,
 ) -> UResult<Config> {
     let command = base_app(about, usage);
-    let matches = command.get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(command, args)?;
     Config::from(&matches)
 }
 
 pub fn base_app(about: &'static str, usage: &str) -> Command {
-    Command::new(uucore::util_name())
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(about)
         .override_usage(format_usage(usage))
-        .infer_long_args(true)
+        .infer_long_args(true);
+    uucore::clap_localization::configure_localized_command(cmd)
         // Format arguments.
         .arg(
             Arg::new(options::DECODE)

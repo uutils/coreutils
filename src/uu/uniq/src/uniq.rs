@@ -547,9 +547,18 @@ fn map_clap_errors(clap_error: Error) -> Box<dyn UError> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, skip_fields_old, skip_chars_old) = handle_obsolete(args);
 
-    let matches = uu_app()
-        .try_get_matches_from(args)
-        .map_err(map_clap_errors)?;
+    let matches = match uu_app().try_get_matches_from(args) {
+        Ok(matches) => matches,
+        Err(clap_error) => {
+            if clap_error.exit_code() == 0 {
+                // Let caller handle help/version
+                return Err(map_clap_errors(clap_error));
+            }
+            // Use ErrorFormatter directly to handle error
+            let formatter = uucore::clap_localization::ErrorFormatter::new(uucore::util_name());
+            formatter.print_error_and_exit_with_callback(&clap_error, 1, || {});
+        }
+    };
 
     let files = matches.get_many::<OsString>(ARG_FILES);
 
@@ -590,13 +599,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("uniq-about"))
         .override_usage(format_usage(&translate!("uniq-usage")))
         .infer_long_args(true)
-        .after_help(translate!("uniq-after-help"))
+        .after_help(translate!("uniq-after-help"));
+    uucore::clap_localization::configure_localized_command(cmd)
         .arg(
             Arg::new(options::ALL_REPEATED)
                 .short('D')

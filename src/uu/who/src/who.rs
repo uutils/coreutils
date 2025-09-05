@@ -45,12 +45,12 @@ pub fn uu_app() -> Command {
     #[cfg(target_env = "musl")]
     let about = translate!("who-about") + &translate!("who-about-musl-warning");
 
-    Command::new(uucore::util_name())
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(about)
         .override_usage(format_usage(&translate!("who-usage")))
-        .infer_long_args(true)
+        .infer_long_args(true);
+    uucore::clap_localization::configure_localized_command(cmd)
         .arg(
             Arg::new(options::ALL)
                 .long(options::ALL)

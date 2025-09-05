@@ -243,49 +243,51 @@ fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(expand_shortcuts(args.collect()))?;
+    let matches =
+        uucore::clap_localization::handle_clap_result(uu_app(), expand_shortcuts(args.collect()))?;
 
     expand(&Options::new(&matches)?)
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
-        .about(translate!("expand-about"))
-        .after_help(LONG_HELP)
-        .override_usage(format_usage(&translate!("expand-usage")))
-        .infer_long_args(true)
-        .args_override_self(true)
-        .arg(
-            Arg::new(options::INITIAL)
-                .long(options::INITIAL)
-                .short('i')
-                .help(translate!("expand-help-initial"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::TABS)
-                .long(options::TABS)
-                .short('t')
-                .value_name("N, LIST")
-                .action(ArgAction::Append)
-                .help(translate!("expand-help-tabs")),
-        )
-        .arg(
-            Arg::new(options::NO_UTF8)
-                .long(options::NO_UTF8)
-                .short('U')
-                .help(translate!("expand-help-no-utf8"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FILES)
-                .action(ArgAction::Append)
-                .hide(true)
-                .value_hint(clap::ValueHint::FilePath)
-                .value_parser(clap::value_parser!(OsString)),
-        )
+    uucore::clap_localization::configure_localized_command(
+        Command::new(uucore::util_name())
+            .version(uucore::crate_version!())
+            .about(translate!("expand-about"))
+            .after_help(LONG_HELP)
+            .override_usage(format_usage(&translate!("expand-usage"))),
+    )
+    .infer_long_args(true)
+    .args_override_self(true)
+    .arg(
+        Arg::new(options::INITIAL)
+            .long(options::INITIAL)
+            .short('i')
+            .help(translate!("expand-help-initial"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::TABS)
+            .long(options::TABS)
+            .short('t')
+            .value_name("N, LIST")
+            .action(ArgAction::Append)
+            .help(translate!("expand-help-tabs")),
+    )
+    .arg(
+        Arg::new(options::NO_UTF8)
+            .long(options::NO_UTF8)
+            .short('U')
+            .help(translate!("expand-help-no-utf8"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::FILES)
+            .action(ArgAction::Append)
+            .hide(true)
+            .value_hint(clap::ValueHint::FilePath)
+            .value_parser(clap::value_parser!(OsString)),
+    )
 }
 
 fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {

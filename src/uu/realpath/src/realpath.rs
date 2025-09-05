@@ -18,7 +18,7 @@ use uucore::fs::make_path_relative_to;
 use uucore::translate;
 use uucore::{
     display::{Quotable, print_verbatim},
-    error::{FromIo, UClapError, UResult},
+    error::{FromIo, UResult},
     format_usage,
     fs::{MissingHandling, ResolveMode, canonicalize},
     line_ending::LineEnding,
@@ -72,7 +72,7 @@ impl ValueParserFactory for NonEmptyOsStringParser {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args).with_exit_code(1)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     /*  the list of files */
 

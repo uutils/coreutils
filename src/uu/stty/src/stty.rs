@@ -29,7 +29,6 @@ use std::num::IntErrorKind;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, RawFd};
-use uucore::LocalizedCommand;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::translate;
@@ -243,7 +242,7 @@ ioctl_write_ptr_bad!(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let opts = Options::from(&matches)?;
 

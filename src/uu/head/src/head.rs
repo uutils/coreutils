@@ -14,7 +14,6 @@ use std::num::TryFromIntError;
 #[cfg(unix)]
 use std::os::fd::{AsRawFd, FromRawFd};
 use thiserror::Error;
-use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::line_ending::LineEnding;
@@ -555,7 +554,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<_> = arg_iterate(args)?.collect();
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let options = HeadOptions::get_from(&matches).map_err(HeadError::MatchOption)?;
     uu_head(&options)
 }

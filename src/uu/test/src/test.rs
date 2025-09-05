@@ -15,7 +15,6 @@ use std::ffi::{OsStr, OsString};
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
-use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
@@ -51,7 +50,10 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     if binary_name.ends_with('[') {
         // If invoked as [ we should recognize --help and --version (but not -h or -v)
         if args.len() == 1 && (args[0] == "--help" || args[0] == "--version") {
-            uu_app().get_matches_from_localized(std::iter::once(program).chain(args.into_iter()));
+            uucore::clap_localization::handle_clap_result(
+                uu_app(),
+                std::iter::once(program).chain(args.into_iter()),
+            )?;
             return Ok(());
         }
         // If invoked via name '[', matching ']' must be in the last arg

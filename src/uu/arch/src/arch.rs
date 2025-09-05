@@ -6,13 +6,12 @@
 use platform_info::*;
 
 use clap::Command;
-use uucore::LocalizedCommand;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    uu_app().get_matches_from_localized(args);
+    uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let uts =
         PlatformInfo::new().map_err(|_e| USimpleError::new(1, translate!("cannot-get-system")))?;

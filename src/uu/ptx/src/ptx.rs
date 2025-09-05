@@ -17,7 +17,6 @@ use std::path::Path;
 use clap::{Arg, ArgAction, Command};
 use regex::Regex;
 use thiserror::Error;
-use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::format_usage;
@@ -731,7 +730,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let config = get_config(&matches)?;
 
     let input_files;

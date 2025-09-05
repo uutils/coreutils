@@ -26,7 +26,6 @@ mod split_name;
 use crate::csplit_error::CsplitError;
 use crate::split_name::SplitName;
 
-use uucore::LocalizedCommand;
 use uucore::translate;
 
 mod options {
@@ -606,7 +605,7 @@ where
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     // get the file to split
     let file_name = matches.get_one::<OsString>(options::FILE).unwrap();
