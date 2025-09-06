@@ -3676,6 +3676,7 @@ version = "0.2.2"
 dependencies = [
  "clap",
  "fluent",
+ "indicatif",
  "libc",
  "thiserror 2.0.16",
  "uucore",

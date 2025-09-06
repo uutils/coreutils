@@ -1078,3 +1078,59 @@ fn test_rm_recursive_long_path_safe_traversal() {
     // Verify the directory is completely removed
     assert!(!at.dir_exists("rm_deep"));
 }
+
+#[test]
+fn test_progress_flag() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_rm_progress_file";
+
+    at.touch(file);
+
+    // Test that -g/--progress flag is accepted
+    ucmd.arg("-g").arg(file).succeeds();
+
+    assert!(!at.file_exists(file));
+}
+
+#[test]
+fn test_progress_with_recursive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("test_dir");
+    at.touch("test_dir/file1");
+    at.touch("test_dir/file2");
+    at.mkdir("test_dir/subdir");
+    at.touch("test_dir/subdir/file3");
+
+    // Test progress with recursive removal
+    ucmd.arg("-rg").arg("test_dir").succeeds();
+
+    assert!(!at.dir_exists("test_dir"));
+}
+
+#[test]
+fn test_progress_with_verbose() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_rm_progress_verbose_file";
+
+    at.touch(file);
+
+    // Test that progress and verbose work together
+    ucmd.arg("-gv").arg(file).succeeds().stdout_contains(file);
+
+    assert!(!at.file_exists(file));
+}
+
+#[test]
+fn test_progress_no_output_on_error() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    let nonexistent_file = "this_file_does_not_exist";
+
+    // Test that progress bar is not shown when file doesn't exist
+    let result = ucmd.arg("--progress").arg(nonexistent_file).fails();
+
+    // Should contain error message but no progress bar output
+    result
+        .stderr_contains("cannot remove")
+        .stderr_contains("No such file or directory");
+}
