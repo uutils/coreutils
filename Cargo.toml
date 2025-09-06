@@ -358,7 +358,7 @@ rust-ini = "0.21.0"
 same-file = "1.0.6"
 self_cell = "1.0.4"
 # FIXME we use the exact version because the new 0.5.3 requires an MSRV of 1.88
-selinux = "=0.5.2"
+selinux = "=0.5.3"
 signal-hook = "0.3.17"
 tempfile = "3.15.0"
 terminal_size = "0.4.0"
