@@ -261,13 +261,13 @@ cargo run completion ls bash > /usr/local/share/bash-completion/completions/ls
 To generate manpages, the syntax is:
 
 ```bash
-cargo run manpage <utility>
+cargo run --bin uudoc --features uudoc -- manpage <utility>
 ```
 
 So, to install the manpage for `ls` to `/usr/local/share/man/man1/ls.1` run:
 
 ```bash
-cargo run manpage ls > /usr/local/share/man/man1/ls.1
+cargo run --bin uudoc --features uudoc -- manpage ls > /usr/local/share/man/man1/ls.1
 ```
 
 ## Un-installation
