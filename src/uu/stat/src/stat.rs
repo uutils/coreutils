@@ -24,7 +24,7 @@ use std::fs::{FileType, Metadata};
 use std::io::Write;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::Path;
-use std::{env, fs};
+use std::{env, fs, vec};
 
 use thiserror::Error;
 use uucore::time::{FormatSystemTimeFallback, format_system_time, system_time_to_sec};
@@ -111,9 +111,42 @@ fn pad_and_print(result: &str, left: bool, width: usize, padding: Padding) {
     }
 }
 
+/// Pads and prints raw bytes (Unix-specific) or falls back to string printing
+///
+/// On Unix systems, this preserves non-UTF8 data by printing raw bytes
+/// On other platforms, falls back to lossy string conversion
+fn pad_and_print_bytes<W: Write>(
+    mut writer: W,
+    bytes: &[u8],
+    left: bool,
+    width: usize,
+    precision: Precision,
+) -> Result<(), std::io::Error> {
+    let display_bytes = match precision {
+        Precision::Number(p) if p < bytes.len() => &bytes[..p],
+        _ => bytes,
+    };
+
+    let display_len = display_bytes.len();
+    let padding_needed = width.saturating_sub(display_len);
+
+    let (left_pad, right_pad) = if left {
+        (0, padding_needed)
+    } else {
+        (padding_needed, 0)
+    };
+
+    writer.write_all(&vec![b' '; left_pad])?;
+    writer.write_all(display_bytes)?;
+    writer.write_all(&vec![b' '; right_pad])?;
+
+    Ok(())
+}
+
 #[derive(Debug)]
-pub enum OutputType {
+pub enum OutputType<'a> {
     Str(String),
+    OsStr(&'a OsString),
     Integer(i64),
     Unsigned(u64),
     UnsignedHex(u64),
@@ -306,6 +339,7 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Precisio
 
     match output {
         OutputType::Str(s) => print_str(s, &flags, width, precision),
+        OutputType::OsStr(s) => print_os_str(s, &flags, width, precision),
         OutputType::Integer(num) => print_integer(*num, &flags, width, precision, padding_char),
         OutputType::Unsigned(num) => print_unsigned(*num, &flags, width, precision, padding_char),
         OutputType::UnsignedOct(num) => {
@@ -352,6 +386,37 @@ fn print_str(s: &str, flags: &Flags, width: usize, precision: Precision) {
         _ => s,
     };
     pad_and_print(s, flags.left, width, Padding::Space);
+}
+
+/// Prints a `OsString` value based on the provided flags, width, and precision.
+/// for unix it converts it to bytes then tries to print it if failed print the lossy string version
+/// for windows, `OsString` uses UTF-16 internally which doesn't map directly to bytes like Unix,
+/// so we fall back to lossy string conversion to handle invalid UTF-8 sequences gracefully
+///
+/// # Arguments
+///
+/// * `s` - The `OsString` to be printed.
+/// * `flags` - A reference to the Flags struct containing formatting flags.
+/// * `width` - The width of the field for the printed string.
+/// * `precision` - How many digits of precision, if any.
+fn print_os_str(s: &OsString, flags: &Flags, width: usize, precision: Precision) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+
+        let bytes = s.as_bytes();
+
+        if pad_and_print_bytes(std::io::stdout(), bytes, flags.left, width, precision).is_err() {
+            // if an error occurred while trying to print bytes fall back to normal lossy string so it can be printed
+            let fallback_string = s.to_string_lossy();
+            print_str(&fallback_string, flags, width, precision);
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let lossy_string = s.to_string_lossy();
+        print_str(&lossy_string, flags, width, precision);
+    }
 }
 
 fn quote_file_name(file_name: &str, quoting_style: &QuotingStyle) -> String {
@@ -890,16 +955,12 @@ impl Stater {
         })
     }
 
-    fn find_mount_point<P: AsRef<Path>>(&self, p: P) -> Option<String> {
+    fn find_mount_point<P: AsRef<Path>>(&self, p: P) -> Option<&OsString> {
         let path = p.as_ref().canonicalize().ok()?;
-
-        for root in self.mount_list.as_ref()? {
-            if path.starts_with(root) {
-                // TODO: This is probably wrong, we should pass the OsString
-                return Some(root.to_string_lossy().into_owned());
-            }
-        }
-        None
+        self.mount_list
+            .as_ref()?
+            .iter()
+            .find(|root| path.starts_with(root))
     }
 
     fn exec(&self) -> i32 {
@@ -993,8 +1054,11 @@ impl Stater {
                     'h' => OutputType::Unsigned(meta.nlink()),
                     // inode number
                     'i' => OutputType::Unsigned(meta.ino()),
-                    // mount point: TODO: This should be an OsStr
-                    'm' => OutputType::Str(self.find_mount_point(file).unwrap()),
+                    // mount point
+                    'm' => match self.find_mount_point(file) {
+                        Some(s) => OutputType::OsStr(s),
+                        None => OutputType::Str(String::new()),
+                    },
                     // file name
                     'n' => OutputType::Str(display_name.to_string()),
                     // quoted file name with dereference if symbolic link
@@ -1300,6 +1364,8 @@ fn pretty_time(meta: &Metadata, md_time_field: MetadataTimeField) -> String {
 
 #[cfg(test)]
 mod tests {
+    use crate::pad_and_print_bytes;
+
     use super::{Flags, Precision, ScanUtil, Stater, Token, group_num, precision_trunc};
 
     #[test]
@@ -1420,5 +1486,26 @@ mod tests {
         assert_eq!(precision_trunc(123.456, Precision::Number(3)), "123.456");
         assert_eq!(precision_trunc(123.456, Precision::Number(4)), "123.4560");
         assert_eq!(precision_trunc(123.456, Precision::Number(5)), "123.45600");
+    }
+
+    #[test]
+    fn test_pad_and_print_bytes() {
+        // testing non-utf8 with normal settings
+        let mut buffer = Vec::new();
+        let bytes = b"\x80\xFF\x80";
+        pad_and_print_bytes(&mut buffer, bytes, false, 3, Precision::NotSpecified).unwrap();
+        assert_eq!(&buffer, b"\x80\xFF\x80");
+
+        // testing left padding
+        let mut buffer = Vec::new();
+        let bytes = b"\x80\xFF\x80";
+        pad_and_print_bytes(&mut buffer, bytes, false, 5, Precision::NotSpecified).unwrap();
+        assert_eq!(&buffer, b"  \x80\xFF\x80");
+
+        // testing right padding
+        let mut buffer = Vec::new();
+        let bytes = b"\x80\xFF\x80";
+        pad_and_print_bytes(&mut buffer, bytes, true, 5, Precision::NotSpecified).unwrap();
+        assert_eq!(&buffer, b"\x80\xFF\x80  ");
     }
 }
