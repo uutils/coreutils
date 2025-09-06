@@ -1440,6 +1440,9 @@ fn construct_dest_path(
                     Path::new("")
                 }
             } else {
+                if source_path == Path::new(".") && target.is_dir() {
+                    return Ok(target.to_path_buf());
+                }
                 source_path.parent().unwrap_or(source_path)
             };
             localize_to_target(root, source_path, target)?

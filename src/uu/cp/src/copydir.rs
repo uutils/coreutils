@@ -109,6 +109,8 @@ impl<'a> Context<'a> {
         let root_path = current_dir.join(root);
         let root_parent = if target.exists() && !root.to_str().unwrap().ends_with("/.") {
             root_path.parent().map(|p| p.to_path_buf())
+        } else if root == Path::new(".") && target.is_dir() {
+            None
         } else {
             Some(root_path)
         };
@@ -192,6 +194,12 @@ impl Entry {
                 }
             } else {
                 descendant = descendant.strip_prefix(context.root)?.to_path_buf();
+            }
+        } else if context.root == Path::new(".") && context.target.is_dir() {
+            if let Some(current_dir_name) = context.current_dir.file_name() {
+                if let Ok(stripped) = descendant.strip_prefix(current_dir_name) {
+                    descendant = stripped.to_path_buf();
+                }
             }
         }
 
@@ -325,7 +333,8 @@ pub(crate) fn copy_directory(
 
     // check if root is a prefix of target
     if path_has_prefix(target, root)? {
-        return Err(translate!("cp-error-cannot-copy-directory-into-itself", "source" => root.quote(), "dest" => target.join(root.file_name().unwrap()).quote())
+        let dest_name = root.file_name().unwrap_or_else(|| root.as_os_str());
+        return Err(translate!("cp-error-cannot-copy-directory-into-itself", "source" => root.quote(), "dest" => target.join(dest_name).quote())
         .into());
     }
 
