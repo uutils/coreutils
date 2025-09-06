@@ -110,6 +110,10 @@ impl<'a> Context<'a> {
         let root_parent = if target.exists() && !root.to_str().unwrap().ends_with("/.") {
             root_path.parent().map(|p| p.to_path_buf())
         } else if root == Path::new(".") && target.is_dir() {
+            // Special case: when copying current directory (.) to an existing directory,
+            // we don't want to use the parent path as root_parent because we want to
+            // copy the contents of the current directory directly into the target directory,
+            // not create a subdirectory with the current directory's name.
             None
         } else {
             Some(root_path)
@@ -196,6 +200,11 @@ impl Entry {
                 descendant = descendant.strip_prefix(context.root)?.to_path_buf();
             }
         } else if context.root == Path::new(".") && context.target.is_dir() {
+            // Special case: when copying current directory (.) to an existing directory,
+            // strip the current directory name from the descendant path to avoid creating
+            // an extra level of nesting. For example, if we're in /home/user/source_dir
+            // and copying . to /home/user/dest_dir, we want to copy source_dir/file.txt
+            // to dest_dir/file.txt, not dest_dir/source_dir/file.txt.
             if let Some(current_dir_name) = context.current_dir.file_name() {
                 if let Ok(stripped) = descendant.strip_prefix(current_dir_name) {
                     descendant = stripped.to_path_buf();
