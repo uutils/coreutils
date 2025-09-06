@@ -6070,7 +6070,7 @@ fn test_ls_capabilities() {
         .succeeds()
         .stdout_contains("\x1b[30;41mtest/cap_pos") // spell-checker:disable-line
         .stdout_contains("\x1b[30;41mcap_pos") // spell-checker:disable-line
-        .stdout_does_not_contain("0;41mtest/dir/cap_neg"); // spell-checker:disable-line
+        .stdout_does_not_contain("0;41mcap_neg"); // spell-checker:disable-line
 }
 
 #[cfg(feature = "test_risky_names")]
