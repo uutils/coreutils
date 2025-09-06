@@ -1054,3 +1054,27 @@ fn test_non_utf8_paths() {
 
     assert!(!at.dir_exists(non_utf8_dir_name));
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_rm_recursive_long_path_safe_traversal() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let mut deep_path = String::from("rm_deep");
+    at.mkdir(&deep_path);
+
+    for i in 0..12 {
+        let long_dir_name = format!("{}{}", "z".repeat(80), i);
+        deep_path = format!("{deep_path}/{long_dir_name}");
+        at.mkdir_all(&deep_path);
+    }
+
+    at.write("rm_deep/test1.txt", "content1");
+    at.write(&format!("{deep_path}/test2.txt"), "content2");
+
+    ts.ucmd().arg("-rf").arg("rm_deep").succeeds();
+
+    // Verify the directory is completely removed
+    assert!(!at.dir_exists("rm_deep"));
+}

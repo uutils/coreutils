@@ -20,7 +20,7 @@ path = "src/rm.rs"
 [dependencies]
 thiserror = { workspace = true }
 clap = { workspace = true }
-uucore = { workspace = true, features = ["fs", "parser"] }
+uucore = { workspace = true, features = ["fs", "parser", "safe-traversal"] }
 fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
