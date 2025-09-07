@@ -12,7 +12,6 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let out_dir = env::var("OUT_DIR")?;
 
     let mut embedded_file = File::create(Path::new(&out_dir).join("embedded_locales.rs"))?;
-
     writeln!(embedded_file, "// Generated at compile time - do not edit")?;
     writeln!(
         embedded_file,
@@ -75,6 +74,14 @@ fn detect_target_utility() -> Option<String> {
     if let Ok(target_util) = env::var("UUCORE_TARGET_UTIL") {
         if !target_util.is_empty() {
             return Some(target_util);
+        }
+    }
+
+    // Auto-detect utility name from CARGO_PKG_NAME if it's a uu_* package
+    if let Ok(pkg_name) = env::var("CARGO_PKG_NAME") {
+        if let Some(util_name) = pkg_name.strip_prefix("uu_") {
+            println!("cargo:warning=Auto-detected utility name: {}", util_name);
+            return Some(util_name.to_string());
         }
     }
 
@@ -156,6 +163,9 @@ fn embed_all_utilities_locales(
     // Discover all uu_* directories
     let src_uu_dir = project_root.join("src/uu");
     if !src_uu_dir.exists() {
+        // When src/uu doesn't exist (e.g., standalone uucore from crates.io),
+        // embed a static list of utility locales that are commonly used
+        embed_static_utility_locales(embedded_file)?;
         return Ok(());
     }
 
@@ -200,5 +210,62 @@ fn embed_all_utilities_locales(
     }
 
     embedded_file.flush()?;
+    Ok(())
+}
+
+fn embed_static_utility_locales(
+    embedded_file: &mut std::fs::File,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use std::env;
+
+    writeln!(
+        embedded_file,
+        "    // Static utility locales for crates.io builds"
+    )?;
+
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
+    let Some(registry_dir) = Path::new(&manifest_dir).parent() else {
+        return Ok(()); // nothing to scan
+    };
+
+    // First, try to embed uucore locales - critical for common translations like "Usage:"
+    let uucore_locale_file = Path::new(&manifest_dir).join("locales/en-US.ftl");
+    if uucore_locale_file.is_file() {
+        let content = std::fs::read_to_string(&uucore_locale_file)?;
+        writeln!(embedded_file, "    // Common uucore locale")?;
+        writeln!(
+            embedded_file,
+            "    locales.insert(\"uucore/en-US.ftl\", r###\"{content}\"###);"
+        )?;
+        writeln!(embedded_file)?;
+    }
+
+    // Collect and sort for deterministic builds
+    let mut entries: Vec<_> = std::fs::read_dir(registry_dir)?
+        .filter_map(Result::ok)
+        .collect();
+    entries.sort_by_key(|e| e.file_name());
+
+    for entry in entries {
+        let file_name = entry.file_name();
+        if let Some(dir_name) = file_name.to_str() {
+            // Match uu_<util>-<version>
+            if let Some((util_part, _)) = dir_name.split_once('-') {
+                if let Some(util_name) = util_part.strip_prefix("uu_") {
+                    let locale_file = entry.path().join("locales/en-US.ftl");
+                    if locale_file.is_file() {
+                        let content = std::fs::read_to_string(&locale_file)?;
+                        writeln!(embedded_file, "    // Locale for {util_name}")?;
+                        writeln!(
+                            embedded_file,
+                            "    locales.insert(\"{util_name}/en-US.ftl\", r###\"{content}\"###);"
+                        )?;
+                        writeln!(embedded_file)?;
+                    }
+                }
+            }
+        }
+    }
+
     Ok(())
 }
