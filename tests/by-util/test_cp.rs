@@ -6854,29 +6854,29 @@ fn test_cp_preserve_context_root() {
 #[test]
 fn test_cp_current_directory_to_existing_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
-    
+
     // Create source directory with files
     at.mkdir("source_dir");
     at.touch("source_dir/file1.txt");
     at.touch("source_dir/file2.txt");
     at.mkdir("source_dir/subdir");
     at.touch("source_dir/subdir/file3.txt");
-    
+
     // Create existing destination directory
     at.mkdir("dest_dir");
-    
+
     // Copy current directory (.) to existing directory
     // This should copy the contents of source_dir to dest_dir
     ucmd.current_dir(at.plus("source_dir"))
         .args(&["-r", ".", "../dest_dir"])
         .succeeds();
-    
+
     // Verify files were copied correctly
     assert!(at.file_exists("dest_dir/file1.txt"));
     assert!(at.file_exists("dest_dir/file2.txt"));
     assert!(at.dir_exists("dest_dir/subdir"));
     assert!(at.file_exists("dest_dir/subdir/file3.txt"));
-    
+
     // Verify the directory structure is correct (no extra nesting)
     assert!(!at.file_exists("dest_dir/source_dir/file1.txt"));
 }
@@ -6886,22 +6886,22 @@ fn test_cp_current_directory_to_existing_directory() {
 #[test]
 fn test_cp_current_directory_to_new_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
-    
+
     // Create source directory with files
     at.mkdir("source_dir");
     at.touch("source_dir/file1.txt");
     at.touch("source_dir/file2.txt");
     at.mkdir("source_dir/subdir");
     at.touch("source_dir/subdir/file3.txt");
-    
+
     // Copy current directory (.) to new directory
     ucmd.current_dir(at.plus("source_dir"))
         .args(&["-r", ".", "../new_dest_dir"])
         .succeeds();
-    
+
     // Verify the new directory was created
     assert!(at.dir_exists("new_dest_dir"));
-    
+
     // Verify files were copied correctly
     assert!(at.file_exists("new_dest_dir/file1.txt"));
     assert!(at.file_exists("new_dest_dir/file2.txt"));
@@ -6914,24 +6914,25 @@ fn test_cp_current_directory_to_new_directory() {
 #[test]
 fn test_cp_current_directory_verbose() {
     let (at, mut ucmd) = at_and_ucmd!();
-    
+
     // Create source directory with files
     at.mkdir("source_dir");
     at.touch("source_dir/file1.txt");
     at.touch("source_dir/file2.txt");
-    
+
     // Create existing destination directory
     at.mkdir("dest_dir");
-    
+
     // Copy current directory (.) to existing directory with verbose output
-    let result = ucmd.current_dir(at.plus("source_dir"))
+    let result = ucmd
+        .current_dir(at.plus("source_dir"))
         .args(&["-rv", ".", "../dest_dir"])
         .succeeds();
-    
+
     // Verify files were copied
     assert!(at.file_exists("dest_dir/file1.txt"));
     assert!(at.file_exists("dest_dir/file2.txt"));
-    
+
     // Check that verbose output shows correct paths
     let output = result.stdout_str();
     // The verbose output should show the files being copied
@@ -6947,20 +6948,20 @@ fn test_cp_current_directory_verbose() {
 #[test]
 fn test_cp_current_directory_preserve_attributes() {
     let (at, mut ucmd) = at_and_ucmd!();
-    
+
     // Create source directory with files
     at.mkdir("source_dir");
     at.touch("source_dir/file1.txt");
     at.touch("source_dir/file2.txt");
-    
+
     // Create existing destination directory
     at.mkdir("dest_dir");
-    
+
     // Copy current directory (.) with preserve attributes
     ucmd.current_dir(at.plus("source_dir"))
         .args(&["-rp", ".", "../dest_dir"])
         .succeeds();
-    
+
     // Verify files were copied
     assert!(at.file_exists("dest_dir/file1.txt"));
     assert!(at.file_exists("dest_dir/file2.txt"));
@@ -6971,11 +6972,11 @@ fn test_cp_current_directory_preserve_attributes() {
 #[test]
 fn test_cp_current_directory_to_itself_disallowed() {
     let (at, mut ucmd) = at_and_ucmd!();
-    
+
     // Create a directory
     at.mkdir("test_dir");
     at.touch("test_dir/file1.txt");
-    
+
     // Try to copy current directory (.) to itself
     ucmd.current_dir(at.plus("test_dir"))
         .args(&["-r", ".", "."])
@@ -6988,7 +6989,7 @@ fn test_cp_current_directory_to_itself_disallowed() {
 #[test]
 fn test_cp_current_directory_with_symlinks() {
     let (at, mut ucmd) = at_and_ucmd!();
-    
+
     // Create source directory with files and symlinks
     at.mkdir("source_dir");
     at.touch("source_dir/file1.txt");
@@ -6996,15 +6997,15 @@ fn test_cp_current_directory_with_symlinks() {
     at.mkdir("source_dir/subdir");
     at.touch("source_dir/subdir/file2.txt");
     at.symlink_file("../file1.txt", "source_dir/subdir/link2.txt");
-    
+
     // Create existing destination directory
     at.mkdir("dest_dir");
-    
+
     // Copy current directory (.) to existing directory
     ucmd.current_dir(at.plus("source_dir"))
         .args(&["-r", ".", "../dest_dir"])
         .succeeds();
-    
+
     // Verify files and symlinks were copied correctly
     assert!(at.file_exists("dest_dir/file1.txt"));
     assert!(at.is_symlink("dest_dir/link1.txt"));
