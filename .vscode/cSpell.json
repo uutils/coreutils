@@ -31,6 +31,7 @@
     "src/uucore/locales/*.ftl",
     ".devcontainer/**",
     "util/gnu-patches/**",
+    "docs/src/release-notes/**",
   ],
 
   "enableGlobDot": true,
