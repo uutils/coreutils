@@ -342,7 +342,7 @@ pub(crate) fn copy_directory(
 
     // check if root is a prefix of target
     if path_has_prefix(target, root)? {
-        let dest_name = root.file_name().unwrap_or_else(|| root.as_os_str());
+        let dest_name = root.file_name().unwrap_or(root.as_os_str());
         return Err(translate!("cp-error-cannot-copy-directory-into-itself", "source" => root.quote(), "dest" => target.join(dest_name).quote())
         .into());
     }
