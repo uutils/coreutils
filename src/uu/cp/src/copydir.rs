@@ -104,14 +104,28 @@ struct Context<'a> {
 }
 
 impl<'a> Context<'a> {
-    fn new(root: &'a Path, target: &'a Path) -> io::Result<Self> {
+    /// Creates a new `Context` for copying a directory.
+    ///
+    /// # Parameters
+    ///
+    /// - `root`: The source path from which the directory will be copied.
+    /// - `target`: The target path to which the directory will be copied.
+    /// - `no_target_dir`: A boolean indicating whether the root parent
+    ///   should consider whether or not the target directory exists.
+    ///
+    /// `$ cp -r source target/` Typically behave differently whether `target`
+    /// exists or not, end in `/` or `.`. the `--no-target-dir` flag can be
+    /// used to force the behavior of the command in case where `target` exists,
+    /// and is reflected in the `no_target_dir` parameter.
+    fn new(root: &'a Path, target: &'a Path, no_target_dir: bool) -> io::Result<Self> {
         let current_dir = env::current_dir()?;
         let root_path = current_dir.join(root);
-        let root_parent = if target.exists() && !root.to_str().unwrap().ends_with("/.") {
-            root_path.parent().map(|p| p.to_path_buf())
-        } else {
-            Some(root_path)
-        };
+        let root_parent =
+            if (target.exists() || no_target_dir) && !root.to_str().unwrap().ends_with("/.") {
+                root_path.parent().map(|p| p.to_path_buf())
+            } else {
+                Some(root_path)
+            };
         Ok(Self {
             current_dir,
             root_parent,
@@ -190,9 +204,8 @@ impl Entry {
                         translate!("cp-error-failed-to-create-directory", "error" => e)
                     );
                 }
-            } else {
-                descendant = descendant.strip_prefix(context.root)?.to_path_buf();
             }
+            descendant = descendant.strip_prefix(context.root)?.to_path_buf();
         }
 
         let local_to_target = context.target.join(descendant);
@@ -367,7 +380,7 @@ pub(crate) fn copy_directory(
     // Collect some paths here that are invariant during the traversal
     // of the given directory, like the current working directory and
     // the target directory.
-    let context = match Context::new(root, target) {
+    let context = match Context::new(root, target, options.no_target_dir) {
         Ok(c) => c,
         Err(e) => {
             return Err(translate!("cp-error-failed-get-current-dir", "error" => e).into());
