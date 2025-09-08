@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command};
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, stdin};
 use std::path::Path;
@@ -20,7 +20,7 @@ pub struct Settings {
     body_numbering: NumberingStyle,
     footer_numbering: NumberingStyle,
     // The variable corresponding to -d
-    section_delimiter: String,
+    section_delimiter: OsString,
     // The variables corresponding to the options -v, -i, -l, -w.
     starting_line_number: i64,
     line_increment: i64,
@@ -40,7 +40,7 @@ impl Default for Settings {
             header_numbering: NumberingStyle::None,
             body_numbering: NumberingStyle::NonEmpty,
             footer_numbering: NumberingStyle::None,
-            section_delimiter: String::from("\\:"),
+            section_delimiter: OsString::from("\\:"),
             starting_line_number: 1,
             line_increment: 1,
             join_blank_lines: 1,
@@ -140,8 +140,8 @@ enum SectionDelimiter {
 impl SectionDelimiter {
     /// A valid section delimiter contains the pattern one to three times,
     /// and nothing else.
-    fn parse(bytes: &[u8], pattern: &str) -> Option<Self> {
-        let pattern = pattern.as_bytes();
+    fn parse(bytes: &[u8], pattern: &OsStr) -> Option<Self> {
+        let pattern = pattern.as_encoded_bytes();
 
         if bytes.is_empty() || pattern.is_empty() || bytes.len() % pattern.len() != 0 {
             return None;
@@ -270,6 +270,7 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(options::SECTION_DELIMITER)
                 .help(translate!("nl-help-section-delimiter"))
+                .value_parser(clap::value_parser!(OsString))
                 .value_name("CC"),
         )
         .arg(

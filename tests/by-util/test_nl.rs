@@ -627,7 +627,50 @@ fn test_section_delimiter() {
 }
 
 #[test]
-fn test_one_char_section_delimiter_expansion() {
+#[cfg(target_os = "linux")]
+fn test_section_delimiter_non_utf8() {
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+
+    fn create_arg(prefix: &[u8]) -> OsString {
+        let section_delimiter = [0xFF, 0xFE];
+        let mut v = prefix.to_vec();
+        v.extend_from_slice(&section_delimiter);
+        OsString::from_vec(v)
+    }
+
+    let short = create_arg(b"-d");
+    let long = create_arg(b"--section-delimiter=");
+
+    for arg in [short, long] {
+        let header_section: Vec<u8> =
+            vec![b'a', b'\n', 0xFF, 0xFE, 0xFF, 0xFE, 0xFF, 0xFE, b'\n', b'b'];
+
+        new_ucmd!()
+            .arg(&arg)
+            .pipe_in(header_section)
+            .succeeds()
+            .stdout_is("     1\ta\n\n       b\n");
+
+        let body_section: Vec<u8> = vec![b'a', b'\n', 0xFF, 0xFE, 0xFF, 0xFE, b'\n', b'b'];
+
+        new_ucmd!()
+            .arg(&arg)
+            .pipe_in(body_section)
+            .succeeds()
+            .stdout_is("     1\ta\n\n     1\tb\n");
+
+        let footer_section: Vec<u8> = vec![b'a', b'\n', 0xFF, 0xFE, b'\n', b'b'];
+
+        new_ucmd!()
+            .arg(&arg)
+            .pipe_in(footer_section)
+            .succeeds()
+            .stdout_is("     1\ta\n\n       b\n");
+    }
+}
+
+#[test]
+fn test_one_char_section_delimiter() {
     for arg in ["-da", "--section-delimiter=a"] {
         new_ucmd!()
             .arg(arg)
@@ -644,6 +687,48 @@ fn test_one_char_section_delimiter_expansion() {
         new_ucmd!()
             .arg(arg)
             .pipe_in("a\na:\nb") // footer section
+            .succeeds()
+            .stdout_is("     1\ta\n\n       b\n");
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_one_byte_section_delimiter() {
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+
+    fn create_arg(prefix: &[u8]) -> OsString {
+        let mut v = prefix.to_vec();
+        v.push(0xFF);
+        OsString::from_vec(v)
+    }
+
+    let short = create_arg(b"-d");
+    let long = create_arg(b"--section-delimiter=");
+
+    for arg in [short, long] {
+        let header_section: Vec<u8> =
+            vec![b'a', b'\n', 0xFF, b':', 0xFF, b':', 0xFF, b':', b'\n', b'b'];
+
+        new_ucmd!()
+            .arg(&arg)
+            .pipe_in(header_section)
+            .succeeds()
+            .stdout_is("     1\ta\n\n       b\n");
+
+        let body_section: Vec<u8> = vec![b'a', b'\n', 0xFF, b':', 0xFF, b':', b'\n', b'b'];
+
+        new_ucmd!()
+            .arg(&arg)
+            .pipe_in(body_section)
+            .succeeds()
+            .stdout_is("     1\ta\n\n     1\tb\n");
+
+        let footer_section: Vec<u8> = vec![b'a', b'\n', 0xFF, b':', b'\n', b'b'];
+
+        new_ucmd!()
+            .arg(&arg)
+            .pipe_in(footer_section)
             .succeeds()
             .stdout_is("     1\ta\n\n       b\n");
     }
