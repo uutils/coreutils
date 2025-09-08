@@ -6946,13 +6946,27 @@ fn test_cp_current_directory_verbose() {
 // Test copying current directory (.) with preserve attributes.
 // This ensures attributes are preserved when copying the current directory.
 #[test]
+#[cfg(all(not(windows), not(target_os = "freebsd")))]
 fn test_cp_current_directory_preserve_attributes() {
+    use filetime::FileTime;
+    use std::os::unix::prelude::MetadataExt;
+
     let (at, mut ucmd) = at_and_ucmd!();
 
     // Create source directory with files
     at.mkdir("source_dir");
     at.touch("source_dir/file1.txt");
     at.touch("source_dir/file2.txt");
+
+    // Set specific permissions on the source files
+    at.set_mode("source_dir/file1.txt", 0o644);
+    at.set_mode("source_dir/file2.txt", 0o755);
+
+    // Set specific timestamps on the source files (1 hour ago)
+    let ts = time::OffsetDateTime::now_utc();
+    let previous = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
+    filetime::set_file_times(at.plus("source_dir/file1.txt"), previous, previous).unwrap();
+    filetime::set_file_times(at.plus("source_dir/file2.txt"), previous, previous).unwrap();
 
     // Create existing destination directory
     at.mkdir("dest_dir");
@@ -6965,6 +6979,38 @@ fn test_cp_current_directory_preserve_attributes() {
     // Verify files were copied
     assert!(at.file_exists("dest_dir/file1.txt"));
     assert!(at.file_exists("dest_dir/file2.txt"));
+
+    // Verify that permissions are preserved
+    let src_metadata1 = at.metadata("source_dir/file1.txt");
+    let dst_metadata1 = at.metadata("dest_dir/file1.txt");
+    assert_eq!(
+        src_metadata1.mode() & 0o7777,
+        dst_metadata1.mode() & 0o7777,
+        "file1.txt permissions not preserved"
+    );
+
+    let src_metadata2 = at.metadata("source_dir/file2.txt");
+    let dst_metadata2 = at.metadata("dest_dir/file2.txt");
+    assert_eq!(
+        src_metadata2.mode() & 0o7777,
+        dst_metadata2.mode() & 0o7777,
+        "file2.txt permissions not preserved"
+    );
+
+    // Verify that timestamps are preserved
+    let src_modified1 = src_metadata1.modified().unwrap();
+    let dst_modified1 = dst_metadata1.modified().unwrap();
+    assert_eq!(
+        src_modified1, dst_modified1,
+        "file1.txt timestamps not preserved"
+    );
+
+    let src_modified2 = src_metadata2.modified().unwrap();
+    let dst_modified2 = dst_metadata2.modified().unwrap();
+    assert_eq!(
+        src_modified2, dst_modified2,
+        "file2.txt timestamps not preserved"
+    );
 }
 
 // Test that copying current directory (.) to itself is disallowed.
