@@ -429,12 +429,11 @@ fn test_mv_replace_symlink_with_symlink() {
 fn test_mv_replace_symlink_with_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.mkdir("a");
+    at.touch("a");
     at.mkdir("b");
-    at.touch("a/empty_file_a");
     at.touch("b/empty_file_b");
 
-    at.symlink_dir("a", "symlink");
+    at.symlink_file("a", "symlink");
 
     ucmd.arg("-T")
         .arg("b")
@@ -449,25 +448,44 @@ fn test_mv_replace_symlink_with_directory() {
 fn test_mv_replace_symlink_with_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.mkdir("a");
-    at.touch("a/empty_file_a");
-    at.touch("empty_file_b");
+    at.touch("a");
+    at.touch("b");
 
-    at.symlink_dir("a", "symlink");
-
-    assert!(at.file_exists("symlink/empty_file_a"));
+    at.symlink_file("a", "symlink");
 
     ucmd.arg("-T")
-        .arg("empty_file_b")
+        .arg("b")
         .arg("symlink")
         .succeeds()
         .no_stderr();
 
     assert!(at.file_exists("symlink"));
     assert!(!at.is_symlink("symlink"));
-    assert!(!at.file_exists("empty_file_b"));
+    assert!(!at.file_exists("b"));
+    assert!(at.file_exists("a"));
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_file_to_symlink_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("a");
+    at.touch("a/empty_file_a");
+    at.touch("b");
+
+    at.symlink_dir("a", "symlink");
+
+    assert!(at.file_exists("symlink/empty_file_a"));
+
+    ucmd.arg("b").arg("symlink").succeeds().no_stderr();
+
+    assert!(at.dir_exists("symlink"));
+    assert!(at.is_symlink("symlink"));
+    assert!(at.file_exists("symlink/b"));
+    assert!(!at.file_exists("b"));
     assert!(at.dir_exists("a"));
-    assert!(at.file_exists("a/empty_file_a"));
+    assert!(at.file_exists("a/b"));
 }
 
 #[test]
