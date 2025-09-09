@@ -2,6 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore readelf
+
 use uutests::util::TestScenario;
 
 #[cfg(unix)]
@@ -279,4 +282,31 @@ fn util_version() {
         let ver = std::env::var("CARGO_PKG_VERSION").unwrap();
         assert_eq!(format!("coreutils {ver} (multi-call binary)\n"), output_str);
     }
+}
+
+#[test]
+#[cfg(target_env = "musl")]
+fn test_musl_no_dynamic_deps() {
+    use std::process::Command;
+
+    let scenario = TestScenario::new("test_musl_no_dynamic_deps");
+    if !scenario.bin_path.exists() {
+        println!("Skipping test: Binary not found at {:?}", scenario.bin_path);
+        return;
+    }
+
+    let output = Command::new("readelf")
+        .arg("-d")
+        .arg(&scenario.bin_path)
+        .output()
+        .expect("Failed to run readelf");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Static binaries should have no NEEDED entries (dynamic library dependencies)
+    assert!(
+        !stdout.contains("NEEDED"),
+        "Found dynamic dependencies in musl binary:\n{}",
+        stdout
+    );
 }

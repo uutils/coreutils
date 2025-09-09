@@ -163,11 +163,19 @@ feat_os_macos = [
   "feat_require_unix_hostid",
 ]
 # "feat_os_unix" == set of utilities which can be built/run on modern/usual *nix platforms.
-# Also used for targets binding to the "musl" library (ref: <https://musl.libc.org/about.html>)
 feat_os_unix = [
   "feat_Tier1",
   #
   "feat_require_unix",
+  "feat_require_unix_hostid",
+  "feat_require_unix_utmpx",
+]
+# "feat_os_unix_musl" == set of utilities which can be built/run on targets binding to the "musl" library (ref: <https://musl.libc.org/about.html>)
+# It excludes stdbuf due to cdylib limitations (https://github.com/rust-lang/rust/issues/82193)
+feat_os_unix_musl = [
+  "feat_Tier1",
+  #
+  "feat_require_unix_musl",
   "feat_require_unix_hostid",
   "feat_require_unix_utmpx",
 ]
@@ -194,7 +202,11 @@ feat_os_unix_android = [
 # ** NOTE: these `feat_require_...` sets should be minimized as much as possible to encourage cross-platform availability of utilities
 #
 # "feat_require_unix" == set of utilities requiring support which is only available on unix platforms
-feat_require_unix = [
+feat_require_unix = ["feat_require_unix_core", "stdbuf"]
+# "feat_require_unix_musl" == set of utilities requiring unix support, excluding stdbuf (cdylib not supported on musl)
+feat_require_unix_musl = ["feat_require_unix_core"]
+# "feat_require_unix_core" == core unix utilities (shared between regular unix and musl)
+feat_require_unix_core = [
   "chgrp",
   "chmod",
   "chown",
@@ -210,7 +222,6 @@ feat_require_unix = [
   "nohup",
   "pathchk",
   "stat",
-  "stdbuf",
   "stty",
   "timeout",
   "tty",
