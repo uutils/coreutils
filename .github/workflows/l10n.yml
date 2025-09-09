@@ -1118,6 +1118,29 @@ jobs:
       env:
         RUST_BACKTRACE: "1"
 
+  l10n_embedded_locale_regression_test:
+    name: L10n/Embedded Locale Regression Test
+    runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.9
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        sudo apt-get -y update && sudo apt-get -y install libselinux1-dev
+    - name: Test embedded locale functionality for individual utilities
+      shell: bash
+      run: |
+        bash util/test_locale_regression.sh
+
   l10n_locale_embedding_regression_test:
     name: L10n/Locale Embedding Regression Test
     runs-on: ubuntu-latest
