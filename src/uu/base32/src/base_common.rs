@@ -12,8 +12,9 @@ use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::encoding::{
-    BASE2LSBF, BASE2MSBF, EncodingWrapper, Format, SupportsFastDecodeAndEncode, Z85Wrapper,
-    for_base_common::{BASE32, BASE32HEX, BASE64, BASE64_NOPAD, BASE64URL, HEXUPPER_PERMISSIVE},
+    BASE2LSBF, BASE2MSBF, Base64SimdWrapper, EncodingWrapper, Format, SupportsFastDecodeAndEncode,
+    Z85Wrapper,
+    for_base_common::{BASE32, BASE32HEX, BASE64URL, HEXUPPER_PERMISSIVE},
 };
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
@@ -271,13 +272,9 @@ pub fn get_supports_fast_decode_and_encode(
             } else {
                 &b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/"[..]
             };
-            let wrapper = if decode && !has_padding {
-                BASE64_NOPAD
-            } else {
-                BASE64
-            };
-            Box::from(EncodingWrapper::new(
-                wrapper,
+            let use_padding = !decode || has_padding;
+            Box::from(Base64SimdWrapper::new(
+                use_padding,
                 BASE64_VALID_DECODING_MULTIPLE,
                 BASE64_UNPADDED_MULTIPLE,
                 alphabet,

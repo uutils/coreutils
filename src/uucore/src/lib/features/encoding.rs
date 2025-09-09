@@ -7,9 +7,84 @@
 // spell-checker:ignore unpadded
 
 use crate::error::{UResult, USimpleError};
+use base64_simd;
 use data_encoding::Encoding;
 use data_encoding_macro::new_encoding;
 use std::collections::VecDeque;
+
+// SIMD base64 wrapper
+pub struct Base64SimdWrapper {
+    pub alphabet: &'static [u8],
+    pub use_padding: bool,
+    pub unpadded_multiple: usize,
+    pub valid_decoding_multiple: usize,
+}
+
+impl Base64SimdWrapper {
+    pub fn new(
+        use_padding: bool,
+        valid_decoding_multiple: usize,
+        unpadded_multiple: usize,
+        alphabet: &'static [u8],
+    ) -> Self {
+        assert!(valid_decoding_multiple > 0);
+        assert!(unpadded_multiple > 0);
+        assert!(!alphabet.is_empty());
+
+        Self {
+            alphabet,
+            use_padding,
+            unpadded_multiple,
+            valid_decoding_multiple,
+        }
+    }
+}
+
+impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
+    fn alphabet(&self) -> &'static [u8] {
+        self.alphabet
+    }
+
+    fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
+        let decoded = if self.use_padding {
+            base64_simd::STANDARD.decode_to_vec(input)
+        } else {
+            base64_simd::STANDARD_NO_PAD.decode_to_vec(input)
+        };
+
+        match decoded {
+            Ok(decoded_bytes) => {
+                output.extend_from_slice(&decoded_bytes);
+                Ok(())
+            }
+            Err(_) => {
+                // Restore original length on error
+                output.truncate(output.len());
+                Err(USimpleError::new(1, "error: invalid input".to_owned()))
+            }
+        }
+    }
+
+    fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()> {
+        let encoded = if self.use_padding {
+            base64_simd::STANDARD.encode_to_string(input)
+        } else {
+            base64_simd::STANDARD_NO_PAD.encode_to_string(input)
+        };
+
+        output.extend(encoded.as_bytes());
+
+        Ok(())
+    }
+
+    fn unpadded_multiple(&self) -> usize {
+        self.unpadded_multiple
+    }
+
+    fn valid_decoding_multiple(&self) -> usize {
+        self.valid_decoding_multiple
+    }
+}
 
 // Re-export for the faster decoding/encoding logic
 pub mod for_base_common {
