@@ -39,8 +39,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             embed_single_utility_locale(&mut embedded_file, &project_root()?, &util_name)?;
         }
         None => {
-            // Embed all utilities locales (multicall binary or fallback)
-            embed_all_utilities_locales(&mut embedded_file, &project_root()?)?;
+            // Embed all utility locales (multicall binary or fallback)
+            embed_all_utility_locales(&mut embedded_file, &project_root()?)?;
         }
     }
 
@@ -154,7 +154,7 @@ fn embed_single_utility_locale(
 }
 
 /// Embed locale files for all utilities (multicall binary)
-fn embed_all_utilities_locales(
+fn embed_all_utility_locales(
     embedded_file: &mut std::fs::File,
     project_root: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
