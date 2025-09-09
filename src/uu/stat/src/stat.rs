@@ -24,7 +24,7 @@ use std::fs::{FileType, Metadata};
 use std::io::Write;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::Path;
-use std::{env, fs, vec};
+use std::{env, fs};
 
 use thiserror::Error;
 use uucore::time::{FormatSystemTimeFallback, format_system_time, system_time_to_sec};
@@ -136,10 +136,24 @@ fn pad_and_print_bytes<W: Write>(
         (padding_needed, 0)
     };
 
-    writer.write_all(&vec![b' '; left_pad])?;
+    if left_pad > 0 {
+        print_padding(&mut writer, left_pad)?;
+    }
     writer.write_all(display_bytes)?;
-    writer.write_all(&vec![b' '; right_pad])?;
+    if right_pad > 0 {
+        print_padding(&mut writer, right_pad)?;
+    }
 
+    Ok(())
+}
+
+/// print padding based on a writer W and n size
+/// writer is genric to be any buffer like: `std::io::stdout`
+/// n is the calculated padding size
+fn print_padding<W: Write>(writer: &mut W, n: usize) -> Result<(), std::io::Error> {
+    for _ in 0..n {
+        writer.write_all(b" ")?;
+    }
     Ok(())
 }
 
@@ -1364,7 +1378,7 @@ fn pretty_time(meta: &Metadata, md_time_field: MetadataTimeField) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::pad_and_print_bytes;
+    use crate::{pad_and_print_bytes, print_padding};
 
     use super::{Flags, Precision, ScanUtil, Stater, Token, group_num, precision_trunc};
 
@@ -1507,5 +1521,12 @@ mod tests {
         let bytes = b"\x80\xFF\x80";
         pad_and_print_bytes(&mut buffer, bytes, true, 5, Precision::NotSpecified).unwrap();
         assert_eq!(&buffer, b"\x80\xFF\x80  ");
+    }
+
+    #[test]
+    fn test_print_padding() {
+        let mut buffer = Vec::new();
+        print_padding(&mut buffer, 5).unwrap();
+        assert_eq!(&buffer, b"     ");
     }
 }
