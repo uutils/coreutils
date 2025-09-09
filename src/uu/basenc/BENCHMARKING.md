@@ -183,7 +183,7 @@ Benchmark 2 (3 runs): ./target/release/basenc --decode --ignore-garbage --z85 --
   branch_misses      1.18M  ± 14.7K     1.16M  … 1.19M           0 ( 0%)        ⚡- 99.9% ±  0.0%
 ```
 
-## SIMD Benchmark Results (2024-09-08)
+## SIMD Benchmark Results (2025-09-08)
 
 ### Base64 encoding performance with SIMD acceleration
 
