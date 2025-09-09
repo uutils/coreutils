@@ -207,7 +207,7 @@ Summary
 ```
 
 **Key improvements:**
-- **1.77x faster** than GNU coreutils base64
+- **1.77x faster** than GNU coreutils `base64`
 - **3.2x reduction** in user CPU time (4.278s → 1.342s)
 - **Overall 77% performance improvement** on large file encoding
 
