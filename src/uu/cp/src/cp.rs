@@ -1440,6 +1440,13 @@ fn construct_dest_path(
                     Path::new("")
                 }
             } else {
+                if source_path == Path::new(".") && target.is_dir() {
+                    // Special case: when copying current directory (.) to an existing directory,
+                    // return the target path directly instead of trying to construct a path
+                    // relative to the source's parent. This ensures we copy the contents of
+                    // the current directory into the target directory, not create a subdirectory.
+                    return Ok(target.to_path_buf());
+                }
                 source_path.parent().unwrap_or(source_path)
             };
             localize_to_target(root, source_path, target)?
