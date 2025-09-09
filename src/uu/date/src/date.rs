@@ -387,14 +387,117 @@ fn make_format_string(settings: &Settings) -> &str {
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
 ) -> Result<Zoned, (String, parse_datetime::ParseDateTimeError)> {
-    match parse_datetime::parse_datetime(s.as_ref()) {
-        Ok(date) => {
-            let timestamp =
-                Timestamp::new(date.timestamp(), date.timestamp_subsec_nanos() as i32).unwrap();
-            Ok(Zoned::new(timestamp, TimeZone::UTC))
-        }
-        Err(e) => Err((s.as_ref().into(), e)),
+    let input = s.as_ref();
+
+    // Handle TZ="timezone" date_spec syntax
+    if let Some((tz_spec, date_part)) = parse_tz_syntax(input) {
+        parse_date_with_timezone(&tz_spec, &date_part, input)
+    } else {
+        // Original parsing logic - no TZ prefix
+        parse_date_without_timezone(input)
     }
+}
+
+/// Parse TZ="timezone" `date_spec` syntax used by GNU date
+/// Returns (`timezone_name`, `date_part`) if the syntax is detected, None otherwise
+/// Handles both quoted (TZ="UTC") and unquoted (TZ=UTC) formats
+fn parse_tz_syntax(input: &str) -> Option<(String, String)> {
+    let trimmed = input.trim_start();
+
+    // Check for TZ= prefix (case insensitive)
+    if trimmed.len() < 3 || !trimmed[0..3].to_ascii_lowercase().starts_with("tz=") {
+        return None;
+    }
+
+    let after_equals = &trimmed[3..];
+
+    // Handle quoted timezone: TZ="..."
+    if let Some(after_quote) = after_equals.strip_prefix('"') {
+        if let Some(end_quote) = after_quote.find('"') {
+            let tz_name = after_quote[..end_quote].to_string();
+            let remainder = after_quote[end_quote + 1..].trim_start();
+            if !remainder.is_empty() {
+                return Some((tz_name, remainder.to_string()));
+            }
+        }
+    }
+    // Handle unquoted timezone: TZ=UTC
+    else if let Some(space_pos) = after_equals.find(char::is_whitespace) {
+        let tz_name = after_equals[..space_pos].to_string();
+        let remainder = after_equals[space_pos..].trim_start();
+        if !remainder.is_empty() {
+            return Some((tz_name, remainder.to_string()));
+        }
+    }
+
+    None
+}
+
+/// Parse timezone string into a jiff `TimeZone`
+/// Returns `TimeZone` if valid, Err if invalid
+fn parse_timezone(tz_spec: &str) -> Result<TimeZone, Box<dyn std::error::Error>> {
+    // Handle very long timezone names (potential DoS)
+    if tz_spec.len() > 256 {
+        return Err(translate!("timezone-name-too-long").into());
+    }
+
+    // Handle common abbreviations first for consistency
+    match tz_spec {
+        "GMT" | "UTC" => Ok(TimeZone::UTC),
+        _ => {
+            // Try to parse as IANA timezone name
+            if let Ok(tz) = TimeZone::get(tz_spec) {
+                return Ok(tz);
+            }
+
+            // Try parsing as fixed offset (+02:00, -05:30, etc.)
+            if let Ok(offset) = parse_fixed_offset(tz_spec) {
+                return Ok(TimeZone::fixed(offset));
+            }
+
+            Err(translate!("unknown-timezone", "timezone" => tz_spec).into())
+        }
+    }
+}
+
+/// Parse fixed offset timezone strings like +02:00, -05:30, +0530, etc.
+fn parse_fixed_offset(s: &str) -> Result<jiff::tz::Offset, Box<dyn std::error::Error>> {
+    if s.is_empty() {
+        return Err(translate!("empty-offset").into());
+    }
+
+    let (sign, rest) = match s.chars().next() {
+        Some('+') => (1, &s[1..]),
+        Some('-') => (-1, &s[1..]),
+        _ => return Err(translate!("missing-sign").into()),
+    };
+
+    // Handle formats: HH, HHMM, HH:MM
+    let (hours, minutes) = if rest.contains(':') {
+        // HH:MM format
+        let parts: Vec<&str> = rest.split(':').collect();
+        if parts.len() != 2 {
+            return Err(translate!("invalid-offset-format").into());
+        }
+        (parts[0].parse::<i32>()?, parts[1].parse::<i32>()?)
+    } else if rest.len() == 4 {
+        // HHMM format
+        let hours_str = &rest[0..2];
+        let mins_str = &rest[2..4];
+        (hours_str.parse::<i32>()?, mins_str.parse::<i32>()?)
+    } else if rest.len() == 2 {
+        // HH format (assume 00 minutes)
+        (rest.parse::<i32>()?, 0)
+    } else {
+        return Err(translate!("invalid-offset-format").into());
+    };
+
+    if hours.abs() > 23 || minutes.abs() > 59 {
+        return Err(translate!("invalid-hours-or-minutes").into());
+    }
+
+    let total_seconds = sign * (hours * 3600 + minutes * 60);
+    Ok(jiff::tz::Offset::from_seconds(total_seconds)?)
 }
 
 // TODO: Convert `parse_datetime` to jiff and remove wrapper from chrono to jiff structures.
@@ -483,5 +586,191 @@ fn set_system_datetime(date: Zoned) -> UResult<()> {
             .map_err_context(|| translate!("date-error-cannot-set-date")))
     } else {
         Ok(())
+    }
+}
+
+/// Parse a date string with timezone specification
+fn parse_date_with_timezone(
+    tz_spec: &str,
+    date_part: &str,
+    input: &str,
+) -> Result<Zoned, (String, parse_datetime::ParseDateTimeError)> {
+    // Parse the timezone first
+    match parse_timezone(tz_spec) {
+        Ok(timezone) => {
+            // Parse the date part and interpret it in the specified timezone
+            match parse_datetime::parse_datetime(date_part) {
+                Ok(date) => {
+                    // Since parse_datetime gives us a chrono DateTime that represents the
+                    // parsed civil time, we need to extract those civil components without
+                    // using chrono traits. We'll format to string and re-parse with jiff.
+                    let datetime_str = date.format("%Y-%m-%d %H:%M:%S").to_string();
+
+                    // Parse with jiff's civil datetime parser
+                    match jiff::civil::DateTime::strptime("%Y-%m-%d %H:%M:%S", &datetime_str) {
+                        Ok(civil_dt) => {
+                            // Convert to zoned datetime in the target timezone
+                            match civil_dt.to_zoned(timezone.clone()) {
+                                Ok(zoned) => Ok(zoned),
+                                Err(_) => {
+                                    // Fallback: create timestamp and apply timezone
+                                    let timestamp = Timestamp::new(
+                                        date.timestamp(),
+                                        date.timestamp_subsec_nanos() as i32,
+                                    )
+                                    .unwrap();
+                                    Ok(Zoned::new(timestamp, timezone))
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            // Fallback: create timestamp and apply timezone
+                            let timestamp = Timestamp::new(
+                                date.timestamp(),
+                                date.timestamp_subsec_nanos() as i32,
+                            )
+                            .unwrap();
+                            Ok(Zoned::new(timestamp, timezone))
+                        }
+                    }
+                }
+                Err(e) => Err((input.into(), e)),
+            }
+        }
+        Err(_) => {
+            // For GNU compatibility: if TZ is not recognized in TZ="..." syntax,
+            // return current time instead of an error
+            Ok(Zoned::now())
+        }
+    }
+}
+
+/// Parse a date string without timezone specification (original behavior)
+fn parse_date_without_timezone(
+    input: &str,
+) -> Result<Zoned, (String, parse_datetime::ParseDateTimeError)> {
+    match parse_datetime::parse_datetime(input) {
+        Ok(date) => {
+            let timestamp =
+                Timestamp::new(date.timestamp(), date.timestamp_subsec_nanos() as i32).unwrap();
+            Ok(Zoned::new(timestamp, TimeZone::UTC))
+        }
+        Err(e) => Err((input.into(), e)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_tz_syntax_valid() {
+        // Test basic TZ syntax parsing
+        let result = parse_tz_syntax("TZ=\"UTC\" 2020-01-01");
+        assert_eq!(result, Some(("UTC".to_string(), "2020-01-01".to_string())));
+
+        // Test with different timezone
+        let result = parse_tz_syntax("TZ=\"EST\" now");
+        assert_eq!(result, Some(("EST".to_string(), "now".to_string())));
+
+        // Test with long timezone name
+        let long_tz = "a".repeat(100);
+        let input = format!("TZ=\"{long_tz}\" tomorrow");
+        let result = parse_tz_syntax(&input);
+        assert_eq!(result, Some((long_tz, "tomorrow".to_string())));
+    }
+
+    #[test]
+    fn test_parse_tz_syntax_invalid() {
+        // Test without TZ prefix
+        assert_eq!(parse_tz_syntax("\"UTC\" 2020-01-01"), None);
+
+        // Test with unclosed quote
+        assert_eq!(parse_tz_syntax("TZ=\"UTC 2020-01-01"), None);
+
+        // Test with no date part
+        assert_eq!(parse_tz_syntax("TZ=\"UTC\""), None);
+        assert_eq!(parse_tz_syntax("TZ=\"UTC\" "), None);
+        assert_eq!(parse_tz_syntax("TZ=UTC"), None); // No date part
+
+        // Test empty input
+        assert_eq!(parse_tz_syntax(""), None);
+
+        // Test malformed inputs
+        assert_eq!(parse_tz_syntax("TX=UTC 2020-01-01"), None); // Wrong prefix
+        assert_eq!(parse_tz_syntax("TZ"), None); // Too short
+    }
+
+    #[test]
+    fn test_parse_tz_syntax_edge_cases() {
+        // Test with empty timezone
+        let result = parse_tz_syntax("TZ=\"\" 2020-01-01");
+        assert_eq!(result, Some((String::new(), "2020-01-01".to_string())));
+
+        // Test with whitespace in timezone
+        let result = parse_tz_syntax("TZ=\"US/Pacific\" 2020-01-01");
+        assert_eq!(
+            result,
+            Some(("US/Pacific".to_string(), "2020-01-01".to_string()))
+        );
+
+        // Test with multiple spaces before date part
+        let result = parse_tz_syntax("TZ=\"UTC\"   tomorrow");
+        assert_eq!(result, Some(("UTC".to_string(), "tomorrow".to_string())));
+
+        // Test with quotes in timezone name (should work until first quote)
+        let result = parse_tz_syntax("TZ=\"UTC\"extra\" 2020-01-01");
+        assert_eq!(
+            result,
+            Some(("UTC".to_string(), "extra\" 2020-01-01".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_parse_timezone_valid() {
+        // Test standard timezones
+        assert!(parse_timezone("UTC").is_ok());
+        assert!(parse_timezone("GMT").is_ok());
+
+        // Test that we get UTC for both (GMT maps to UTC in our impl)
+        assert_eq!(parse_timezone("UTC").unwrap(), TimeZone::UTC);
+        // GMT gets converted to UTC in our parse_timezone function
+        let gmt_tz = parse_timezone("GMT").unwrap();
+        assert_eq!(gmt_tz, TimeZone::UTC);
+    }
+
+    #[test]
+    fn test_parse_timezone_fixed_offsets() {
+        // Test various fixed offset formats
+        assert!(parse_timezone("+02:00").is_ok());
+        assert!(parse_timezone("-05:30").is_ok());
+        assert!(parse_timezone("+0530").is_ok());
+        assert!(parse_timezone("-08").is_ok());
+    }
+
+    #[test]
+    fn test_parse_timezone_invalid() {
+        // Test invalid timezones
+        assert!(parse_timezone("INVALID_TZ").is_err());
+        assert!(parse_timezone("").is_err());
+
+        // Test very long timezone names
+        let long_tz = "a".repeat(300);
+        assert!(parse_timezone(&long_tz).is_err());
+    }
+
+    #[test]
+    fn test_parse_fixed_offset() {
+        // Test valid formats
+        assert!(parse_fixed_offset("+02:00").is_ok());
+        assert!(parse_fixed_offset("-05:30").is_ok());
+        assert!(parse_fixed_offset("+0530").is_ok());
+        assert!(parse_fixed_offset("-08").is_ok());
+
+        // Test invalid formats
+        assert!(parse_fixed_offset("02:00").is_err()); // Missing sign
+        assert!(parse_fixed_offset("+25:00").is_err()); // Invalid hours
+        assert!(parse_fixed_offset("+02:70").is_err()); // Invalid minutes
+        assert!(parse_fixed_offset("").is_err()); // Empty
     }
 }

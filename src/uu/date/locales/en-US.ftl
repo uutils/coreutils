@@ -102,3 +102,11 @@ date-error-date-overflow = date overflow '{$date}'
 date-error-setting-date-not-supported-macos = setting the date is not supported by macOS
 date-error-setting-date-not-supported-redox = setting the date is not supported by Redox
 date-error-cannot-set-date = cannot set date
+
+# Timezone parsing errors
+timezone-name-too-long = timezone name too long
+unknown-timezone = unknown timezone: {$timezone}
+empty-offset = empty offset
+missing-sign = missing sign
+invalid-offset-format = invalid offset format
+invalid-hours-or-minutes = invalid hours or minutes
