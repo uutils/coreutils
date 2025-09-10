@@ -374,8 +374,12 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         });
     }
 
-    let target_is_dir = target.is_dir() && !target.is_symlink();
     let source_is_dir = source.is_dir() && !source.is_symlink();
+    let target_is_dir = if target.is_symlink() {
+        fs::canonicalize(target).is_ok_and(|p| p.is_dir())
+    } else {
+        target.is_dir()
+    };
 
     if path_ends_with_terminator(target)
         && (!target_is_dir && !source_is_dir)
