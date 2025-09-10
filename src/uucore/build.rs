@@ -119,35 +119,41 @@ fn embed_single_utility_locale(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use std::fs;
 
-    // Embed the specific utility's locale
-    let locale_path = project_root
-        .join("src/uu")
-        .join(util_name)
-        .join("locales/en-US.ftl");
+    let locales_to_embed = get_locales_to_embed();
 
-    if locale_path.exists() {
-        let content = fs::read_to_string(&locale_path)?;
-        writeln!(embedded_file, "    // Locale for {util_name}")?;
-        writeln!(
-            embedded_file,
-            "    locales.insert(\"{util_name}/en-US.ftl\", r###\"{content}\"###);"
-        )?;
-        writeln!(embedded_file)?;
+    for locale in &locales_to_embed {
+        // Embed the specific utility's locale
+        let locale_path = project_root
+            .join("src/uu")
+            .join(util_name)
+            .join(format!("locales/{locale}.ftl"));
 
-        // Tell Cargo to rerun if this file changes
-        println!("cargo:rerun-if-changed={}", locale_path.display());
+        if locale_path.exists() {
+            let content = fs::read_to_string(&locale_path)?;
+            writeln!(embedded_file, "    // Locale for {util_name} ({locale})")?;
+            writeln!(
+                embedded_file,
+                "    locales.insert(\"{util_name}/{locale}.ftl\", r###\"{content}\"###);"
+            )?;
+            writeln!(embedded_file)?;
+
+            // Tell Cargo to rerun if this file changes
+            println!("cargo:rerun-if-changed={}", locale_path.display());
+        }
     }
 
     // Always embed uucore locale file if it exists
-    let uucore_locale_path = project_root.join("src/uucore/locales/en-US.ftl");
-    if uucore_locale_path.exists() {
-        let content = fs::read_to_string(&uucore_locale_path)?;
-        writeln!(embedded_file, "    // Common uucore locale")?;
-        writeln!(
-            embedded_file,
-            "    locales.insert(\"uucore/en-US.ftl\", r###\"{content}\"###);"
-        )?;
-        println!("cargo:rerun-if-changed={}", uucore_locale_path.display());
+    for locale in &locales_to_embed {
+        let uucore_locale_path = project_root.join(format!("src/uucore/locales/{locale}.ftl"));
+        if uucore_locale_path.exists() {
+            let content = fs::read_to_string(&uucore_locale_path)?;
+            writeln!(embedded_file, "    // Common uucore locale ({locale})")?;
+            writeln!(
+                embedded_file,
+                "    locales.insert(\"uucore/{locale}.ftl\", r###\"{content}\"###);"
+            )?;
+            println!("cargo:rerun-if-changed={}", uucore_locale_path.display());
+        }
     }
 
     Ok(())
@@ -180,33 +186,41 @@ fn embed_all_utility_locales(
     }
     util_dirs.sort();
 
+    let locales_to_embed = get_locales_to_embed();
+
     // Embed locale files for each utility
     for util_name in &util_dirs {
-        let locale_path = src_uu_dir.join(util_name).join("locales/en-US.ftl");
-        if locale_path.exists() {
-            let content = fs::read_to_string(&locale_path)?;
-            writeln!(embedded_file, "    // Locale for {util_name}")?;
-            writeln!(
-                embedded_file,
-                "    locales.insert(\"{util_name}/en-US.ftl\", r###\"{content}\"###);"
-            )?;
-            writeln!(embedded_file)?;
+        for locale in &locales_to_embed {
+            let locale_path = src_uu_dir
+                .join(util_name)
+                .join(format!("locales/{locale}.ftl"));
+            if locale_path.exists() {
+                let content = fs::read_to_string(&locale_path)?;
+                writeln!(embedded_file, "    // Locale for {util_name} ({locale})")?;
+                writeln!(
+                    embedded_file,
+                    "    locales.insert(\"{util_name}/{locale}.ftl\", r###\"{content}\"###);"
+                )?;
+                writeln!(embedded_file)?;
 
-            // Tell Cargo to rerun if this file changes
-            println!("cargo:rerun-if-changed={}", locale_path.display());
+                // Tell Cargo to rerun if this file changes
+                println!("cargo:rerun-if-changed={}", locale_path.display());
+            }
         }
     }
 
     // Also embed uucore locale file if it exists
-    let uucore_locale_path = project_root.join("src/uucore/locales/en-US.ftl");
-    if uucore_locale_path.exists() {
-        let content = fs::read_to_string(&uucore_locale_path)?;
-        writeln!(embedded_file, "    // Common uucore locale")?;
-        writeln!(
-            embedded_file,
-            "    locales.insert(\"uucore/en-US.ftl\", r###\"{content}\"###);"
-        )?;
-        println!("cargo:rerun-if-changed={}", uucore_locale_path.display());
+    for locale in &locales_to_embed {
+        let uucore_locale_path = project_root.join(format!("src/uucore/locales/{locale}.ftl"));
+        if uucore_locale_path.exists() {
+            let content = fs::read_to_string(&uucore_locale_path)?;
+            writeln!(embedded_file, "    // Common uucore locale ({locale})")?;
+            writeln!(
+                embedded_file,
+                "    locales.insert(\"uucore/{locale}.ftl\", r###\"{content}\"###);"
+            )?;
+            println!("cargo:rerun-if-changed={}", uucore_locale_path.display());
+        }
     }
 
     embedded_file.flush()?;
@@ -228,16 +242,20 @@ fn embed_static_utility_locales(
         return Ok(()); // nothing to scan
     };
 
+    let locales_to_embed = get_locales_to_embed();
+
     // First, try to embed uucore locales - critical for common translations like "Usage:"
-    let uucore_locale_file = Path::new(&manifest_dir).join("locales/en-US.ftl");
-    if uucore_locale_file.is_file() {
-        let content = std::fs::read_to_string(&uucore_locale_file)?;
-        writeln!(embedded_file, "    // Common uucore locale")?;
-        writeln!(
-            embedded_file,
-            "    locales.insert(\"uucore/en-US.ftl\", r###\"{content}\"###);"
-        )?;
-        writeln!(embedded_file)?;
+    for locale in &locales_to_embed {
+        let uucore_locale_file = Path::new(&manifest_dir).join(format!("locales/{locale}.ftl"));
+        if uucore_locale_file.is_file() {
+            let content = std::fs::read_to_string(&uucore_locale_file)?;
+            writeln!(embedded_file, "    // Common uucore locale ({locale})")?;
+            writeln!(
+                embedded_file,
+                "    locales.insert(\"uucore/{locale}.ftl\", r###\"{content}\"###);"
+            )?;
+            writeln!(embedded_file)?;
+        }
     }
 
     // Collect and sort for deterministic builds
@@ -252,15 +270,17 @@ fn embed_static_utility_locales(
             // Match uu_<util>-<version>
             if let Some((util_part, _)) = dir_name.split_once('-') {
                 if let Some(util_name) = util_part.strip_prefix("uu_") {
-                    let locale_file = entry.path().join("locales/en-US.ftl");
-                    if locale_file.is_file() {
-                        let content = std::fs::read_to_string(&locale_file)?;
-                        writeln!(embedded_file, "    // Locale for {util_name}")?;
-                        writeln!(
-                            embedded_file,
-                            "    locales.insert(\"{util_name}/en-US.ftl\", r###\"{content}\"###);"
-                        )?;
-                        writeln!(embedded_file)?;
+                    for locale in &locales_to_embed {
+                        let locale_file = entry.path().join(format!("locales/{locale}.ftl"));
+                        if locale_file.is_file() {
+                            let content = std::fs::read_to_string(&locale_file)?;
+                            writeln!(embedded_file, "    // Locale for {util_name} ({locale})")?;
+                            writeln!(
+                                embedded_file,
+                                "    locales.insert(\"{util_name}/{locale}.ftl\", r###\"{content}\"###);"
+                            )?;
+                            writeln!(embedded_file)?;
+                        }
                     }
                 }
             }
@@ -268,4 +288,25 @@ fn embed_static_utility_locales(
     }
 
     Ok(())
+}
+
+/// Determines which locales to embed into the binary.
+///
+/// To support localized messages in installed binaries (e.g., via `cargo install`),
+/// this function identifies the user's current locale from the `LANG` environment
+/// variable.
+///
+/// It always includes "en-US" to ensure that a fallback is available if the
+/// system locale's translation file is missing or if `LANG` is not set.
+fn get_locales_to_embed() -> Vec<String> {
+    let mut locales = vec!["en-US".to_string()];
+    if let Ok(lang) = env::var("LANG") {
+        if let Some(locale) = lang.split('.').next() {
+            let locale = locale.replace('_', "-");
+            if locale != "en-US" {
+                locales.push(locale);
+            }
+        }
+    }
+    locales
 }
