@@ -490,11 +490,12 @@ else
 	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
 endif
 $(foreach prog, $(CKSUM_PROGS), \
-ifeq (${MULTICALL}, y)
-	cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
-else
-	cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)cksum $(PROG_PREFIX)$(prog) $(newline) \
-endif
+	ifeq (${MULTICALL}, y)
+		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
+	else
+		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)cksum $(PROG_PREFIX)$(prog) $(newline) \
+	endif
+)
 
 uninstall:
 ifneq ($(OS),Windows_NT)
