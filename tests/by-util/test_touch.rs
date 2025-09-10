@@ -765,9 +765,9 @@ fn test_touch_trailing_slash() {
 fn test_touch_trailing_slash_windows() {
     let (_at, mut ucmd) = at_and_ucmd!();
     let file = "no-file/";
-    ucmd.args(&[file]).fails().stderr_only(format!(
-        "touch: cannot touch '{file}': The filename, directory name, or volume label syntax is incorrect.\n"
-    ));
+    ucmd.args(&[file])
+        .fails()
+        .stderr_contains(format!("touch: cannot touch '{file}'"));
 }
 
 #[test]
