@@ -483,14 +483,16 @@ ifeq (${MULTICALL}, y)
 		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
 	)
     $(foreach prog, $(CKSUM_PROGS), \
-		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline)) \
+		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
+	)
 	$(if $(findstring test,$(INSTALLEES)), cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
 else
 	$(foreach prog, $(INSTALLEES), \
 		$(INSTALL) $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog) $(newline) \
 	)
 	 $(foreach prog, $(CKSUM_PROGS), \
-		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)cksum $(PROG_PREFIX)$(prog) $(newline)) \
+		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)cksum $(PROG_PREFIX)$(prog) $(newline) \
+	)
 	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
 endif
 )
