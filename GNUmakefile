@@ -191,6 +191,24 @@ SELINUX_PROGS := \
 	chcon \
 	runcon
 
+CKSUM_PROGS := \
+	b2sum \
+	b3sum \
+	hashsum \
+	md5sum \
+	sha1sum \
+	sha224sum \
+	sha256sum \
+	sha3-224sum \
+	sha3-256sum \
+	sha3-384sum \
+	sha3-512sum \
+	sha384sum \
+	sha3sum \
+	sha512sum \
+	shake128sum \
+	shake256sum
+
 $(info Detected OS = $(OS))
 
 # Don't build the SELinux programs on macOS (Darwin) and FreeBSD
@@ -470,6 +488,12 @@ else
 		$(INSTALL) $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog) $(newline) \
 	)
 	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
+endif
+$(foreach prog, $(CKSUM_SYMLINKS), \
+ifeq (${MULTICALL}, y)
+	cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
+else
+	cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)cksum $(PROG_PREFIX)$(prog) $(newline) \
 endif
 
 uninstall:
