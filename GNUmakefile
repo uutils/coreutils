@@ -495,7 +495,6 @@ else
 	)
 	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
 endif
-)
 
 uninstall:
 ifneq ($(OS),Windows_NT)
