@@ -497,6 +497,7 @@ dependencies = [
  "clap_mangen",
  "ctor",
  "filetime",
+ "fluent-syntax",
  "glob",
  "hex-literal",
  "libc",
@@ -620,7 +621,6 @@ dependencies = [
  "uu_whoami",
  "uu_yes",
  "uucore",
- "uuhelp_parser",
  "uutests",
  "walkdir",
  "xattr",
@@ -4130,12 +4130,7 @@ version = "0.2.2"
 dependencies = [
  "proc-macro2",
  "quote",
- "uuhelp_parser",
 ]
-
-[[package]]
-name = "uuhelp_parser"
-version = "0.2.2"
 
 [[package]]
 name = "uuid"
