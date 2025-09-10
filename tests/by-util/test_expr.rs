@@ -1869,11 +1869,10 @@ mod gnu_expr_multibyte {
 
     // The regex engine should match the '.' to the first multibyte character.
     #[test]
-    #[ignore = "not implemented"]
     fn test_m3() {
         let args: &[&[u8]] = &[b"match", b"\xCE\xB1bc\xCE\xB4ef", b".bc"];
 
-        let cases = &[TestCase::FR.out("3"), TestCase::C.code(1)];
+        let cases = &[TestCase::FR.out("3"), TestCase::C.out("0").code(1)];
 
         for tc in cases {
             check_test_case(args, tc);
@@ -1883,7 +1882,6 @@ mod gnu_expr_multibyte {
     // The opposite of the previous test: two dots should only match the two
     // octets in single-byte locale.
     #[test]
-    #[ignore = "not implemented"]
     fn test_m4() {
         let args: &[&[u8]] = &[b"match", b"\xCE\xB1bc\xCE\xB4ef", b"..bc"];
 
@@ -1896,11 +1894,10 @@ mod gnu_expr_multibyte {
 
     // Match with grouping - a single dot should return the two octets
     #[test]
-    #[ignore = "not implemented"]
     fn test_m5() {
         let args: &[&[u8]] = &[b"match", b"\xCE\xB1bc\xCE\xB4ef", b"\\(.b\\)c"];
 
-        let cases = &[TestCase::FR.out(b"\xCE\xB1b"), TestCase::C.code(1)];
+        let cases = &[TestCase::FR.out(b"\xCE\xB1b"), TestCase::C.out("").code(1)];
 
         for tc in cases {
             check_test_case(args, tc);
@@ -1910,11 +1907,10 @@ mod gnu_expr_multibyte {
     // Invalid multibyte sequences - regex should not match in multibyte locale
     // (POSIX requirement)
     #[test]
-    #[ignore = "not implemented"]
     fn test_m6() {
         let args: &[&[u8]] = &[b"match", b"\xCEbc\xCE\xB4ef", b"\\(.\\)"];
 
-        let cases = &[TestCase::FR.code(1), TestCase::C.out(b"\xCE")];
+        let cases = &[TestCase::FR.out("").code(1), TestCase::C.out(b"\xCE")];
 
         for tc in cases {
             check_test_case(args, tc);
@@ -1926,7 +1922,6 @@ mod gnu_expr_multibyte {
     // In the single byte case, the regex engine sees two octets in the
     // character class ('\xCE' and '\xB1') - and it matches the first one.
     #[test]
-    #[ignore = "not implemented"]
     fn test_m7() {
         let args: &[&[u8]] = &[b"match", b"\xCE\xB1bc\xCE\xB4ef", b"\\(.\\)"];
 
