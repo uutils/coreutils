@@ -52,7 +52,7 @@ etc.).
 This utility does not exist in GNU coreutils. The behavior is modeled after both
 the `b2sum` utility of GNU and the
 [`b3sum`](https://github.com/BLAKE3-team/BLAKE3) utility by the BLAKE3 team. It also 
-supports the `--no-names` option, that does not appear in the GNU utilility.
+supports the `--no-names` option, that does not appear in the GNU utility.
 
 ## `more`
 
