@@ -194,7 +194,6 @@ SELINUX_PROGS := \
 HASHSUM_PROGS := \
 	b2sum \
 	b3sum \
-	hashsum \
 	md5sum \
 	sha1sum \
 	sha224sum \
@@ -491,7 +490,7 @@ else
 		$(INSTALL) $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog) $(newline) \
 	)
 	$(foreach prog, $(HASHSUM_PROGS), \
-		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)cksum $(PROG_PREFIX)$(prog) $(newline) \
+		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)hashsum $(PROG_PREFIX)$(prog) $(newline) \
 	)
 	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
 endif
