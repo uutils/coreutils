@@ -106,8 +106,6 @@ skip = [
   { name = "rand_core", version = "0.6.4" },
   # utmp-classic
   { name = "zerocopy", version = "0.7.35" },
-  # rustix
-  { name = "linux-raw-sys", version = "0.9.4" },
 ]
 # spell-checker: enable
 
