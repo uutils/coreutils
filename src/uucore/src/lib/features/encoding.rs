@@ -16,7 +16,6 @@ use std::collections::VecDeque;
 // SIMD base64 wrapper
 pub struct Base64SimdWrapper {
     pub alphabet: &'static [u8],
-    pub use_padding: bool,
     pub unpadded_multiple: usize,
     pub valid_decoding_multiple: usize,
 }
@@ -43,7 +42,6 @@ impl Base64SimdWrapper {
     }
 
     pub fn new(
-        use_padding: bool,
         valid_decoding_multiple: usize,
         unpadded_multiple: usize,
         alphabet: &'static [u8],
@@ -54,7 +52,6 @@ impl Base64SimdWrapper {
 
         Self {
             alphabet,
-            use_padding,
             unpadded_multiple,
             valid_decoding_multiple,
         }
@@ -67,73 +64,35 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
     }
 
     fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
-        let original_len = output.len();
+        // Padding always comes at the end, so at most once. No_PAD should be
+        // called most of the times
+        let decoded = base64_simd::STANDARD_NO_PAD.decode_to_vec(input);
 
-        let decode_result = if self.use_padding {
-            // GNU coreutils keeps decoding even when '=' appears before the true end
-            // of the stream (e.g. concatenated padded chunks). Mirror that logic
-            // by splitting at each '='-containing quantum, decoding those 4-byte
-            // groups with the padded variant, then letting the remainder fall back
-            // to whichever alphabet fits.
-            let mut start = 0usize;
-            while start < input.len() {
-                let remaining = &input[start..];
-
-                if remaining.is_empty() {
-                    break;
-                }
-
-                if let Some(eq_rel_idx) = remaining.iter().position(|&b| b == b'=') {
-                    let blocks = (eq_rel_idx / 4) + 1;
-                    let segment_len = blocks * 4;
-
-                    if segment_len > remaining.len() {
-                        return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+        match decoded {
+            Ok(decoded_bytes) => {
+                output.extend_from_slice(&decoded_bytes);
+                Ok(())
+            }
+            Err(_) => {
+                // Check if the padding works
+                let decoded_2 = base64_simd::STANDARD.decode_to_vec(input);
+                match decoded_2 {
+                    Ok(decoded_bytes_2) => {
+                        output.extend_from_slice(&decoded_bytes_2);
+                        Ok(())
                     }
-
-                    if Self::decode_with_standard(&remaining[..segment_len], output).is_err() {
-                        return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                    Err(_) => {
+                        // Restore original length on error
+                        output.truncate(output.len());
+                        Err(USimpleError::new(1, "error: invalid input".to_owned()))
                     }
-
-                    start += segment_len;
-                } else {
-                    // If there are no more '=' bytes the tail might still be padded
-                    // (len % 4 == 0) or purposely unpadded (GNU --ignore-garbage or
-                    // concatenated streams), so select the matching alphabet.
-                    let decoder = if remaining.len() % 4 == 0 {
-                        Self::decode_with_standard
-                    } else {
-                        Self::decode_with_no_pad
-                    };
-
-                    if decoder(remaining, output).is_err() {
-                        return Err(USimpleError::new(1, "error: invalid input".to_owned()));
-                    }
-
-                    break;
                 }
             }
-
-            Ok(())
-        } else {
-            Self::decode_with_no_pad(input, output)
-                .map_err(|_| USimpleError::new(1, "error: invalid input".to_owned()))
-        };
-
-        if let Err(err) = decode_result {
-            output.truncate(original_len);
-            Err(err)
-        } else {
-            Ok(())
         }
     }
 
     fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()> {
-        let encoded = if self.use_padding {
-            base64_simd::STANDARD.encode_to_string(input)
-        } else {
-            base64_simd::STANDARD_NO_PAD.encode_to_string(input)
-        };
+        let encoded = base64_simd::STANDARD.encode_to_string(input);
 
         output.extend(encoded.as_bytes());
 

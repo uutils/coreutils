@@ -270,17 +270,10 @@ pub fn get_supports_fast_decode_and_encode(
             b"0123456789ABCDEFGHIJKLMNOPQRSTUV=",
         )),
         Format::Base64 => {
-            let alphabet: &[u8] = if has_padding {
-                &b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/="[..]
-            } else {
-                &b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/"[..]
-            };
-            let use_padding = !decode || has_padding;
             Box::from(Base64SimdWrapper::new(
-                use_padding,
                 BASE64_VALID_DECODING_MULTIPLE,
                 BASE64_UNPADDED_MULTIPLE,
-                alphabet,
+                b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=",
             ))
         }
         Format::Base64Url => Box::from(EncodingWrapper::new(
