@@ -7079,3 +7079,69 @@ fn test_cp_no_dereference_symlink_with_parents() {
         .succeeds();
     assert_eq!(at.resolve_link("x/symlink-to-directory"), "directory");
 }
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_cp_dest_in_use() {
+    use std::process::Command;
+    use uutests::util::get_tests_binary;
+
+    let (at, _ucmd) = at_and_ucmd!();
+
+    // We create a copy of the coreutils binary in our test directory
+    let copy_coreutils = at.plus("copy_coreutils");
+    std::fs::copy(get_tests_binary(), &copy_coreutils)
+        .expect("Failed to copy coreutils binary to test directory");
+
+    // Ensure the file is ready for execution
+    std::fs::File::open(&copy_coreutils)
+        .and_then(|file| file.sync_all())
+        .expect("Failed to sync copied binary to disk");
+
+    // Now try to copy a file over ourself
+    // As copy_coreutils is in use, this should fail with "Text file busy"
+    let result = Command::new(&copy_coreutils)
+        .arg("cp")
+        .arg(at.plus(TEST_HELLO_WORLD_SOURCE))
+        .arg(&copy_coreutils)
+        .output()
+        .expect("Failed to execute command");
+
+    // Verify that the command failed
+    assert!(!result.status.success());
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_cp_dest_in_use_forced() {
+    use std::process::Command;
+    use uutests::util::get_tests_binary;
+
+    let (at, _ucmd) = at_and_ucmd!();
+
+    // We create a copy of the coreutils binary in our test directory
+    let copy_coreutils = at.plus("copy_coreutils");
+    std::fs::copy(get_tests_binary(), &copy_coreutils)
+        .expect("Failed to copy coreutils binary to test directory");
+
+    // Ensure the file is ready for execution
+    std::fs::File::open(&copy_coreutils)
+        .and_then(|file| file.sync_all())
+        .expect("Failed to sync copied binary to disk");
+
+    // Now try to copy a file over ourself
+    // With force argument, this should succeed as the destination is deleted first
+    let result = Command::new(&copy_coreutils)
+        .arg("cp")
+        .arg("-f")
+        .arg(at.plus(TEST_HELLO_WORLD_SOURCE))
+        .arg(&copy_coreutils)
+        .output()
+        .expect("Failed to execute command");
+
+    // Verify that the command succeeded
+    assert!(result.status.success());
+
+    // check that the file was really copied
+    assert_eq!(at.read("copy_coreutils"), "Hello, World!\n");
+}
