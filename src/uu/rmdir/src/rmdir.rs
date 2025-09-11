@@ -63,7 +63,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 use std::os::unix::ffi::OsStrExt;
 
                 fn points_to_directory(path: &Path) -> io::Result<bool> {
-                    Ok(path.metadata()?.file_type().is_dir())
+                    Ok(path.is_dir())
                 }
 
                 let bytes = path.as_os_str().as_bytes();
