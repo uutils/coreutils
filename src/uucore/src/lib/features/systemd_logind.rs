@@ -51,7 +51,7 @@ mod login {
 
     /// Get all active sessions
     pub fn get_sessions() -> Result<Vec<String>, Box<dyn std::error::Error>> {
-        let mut sessions_ptr: *mut *mut i8 = ptr::null_mut();
+        let mut sessions_ptr: *mut *mut libc::c_char = ptr::null_mut();
 
         let result = unsafe { ffi::sd_get_sessions(&mut sessions_ptr) };
 
@@ -120,7 +120,7 @@ mod login {
     /// Get TTY for a session
     pub fn get_session_tty(session_id: &str) -> Result<Option<String>, Box<dyn std::error::Error>> {
         let session_cstring = CString::new(session_id)?;
-        let mut tty_ptr: *mut i8 = ptr::null_mut();
+        let mut tty_ptr: *mut libc::c_char = ptr::null_mut();
 
         let result = unsafe { ffi::sd_session_get_tty(session_cstring.as_ptr(), &mut tty_ptr) };
 
@@ -149,7 +149,7 @@ mod login {
         session_id: &str,
     ) -> Result<Option<String>, Box<dyn std::error::Error>> {
         let session_cstring = CString::new(session_id)?;
-        let mut host_ptr: *mut i8 = ptr::null_mut();
+        let mut host_ptr: *mut libc::c_char = ptr::null_mut();
 
         let result =
             unsafe { ffi::sd_session_get_remote_host(session_cstring.as_ptr(), &mut host_ptr) };
@@ -179,7 +179,7 @@ mod login {
         session_id: &str,
     ) -> Result<Option<String>, Box<dyn std::error::Error>> {
         let session_cstring = CString::new(session_id)?;
-        let mut display_ptr: *mut i8 = ptr::null_mut();
+        let mut display_ptr: *mut libc::c_char = ptr::null_mut();
 
         let result =
             unsafe { ffi::sd_session_get_display(session_cstring.as_ptr(), &mut display_ptr) };
@@ -209,7 +209,7 @@ mod login {
         session_id: &str,
     ) -> Result<Option<String>, Box<dyn std::error::Error>> {
         let session_cstring = CString::new(session_id)?;
-        let mut type_ptr: *mut i8 = ptr::null_mut();
+        let mut type_ptr: *mut libc::c_char = ptr::null_mut();
 
         let result = unsafe { ffi::sd_session_get_type(session_cstring.as_ptr(), &mut type_ptr) };
 
@@ -238,7 +238,7 @@ mod login {
         session_id: &str,
     ) -> Result<Option<String>, Box<dyn std::error::Error>> {
         let session_cstring = CString::new(session_id)?;
-        let mut seat_ptr: *mut i8 = ptr::null_mut();
+        let mut seat_ptr: *mut libc::c_char = ptr::null_mut();
 
         let result = unsafe { ffi::sd_session_get_seat(session_cstring.as_ptr(), &mut seat_ptr) };
 
