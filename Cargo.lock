@@ -184,9 +184,9 @@ dependencies = [
 
 [[package]]
 name = "bindgen"
-version = "0.71.1"
+version = "0.72.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f58bf3d7db68cfbac37cfc485a8d711e87e064c3d0fe0435b92f7a407f9d6b3"
+checksum = "993776b509cfb49c750f11b8f07a46fa23e0a1386ffc01fb1e7d343efc387895"
 dependencies = [
  "bitflags 2.9.1",
  "cexpr",
@@ -1089,9 +1089,9 @@ dependencies = [
 
 [[package]]
 name = "fts-sys"
-version = "0.2.16"
+version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43119ec0f2227f8505c8bb6c60606b5eefc328607bfe1a421e561c4decfa02ab"
+checksum = "9c03259139c9b098dd92241b046fedfeebcd6b000d491c821b24ced28558a9c2"
 dependencies = [
  "bindgen",
  "libc",
@@ -2450,9 +2450,9 @@ dependencies = [
 
 [[package]]
 name = "selinux-sys"
-version = "0.6.14"
+version = "0.6.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "280da3df1236da180be5ac50a893b26a1d3c49e3a44acb2d10d1f082523ff916"
+checksum = "debaba5832b4831ffe0ba9118b526c752c960f41c46c4ef197d9a15f5179d6fd"
 dependencies = [
  "bindgen",
  "cc",
@@ -4324,7 +4324,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
