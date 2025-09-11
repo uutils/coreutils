@@ -171,40 +171,21 @@ pub fn get_input(config: &Config) -> UResult<Box<dyn ReadSeek>> {
     }
 }
 
-/// Determines if the input buffer ends with padding ('=') after trimming trailing whitespace.
-fn read_and_has_padding<R: Read>(input: &mut R) -> UResult<(bool, Vec<u8>)> {
-    let mut buf = Vec::new();
-    input
-        .read_to_end(&mut buf)
-        .map_err(|err| USimpleError::new(1, format_read_error(err.kind())))?;
-
-    // Reverse iterator and skip trailing whitespace without extra collections
-    let has_padding = buf
-        .iter()
-        .rfind(|&&byte| !byte.is_ascii_whitespace())
-        .is_some_and(|&byte| byte == b'=');
-
-    Ok((has_padding, buf))
-}
-
 pub fn handle_input<R: Read + Seek>(input: &mut R, format: Format, config: Config) -> UResult<()> {
-    let (has_padding, read) = read_and_has_padding(input)?;
-
-    let supports_fast_decode_and_encode =
-        get_supports_fast_decode_and_encode(format, config.decode, has_padding);
+    let supports_fast_decode_and_encode = get_supports_fast_decode_and_encode(format);
 
     let supports_fast_decode_and_encode_ref = supports_fast_decode_and_encode.as_ref();
     let mut stdout_lock = io::stdout().lock();
     if config.decode {
         fast_decode::fast_decode(
-            read,
+            input,
             &mut stdout_lock,
             supports_fast_decode_and_encode_ref,
             config.ignore_garbage,
         )
     } else {
         fast_encode::fast_encode(
-            read,
+            input,
             &mut stdout_lock,
             supports_fast_decode_and_encode_ref,
             config.wrap_cols,
@@ -212,11 +193,7 @@ pub fn handle_input<R: Read + Seek>(input: &mut R, format: Format, config: Confi
     }
 }
 
-pub fn get_supports_fast_decode_and_encode(
-    format: Format,
-    decode: bool,
-    has_padding: bool,
-) -> Box<dyn SupportsFastDecodeAndEncode> {
+pub fn get_supports_fast_decode_and_encode(format: Format) -> Box<dyn SupportsFastDecodeAndEncode> {
     const BASE16_VALID_DECODING_MULTIPLE: usize = 2;
     const BASE2_VALID_DECODING_MULTIPLE: usize = 8;
     const BASE32_VALID_DECODING_MULTIPLE: usize = 8;
@@ -263,13 +240,11 @@ pub fn get_supports_fast_decode_and_encode(
             // spell-checker:disable-next-line
             b"0123456789ABCDEFGHIJKLMNOPQRSTUV=",
         )),
-        Format::Base64 => {
-            Box::from(Base64SimdWrapper::new(
-                BASE64_VALID_DECODING_MULTIPLE,
-                BASE64_UNPADDED_MULTIPLE,
-                b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=",
-            ))
-        }
+        Format::Base64 => Box::from(Base64SimdWrapper::new(
+            BASE64_VALID_DECODING_MULTIPLE,
+            BASE64_UNPADDED_MULTIPLE,
+            b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=",
+        )),
         Format::Base64Url => Box::from(EncodingWrapper::new(
             BASE64URL,
             BASE64_VALID_DECODING_MULTIPLE,
@@ -283,14 +258,16 @@ pub fn get_supports_fast_decode_and_encode(
 }
 
 pub mod fast_encode {
-    use crate::base_common::WRAP_DEFAULT;
+    use crate::base_common::{WRAP_DEFAULT, format_read_error};
     use std::{
-        cmp::min,
         collections::VecDeque,
-        io::{self, Write},
+        io::{self, BufRead, BufReader, ErrorKind, Read, Write},
         num::NonZeroUsize,
     };
-    use uucore::{encoding::SupportsFastDecodeAndEncode, error::UResult};
+    use uucore::{
+        encoding::SupportsFastDecodeAndEncode,
+        error::{UResult, USimpleError},
+    };
 
     struct LineWrapping {
         line_length: NonZeroUsize,
@@ -393,7 +370,7 @@ pub mod fast_encode {
     // End of helper functions
 
     pub fn fast_encode(
-        input: Vec<u8>,
+        input: &mut dyn Read,
         output: &mut dyn Write,
         supports_fast_decode_and_encode: &dyn SupportsFastDecodeAndEncode,
         wrap: Option<usize>,
@@ -401,10 +378,8 @@ pub mod fast_encode {
         // Based on performance testing
 
         const ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE: usize = 1_024;
-
         let encode_in_chunks_of_size =
             supports_fast_decode_and_encode.unpadded_multiple() * ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
-
         assert!(encode_in_chunks_of_size > 0);
 
         // The "data-encoding" crate supports line wrapping, but not arbitrary line wrapping, only certain widths, so
@@ -425,79 +400,73 @@ pub mod fast_encode {
             }),
         };
 
-        let input_size = input.len();
-
         // Start of buffers
         // Data that was read from `input` but has not been encoded yet
         let mut leftover_buffer = VecDeque::<u8>::new();
-
         // Encoded data that needs to be written to `output`
         let mut encoded_buffer = VecDeque::<u8>::new();
+        let mut in_reader = BufReader::with_capacity(encode_in_chunks_of_size, input);
         // End of buffers
-
-        input
-            .iter()
-            .enumerate()
-            .step_by(encode_in_chunks_of_size)
-            .map(|(idx, _)| {
-                // The part of `input_buffer` that was actually filled by the call
-                // to `read`
-                &input[idx..min(input_size, idx + encode_in_chunks_of_size)]
-            })
-            .map(|buffer| {
+        loop {
+            let buf_res = in_reader.fill_buf();
+            if let Ok(buffer) = buf_res {
+                let buffer_len = buffer.len();
                 if buffer.len() < encode_in_chunks_of_size {
                     leftover_buffer.extend(buffer);
                     assert!(leftover_buffer.len() < encode_in_chunks_of_size);
-                    return None;
+                    break;
                 }
-                Some(buffer)
-            })
-            .for_each(|buffer| {
-                if let Some(read_buffer) = buffer {
-                    // Encode data in chunks, then place it in `encoded_buffer`
-                    assert_eq!(read_buffer.len(), encode_in_chunks_of_size);
-                    encode_in_chunks_to_buffer(
-                        supports_fast_decode_and_encode,
-                        read_buffer,
-                        &mut encoded_buffer,
-                    )
-                    .unwrap();
-                    // Write all data in `encoded_buffer` to `output`
-                    write_to_output(
-                        &mut line_wrapping,
-                        &mut encoded_buffer,
-                        output,
-                        false,
-                        wrap == Some(0),
-                    )
-                    .unwrap();
-                }
-            });
+                assert_eq!(buffer.len(), encode_in_chunks_of_size);
+                encode_in_chunks_to_buffer(
+                    supports_fast_decode_and_encode,
+                    buffer,
+                    &mut encoded_buffer,
+                )?;
+                // Write all data in `encoded_buffer` to `output`
+                write_to_output(
+                    &mut line_wrapping,
+                    &mut encoded_buffer,
+                    output,
+                    false,
+                    wrap == Some(0),
+                )?;
+                in_reader.consume(buffer_len);
+            } else if let Err(err) = buf_res {
+                let kind = err.kind();
 
+                if kind == ErrorKind::Interrupted {
+                    // Retry reading
+                    continue;
+                }
+
+                return Err(USimpleError::new(1, format_read_error(kind)));
+            }
+        }
         // Cleanup
         // `input` has finished producing data, so the data remaining in the buffers needs to be encoded and printed
-        {
-            // Encode all remaining unencoded bytes, placing them in `encoded_buffer`
-            supports_fast_decode_and_encode
-                .encode_to_vec_deque(leftover_buffer.make_contiguous(), &mut encoded_buffer)?;
-
-            // Write all data in `encoded_buffer` to output
-            // `is_cleanup` triggers special cleanup-only logic
-            write_to_output(
-                &mut line_wrapping,
-                &mut encoded_buffer,
-                output,
-                true,
-                wrap == Some(0),
-            )?;
-        }
+        // Encode all remaining unencoded bytes, placing them in `encoded_buffer`
+        supports_fast_decode_and_encode
+            .encode_to_vec_deque(leftover_buffer.make_contiguous(), &mut encoded_buffer)?;
+        // Write all data in `encoded_buffer` to output
+        // `is_cleanup` triggers special cleanup-only logic
+        write_to_output(
+            &mut line_wrapping,
+            &mut encoded_buffer,
+            output,
+            true,
+            wrap == Some(0),
+        )?;
         Ok(())
     }
 }
 
 pub mod fast_decode {
-    use std::io::{self, Write};
-    use uucore::{encoding::SupportsFastDecodeAndEncode, error::UResult};
+    use crate::base_common::format_read_error;
+    use std::io::{self, BufRead, BufReader, ErrorKind, Read, Write};
+    use uucore::{
+        encoding::SupportsFastDecodeAndEncode,
+        error::{UResult, USimpleError},
+    };
 
     // Start of helper functions
     fn alphabet_to_table(alphabet: &[u8], ignore_garbage: bool) -> [bool; 256] {
@@ -556,17 +525,15 @@ pub mod fast_decode {
     // End of helper functions
 
     pub fn fast_decode(
-        input: Vec<u8>,
+        input: &mut dyn Read,
         output: &mut dyn Write,
         supports_fast_decode_and_encode: &dyn SupportsFastDecodeAndEncode,
         ignore_garbage: bool,
     ) -> UResult<()> {
         const DECODE_IN_CHUNKS_OF_SIZE_MULTIPLE: usize = 1_024;
-
         let alphabet = supports_fast_decode_and_encode.alphabet();
         let decode_in_chunks_of_size = supports_fast_decode_and_encode.valid_decoding_multiple()
             * DECODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
-
         assert!(decode_in_chunks_of_size > 0);
 
         // Note that it's not worth using "data-encoding"'s ignore functionality if `ignore_garbage` is true, because
@@ -585,42 +552,71 @@ pub mod fast_decode {
 
         // Decoded data that needs to be written to `output`
         let mut decoded_buffer = Vec::<u8>::new();
-
+        let mut buffers = [
+            Vec::with_capacity(decode_in_chunks_of_size),
+            Vec::with_capacity(decode_in_chunks_of_size),
+        ];
+        let mut current_buffer_index = 0usize;
+        let mut in_reader = BufReader::with_capacity(decode_in_chunks_of_size, input);
         // End of buffers
+        loop {
+            while buffers[current_buffer_index].len() < decode_in_chunks_of_size {
+                let read_res = in_reader.fill_buf();
+                if let Ok(read_buffer) = read_res {
+                    let read_size = read_buffer.len();
+                    if read_size == 0 {
+                        break;
+                    }
+                    // Filter and fill the valid buffer. When it is filled, we
+                    // switch buffer to avoid reading again.
+                    read_buffer
+                        .iter()
+                        .filter(|ch| table[usize::from(**ch)])
+                        .for_each(|ch| {
+                            if buffers[current_buffer_index].len() < decode_in_chunks_of_size {
+                                buffers[current_buffer_index].push(*ch);
+                            } else {
+                                buffers[(current_buffer_index + 1) % buffers.len()].push(*ch);
+                            }
+                        });
+                    in_reader.consume(read_size);
+                } else if let Err(err) = read_res {
+                    let kind = err.kind();
 
-        let mut buffer = Vec::with_capacity(decode_in_chunks_of_size);
+                    if kind == ErrorKind::Interrupted {
+                        // Retry reading
+                        continue;
+                    }
 
-        input
-            .iter()
-            .filter(|ch| table[usize::from(**ch)])
-            .for_each(|ch| {
-                buffer.push(*ch);
-                // How many bytes to steal from `read_buffer` to get
-                // `leftover_buffer` to the right size
-                if buffer.len() == decode_in_chunks_of_size {
-                    assert_eq!(decode_in_chunks_of_size, buffer.len());
-                    // Decode data in chunks, then place it in `decoded_buffer`
-                    decode_in_chunks_to_buffer(
-                        supports_fast_decode_and_encode,
-                        &buffer,
-                        &mut decoded_buffer,
-                    )
-                    .unwrap();
-                    // Write all data in `decoded_buffer` to `output`
-                    write_to_output(&mut decoded_buffer, output).unwrap();
-                    buffer.clear();
+                    return Err(USimpleError::new(1, format_read_error(kind)));
                 }
-            });
-        // Cleanup
-        // `input` has finished producing data, so the data remaining in the buffers needs to be decoded and printed
-        {
-            // Decode all remaining encoded bytes, placing them in `decoded_buffer`
-            supports_fast_decode_and_encode.decode_into_vec(&buffer, &mut decoded_buffer)?;
-
+            }
+            if buffers[current_buffer_index].len() < decode_in_chunks_of_size {
+                break;
+            }
+            assert_eq!(
+                buffers[current_buffer_index].len(),
+                decode_in_chunks_of_size
+            );
+            // Decode data in chunks, then place it in `decoded_buffer`
+            decode_in_chunks_to_buffer(
+                supports_fast_decode_and_encode,
+                &buffers[current_buffer_index],
+                &mut decoded_buffer,
+            )?;
             // Write all data in `decoded_buffer` to `output`
             write_to_output(&mut decoded_buffer, output)?;
-        }
 
+            buffers[current_buffer_index].clear();
+            current_buffer_index = (current_buffer_index + 1) % buffers.len();
+        }
+        // Cleanup
+        // `input` has finished producing data, so the data remaining in the buffers needs to be decoded and printed
+        // Decode all remaining encoded bytes, placing them in `decoded_buffer`
+        supports_fast_decode_and_encode
+            .decode_into_vec(&buffers[current_buffer_index], &mut decoded_buffer)?;
+        // Write all data in `decoded_buffer` to `output`
+        write_to_output(&mut decoded_buffer, output)?;
         Ok(())
     }
 }
@@ -642,33 +638,4 @@ fn format_read_error(kind: ErrorKind) -> String {
     }
 
     translate!("base-common-read-error", "error" => kind_string_capitalized)
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::base_common::read_and_has_padding;
-    use std::io::Cursor;
-
-    #[test]
-    fn test_has_padding() {
-        let test_cases = vec![
-            ("aGVsbG8sIHdvcmxkIQ==", true),
-            ("aGVsbG8sIHdvcmxkIQ== ", true),
-            ("aGVsbG8sIHdvcmxkIQ==\n", true),
-            ("aGVsbG8sIHdvcmxkIQ== \n", true),
-            ("aGVsbG8sIHdvcmxkIQ=", true),
-            ("aGVsbG8sIHdvcmxkIQ= ", true),
-            ("aGVsbG8sIHdvcmxkIQ \n", false),
-            ("aGVsbG8sIHdvcmxkIQ", false),
-        ];
-
-        for (input, expected) in test_cases {
-            let mut cursor = Cursor::new(input.as_bytes());
-            assert_eq!(
-                read_and_has_padding(&mut cursor).unwrap().0,
-                expected,
-                "Failed for input: '{input}'"
-            );
-        }
-    }
 }
