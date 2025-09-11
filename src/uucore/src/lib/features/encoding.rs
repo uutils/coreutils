@@ -15,14 +15,12 @@ use std::collections::VecDeque;
 // SIMD base64 wrapper
 pub struct Base64SimdWrapper {
     pub alphabet: &'static [u8],
-    pub use_padding: bool,
     pub unpadded_multiple: usize,
     pub valid_decoding_multiple: usize,
 }
 
 impl Base64SimdWrapper {
     pub fn new(
-        use_padding: bool,
         valid_decoding_multiple: usize,
         unpadded_multiple: usize,
         alphabet: &'static [u8],
@@ -33,7 +31,6 @@ impl Base64SimdWrapper {
 
         Self {
             alphabet,
-            use_padding,
             unpadded_multiple,
             valid_decoding_multiple,
         }
@@ -46,11 +43,9 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
     }
 
     fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
-        let decoded = if self.use_padding {
-            base64_simd::STANDARD.decode_to_vec(input)
-        } else {
-            base64_simd::STANDARD_NO_PAD.decode_to_vec(input)
-        };
+        // Padding always comes at the end, so at most once. No_PAD should be
+        // called most of the times
+        let decoded = base64_simd::STANDARD_NO_PAD.decode_to_vec(input);
 
         match decoded {
             Ok(decoded_bytes) => {
@@ -58,19 +53,25 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
                 Ok(())
             }
             Err(_) => {
-                // Restore original length on error
-                output.truncate(output.len());
-                Err(USimpleError::new(1, "error: invalid input".to_owned()))
+                // Check if the padding works
+                let decoded_2 = base64_simd::STANDARD.decode_to_vec(input);
+                match decoded_2 {
+                    Ok(decoded_bytes_2) => {
+                        output.extend_from_slice(&decoded_bytes_2);
+                        Ok(())
+                    }
+                    Err(_) => {
+                        // Restore original length on error
+                        output.truncate(output.len());
+                        Err(USimpleError::new(1, "error: invalid input".to_owned()))
+                    }
+                }
             }
         }
     }
 
     fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()> {
-        let encoded = if self.use_padding {
-            base64_simd::STANDARD.encode_to_string(input)
-        } else {
-            base64_simd::STANDARD_NO_PAD.encode_to_string(input)
-        };
+        let encoded = base64_simd::STANDARD.encode_to_string(input);
 
         output.extend(encoded.as_bytes());
 
