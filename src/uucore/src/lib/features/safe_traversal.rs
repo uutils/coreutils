@@ -9,7 +9,7 @@
 // Only available on Linux
 //
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
-// spell-checker:ignore RAII dirfd
+// spell-checker:ignore RAII dirfd fchownat fchown
 
 #![cfg(target_os = "linux")]
 
@@ -25,7 +25,7 @@ use std::path::Path;
 use nix::dir::Dir;
 use nix::fcntl::{OFlag, openat};
 use nix::sys::stat::{FileStat, Mode, fstatat};
-use nix::unistd::{UnlinkatFlags, unlinkat};
+use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
 
 use crate::translate;
 
@@ -205,6 +205,43 @@ impl DirFd {
                 source: io::Error::from_raw_os_error(e as i32),
             }
         })?;
+
+        Ok(())
+    }
+
+    /// Change ownership of a file relative to this directory
+    /// Use uid/gid of None to keep the current value
+    pub fn chown_at(
+        &self,
+        name: &OsStr,
+        uid: Option<u32>,
+        gid: Option<u32>,
+        follow_symlinks: bool,
+    ) -> io::Result<()> {
+        let name_cstr =
+            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+
+        let flags = if follow_symlinks {
+            nix::fcntl::AtFlags::empty()
+        } else {
+            nix::fcntl::AtFlags::AT_SYMLINK_NOFOLLOW
+        };
+
+        let uid = uid.map(Uid::from_raw);
+        let gid = gid.map(Gid::from_raw);
+
+        fchownat(&self.fd, name_cstr.as_c_str(), uid, gid, flags)
+            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+
+        Ok(())
+    }
+
+    /// Change ownership of this directory
+    pub fn fchown(&self, uid: Option<u32>, gid: Option<u32>) -> io::Result<()> {
+        let uid = uid.map(Uid::from_raw);
+        let gid = gid.map(Gid::from_raw);
+
+        fchown(&self.fd, uid, gid).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
 
         Ok(())
     }
