@@ -344,6 +344,7 @@ linux-raw-sys = "0.11"
 lscolors = { version = "0.20.0", default-features = false, features = [
   "gnu_legacy",
 ] }
+machine-factor = "0.2.1"
 memchr = "2.7.2"
 memmap2 = "0.9.4"
 nix = { version = "0.30", default-features = false }
