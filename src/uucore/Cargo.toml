@@ -87,6 +87,7 @@ nix = { workspace = true, features = [
   "zerocopy",
   "signal",
   "dir",
+  "user",
 ] }
 xattr = { workspace = true, optional = true }
 
