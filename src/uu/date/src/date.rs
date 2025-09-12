@@ -65,6 +65,7 @@ enum Format {
 enum DateSource {
     Now,
     File(PathBuf),
+    FileMtime(PathBuf),
     Stdin,
     Human(String),
 }
@@ -146,6 +147,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             "-" => DateSource::Stdin,
             _ => DateSource::File(file.into()),
         }
+    } else if let Some(file) = matches.get_one::<String>(OPT_REFERENCE) {
+        DateSource::FileMtime(file.into())
     } else {
         DateSource::Now
     };
@@ -211,6 +214,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
             let lines = BufReader::new(file).lines();
             let iter = lines.map_while(Result::ok).map(parse_date);
+            Box::new(iter)
+        }
+        DateSource::FileMtime(ref path) => {
+            let metadata = std::fs::metadata(path)
+                .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
+            let mtime = metadata.modified()?;
+            let ts = Timestamp::try_from(mtime).map_err(|e| {
+                USimpleError::new(
+                    1,
+                    translate!("date-error-cannot-set-date", "path" => path.to_string_lossy(), "error" => e),
+                )
+            })?;
+            let date = ts.to_zoned(TimeZone::try_system().unwrap_or(TimeZone::UTC));
+            let iter = std::iter::once(Ok(date));
             Box::new(iter)
         }
         DateSource::Now => {
