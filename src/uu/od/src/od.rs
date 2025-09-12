@@ -255,7 +255,6 @@ pub fn uu_app() -> Command {
         .about(translate!("od-about"))
         .override_usage(format_usage(&translate!("od-usage")))
         .after_help(translate!("od-after-help"))
-        .trailing_var_arg(true)
         .dont_delimit_trailing_values(true)
         .infer_long_args(true)
         .args_override_self(true)

@@ -975,3 +975,20 @@ fn test_od_invalid_bytes() {
             .stderr_only(format!("od: {option} argument '{BIG_SIZE}' too large\n"));
     }
 }
+
+#[test]
+fn test_od_options_after_filename() {
+    let file = "test";
+    let (at, mut ucmd) = at_and_ucmd!();
+    let input: [u8; 4] = [0x68, 0x1c, 0xbb, 0xfd];
+    at.write_bytes(file, &input);
+
+    ucmd.arg(file)
+        .arg("-v")
+        .arg("-An")
+        .arg("-t")
+        .arg("x2")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(" 1c68 fdbb\n");
+}
