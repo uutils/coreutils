@@ -37,3 +37,13 @@ action-removing = suppression
 action-creating = création
 action-reading = lecture
 action-writing = écriture
+
+# Messages d'erreur de traversée sécurisée
+safe-traversal-error-path-contains-null = le chemin contient un octet null
+safe-traversal-error-open-failed = échec de l'ouverture de '{ $path }' : { $source }
+safe-traversal-error-stat-failed = échec de l'analyse de '{ $path }' : { $source }
+safe-traversal-error-read-dir-failed = échec de la lecture du répertoire '{ $path }' : { $source }
+safe-traversal-error-unlink-failed = échec de la suppression de '{ $path }' : { $source }
+safe-traversal-error-invalid-fd = descripteur de fichier invalide
+safe-traversal-current-directory = <répertoire courant>
+safe-traversal-directory = <répertoire>

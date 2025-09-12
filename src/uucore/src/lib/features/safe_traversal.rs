@@ -27,34 +27,36 @@ use nix::fcntl::{OFlag, openat};
 use nix::sys::stat::{FileStat, Mode, fstatat};
 use nix::unistd::{UnlinkatFlags, unlinkat};
 
+use crate::translate;
+
 // Custom error types for better error reporting
 #[derive(thiserror::Error, Debug)]
 pub enum SafeTraversalError {
-    #[error("path contains null byte")]
+    #[error("{}", translate!("safe-traversal-error-path-contains-null"))]
     PathContainsNull,
 
-    #[error("failed to open '{path}': {source}")]
+    #[error("{}", translate!("safe-traversal-error-open-failed", "path" => path, "source" => source))]
     OpenFailed {
         path: String,
         #[source]
         source: io::Error,
     },
 
-    #[error("failed to stat '{path}': {source}")]
+    #[error("{}", translate!("safe-traversal-error-stat-failed", "path" => path, "source" => source))]
     StatFailed {
         path: String,
         #[source]
         source: io::Error,
     },
 
-    #[error("failed to read directory '{path}': {source}")]
+    #[error("{}", translate!("safe-traversal-error-read-dir-failed", "path" => path, "source" => source))]
     ReadDirFailed {
         path: String,
         #[source]
         source: io::Error,
     },
 
-    #[error("failed to unlink '{path}': {source}")]
+    #[error("{}", translate!("safe-traversal-error-unlink-failed", "path" => path, "source" => source))]
     UnlinkFailed {
         path: String,
         #[source]
@@ -65,9 +67,10 @@ pub enum SafeTraversalError {
 impl From<SafeTraversalError> for io::Error {
     fn from(err: SafeTraversalError) -> Self {
         match err {
-            SafeTraversalError::PathContainsNull => {
-                io::Error::new(io::ErrorKind::InvalidInput, "path contains null byte")
-            }
+            SafeTraversalError::PathContainsNull => io::Error::new(
+                io::ErrorKind::InvalidInput,
+                translate!("safe-traversal-error-path-contains-null"),
+            ),
             SafeTraversalError::OpenFailed { source, .. } => source,
             SafeTraversalError::StatFailed { source, .. } => source,
             SafeTraversalError::ReadDirFailed { source, .. } => source,
@@ -168,7 +171,7 @@ impl DirFd {
     /// Get raw stat data for this directory
     pub fn fstat(&self) -> io::Result<FileStat> {
         let stat = nix::sys::stat::fstat(&self.fd).map_err(|e| SafeTraversalError::StatFailed {
-            path: "<current directory>".to_string(),
+            path: translate!("safe-traversal-current-directory"),
             source: io::Error::from_raw_os_error(e as i32),
         })?;
 
@@ -179,7 +182,7 @@ impl DirFd {
     pub fn read_dir(&self) -> io::Result<Vec<OsString>> {
         read_dir_entries(&self.fd).map_err(|e| {
             SafeTraversalError::ReadDirFailed {
-                path: "<directory>".to_string(),
+                path: translate!("safe-traversal-directory"),
                 source: e,
             }
             .into()
@@ -211,7 +214,7 @@ impl DirFd {
         if fd < 0 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "invalid file descriptor",
+                translate!("safe-traversal-error-invalid-fd"),
             ));
         }
         // SAFETY: We've verified fd >= 0, and the caller is transferring ownership
