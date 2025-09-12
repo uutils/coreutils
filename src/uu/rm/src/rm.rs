@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (path) eacces inacc rm-r4
+// spell-checker:ignore (path) eacces inacc rm-r4 unlinkat fstatat
 
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, Command, parser::ValueSource};
@@ -21,6 +21,8 @@ use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+#[cfg(target_os = "linux")]
+use uucore::safe_traversal::DirFd;
 use uucore::translate;
 
 use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
@@ -428,6 +430,140 @@ fn is_writable(_path: &Path) -> bool {
     true
 }
 
+#[cfg(target_os = "linux")]
+fn safe_remove_dir_recursive(path: &Path, options: &Options) -> bool {
+    // Try to open the directory using DirFd for secure traversal
+    let dir_fd = match DirFd::open(path) {
+        Ok(fd) => fd,
+        Err(e) => {
+            show_error!(
+                "{}",
+                e.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()))
+            );
+            return true;
+        }
+    };
+
+    let error = safe_remove_dir_recursive_impl(path, &dir_fd, options);
+
+    // After processing all children, remove the directory itself
+    if error {
+        error
+    } else {
+        // Ask user permission if needed
+        if options.interactive == InteractiveMode::Always && !prompt_dir(path, options) {
+            return false;
+        }
+
+        // Use regular fs::remove_dir for the root since we can't unlinkat ourselves
+        match fs::remove_dir(path) {
+            Ok(_) => false,
+            Err(e) => {
+                let e = e.map_err_context(
+                    || translate!("rm-error-cannot-remove", "file" => path.quote()),
+                );
+                show_error!("{e}");
+                true
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Options) -> bool {
+    // Check if we should descend into this directory
+    if options.interactive == InteractiveMode::Always
+        && !is_dir_empty(path)
+        && !prompt_descend(path)
+    {
+        return false;
+    }
+
+    // Read directory entries using safe traversal
+    let entries = match dir_fd.read_dir() {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            // This is not considered an error - just like the original
+            return false;
+        }
+        Err(e) => {
+            show_error!(
+                "{}",
+                e.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()))
+            );
+            return true;
+        }
+    };
+
+    let mut error = false;
+
+    // Process each entry
+    for entry_name in entries {
+        let entry_path = path.join(&entry_name);
+
+        // Get metadata for the entry using fstatat
+        let entry_stat = match dir_fd.stat_at(&entry_name, false) {
+            Ok(stat) => stat,
+            Err(e) => {
+                let e = e.map_err_context(
+                    || translate!("rm-error-cannot-remove", "file" => entry_path.quote()),
+                );
+                show_error!("{e}");
+                error = true;
+                continue;
+            }
+        };
+
+        // Check if it's a directory
+        let is_dir = (entry_stat.st_mode & libc::S_IFMT) == libc::S_IFDIR;
+
+        if is_dir {
+            // Recursively remove directory
+            let subdir_fd = match dir_fd.open_subdir(&entry_name) {
+                Ok(fd) => fd,
+                Err(e) => {
+                    let e = e.map_err_context(
+                        || translate!("rm-error-cannot-remove", "file" => entry_path.quote()),
+                    );
+                    show_error!("{e}");
+                    error = true;
+                    continue;
+                }
+            };
+
+            let child_error = safe_remove_dir_recursive_impl(&entry_path, &subdir_fd, options);
+            error = error || child_error;
+
+            // Try to remove the directory (even if there were some child errors)
+            // Ask user permission if needed
+            if options.interactive == InteractiveMode::Always && !prompt_dir(&entry_path, options) {
+                continue;
+            }
+
+            if let Err(e) = dir_fd.unlink_at(&entry_name, true) {
+                let e = e.map_err_context(
+                    || translate!("rm-error-cannot-remove", "file" => entry_path.quote()),
+                );
+                show_error!("{e}");
+                error = true;
+            }
+        } else {
+            // Remove file - check if user wants to remove it first
+            if prompt_file(&entry_path, options) {
+                if let Err(e) = dir_fd.unlink_at(&entry_name, false) {
+                    let e = e.map_err_context(
+                        || translate!("rm-error-cannot-remove", "file" => entry_path.quote()),
+                    );
+                    show_error!("{e}");
+                    error = true;
+                }
+            }
+        }
+    }
+
+    error
+}
+
 /// Recursively remove the directory tree rooted at the given path.
 ///
 /// If `path` is a file or a symbolic link, just remove it. If it is a
@@ -454,25 +590,30 @@ fn remove_dir_recursive(path: &Path, options: &Options) -> bool {
         return false;
     }
 
-    // Special case: if we cannot access the metadata because the
-    // filename is too long, fall back to try
-    // `fs::remove_dir_all()`.
-    //
-    // TODO This is a temporary bandage; we shouldn't need to do this
-    // at all. Instead of using the full path like "x/y/z", which
-    // causes a `InvalidFilename` error when trying to access the file
-    // metadata, we should be able to use just the last part of the
-    // path, "z", and know that it is relative to the parent, "x/y".
-    if let Some(s) = path.to_str() {
-        if s.len() > 1000 {
-            match fs::remove_dir_all(path) {
-                Ok(_) => return false,
-                Err(e) => {
-                    let e = e.map_err_context(
-                        || translate!("rm-error-cannot-remove", "file" => path.quote()),
-                    );
-                    show_error!("{e}");
-                    return true;
+    // Use secure traversal on Linux for long paths
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(s) = path.to_str() {
+            if s.len() > 1000 {
+                return safe_remove_dir_recursive(path, options);
+            }
+        }
+    }
+
+    // Fallback for non-Linux or shorter paths
+    #[cfg(not(target_os = "linux"))]
+    {
+        if let Some(s) = path.to_str() {
+            if s.len() > 1000 {
+                match fs::remove_dir_all(path) {
+                    Ok(_) => return false,
+                    Err(e) => {
+                        let e = e.map_err_context(
+                            || translate!("rm-error-cannot-remove", "file" => path.quote()),
+                        );
+                        show_error!("{e}");
+                        return true;
+                    }
                 }
             }
         }
