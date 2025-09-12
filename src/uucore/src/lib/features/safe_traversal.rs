@@ -1,8 +1,15 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+//
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
+//
 // Only available on Linux
+//
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
-// spell-checker:ignore  RAII dirfd
+// spell-checker:ignore RAII dirfd
 
 #![cfg(target_os = "linux")]
 
@@ -126,7 +133,6 @@ pub struct DirFd {
 impl DirFd {
     /// Open a directory and return a file descriptor
     pub fn open(path: &Path) -> io::Result<Self> {
-        let path_str = path.to_string_lossy();
         let path_cstr = CString::new(path.as_os_str().as_bytes())
             .map_err(|_| SafeTraversalError::PathContainsNull)?;
 
@@ -139,7 +145,7 @@ impl DirFd {
 
         if fd < 0 {
             Err(SafeTraversalError::OpenFailed {
-                path: path_str.to_string(),
+                path: path.to_string_lossy().into_owned(),
                 source: io::Error::last_os_error(),
             }
             .into())
@@ -150,7 +156,6 @@ impl DirFd {
 
     /// Open a subdirectory relative to this directory
     pub fn open_subdir(&self, name: &OsStr) -> io::Result<Self> {
-        let name_str = name.to_string_lossy();
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
 
@@ -164,7 +169,7 @@ impl DirFd {
 
         if fd < 0 {
             Err(SafeTraversalError::OpenFailed {
-                path: name_str.to_string(),
+                path: name.to_string_lossy().into_owned(),
                 source: io::Error::last_os_error(),
             }
             .into())
@@ -175,7 +180,6 @@ impl DirFd {
 
     /// Get raw stat data for a file relative to this directory
     pub fn stat_at(&self, name: &OsStr, follow_symlinks: bool) -> io::Result<libc::stat> {
-        let name_str = name.to_string_lossy();
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
 
@@ -190,7 +194,7 @@ impl DirFd {
 
         if ret < 0 {
             Err(SafeTraversalError::StatFailed {
-                path: name_str.to_string(),
+                path: name.to_string_lossy().into_owned(),
                 source: io::Error::last_os_error(),
             }
             .into())
@@ -257,7 +261,6 @@ impl DirFd {
 
     /// Remove a file or empty directory relative to this directory
     pub fn unlink_at(&self, name: &OsStr, is_dir: bool) -> io::Result<()> {
-        let name_str = name.to_string_lossy();
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
         let flags = if is_dir { libc::AT_REMOVEDIR } else { 0 };
@@ -266,7 +269,7 @@ impl DirFd {
 
         if ret < 0 {
             Err(SafeTraversalError::UnlinkFailed {
-                path: name_str.to_string(),
+                path: name.to_string_lossy().into_owned(),
                 source: io::Error::last_os_error(),
             }
             .into())
@@ -427,7 +430,6 @@ impl Metadata {
 }
 
 // Add MetadataExt trait implementation for compatibility
-#[cfg(not(windows))]
 impl std::os::unix::fs::MetadataExt for Metadata {
     fn dev(&self) -> u64 {
         self.stat.st_dev
