@@ -33,7 +33,7 @@ expensive_tests = []
 # "test_risky_names" == enable tests that create problematic file names (would make a network share inaccessible to Windows, breaks SVN on Mac OS, etc.)
 test_risky_names = []
 # * only build `uudoc` when `--feature uudoc` is activated
-uudoc = ["zip", "dep:uuhelp_parser"]
+uudoc = ["zip", "dep:fluent-syntax"]
 ## features
 ## Optional feature for stdbuf
 # "feat_external_libstdbuf" == use an external libstdbuf.so for stdbuf instead of embedding it
@@ -282,7 +282,6 @@ members = [
   "src/uu/stdbuf/src/libstdbuf",
   "src/uucore",
   "src/uucore_procs",
-  "src/uuhelp_parser",
   "tests/benches/factor",
   "tests/uutests",
   # "fuzz",  # TODO
@@ -415,8 +414,8 @@ phf.workspace = true
 selinux = { workspace = true, optional = true }
 textwrap.workspace = true
 zip = { workspace = true, optional = true }
+fluent-syntax = { workspace = true, optional = true }
 
-uuhelp_parser = { optional = true, version = "0.2.2", path = "src/uuhelp_parser" }
 
 # * uutils
 uu_test = { optional = true, version = "0.2.2", package = "uu_test", path = "src/uu/test" }

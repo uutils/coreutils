@@ -29,8 +29,6 @@ sed -i -e "s|version = \"$FROM\"|version = \"$TO\"|" $PROGS
 # Update uucore_procs
 sed -i -e "s|version = \"$FROM\"|version = \"$TO\"|" src/uucore_procs/Cargo.toml
 
-# Update uuhelp_parser
-sed -i -e "s|version = \"$FROM\"|version = \"$TO\"|" src/uuhelp_parser/Cargo.toml
 
 # Update the stdbuf stuff
 sed -i -e "s|libstdbuf = { version=\"$FROM\"|libstdbuf = { version=\"$TO\"|" src/uu/stdbuf/Cargo.toml
