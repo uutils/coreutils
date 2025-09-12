@@ -430,7 +430,6 @@ impl Metadata {
 }
 
 // Add MetadataExt trait implementation for compatibility
-#[cfg(not(windows))]
 impl std::os::unix::fs::MetadataExt for Metadata {
     fn dev(&self) -> u64 {
         self.stat.st_dev
