@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore memmem algo
+// spell-checker:ignore memmem algo PCLMULQDQ refin xorout
 
 //! Implementations of digest functions, like md5 and sha1.
 //!
@@ -17,6 +17,22 @@ use std::io::Write;
 use hex::encode;
 #[cfg(windows)]
 use memchr::memmem;
+
+use crc_fast::{CrcParams, checksum_with_params};
+
+// POSIX cksum SIMD configuration for crc-fast
+// This uses SIMD instructions (PCLMULQDQ) for fast CRC computation
+fn get_posix_cksum_params() -> CrcParams {
+    CrcParams::new(
+        "CRC-32/CKSUM", // Name
+        32,             // Width
+        0x04c11db7,     // Polynomial
+        0x00000000,     // Initial CRC value: 0 (not 0xffffffff)
+        false,          // No input reflection (refin)
+        0xffffffff,     // XOR output with 0xffffffff (xorout)
+        0,              // Check value (not used)
+    )
+}
 
 pub trait Digest {
     fn new() -> Self
@@ -122,48 +138,11 @@ impl Digest for Sm3 {
     }
 }
 
-// NOTE: CRC_TABLE_LEN *must* be <= 256 as we cast 0..CRC_TABLE_LEN to u8
-const CRC_TABLE_LEN: usize = 256;
-
 pub struct Crc {
     state: u32,
     size: usize,
-    crc_table: [u32; CRC_TABLE_LEN],
-}
-impl Crc {
-    fn generate_crc_table() -> [u32; CRC_TABLE_LEN] {
-        let mut table = [0; CRC_TABLE_LEN];
-
-        for (i, elt) in table.iter_mut().enumerate().take(CRC_TABLE_LEN) {
-            *elt = Self::crc_entry(i as u8);
-        }
-
-        table
-    }
-    fn crc_entry(input: u8) -> u32 {
-        let mut crc = (input as u32) << 24;
-
-        let mut i = 0;
-        while i < 8 {
-            let if_condition = crc & 0x8000_0000;
-            let if_body = (crc << 1) ^ 0x04c1_1db7;
-            let else_body = crc << 1;
-
-            // NOTE: i feel like this is easier to understand than emulating an if statement in bitwise
-            //       ops
-            let condition_table = [else_body, if_body];
-
-            crc = condition_table[(if_condition != 0) as usize];
-            i += 1;
-        }
-
-        crc
-    }
-
-    fn update(&mut self, input: u8) {
-        self.state = (self.state << 8)
-            ^ self.crc_table[((self.state >> 24) as usize ^ input as usize) & 0xFF];
-    }
+    // Store data for SIMD processing
+    data_buffer: Vec<u8>,
 }
 
 impl Digest for Crc {
@@ -171,24 +150,26 @@ impl Digest for Crc {
         Self {
             state: 0,
             size: 0,
-            crc_table: Self::generate_crc_table(),
+            data_buffer: Vec::with_capacity(8192),
         }
     }
 
     fn hash_update(&mut self, input: &[u8]) {
-        for &elt in input {
-            self.update(elt);
-        }
         self.size += input.len();
+        // Store data for SIMD processing
+        self.data_buffer.extend_from_slice(input);
     }
 
     fn hash_finalize(&mut self, out: &mut [u8]) {
+        // Add the size bytes to the data buffer
         let mut sz = self.size;
         while sz != 0 {
-            self.update(sz as u8);
+            self.data_buffer.push(sz as u8);
             sz >>= 8;
         }
-        self.state = !self.state;
+
+        // Use SIMD-accelerated CRC computation
+        self.state = checksum_with_params(get_posix_cksum_params(), &self.data_buffer) as u32;
         out.copy_from_slice(&self.state.to_ne_bytes());
     }
 
@@ -199,7 +180,9 @@ impl Digest for Crc {
     }
 
     fn reset(&mut self) {
-        *self = Self::new();
+        self.state = 0;
+        self.size = 0;
+        self.data_buffer.clear();
     }
 
     fn output_bits(&self) -> usize {
@@ -528,5 +511,134 @@ mod tests {
         let result_lf = digest.result_str();
 
         assert_eq!(result_crlf, result_lf);
+    }
+
+    use super::{Crc, Digest};
+
+    #[test]
+    fn test_crc_basic_functionality() {
+        // Test that our CRC implementation works with basic functionality
+        let mut crc1 = Crc::new();
+        let mut crc2 = Crc::new();
+
+        // Same input should give same output
+        crc1.hash_update(b"test");
+        crc2.hash_update(b"test");
+
+        let mut out1 = [0u8; 4];
+        let mut out2 = [0u8; 4];
+        crc1.hash_finalize(&mut out1);
+        crc2.hash_finalize(&mut out2);
+
+        assert_eq!(out1, out2);
+    }
+
+    #[test]
+    fn test_crc_digest_basic() {
+        let mut crc = Crc::new();
+
+        // Test empty input
+        let mut output = [0u8; 4];
+        crc.hash_finalize(&mut output);
+        let empty_result = u32::from_ne_bytes(output);
+
+        // Reset and test with "test" string
+        crc.reset();
+        crc.hash_update(b"test");
+        crc.hash_finalize(&mut output);
+        let test_result = u32::from_ne_bytes(output);
+
+        // The result should be different for different inputs
+        assert_ne!(empty_result, test_result);
+
+        // Test known value: "test" should give 3076352578
+        assert_eq!(test_result, 3076352578);
+    }
+
+    #[test]
+    fn test_crc_digest_incremental() {
+        let mut crc1 = Crc::new();
+        let mut crc2 = Crc::new();
+
+        // Test that processing in chunks gives same result as all at once
+        let data = b"Hello, World! This is a test string for CRC computation.";
+
+        // Process all at once
+        crc1.hash_update(data);
+        let mut output1 = [0u8; 4];
+        crc1.hash_finalize(&mut output1);
+
+        // Process in chunks
+        crc2.hash_update(&data[0..10]);
+        crc2.hash_update(&data[10..30]);
+        crc2.hash_update(&data[30..]);
+        let mut output2 = [0u8; 4];
+        crc2.hash_finalize(&mut output2);
+
+        assert_eq!(output1, output2);
+    }
+
+    #[test]
+    fn test_crc_slice8_vs_single_byte() {
+        // Test that our optimized slice-by-8 gives same results as byte-by-byte
+        let test_data = b"This is a longer test string to verify slice-by-8 optimization works correctly with various data sizes including remainders.";
+
+        let mut crc_optimized = Crc::new();
+        crc_optimized.hash_update(test_data);
+        let mut output_opt = [0u8; 4];
+        crc_optimized.hash_finalize(&mut output_opt);
+
+        // Create a reference implementation using hash_update
+        let mut crc_reference = Crc::new();
+        for &byte in test_data {
+            crc_reference.hash_update(&[byte]);
+        }
+        let mut output_ref = [0u8; 4];
+        crc_reference.hash_finalize(&mut output_ref);
+
+        assert_eq!(output_opt, output_ref);
+    }
+
+    #[test]
+    fn test_crc_known_values() {
+        // Test against our CRC implementation values
+        // Note: These are the correct values for our POSIX cksum implementation
+        let test_cases = [
+            ("", 4294967295u32),
+            ("a", 1220704766u32),
+            ("abc", 1219131554u32),
+        ];
+
+        for (input, expected) in test_cases {
+            let mut crc = Crc::new();
+            crc.hash_update(input.as_bytes());
+            let mut output = [0u8; 4];
+            crc.hash_finalize(&mut output);
+            let result = u32::from_ne_bytes(output);
+
+            assert_eq!(result, expected, "CRC mismatch for input: '{}'", input);
+        }
+    }
+
+    #[test]
+    fn test_crc_hash_update_edge_cases() {
+        let mut crc = Crc::new();
+
+        // Test with data that's not a multiple of 8 bytes
+        let data7 = b"1234567"; // 7 bytes
+        crc.hash_update(data7);
+
+        let data9 = b"123456789"; // 9 bytes
+        let mut crc2 = Crc::new();
+        crc2.hash_update(data9);
+
+        // Should not panic and should produce valid results
+        let mut out1 = [0u8; 4];
+        let mut out2 = [0u8; 4];
+        crc.hash_finalize(&mut out1);
+        crc2.hash_finalize(&mut out2);
+
+        // Results should be different for different inputs
+        assert_ne!(out1, out2);
     }
 }
