@@ -166,11 +166,7 @@ impl Stat {
 
     /// Create a Stat using safe traversal methods with `DirFd` for the root directory
     #[cfg(target_os = "linux")]
-    fn new_from_dirfd(
-        dir_fd: &DirFd,
-        full_path: &Path,
-        _options: &TraversalOptions,
-    ) -> std::io::Result<Self> {
+    fn new_from_dirfd(dir_fd: &DirFd, full_path: &Path) -> std::io::Result<Self> {
         // Get metadata for the directory itself using fstat
         let safe_metadata = dir_fd.metadata()?;
 
@@ -361,7 +357,7 @@ fn safe_du(
             Err(_e) => {
                 // Try using our new DirFd method for the root directory
                 match DirFd::open(path) {
-                    Ok(dir_fd) => match Stat::new_from_dirfd(&dir_fd, path, options) {
+                    Ok(dir_fd) => match Stat::new_from_dirfd(&dir_fd, path) {
                         Ok(s) => s,
                         Err(e) => {
                             let error = e.map_err_context(
