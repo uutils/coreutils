@@ -99,3 +99,11 @@ date-error-date-overflow = débordement de date '{$date}'
 date-error-setting-date-not-supported-macos = la définition de la date n'est pas prise en charge par macOS
 date-error-setting-date-not-supported-redox = la définition de la date n'est pas prise en charge par Redox
 date-error-cannot-set-date = impossible de définir la date
+
+# Erreurs d'analyse de fuseau horaire
+timezone-name-too-long = nom de fuseau horaire trop long
+unknown-timezone = fuseau horaire inconnu : {$timezone}
+empty-offset = décalage vide
+missing-sign = signe manquant
+invalid-offset-format = format de décalage invalide
+invalid-hours-or-minutes = heures ou minutes invalides

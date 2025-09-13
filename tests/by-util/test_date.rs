@@ -729,3 +729,138 @@ fn test_date_empty_tz_time() {
         .succeeds()
         .stdout_only("Thu Jan  1 00:00:00 UTC 1970\n");
 }
+
+#[test]
+fn test_date_tz_syntax_valid_timezone() {
+    // Test TZ="UTC" with a specific date - use RFC 3339 for reliable parsing
+    let result = new_ucmd!()
+        .arg("--rfc-3339=seconds")
+        .arg("-d")
+        .arg("TZ=\"UTC\" 2020-01-01 12:00:00")
+        .succeeds();
+
+    let output = result.stdout_str();
+    // Should show the parsed date in UTC timezone
+    assert!(output.contains("2020-01-01 12:00:00+00:00"));
+}
+
+#[test]
+fn test_date_tz_syntax_invalid_timezone() {
+    // Test TZ with an invalid timezone name - should return current time
+    let before: i64 = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        .try_into()
+        .unwrap();
+
+    let result = new_ucmd!()
+        .arg("+%s")
+        .arg("-d")
+        .arg("TZ=\"INVALID_TZ\" 2020-01-01")
+        .succeeds();
+
+    let after: i64 = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        .try_into()
+        .unwrap();
+
+    let timestamp: i64 = result.stdout_str().trim().parse().unwrap();
+
+    // Should be within a few seconds of current time, not 2020
+    assert!(timestamp >= before - 1 && timestamp <= after + 1);
+
+    // Also verify with regular format that it doesn't contain 2020
+    let regular_result = new_ucmd!()
+        .arg("-d")
+        .arg("TZ=\"INVALID_TZ\" 2020-01-01")
+        .succeeds();
+    assert!(!regular_result.stdout_str().contains("2020"));
+}
+
+#[test]
+fn test_date_tz_syntax_large_timezone_name() {
+    // Test with very large timezone name (DoS protection)
+    let large_tz = "a".repeat(300);
+    let arg = format!("TZ=\"{large_tz}\" 2020-01-01");
+
+    let before: i64 = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        .try_into()
+        .unwrap();
+
+    let result = new_ucmd!().arg("+%s").arg("-d").arg(&arg).succeeds();
+
+    let after: i64 = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        .try_into()
+        .unwrap();
+
+    let timestamp: i64 = result.stdout_str().trim().parse().unwrap();
+    // Should return current time due to invalid (too long) TZ
+    assert!(timestamp >= before - 1 && timestamp <= after + 1);
+
+    // Also verify it doesn't contain 2020
+    let regular_result = new_ucmd!().arg("-d").arg(&arg).succeeds();
+    assert!(!regular_result.stdout_str().contains("2020"));
+}
+
+#[test]
+fn test_date_tz_syntax_unquoted() {
+    // Test unquoted TZ syntax - should work now
+    let result = new_ucmd!()
+        .arg("--rfc-3339=seconds")
+        .arg("-d")
+        .arg("TZ=UTC 2020-01-01 12:00:00")
+        .succeeds();
+
+    let output = result.stdout_str();
+    assert!(output.contains("2020-01-01 12:00:00+00:00"));
+}
+
+#[test]
+fn test_date_tz_syntax_fixed_offset() {
+    // Test with fixed timezone offset
+    let result = new_ucmd!()
+        .arg("--rfc-3339=seconds")
+        .arg("-d")
+        .arg("TZ=\"+02:00\" 2020-01-01 12:00:00")
+        .succeeds();
+
+    let output = result.stdout_str();
+    // Should show the date with +02:00 offset
+    assert!(output.contains("2020-01-01 12:00:00+02:00"));
+}
+
+#[test]
+fn test_date_tz_syntax_case_insensitive() {
+    // Test case insensitive TZ prefix
+    let result = new_ucmd!()
+        .arg("--rfc-3339=seconds")
+        .arg("-d")
+        .arg("tz=\"UTC\" 2020-01-01 12:00:00")
+        .succeeds();
+
+    let output = result.stdout_str();
+    assert!(output.contains("2020-01-01 12:00:00+00:00"));
+}
+
+#[test]
+fn test_date_tz_syntax_no_tz_prefix() {
+    // Test that regular date parsing still works without TZ prefix
+    let result = new_ucmd!()
+        .arg("--rfc-3339=seconds")
+        .arg("-d")
+        .arg("2020-01-01 12:00:00")
+        .succeeds();
+
+    let output = result.stdout_str();
+    // Should parse normally (in UTC by default)
+    assert!(output.contains("2020-01-01 12:00:00+00:00"));
+}
