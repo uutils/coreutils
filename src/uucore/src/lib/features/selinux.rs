@@ -8,24 +8,25 @@
 use std::error::Error;
 use std::path::Path;
 
+use crate::translate;
 use selinux::SecurityContext;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum SeLinuxError {
-    #[error("SELinux is not enabled on this system")]
+    #[error("{}", translate!("selinux-error-not-enabled"))]
     SELinuxNotEnabled,
 
-    #[error("failed to open the file: {0}")]
+    #[error("{}", translate!("selinux-error-file-open-failure", "error" => .0.clone()))]
     FileOpenFailure(String),
 
-    #[error("failed to retrieve the security context: {0}")]
+    #[error("{}", translate!("selinux-error-context-retrieval-failure", "error" => .0.clone()))]
     ContextRetrievalFailure(String),
 
-    #[error("failed to set default file creation context to '{0}': {1}")]
+    #[error("{}", translate!("selinux-error-context-set-failure", "context" => .0.clone(), "error" => .1.clone()))]
     ContextSetFailure(String, String),
 
-    #[error("failed to set default file creation context to '{0}': {1}")]
+    #[error("{}", translate!("selinux-error-context-conversion-failure", "context" => .0.clone(), "error" => .1.clone()))]
     ContextConversionFailure(String, String),
 }
 
