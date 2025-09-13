@@ -442,23 +442,19 @@ fn safe_du(
         // Handle symlinks with -L option
         // For safe traversal with -L, we skip symlinks to directories entirely
         // and let the non-safe traversal handle them at the top level
-        let (entry_stat, is_dir) = if is_symlink && options.dereference == Deref::All {
+        if is_symlink && options.dereference == Deref::All {
             // Skip symlinks to directories when using safe traversal with -L
             // They will be handled by regular traversal
             continue;
-        } else {
-            let is_dir = (lstat.st_mode & S_IFMT) == S_IFDIR;
-            (lstat, is_dir)
-        };
+        }
 
-        let file_info = if entry_stat.st_ino != 0 {
-            Some(FileInfo {
-                file_id: entry_stat.st_ino as u128,
-                dev_id: entry_stat.st_dev,
-            })
-        } else {
-            None
-        };
+        let is_dir = (lstat.st_mode & S_IFMT) == S_IFDIR;
+        let entry_stat = lstat;
+
+        let file_info = (entry_stat.st_ino != 0).then_some(FileInfo {
+            file_id: entry_stat.st_ino as u128,
+            dev_id: entry_stat.st_dev,
+        });
 
         // For safe traversal, we need to handle stats differently
         // We can't use std::fs::Metadata since that requires the full path
