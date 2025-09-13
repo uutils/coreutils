@@ -19,7 +19,12 @@ path = "src/chown.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["entries", "fs", "perms"] }
+uucore = { workspace = true, features = [
+  "entries",
+  "fs",
+  "perms",
+  "safe-traversal",
+] }
 fluent = { workspace = true }
 
 [[bin]]
