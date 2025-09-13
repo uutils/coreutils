@@ -1,48 +1,62 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+//
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
+//
 // Only available on Linux
+//
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
-// spell-checker:ignore  RAII dirfd
+// spell-checker:ignore RAII dirfd
 
 #![cfg(target_os = "linux")]
 
 #[cfg(test)]
 use std::os::unix::ffi::OsStringExt;
 
-use std::ffi::{CStr, CString, OsStr, OsString};
+use std::ffi::{CString, OsStr, OsString};
 use std::io;
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::io::{AsRawFd, RawFd};
+use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 use std::path::Path;
+
+use nix::dir::Dir;
+use nix::fcntl::{OFlag, openat};
+use nix::sys::stat::{FileStat, Mode, fstatat};
+use nix::unistd::{UnlinkatFlags, unlinkat};
+
+use crate::translate;
 
 // Custom error types for better error reporting
 #[derive(thiserror::Error, Debug)]
 pub enum SafeTraversalError {
-    #[error("path contains null byte")]
+    #[error("{}", translate!("safe-traversal-error-path-contains-null"))]
     PathContainsNull,
 
-    #[error("failed to open '{path}': {source}")]
+    #[error("{}", translate!("safe-traversal-error-open-failed", "path" => path, "source" => source))]
     OpenFailed {
         path: String,
         #[source]
         source: io::Error,
     },
 
-    #[error("failed to stat '{path}': {source}")]
+    #[error("{}", translate!("safe-traversal-error-stat-failed", "path" => path, "source" => source))]
     StatFailed {
         path: String,
         #[source]
         source: io::Error,
     },
 
-    #[error("failed to read directory '{path}': {source}")]
+    #[error("{}", translate!("safe-traversal-error-read-dir-failed", "path" => path, "source" => source))]
     ReadDirFailed {
         path: String,
         #[source]
         source: io::Error,
     },
 
-    #[error("failed to unlink '{path}': {source}")]
+    #[error("{}", translate!("safe-traversal-error-unlink-failed", "path" => path, "source" => source))]
     UnlinkFailed {
         path: String,
         #[source]
@@ -53,9 +67,10 @@ pub enum SafeTraversalError {
 impl From<SafeTraversalError> for io::Error {
     fn from(err: SafeTraversalError) -> Self {
         match err {
-            SafeTraversalError::PathContainsNull => {
-                io::Error::new(io::ErrorKind::InvalidInput, "path contains null byte")
-            }
+            SafeTraversalError::PathContainsNull => io::Error::new(
+                io::ErrorKind::InvalidInput,
+                translate!("safe-traversal-error-path-contains-null"),
+            ),
             SafeTraversalError::OpenFailed { source, .. } => source,
             SafeTraversalError::StatFailed { source, .. } => source,
             SafeTraversalError::ReadDirFailed { source, .. } => source,
@@ -64,139 +79,83 @@ impl From<SafeTraversalError> for io::Error {
     }
 }
 
-// RAII wrapper for DIR pointer
-struct Dir {
-    dirp: *mut libc::DIR,
-}
+// Helper function to read directory entries using nix
+fn read_dir_entries(fd: &OwnedFd) -> io::Result<Vec<OsString>> {
+    let mut entries = Vec::new();
 
-impl Dir {
-    fn from_fd(fd: RawFd) -> io::Result<Self> {
-        let dirp = unsafe { libc::fdopendir(fd) };
-        if dirp.is_null() {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok(Dir { dirp })
+    // Duplicate the fd for Dir (it takes ownership)
+    let dup_fd = nix::unistd::dup(fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+
+    let mut dir = Dir::from_fd(dup_fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+
+    for entry_result in dir.iter() {
+        let entry = entry_result.map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+
+        let name = entry.file_name();
+        let name_os = OsStr::from_bytes(name.to_bytes());
+
+        if name_os != "." && name_os != ".." {
+            entries.push(name_os.to_os_string());
         }
     }
 
-    fn read_entries(&self) -> io::Result<Vec<OsString>> {
-        let mut entries = Vec::new();
-
-        loop {
-            // Clear errno before readdir as per POSIX requirements
-            unsafe { *libc::__errno_location() = 0 };
-
-            let entry = unsafe { libc::readdir(self.dirp) };
-            if entry.is_null() {
-                let errno = unsafe { *libc::__errno_location() };
-                if errno != 0 {
-                    return Err(io::Error::from_raw_os_error(errno));
-                }
-                break;
-            }
-
-            let name = unsafe { CStr::from_ptr((*entry).d_name.as_ptr()) };
-            let name_os = OsStr::from_bytes(name.to_bytes());
-
-            if name_os != "." && name_os != ".." {
-                entries.push(name_os.to_os_string());
-            }
-        }
-
-        Ok(entries)
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        if !self.dirp.is_null() {
-            unsafe {
-                libc::closedir(self.dirp);
-            }
-        }
-    }
+    Ok(entries)
 }
 
 /// A directory file descriptor that enables safe traversal
 pub struct DirFd {
-    fd: RawFd,
-    owned: bool,
+    fd: OwnedFd,
 }
 
 impl DirFd {
     /// Open a directory and return a file descriptor
     pub fn open(path: &Path) -> io::Result<Self> {
-        let path_str = path.to_string_lossy();
-        let path_cstr = CString::new(path.as_os_str().as_bytes())
-            .map_err(|_| SafeTraversalError::PathContainsNull)?;
-
-        let fd = unsafe {
-            libc::open(
-                path_cstr.as_ptr(),
-                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
-            )
-        };
-
-        if fd < 0 {
-            Err(SafeTraversalError::OpenFailed {
-                path: path_str.to_string(),
-                source: io::Error::last_os_error(),
+        let flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
+        let fd = nix::fcntl::open(path, flags, Mode::empty()).map_err(|e| {
+            SafeTraversalError::OpenFailed {
+                path: path.to_string_lossy().into_owned(),
+                source: io::Error::from_raw_os_error(e as i32),
             }
-            .into())
-        } else {
-            Ok(DirFd { fd, owned: true })
-        }
+        })?;
+
+        Ok(DirFd { fd })
     }
 
     /// Open a subdirectory relative to this directory
     pub fn open_subdir(&self, name: &OsStr) -> io::Result<Self> {
-        let name_str = name.to_string_lossy();
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
 
-        let fd = unsafe {
-            libc::openat(
-                self.fd,
-                name_cstr.as_ptr(),
-                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
-            )
-        };
-
-        if fd < 0 {
-            Err(SafeTraversalError::OpenFailed {
-                path: name_str.to_string(),
-                source: io::Error::last_os_error(),
+        let flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
+        let fd = openat(&self.fd, name_cstr.as_c_str(), flags, Mode::empty()).map_err(|e| {
+            SafeTraversalError::OpenFailed {
+                path: name.to_string_lossy().into_owned(),
+                source: io::Error::from_raw_os_error(e as i32),
             }
-            .into())
-        } else {
-            Ok(DirFd { fd, owned: true })
-        }
+        })?;
+
+        Ok(DirFd { fd })
     }
 
     /// Get raw stat data for a file relative to this directory
-    pub fn stat_at(&self, name: &OsStr, follow_symlinks: bool) -> io::Result<libc::stat> {
-        let name_str = name.to_string_lossy();
+    pub fn stat_at(&self, name: &OsStr, follow_symlinks: bool) -> io::Result<FileStat> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
 
-        let mut stat: libc::stat = unsafe { std::mem::zeroed() };
         let flags = if follow_symlinks {
-            0
+            nix::fcntl::AtFlags::empty()
         } else {
-            libc::AT_SYMLINK_NOFOLLOW
+            nix::fcntl::AtFlags::AT_SYMLINK_NOFOLLOW
         };
 
-        let ret = unsafe { libc::fstatat(self.fd, name_cstr.as_ptr(), &mut stat, flags) };
-
-        if ret < 0 {
-            Err(SafeTraversalError::StatFailed {
-                path: name_str.to_string(),
-                source: io::Error::last_os_error(),
+        let stat = fstatat(&self.fd, name_cstr.as_c_str(), flags).map_err(|e| {
+            SafeTraversalError::StatFailed {
+                path: name.to_string_lossy().into_owned(),
+                source: io::Error::from_raw_os_error(e as i32),
             }
-            .into())
-        } else {
-            Ok(stat)
-        }
+        })?;
+
+        Ok(stat)
     }
 
     /// Get metadata for a file relative to this directory
@@ -210,45 +169,20 @@ impl DirFd {
     }
 
     /// Get raw stat data for this directory
-    pub fn fstat(&self) -> io::Result<libc::stat> {
-        let mut stat: libc::stat = unsafe { std::mem::zeroed() };
+    pub fn fstat(&self) -> io::Result<FileStat> {
+        let stat = nix::sys::stat::fstat(&self.fd).map_err(|e| SafeTraversalError::StatFailed {
+            path: translate!("safe-traversal-current-directory"),
+            source: io::Error::from_raw_os_error(e as i32),
+        })?;
 
-        let ret = unsafe { libc::fstat(self.fd, &mut stat) };
-
-        if ret < 0 {
-            Err(SafeTraversalError::StatFailed {
-                path: "<current directory>".to_string(),
-                source: io::Error::last_os_error(),
-            }
-            .into())
-        } else {
-            Ok(stat)
-        }
+        Ok(stat)
     }
 
     /// Read directory entries
     pub fn read_dir(&self) -> io::Result<Vec<OsString>> {
-        // Duplicate the fd for fdopendir (it takes ownership)
-        let dup_fd = unsafe { libc::dup(self.fd) };
-        if dup_fd < 0 {
-            return Err(SafeTraversalError::ReadDirFailed {
-                path: "<directory>".to_string(),
-                source: io::Error::last_os_error(),
-            }
-            .into());
-        }
-
-        let dir = Dir::from_fd(dup_fd).map_err(|e| {
-            unsafe { libc::close(dup_fd) };
+        read_dir_entries(&self.fd).map_err(|e| {
             SafeTraversalError::ReadDirFailed {
-                path: "<directory>".to_string(),
-                source: e,
-            }
-        })?;
-
-        dir.read_entries().map_err(|e| {
-            SafeTraversalError::ReadDirFailed {
-                path: "<directory>".to_string(),
+                path: translate!("safe-traversal-directory"),
                 source: e,
             }
             .into()
@@ -257,49 +191,47 @@ impl DirFd {
 
     /// Remove a file or empty directory relative to this directory
     pub fn unlink_at(&self, name: &OsStr, is_dir: bool) -> io::Result<()> {
-        let name_str = name.to_string_lossy();
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
-        let flags = if is_dir { libc::AT_REMOVEDIR } else { 0 };
-
-        let ret = unsafe { libc::unlinkat(self.fd, name_cstr.as_ptr(), flags) };
-
-        if ret < 0 {
-            Err(SafeTraversalError::UnlinkFailed {
-                path: name_str.to_string(),
-                source: io::Error::last_os_error(),
-            }
-            .into())
+        let flags = if is_dir {
+            UnlinkatFlags::RemoveDir
         } else {
-            Ok(())
-        }
+            UnlinkatFlags::NoRemoveDir
+        };
+
+        unlinkat(&self.fd, name_cstr.as_c_str(), flags).map_err(|e| {
+            SafeTraversalError::UnlinkFailed {
+                path: name.to_string_lossy().into_owned(),
+                source: io::Error::from_raw_os_error(e as i32),
+            }
+        })?;
+
+        Ok(())
     }
 
-    /// Create a DirFd from an existing file descriptor (does not take ownership)
+    /// Create a DirFd from an existing file descriptor (takes ownership)
     pub fn from_raw_fd(fd: RawFd) -> io::Result<Self> {
         if fd < 0 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "invalid file descriptor",
+                translate!("safe-traversal-error-invalid-fd"),
             ));
         }
-        Ok(DirFd { fd, owned: false })
-    }
-}
-
-impl Drop for DirFd {
-    fn drop(&mut self) {
-        if self.owned && self.fd >= 0 {
-            unsafe {
-                libc::close(self.fd);
-            }
-        }
+        // SAFETY: We've verified fd >= 0, and the caller is transferring ownership
+        let owned_fd = unsafe { OwnedFd::from_raw_fd(fd) };
+        Ok(DirFd { fd: owned_fd })
     }
 }
 
 impl AsRawFd for DirFd {
     fn as_raw_fd(&self) -> RawFd {
-        self.fd
+        self.fd.as_raw_fd()
+    }
+}
+
+impl AsFd for DirFd {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.fd.as_fd()
     }
 }
 
@@ -371,11 +303,11 @@ impl FileType {
 /// Metadata wrapper for safer access to file information
 #[derive(Debug, Clone)]
 pub struct Metadata {
-    stat: libc::stat,
+    stat: FileStat,
 }
 
 impl Metadata {
-    pub fn from_stat(stat: libc::stat) -> Self {
+    pub fn from_stat(stat: FileStat) -> Self {
         Self { stat }
     }
 
@@ -407,11 +339,6 @@ impl Metadata {
         }
     }
 
-    /// Get the raw libc::stat for compatibility with existing code
-    pub fn as_raw_stat(&self) -> &libc::stat {
-        &self.stat
-    }
-
     /// Compatibility methods to match std::fs::Metadata interface
     pub fn is_dir(&self) -> bool {
         self.file_type().is_directory()
@@ -427,7 +354,6 @@ impl Metadata {
 }
 
 // Add MetadataExt trait implementation for compatibility
-#[cfg(not(windows))]
 impl std::os::unix::fs::MetadataExt for Metadata {
     fn dev(&self) -> u64 {
         self.stat.st_dev
@@ -556,6 +482,7 @@ mod tests {
     use super::*;
     use std::fs;
     use std::os::unix::fs::symlink;
+    use std::os::unix::io::IntoRawFd;
     use tempfile::TempDir;
 
     #[test]
@@ -694,11 +621,16 @@ mod tests {
     fn test_from_raw_fd() {
         let temp_dir = TempDir::new().unwrap();
         let dir_fd = DirFd::open(temp_dir.path()).unwrap();
-        let raw_fd = dir_fd.as_raw_fd();
 
-        let borrowed_fd = DirFd::from_raw_fd(raw_fd).unwrap();
-        assert_eq!(borrowed_fd.as_raw_fd(), raw_fd);
-        assert!(!borrowed_fd.owned); // Should not own the FD
+        // Duplicate the fd first so we don't have ownership conflicts
+        let dup_fd = nix::unistd::dup(&dir_fd).unwrap();
+        let from_raw_fd = DirFd::from_raw_fd(dup_fd.into_raw_fd()).unwrap();
+
+        // Both should refer to the same directory
+        let stat1 = dir_fd.fstat().unwrap();
+        let stat2 = from_raw_fd.fstat().unwrap();
+        assert_eq!(stat1.st_ino, stat2.st_ino);
+        assert_eq!(stat1.st_dev, stat2.st_dev);
     }
 
     #[test]
@@ -770,9 +702,7 @@ mod tests {
         assert_eq!(metadata.mode() & libc::S_IFMT as u32, libc::S_IFREG as u32);
         assert_eq!(metadata.nlink(), 1);
 
-        // Test raw stat access
-        let raw_stat = metadata.as_raw_stat();
-        assert_eq!(raw_stat.st_size, metadata.size() as i64);
+        assert!(metadata.size() > 0);
     }
 
     #[test]

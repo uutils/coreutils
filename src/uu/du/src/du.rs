@@ -166,11 +166,7 @@ impl Stat {
 
     /// Create a Stat using safe traversal methods with `DirFd` for the root directory
     #[cfg(target_os = "linux")]
-    fn new_from_dirfd(
-        dir_fd: &DirFd,
-        full_path: &Path,
-        _options: &TraversalOptions,
-    ) -> std::io::Result<Self> {
+    fn new_from_dirfd(dir_fd: &DirFd, full_path: &Path) -> std::io::Result<Self> {
         // Get metadata for the directory itself using fstat
         let safe_metadata = dir_fd.metadata()?;
 
@@ -361,7 +357,7 @@ fn safe_du(
             Err(_e) => {
                 // Try using our new DirFd method for the root directory
                 match DirFd::open(path) {
-                    Ok(dir_fd) => match Stat::new_from_dirfd(&dir_fd, path, options) {
+                    Ok(dir_fd) => match Stat::new_from_dirfd(&dir_fd, path) {
                         Ok(s) => s,
                         Err(e) => {
                             let error = e.map_err_context(
@@ -446,23 +442,19 @@ fn safe_du(
         // Handle symlinks with -L option
         // For safe traversal with -L, we skip symlinks to directories entirely
         // and let the non-safe traversal handle them at the top level
-        let (entry_stat, is_dir) = if is_symlink && options.dereference == Deref::All {
+        if is_symlink && options.dereference == Deref::All {
             // Skip symlinks to directories when using safe traversal with -L
             // They will be handled by regular traversal
             continue;
-        } else {
-            let is_dir = (lstat.st_mode & S_IFMT) == S_IFDIR;
-            (lstat, is_dir)
-        };
+        }
 
-        let file_info = if entry_stat.st_ino != 0 {
-            Some(FileInfo {
-                file_id: entry_stat.st_ino as u128,
-                dev_id: entry_stat.st_dev,
-            })
-        } else {
-            None
-        };
+        let is_dir = (lstat.st_mode & S_IFMT) == S_IFDIR;
+        let entry_stat = lstat;
+
+        let file_info = (entry_stat.st_ino != 0).then_some(FileInfo {
+            file_id: entry_stat.st_ino as u128,
+            dev_id: entry_stat.st_dev,
+        });
 
         // For safe traversal, we need to handle stats differently
         // We can't use std::fs::Metadata since that requires the full path
@@ -723,18 +715,9 @@ fn du_regular(
                             }
                         }
                         Err(e) => {
-                            // Check if this is the "too many symlinks" error we want to catch
-                            if e.kind() == std::io::ErrorKind::InvalidData
-                                && e.to_string().contains("Too many levels")
-                            {
-                                print_tx.send(Err(e.map_err_context(
+                            print_tx.send(Err(e.map_err_context(
                                     || translate!("du-error-cannot-access", "path" => entry_path.quote()),
                                 )))?;
-                            } else {
-                                print_tx.send(Err(e.map_err_context(
-                                    || translate!("du-error-cannot-access", "path" => entry_path.quote()),
-                                )))?;
-                            }
                         }
                     }
                 }
