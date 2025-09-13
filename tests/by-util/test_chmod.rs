@@ -401,7 +401,7 @@ fn test_chmod_recursive() {
         .arg("z")
         .umask(0)
         .fails()
-        .stderr_is("chmod: Permission denied\n");
+        .stderr_is(err_msg);
 
     assert_eq!(at.metadata("z/y").permissions().mode(), 0o100444);
     assert_eq!(at.metadata("a/a").permissions().mode(), 0o100444);

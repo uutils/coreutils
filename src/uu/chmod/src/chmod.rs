@@ -17,6 +17,9 @@ use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;
 use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
+
+#[cfg(target_os = "linux")]
+use uucore::safe_traversal::DirFd;
 use uucore::{format_usage, show, show_error};
 
 use uucore::translate;
@@ -322,6 +325,7 @@ impl Chmoder {
         r
     }
 
+    #[cfg(not(target_os = "linux"))]
     fn walk_dir_with_context(&self, file_path: &Path, is_command_line_arg: bool) -> UResult<()> {
         let mut r = self.chmod_file(file_path);
 
@@ -352,6 +356,216 @@ impl Chmoder {
         r
     }
 
+    #[cfg(target_os = "linux")]
+    fn walk_dir_with_context(&self, file_path: &Path, is_command_line_arg: bool) -> UResult<()> {
+        let mut r = self.chmod_file(file_path);
+
+        // Determine whether to traverse symlinks based on context and traversal mode
+        let should_follow_symlink = match self.traverse_symlinks {
+            TraverseSymlinks::All => true,
+            TraverseSymlinks::First => is_command_line_arg, // Only follow symlinks that are command line args
+            TraverseSymlinks::None => false,
+        };
+
+        // If the path is a directory (or we should follow symlinks), recurse into it using safe traversal
+        if (!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir() {
+            match DirFd::open(file_path) {
+                Ok(dir_fd) => {
+                    r = self
+                        .safe_traverse_dir(&dir_fd, file_path, is_command_line_arg)
+                        .and(r);
+                }
+                Err(err) => {
+                    // Handle permission denied errors with proper file path context
+                    if err.kind() == std::io::ErrorKind::PermissionDenied {
+                        r = r.and(Err(ChmodError::PermissionDenied(
+                            file_path.to_string_lossy().to_string(),
+                        )
+                        .into()));
+                    } else {
+                        r = r.and(Err(err.into()));
+                    }
+                }
+            }
+        }
+        r
+    }
+
+    #[cfg(target_os = "linux")]
+    fn safe_traverse_dir(
+        &self,
+        dir_fd: &DirFd,
+        dir_path: &Path,
+        _is_command_line_arg: bool,
+    ) -> UResult<()> {
+        let mut r = Ok(());
+
+        // Read directory entries
+        let entries = match dir_fd.read_dir() {
+            Ok(entries) => entries,
+            Err(e) => {
+                return Err(e.into());
+            }
+        };
+
+        // Determine if we should follow symlinks (doesn't depend on entry_name)
+        let should_follow_symlink = self.traverse_symlinks == TraverseSymlinks::All;
+
+        for entry_name in entries {
+            let entry_path = dir_path.join(&entry_name);
+
+            // Get metadata for the entry
+            let follow = self.traverse_symlinks == TraverseSymlinks::All;
+
+            let meta = match dir_fd.metadata_at(&entry_name, follow) {
+                Ok(m) => m,
+                Err(e) => {
+                    // Handle permission denied with proper file path context
+                    if e.kind() == std::io::ErrorKind::PermissionDenied {
+                        r = r.and(Err(ChmodError::PermissionDenied(
+                            entry_path.to_string_lossy().to_string(),
+                        )
+                        .into()));
+                    } else {
+                        r = r.and(Err(e.into()));
+                    }
+                    continue;
+                }
+            };
+
+            if entry_path.is_symlink() {
+                r = self
+                    .handle_symlink_during_safe_recursion(&entry_path, dir_fd, &entry_name)
+                    .and(r);
+            } else {
+                // For regular files and directories, chmod them
+                r = self
+                    .safe_chmod_file(&entry_path, dir_fd, &entry_name, meta.mode() & 0o7777)
+                    .and(r);
+
+                // Recurse into subdirectories
+                if meta.is_dir() {
+                    r = self.walk_dir_with_context(&entry_path, false).and(r);
+                }
+            }
+        }
+        r
+    }
+
+    #[cfg(target_os = "linux")]
+    fn handle_symlink_during_safe_recursion(
+        &self,
+        path: &Path,
+        dir_fd: &DirFd,
+        entry_name: &std::ffi::OsStr,
+    ) -> UResult<()> {
+        // During recursion, determine behavior based on traversal mode
+        match self.traverse_symlinks {
+            TraverseSymlinks::All => {
+                // Follow all symlinks during recursion
+                // Check if the symlink target is a directory, but handle dangling symlinks gracefully
+                match fs::metadata(path) {
+                    Ok(meta) if meta.is_dir() => self.walk_dir_with_context(path, false),
+                    Ok(meta) => {
+                        // It's a file symlink, chmod it using safe traversal
+                        self.safe_chmod_file(path, dir_fd, entry_name, meta.mode() & 0o7777)
+                    }
+                    Err(_) => {
+                        // Dangling symlink, chmod it without dereferencing
+                        self.chmod_file_internal(path, false)
+                    }
+                }
+            }
+            TraverseSymlinks::First | TraverseSymlinks::None => {
+                // Don't follow symlinks encountered during recursion
+                // For these symlinks, don't dereference them even if dereference is normally true
+                self.chmod_file_internal(path, false)
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn safe_chmod_file(
+        &self,
+        file_path: &Path,
+        dir_fd: &DirFd,
+        entry_name: &std::ffi::OsStr,
+        current_mode: u32,
+    ) -> UResult<()> {
+        // Determine the new permissions to apply
+        let new_mode = match self.fmode {
+            Some(mode) => mode,
+            None => {
+                let cmode_unwrapped = self.cmode.clone().unwrap();
+                let mut new_mode = current_mode;
+                for mode in cmode_unwrapped.split(',') {
+                    let result = if mode.chars().any(|c| c.is_ascii_digit()) {
+                        mode::parse_numeric(new_mode, mode, file_path.is_dir())
+                    } else {
+                        mode::parse_symbolic(new_mode, mode, mode::get_umask(), file_path.is_dir())
+                    };
+
+                    match result {
+                        Ok(parsed_mode) => {
+                            new_mode = parsed_mode;
+                        }
+                        Err(f) => {
+                            return if self.quiet {
+                                Err(ExitCode::new(1))
+                            } else {
+                                Err(USimpleError::new(1, f))
+                            };
+                        }
+                    }
+                }
+                new_mode
+            }
+        };
+
+        // Use safe traversal to change the mode
+        let follow_symlinks = self.dereference;
+        if let Err(_e) = dir_fd.chmod_at(entry_name, new_mode, follow_symlinks) {
+            if self.verbose {
+                println!(
+                    "failed to change mode of {} to {:o}",
+                    file_path.quote(),
+                    new_mode
+                );
+            }
+            return Err(
+                ChmodError::PermissionDenied(file_path.to_string_lossy().to_string()).into(),
+            );
+        }
+
+        // Report the change if verbose or changes mode
+        if self.verbose || self.changes {
+            let current_permissions = display_permissions_unix(current_mode, false);
+            let new_permissions = display_permissions_unix(new_mode, false);
+            if new_mode != current_mode {
+                if self.changes || self.verbose {
+                    println!(
+                        "mode of {} changed from {} ({:04o}) to {} ({:04o})",
+                        file_path.quote(),
+                        current_permissions,
+                        current_mode,
+                        new_permissions,
+                        new_mode
+                    );
+                }
+            } else if self.verbose {
+                println!(
+                    "mode of {} retained as {} ({:04o})",
+                    file_path.quote(),
+                    current_permissions,
+                    current_mode
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "linux"))]
     fn handle_symlink_during_recursion(&self, path: &Path) -> UResult<()> {
         // During recursion, determine behavior based on traversal mode
         match self.traverse_symlinks {
