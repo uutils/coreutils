@@ -719,18 +719,9 @@ fn du_regular(
                             }
                         }
                         Err(e) => {
-                            // Check if this is the "too many symlinks" error we want to catch
-                            if e.kind() == std::io::ErrorKind::InvalidData
-                                && e.to_string().contains("Too many levels")
-                            {
-                                print_tx.send(Err(e.map_err_context(
+                            print_tx.send(Err(e.map_err_context(
                                     || translate!("du-error-cannot-access", "path" => entry_path.quote()),
                                 )))?;
-                            } else {
-                                print_tx.send(Err(e.map_err_context(
-                                    || translate!("du-error-cannot-access", "path" => entry_path.quote()),
-                                )))?;
-                            }
                         }
                     }
                 }
