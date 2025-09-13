@@ -9,7 +9,7 @@
 // Only available on Linux
 //
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
-// spell-checker:ignore RAII dirfd fchownat fchown
+// spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod
 
 #![cfg(target_os = "linux")]
 
@@ -24,7 +24,7 @@ use std::path::Path;
 
 use nix::dir::Dir;
 use nix::fcntl::{OFlag, openat};
-use nix::sys::stat::{FileStat, Mode, fstatat};
+use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat};
 use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
 
 use crate::translate;
@@ -242,6 +242,35 @@ impl DirFd {
         let gid = gid.map(Gid::from_raw);
 
         fchown(&self.fd, uid, gid).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+
+        Ok(())
+    }
+
+    /// Change mode of a file relative to this directory
+    pub fn chmod_at(&self, name: &OsStr, mode: u32, follow_symlinks: bool) -> io::Result<()> {
+        let flags = if follow_symlinks {
+            FchmodatFlags::FollowSymlink
+        } else {
+            FchmodatFlags::NoFollowSymlink
+        };
+
+        let mode = Mode::from_bits_truncate(mode);
+
+        let name_cstr =
+            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+
+        fchmodat(&self.fd, name_cstr.as_c_str(), mode, flags)
+            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+
+        Ok(())
+    }
+
+    /// Change mode of this directory
+    pub fn fchmod(&self, mode: u32) -> io::Result<()> {
+        let mode = Mode::from_bits_truncate(mode);
+
+        nix::sys::stat::fchmod(&self.fd, mode)
+            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
 
         Ok(())
     }
