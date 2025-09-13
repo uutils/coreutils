@@ -621,6 +621,49 @@ fn test_mv_symlink_into_target() {
     ucmd.arg("dir-link").arg("dir").succeeds();
 }
 
+#[cfg(all(unix, not(target_os = "android")))]
+#[ignore = "requires sudo"]
+#[test]
+fn test_mv_broken_symlink_to_another_fs() {
+    let scene = TestScenario::new(util_name!());
+
+    scene.fixtures.mkdir("foo");
+
+    let mount = scene
+        .cmd("sudo")
+        .args(&[
+            "-E",
+            "--non-interactive",
+            "mount",
+            "none",
+            "-t",
+            "tmpfs",
+            "foo",
+        ])
+        .run();
+
+    if !mount.succeeded() {
+        print!("Test skipped; requires root user");
+        return;
+    }
+
+    scene.fixtures.mkdir("bar");
+    scene.fixtures.symlink_file("nonexistent", "bar/baz");
+
+    scene
+        .ucmd()
+        .arg("bar")
+        .arg("foo")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    scene
+        .cmd("sudo")
+        .args(&["-E", "--non-interactive", "umount", "foo"])
+        .succeeds();
+}
+
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
 fn test_mv_hardlink_to_symlink() {
