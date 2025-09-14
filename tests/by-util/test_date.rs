@@ -353,6 +353,22 @@ fn test_date_for_file() {
 }
 
 #[test]
+fn test_date_for_file_mtime() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "reference_file";
+    at.touch(file);
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    let result = ucmd.arg("--reference").arg(file).arg("+%s%N").succeeds();
+    let mtime = at.metadata(file).modified().unwrap();
+    let mtime_nanos = mtime
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
+        .to_string();
+    assert_eq!(result.stdout_str().trim(), &mtime_nanos[..]);
+}
+
+#[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 /// TODO: expected to fail currently; change to `succeeds()` when required.
 fn test_date_set_valid_3() {

@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime;
 use jiff::tz::TimeZone;
-use jiff::{SignedDuration, Timestamp, Zoned};
+use jiff::{Timestamp, Zoned};
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 use libc::{CLOCK_REALTIME, clock_settime, timespec};
 use std::fs::File;
@@ -64,10 +64,10 @@ enum Format {
 /// Various places that dates can come from
 enum DateSource {
     Now,
-    Custom(String),
     File(PathBuf),
+    FileMtime(PathBuf),
     Stdin,
-    Human(SignedDuration),
+    Human(String),
 }
 
 enum Iso8601Format {
@@ -141,16 +141,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let date_source = if let Some(date) = matches.get_one::<String>(OPT_DATE) {
-        if let Ok(duration) = parse_offset(date.as_str()) {
-            DateSource::Human(duration)
-        } else {
-            DateSource::Custom(date.into())
-        }
+        DateSource::Human(date.into())
     } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
         match file.as_ref() {
             "-" => DateSource::Stdin,
             _ => DateSource::File(file.into()),
         }
+    } else if let Some(file) = matches.get_one::<String>(OPT_REFERENCE) {
+        DateSource::FileMtime(file.into())
     } else {
         DateSource::Now
     };
@@ -176,7 +174,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if let Some(date) = settings.set_to {
         // All set time functions expect UTC datetimes.
         let date = if settings.utc {
-            date.with_time_zone(TimeZone::UTC)
+            date.datetime().to_zoned(TimeZone::UTC).map_err(|e| {
+                USimpleError::new(1, translate!("date-error-invalid-date", "error" => e))
+            })?
         } else {
             date
         };
@@ -193,26 +193,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Iterate over all dates - whether it's a single date or a file.
     let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
-        DateSource::Custom(ref input) => {
+        DateSource::Human(ref input) => {
             let date = parse_date(input);
             let iter = std::iter::once(date);
             Box::new(iter)
-        }
-        DateSource::Human(relative_time) => {
-            // Double check the result is overflow or not of the current_time + relative_time
-            // it may cause a panic of chrono::datetime::DateTime add
-            match now.checked_add(relative_time) {
-                Ok(date) => {
-                    let iter = std::iter::once(Ok(date));
-                    Box::new(iter)
-                }
-                Err(_) => {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("date-error-date-overflow", "date" => relative_time),
-                    ));
-                }
-            }
         }
         DateSource::Stdin => {
             let lines = BufReader::new(std::io::stdin()).lines();
@@ -230,6 +214,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
             let lines = BufReader::new(file).lines();
             let iter = lines.map_while(Result::ok).map(parse_date);
+            Box::new(iter)
+        }
+        DateSource::FileMtime(ref path) => {
+            let metadata = std::fs::metadata(path)
+                .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
+            let mtime = metadata.modified()?;
+            let ts = Timestamp::try_from(mtime).map_err(|e| {
+                USimpleError::new(
+                    1,
+                    translate!("date-error-cannot-set-date", "path" => path.to_string_lossy(), "error" => e),
+                )
+            })?;
+            let date = ts.to_zoned(TimeZone::try_system().unwrap_or(TimeZone::UTC));
+            let iter = std::iter::once(Ok(date));
             Box::new(iter)
         }
         DateSource::Now => {
@@ -391,25 +389,12 @@ fn parse_date<S: AsRef<str> + Clone>(
         Ok(date) => {
             let timestamp =
                 Timestamp::new(date.timestamp(), date.timestamp_subsec_nanos() as i32).unwrap();
-            Ok(Zoned::new(timestamp, TimeZone::UTC))
+            Ok(Zoned::new(
+                timestamp,
+                TimeZone::try_system().unwrap_or(TimeZone::UTC),
+            ))
         }
         Err(e) => Err((s.as_ref().into(), e)),
-    }
-}
-
-// TODO: Convert `parse_datetime` to jiff and remove wrapper from chrono to jiff structures.
-// Also, consider whether parse_datetime::parse_datetime_at_date can be renamed to something
-// like parse_datetime::parse_offset, instead of doing some addition/subtraction.
-fn parse_offset(date: &str) -> Result<SignedDuration, ()> {
-    let ref_time = chrono::Local::now();
-    if let Ok(new_time) = parse_datetime::parse_datetime_at_date(ref_time, date) {
-        let duration = new_time.signed_duration_since(ref_time);
-        Ok(SignedDuration::new(
-            duration.num_seconds(),
-            duration.subsec_nanos(),
-        ))
-    } else {
-        Err(())
     }
 }
 
