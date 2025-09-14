@@ -388,7 +388,7 @@ manpages: build-coreutils
 install-manpages: manpages
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/man/man1
 	$(foreach prog, $(INSTALLEES), \
-		$(INSTALL) $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(DESTDIR)$(DATAROOTDIR)/man/man1/ $(newline) \
+		$(INSTALL) -m 644 $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(DESTDIR)$(DATAROOTDIR)/man/man1/ $(newline) \
 	)
 else
 install-manpages:
@@ -408,9 +408,9 @@ install-completions: completions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d
 	$(foreach prog, $(INSTALLEES), \
-		$(INSTALL) $(BUILDDIR)/completions/zsh/_$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/ $(newline) \
-		$(INSTALL) $(BUILDDIR)/completions/bash/$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/ $(newline) \
-		$(INSTALL) $(BUILDDIR)/completions/fish/$(PROG_PREFIX)$(prog).fish $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/ $(newline) \
+		$(INSTALL) -m 644 $(BUILDDIR)/completions/zsh/_$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/ $(newline) \
+		$(INSTALL) -m 644 $(BUILDDIR)/completions/bash/$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/ $(newline) \
+		$(INSTALL) -m 644 $(BUILDDIR)/completions/fish/$(PROG_PREFIX)$(prog).fish $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/ $(newline) \
 	)
 else
 install-completions:
@@ -422,7 +422,7 @@ locales:
 	@if [ -d "$(BASEDIR)/src/uucore/locales" ]; then \
 		mkdir -p "$(BUILDDIR)/locales/uucore"; \
 		for locale_file in "$(BASEDIR)"/src/uucore/locales/*.ftl; do \
-			$(INSTALL) -v "$$locale_file" "$(BUILDDIR)/locales/uucore/"; \
+			$(INSTALL) -m 644 -v "$$locale_file" "$(BUILDDIR)/locales/uucore/"; \
 		done; \
 	fi; \
 	# Copy utility-specific locales
@@ -431,7 +431,7 @@ locales:
 			mkdir -p "$(BUILDDIR)/locales/$$prog"; \
 			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
 				if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
-					$(INSTALL) -v "$$locale_file" "$(BUILDDIR)/locales/$$prog/"; \
+					$(INSTALL) -m 644 -v "$$locale_file" "$(BUILDDIR)/locales/$$prog/"; \
 				fi; \
 			done; \
 		fi; \
@@ -444,7 +444,7 @@ install-locales:
 			mkdir -p "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog"; \
 			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
 				if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
-					$(INSTALL) -v "$$locale_file" "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog/"; \
+					$(INSTALL) -m 644 -v "$$locale_file" "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog/"; \
 				fi; \
 			done; \
 		fi; \
@@ -460,16 +460,16 @@ ifneq ($(OS),Windows_NT)
 	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf* $(DESTDIR)$(LIBSTDBUF_DIR)/
 endif
 ifeq (${MULTICALL}, y)
-	$(INSTALL) $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
+	$(INSTALL) -m 755 $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
 	$(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
 		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
 	)
 	$(if $(findstring test,$(INSTALLEES)), cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
 else
 	$(foreach prog, $(INSTALLEES), \
-		$(INSTALL) $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog) $(newline) \
+		$(INSTALL) -m 755 $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog) $(newline) \
 	)
-	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
+	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) -m 755 $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
 endif
 
 uninstall:
