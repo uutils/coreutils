@@ -13,7 +13,7 @@ If you are using a version packaged by your Linux distribution, please check wit
 **Do not open public GitHub issues for security vulnerabilities.**
 This prevents accidental disclosure before a fix is available.
 
-Instead, please use one of the following methods:
+Instead, please use the following method:
 
 - **Email:** [sylvestre@debian.org](mailto:Sylvestre@debian.org)
 - **Encryption (optional):** You may encrypt your report using our PGP key:
