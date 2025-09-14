@@ -42,9 +42,3 @@ We follow a **Coordinated Vulnerability Disclosure (CVD)** process:
 3. We will provide a timeline for developing and releasing a fix.
 4. Once a fix is available, we will publish a GitHub Security Advisory.
 5. You will be credited in the advisory unless you request anonymity.
-
----
-
-## Security Audits
-
-Whenever possible, we aim to commission independent security audits and will publish the results for transparency.
