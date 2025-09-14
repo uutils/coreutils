@@ -444,8 +444,7 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
             bits: 512,
         }),
         ALGORITHM_OPTIONS_SHAKE128 | "shake128sum" => {
-            let bits =
-                length.ok_or_else(|| USimpleError::new(1, "--bits required for SHAKE128"))?;
+            let bits = length.ok_or(ChecksumError::BitsRequiredForShake128)?;
             Ok(HashAlgorithm {
                 name: ALGORITHM_OPTIONS_SHAKE128,
                 create_fn: Box::new(|| Box::new(Shake128::new())),
@@ -453,8 +452,7 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
             })
         }
         ALGORITHM_OPTIONS_SHAKE256 | "shake256sum" => {
-            let bits =
-                length.ok_or_else(|| USimpleError::new(1, "--bits required for SHAKE256"))?;
+            let bits = length.ok_or(ChecksumError::BitsRequiredForShake256)?;
             Ok(HashAlgorithm {
                 name: ALGORITHM_OPTIONS_SHAKE256,
                 create_fn: Box::new(|| Box::new(Shake256::new())),
