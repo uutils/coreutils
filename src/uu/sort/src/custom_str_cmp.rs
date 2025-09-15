@@ -8,6 +8,7 @@
 //! The goal is to compare strings without transforming them first (i.e. not allocating new strings)
 
 use std::cmp::Ordering;
+use uucore::i18n::collator::locale_cmp;
 
 fn filter_char(c: u8, ignore_non_printing: bool, ignore_non_dictionary: bool) -> bool {
     if ignore_non_dictionary && !(c.is_ascii_alphanumeric() || c.is_ascii_whitespace()) {
@@ -35,8 +36,8 @@ pub fn custom_str_cmp(
     ignore_case: bool,
 ) -> Ordering {
     if !(ignore_case || ignore_non_dictionary || ignore_non_printing) {
-        // There are no custom settings. Fall back to the default strcmp, which is faster.
-        return a.cmp(b);
+        // There are no custom settings. Fall back to locale-aware comparison.
+        return locale_cmp(a, b);
     }
     let mut a_chars = a
         .iter()

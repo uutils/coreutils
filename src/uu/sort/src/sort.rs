@@ -45,6 +45,7 @@ use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::format_usage;
+use uucore::i18n::collator::CollatorOptions;
 use uucore::line_ending::LineEnding;
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
@@ -1274,6 +1275,9 @@ fn default_merge_batch_size() -> usize {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // Initialize locale-aware collator for string comparisons
+    uucore::i18n::collator::try_init_collator(CollatorOptions::default());
+
     let mut settings = GlobalSettings::default();
 
     let matches = uucore::clap_localization::handle_clap_result_with_exit_code(
