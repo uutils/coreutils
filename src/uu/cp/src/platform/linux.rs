@@ -62,8 +62,7 @@ where
     let dst_file = File::create(&dest)?;
     let src_fd = src_file.as_raw_fd();
     let dst_fd = dst_file.as_raw_fd();
-    let result =
-        unsafe { libc::ioctl(dst_fd, linux_raw_sys::ioctl::FICLONE as libc::Ioctl, src_fd) };
+    let result = unsafe { libc::ioctl(dst_fd, libc::FICLONE, src_fd) };
     if result == 0 {
         return Ok(());
     }
