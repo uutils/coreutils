@@ -1153,7 +1153,7 @@ where
 
 pub fn digest_reader<T: Read>(
     digest: &mut Box<dyn Digest>,
-    reader: &mut BufReader<T>,
+    reader: &mut T,
     binary: bool,
     output_bits: usize,
 ) -> io::Result<(String, usize)> {
