@@ -2359,4 +2359,24 @@ fn test_start_buffer() {
         .stdout_only_bytes(&expected);
 }
 
+#[test]
+fn test_locale_sorting_c() {
+    // Test LC_ALL=C locale sorting (should sort by byte values)
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .pipe_in("a\no\nu\nä\nö\nü\n")
+        .succeeds()
+        .stdout_is("a\no\nu\nä\nö\nü\n");
+}
+
+#[test]
+fn test_locale_sorting_german() {
+    // Test LC_ALL=de_DE.utf-8 locale sorting (should respect German collation)
+    new_ucmd!()
+        .env("LC_ALL", "de_DE.utf-8")
+        .pipe_in("a\no\nu\nä\nö\nü\n")
+        .succeeds()
+        .stdout_is("a\nä\no\nö\nu\nü\n");
+}
+
 /* spell-checker: enable */
