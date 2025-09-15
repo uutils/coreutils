@@ -502,7 +502,13 @@ jobs:
 
         # Find where coreutils was actually installed
         echo "Searching for coreutils binary in installation directory..."
-        COREUTILS_BIN=$(find "$INSTALL_DIR" -name "coreutils" -type f 2>/dev/null | head -1)
+        # First try the expected location
+        if [ -x "$INSTALL_DIR/usr/bin/coreutils" ]; then
+          COREUTILS_BIN="$INSTALL_DIR/usr/bin/coreutils"
+        else
+          # Fallback: search for executable files named coreutils (excluding completion files)
+          COREUTILS_BIN=$(find "$INSTALL_DIR" -path "*/bin/*" -name "coreutils" -type f 2>/dev/null | head -1)
+        fi
         if [ -n "$COREUTILS_BIN" ]; then
           echo "Found coreutils at: $COREUTILS_BIN"
           export COREUTILS_BIN
