@@ -97,8 +97,10 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
         set_or_err(detect_algo("b3sum", None)?)?;
     }
     if matches.get_flag("sha3") {
-        let bits = matches.get_one::<usize>("bits").copied();
-        set_or_err(create_sha3(bits)?)?;
+        match matches.get_one::<usize>("bits") {
+            Some(bits) => set_or_err(create_sha3(*bits)?)?,
+            None => return Err(ChecksumError::BitsRequiredForSha3.into()),
+        }
     }
     if matches.get_flag("sha3-224") {
         set_or_err(HashAlgorithm {

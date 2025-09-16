@@ -249,34 +249,32 @@ impl UError for ChecksumError {
 ///
 /// # Returns
 ///
-/// Returns a UResult of a tuple containing the algorithm name, the hasher instance, and
-/// the output length in bits or an Err if an unsupported output size is provided, or if
-/// the `--bits` flag is missing.
-pub fn create_sha3(bits: Option<usize>) -> UResult<HashAlgorithm> {
+/// Returns a `UResult` with an `HashAlgorithm` or an `Err` if an unsupported
+/// output size is provided.
+pub fn create_sha3(bits: usize) -> UResult<HashAlgorithm> {
     match bits {
-        Some(224) => Ok(HashAlgorithm {
+        224 => Ok(HashAlgorithm {
             name: "SHA3_224",
             create_fn: Box::new(|| Box::new(Sha3_224::new())),
             bits: 224,
         }),
-        Some(256) => Ok(HashAlgorithm {
+        256 => Ok(HashAlgorithm {
             name: "SHA3_256",
             create_fn: Box::new(|| Box::new(Sha3_256::new())),
             bits: 256,
         }),
-        Some(384) => Ok(HashAlgorithm {
+        384 => Ok(HashAlgorithm {
             name: "SHA3_384",
             create_fn: Box::new(|| Box::new(Sha3_384::new())),
             bits: 384,
         }),
-        Some(512) => Ok(HashAlgorithm {
+        512 => Ok(HashAlgorithm {
             name: "SHA3_512",
             create_fn: Box::new(|| Box::new(Sha3_512::new())),
             bits: 512,
         }),
 
-        Some(_) => Err(ChecksumError::InvalidOutputSizeForSha3.into()),
-        None => Err(ChecksumError::BitsRequiredForSha3.into()),
+        _ => Err(ChecksumError::InvalidOutputSizeForSha3.into()),
     }
 }
 
@@ -459,8 +457,10 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
                 bits,
             })
         }
-        //ALGORITHM_OPTIONS_SHA3 | "sha3" => (
-        _ if algo.starts_with("sha3") => create_sha3(length),
+        _ if algo.starts_with("sha3") => {
+            let bits = length.ok_or(ChecksumError::BitsRequiredForSha3)?;
+            create_sha3(bits)
+        }
 
         _ => Err(ChecksumError::UnknownAlgorithm.into()),
     }
