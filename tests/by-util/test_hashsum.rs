@@ -1080,3 +1080,48 @@ fn test_check_sha256_binary() {
         .no_stderr()
         .stdout_is("binary.png: OK\n");
 }
+
+#[test]
+fn test_help_shows_correct_utility_name() {
+    // Test that help output shows the actual utility name instead of "hashsum"
+    let scene = TestScenario::new(util_name!());
+
+    // Test md5sum
+    scene
+        .ccmd("md5sum")
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("Usage: md5sum")
+        .stdout_does_not_contain("Usage: hashsum");
+
+    // Test sha256sum
+    scene
+        .ccmd("sha256sum")
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("Usage: sha256sum")
+        .stdout_does_not_contain("Usage: hashsum");
+
+    // Test b2sum
+    scene
+        .ccmd("b2sum")
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("Usage: b2sum")
+        .stdout_does_not_contain("Usage: hashsum");
+
+    // Test b3sum
+    scene
+        .ccmd("b3sum")
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("Usage: b3sum")
+        .stdout_does_not_contain("Usage: hashsum");
+
+    // Test that generic hashsum still shows the correct usage
+    scene
+        .ccmd("hashsum")
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("Usage: hashsum --<digest>");
+}
