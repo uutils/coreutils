@@ -1859,7 +1859,7 @@ impl PathData {
         // TODO: See how Mac should work here
         let has_acl = false;
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let has_acl = { has_acl(&p_buf) };
+        let has_acl = { has_acl(&p_buf, ft.get().and_then(Option::as_ref)) };
 
         Self {
             md: OnceCell::new(),

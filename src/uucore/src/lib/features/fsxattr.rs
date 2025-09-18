@@ -8,6 +8,7 @@
 //! Set of functions to manage xattr on files and dirs
 use std::collections::HashMap;
 use std::ffi::OsString;
+use std::fs::FileType;
 use std::path::Path;
 use std::sync::LazyLock;
 
@@ -83,21 +84,21 @@ pub fn apply_xattrs<P: AsRef<Path>>(
 /// # Returns
 ///
 /// `true` if the file has extended attributes (indicating an ACL), `false` otherwise.
-pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
+pub fn has_acl<P: AsRef<Path>>(file: P, opt_metadata: Option<&FileType>) -> bool {
     // don't use exacl here, it is doing more getxattr call then needed
     xattr::get_deref(&file, &*POSIX_ACL_ACCESS_KEY)
         .ok()
         .flatten()
         .or_else(|| {
-            // Default ACL only applies to directories
+            // Default ACL only applies to directories - avoid 2nd syscall here
             // See: https://www.usenix.org/legacy/publications/library/proceedings/usenix03/tech/freenix03/full_papers/gruenbacher/gruenbacher_html/main.html
-            if file.as_ref().is_dir() {
-                return xattr::get_deref(&file, &*POSIX_ACL_DEFAULT_KEY)
-                    .ok()
-                    .flatten();
+            if opt_metadata.map(|ft| !ft.is_dir()).unwrap_or(false) {
+                return None;
             }
 
-            None
+            xattr::get_deref(&file, &*POSIX_ACL_DEFAULT_KEY)
+                .ok()
+                .flatten()
         })
         .map(|vec| !vec.is_empty())
         .unwrap_or(false)
