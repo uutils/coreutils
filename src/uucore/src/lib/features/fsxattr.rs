@@ -9,6 +9,12 @@
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::Path;
+use std::sync::LazyLock;
+
+static POSIX_ACL_ACCESS_KEY: LazyLock<OsString> =
+    LazyLock::new(|| "system.posix_acl_access".into());
+static POSIX_ACL_DEFAULT_KEY: LazyLock<OsString> =
+    LazyLock::new(|| "system.posix_acl_default".into());
 
 /// Copies extended attributes (xattrs) from one file or directory to another.
 ///
@@ -79,14 +85,16 @@ pub fn apply_xattrs<P: AsRef<Path>>(
 /// `true` if the file has extended attributes (indicating an ACL), `false` otherwise.
 pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
     // don't use exacl here, it is doing more getxattr call then needed
-    // FYI: GNU does not count the default ACL ("system.posix_acl_default") as an ACL
-    match xattr::get_deref(&file, "system.posix_acl_access")
+    xattr::get_deref(&file, &*POSIX_ACL_ACCESS_KEY)
         .ok()
         .flatten()
-    {
-        Some(vec) => !vec.is_empty(),
-        None => false,
-    }
+        .or_else(|| {
+            xattr::get_deref(&file, &*POSIX_ACL_DEFAULT_KEY)
+                .ok()
+                .flatten()
+        })
+        .map(|vec| !vec.is_empty())
+        .unwrap_or(false)
 }
 
 /// Returns the permissions bits of a file or directory which has Access Control List (ACL) entries based on its
@@ -107,7 +115,7 @@ pub fn get_acl_perm_bits_from_xattr<P: AsRef<Path>>(source: P) -> u32 {
     // will have their permissions modified.
     if let Ok(entries) = retrieve_xattrs(source) {
         let mut perm: u32 = 0;
-        if let Some(value) = entries.get(&OsString::from("system.posix_acl_default")) {
+        if let Some(value) = entries.get(&*POSIX_ACL_DEFAULT_KEY) {
             // value is xattr byte vector
             // value follows a starts with a 4 byte header, and then has posix_acl_entries, each
             // posix_acl_entry is separated by a u32 sequence i.e. 0xFFFFFFFF
