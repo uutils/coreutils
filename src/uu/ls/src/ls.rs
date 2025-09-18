@@ -1826,27 +1826,21 @@ impl PathData {
 
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
-        fn get_file_type(
-            de: &DirEntry,
-            p_buf: &Path,
-            must_dereference: bool,
-        ) -> OnceCell<Option<FileType>> {
+        fn get_file_type(de: &DirEntry, must_dereference: bool) -> Option<FileType> {
             if must_dereference {
-                if let Ok(md_pb) = p_buf.metadata() {
-                    return OnceCell::from(Some(md_pb.file_type()));
-                }
+                // wait for metadata call to populate file type
+                return None;
             }
+
             if let Ok(ft_de) = de.file_type() {
-                OnceCell::from(Some(ft_de))
-            } else if let Ok(md_pb) = p_buf.symlink_metadata() {
-                OnceCell::from(Some(md_pb.file_type()))
-            } else {
-                OnceCell::new()
+                return Some(ft_de);
             }
+
+            None
         }
 
         let ft = match de {
-            Some(ref de) => get_file_type(de, &p_buf, must_dereference),
+            Some(ref de) => OnceCell::from(get_file_type(de, must_dereference)),
             None => OnceCell::new(),
         };
 
