@@ -1782,6 +1782,7 @@ struct PathData {
     must_dereference: bool,
     security_context: String,
     command_line: bool,
+    has_acl: bool,
 }
 
 impl PathData {
@@ -1846,12 +1847,19 @@ impl PathData {
                 OnceCell::new()
             }
         }
+
         let ft = match de {
             Some(ref de) => get_file_type(de, &p_buf, must_dereference),
             None => OnceCell::new(),
         };
 
         let security_context = get_security_context(config, &p_buf, must_dereference);
+
+        #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
+        // TODO: See how Mac should work here
+        let has_acl = false;
+        #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+        let has_acl = { has_acl(&p_buf) };
 
         Self {
             md: OnceCell::new(),
@@ -1862,6 +1870,7 @@ impl PathData {
             must_dereference,
             security_context,
             command_line,
+            has_acl,
         }
     }
 
@@ -2703,11 +2712,9 @@ fn display_item_long(
         output_display.extend(b"  ");
     }
     if let Some(md) = item.get_metadata(&mut state.out) {
-        #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
         // TODO: See how Mac should work here
-        let is_acl_set = false;
-        #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let is_acl_set = has_acl(item.display_name.as_os_str());
+        let is_acl_set = item.has_acl;
+
         output_display.extend(display_permissions(md, true).as_bytes());
         if item.security_context.len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
