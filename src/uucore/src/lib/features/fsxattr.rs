@@ -84,7 +84,7 @@ pub fn apply_xattrs<P: AsRef<Path>>(
 /// # Returns
 ///
 /// `true` if the file has extended attributes (indicating an ACL), `false` otherwise.
-pub fn has_acl<P: AsRef<Path>>(file: P, opt_metadata: Option<&FileType>) -> bool {
+pub fn has_acl<P: AsRef<Path>>(file: P, opt_ft: Option<&FileType>) -> bool {
     // don't use exacl here, it is doing more getxattr call then needed
     xattr::get_deref(&file, &*POSIX_ACL_ACCESS_KEY)
         .ok()
@@ -92,7 +92,7 @@ pub fn has_acl<P: AsRef<Path>>(file: P, opt_metadata: Option<&FileType>) -> bool
         .or_else(|| {
             // Default ACL only applies to directories - avoid 2nd syscall here
             // See: https://www.usenix.org/legacy/publications/library/proceedings/usenix03/tech/freenix03/full_papers/gruenbacher/gruenbacher_html/main.html
-            if opt_metadata.map(|ft| !ft.is_dir()).unwrap_or(false) {
+            if opt_ft.map(|ft| !ft.is_dir()).unwrap_or(false) {
                 return None;
             }
 
