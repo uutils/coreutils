@@ -34,7 +34,7 @@
 /// Overall, the module ensures each entry in the DIRED output has the correct
 /// byte position, considering additional lines or padding affecting positions.
 ///
-use crate::Config;
+use crate::{Config, print_output_buf};
 use std::fmt;
 use std::io::{BufWriter, Stdout, Write};
 use uucore::error::UResult;
@@ -83,8 +83,9 @@ pub fn calculate_dired(
     (start, end)
 }
 
-pub fn indent(out: &mut BufWriter<Stdout>) -> UResult<()> {
-    write!(out, "  ")?;
+pub fn indent() -> UResult<()> {
+    print_output_buf("  ".as_bytes())?;
+
     Ok(())
 }
 

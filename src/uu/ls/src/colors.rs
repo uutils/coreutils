@@ -7,7 +7,6 @@ use super::get_metadata_with_deref_opt;
 use lscolors::{Indicator, LsColors, Style};
 use std::ffi::OsString;
 use std::fs::{DirEntry, Metadata};
-use std::io::{BufWriter, Stdout};
 
 /// We need this struct to be able to store the previous style.
 /// This because we need to check the previous value in case we don't need
@@ -153,7 +152,6 @@ pub(crate) fn color_name(
     name: OsString,
     path: &PathData,
     style_manager: &mut StyleManager,
-    out: &mut BufWriter<Stdout>,
     target_symlink: Option<&PathData>,
     wrap: bool,
 ) -> OsString {
@@ -193,7 +191,7 @@ pub(crate) fn color_name(
         let md = md_res.or_else(|_| path.p_buf.symlink_metadata());
         style_manager.apply_style_based_on_metadata(path, md.ok().as_ref(), name, wrap)
     } else {
-        let md_option = path.get_metadata(out);
+        let md_option = path.get_metadata();
         let symlink_metadata = path.p_buf.symlink_metadata().ok();
         let md = md_option.or(symlink_metadata.as_ref());
         style_manager.apply_style_based_on_metadata(path, md, name, wrap)
