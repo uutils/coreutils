@@ -80,7 +80,13 @@ pub fn apply_xattrs<P: AsRef<Path>>(
 pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
     // don't use exacl here, it is doing more getxattr call then needed
     // FYI: GNU does not count the default ACL ("system.posix_acl_default") as an ACL
-    xattr::get_deref(&file, "system.posix_acl_access").is_ok()
+    match xattr::get_deref(&file, "system.posix_acl_access")
+        .ok()
+        .flatten()
+    {
+        Some(vec) => !vec.is_empty(),
+        None => false,
+    }
 }
 
 /// Returns the permissions bits of a file or directory which has Access Control List (ACL) entries based on its
