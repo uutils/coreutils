@@ -1839,10 +1839,10 @@ impl PathData {
             None
         }
 
-        let ft = match de {
-            Some(ref de) => OnceCell::from(get_file_type(de, must_dereference)),
-            None => OnceCell::new(),
-        };
+        let ft = de
+            .as_ref()
+            .map(|de| OnceCell::from(get_file_type(&de, must_dereference)))
+            .unwrap_or_else(|| OnceCell::new());
 
         let security_context = get_security_context(config, &p_buf, must_dereference);
 
