@@ -1787,7 +1787,7 @@ struct PathData {
 impl PathData {
     fn new(
         p_buf: PathBuf,
-        dir_entry: Option<std::io::Result<DirEntry>>,
+        dir_entry: Option<DirEntry>,
         file_name: Option<OsString>,
         config: &Config,
         command_line: bool,
@@ -1804,6 +1804,7 @@ impl PathData {
                 .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
                 .to_owned()
         };
+
         let must_dereference = match &config.dereference {
             Dereference::All => true,
             Dereference::Args => command_line,
@@ -1821,10 +1822,7 @@ impl PathData {
             Dereference::None => false,
         };
 
-        let de: Option<DirEntry> = match dir_entry {
-            Some(de) => de.ok(),
-            None => None,
-        };
+        let de: Option<DirEntry> = dir_entry;
 
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
@@ -1846,6 +1844,7 @@ impl PathData {
                 OnceCell::new()
             }
         }
+
         let ft = match de {
             Some(ref de) => get_file_type(de, &p_buf, must_dereference),
             None => OnceCell::new(),
@@ -2226,7 +2225,7 @@ fn enter_directory(
 
         if should_display(&dir_entry, config) {
             let entry_path_data =
-                PathData::new(dir_entry.path(), Some(Ok(dir_entry)), None, config, false);
+                PathData::new(dir_entry.path(), Some(dir_entry), None, config, false);
             entries.push(entry_path_data);
         }
     }
