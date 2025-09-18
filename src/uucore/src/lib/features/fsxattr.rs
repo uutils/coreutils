@@ -89,9 +89,15 @@ pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
         .ok()
         .flatten()
         .or_else(|| {
-            xattr::get_deref(&file, &*POSIX_ACL_DEFAULT_KEY)
-                .ok()
-                .flatten()
+            // Default ACL only applies to directories
+            // See: https://www.usenix.org/legacy/publications/library/proceedings/usenix03/tech/freenix03/full_papers/gruenbacher/gruenbacher_html/main.html
+            if file.as_ref().is_dir() {
+                return xattr::get_deref(&file, &*POSIX_ACL_DEFAULT_KEY)
+                    .ok()
+                    .flatten();
+            }
+
+            None
         })
         .map(|vec| !vec.is_empty())
         .unwrap_or(false)
