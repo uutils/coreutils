@@ -1,0 +1,44 @@
+name: stty PTY deep check
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *"
+
+jobs:
+  stty-pty-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+
+      - name: Build coreutils with stty feature
+        run: cargo build --features stty
+
+      - name: Show NCCS via PTY
+        run: |
+          script -q -c "python3 - <<'PY'
+          import termios, sys
+          try:
+              cc = len(termios.tcgetattr(sys.stdin.fileno())[6])
+              print('NCCS=', cc)
+          except Exception as e:
+              print('NCCS check failed:', e)
+          PY" /dev/null
+
+      - name: Round-trip current settings
+        run: |
+          script -q -c 'S="$(./target/debug/coreutils stty -g)"; ./target/debug/coreutils stty "$S"' /dev/null
+
+      - name: Apply Bluefin sample 1 (expect success if NCCS=32)
+        run: |
+          script -q -c './target/debug/coreutils stty "4500:5:bf:8a3b:3:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0"' /dev/null
+
+      - name: Apply Bluefin sample 2 (expect success if NCCS=32)
+        run: |
+          script -q -c './target/debug/coreutils stty "4400:5:bf:8a31:3:1c:7f:15:4:0:1:0:11:13:1a:0:12:0:17:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0"' /dev/null
+
