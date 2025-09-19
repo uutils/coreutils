@@ -1875,8 +1875,8 @@ impl PathData {
                 match get_metadata_with_deref_opt(self.p_buf.as_path(), self.must_dereference) {
                     Err(err) => {
                         // FIXME: A bit tricky to propagate the result here
-                        let mut out = stdout();
-                        out.flush().unwrap();
+                        let mut out = stdout().lock();
+                        let _ = out.flush();
                         let errno = err.raw_os_error().unwrap_or(1i32);
                         // a bad fd will throw an error when dereferenced,
                         // but GNU will not throw an error until a bad fd "dir"
@@ -1915,6 +1915,7 @@ impl PathData {
             .as_ref()
     }
 
+    #[cfg(unix)]
     fn is_executable_file(&self) -> bool {
         self.file_type().is_some_and(|f| f.is_file())
             && self.get_metadata().is_some_and(|md| file_is_executable(md))
