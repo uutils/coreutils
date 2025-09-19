@@ -133,16 +133,6 @@ impl<'a> StyleManager<'a> {
             .style_for_path_with_metadata(&path.p_buf, md_option);
         self.apply_style(style, name, wrap)
     }
-
-    pub(crate) fn apply_style_based_on_dir_entry(
-        &mut self,
-        dir_entry: &DirEntry,
-        name: OsString,
-        wrap: bool,
-    ) -> OsString {
-        let style = self.colors.style_for(dir_entry);
-        self.apply_style(style, name, wrap)
-    }
 }
 
 /// Colors the provided name based on the style determined for the given path
@@ -172,14 +162,6 @@ pub(crate) fn color_name(
         // If the file has capabilities, use a specific style for `ca` (capabilities)
         if has_capabilities {
             return style_manager.apply_style(capabilities, name, wrap);
-        }
-    }
-
-    if !path.must_dereference {
-        // If we need to dereference (follow) a symlink, we will need to get the metadata
-        if let Some(de) = &path.de {
-            // There is a DirEntry, we don't need to get the metadata for the color
-            return style_manager.apply_style_based_on_dir_entry(de, name, wrap);
         }
     }
 
