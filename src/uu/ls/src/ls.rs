@@ -1828,10 +1828,10 @@ impl PathData {
 
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
-        fn get_file_type(de: &DirEntry, must_dereference: bool) -> Option<FileType> {
+        fn get_file_type(de: &DirEntry, p_buf: &Path, must_dereference: bool) -> Option<FileType> {
             if must_dereference {
                 // wait for metadata call to populate file type
-                return None;
+                return p_buf.metadata().ok().map(|md| md.file_type());
             }
 
             if let Ok(ft_de) = de.file_type() {
@@ -1842,7 +1842,7 @@ impl PathData {
         }
 
         let ft = match de {
-            Some(ref de) => OnceCell::from(get_file_type(de, must_dereference)),
+            Some(ref de) => OnceCell::from(get_file_type(de, &p_buf, must_dereference)),
             None => OnceCell::new(),
         };
 
@@ -1899,9 +1899,19 @@ impl PathData {
             .as_ref()
     }
 
-    fn file_type(&self, out: &mut BufWriter<Stdout>) -> Option<&FileType> {
+    fn file_type(&self) -> Option<&FileType> {
         self.ft
-            .get_or_init(|| self.get_metadata(out).map(|md| md.file_type()))
+            .get_or_init(|| {
+                self.md
+                    .get_or_init(|| {
+                        match get_metadata_with_deref_opt(&self.p_buf, self.must_dereference) {
+                            Ok(md) => Some(md),
+                            Err(_) => self.de.as_ref().and_then(|de| de.metadata().ok()),
+                        }
+                    })
+                    .as_ref()
+                    .map(|md| md.file_type())
+            })
             .as_ref()
     }
 }
@@ -1985,7 +1995,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
             continue;
         }
 
-        let show_dir_contents = match path_data.file_type(&mut state.out) {
+        let show_dir_contents = match path_data.file_type() {
             Some(ft) => !config.directory && ft.is_dir(),
             None => {
                 set_exit_code(1);
@@ -2244,10 +2254,7 @@ fn enter_directory(
         for e in entries
             .iter()
             .skip(if config.files == Files::All { 2 } else { 0 })
-            .filter(|p| {
-                p.ft.get()
-                    .is_some_and(|o_ft| o_ft.is_some_and(|ft| ft.is_dir()))
-            })
+            .filter(|p| p.file_type().is_some_and(|ft| ft.is_dir()))
         {
             match fs::read_dir(&e.p_buf) {
                 Err(err) => {
@@ -2801,7 +2808,7 @@ fn display_item_long(
     } else {
         #[cfg(unix)]
         let leading_char = {
-            if let Some(Some(ft)) = item.ft.get() {
+            if let Some(ft) = item.file_type() {
                 if ft.is_char_device() {
                     "c"
                 } else if ft.is_block_device() {
@@ -2819,8 +2826,8 @@ fn display_item_long(
         };
         #[cfg(not(unix))]
         let leading_char = {
-            if let Some(Some(ft)) = item.ft.get() {
-                if ft.is_symlink() {
+            if let Some(ft) = item.file_type() {
+                if item.is_symlink() {
                     "l"
                 } else if ft.is_dir() {
                     "d"
@@ -3013,7 +3020,7 @@ fn file_is_executable(md: &Metadata) -> bool {
 }
 
 fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
-    let file_type = path.file_type(out)?;
+    let file_type = path.file_type()?;
 
     if file_type.is_dir() {
         Some('/')
@@ -3120,8 +3127,8 @@ fn display_item_name(
     }
 
     if config.format == Format::Long
-        && path.file_type(&mut state.out).is_some()
-        && path.file_type(&mut state.out).unwrap().is_symlink()
+        && path.file_type().is_some()
+        && path.file_type().unwrap().is_symlink()
         && !path.must_dereference
     {
         match path.p_buf.read_link() {
@@ -3154,7 +3161,7 @@ fn display_item_name(
                         )
                         .is_err()
                     {
-                        name.push(path.p_buf.read_link().unwrap());
+                        name.push(target);
                     } else {
                         name.push(color_name(
                             locale_aware_escape_name(target.as_os_str(), config.quoting_style),
