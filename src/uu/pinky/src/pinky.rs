@@ -13,6 +13,7 @@ mod platform;
 
 mod options {
     pub const LONG_FORMAT: &str = "long_format";
+    pub const LOOKUP: &str = "lookup";
     pub const OMIT_HOME_DIR: &str = "omit_home_dir";
     pub const OMIT_PROJECT_FILE: &str = "omit_project_file";
     pub const OMIT_PLAN_FILE: &str = "omit_plan_file";
@@ -100,6 +101,12 @@ pub fn uu_app() -> Command {
             Arg::new(options::USER)
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::Username),
+        )
+        .arg(
+            Arg::new(options::LOOKUP)
+                .long(options::LOOKUP)
+                .help(translate!("pinky-help-lookup"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             // Redefine the help argument to not include the short flag
