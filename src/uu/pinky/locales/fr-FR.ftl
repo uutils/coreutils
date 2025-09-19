@@ -19,6 +19,7 @@ pinky-help-omit-headings = omettre la ligne des en-têtes de colonnes en format 
 pinky-help-omit-name = omettre le nom complet de l'utilisateur en format court
 pinky-help-omit-name-host = omettre le nom complet et l'hôte distant de l'utilisateur en format court
 pinky-help-omit-name-host-time = omettre le nom complet, l'hôte distant et le temps d'inactivité de l'utilisateur en format court
+pinky-help-lookup = tenter de donner un forme canonique aux noms d'hôte avec DNS
 pinky-help-help = Afficher les informations d'aide
 
 # En-têtes de colonnes pour le format court
