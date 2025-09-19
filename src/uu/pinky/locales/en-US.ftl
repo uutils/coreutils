@@ -19,6 +19,7 @@ pinky-help-omit-headings = omit the line of column headings in short format
 pinky-help-omit-name = omit the user's full name in short format
 pinky-help-omit-name-host = omit the user's full name and remote host in short format
 pinky-help-omit-name-host-time = omit the user's full name, remote host and idle time in short format
+pinky-help-lookup = attempt to canonicalize hostnames via DNS
 pinky-help-help = Print help information
 
 # Column headers for short format
