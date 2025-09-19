@@ -1860,7 +1860,7 @@ impl PathData {
         }
     }
 
-    fn get_metadata(&self, out: &mut BufWriter<Stdout>) -> Option<&Metadata> {
+    fn get_metadata(&self) -> Option<&Metadata> {
         self.md
             .get_or_init(|| {
                 // check if we can use DirEntry metadata
@@ -1875,6 +1875,7 @@ impl PathData {
                 match get_metadata_with_deref_opt(self.p_buf.as_path(), self.must_dereference) {
                     Err(err) => {
                         // FIXME: A bit tricky to propagate the result here
+                        let mut out = stdout();
                         out.flush().unwrap();
                         let errno = err.raw_os_error().unwrap_or(1i32);
                         // a bad fd will throw an error when dereferenced,
@@ -1912,6 +1913,11 @@ impl PathData {
                     .map(|md| md.file_type())
             })
             .as_ref()
+    }
+
+    fn is_executable_file(&self) -> bool {
+        self.file_type().is_some_and(|f| f.is_file())
+            && self.get_metadata().is_some_and(|md| file_is_executable(md))
     }
 
     fn is_dangling_link(&self) -> bool {
@@ -1998,7 +2004,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         // Proper GNU handling is don't show if dereferenced symlink DNE
         // but only for the base dir, for a child dir show, and print ?s
         // in long format
-        if path_data.get_metadata(&mut state.out).is_none() {
+        if path_data.get_metadata().is_none() {
             continue;
         }
 
@@ -2017,8 +2023,8 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         }
     }
 
-    sort_entries(&mut files, config, &mut state.out);
-    sort_entries(&mut dirs, config, &mut state.out);
+    sort_entries(&mut files, config);
+    sort_entries(&mut dirs, config);
 
     if let Some(style_manager) = state.style_manager.as_mut() {
         // ls will try to write a reset before anything is written if normal
@@ -2090,17 +2096,17 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     Ok(())
 }
 
-fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<Stdout>) {
+fn sort_entries(entries: &mut [PathData], config: &Config) {
     match config.sort {
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
-                k.get_metadata(out)
+                k.get_metadata()
                     .and_then(|md| metadata_get_time(md, config.time))
                     .unwrap_or(UNIX_EPOCH),
             )
         }),
         Sort::Size => {
-            entries.sort_by_key(|k| Reverse(k.get_metadata(out).map_or(0, |md| md.len())));
+            entries.sort_by_key(|k| Reverse(k.get_metadata().map_or(0, |md| md.len())));
         }
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
@@ -2244,7 +2250,7 @@ fn enter_directory(
         }
     }
 
-    sort_entries(&mut entries, config, &mut state.out);
+    sort_entries(&mut entries, config);
 
     // Print total after any error display
     if config.format == Format::Long || config.alloc_size {
@@ -2322,7 +2328,7 @@ fn display_dir_entry_size(
     state: &mut ListState,
 ) -> (usize, usize, usize, usize, usize, usize) {
     // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
-    if let Some(md) = entry.get_metadata(&mut state.out) {
+    if let Some(md) = entry.get_metadata() {
         let (size_len, major_len, minor_len) = match display_len_or_rdev(md, config) {
             SizeOrDeviceId::Device(major, minor) => {
                 (major.len() + minor.len() + 2usize, major.len(), minor.len())
@@ -2379,7 +2385,7 @@ fn return_total(
     let mut total_size = 0;
     for item in items {
         total_size += item
-            .get_metadata(out)
+            .get_metadata()
             .as_ref()
             .map_or(0, |md| get_block_size(md, config));
     }
@@ -2397,13 +2403,12 @@ fn display_additional_leading_info(
     item: &PathData,
     padding: &PaddingCollection,
     config: &Config,
-    out: &mut BufWriter<Stdout>,
 ) -> UResult<String> {
     let mut result = String::new();
     #[cfg(unix)]
     {
         if config.inode {
-            let i = if let Some(md) = item.get_metadata(out) {
+            let i = if let Some(md) = item.get_metadata() {
                 get_inode(md)
             } else {
                 "?".to_owned()
@@ -2413,7 +2418,7 @@ fn display_additional_leading_info(
     }
 
     if config.alloc_size {
-        let s = if let Some(md) = item.get_metadata(out) {
+        let s = if let Some(md) = item.get_metadata() {
             display_size(get_block_size(md, config), config)
         } else {
             "?".to_owned()
@@ -2454,12 +2459,7 @@ fn display_items(
             let should_display_leading_info = config.alloc_size;
 
             if should_display_leading_info {
-                let more_info = display_additional_leading_info(
-                    item,
-                    &padding_collection,
-                    config,
-                    &mut state.out,
-                )?;
+                let more_info = display_additional_leading_info(item, &padding_collection, config)?;
 
                 write!(state.out, "{more_info}")?;
             }
@@ -2487,7 +2487,7 @@ fn display_items(
 
         let mut names_vec = Vec::new();
         for i in items {
-            let more_info = display_additional_leading_info(i, &padding, config, &mut state.out)?;
+            let more_info = display_additional_leading_info(i, &padding, config)?;
             // it's okay to set current column to zero which is used to decide
             // whether text will wrap or not, because when format is grid or
             // column ls will try to place the item name in a new line if it
@@ -2711,7 +2711,7 @@ fn display_item_long(
     if config.dired {
         output_display.extend(b"  ");
     }
-    if let Some(md) = item.get_metadata(&mut state.out) {
+    if let Some(md) = item.get_metadata() {
         #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
         // TODO: See how Mac should work here
         let is_acl_set = false;
@@ -3030,7 +3030,7 @@ fn file_is_executable(md: &Metadata) -> bool {
     return md.mode() & ((S_IXUSR | S_IXGRP | S_IXOTH) as u32) != 0;
 }
 
-fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
+fn classify_file(path: &PathData) -> Option<char> {
     let file_type = path.file_type()?;
 
     if file_type.is_dir() {
@@ -3044,11 +3044,9 @@ fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
                 Some('=')
             } else if file_type.is_fifo() {
                 Some('|')
-            } else if file_type.is_file()
                 // Safe unwrapping if the file was removed between listing and display
                 // See https://github.com/uutils/coreutils/issues/5371
-                && path.get_metadata(out).is_some_and(file_is_executable)
-            {
+            } else if path.is_executable_file() {
                 Some('*')
             } else {
                 None
@@ -3094,14 +3092,7 @@ fn display_item_name(
 
     if let Some(style_manager) = &mut state.style_manager {
         let len = name.len();
-        name = color_name(
-            name,
-            path,
-            style_manager,
-            &mut state.out,
-            None,
-            is_wrap(len),
-        );
+        name = color_name(name, path, style_manager, None, is_wrap(len));
     }
 
     if config.format != Format::Long && !more_info.is_empty() {
@@ -3111,7 +3102,7 @@ fn display_item_name(
     }
 
     if config.indicator_style != IndicatorStyle::None {
-        let sym = classify_file(path, &mut state.out);
+        let sym = classify_file(path);
 
         let char_opt = match config.indicator_style {
             IndicatorStyle::Classify => sym,
@@ -3165,7 +3156,7 @@ fn display_item_name(
                     // Because we use an absolute path, we can assume this is guaranteed to exist.
                     // Otherwise, we use path.md(), which will guarantee we color to the same
                     // color of non-existent symlinks according to style_for_path_with_metadata.
-                    if path.get_metadata(&mut state.out).is_none()
+                    if path.get_metadata().is_none()
                         && get_metadata_with_deref_opt(
                             target_data.p_buf.as_path(),
                             target_data.must_dereference,
@@ -3178,7 +3169,6 @@ fn display_item_name(
                             locale_aware_escape_name(target.as_os_str(), config.quoting_style),
                             path,
                             style_manager,
-                            &mut state.out,
                             Some(&target_data),
                             is_wrap(name.len()),
                         ));
@@ -3340,7 +3330,7 @@ fn calculate_padding_collection(
     for item in items {
         #[cfg(unix)]
         if config.inode {
-            let inode_len = if let Some(md) = item.get_metadata(&mut state.out) {
+            let inode_len = if let Some(md) = item.get_metadata() {
                 display_inode(md).len()
             } else {
                 continue;
@@ -3349,7 +3339,7 @@ fn calculate_padding_collection(
         }
 
         if config.alloc_size {
-            if let Some(md) = item.get_metadata(&mut state.out) {
+            if let Some(md) = item.get_metadata() {
                 let block_size_len = display_size(get_block_size(md, config), config).len();
                 padding_collections.block_size = block_size_len.max(padding_collections.block_size);
             }
@@ -3399,7 +3389,7 @@ fn calculate_padding_collection(
 
     for item in items {
         if config.alloc_size {
-            if let Some(md) = item.get_metadata(&mut state.out) {
+            if let Some(md) = item.get_metadata() {
                 let block_size_len = display_size(get_block_size(md, config), config).len();
                 padding_collections.block_size = block_size_len.max(padding_collections.block_size);
             }
