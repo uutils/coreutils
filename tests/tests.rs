@@ -328,6 +328,14 @@ mod test_stdbuf;
 #[path = "by-util/test_stty.rs"]
 mod test_stty;
 
+#[cfg(feature = "stty")]
+#[path = "by-util/test_stty_roundtrip.rs"]
+mod test_stty_roundtrip;
+
+#[cfg(feature = "stty")]
+#[path = "by-util/test_stty_hex_edges.rs"]
+mod test_stty_hex_edges;
+
 #[cfg(feature = "sum")]
 #[path = "by-util/test_sum.rs"]
 mod test_sum;

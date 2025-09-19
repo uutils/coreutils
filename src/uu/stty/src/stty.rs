@@ -268,6 +268,26 @@ fn stty(opts: &Options) -> UResult<()> {
     let mut valid_args: Vec<ArgOptions> = Vec::new();
 
     if let Some(args) = &opts.settings {
+        // Special case: if there is exactly one argument and it looks like a
+        // colon-separated hex save string, try to restore from it directly.
+        if args.len() == 1 {
+            let only = args[0];
+            // reject GNU gfmt1 (has '='), we only support raw colon hex here
+            let looks_like_save = only.contains(':') && !only.contains('=');
+            if looks_like_save {
+                // Try parsing and applying; if parsing fails, return a proper error
+                let mut termios = tcgetattr(opts.file.as_fd())?;
+                match try_apply_hex_save_string(only, &mut termios) {
+                    Ok(true) => {
+                        tcsetattr(opts.file.as_fd(), set_arg, &termios)?;
+                        return Ok(());
+                    }
+                    Ok(false) => { /* fall through to normal parsing */ }
+                    Err(e) => return Err(e),
+                }
+            }
+        }
+
         let mut args_iter = args.iter();
         while let Some(&arg) = args_iter.next() {
             match arg {
@@ -426,6 +446,97 @@ fn stty(opts: &Options) -> UResult<()> {
         print_settings(&termios, opts)?;
     }
     Ok(())
+}
+
+/// Try to parse and apply a colon-separated hex save string.
+/// Returns Ok(true) if applied; Ok(false) if it didn't look like a save string;
+/// Err(_) on parsing/validation errors.
+fn try_apply_hex_save_string(input: &str, termios: &mut Termios) -> Result<bool, Box<dyn UError>> {
+    // quick filter: ensure only hex digits and colons (lower/upper) and no spaces
+    // At this point, caller already detected a likely save string (':' present, no '=')
+    // So if we see any unexpected character, treat it as an invalid integer argument.
+    if input.is_empty()
+        || input
+            .find(|c: char| !(c.is_ascii_hexdigit() || c == ':'))
+            .is_some()
+    {
+        return Err(USimpleError::new(
+            1,
+            translate!(
+                "stty-error-invalid-integer-argument",
+                "value" => format!("'{input}'")
+            ),
+        )
+        .into());
+    }
+
+    let parts: Vec<&str> = input.split(':').collect();
+    if parts.len() < 5 {
+        return Err(USimpleError::new(
+            1,
+            translate!(
+                "stty-error-invalid-argument",
+                "arg" => input
+            ),
+        ));
+    }
+
+    // Parse first four hex fields as flags bits into platform tcflag_t
+    let parse_tcflag_hex = |s: &str| -> Result<nix::libc::tcflag_t, Box<dyn UError>> {
+        match u128::from_str_radix(s, 16) {
+            Ok(v) => Ok(v as nix::libc::tcflag_t),
+            Err(_) => Err(USimpleError::new(
+                1,
+                translate!("stty-error-invalid-integer-argument", "value" => format!("'{s}'")),
+            )
+            .into()),
+        }
+    };
+
+    let iflags_bits = parse_tcflag_hex(parts[0])?;
+    let oflags_bits = parse_tcflag_hex(parts[1])?;
+    let cflags_bits = parse_tcflag_hex(parts[2])?;
+    let lflags_bits = parse_tcflag_hex(parts[3])?;
+
+    // Convert to flag sets, truncating unknown bits like GNU does
+    termios.input_flags = InputFlags::from_bits_truncate(iflags_bits);
+    termios.output_flags = OutputFlags::from_bits_truncate(oflags_bits);
+    termios.control_flags = ControlFlags::from_bits_truncate(cflags_bits);
+    termios.local_flags = LocalFlags::from_bits_truncate(lflags_bits);
+
+    // Remaining parts are control chars; ensure the count matches NCCS
+    let required = termios.control_chars.len();
+    let cc_parts = &parts[4..];
+
+    if cc_parts.len() != required {
+        return Err(USimpleError::new(
+            1,
+            translate!(
+                "stty-error-invalid-argument",
+                "arg" => input
+            ),
+        )
+        .into());
+    }
+
+    for (i, p) in cc_parts.iter().enumerate() {
+        // control chars are bytes in hex; allow empty meaning 0 as a courtesy
+        let byte = if p.is_empty() {
+            0
+        } else {
+            match u8::from_str_radix(p, 16) {
+                Ok(v) => v,
+                Err(_) => return Err(USimpleError::new(
+                    1,
+                    translate!("stty-error-invalid-integer-argument", "value" => format!("'{p}'")),
+                )
+                .into()),
+            }
+        };
+        termios.control_chars[i] = byte;
+    }
+
+    Ok(true)
 }
 
 fn missing_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
