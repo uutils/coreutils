@@ -187,13 +187,17 @@ pub(crate) fn color_name(
         // use the optional target_symlink
         // Use fn get_metadata_with_deref_opt instead of get_metadata() here because ls
         // should not exit with an err, if we are unable to obtain the target_metadata
-        let md_res = get_metadata_with_deref_opt(&target.p_buf, path.must_dereference);
-        let md = md_res.or_else(|_| path.p_buf.symlink_metadata());
-        style_manager.apply_style_based_on_metadata(path, md.ok().as_ref(), name, wrap)
+        let md_option = get_metadata_with_deref_opt(&target.p_buf, path.must_dereference)
+            .ok()
+            .or_else(|| path.p_buf.symlink_metadata().ok());
+
+        style_manager.apply_style_based_on_metadata(path, md_option.as_ref(), name, wrap)
     } else {
-        let md_option = path.metadata();
-        let symlink_metadata = path.p_buf.symlink_metadata().ok();
-        let md = md_option.or(symlink_metadata.as_ref());
-        style_manager.apply_style_based_on_metadata(path, md, name, wrap)
+        let md_option: Option<Metadata> = path
+            .metadata()
+            .cloned()
+            .or_else(|| path.p_buf.symlink_metadata().ok());
+
+        style_manager.apply_style_based_on_metadata(path, md_option.as_ref(), name, wrap)
     }
 }
