@@ -2836,7 +2836,7 @@ fn display_item_long(
         #[cfg(not(unix))]
         let leading_char = {
             if let Some(ft) = item.file_type() {
-                if item.is_symlink() {
+                if ft.is_symlink() {
                     "l"
                 } else if ft.is_dir() {
                     "d"
