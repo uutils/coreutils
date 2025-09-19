@@ -1904,10 +1904,9 @@ impl PathData {
             .get_or_init(|| {
                 self.md
                     .get_or_init(|| {
-                        match get_metadata_with_deref_opt(&self.p_buf, self.must_dereference) {
-                            Ok(md) => Some(md),
-                            Err(_) => self.de.as_ref().and_then(|de| de.metadata().ok()),
-                        }
+                        get_metadata_with_deref_opt(&self.p_buf, self.must_dereference)
+                            .ok()
+                            .or_else(|| self.de.as_ref().and_then(|de| de.metadata().ok()))
                     })
                     .as_ref()
                     .map(|md| md.file_type())
@@ -2828,8 +2827,10 @@ fn display_item_long(
                 } else {
                     "-"
                 }
+            } else if item.is_dangling_link() {
+                "l"
             } else {
-                if item.is_dangling_link() { "l" } else { "-" }
+                "-"
             }
         };
         #[cfg(not(unix))]
@@ -2842,8 +2843,10 @@ fn display_item_long(
                 } else {
                     "-"
                 }
+            } else if item.is_dangling_link() {
+                "l"
             } else {
-                if item.is_dangling_link() { "l" } else { "-" }
+                "-"
             }
         };
 
