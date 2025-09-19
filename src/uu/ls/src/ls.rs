@@ -1914,6 +1914,10 @@ impl PathData {
             })
             .as_ref()
     }
+
+    fn is_broken_link(&self) -> bool {
+        self.de.is_some() && get_metadata_with_deref_opt(&self.p_buf, false).is_ok()
+    }
 }
 
 /// Show the directory name in the case where several arguments are given to ls
@@ -2821,7 +2825,7 @@ fn display_item_long(
                     "-"
                 }
             } else {
-                "-"
+                if item.is_broken_link() { "l" } else { "-" }
             }
         };
         #[cfg(not(unix))]
@@ -2835,7 +2839,7 @@ fn display_item_long(
                     "-"
                 }
             } else {
-                "-"
+                if item.is_broken_link() { "l" } else { "-" }
             }
         };
 
