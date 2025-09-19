@@ -6,7 +6,7 @@ use super::PathData;
 use super::get_metadata_with_deref_opt;
 use lscolors::{Indicator, LsColors, Style};
 use std::ffi::OsString;
-use std::fs::{DirEntry, Metadata};
+use std::fs::Metadata;
 
 /// We need this struct to be able to store the previous style.
 /// This because we need to check the previous value in case we don't need
