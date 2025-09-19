@@ -1915,8 +1915,12 @@ impl PathData {
             .as_ref()
     }
 
-    fn is_broken_link(&self) -> bool {
-        self.de.is_some() && get_metadata_with_deref_opt(&self.p_buf, false).is_ok()
+    fn is_dangling_link(&self) -> bool {
+        // deref enabled, self is real dir entry, self has metadata associated with link, but not with target
+        self.must_dereference
+            && self.de.is_some()
+            && self.file_type().is_none()
+            && get_metadata_with_deref_opt(&self.p_buf, false).is_ok()
     }
 }
 
@@ -2825,7 +2829,7 @@ fn display_item_long(
                     "-"
                 }
             } else {
-                if item.is_broken_link() { "l" } else { "-" }
+                if item.is_dangling_link() { "l" } else { "-" }
             }
         };
         #[cfg(not(unix))]
@@ -2839,7 +2843,7 @@ fn display_item_long(
                     "-"
                 }
             } else {
-                if item.is_broken_link() { "l" } else { "-" }
+                if item.is_dangling_link() { "l" } else { "-" }
             }
         };
 
