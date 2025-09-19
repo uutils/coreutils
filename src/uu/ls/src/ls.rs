@@ -1915,7 +1915,7 @@ impl PathData {
     #[cfg(unix)]
     fn is_executable_file(&self) -> bool {
         self.file_type().is_some_and(|f| f.is_file())
-            && self.metadata().is_some_and(|md| file_is_executable(md))
+            && self.metadata().is_some_and(file_is_executable)
     }
 }
 
@@ -3119,8 +3119,7 @@ fn display_item_name(
     }
 
     if config.format == Format::Long
-        && path.file_type().is_some()
-        && path.file_type().unwrap().is_symlink()
+        && path.file_type().is_some_and(|ft| ft.is_symlink())
         && !path.must_dereference
     {
         match path.p_buf.read_link() {
@@ -3379,7 +3378,7 @@ fn calculate_padding_collection(
 
     for item in items {
         if config.alloc_size {
-            if let Some(md) = item.get_metadata() {
+            if let Some(md) = item.metadata() {
                 let block_size_len = display_size(get_block_size(md, config), config).len();
                 padding_collections.block_size = block_size_len.max(padding_collections.block_size);
             }
