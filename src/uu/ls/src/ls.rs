@@ -1858,7 +1858,7 @@ impl PathData {
         }
     }
 
-    fn get_metadata(&self) -> Option<&Metadata> {
+    fn metadata(&self) -> Option<&Metadata> {
         self.md
             .get_or_init(|| {
                 // check if we can use DirEntry metadata
@@ -1900,23 +1900,8 @@ impl PathData {
 
     fn file_type(&self) -> Option<&FileType> {
         self.ft
-            .get_or_init(|| {
-                self.md
-                    .get_or_init(|| {
-                        get_metadata_with_deref_opt(&self.p_buf, self.must_dereference)
-                            .ok()
-                            .or_else(|| self.de.as_ref().and_then(|de| de.metadata().ok()))
-                    })
-                    .as_ref()
-                    .map(|md| md.file_type())
-            })
+            .get_or_init(|| self.metadata().map(|md| md.file_type()))
             .as_ref()
-    }
-
-    #[cfg(unix)]
-    fn is_executable_file(&self) -> bool {
-        self.file_type().is_some_and(|f| f.is_file())
-            && self.get_metadata().is_some_and(|md| file_is_executable(md))
     }
 
     fn is_dangling_link(&self) -> bool {
@@ -1924,7 +1909,13 @@ impl PathData {
         self.must_dereference
             && self.de.is_some()
             && self.file_type().is_none()
-            && get_metadata_with_deref_opt(&self.p_buf, false).is_ok()
+            && self.metadata().is_none()
+    }
+
+    #[cfg(unix)]
+    fn is_executable_file(&self) -> bool {
+        self.file_type().is_some_and(|f| f.is_file())
+            && self.metadata().is_some_and(|md| file_is_executable(md))
     }
 }
 
@@ -2003,7 +1994,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         // Proper GNU handling is don't show if dereferenced symlink DNE
         // but only for the base dir, for a child dir show, and print ?s
         // in long format
-        if path_data.get_metadata().is_none() {
+        if path_data.metadata().is_none() {
             continue;
         }
 
@@ -2099,13 +2090,13 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
     match config.sort {
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
-                k.get_metadata()
+                k.metadata()
                     .and_then(|md| metadata_get_time(md, config.time))
                     .unwrap_or(UNIX_EPOCH),
             )
         }),
         Sort::Size => {
-            entries.sort_by_key(|k| Reverse(k.get_metadata().map_or(0, |md| md.len())));
+            entries.sort_by_key(|k| Reverse(k.metadata().map_or(0, |md| md.len())));
         }
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
@@ -2327,7 +2318,7 @@ fn display_dir_entry_size(
     state: &mut ListState,
 ) -> (usize, usize, usize, usize, usize, usize) {
     // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
-    if let Some(md) = entry.get_metadata() {
+    if let Some(md) = entry.metadata() {
         let (size_len, major_len, minor_len) = match display_len_or_rdev(md, config) {
             SizeOrDeviceId::Device(major, minor) => {
                 (major.len() + minor.len() + 2usize, major.len(), minor.len())
@@ -2384,7 +2375,7 @@ fn return_total(
     let mut total_size = 0;
     for item in items {
         total_size += item
-            .get_metadata()
+            .metadata()
             .as_ref()
             .map_or(0, |md| get_block_size(md, config));
     }
@@ -2407,7 +2398,7 @@ fn display_additional_leading_info(
     #[cfg(unix)]
     {
         if config.inode {
-            let i = if let Some(md) = item.get_metadata() {
+            let i = if let Some(md) = item.metadata() {
                 get_inode(md)
             } else {
                 "?".to_owned()
@@ -2417,7 +2408,7 @@ fn display_additional_leading_info(
     }
 
     if config.alloc_size {
-        let s = if let Some(md) = item.get_metadata() {
+        let s = if let Some(md) = item.metadata() {
             display_size(get_block_size(md, config), config)
         } else {
             "?".to_owned()
@@ -2710,7 +2701,7 @@ fn display_item_long(
     if config.dired {
         output_display.extend(b"  ");
     }
-    if let Some(md) = item.get_metadata() {
+    if let Some(md) = item.metadata() {
         #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
         // TODO: See how Mac should work here
         let is_acl_set = false;
@@ -3155,7 +3146,7 @@ fn display_item_name(
                     // Because we use an absolute path, we can assume this is guaranteed to exist.
                     // Otherwise, we use path.md(), which will guarantee we color to the same
                     // color of non-existent symlinks according to style_for_path_with_metadata.
-                    if path.get_metadata().is_none()
+                    if path.metadata().is_none()
                         && get_metadata_with_deref_opt(
                             target_data.p_buf.as_path(),
                             target_data.must_dereference,
@@ -3329,7 +3320,7 @@ fn calculate_padding_collection(
     for item in items {
         #[cfg(unix)]
         if config.inode {
-            let inode_len = if let Some(md) = item.get_metadata() {
+            let inode_len = if let Some(md) = item.metadata() {
                 display_inode(md).len()
             } else {
                 continue;
@@ -3338,7 +3329,7 @@ fn calculate_padding_collection(
         }
 
         if config.alloc_size {
-            if let Some(md) = item.get_metadata() {
+            if let Some(md) = item.metadata() {
                 let block_size_len = display_size(get_block_size(md, config), config).len();
                 padding_collections.block_size = block_size_len.max(padding_collections.block_size);
             }

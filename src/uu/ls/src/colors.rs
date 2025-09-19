@@ -191,7 +191,7 @@ pub(crate) fn color_name(
         let md = md_res.or_else(|_| path.p_buf.symlink_metadata());
         style_manager.apply_style_based_on_metadata(path, md.ok().as_ref(), name, wrap)
     } else {
-        let md_option = path.get_metadata();
+        let md_option = path.metadata();
         let symlink_metadata = path.p_buf.symlink_metadata().ok();
         let md = md_option.or(symlink_metadata.as_ref());
         style_manager.apply_style_based_on_metadata(path, md, name, wrap)
