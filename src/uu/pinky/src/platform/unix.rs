@@ -64,6 +64,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // if true, use the "short" output format.
     let do_short_format = !matches.get_flag(options::LONG_FORMAT);
 
+    // If true, attempt to canonicalize hostname via a DNS lookup.
+    let do_lookup = matches.get_flag(options::LOOKUP);
+
     /* if true, display the ut_host field. */
     let mut include_where = true;
 
@@ -81,6 +84,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let pk = Pinky {
+        do_lookup,
         include_idle,
         include_heading,
         include_fullname,
@@ -103,6 +107,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 struct Pinky {
+    do_lookup: bool,
     include_idle: bool,
     include_heading: bool,
     include_fullname: bool,
@@ -206,10 +211,16 @@ impl Pinky {
 
         print!(" {}", time_string(ut));
 
-        let mut s = ut.host();
-        if self.include_where && !s.is_empty() {
-            s = ut.canon_host()?;
-            print!(" {s}");
+        if self.include_where {
+            let s: String = if self.do_lookup {
+                ut.canon_host().unwrap_or(ut.host())
+            } else {
+                ut.host()
+            };
+
+            if !s.is_empty() {
+                print!(" {s}");
+            }
         }
 
         println!();
