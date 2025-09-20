@@ -93,6 +93,19 @@ fn test_short_format_i() {
 #[cfg(unix)]
 #[test]
 #[cfg(not(target_os = "openbsd"))]
+fn test_lookup() {
+    let args = ["--lookup"];
+    let ts = TestScenario::new(util_name!());
+    let actual = ts.ucmd().args(&args).succeeds().stdout_move_str();
+    let expect = unwrap_or_return!(expected_result(&ts, &[])).stdout_move_str();
+    let v_actual: Vec<&str> = actual.split_whitespace().collect();
+    let v_expect: Vec<&str> = expect.split_whitespace().collect();
+    assert_eq!(v_actual, v_expect);
+}
+
+#[cfg(unix)]
+#[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_short_format_q() {
     // allow whitespace variation
     // * minor whitespace differences occur between platform built-in outputs; specifically, the number of trailing TABs may be variant
