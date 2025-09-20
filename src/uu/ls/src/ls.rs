@@ -39,7 +39,7 @@ use thiserror::Error;
 #[cfg(unix)]
 use uucore::entries;
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-use uucore::fsxattr::has_acl;
+use uucore::fsxattr::{has_acl, has_capability};
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 #[cfg(any(
@@ -2707,15 +2707,19 @@ fn display_item_long(
         #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
         // TODO: See how Mac should work here
         let has_acl = false;
+        #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
+        let has_cap = false;
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
         let has_acl = { has_acl(&item.p_buf, item.file_type(&mut state.out)) };
+        #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+        let has_cap = { has_capability(&item.p_buf) };
 
         output_display.extend(display_permissions(md, true).as_bytes());
         if item.security_context.len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
             output_display.extend(b".");
-        } else if has_acl {
+        } else if has_acl || has_cap {
             output_display.extend(b"+");
         }
         output_display.extend(b" ");

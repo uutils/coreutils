@@ -16,6 +16,7 @@ static POSIX_ACL_ACCESS_KEY: LazyLock<OsString> =
     LazyLock::new(|| "system.posix_acl_access".into());
 static POSIX_ACL_DEFAULT_KEY: LazyLock<OsString> =
     LazyLock::new(|| "system.posix_acl_default".into());
+static SET_CAPABILITY_KEY: LazyLock<OsString> = LazyLock::new(|| "security.capability".into());
 
 /// Copies extended attributes (xattrs) from one file or directory to another.
 ///
@@ -100,6 +101,24 @@ pub fn has_acl<P: AsRef<Path>>(file: P, opt_ft: Option<&FileType>) -> bool {
                 .ok()
                 .flatten()
         })
+        .map(|vec| !vec.is_empty())
+        .unwrap_or(false)
+}
+
+/// Checks if a file has an Capability set based on its extended attributes.
+///
+/// # Arguments
+///
+/// * `file` - A reference to the path of the file.
+///
+/// # Returns
+///
+/// `true` if the file has a capability extended attribute, `false` otherwise.
+pub fn has_capability<P: AsRef<Path>>(file: P) -> bool {
+    // don't use exacl here, it is doing more getxattr call then needed
+    xattr::get_deref(&file, &*SET_CAPABILITY_KEY)
+        .ok()
+        .flatten()
         .map(|vec| !vec.is_empty())
         .unwrap_or(false)
 }
