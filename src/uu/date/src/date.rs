@@ -3,14 +3,16 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
+// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres
 
 use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime;
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, Zoned};
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
-use libc::{CLOCK_REALTIME, clock_settime, timespec};
+use libc::clock_settime;
+#[cfg(unix)]
+use libc::{CLOCK_REALTIME, clock_getres, timespec};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -35,6 +37,7 @@ const OPT_FORMAT: &str = "format";
 const OPT_FILE: &str = "file";
 const OPT_DEBUG: &str = "debug";
 const OPT_ISO_8601: &str = "iso-8601";
+const OPT_RESOLUTION: &str = "resolution";
 const OPT_RFC_EMAIL: &str = "rfc-email";
 const OPT_RFC_822: &str = "rfc-822";
 const OPT_RFC_2822: &str = "rfc-2822";
@@ -57,6 +60,7 @@ enum Format {
     Iso8601(Iso8601Format),
     Rfc5322,
     Rfc3339(Rfc3339Format),
+    Resolution,
     Custom(String),
     Default,
 }
@@ -68,6 +72,7 @@ enum DateSource {
     FileMtime(PathBuf),
     Stdin,
     Human(String),
+    Resolution,
 }
 
 enum Iso8601Format {
@@ -136,6 +141,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|s| s.as_str().into())
     {
         Format::Rfc3339(fmt)
+    } else if matches.get_flag(OPT_RESOLUTION) {
+        Format::Resolution
     } else {
         Format::Default
     };
@@ -149,6 +156,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     } else if let Some(file) = matches.get_one::<String>(OPT_REFERENCE) {
         DateSource::FileMtime(file.into())
+    } else if matches.get_flag(OPT_RESOLUTION) {
+        DateSource::Resolution
     } else {
         DateSource::Now
     };
@@ -230,6 +239,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let iter = std::iter::once(Ok(date));
             Box::new(iter)
         }
+        DateSource::Resolution => {
+            let resolution = get_clock_resolution();
+            let date = resolution.to_zoned(TimeZone::system());
+            let iter = std::iter::once(Ok(date));
+            Box::new(iter)
+        }
         DateSource::Now => {
             let iter = std::iter::once(Ok(now));
             Box::new(iter)
@@ -296,6 +311,13 @@ pub fn uu_app() -> Command {
                 .num_args(0..=1)
                 .default_missing_value(OPT_DATE)
                 .help(translate!("date-help-iso-8601")),
+        )
+        .arg(
+            Arg::new(OPT_RESOLUTION)
+                .long(OPT_RESOLUTION)
+                .overrides_with(OPT_RESOLUTION)
+                .help(translate!("date-help-resolution"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_RFC_EMAIL)
@@ -374,6 +396,7 @@ fn make_format_string(settings: &Settings) -> &str {
             Rfc3339Format::Seconds => "%F %T%:z",
             Rfc3339Format::Ns => "%F %T.%N%:z",
         },
+        Format::Resolution => "%s.%N",
         Format::Custom(ref fmt) => fmt,
         Format::Default => "%a %b %e %X %Z %Y",
     }
@@ -396,6 +419,41 @@ fn parse_date<S: AsRef<str> + Clone>(
         }
         Err(e) => Err((s.as_ref().into(), e)),
     }
+}
+
+#[cfg(not(any(unix, windows)))]
+fn get_clock_resolution() -> Timestamp {
+    unimplemented!("getting clock resolution not implemented (unsupported target)");
+}
+
+#[cfg(unix)]
+fn get_clock_resolution() -> Timestamp {
+    let mut timespec = timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    unsafe {
+        // SAFETY: the timespec struct lives for the full duration of this function call.
+        //
+        // The clock_getres function can only fail if the passed clock_id is not
+        // a known clock. All compliant posix implementors must support
+        // CLOCK_REALTIME, therefore this function call cannot fail on any
+        // compliant posix implementation.
+        //
+        // See more here:
+        // https://pubs.opengroup.org/onlinepubs/9799919799/functions/clock_getres.html
+        clock_getres(CLOCK_REALTIME, &raw mut timespec);
+    }
+    Timestamp::constant(timespec.tv_sec, timespec.tv_nsec as i32)
+}
+
+#[cfg(windows)]
+fn get_clock_resolution() -> Timestamp {
+    // Windows does not expose a system call for getting the resolution of the
+    // clock, however the FILETIME struct returned by GetSystemTimeAsFileTime,
+    // and GetSystemTimePreciseAsFileTime has a resolution of 100ns.
+    // https://learn.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-filetime
+    Timestamp::constant(0, 100)
 }
 
 #[cfg(not(any(unix, windows)))]
