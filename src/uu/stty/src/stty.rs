@@ -466,8 +466,7 @@ fn try_apply_hex_save_string(input: &str, termios: &mut Termios) -> Result<bool,
                 "stty-error-invalid-integer-argument",
                 "value" => format!("'{input}'")
             ),
-        )
-        .into());
+        ));
     }
 
     let parts: Vec<&str> = input.split(':').collect();
@@ -488,8 +487,7 @@ fn try_apply_hex_save_string(input: &str, termios: &mut Termios) -> Result<bool,
             Err(_) => Err(USimpleError::new(
                 1,
                 translate!("stty-error-invalid-integer-argument", "value" => format!("'{s}'")),
-            )
-            .into()),
+            )),
         }
     };
 
@@ -515,8 +513,7 @@ fn try_apply_hex_save_string(input: &str, termios: &mut Termios) -> Result<bool,
                 "stty-error-invalid-argument",
                 "arg" => input
             ),
-        )
-        .into());
+        ));
     }
 
     for (i, p) in cc_parts.iter().enumerate() {
@@ -526,11 +523,12 @@ fn try_apply_hex_save_string(input: &str, termios: &mut Termios) -> Result<bool,
         } else {
             match u8::from_str_radix(p, 16) {
                 Ok(v) => v,
-                Err(_) => return Err(USimpleError::new(
-                    1,
-                    translate!("stty-error-invalid-integer-argument", "value" => format!("'{p}'")),
-                )
-                .into()),
+                Err(_) => {
+                    return Err(USimpleError::new(
+                        1,
+                        translate!("stty-error-invalid-integer-argument", "value" => format!("'{p}'")),
+                    ));
+                }
             }
         };
         termios.control_chars[i] = byte;
