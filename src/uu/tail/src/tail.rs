@@ -50,7 +50,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let settings = parse_args(args)?;
-
     settings.check_warnings();
 
     match settings.verify() {
@@ -74,6 +73,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
     let mut observer = Observer::from(settings);
 
     observer.start(settings)?;
+
     // Do an initial tail print of each path's content.
     // Add `path` and `reader` to `files` map if `--follow` is selected.
     for input in &settings.inputs.clone() {
@@ -100,7 +100,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
         the input file is not a FIFO, pipe, or regular file, it is unspecified whether or
         not the -f option shall be ignored.
         */
-        if !settings.has_only_stdin() || settings.pid != 0 {
+        if !settings.has_only_stdin() || settings.pid != 0 || settings.stdin_is_regular_file() {
             follow::follow(observer, settings)?;
         }
     }
