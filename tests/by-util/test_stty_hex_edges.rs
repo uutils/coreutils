@@ -6,9 +6,21 @@ use std::path::Path;
 use uutests::new_ucmd;
 
 fn dev_tty_available() -> bool {
+    #[cfg(target_os = "android")]
+    {
+        return false; // Android CI/Termux often lacks a usable /dev/tty for non-interactive shells
+    }
     #[cfg(unix)]
     {
-        Path::new("/dev/tty").exists()
+        use std::fs::File;
+        use std::os::fd::AsRawFd;
+        if !Path::new("/dev/tty").exists() {
+            return false;
+        }
+        if let Ok(f) = File::open("/dev/tty") {
+            return nix::unistd::isatty(f).unwrap_or(false);
+        }
+        false
     }
     #[cfg(not(unix))]
     {
@@ -31,13 +43,7 @@ fn nccs_of(save: &str) -> usize {
 
 fn with_uppercase_hex(s: &str) -> String {
     s.chars()
-        .map(|c| {
-            if c.is_ascii_hexdigit() {
-                c.to_ascii_uppercase()
-            } else {
-                c
-            }
-        })
+        .map(|c| if c.is_ascii_hexdigit() { c.to_ascii_uppercase() } else { c })
         .collect()
 }
 
@@ -50,7 +56,10 @@ fn stty_hex_minimal_ccs_exact_nccs() {
         return;
     }
     let save = stty_g().expect("stty -g should succeed");
-    let mut parts: Vec<String> = save.split(':').map(|s| s.to_string()).collect();
+    let mut parts: Vec<String> = save
+        .split(':')
+        .map(std::string::ToString::to_string)
+        .collect();
     let nccs = nccs_of(&save);
     assert!(parts.len() >= 4 + nccs);
     // Keep first 4 flag fields; set all CCs to 0
@@ -84,19 +93,22 @@ fn stty_hex_leading_zeros_everywhere() {
         return;
     }
     let save = stty_g().unwrap();
-    let mut parts: Vec<String> = save.split(':').map(|s| s.to_string()).collect();
+    let mut parts: Vec<String> = save
+        .split(':')
+        .map(std::string::ToString::to_string)
+        .collect();
     // Prepend zeros to each field
     for p in &mut parts {
         if p.is_empty() {
             *p = "0".into();
         } else {
-            *p = format!("000{}", p);
+            *p = format!("000{p}");
         }
     }
     let padded = parts.join(":");
     new_ucmd!().args(&["-F", "/dev/tty", &padded]).succeeds();
     // Round-trip equivalence (canonical output can differ in width, so compare via new -g)
-    let post = stty_g().unwrap();
+
     // Apply original and confirm it reverts to canonical original
     new_ucmd!().args(&["-F", "/dev/tty", &save]).succeeds();
     let back = stty_g().unwrap();
@@ -126,7 +138,10 @@ fn stty_hex_extra_cc_field() {
         return;
     }
     let save = stty_g().unwrap();
-    let mut parts: Vec<String> = save.split(':').map(|s| s.to_string()).collect();
+    let mut parts: Vec<String> = save
+        .split(':')
+        .map(std::string::ToString::to_string)
+        .collect();
     parts.push("0".into()); // add one extra CC
     let extra = parts.join(":");
     new_ucmd!()
@@ -143,7 +158,10 @@ fn stty_hex_malformed_flag_hex() {
         return;
     }
     let save = stty_g().unwrap();
-    let mut parts: Vec<String> = save.split(':').map(|s| s.to_string()).collect();
+    let mut parts: Vec<String> = save
+        .split(':')
+        .map(std::string::ToString::to_string)
+        .collect();
     parts[1] = "zz".into();
     let bad = parts.join(":");
     new_ucmd!()
@@ -160,7 +178,7 @@ fn stty_hex_unexpected_trailing_space() {
         return;
     }
     let save = stty_g().unwrap();
-    let bad = format!("{} ", save); // append a space
+    let bad = format!("{save} "); // append a space
     new_ucmd!()
         .args(&["-F", "/dev/tty", &bad])
         .fails_with_code(1)
@@ -175,7 +193,10 @@ fn stty_hex_platform_nccs_mismatch() {
         return;
     }
     let save = stty_g().unwrap();
-    let mut parts: Vec<String> = save.split(':').map(|s| s.to_string()).collect();
+    let parts: Vec<String> = save
+        .split(':')
+        .map(std::string::ToString::to_string)
+        .collect();
     let nccs = nccs_of(&save);
 
     // Case A: NCCS-1
@@ -207,7 +228,10 @@ fn stty_hex_unknown_flag_bits_truncated() {
         return;
     }
     let save = stty_g().unwrap();
-    let mut parts: Vec<String> = save.split(':').map(|s| s.to_string()).collect();
+    let mut parts: Vec<String> = save
+        .split(':')
+        .map(std::string::ToString::to_string)
+        .collect();
     // Add a high bit to input flags (field 0). Parse as hex, OR a high bit, and format back.
     // Use u128 to be safe across widths; renderer will truncate via from_bits_truncate.
     if let Ok(v) = u128::from_str_radix(&parts[0], 16) {
@@ -216,7 +240,7 @@ fn stty_hex_unknown_flag_bits_truncated() {
         } else {
             v | (1u128 << 63)
         };
-        parts[0] = format!("{:x}", v2);
+        parts[0] = format!("{v2:x}");
         let modded = parts.join(":");
         new_ucmd!().args(&["-F", "/dev/tty", &modded]).succeeds();
         // Round-trip back to original to confirm no persistent corruption

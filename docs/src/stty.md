@@ -70,8 +70,8 @@ The implementation has been validated with an extensive suite of edge-case tests
 - Error handling
   - Insufficient fields (< 5 total): rejected with exit code 1 and "invalid argument".
   - Extra CC fields (> NCCS): rejected with exit code 1 and "invalid argument".
-  - Malformed hex in any flag field: rejected with exit code 1 and "invalid integer argument '<chunk>'".
-  - Unexpected characters (spaces, punctuation): rejected early with exit code 1 and "invalid integer argument '<input>'".
+  - Malformed hex in any flag field: rejected with exit code 1 and "invalid integer argument '&lt;chunk&gt;'".
+  - Unexpected characters (spaces, punctuation): rejected early with exit code 1 and "invalid integer argument '&lt;input&gt;'".
 
 - Platform compatibility
   - Exact CC count enforced using the platform’s runtime NCCS; NCCS−1 and NCCS+1 inputs are rejected.

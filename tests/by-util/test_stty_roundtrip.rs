@@ -5,9 +5,21 @@ use std::path::Path;
 use uutests::new_ucmd;
 
 fn dev_tty_available() -> bool {
+    #[cfg(target_os = "android")]
+    {
+        return false; // Android CI/Termux often lacks a usable /dev/tty for non-interactive shells
+    }
     #[cfg(unix)]
     {
-        Path::new("/dev/tty").exists()
+        use std::fs::File;
+        if !Path::new("/dev/tty").exists() {
+            return false;
+        }
+        if let Ok(f) = File::open("/dev/tty") {
+            // Ensure it is a real TTY
+            return nix::unistd::isatty(f).unwrap_or(false);
+        }
+        false
     }
     #[cfg(not(unix))]
     {
@@ -57,7 +69,10 @@ fn malformed_save_strings_dev_tty() {
     }
 
     // Case 2: non-hex content in a CC position
-    let mut parts: Vec<String> = save.split(':').map(|s| s.to_string()).collect();
+    let mut parts: Vec<String> = save
+        .split(':')
+        .map(std::string::ToString::to_string)
+        .collect();
     if parts.len() >= 5 {
         parts[4] = "zz".into(); // corrupt first CC
         let corrupted = parts.join(":");
