@@ -8,6 +8,8 @@
 
 #[cfg(feature = "backup-control")]
 pub mod backup_control;
+#[cfg(feature = "bench-utils")]
+pub mod bench_utils;
 #[cfg(feature = "buf-copy")]
 pub mod buf_copy;
 #[cfg(feature = "checksum")]

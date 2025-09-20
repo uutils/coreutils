@@ -3045,7 +3045,9 @@ name = "uu_base64"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "divan",
  "fluent",
+ "tempfile",
  "uu_base32",
  "uucore",
 ]
@@ -4166,6 +4168,7 @@ dependencies = [
  "data-encoding",
  "data-encoding-macro",
  "digest",
+ "divan",
  "dns-lookup",
  "dunce",
  "fluent",

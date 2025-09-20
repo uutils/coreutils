@@ -36,6 +36,8 @@ pub use crate::mods::posix;
 // * feature-gated modules
 #[cfg(feature = "backup-control")]
 pub use crate::features::backup_control;
+#[cfg(feature = "bench-utils")]
+pub use crate::features::bench_utils;
 #[cfg(feature = "buf-copy")]
 pub use crate::features::buf_copy;
 #[cfg(feature = "checksum")]

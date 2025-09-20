@@ -79,6 +79,7 @@ fluent-syntax = { workspace = true }
 unic-langid = { workspace = true }
 fluent-bundle = { workspace = true }
 thiserror = { workspace = true }
+divan = { workspace = true, optional = true }
 [target.'cfg(unix)'.dependencies]
 walkdir = { workspace = true, optional = true }
 nix = { workspace = true, features = [
@@ -92,6 +93,7 @@ xattr = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+divan = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi-util = { workspace = true, optional = true }
@@ -169,3 +171,4 @@ wide = []
 tty = []
 time = ["jiff"]
 uptime = ["chrono", "libc", "windows-sys", "utmpx", "utmp-classic"]
+bench-utils = ["divan"]
