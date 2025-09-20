@@ -262,8 +262,7 @@ mod tests {
         assert!(!has_acl(&file_path, None));
 
         let test_attr = "system.posix_acl_access";
-        let user = std::env::var("USER").unwrap();
-        let test_value = format!("user:{user}:rw-");
+        let test_value = "invalid_test_value";
         xattr::set(&file_path, test_attr, test_value.as_bytes()).unwrap();
 
         assert!(has_acl(&file_path, None));
