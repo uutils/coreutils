@@ -107,7 +107,7 @@ fn reader(
 ) -> UResult<()> {
     let mut carry_over = vec![];
     for recycled_chunk in receiver {
-        let should_continue = chunks::read(
+        let progress = chunks::read(
             sender,
             recycled_chunk,
             None,
@@ -117,7 +117,7 @@ fn reader(
             settings.line_ending.into(),
             settings,
         )?;
-        if !should_continue {
+        if matches!(progress, chunks::ReadProgress::Finished) {
             break;
         }
     }
