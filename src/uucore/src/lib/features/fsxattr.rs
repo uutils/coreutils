@@ -8,7 +8,14 @@
 //! Set of functions to manage xattr on files and dirs
 use std::collections::HashMap;
 use std::ffi::OsString;
+use std::fs::FileType;
 use std::path::Path;
+use std::sync::LazyLock;
+
+static POSIX_ACL_ACCESS_KEY: LazyLock<OsString> =
+    LazyLock::new(|| "system.posix_acl_access".into());
+static POSIX_ACL_DEFAULT_KEY: LazyLock<OsString> =
+    LazyLock::new(|| "system.posix_acl_default".into());
 
 /// Copies extended attributes (xattrs) from one file or directory to another.
 ///
@@ -77,12 +84,24 @@ pub fn apply_xattrs<P: AsRef<Path>>(
 /// # Returns
 ///
 /// `true` if the file has extended attributes (indicating an ACL), `false` otherwise.
-pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
+pub fn has_acl<P: AsRef<Path>>(file: P, opt_ft: Option<&FileType>) -> bool {
     // don't use exacl here, it is doing more getxattr call then needed
-    xattr::list_deref(file).is_ok_and(|acl| {
-        // if we have extra attributes, we have an acl
-        acl.count() > 0
-    })
+    xattr::get_deref(&file, &*POSIX_ACL_ACCESS_KEY)
+        .ok()
+        .flatten()
+        .or_else(|| {
+            // Default ACL only applies to directories - avoid 2nd syscall here
+            // See: https://www.usenix.org/legacy/publications/library/proceedings/usenix03/tech/freenix03/full_papers/gruenbacher/gruenbacher_html/main.html
+            if opt_ft.map(|ft| !ft.is_dir()).unwrap_or(false) {
+                return None;
+            }
+
+            xattr::get_deref(&file, &*POSIX_ACL_DEFAULT_KEY)
+                .ok()
+                .flatten()
+        })
+        .map(|vec| !vec.is_empty())
+        .unwrap_or(false)
 }
 
 /// Returns the permissions bits of a file or directory which has Access Control List (ACL) entries based on its
@@ -103,7 +122,7 @@ pub fn get_acl_perm_bits_from_xattr<P: AsRef<Path>>(source: P) -> u32 {
     // will have their permissions modified.
     if let Ok(entries) = retrieve_xattrs(source) {
         let mut perm: u32 = 0;
-        if let Some(value) = entries.get(&OsString::from("system.posix_acl_default")) {
+        if let Some(value) = entries.get(&*POSIX_ACL_DEFAULT_KEY) {
             // value is xattr byte vector
             // value follows a starts with a 4 byte header, and then has posix_acl_entries, each
             // posix_acl_entry is separated by a u32 sequence i.e. 0xFFFFFFFF
@@ -240,12 +259,15 @@ mod tests {
 
         File::create(&file_path).unwrap();
 
-        assert!(!has_acl(&file_path));
+        assert!(!has_acl(&file_path, None));
 
-        let test_attr = "user.test_acl";
-        let test_value = b"test value";
-        xattr::set(&file_path, test_attr, test_value).unwrap();
+        let test_attr = "system.posix_acl_access";
+        let test_value = "invalid_test_value";
+        // perhaps can't set actual ACL in test environment? if so, return early
+        let Ok(_) = xattr::set(&file_path, test_attr, test_value.as_bytes()) else {
+            return;
+        };
 
-        assert!(has_acl(&file_path));
+        assert!(has_acl(&file_path, None));
     }
 }

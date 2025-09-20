@@ -1846,6 +1846,7 @@ impl PathData {
                 OnceCell::new()
             }
         }
+
         let ft = match de {
             Some(ref de) => get_file_type(de, &p_buf, must_dereference),
             None => OnceCell::new(),
@@ -2705,15 +2706,16 @@ fn display_item_long(
     if let Some(md) = item.get_metadata(&mut state.out) {
         #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
         // TODO: See how Mac should work here
-        let is_acl_set = false;
+        let has_acl = false;
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let is_acl_set = has_acl(item.display_name.as_os_str());
+        let has_acl = { has_acl(&item.p_buf, item.file_type(&mut state.out)) };
+
         output_display.extend(display_permissions(md, true).as_bytes());
         if item.security_context.len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
             output_display.extend(b".");
-        } else if is_acl_set {
+        } else if has_acl {
             output_display.extend(b"+");
         }
         output_display.extend(b" ");
