@@ -2708,7 +2708,7 @@ fn display_item_long(
         // TODO: See how Mac should work here
         let has_acl = false;
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let has_acl = { has_acl(&p_buf, ft.get().and_then(Option::as_ref)) };
+        let has_acl = { has_acl(&item.p_buf, item.file_type().and_then(Option::as_ref)) };
 
         output_display.extend(display_permissions(md, true).as_bytes());
         if item.security_context.len() > 1 {
