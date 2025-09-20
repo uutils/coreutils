@@ -4112,6 +4112,7 @@ dependencies = [
  "divan",
  "fluent",
  "libc",
+ "memchr",
  "nix",
  "tempfile",
  "thiserror 2.0.16",
