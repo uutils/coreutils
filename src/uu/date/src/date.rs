@@ -298,6 +298,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_FILE)
                 .value_name("DATEFILE")
                 .value_hint(clap::ValueHint::FilePath)
+                .conflicts_with(OPT_DATE)
                 .help(translate!("date-help-file")),
         )
         .arg(
@@ -315,6 +316,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_RESOLUTION)
                 .long(OPT_RESOLUTION)
+                .conflicts_with_all([OPT_DATE, OPT_FILE])
                 .overrides_with(OPT_RESOLUTION)
                 .help(translate!("date-help-resolution"))
                 .action(ArgAction::SetTrue),
@@ -347,6 +349,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_REFERENCE)
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::AnyPath)
+                .conflicts_with_all([OPT_DATE, OPT_FILE, OPT_RESOLUTION])
                 .help(translate!("date-help-reference")),
         )
         .arg(
