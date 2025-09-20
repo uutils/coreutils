@@ -191,6 +191,23 @@ SELINUX_PROGS := \
 	chcon \
 	runcon
 
+HASHSUM_PROGS := \
+	b2sum \
+	b3sum \
+	md5sum \
+	sha1sum \
+	sha224sum \
+	sha256sum \
+	sha3-224sum \
+	sha3-256sum \
+	sha3-384sum \
+	sha3-512sum \
+	sha384sum \
+	sha3sum \
+	sha512sum \
+	shake128sum \
+	shake256sum
+
 $(info Detected OS = $(OS))
 
 # Don't build the SELinux programs on macOS (Darwin) and FreeBSD
@@ -464,10 +481,16 @@ ifeq (${MULTICALL}, y)
 	$(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
 		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
 	)
+	$(foreach prog, $(HASHSUM_PROGS), \
+		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
+	)
 	$(if $(findstring test,$(INSTALLEES)), cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
 else
 	$(foreach prog, $(INSTALLEES), \
 		$(INSTALL) -m 755 $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog) $(newline) \
+	)
+	$(foreach prog, $(HASHSUM_PROGS), \
+		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)hashsum $(PROG_PREFIX)$(prog) $(newline) \
 	)
 	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) -m 755 $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
 endif
