@@ -25,7 +25,6 @@ fn test_cat_broken_pipe_nonzero_and_message() {
     }
 }
 
-
 // This file is part of the uutils coreutils package.
 //
 // For the full copyright and license information, please view the LICENSE
