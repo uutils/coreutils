@@ -12,6 +12,8 @@ use crate::translate;
 use selinux::SecurityContext;
 use thiserror::Error;
 
+use crate::error::UError;
+
 #[derive(Debug, Error)]
 pub enum SeLinuxError {
     #[error("{}", translate!("selinux-error-not-enabled"))]
@@ -33,6 +35,18 @@ pub enum SeLinuxError {
 impl From<SeLinuxError> for i32 {
     fn from(error: SeLinuxError) -> i32 {
         match error {
+            SeLinuxError::SELinuxNotEnabled => 1,
+            SeLinuxError::FileOpenFailure(_) => 2,
+            SeLinuxError::ContextRetrievalFailure(_) => 3,
+            SeLinuxError::ContextSetFailure(_, _) => 4,
+            SeLinuxError::ContextConversionFailure(_, _) => 5,
+        }
+    }
+}
+
+impl UError for SeLinuxError {
+    fn code(&self) -> i32 {
+        match self {
             SeLinuxError::SELinuxNotEnabled => 1,
             SeLinuxError::FileOpenFailure(_) => 2,
             SeLinuxError::ContextRetrievalFailure(_) => 3,
