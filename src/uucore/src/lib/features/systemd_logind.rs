@@ -444,8 +444,9 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
             .unwrap_or_default();
 
         // Determine host (use remote_host if available)
+        // If host is local (non-remote) we use display,
         let host = if remote_host.is_empty() {
-            String::new()
+            display.clone()
         } else {
             remote_host
         };
