@@ -40,7 +40,7 @@ const ARG_NUMBERS: &str = "numbers";
 #[derive(Clone)]
 struct SeqOptions<'a> {
     separator: OsString,
-    terminator: String,
+    terminator: OsString,
     equal_width: bool,
     format: Option<&'a str>,
 }
@@ -108,10 +108,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .get_one::<OsString>(OPT_SEPARATOR)
             .map_or(OsString::from("\n"), |s| s.to_os_string()),
         terminator: matches
-            .get_one::<String>(OPT_TERMINATOR)
-            .map(|s| s.as_str())
-            .unwrap_or("\n")
-            .to_string(),
+            .get_one::<OsString>(OPT_TERMINATOR)
+            .map_or(OsString::from("\n"), |s| s.to_os_string()),
         equal_width: matches.get_flag(OPT_EQUAL_WIDTH),
         format: matches.get_one::<String>(OPT_FORMAT).map(|s| s.as_str()),
     };
@@ -235,7 +233,8 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_TERMINATOR)
                 .short('t')
                 .long("terminator")
-                .help(translate!("seq-help-terminator")),
+                .help(translate!("seq-help-terminator"))
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(OPT_EQUAL_WIDTH)
@@ -268,7 +267,7 @@ fn fast_print_seq(
     increment: u64,
     last: &BigUint,
     separator: &OsStr,
-    terminator: &str,
+    terminator: &OsStr,
     padding: usize,
 ) -> std::io::Result<()> {
     // Nothing to do, just return.
@@ -321,7 +320,7 @@ fn fast_print_seq(
     }
     // Write the last number without separator, but with terminator.
     stdout.write_all(&buf[start..num_end])?;
-    write!(stdout, "{terminator}")?;
+    stdout.write_all(terminator.as_encoded_bytes())?;
     stdout.flush()?;
     Ok(())
 }
@@ -338,7 +337,7 @@ fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> boo
 fn print_seq(
     range: RangeFloat,
     separator: &OsStr,
-    terminator: &str,
+    terminator: &OsStr,
     format: &Format<num_format::Float, &ExtendedBigDecimal>,
     fast_allowed: bool,
     padding: usize, // Used by fast path only
@@ -383,7 +382,7 @@ fn print_seq(
         is_first_iteration = false;
     }
     if !is_first_iteration {
-        stdout.write_all(terminator.as_bytes())?;
+        stdout.write_all(terminator.as_encoded_bytes())?;
     }
     stdout.flush()?;
     Ok(())
