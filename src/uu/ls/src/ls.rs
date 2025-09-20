@@ -39,7 +39,9 @@ use thiserror::Error;
 #[cfg(unix)]
 use uucore::entries;
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-use uucore::fsxattr::{has_acl, has_capability};
+use uucore::fsxattr::{
+    POSIX_ACL_ACCESS_KEY, POSIX_ACL_DEFAULT_KEY, SET_CAPABILITY_KEY, retrieve_xattrs,
+};
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 #[cfg(any(
@@ -1768,10 +1770,12 @@ pub fn uu_app() -> Command {
 /// Any data that will be reused several times makes sense to be added to this structure.
 /// Caching data here helps eliminate redundant syscalls to fetch same information.
 #[derive(Debug)]
+#[allow(unused)]
 struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
+    xattrs: OnceCell<Option<HashMap<OsString, Vec<u8>>>>,
     // can be used to avoid reading the metadata. Can be also called d_type:
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
     de: Option<DirEntry>,
@@ -1857,6 +1861,7 @@ impl PathData {
         Self {
             md: OnceCell::new(),
             ft,
+            xattrs: OnceCell::new(),
             de,
             display_name,
             p_buf,
@@ -1909,6 +1914,41 @@ impl PathData {
         self.ft
             .get_or_init(|| self.get_metadata(out).map(|md| md.file_type()))
             .as_ref()
+    }
+
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    fn xattrs(&self) -> &Option<HashMap<OsString, Vec<u8>>> {
+        self.xattrs
+            .get_or_init(|| retrieve_xattrs(&self.p_buf, self.must_dereference).ok())
+    }
+
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    fn has_acl(&self, out: &mut BufWriter<Stdout>) -> bool {
+        self.xattrs()
+            .as_ref()
+            .and_then(|map| {
+                map.get(&*POSIX_ACL_ACCESS_KEY).or_else(|| {
+                    // Default ACL only applies to directories - avoid 2nd syscall here
+                    // See: https://www.usenix.org/legacy/publications/library/proceedings/usenix03/tech/freenix03/full_papers/gruenbacher/gruenbacher_html/main.html
+                    if self.file_type(out).map(|ft| !ft.is_dir()).unwrap_or(false) {
+                        return None;
+                    }
+
+                    map.get(&*POSIX_ACL_DEFAULT_KEY)
+                })
+            })
+            .map(|vec| !vec.is_empty())
+            .unwrap_or(false)
+    }
+
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    fn has_capability(&self) -> bool {
+        // don't use exacl here, it is doing more getxattr call then needed
+        self.xattrs()
+            .as_ref()
+            .and_then(|map| map.get(&*SET_CAPABILITY_KEY))
+            .map(|vec| !vec.is_empty())
+            .unwrap_or(false)
     }
 }
 
@@ -2710,9 +2750,9 @@ fn display_item_long(
         #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
         let has_cap = false;
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let has_acl = { has_acl(&item.p_buf, item.file_type(&mut state.out)) };
+        let has_acl = { item.has_acl(&mut state.out) };
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let has_cap = { has_capability(&item.p_buf) };
+        let has_cap = { item.has_capability() };
 
         output_display.extend(display_permissions(md, true).as_bytes());
         if item.security_context.len() > 1 {

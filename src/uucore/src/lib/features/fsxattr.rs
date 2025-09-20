@@ -12,11 +12,11 @@ use std::fs::FileType;
 use std::path::Path;
 use std::sync::LazyLock;
 
-static POSIX_ACL_ACCESS_KEY: LazyLock<OsString> =
+pub static POSIX_ACL_ACCESS_KEY: LazyLock<OsString> =
     LazyLock::new(|| "system.posix_acl_access".into());
-static POSIX_ACL_DEFAULT_KEY: LazyLock<OsString> =
+pub static POSIX_ACL_DEFAULT_KEY: LazyLock<OsString> =
     LazyLock::new(|| "system.posix_acl_default".into());
-static SET_CAPABILITY_KEY: LazyLock<OsString> = LazyLock::new(|| "security.capability".into());
+pub static SET_CAPABILITY_KEY: LazyLock<OsString> = LazyLock::new(|| "security.capability".into());
 
 /// Copies extended attributes (xattrs) from one file or directory to another.
 ///
@@ -46,9 +46,19 @@ pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
 /// # Returns
 ///
 /// A result containing a HashMap of attributes names and values, or an error.
-pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<HashMap<OsString, Vec<u8>>> {
+pub fn retrieve_xattrs<P: AsRef<Path>>(
+    source: P,
+    must_dereference: bool,
+) -> std::io::Result<HashMap<OsString, Vec<u8>>> {
     let mut attrs = HashMap::new();
-    for attr_name in xattr::list(&source)? {
+
+    let iter = if must_dereference {
+        xattr::list_deref(&source)?
+    } else {
+        xattr::list(&source)?
+    };
+
+    for attr_name in iter {
         if let Some(value) = xattr::get(&source, &attr_name)? {
             attrs.insert(attr_name, value);
         }
@@ -139,7 +149,7 @@ pub fn get_acl_perm_bits_from_xattr<P: AsRef<Path>>(source: P) -> u32 {
 
     // Only default acl entries get inherited by objects under the path i.e. if child directories
     // will have their permissions modified.
-    if let Ok(entries) = retrieve_xattrs(source) {
+    if let Ok(entries) = retrieve_xattrs(source, false) {
         let mut perm: u32 = 0;
         if let Some(value) = entries.get(&*POSIX_ACL_DEFAULT_KEY) {
             // value is xattr byte vector
