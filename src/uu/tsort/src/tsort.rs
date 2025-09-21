@@ -42,6 +42,8 @@ enum TsortError {
 
 impl UError for TsortError {}
 
+
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
@@ -63,11 +65,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Create the directed graph from pairs of tokens in the input data.
     let mut g = Graph::new(input.to_string_lossy().to_string());
-    for ab in data.split_whitespace().collect::<Vec<&str>>().chunks(2) {
-        match ab {
-            [a, b] => g.add_edge(a, b),
-            _ => return Err(TsortError::NumTokensOdd(input.to_string_lossy().to_string()).into()),
-        }
+    
+    let mut edgetokens = data.split_whitespace();
+    
+    loop {
+        let Some(a) = edgetokens.next() else {
+            break;
+        };
+        let Some(b) = edgetokens.next() else {
+            return Err(TsortError::NumTokensOdd(input.to_string_lossy().to_string()).into());
+        };
+        g.add_edge(a, b);
     }
 
     g.run_tsort();
@@ -127,19 +135,11 @@ impl<'input> Graph<'input> {
         }
     }
 
-    fn add_node(&mut self, name: &'input str) {
-        self.nodes.entry(name).or_default();
-    }
-
     fn add_edge(&mut self, from: &'input str, to: &'input str) {
-        self.add_node(from);
+        let from_node = self.nodes.entry(from).or_default();
         if from != to {
-            self.add_node(to);
-
-            let from_node = self.nodes.get_mut(from).unwrap();
             from_node.add_successor(to);
-
-            let to_node = self.nodes.get_mut(to).unwrap();
+            let to_node = self.nodes.entry(to).or_default();
             to_node.predecessor_count += 1;
         }
     }
@@ -233,10 +233,7 @@ impl<'input> Graph<'input> {
 
     fn detect_cycle(&self) -> Vec<&'input str> {
         // Sort the nodes just to make this function deterministic.
-        let mut nodes = Vec::new();
-        for node in self.nodes.keys() {
-            nodes.push(node);
-        }
+        let mut nodes: Vec<_> = self.nodes.keys().collect();
         nodes.sort_unstable();
 
         let mut visited = HashSet::new();
