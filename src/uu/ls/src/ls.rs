@@ -5,7 +5,6 @@
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime getxattr
 
-#[cfg(unix)]
 use std::collections::HashMap;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
@@ -38,10 +37,9 @@ use thiserror::Error;
 
 #[cfg(unix)]
 use uucore::entries;
+use uucore::fsxattr::retrieve_xattrs;
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-use uucore::fsxattr::{
-    POSIX_ACL_ACCESS_KEY, POSIX_ACL_DEFAULT_KEY, SET_CAPABILITY_KEY, retrieve_xattrs,
-};
+use uucore::fsxattr::{POSIX_ACL_ACCESS_KEY, POSIX_ACL_DEFAULT_KEY, SET_CAPABILITY_KEY};
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 #[cfg(any(
@@ -1916,10 +1914,10 @@ impl PathData {
             .as_ref()
     }
 
-    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-    fn xattrs(&self) -> &Option<HashMap<OsString, Vec<u8>>> {
+    fn xattrs(&self) -> Option<&HashMap<OsString, Vec<u8>>> {
         self.xattrs
             .get_or_init(|| retrieve_xattrs(&self.p_buf, self.must_dereference).ok())
+            .as_ref()
     }
 
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
@@ -1930,15 +1928,14 @@ impl PathData {
                 map.get(&*POSIX_ACL_ACCESS_KEY).or_else(|| {
                     // Default ACL only applies to directories - avoid 2nd syscall here
                     // See: https://www.usenix.org/legacy/publications/library/proceedings/usenix03/tech/freenix03/full_papers/gruenbacher/gruenbacher_html/main.html
-                    if self.file_type(out).map(|ft| !ft.is_dir()).unwrap_or(false) {
+                    if self.file_type(out).is_some_and(|ft| !ft.is_dir()) {
                         return None;
                     }
 
                     map.get(&*POSIX_ACL_DEFAULT_KEY)
                 })
             })
-            .map(|vec| !vec.is_empty())
-            .unwrap_or(false)
+            .is_some_and(|vec| !vec.is_empty())
     }
 
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
@@ -1947,8 +1944,7 @@ impl PathData {
         self.xattrs()
             .as_ref()
             .and_then(|map| map.get(&*SET_CAPABILITY_KEY))
-            .map(|vec| !vec.is_empty())
-            .unwrap_or(false)
+            .is_some_and(|vec| !vec.is_empty())
     }
 }
 
