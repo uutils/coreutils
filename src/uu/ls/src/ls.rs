@@ -1780,7 +1780,7 @@ struct PathData {
     // PathBuf that all above data corresponds to
     p_buf: PathBuf,
     must_dereference: bool,
-    security_context: String,
+    security_context: OnceCell<String>,
     command_line: bool,
 }
 
@@ -1844,8 +1844,6 @@ impl PathData {
             None => OnceCell::new(),
         };
 
-        let security_context = get_security_context(config, &p_buf, must_dereference);
-
         Self {
             md: OnceCell::new(),
             ft,
@@ -1853,7 +1851,7 @@ impl PathData {
             display_name,
             p_buf,
             must_dereference,
-            security_context,
+            security_context: OnceCell::new(),
             command_line,
         }
     }
@@ -1916,6 +1914,12 @@ impl PathData {
     fn is_executable_file(&self) -> bool {
         self.file_type().is_some_and(|f| f.is_file())
             && self.metadata().is_some_and(file_is_executable)
+    }
+
+    fn security_context(&self, config: &Config) -> &String {
+        self.security_context.get_or_init(|| {
+            get_security_context(config, &self.p_buf, self.metadata(), self.must_dereference)
+        })
     }
 }
 
@@ -2460,7 +2464,7 @@ fn display_items(
         let mut longest_context_len = 1;
         let prefix_context = if config.context {
             for item in items {
-                let context_len = item.security_context.len();
+                let context_len = item.security_context(config).len();
                 longest_context_len = context_len.max(longest_context_len);
             }
             Some(longest_context_len)
@@ -2708,7 +2712,7 @@ fn display_item_long(
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
         let is_acl_set = has_acl(item.display_name.as_os_str());
         output_display.extend(display_permissions(md, true).as_bytes());
-        if item.security_context.len() > 1 {
+        if item.security_context(config).len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
             output_display.extend(b".");
@@ -2730,7 +2734,7 @@ fn display_item_long(
 
         if config.context {
             output_display.extend(b" ");
-            output_display.extend_pad_right(&item.security_context, padding.context);
+            output_display.extend_pad_right(&item.security_context(config), padding.context);
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
@@ -2842,7 +2846,7 @@ fn display_item_long(
 
         output_display.extend(leading_char.as_bytes());
         output_display.extend(b"?????????");
-        if item.security_context.len() > 1 {
+        if item.security_context(config).len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
             output_display.extend(b".");
@@ -2862,7 +2866,7 @@ fn display_item_long(
 
         if config.context {
             output_display.extend(b" ");
-            output_display.extend_pad_right(&item.security_context, padding.context);
+            output_display.extend_pad_right(item.security_context(config), padding.context);
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
@@ -3182,9 +3186,9 @@ fn display_item_name(
     if config.context {
         if let Some(pad_count) = prefix_context {
             let security_context = if matches!(config.format, Format::Commas) {
-                path.security_context.clone()
+                path.security_context(config).to_owned()
             } else {
-                pad_left(&path.security_context, pad_count)
+                pad_left(path.security_context(config), pad_count).to_owned()
             };
             let old_name = name;
             name = format!("{security_context} ").into();
@@ -3245,23 +3249,30 @@ fn display_inode(metadata: &Metadata) -> String {
 
 /// This returns the `SELinux` security context as UTF8 `String`.
 /// In the long term this should be changed to [`OsStr`], see discussions at #2621/#2656
-fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -> String {
+fn get_security_context(
+    config: &Config,
+    p_buf: &Path,
+    opt_metadata: Option<&Metadata>,
+    must_dereference: bool,
+) -> String {
     let substitute_string = "?".to_string();
     // If we must dereference, ensure that the symlink is actually valid even if the system
     // does not support SELinux.
     // Conforms to the GNU coreutils where a dangling symlink results in exit code 1.
     if must_dereference {
-        match get_metadata_with_deref_opt(p_buf, must_dereference) {
-            Err(err) => {
-                // The Path couldn't be dereferenced, so return early and set exit code 1
-                // to indicate a minor error
-                // Only show error when context display is requested to avoid duplicate messages
-                if config.context {
-                    show!(LsError::IOErrorContext(p_buf.to_path_buf(), err, false));
+        if opt_metadata.is_none() {
+            match get_metadata_with_deref_opt(p_buf, must_dereference) {
+                Err(err) => {
+                    // The Path couldn't be dereferenced, so return early and set exit code 1
+                    // to indicate a minor error
+                    // Only show error when context display is requested to avoid duplicate messages
+                    if config.context {
+                        show!(LsError::IOErrorContext(p_buf.to_path_buf(), err, false));
+                    }
+                    return substitute_string;
                 }
-                return substitute_string;
+                Ok(_md) => (),
             }
-            Ok(_md) => (),
         }
     }
     if config.selinux_supported {
@@ -3335,7 +3346,7 @@ fn calculate_padding_collection(
         }
 
         if config.format == Format::Long {
-            let context_len = item.security_context.len();
+            let context_len = item.security_context(config).len();
             let (link_count_len, uname_len, group_len, size_len, major_len, minor_len) =
                 display_dir_entry_size(item, config, state);
             padding_collections.link_count = link_count_len.max(padding_collections.link_count);
