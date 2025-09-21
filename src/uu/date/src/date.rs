@@ -11,7 +11,7 @@ use jiff::tz::TimeZone;
 use jiff::{Timestamp, Zoned};
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 use libc::clock_settime;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 use libc::{CLOCK_REALTIME, clock_getres, timespec};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -429,7 +429,7 @@ fn get_clock_resolution() -> Timestamp {
     unimplemented!("getting clock resolution not implemented (unsupported target)");
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 fn get_clock_resolution() -> Timestamp {
     let mut timespec = timespec {
         tv_sec: 0,
@@ -449,6 +449,14 @@ fn get_clock_resolution() -> Timestamp {
     }
     #[allow(clippy::unnecessary_cast)] // Cast required on 32-bit platforms
     Timestamp::constant(timespec.tv_sec as i64, timespec.tv_nsec as i32)
+}
+
+#[cfg(all(unix, target_os = "redox"))]
+fn get_clock_resolution() -> Timestamp {
+    // Redox OS does not support the posix clock_getres function, however
+    // internally it uses a resolution of 1ns to represent timestamps.
+    // https://gitlab.redox-os.org/redox-os/kernel/-/blob/master/src/time.rs
+    Timestamp::constant(0, 1)
 }
 
 #[cfg(windows)]
