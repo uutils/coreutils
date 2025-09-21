@@ -42,8 +42,6 @@ enum TsortError {
 
 impl UError for TsortError {}
 
-
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
@@ -65,17 +63,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Create the directed graph from pairs of tokens in the input data.
     let mut g = Graph::new(input.to_string_lossy().to_string());
-    
-    let mut edgetokens = data.split_whitespace();
-    
+    // Input is considered to be in the format
+    // From1 To1 From2 To2 ...
+    // with tokens separated by whitespaces
+    let mut edge_tokens = data.split_whitespace();
+    // Note: this is equivalent to iterating over edge_tokens.chunks(2)
+    // but chunks() exists only for slices and would require unnecessary Vec allocation.
+    // Itertools::chunks() is not used due to unnecessary overhead for internal RefCells
     loop {
-        let Some(a) = edgetokens.next() else {
+        // Try take next pair of tokens
+        let Some(from) = edge_tokens.next() else {
+            // no more tokens -> end of input. Graph constructed
             break;
         };
-        let Some(b) = edgetokens.next() else {
+        let Some(to) = edge_tokens.next() else {
             return Err(TsortError::NumTokensOdd(input.to_string_lossy().to_string()).into());
         };
-        g.add_edge(a, b);
+        g.add_edge(from, to);
     }
 
     g.run_tsort();
