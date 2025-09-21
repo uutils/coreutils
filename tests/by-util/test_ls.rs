@@ -6260,7 +6260,7 @@ fn test_ls_time_style_posix_locale_override() {
 fn test_ls_time_style_precedence_last_wins() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch("prec_file");
+    at.touch("timefile");
 
     // time-style first, full-time last -> expect full-iso-like (seconds)
     let out1 = scene
@@ -6268,7 +6268,7 @@ fn test_ls_time_style_precedence_last_wins() {
         .arg("--time-style=long-iso")
         .arg("--full-time")
         .arg("-l")
-        .arg("prec_file")
+        .arg("timefile")
         .succeeds();
     let has_seconds = Regex::new(r"\d{2}:\d{2}:\d{2}")
         .unwrap()
@@ -6285,7 +6285,7 @@ fn test_ls_time_style_precedence_last_wins() {
         .arg("--full-time")
         .arg("--time-style=long-iso")
         .arg("-l")
-        .arg("prec_file")
+        .arg("timefile")
         .succeeds();
     let no_seconds = !Regex::new(r"\d{2}:\d{2}:\d{2}")
         .unwrap()
