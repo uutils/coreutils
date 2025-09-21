@@ -2734,7 +2734,7 @@ fn display_item_long(
 
         if config.context {
             output_display.extend(b" ");
-            output_display.extend_pad_right(&item.security_context(config), padding.context);
+            output_display.extend_pad_right(item.security_context(config), padding.context);
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
@@ -3186,9 +3186,9 @@ fn display_item_name(
     if config.context {
         if let Some(pad_count) = prefix_context {
             let security_context = if matches!(config.format, Format::Commas) {
-                path.security_context(config).to_owned()
+                path.security_context(config).clone()
             } else {
-                pad_left(path.security_context(config), pad_count).to_owned()
+                pad_left(path.security_context(config), pad_count).clone()
             };
             let old_name = name;
             name = format!("{security_context} ").into();
@@ -3390,7 +3390,7 @@ fn calculate_padding_collection(
             }
         }
 
-        let context_len = item.security_context.len();
+        let context_len = item.security_context().len();
         let (link_count_len, uname_len, group_len, size_len, _major_len, _minor_len) =
             display_dir_entry_size(item, config, state);
         padding_collections.link_count = link_count_len.max(padding_collections.link_count);
