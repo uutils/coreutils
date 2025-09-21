@@ -5,7 +5,7 @@ name: CICD
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata
 # spell-checker:ignore (people) Peltoche rivy dtolnay Anson dawidd
 # spell-checker:ignore (shell/tools) binutils choco clippy dmake dpkg esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libfuse libssl limactl mkdir nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache utmpdump xargs
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils libsystemd
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils libsystemd codspeed
 
 env:
   PROJECT_NAME: coreutils
@@ -1221,3 +1221,47 @@ jobs:
         lima bash -c "cd work && cargo test --features 'feat_selinux'"
     - name: Lint with SELinux
       run: lima bash -c "cd work && cargo clippy --all-targets --features 'feat_selinux' -- -D warnings"
+
+  benchmarks:
+    name: Run benchmarks (CodSpeed)
+    runs-on: ubuntu-latest
+    needs: min_version
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Install system dependencies
+        shell: bash
+        run: |
+          sudo apt-get -y update
+          sudo apt-get -y install libselinux1-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Install cargo-codspeed
+        shell: bash
+        run: cargo install cargo-codspeed --locked
+
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v4
+        env:
+          CODSPEED_LOG: debug
+        with:
+          mode: instrumentation
+          run: |
+            # Find all utilities with benchmarks and run them individually
+            echo "Starting CodSpeed benchmark collection..."
+            for bench_dir in $(ls -d src/uu/*/benches 2>/dev/null); do
+              prog_dir=$(dirname "$bench_dir")
+              prog_name=$(basename "$prog_dir")
+              echo "Processing benchmarks for uu_$prog_name"
+              cargo codspeed build -p uu_$prog_name
+              cargo codspeed run -p uu_$prog_name
+            done
+          token: ${{ secrets.CODSPEED_TOKEN }}
