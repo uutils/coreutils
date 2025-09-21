@@ -447,7 +447,8 @@ fn get_clock_resolution() -> Timestamp {
         // https://pubs.opengroup.org/onlinepubs/9799919799/functions/clock_getres.html
         clock_getres(CLOCK_REALTIME, &raw mut timespec);
     }
-    Timestamp::constant(timespec.tv_sec, timespec.tv_nsec as i32)
+    #[allow(clippy::unnecessary_cast)] // Cast required on 32-bit platforms
+    Timestamp::constant(timespec.tv_sec as i64, timespec.tv_nsec as i32)
 }
 
 #[cfg(windows)]
