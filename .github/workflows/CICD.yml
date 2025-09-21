@@ -1223,7 +1223,7 @@ jobs:
       run: lima bash -c "cd work && cargo clippy --all-targets --features 'feat_selinux' -- -D warnings"
 
   benchmarks:
-    name: Run benchmarks
+    name: Run benchmarks (CodSpeed)
     runs-on: ubuntu-latest
     needs: min_version
     steps:
