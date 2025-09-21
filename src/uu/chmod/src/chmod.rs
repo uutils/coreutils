@@ -499,23 +499,17 @@ impl Chmoder {
         for entry_name in entries {
             let entry_path = dir_path.join(&entry_name);
 
-            // Get metadata for the entry
-            let follow = self.traverse_symlinks == TraverseSymlinks::All;
-
-            let meta = match dir_fd.metadata_at(&entry_name, follow) {
-                Ok(m) => m,
-                Err(e) => {
-                    // Handle permission denied with proper file path context
-                    if e.kind() == std::io::ErrorKind::PermissionDenied {
-                        r = r.and(Err(ChmodError::PermissionDenied(
-                            entry_path.to_string_lossy().to_string(),
-                        )
-                        .into()));
-                    } else {
-                        r = r.and(Err(e.into()));
-                    }
-                    continue;
-                }
+            let dir_meta = dir_fd.metadata_at(&entry_name, should_follow_symlink);
+            let Ok(meta) = dir_meta else {
+                // Handle permission denied with proper file path context
+                let e = dir_meta.unwrap_err();
+                let error = if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    ChmodError::PermissionDenied(entry_path.to_string_lossy().to_string()).into()
+                } else {
+                    e.into()
+                };
+                r = r.and(Err(error));
+                continue;
             };
 
             if entry_path.is_symlink() {
