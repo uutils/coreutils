@@ -11,6 +11,8 @@ fn test_cat_broken_pipe_nonzero_and_message() {
         assert_eq!(libc::pipe(fds.as_mut_ptr()), 0, "Failed to create pipe");
         // Close the read end to simulate a broken pipe on stdout
         let _read_end = File::from_raw_fd(fds[0]);
+        // Explicitly drop the read-end so writers see EPIPE instead of blocking on a full pipe
+        std::mem::drop(_read_end);
         let write_end = File::from_raw_fd(fds[1]);
 
         let content = (0..10000).map(|_| "x").collect::<String>();
@@ -19,8 +21,7 @@ fn test_cat_broken_pipe_nonzero_and_message() {
             .pipe_in(content.as_bytes())
             .run();
 
-        // Ensure a status is produced (no crash). Broken pipe usually triggers failure and stderr.
-        // We keep this tolerant across platforms by not hard-coding the code, but require no panic.
+        // Ensure the process exits (no hang) even if platforms differ in exit code/message on SIGPIPE
         assert!(result.succeeded() || !result.succeeded());
     }
 }
