@@ -6193,11 +6193,6 @@ fn test_ls_time_style_iso_recent_and_older() {
     let at = &scene.fixtures;
     // Recent file (now)
     at.touch("recent");
-    // Older file: set mtime to 1970-01-01 using uutils touch
-    scene
-        .ccmd("touch")
-        .args(&["-d", "1970-01-01", "older"]) // RFC3339-ish date understood by GNU and uutils touch
-        .succeeds();
 
     // Recent format for --time-style=iso is %m-%d %H:%M
     let recent = scene
@@ -6214,18 +6209,28 @@ fn test_ls_time_style_iso_recent_and_older() {
     );
 
     // Older format appends a full ISO date padded (year present)
-    let older = scene
-        .ucmd()
-        .arg("-l")
-        .arg("--time-style=iso")
-        .arg("older")
-        .succeeds();
-    let re_older = Regex::new(r"(^|\n).*\d{4}-\d{2}-\d{2}  +").unwrap();
-    assert!(
-        re_older.is_match(older.stdout_str()),
-        "older not matched: {}",
-        older.stdout_str()
-    );
+    // Only run this part when the test binary includes `touch`
+    #[cfg(feature = "touch")]
+    {
+        // Older file: set mtime to 1970-01-01 using uutils touch
+        scene
+            .ccmd("touch")
+            .args(&["-d", "1970-01-01", "older"]) // RFC3339-ish date understood by GNU and uutils touch
+            .succeeds();
+
+        let older = scene
+            .ucmd()
+            .arg("-l")
+            .arg("--time-style=iso")
+            .arg("older")
+            .succeeds();
+        let re_older = Regex::new(r"(^|\n).*\d{4}-\d{2}-\d{2}  +").unwrap();
+        assert!(
+            re_older.is_match(older.stdout_str()),
+            "older not matched: {}",
+            older.stdout_str()
+        );
+    }
 }
 
 #[test]
@@ -6255,7 +6260,7 @@ fn test_ls_time_style_posix_locale_override() {
 fn test_ls_time_style_precedence_last_wins() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch("prec");
+    at.touch("prec_file");
 
     // time-style first, full-time last -> expect full-iso-like (seconds)
     let out1 = scene
@@ -6263,7 +6268,7 @@ fn test_ls_time_style_precedence_last_wins() {
         .arg("--time-style=long-iso")
         .arg("--full-time")
         .arg("-l")
-        .arg("prec")
+        .arg("prec_file")
         .succeeds();
     let has_seconds = Regex::new(r"\d{2}:\d{2}:\d{2}")
         .unwrap()
@@ -6280,7 +6285,7 @@ fn test_ls_time_style_precedence_last_wins() {
         .arg("--full-time")
         .arg("--time-style=long-iso")
         .arg("-l")
-        .arg("prec")
+        .arg("prec_file")
         .succeeds();
     let no_seconds = !Regex::new(r"\d{2}:\d{2}:\d{2}")
         .unwrap()
@@ -6297,7 +6302,7 @@ fn test_ls_time_sort_without_long() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.touch("a");
-    // Ensure distinct mtimes
+    // Ensure distinct modification times
     std::thread::sleep(Duration::from_millis(10));
     at.touch("b");
 
