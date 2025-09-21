@@ -1772,6 +1772,7 @@ struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
+    security_context: OnceCell<String>,
     // can be used to avoid reading the metadata. Can be also called d_type:
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
     de: Option<DirEntry>,
@@ -1780,7 +1781,6 @@ struct PathData {
     // PathBuf that all above data corresponds to
     p_buf: PathBuf,
     must_dereference: bool,
-    security_context: OnceCell<String>,
     command_line: bool,
 }
 
@@ -1847,11 +1847,11 @@ impl PathData {
         Self {
             md: OnceCell::new(),
             ft,
+            security_context: OnceCell::new(),
             de,
             display_name,
             p_buf,
             must_dereference,
-            security_context: OnceCell::new(),
             command_line,
         }
     }
