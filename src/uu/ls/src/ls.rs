@@ -2747,19 +2747,15 @@ fn display_item_long(
         #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
         // TODO: See how Mac should work here
         let has_acl = false;
-        #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
-        let has_cap = false;
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
         let has_acl = { item.has_acl(&mut state.out) };
-        #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let has_cap = { item.has_capability() };
 
         output_display.extend(display_permissions(md, true).as_bytes());
         if item.security_context.len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
             output_display.extend(b".");
-        } else if has_acl || has_cap {
+        } else if has_acl {
             output_display.extend(b"+");
         }
         output_display.extend(b" ");
