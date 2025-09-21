@@ -1083,11 +1083,11 @@ impl Config {
             time_format_older,
             context,
             selinux_supported: {
-                #[cfg(feature = "selinux")]
+                #[cfg(all(feature = "selinux", target_os = "linux"))]
                 {
                     uucore::selinux::is_selinux_enabled()
                 }
-                #[cfg(not(feature = "selinux"))]
+                #[cfg(not(all(feature = "selinux", target_os = "linux")))]
                 {
                     false
                 }

@@ -10,9 +10,9 @@ fn test_cat_broken_pipe_nonzero_and_message() {
         let mut fds: [libc::c_int; 2] = [0, 0];
         assert_eq!(libc::pipe(fds.as_mut_ptr()), 0, "Failed to create pipe");
         // Close the read end to simulate a broken pipe on stdout
-        let _read_end = File::from_raw_fd(fds[0]);
+        let read_end = File::from_raw_fd(fds[0]);
         // Explicitly drop the read-end so writers see EPIPE instead of blocking on a full pipe
-        std::mem::drop(_read_end);
+        std::mem::drop(read_end);
         let write_end = File::from_raw_fd(fds[1]);
 
         let content = (0..10000).map(|_| "x").collect::<String>();
