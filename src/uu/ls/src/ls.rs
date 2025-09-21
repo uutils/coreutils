@@ -3259,20 +3259,15 @@ fn get_security_context(
     // If we must dereference, ensure that the symlink is actually valid even if the system
     // does not support SELinux.
     // Conforms to the GNU coreutils where a dangling symlink results in exit code 1.
-    if must_dereference {
-        if opt_metadata.is_none() {
-            match get_metadata_with_deref_opt(p_buf, must_dereference) {
-                Err(err) => {
-                    // The Path couldn't be dereferenced, so return early and set exit code 1
-                    // to indicate a minor error
-                    // Only show error when context display is requested to avoid duplicate messages
-                    if config.context {
-                        show!(LsError::IOErrorContext(p_buf.to_path_buf(), err, false));
-                    }
-                    return substitute_string;
-                }
-                Ok(_md) => (),
+    if must_dereference && opt_metadata.is_none() {
+        if let Err(err) = get_metadata_with_deref_opt(p_buf, must_dereference) {
+            // The Path couldn't be dereferenced, so return early and set exit code 1
+            // to indicate a minor error
+            // Only show error when context display is requested to avoid duplicate messages
+            if config.context {
+                show!(LsError::IOErrorContext(p_buf.to_path_buf(), err, false));
             }
+            return substitute_string;
         }
     }
     if config.selinux_supported {
