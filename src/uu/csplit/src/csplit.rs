@@ -120,18 +120,27 @@ where
         .enumerate();
     let mut input_iter = InputSplitter::new(enumerated_input_lines);
     let mut split_writer = SplitWriter::new(options);
-    let patterns: Vec<patterns::Pattern> = patterns::get_patterns(patterns)?;
-    let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+    let patterns_vec: Vec<patterns::Pattern> = patterns::get_patterns(patterns)?;
+    let all_up_to_line = patterns_vec
+        .iter()
+        .all(|p| matches!(p, patterns::Pattern::UpToLine(_, _)));
+    let ret = do_csplit(&mut split_writer, patterns_vec, &mut input_iter);
 
     // consume the rest, unless there was an error
     if ret.is_ok() {
         input_iter.rewind_buffer();
         if let Some((_, line)) = input_iter.next() {
+            // There is remaining input: create a final split and copy remainder
             split_writer.new_writer()?;
             split_writer.writeln(&line?)?;
             for (_, line) in input_iter {
                 split_writer.writeln(&line?)?;
             }
+            split_writer.finish_split();
+        } else if all_up_to_line && options.suppress_matched {
+            // GNU semantics for integer patterns with --suppress-matched:
+            // even if no remaining input, create a final (possibly empty) split
+            split_writer.new_writer()?;
             split_writer.finish_split();
         }
     }

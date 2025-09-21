@@ -13,6 +13,44 @@ fn generate(from: u32, to: u32) -> String {
 }
 
 #[test]
+fn test_line_numbers_suppress_matched_final_empty() {
+    // Repro for #7286
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--suppress-matched", "-", "2", "4", "6"]) // stdin, split at 2/4/6
+        .pipe_in("1\n2\n3\n4\n5\n6\n")
+        .succeeds()
+        .stdout_only("2\n2\n2\n0\n");
+
+    // Expect four files: xx00:"1\n", xx01:"3\n", xx02:"5\n", xx03:""
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be splits created")
+        .count();
+    assert_eq!(count, 4);
+    assert_eq!(at.read("xx00"), "1\n");
+    assert_eq!(at.read("xx01"), "3\n");
+    assert_eq!(at.read("xx02"), "5\n");
+    assert_eq!(at.read("xx03"), "");
+}
+
+#[test]
+fn test_line_numbers_suppress_matched_final_empty_elided_with_z() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--suppress-matched", "-z", "-", "2", "4", "6"]) // elide empty
+        .pipe_in("1\n2\n3\n4\n5\n6\n")
+        .succeeds()
+        .stdout_only("2\n2\n2\n");
+
+    // Expect three files: xx00:"1\n", xx01:"3\n", xx02:"5\n"
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be splits created")
+        .count();
+    assert_eq!(count, 3);
+    assert_eq!(at.read("xx00"), "1\n");
+    assert_eq!(at.read("xx01"), "3\n");
+    assert_eq!(at.read("xx02"), "5\n");
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
