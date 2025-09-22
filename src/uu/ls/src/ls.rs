@@ -1773,9 +1773,6 @@ struct PathData {
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
     security_context: OnceCell<String>,
-    // can be used to avoid reading the metadata. Can be also called d_type:
-    // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
-    de: Option<DirEntry>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
     // PathBuf that all above data corresponds to
@@ -1797,12 +1794,13 @@ impl PathData {
         let display_name = if let Some(name) = file_name {
             name
         } else if command_line {
-            p_buf.clone().into()
+            p_buf.as_os_str().to_os_string()
         } else {
-            p_buf
-                .file_name()
-                .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
-                .to_owned()
+            dir_entry
+                .as_ref()
+                .map(|de| de.file_name())
+                .or_else(|| p_buf.file_name().map(|inner| inner.to_os_string()))
+                .unwrap_or_default()
         };
 
         let must_dereference = match &config.dereference {
@@ -1822,8 +1820,6 @@ impl PathData {
             Dereference::None => false,
         };
 
-        let de: Option<DirEntry> = dir_entry;
-
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
         fn get_file_type(de: &DirEntry, p_buf: &Path, must_dereference: bool) -> Option<FileType> {
@@ -1839,16 +1835,26 @@ impl PathData {
             None
         }
 
-        let ft = match de {
+        let ft = match dir_entry.as_ref() {
             Some(ref de) => OnceCell::from(get_file_type(de, &p_buf, must_dereference)),
             None => OnceCell::new(),
         };
 
+        let md = match dir_entry.as_ref() {
+            Some(ref de) if !must_dereference => {
+                // check if we can use DirEntry metadata
+                // it will avoid a call to stat()
+                OnceCell::from(de.metadata().ok())
+            }
+            _ => OnceCell::new(),
+        };
+
+        let security_context = OnceCell::new();
+
         Self {
-            md: OnceCell::new(),
+            md,
             ft,
-            security_context: OnceCell::new(),
-            de,
+            security_context,
             display_name,
             p_buf,
             must_dereference,
@@ -1859,14 +1865,6 @@ impl PathData {
     fn metadata(&self) -> Option<&Metadata> {
         self.md
             .get_or_init(|| {
-                // check if we can use DirEntry metadata
-                // it will avoid a call to stat()
-                if !self.must_dereference {
-                    if let Some(dir_entry) = &self.de {
-                        return dir_entry.metadata().ok();
-                    }
-                }
-
                 // if not, check if we can use Path metadata
                 match get_metadata_with_deref_opt(self.p_buf.as_path(), self.must_dereference) {
                     Err(err) => {
@@ -1879,8 +1877,8 @@ impl PathData {
                         // is entered, here we match that GNU behavior, by handing
                         // back the non-dereferenced metadata upon an EBADF
                         if self.must_dereference && errno == 9i32 {
-                            if let Some(dir_entry) = &self.de {
-                                return dir_entry.metadata().ok();
+                            if let Ok(file) = self.p_buf.read_link() {
+                                return file.symlink_metadata().ok();
                             }
                         }
                         show!(LsError::IOErrorContext(
@@ -1904,10 +1902,7 @@ impl PathData {
 
     fn is_dangling_link(&self) -> bool {
         // deref enabled, self is real dir entry, self has metadata associated with link, but not with target
-        self.must_dereference
-            && self.de.is_some()
-            && self.file_type().is_none()
-            && self.metadata().is_none()
+        self.must_dereference && self.file_type().is_none() && self.metadata().is_none()
     }
 
     #[cfg(unix)]
@@ -1917,9 +1912,8 @@ impl PathData {
     }
 
     fn security_context(&self, config: &Config) -> &String {
-        self.security_context.get_or_init(|| {
-            get_security_context(config, &self.p_buf, self.metadata(), self.must_dereference)
-        })
+        self.security_context
+            .get_or_init(|| get_security_context(self, config))
     }
 }
 
@@ -3243,23 +3237,22 @@ fn display_inode(metadata: &Metadata) -> String {
 
 /// This returns the `SELinux` security context as UTF8 `String`.
 /// In the long term this should be changed to [`OsStr`], see discussions at #2621/#2656
-fn get_security_context(
-    config: &Config,
-    p_buf: &Path,
-    opt_metadata: Option<&Metadata>,
-    must_dereference: bool,
-) -> String {
+fn get_security_context(path: &PathData, config: &Config) -> String {
     let substitute_string = "?".to_string();
     // If we must dereference, ensure that the symlink is actually valid even if the system
     // does not support SELinux.
     // Conforms to the GNU coreutils where a dangling symlink results in exit code 1.
-    if must_dereference && opt_metadata.is_none() {
-        if let Err(err) = get_metadata_with_deref_opt(p_buf, must_dereference) {
+    if path.must_dereference && path.metadata().is_none() {
+        if let Err(err) = get_metadata_with_deref_opt(&path.p_buf, path.must_dereference) {
             // The Path couldn't be dereferenced, so return early and set exit code 1
             // to indicate a minor error
             // Only show error when context display is requested to avoid duplicate messages
             if config.context {
-                show!(LsError::IOErrorContext(p_buf.to_path_buf(), err, false));
+                show!(LsError::IOErrorContext(
+                    path.p_buf.to_path_buf(),
+                    err,
+                    false
+                ));
             }
             return substitute_string;
         }
@@ -3267,10 +3260,10 @@ fn get_security_context(
     if config.selinux_supported {
         #[cfg(feature = "selinux")]
         {
-            match selinux::SecurityContext::of_path(p_buf, must_dereference.to_owned(), false) {
+            match selinux::SecurityContext::of_path(path.p_buf, path.must_dereference, false) {
                 Err(_r) => {
                     // TODO: show the actual reason why it failed
-                    show_warning!("failed to get security context of: {}", p_buf.quote());
+                    show_warning!("failed to get security context of: {}", path.p_buf.quote());
                     substitute_string
                 }
                 Ok(None) => substitute_string,
@@ -3281,7 +3274,7 @@ fn get_security_context(
                     String::from_utf8(context.to_vec()).unwrap_or_else(|e| {
                         show_warning!(
                             "getting security context of: {}: {}",
-                            p_buf.quote(),
+                            path.p_buf.quote(),
                             e.to_string()
                         );
                         String::from_utf8_lossy(context).into_owned()

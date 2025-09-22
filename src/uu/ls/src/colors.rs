@@ -5,7 +5,6 @@
 use super::PathData;
 use lscolors::{Indicator, LsColors, Style};
 use std::ffi::OsString;
-use std::fs::DirEntry;
 use std::fs::Metadata;
 
 /// We need this struct to be able to store the previous style.
@@ -133,16 +132,6 @@ impl<'a> StyleManager<'a> {
             .style_for_path_with_metadata(&path.p_buf, md_option);
         self.apply_style(style, name, wrap)
     }
-
-    pub(crate) fn apply_style_based_on_dir_entry(
-        &mut self,
-        dir_entry: &DirEntry,
-        name: OsString,
-        wrap: bool,
-    ) -> OsString {
-        let style = self.colors.style_for(dir_entry);
-        self.apply_style(style, name, wrap)
-    }
 }
 
 /// Colors the provided name based on the style determined for the given path
@@ -175,10 +164,8 @@ pub(crate) fn color_name(
 
     if !path.must_dereference {
         // If we need to dereference (follow) a symlink, we will need to get the metadata
-        if let Some(de) = &path.de {
-            // There is a DirEntry, we don't need to get the metadata for the color
-            return style_manager.apply_style_based_on_dir_entry(de, name, wrap);
-        }
+        // There is a DirEntry, we don't need to get the metadata for the color
+        return style_manager.apply_style_based_on_metadata(path, path.metadata(), name, wrap);
     }
 
     if let Some(_target) = target_symlink {
