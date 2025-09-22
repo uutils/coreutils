@@ -105,35 +105,9 @@ fn line_counting_internal() {
     black_box(line_count);
 }
 
-/// Internal benchmark for line counting using direct function calls
-#[divan::bench(args = [1, 5, 10])]
-fn wc_lines_internal(bencher: Bencher, size_mb: usize) {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let data = generate_test_data(size_mb, 80);
-    let file_path = create_test_file(&data, &temp_dir);
-    let file_path_str = file_path.to_str().unwrap();
-
-    bencher.bench(|| {
-        black_box(run_uutils_wc_internal(&["-l", file_path_str]));
-    });
-}
-
-/// Internal benchmark for byte counting using direct function calls
-#[divan::bench(args = [1, 5, 10])]
-fn wc_bytes_internal(bencher: Bencher, size_mb: usize) {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let data = generate_test_data(size_mb, 80);
-    let file_path = create_test_file(&data, &temp_dir);
-    let file_path_str = file_path.to_str().unwrap();
-
-    bencher.bench(|| {
-        black_box(run_uutils_wc_internal(&["-c", file_path_str]));
-    });
-}
-
-/// Internal benchmark for word counting using direct function calls
-#[divan::bench(args = [1, 5, 10])]
-fn wc_words_internal(bencher: Bencher, size_mb: usize) {
+/// Benchmark different file sizes for byte counting
+#[divan::bench(args = [10, 50, 100])]
+fn wc_bytes_synthetic(bencher: Bencher, size_mb: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = generate_test_data(size_mb, 80);
     let file_path = create_test_file(&data, &temp_dir);
@@ -144,9 +118,8 @@ fn wc_words_internal(bencher: Bencher, size_mb: usize) {
     });
 }
 
-/// Internal benchmark for character counting using direct function calls
-#[divan::bench(args = [1, 5, 10, 25])]
-fn wc_chars_internal(bencher: Bencher, size_mb: usize) {
+#[divan::bench(args = [10, 100, 1_000])]
+fn wc_words_synthetic(bencher: Bencher, size_mb: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = generate_test_data(size_mb, 80);
     let file_path = create_test_file(&data, &temp_dir);
@@ -157,9 +130,9 @@ fn wc_chars_internal(bencher: Bencher, size_mb: usize) {
     });
 }
 
-/// Internal benchmark for combined byte+line counting
-#[divan::bench(args = [1, 5, 10, 50])]
-fn wc_bytes_lines_internal(bencher: Bencher, size_mb: usize) {
+/// Benchmark combined byte+line counting
+#[divan::bench(args = [10, 100, 1_000])]
+fn wc_bytes_lines_synthetic(bencher: Bencher, size_mb: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = generate_test_data(size_mb, 80);
     let file_path = create_test_file(&data, &temp_dir);
@@ -170,20 +143,7 @@ fn wc_bytes_lines_internal(bencher: Bencher, size_mb: usize) {
     });
 }
 
-/// Internal benchmark for default wc behavior (bytes, lines, words)
-#[divan::bench(args = [1, 5, 10])]
-fn wc_default_internal(bencher: Bencher, size_mb: usize) {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let data = generate_test_data(size_mb, 80);
-    let file_path = create_test_file(&data, &temp_dir);
-    let file_path_str = file_path.to_str().unwrap();
-
-    bencher.bench(|| {
-        black_box(run_uutils_wc_internal(&[file_path_str]));
-    });
-}
-
-/// Internal benchmark for different line lengths impact on performance
+/// Test different line lengths impact on performance
 #[divan::bench(args = [(5, 50), (5, 100), (5, 200), (5, 500)])]
 fn wc_lines_variable_length_internal(bencher: Bencher, (size_mb, avg_line_len): (usize, usize)) {
     let temp_dir = tempfile::tempdir().unwrap();

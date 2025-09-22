@@ -1,6 +1,9 @@
 hashsum-about = Compute and check message digests.
 hashsum-usage = hashsum --<digest> [OPTIONS]... [FILE]...
 
+# Utility-specific usage template
+hashsum-usage-specific = {$utility_name} [OPTION]... [FILE]...
+
 # Help messages
 hashsum-help-binary-windows = read or check in binary mode (default)
 hashsum-help-binary-other = read in binary mode
