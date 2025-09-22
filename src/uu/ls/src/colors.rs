@@ -3,9 +3,24 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use super::PathData;
-use lscolors::{Indicator, LsColors, Style};
+use lscolors::{Colorable, Indicator, LsColors, Style};
 use std::ffi::OsString;
 use std::fs::Metadata;
+
+impl Colorable for PathData {
+    fn file_name(&self) -> OsString {
+        self.display_name.clone()
+    }
+    fn file_type(&self) -> Option<std::fs::FileType> {
+        self.file_type().cloned()
+    }
+    fn metadata(&self) -> Option<Metadata> {
+        self.metadata().cloned()
+    }
+    fn path(&self) -> std::path::PathBuf {
+        self.p_buf.clone()
+    }
+}
 
 /// We need this struct to be able to store the previous style.
 /// This because we need to check the previous value in case we don't need
@@ -132,6 +147,16 @@ impl<'a> StyleManager<'a> {
             .style_for_path_with_metadata(&path.p_buf, md_option);
         self.apply_style(style, name, wrap)
     }
+
+    pub(crate) fn apply_style_based_on_colorable<T: Colorable>(
+        &mut self,
+        path: &T,
+        name: OsString,
+        wrap: bool,
+    ) -> OsString {
+        let style = self.colors.style_for(path);
+        self.apply_style(style, name, wrap)
+    }
 }
 
 /// Colors the provided name based on the style determined for the given path
@@ -165,7 +190,7 @@ pub(crate) fn color_name(
     if !path.must_dereference {
         // If we need to dereference (follow) a symlink, we will need to get the metadata
         // There is a DirEntry, we don't need to get the metadata for the color
-        return style_manager.apply_style_based_on_metadata(path, path.metadata(), name, wrap);
+        return style_manager.apply_style_based_on_colorable(path, name, wrap);
     }
 
     if let Some(_target) = target_symlink {
