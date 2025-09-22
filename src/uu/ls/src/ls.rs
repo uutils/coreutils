@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime getxattr
 
+#[cfg(unix)]
 use std::collections::HashMap;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
