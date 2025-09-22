@@ -163,6 +163,14 @@ pub(crate) fn color_name(
         }
     }
 
+    if !path.must_dereference {
+        // If we need to dereference (follow) a symlink, we will need to get the metadata
+        if let Some(md) = path.de.as_ref().and_then(|de| de.metadata().ok()) {
+            // There is a DirEntry, we don't need to get the metadata for the color
+            return style_manager.apply_style_based_on_metadata(path, Some(&md), name, wrap);
+        }
+    }
+
     if let Some(target) = target_symlink {
         // use the optional target_symlink
         // Use fn get_metadata_with_deref_opt instead of get_metadata() here because ls
