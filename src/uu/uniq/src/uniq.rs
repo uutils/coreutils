@@ -218,12 +218,10 @@ impl Uniq {
     }
 
     fn char_prefix_len(text: &str, limit: usize) -> usize {
-        let mut count = 0;
-        for (idx, _) in text.char_indices() {
+        for (count, (idx, _)) in text.char_indices().enumerate() {
             if count == limit {
                 return idx;
             }
-            count += 1;
         }
         text.len()
     }
@@ -296,6 +294,7 @@ impl Uniq {
         let mut count_buf = [0u8; Self::COUNT_PREFIX_BUF_SIZE];
 
         if self.show_counts {
+            // Call the associated function (no &self) after the refactor above.
             let prefix = Self::build_count_prefix(count, &mut count_buf);
             writer
                 .write_all(prefix)
@@ -312,10 +311,12 @@ impl Uniq {
     const COUNT_PREFIX_WIDTH: usize = 7;
     const COUNT_PREFIX_BUF_SIZE: usize = 32;
 
-    fn build_count_prefix<'a>(
+    // This function does not use `self`, so make it an associated function.
+    // Also remove needless explicit lifetimes to satisfy clippy::needless-lifetimes.
+    fn build_count_prefix(
         count: usize,
-        buf: &'a mut [u8; Self::COUNT_PREFIX_BUF_SIZE],
-    ) -> &'a [u8] {
+        buf: &mut [u8; Self::COUNT_PREFIX_BUF_SIZE],
+    ) -> &[u8] {
         let mut digits_buf = [0u8; 20];
         let mut value = count;
         let mut idx = digits_buf.len();
