@@ -113,28 +113,26 @@ impl Uniq {
         Ok(())
     }
 
-    fn skip_fields(&self, line: &[u8]) -> Vec<u8> {
+    fn skip_fields<'a>(&self, line: &'a [u8]) -> &'a [u8] {
         if let Some(skip_fields) = self.skip_fields {
-            let mut line = line.iter();
-            let mut line_after_skipped_field: Vec<u8>;
+            let mut idx = 0;
             for _ in 0..skip_fields {
-                if line.all(|u| u.is_ascii_whitespace()) {
-                    return Vec::new();
+                while idx < line.len() && line[idx].is_ascii_whitespace() {
+                    idx += 1;
                 }
-                line_after_skipped_field = line
-                    .by_ref()
-                    .skip_while(|u| !u.is_ascii_whitespace())
-                    .copied()
-                    .collect::<Vec<u8>>();
-
-                if line_after_skipped_field.is_empty() {
-                    return Vec::new();
+                if idx >= line.len() {
+                    return &line[line.len()..];
                 }
-                line = line_after_skipped_field.iter();
+                while idx < line.len() && !line[idx].is_ascii_whitespace() {
+                    idx += 1;
+                }
+                if idx >= line.len() {
+                    return &line[line.len()..];
+                }
             }
-            line.copied().collect::<Vec<u8>>()
+            &line[idx..]
         } else {
-            line.to_vec()
+            line
         }
     }
 
