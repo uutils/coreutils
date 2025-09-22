@@ -1775,7 +1775,7 @@ struct PathData {
     security_context: OnceCell<String>,
     // can be used to avoid reading the metadata. Can be also called d_type:
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
-    de: Option<DirEntry>,
+    de_md: Option<Metadata>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
     // PathBuf that all above data corresponds to
@@ -1799,10 +1799,10 @@ impl PathData {
         } else if command_line {
             p_buf.clone().into()
         } else {
-            p_buf
-                .file_name()
-                .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
-                .to_owned()
+            dir_entry
+                .as_ref()
+                .map(|de| de.file_name())
+                .unwrap_or_default()
         };
 
         let must_dereference = match &config.dereference {
@@ -1822,24 +1822,26 @@ impl PathData {
             Dereference::None => false,
         };
 
-        let de: Option<DirEntry> = dir_entry;
-
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
-        fn get_file_type(de: &DirEntry, p_buf: &Path, must_dereference: bool) -> Option<FileType> {
+        fn get_file_type(
+            dir_entry: &DirEntry,
+            p_buf: &Path,
+            must_dereference: bool,
+        ) -> Option<FileType> {
             if must_dereference {
                 // wait for metadata call to populate file type
                 return p_buf.metadata().ok().map(|md| md.file_type());
             }
 
-            if let Ok(ft_de) = de.file_type() {
+            if let Ok(ft_de) = dir_entry.file_type() {
                 return Some(ft_de);
             }
 
             None
         }
 
-        let ft = match de {
+        let ft = match dir_entry.as_ref() {
             Some(ref de) => OnceCell::from(get_file_type(de, &p_buf, must_dereference)),
             None => OnceCell::new(),
         };
@@ -1848,7 +1850,7 @@ impl PathData {
             md: OnceCell::new(),
             ft,
             security_context: OnceCell::new(),
-            de,
+            de_md: dir_entry.as_ref().and_then(|de| de.metadata().ok()),
             display_name,
             p_buf,
             must_dereference,
@@ -1861,10 +1863,8 @@ impl PathData {
             .get_or_init(|| {
                 // check if we can use DirEntry metadata
                 // it will avoid a call to stat()
-                if !self.must_dereference {
-                    if let Some(dir_entry) = &self.de {
-                        return dir_entry.metadata().ok();
-                    }
+                if !self.must_dereference && self.de_md.is_some() {
+                    return self.de_md.clone();
                 }
 
                 // if not, check if we can use Path metadata
@@ -1878,10 +1878,8 @@ impl PathData {
                         // but GNU will not throw an error until a bad fd "dir"
                         // is entered, here we match that GNU behavior, by handing
                         // back the non-dereferenced metadata upon an EBADF
-                        if self.must_dereference && errno == 9i32 {
-                            if let Some(dir_entry) = &self.de {
-                                return dir_entry.metadata().ok();
-                            }
+                        if self.must_dereference && errno == 9i32 && self.de_md.is_some() {
+                            return self.de_md.clone();
                         }
                         show!(LsError::IOErrorContext(
                             self.p_buf.clone(),
@@ -1905,7 +1903,7 @@ impl PathData {
     fn is_dangling_link(&self) -> bool {
         // deref enabled, self is real dir entry, self has metadata associated with link, but not with target
         self.must_dereference
-            && self.de.is_some()
+            && self.de_md.is_some()
             && self.file_type().is_none()
             && self.metadata().is_none()
     }
