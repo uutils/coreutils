@@ -3,7 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use super::PathData;
-use super::get_metadata_with_deref_opt;
 use lscolors::{Indicator, LsColors, Style};
 use std::ffi::OsString;
 use std::fs::DirEntry;
@@ -182,13 +181,11 @@ pub(crate) fn color_name(
         }
     }
 
-    if let Some(target) = target_symlink {
+    if let Some(_target) = target_symlink {
         // use the optional target_symlink
-        // Use fn get_metadata_with_deref_opt instead of get_metadata() here because ls
+        // Use fn symlink_metadata directly instead of get_metadata() here because ls
         // should not exit with an err, if we are unable to obtain the target_metadata
-        let md_option = get_metadata_with_deref_opt(&target.p_buf, path.must_dereference)
-            .ok()
-            .or_else(|| path.p_buf.symlink_metadata().ok());
+        let md_option = path.p_buf.symlink_metadata().ok();
 
         style_manager.apply_style_based_on_metadata(path, md_option.as_ref(), name, wrap)
     } else {
