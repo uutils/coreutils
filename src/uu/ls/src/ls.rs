@@ -1922,7 +1922,14 @@ impl PathData {
         // always obtain deref xattrs
         // ACLs and capabilities display (and a test) rely on this
         self.xattrs
-            .get_or_init(|| retrieve_xattrs(&self.p_buf, true).ok())
+            .get_or_init(
+                || match retrieve_xattrs(&self.p_buf, self.must_dereference) {
+                    Ok(map) => Some(map),
+                    Err(_) => fs::read_link(&self.p_buf)
+                        .ok()
+                        .and_then(|file| retrieve_xattrs(file, false).ok()),
+                },
+            )
             .as_ref()
     }
 

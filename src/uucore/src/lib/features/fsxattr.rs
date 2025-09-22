@@ -216,7 +216,7 @@ mod tests {
         test_xattrs.insert(OsString::from(test_attr), test_value.to_vec());
         apply_xattrs(&file_path, test_xattrs).unwrap();
 
-        let retrieved_xattrs = retrieve_xattrs(&file_path, false).unwrap();
+        let retrieved_xattrs = retrieve_xattrs(&file_path, true).unwrap();
         assert!(retrieved_xattrs.contains_key(OsString::from(test_attr).as_os_str()));
         assert_eq!(
             retrieved_xattrs
