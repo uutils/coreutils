@@ -1,0 +1,29 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "words": [
+    "dtolnay",
+    "NCCS",
+    "nccs",
+    "tcgetattr",
+    "tcflag",
+    "tcflags",
+    "cflag",
+    "cflags",
+    "lflag",
+    "lflags",
+    "ispeed",
+    "ospeed",
+    "hexdigit",
+    "gfmt",
+    "Termux",
+    "rsplit"
+  ],
+  "ignorePaths": [
+    "**/target/**",
+    "coreutils/target/**",
+    ".git/**",
+    "node_modules/**"
+  ]
+}
+

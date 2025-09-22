@@ -43,7 +43,13 @@ fn nccs_of(save: &str) -> usize {
 
 fn with_uppercase_hex(s: &str) -> String {
     s.chars()
-        .map(|c| if c.is_ascii_hexdigit() { c.to_ascii_uppercase() } else { c })
+        .map(|c| {
+            if c.is_ascii_hexdigit() {
+                c.to_ascii_uppercase()
+            } else {
+                c
+            }
+        })
         .collect()
 }
 

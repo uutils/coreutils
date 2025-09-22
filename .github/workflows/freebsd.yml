@@ -46,9 +46,6 @@ jobs:
         usesh: true
         sync: rsync
         copyback: false
-        ssh-config: |
-          Host *
-            IdentitiesOnly yes
         # We need jq and GNU coreutils to run show-utils.sh and bash to use inline shell string replacement
         prepare: pkg install -y curl sudo jq coreutils bash
         run: |
@@ -143,9 +140,6 @@ jobs:
         usesh: true
         sync: rsync
         copyback: false
-        ssh-config: |
-          Host *
-            IdentitiesOnly yes
         prepare: pkg install -y curl gmake sudo jq
         run: |
           ## Prepare, build, and test
