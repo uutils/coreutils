@@ -1836,12 +1836,12 @@ impl PathData {
         }
 
         let ft = match dir_entry.as_ref() {
-            Some(ref de) => OnceCell::from(get_file_type(de, &p_buf, must_dereference)),
+            Some(de) => OnceCell::from(get_file_type(de, &p_buf, must_dereference)),
             None => OnceCell::new(),
         };
 
         let md = match dir_entry.as_ref() {
-            Some(ref de) if !must_dereference => {
+            Some(de) if !must_dereference => {
                 // check if we can use DirEntry metadata
                 // it will avoid a call to stat()
                 OnceCell::from(de.metadata().ok())
@@ -3248,11 +3248,7 @@ fn get_security_context(path: &PathData, config: &Config) -> String {
             // to indicate a minor error
             // Only show error when context display is requested to avoid duplicate messages
             if config.context {
-                show!(LsError::IOErrorContext(
-                    path.p_buf.to_path_buf(),
-                    err,
-                    false
-                ));
+                show!(LsError::IOErrorContext(path.p_buf.clone(), err, false));
             }
             return substitute_string;
         }
@@ -3260,7 +3256,11 @@ fn get_security_context(path: &PathData, config: &Config) -> String {
     if config.selinux_supported {
         #[cfg(feature = "selinux")]
         {
-            match selinux::SecurityContext::of_path(path.p_buf, path.must_dereference, false) {
+            match selinux::SecurityContext::of_path(
+                path.p_buf.clone(),
+                path.must_dereference,
+                false,
+            ) {
                 Err(_r) => {
                     // TODO: show the actual reason why it failed
                     show_warning!("failed to get security context of: {}", path.p_buf.quote());
