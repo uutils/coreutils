@@ -70,3 +70,6 @@ Solaris
 SysV
 Xenix
 Yargs
+
+# Product
+codspeed
