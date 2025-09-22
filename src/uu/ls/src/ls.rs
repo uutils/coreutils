@@ -37,9 +37,10 @@ use thiserror::Error;
 
 #[cfg(unix)]
 use uucore::entries;
-use uucore::fsxattr::retrieve_xattrs;
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-use uucore::fsxattr::{POSIX_ACL_ACCESS_KEY, POSIX_ACL_DEFAULT_KEY, SET_CAPABILITY_KEY};
+use uucore::fsxattr::{
+    POSIX_ACL_ACCESS_KEY, POSIX_ACL_DEFAULT_KEY, SET_CAPABILITY_KEY, retrieve_xattrs,
+};
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 #[cfg(any(
@@ -1773,6 +1774,7 @@ struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     xattrs: OnceCell<Option<HashMap<OsString, Vec<u8>>>>,
     // can be used to avoid reading the metadata. Can be also called d_type:
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
@@ -1859,6 +1861,7 @@ impl PathData {
         Self {
             md: OnceCell::new(),
             ft,
+            #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
             xattrs: OnceCell::new(),
             de,
             display_name,
@@ -1914,28 +1917,20 @@ impl PathData {
             .as_ref()
     }
 
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     fn xattrs(&self) -> Option<&HashMap<OsString, Vec<u8>>> {
+        // always obtain deref xattrs
+        // ACLs and capabilities display (and a test) rely on this
         self.xattrs
-            .get_or_init(|| retrieve_xattrs(&self.p_buf, self.must_dereference).ok())
+            .get_or_init(|| retrieve_xattrs(&self.p_buf, true).ok())
             .as_ref()
     }
 
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-    fn has_acl(&self, out: &mut BufWriter<Stdout>) -> bool {
-        self.xattrs()
-            .as_ref()
-            .and_then(|map| {
-                map.get(&*POSIX_ACL_ACCESS_KEY).or_else(|| {
-                    // Default ACL only applies to directories - avoid 2nd syscall here
-                    // See: https://www.usenix.org/legacy/publications/library/proceedings/usenix03/tech/freenix03/full_papers/gruenbacher/gruenbacher_html/main.html
-                    if self.file_type(out).is_some_and(|ft| !ft.is_dir()) {
-                        return None;
-                    }
-
-                    map.get(&*POSIX_ACL_DEFAULT_KEY)
-                })
-            })
-            .is_some_and(|vec| !vec.is_empty())
+    fn has_acl(&self) -> bool {
+        self.xattrs().as_ref().is_some_and(|map| {
+            map.contains_key(&*POSIX_ACL_ACCESS_KEY) || map.contains_key(&*POSIX_ACL_DEFAULT_KEY)
+        })
     }
 
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
@@ -1943,8 +1938,7 @@ impl PathData {
         // don't use exacl here, it is doing more getxattr call then needed
         self.xattrs()
             .as_ref()
-            .and_then(|map| map.get(&*SET_CAPABILITY_KEY))
-            .is_some_and(|vec| !vec.is_empty())
+            .is_some_and(|map| map.contains_key(&*SET_CAPABILITY_KEY))
     }
 }
 
@@ -2744,7 +2738,7 @@ fn display_item_long(
         // TODO: See how Mac should work here
         let has_acl = false;
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let has_acl = { item.has_acl(&mut state.out) };
+        let has_acl = { item.has_acl() };
 
         output_display.extend(display_permissions(md, true).as_bytes());
         if item.security_context.len() > 1 {

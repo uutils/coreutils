@@ -8,7 +8,6 @@
 //! Set of functions to manage xattr on files and dirs
 use std::collections::HashMap;
 use std::ffi::OsString;
-use std::fs::FileType;
 use std::path::Path;
 use std::sync::LazyLock;
 
@@ -95,24 +94,17 @@ pub fn apply_xattrs<P: AsRef<Path>>(
 /// # Returns
 ///
 /// `true` if the file has extended attributes (indicating an ACL), `false` otherwise.
-pub fn has_acl<P: AsRef<Path>>(file: P, opt_ft: Option<&FileType>) -> bool {
+pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
     // don't use exacl here, it is doing more getxattr call then needed
     xattr::get_deref(&file, &*POSIX_ACL_ACCESS_KEY)
         .ok()
         .flatten()
         .or_else(|| {
-            // Default ACL only applies to directories - avoid 2nd syscall here
-            // See: https://www.usenix.org/legacy/publications/library/proceedings/usenix03/tech/freenix03/full_papers/gruenbacher/gruenbacher_html/main.html
-            if opt_ft.map(|ft| !ft.is_dir()).unwrap_or(false) {
-                return None;
-            }
-
             xattr::get_deref(&file, &*POSIX_ACL_DEFAULT_KEY)
                 .ok()
                 .flatten()
         })
-        .map(|vec| !vec.is_empty())
-        .unwrap_or(false)
+        .is_some_and(|vec| !vec.is_empty())
 }
 
 /// Checks if a file has an Capability set based on its extended attributes.
@@ -129,8 +121,7 @@ pub fn has_capability<P: AsRef<Path>>(file: P) -> bool {
     xattr::get_deref(&file, &*SET_CAPABILITY_KEY)
         .ok()
         .flatten()
-        .map(|vec| !vec.is_empty())
-        .unwrap_or(false)
+        .is_some_and(|vec| !vec.is_empty())
 }
 
 /// Returns the permissions bits of a file or directory which has Access Control List (ACL) entries based on its
@@ -149,7 +140,7 @@ pub fn get_acl_perm_bits_from_xattr<P: AsRef<Path>>(source: P) -> u32 {
 
     // Only default acl entries get inherited by objects under the path i.e. if child directories
     // will have their permissions modified.
-    if let Ok(entries) = retrieve_xattrs(source, false) {
+    if let Ok(entries) = retrieve_xattrs(source, true) {
         let mut perm: u32 = 0;
         if let Some(value) = entries.get(&*POSIX_ACL_DEFAULT_KEY) {
             // value is xattr byte vector
@@ -225,7 +216,7 @@ mod tests {
         test_xattrs.insert(OsString::from(test_attr), test_value.to_vec());
         apply_xattrs(&file_path, test_xattrs).unwrap();
 
-        let retrieved_xattrs = retrieve_xattrs(&file_path).unwrap();
+        let retrieved_xattrs = retrieve_xattrs(&file_path, false).unwrap();
         assert!(retrieved_xattrs.contains_key(OsString::from(test_attr).as_os_str()));
         assert_eq!(
             retrieved_xattrs
@@ -288,7 +279,7 @@ mod tests {
 
         File::create(&file_path).unwrap();
 
-        assert!(!has_acl(&file_path, None));
+        assert!(!has_acl(&file_path));
 
         let test_attr = "system.posix_acl_access";
         let test_value = "invalid_test_value";
@@ -297,6 +288,6 @@ mod tests {
             return;
         };
 
-        assert!(has_acl(&file_path, None));
+        assert!(has_acl(&file_path));
     }
 }
