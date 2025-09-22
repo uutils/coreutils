@@ -645,7 +645,8 @@ fn test_output_error_flag_without_value_defaults_warn_nopipe() {
     assert_eq!(at.read(file_out), content);
 }
 
-#[cfg(unix)]
+// Skip on FreeBSD due to repeated CI hangs in FreeBSD VM (see PR #8684)
+#[cfg(all(unix, not(target_os = "freebsd")))]
 #[test]
 fn test_broken_pipe_early_termination_stdout_only() {
     use std::fs::File;
