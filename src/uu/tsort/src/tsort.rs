@@ -4,7 +4,8 @@
 // file that was distributed with this source code.
 //spell-checker:ignore TAOCP indegree
 use clap::{Arg, Command};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::cmp::Reverse;
+use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::ffi::OsString;
 use std::path::Path;
 use thiserror::Error;
@@ -62,12 +63,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     // Create the directed graph from pairs of tokens in the input data.
-    let mut g = Graph::new(input.to_string_lossy().to_string());
-    for ab in data.split_whitespace().collect::<Vec<&str>>().chunks(2) {
-        match ab {
-            [a, b] => g.add_edge(a, b),
-            _ => return Err(TsortError::NumTokensOdd(input.to_string_lossy().to_string()).into()),
-        }
+    let input_name = input.to_string_lossy().to_string();
+    let mut g = Graph::new(input_name.clone());
+    let mut tokens = data.split_whitespace();
+    loop {
+        let Some(a) = tokens.next() else { break };
+        let Some(b) = tokens.next() else {
+            return Err(TsortError::NumTokensOdd(input_name).into());
+        };
+        g.add_edge(a, b);
     }
 
     g.run_tsort();
@@ -95,8 +99,9 @@ fn remove<T>(vec: &mut Vec<T>, x: T) -> Option<usize>
 where
     T: PartialEq,
 {
-    vec.iter().position(|item| *item == x).inspect(|i| {
-        vec.remove(*i);
+    vec.iter().position(|item| *item == x).map(|i| {
+        vec.swap_remove(i);
+        i
     })
 }
 
@@ -153,24 +158,17 @@ impl<'input> Graph<'input> {
     fn run_tsort(&mut self) {
         // First, we find nodes that have no prerequisites (independent nodes).
         // If no such node exists, then there is a cycle.
-        let mut independent_nodes_queue: VecDeque<&'input str> = self
+        let mut independent_nodes_queue: BinaryHeap<Reverse<&'input str>> = self
             .nodes
             .iter()
             .filter_map(|(&name, node)| {
                 if node.predecessor_count == 0 {
-                    Some(name)
+                    Some(Reverse(name))
                 } else {
                     None
                 }
             })
             .collect();
-
-        // To make sure the resulting ordering is deterministic we
-        // need to order independent nodes.
-        //
-        // FIXME: this doesn't comply entirely with the GNU coreutils
-        // implementation.
-        independent_nodes_queue.make_contiguous().sort_unstable();
 
         while !self.nodes.is_empty() {
             // Get the next node (breaking any cycles necessary to do so).
@@ -182,7 +180,7 @@ impl<'input> Graph<'input> {
                     successor_node.predecessor_count -= 1;
                     if successor_node.predecessor_count == 0 {
                         // If we find nodes without any other prerequisites, we add them to the queue.
-                        independent_nodes_queue.push_back(successor_name);
+                        independent_nodes_queue.push(Reverse(successor_name));
                     }
                 }
             }
@@ -195,7 +193,7 @@ impl<'input> Graph<'input> {
     }
 
     // Pre-condition: self.nodes is non-empty.
-    fn find_next_node(&mut self, frontier: &mut VecDeque<&'input str>) -> &'input str {
+    fn find_next_node(&mut self, frontier: &mut BinaryHeap<Reverse<&'input str>>) -> &'input str {
         // If there are no nodes of in-degree zero but there are still
         // un-visited nodes in the graph, then there must be a cycle.
         // We need to find the cycle, display it, and then break the
@@ -210,14 +208,14 @@ impl<'input> Graph<'input> {
         // result in the target node having in-degree zero, so we repeat
         // the process until such a node appears.
         loop {
-            match frontier.pop_front() {
+            match frontier.pop() {
                 None => self.find_and_break_cycle(frontier),
-                Some(v) => return v,
+                Some(Reverse(v)) => return v,
             }
         }
     }
 
-    fn find_and_break_cycle(&mut self, frontier: &mut VecDeque<&'input str>) {
+    fn find_and_break_cycle(&mut self, frontier: &mut BinaryHeap<Reverse<&'input str>>) {
         let cycle = self.detect_cycle();
         show!(TsortError::Loop(self.name.clone()));
         for node in &cycle {
@@ -227,7 +225,7 @@ impl<'input> Graph<'input> {
         let v = cycle[1];
         self.remove_edge(u, v);
         if self.indegree(v).unwrap() == 0 {
-            frontier.push_back(v);
+            frontier.push(Reverse(v));
         }
     }
 
@@ -241,8 +239,9 @@ impl<'input> Graph<'input> {
 
         let mut visited = HashSet::new();
         let mut stack = Vec::with_capacity(self.nodes.len());
+        let mut stack_set = HashSet::with_capacity(self.nodes.len());
         for node in nodes {
-            if !visited.contains(node) && self.dfs(node, &mut visited, &mut stack) {
+            if !visited.contains(node) && self.dfs(node, &mut visited, &mut stack, &mut stack_set) {
                 return stack;
             }
         }
@@ -254,8 +253,9 @@ impl<'input> Graph<'input> {
         node: &'input str,
         visited: &mut HashSet<&'input str>,
         stack: &mut Vec<&'input str>,
+        stack_set: &mut HashSet<&'input str>,
     ) -> bool {
-        if stack.contains(&node) {
+        if stack_set.contains(&node) {
             return true;
         }
         if visited.contains(&node) {
@@ -264,16 +264,18 @@ impl<'input> Graph<'input> {
 
         visited.insert(node);
         stack.push(node);
+        stack_set.insert(node);
 
         if let Some(successor_names) = self.nodes.get(node).map(|n| &n.successor_names) {
             for &successor in successor_names {
-                if self.dfs(successor, visited, stack) {
+                if self.dfs(successor, visited, stack, stack_set) {
                     return true;
                 }
             }
         }
 
         stack.pop();
+        stack_set.remove(node);
         false
     }
 }
