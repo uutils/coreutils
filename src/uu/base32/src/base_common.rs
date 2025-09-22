@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, ErrorKind, Read, Seek, Write};
+use std::io::{self, ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::encoding::{
@@ -149,13 +149,7 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
         )
 }
 
-/// A trait alias for types that implement both `Read` and `Seek`.
-pub trait ReadSeek: Read + Seek {}
-
-/// Automatically implement the `ReadSeek` trait for any type that implements both `Read` and `Seek`.
-impl<T: Read + Seek> ReadSeek for T {}
-
-pub fn get_input(config: &Config) -> UResult<Box<dyn ReadSeek>> {
+pub fn get_input(config: &Config) -> UResult<Box<dyn Read>> {
     match &config.to_read {
         Some(path_buf) => {
             // Do not buffer input, because buffering is handled by `fast_decode` and `fast_encode`
@@ -163,15 +157,11 @@ pub fn get_input(config: &Config) -> UResult<Box<dyn ReadSeek>> {
                 File::open(path_buf).map_err_context(|| path_buf.maybe_quote().to_string())?;
             Ok(Box::new(file))
         }
-        None => {
-            let mut buffer = Vec::new();
-            io::stdin().read_to_end(&mut buffer)?;
-            Ok(Box::new(io::Cursor::new(buffer)))
-        }
+        None => Ok(Box::new(io::stdin())),
     }
 }
 
-pub fn handle_input<R: Read + Seek>(input: &mut R, format: Format, config: Config) -> UResult<()> {
+pub fn handle_input<R: Read>(input: &mut R, format: Format, config: Config) -> UResult<()> {
     let supports_fast_decode_and_encode = get_supports_fast_decode_and_encode(format);
 
     let supports_fast_decode_and_encode_ref = supports_fast_decode_and_encode.as_ref();
