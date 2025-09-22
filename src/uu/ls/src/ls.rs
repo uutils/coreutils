@@ -3127,7 +3127,7 @@ fn display_item_name(
         && !path.must_dereference
     {
         match path.p_buf.read_link() {
-            Ok(target) => {
+            Ok(target_path) => {
                 name.push(" -> ");
 
                 // We might as well color the symlink output after the arrow.
@@ -3136,8 +3136,8 @@ fn display_item_name(
                 if let Some(style_manager) = &mut state.style_manager {
                     // We get the absolute path to be able to construct PathData with valid Metadata.
                     // This is because relative symlinks will fail to get_metadata.
-                    let mut absolute_target = target.clone();
-                    if target.is_relative() {
+                    let mut absolute_target = target_path.clone();
+                    if target_path.is_relative() {
                         if let Some(parent) = path.p_buf.parent() {
                             absolute_target = parent.join(absolute_target);
                         }
@@ -3149,17 +3149,11 @@ fn display_item_name(
                     // Because we use an absolute path, we can assume this is guaranteed to exist.
                     // Otherwise, we use path.md(), which will guarantee we color to the same
                     // color of non-existent symlinks according to style_for_path_with_metadata.
-                    if path.metadata().is_none()
-                        && get_metadata_with_deref_opt(
-                            target_data.p_buf.as_path(),
-                            target_data.must_dereference,
-                        )
-                        .is_err()
-                    {
-                        name.push(target);
+                    if path.metadata().is_none() && target_data.metadata().is_none() {
+                        name.push(target_path);
                     } else {
                         name.push(color_name(
-                            locale_aware_escape_name(target.as_os_str(), config.quoting_style),
+                            locale_aware_escape_name(target_path.as_os_str(), config.quoting_style),
                             path,
                             style_manager,
                             Some(&target_data),
@@ -3170,7 +3164,7 @@ fn display_item_name(
                     // If no coloring is required, we just use target as is.
                     // Apply the right quoting
                     name.push(locale_aware_escape_name(
-                        target.as_os_str(),
+                        target_path.as_os_str(),
                         config.quoting_style,
                     ));
                 }
