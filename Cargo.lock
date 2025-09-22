@@ -4242,6 +4242,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "libc",
+ "memchr",
  "nix 0.30.1",
  "tempfile",
  "thiserror 2.0.16",

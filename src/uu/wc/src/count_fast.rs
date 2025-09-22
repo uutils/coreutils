@@ -230,6 +230,63 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
 >(
     handle: &mut R,
 ) -> (WordCount, Option<io::Error>) {
+    // Use specialized implementations for common cases
+    match (COUNT_BYTES, COUNT_CHARS, COUNT_LINES) {
+        // Lines only - use memchr for fastest line counting
+        (false, false, true) => count_lines_only_fast(handle),
+        // Bytes + Lines - optimize using bytecount and avoid double counting
+        (true, false, true) => count_bytes_and_lines_fast(handle),
+        // Default implementation for other cases
+        _ => {
+            count_bytes_chars_and_lines_generic::<R, COUNT_BYTES, COUNT_CHARS, COUNT_LINES>(handle)
+        }
+    }
+}
+
+/// Specialized fast line counting using memchr
+fn count_lines_only_fast<R: Read>(handle: &mut R) -> (WordCount, Option<io::Error>) {
+    let mut total = WordCount::default();
+    let buf: &mut [u8] = &mut AlignedBuffer::default().data;
+
+    loop {
+        match handle.read(buf) {
+            Ok(0) => return (total, None),
+            Ok(n) => {
+                total.lines += memchr::memchr_iter(b'\n', &buf[..n]).count();
+            }
+            Err(ref e) if e.kind() == ErrorKind::Interrupted => (),
+            Err(e) => return (total, Some(e)),
+        }
+    }
+}
+
+/// Specialized fast byte and line counting using bytecount
+fn count_bytes_and_lines_fast<R: Read>(handle: &mut R) -> (WordCount, Option<io::Error>) {
+    let mut total = WordCount::default();
+    let buf: &mut [u8] = &mut AlignedBuffer::default().data;
+
+    loop {
+        match handle.read(buf) {
+            Ok(0) => return (total, None),
+            Ok(n) => {
+                total.bytes += n;
+                total.lines += bytecount::count(&buf[..n], b'\n');
+            }
+            Err(ref e) if e.kind() == ErrorKind::Interrupted => (),
+            Err(e) => return (total, Some(e)),
+        }
+    }
+}
+
+/// Generic implementation for mixed counting
+fn count_bytes_chars_and_lines_generic<
+    R: Read,
+    const COUNT_BYTES: bool,
+    const COUNT_CHARS: bool,
+    const COUNT_LINES: bool,
+>(
+    handle: &mut R,
+) -> (WordCount, Option<io::Error>) {
     let mut total = WordCount::default();
     let buf: &mut [u8] = &mut AlignedBuffer::default().data;
     loop {
