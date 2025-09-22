@@ -168,7 +168,7 @@ pub(crate) fn color_name(
         let has_capabilities = if capabilities.is_none() {
             false
         } else {
-            path.has_capability()
+            uucore::fsxattr::has_capability(path.p_buf)
         };
 
         // If the file has capabilities, use a specific style for `ca` (capabilities)
