@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 use super::PathData;
 use super::get_metadata_with_deref_opt;
-use lscolors::{Indicator, LsColors, Style, apply_style_based_on_dir_entry};
+use lscolors::{Indicator, LsColors, Style};
 use std::ffi::OsString;
 use std::fs::Metadata;
 
@@ -131,6 +131,16 @@ impl<'a> StyleManager<'a> {
         let style = self
             .colors
             .style_for_path_with_metadata(&path.p_buf, md_option);
+        self.apply_style(style, name, wrap)
+    }
+
+    pub(crate) fn apply_style_based_on_dir_entry(
+        &mut self,
+        dir_entry: &DirEntry,
+        name: OsString,
+        wrap: bool,
+    ) -> OsString {
+        let style = self.colors.style_for(dir_entry);
         self.apply_style(style, name, wrap)
     }
 }
