@@ -3390,7 +3390,7 @@ fn calculate_padding_collection(
             }
         }
 
-        let context_len = item.security_context().len();
+        let context_len = item.security_context(config).len();
         let (link_count_len, uname_len, group_len, size_len, _major_len, _minor_len) =
             display_dir_entry_size(item, config, state);
         padding_collections.link_count = link_count_len.max(padding_collections.link_count);
