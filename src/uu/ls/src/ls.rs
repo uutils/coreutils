@@ -1919,8 +1919,6 @@ impl PathData {
 
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     fn xattrs(&self) -> Option<&HashMap<OsString, Vec<u8>>> {
-        // always obtain deref xattrs
-        // ACLs and capabilities display (and a test) rely on this
         self.xattrs
             .get_or_init(
                 || match retrieve_xattrs(&self.p_buf, self.must_dereference) {
