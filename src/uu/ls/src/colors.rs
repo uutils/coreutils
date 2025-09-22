@@ -12,7 +12,7 @@ impl Colorable for PathData {
         self.display_name.clone()
     }
     fn file_type(&self) -> Option<std::fs::FileType> {
-        self.file_type().cloned()
+        self.file_type().copied()
     }
     fn metadata(&self) -> Option<Metadata> {
         self.metadata().cloned()
