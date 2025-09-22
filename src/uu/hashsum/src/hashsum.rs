@@ -498,7 +498,7 @@ pub fn uu_app_custom() -> Command {
 /// hashsum is handled differently in build.rs
 /// therefore, this is different from other utilities.
 fn uu_app(binary_name: &str) -> (Command, bool) {
-    let (mut command, is_hashsum_bin) = match binary_name {
+    let (command, is_hashsum_bin) = match binary_name {
         // These all support the same options.
         "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" => {
             (uu_app_common(), false)
@@ -519,12 +519,14 @@ fn uu_app(binary_name: &str) -> (Command, bool) {
     };
 
     // If not called as generic hashsum, override the command name and usage
-    if !is_hashsum_bin {
+    let command = if is_hashsum_bin {
+        command
+    } else {
         let usage = translate!("hashsum-usage-specific", "utility_name" => binary_name);
-        command = command
+        command
             .help_template(uucore::localized_help_template(binary_name))
-            .override_usage(format_usage(&usage));
-    }
+            .override_usage(format_usage(&usage))
+    };
 
     (command, is_hashsum_bin)
 }

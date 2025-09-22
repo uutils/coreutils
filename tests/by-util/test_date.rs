@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata
+// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds
 
 use chrono::{DateTime, Datelike, Duration, NaiveTime, Utc}; // spell-checker:disable-line
 use regex::Regex;
@@ -744,4 +744,37 @@ fn test_date_empty_tz_time() {
         .arg("@0")
         .succeeds()
         .stdout_only("Thu Jan  1 00:00:00 UTC 1970\n");
+}
+
+#[test]
+fn test_date_resolution() {
+    // Test that --resolution flag returns a floating point number by default
+    new_ucmd!()
+        .arg("--resolution")
+        .succeeds()
+        .stdout_str_check(|s| s.trim().parse::<f64>().is_ok());
+
+    // Test that --resolution flag can be passed twice to match gnu
+    new_ucmd!()
+        .arg("--resolution")
+        .arg("--resolution")
+        .succeeds()
+        .stdout_str_check(|s| s.trim().parse::<f64>().is_ok());
+
+    // Test that can --resolution output can be formatted as a date
+    new_ucmd!()
+        .arg("--resolution")
+        .arg("-Iseconds")
+        .succeeds()
+        .stdout_only("1970-01-01T00:00:00+00:00\n");
+}
+
+#[test]
+fn test_date_resolution_no_combine() {
+    // Test that date fails when --resolution flag is passed with date flag
+    new_ucmd!()
+        .arg("--resolution")
+        .arg("-d")
+        .arg("2025-01-01")
+        .fails();
 }
