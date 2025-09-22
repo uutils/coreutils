@@ -461,13 +461,16 @@ ifneq ($(OS),Windows_NT)
 endif
 ifeq (${MULTICALL}, y)
 	$(INSTALL) -m 755 $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
-	$(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
-		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
-	)
-	$(if $(findstring test,$(INSTALLEES)), cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
-else
-	$(foreach prog, $(INSTALLEES), \
-		$(INSTALL) -m 755 $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog) $(newline) \
+	@echo "Installing utilities (skipping: $(SKIP_UTILS))"
+        @for util in $$($(BUILDDIR)/coreutils --list); do \
+                if echo "$(SKIP_UTILS)" | grep -qw "$$util"; then \
+                        echo "Skipping $$util"; \
+                else \
+                        cd $(INSTALLDIR_BIN) && ln -sf $(PROG_PREFIX)coreutils $(PROG_PREFIX)$util; \
+                        echo "Installed $$util"; \
+                fi; \
+        done
+	$(INSTALL) -m 755 $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog) $(newline) \
 	)
 	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) -m 755 $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
 endif
