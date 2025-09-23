@@ -387,7 +387,6 @@ jobs:
         test -h /tmp/usr/local/bin/sha512sum
         test -h /tmp/usr/local/bin/shake128sum
         test -h /tmp/usr/local/bin/shake256sum
-  
   build_rust_stable:
     name: Build/stable
     needs: [ min_version, deps ]
@@ -1294,6 +1293,30 @@ jobs:
         shell: bash
         run: cargo install cargo-codspeed --locked
 
+      - name: Get benchmark list
+        id: benchmark_list
+        shell: bash
+        run: |
+          echo "Finding all utilities with benchmarks..."
+          benchmark_packages=""
+          for bench_dir in $(ls -d src/uu/*/benches 2>/dev/null); do
+            prog_dir=$(dirname "$bench_dir")
+            prog_name=$(basename "$prog_dir")
+            echo "Found benchmarks for uu_$prog_name"
+            benchmark_packages="$benchmark_packages uu_$prog_name"
+          done
+          echo "benchmark_packages=${benchmark_packages}" >> $GITHUB_OUTPUT
+          echo "Found benchmark packages:${benchmark_packages}"
+
+      - name: Build benchmarks
+        shell: bash
+        run: |
+          echo "Building benchmarks for packages: ${{ steps.benchmark_list.outputs.benchmark_packages }}"
+          for package in ${{ steps.benchmark_list.outputs.benchmark_packages }}; do
+            echo "Building benchmarks for $package"
+            cargo codspeed build -p $package
+          done
+
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v4
         env:
@@ -1301,13 +1324,9 @@ jobs:
         with:
           mode: instrumentation
           run: |
-            # Find all utilities with benchmarks and run them individually
-            echo "Starting CodSpeed benchmark collection..."
-            for bench_dir in $(ls -d src/uu/*/benches 2>/dev/null); do
-              prog_dir=$(dirname "$bench_dir")
-              prog_name=$(basename "$prog_dir")
-              echo "Processing benchmarks for uu_$prog_name"
-              cargo codspeed build -p uu_$prog_name
-              cargo codspeed run -p uu_$prog_name
+            echo "Running benchmarks for packages: ${{ steps.benchmark_list.outputs.benchmark_packages }}"
+            for package in ${{ steps.benchmark_list.outputs.benchmark_packages }}; do
+              echo "Running benchmarks for $package"
+              cargo codspeed run -p $package
             done
           token: ${{ secrets.CODSPEED_TOKEN }}

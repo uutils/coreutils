@@ -4268,6 +4268,7 @@ dependencies = [
  "bstr",
  "chrono",
  "clap",
+ "codspeed-divan-compat",
  "crc-fast",
  "crc32fast",
  "data-encoding",

@@ -4,9 +4,8 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
-use std::fs::File;
-use std::io::{BufWriter, Write};
-use tempfile::TempDir;
+use uu_tsort::uumain;
+use uucore::benchmark::{create_test_file, run_util_function};
 
 /// Generate topological sort test data with different characteristics
 fn generate_linear_chain(num_nodes: usize) -> Vec<u8> {
@@ -117,42 +116,17 @@ fn generate_wide_dag(num_nodes: usize) -> Vec<u8> {
     data
 }
 
-/// Create a temporary file with test data
-fn create_test_file(data: &[u8], temp_dir: &TempDir) -> std::path::PathBuf {
-    let file_path = temp_dir.path().join("test_data.txt");
-    let file = File::create(&file_path).unwrap();
-    let mut writer = BufWriter::new(file);
-    writer.write_all(data).unwrap();
-    writer.flush().unwrap();
-    file_path
-}
-
-/// Run uutils tsort with given arguments
-fn run_uutils_tsort(args: &[&str]) -> i32 {
-    use std::process::{Command, Stdio};
-
-    // Use the binary instead of calling uumain directly to avoid stdout issues
-    let output = Command::new("../../../target/release/coreutils")
-        .args(["tsort"].iter().chain(args.iter()))
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .expect("Failed to execute tsort command");
-
-    i32::from(!output.success())
-}
-
 /// Benchmark linear chain graphs of different sizes
 /// This tests the performance improvements mentioned in PR #8694
 #[divan::bench(args = [1_000, 10_000, 100_000, 1_000_000])]
 fn tsort_linear_chain(bencher: Bencher, num_nodes: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = generate_linear_chain(num_nodes);
-    let file_path = create_test_file(&data, &temp_dir);
+    let file_path = create_test_file(&data, temp_dir.path());
     let file_path_str = file_path.to_str().unwrap();
 
     bencher.bench(|| {
-        black_box(run_uutils_tsort(&[file_path_str]));
+        black_box(run_util_function(uumain, &[file_path_str]));
     });
 }
 
@@ -161,11 +135,11 @@ fn tsort_linear_chain(bencher: Bencher, num_nodes: usize) {
 fn tsort_tree_dag(bencher: Bencher, (depth, branching): (usize, usize)) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = generate_tree_dag(depth, branching);
-    let file_path = create_test_file(&data, &temp_dir);
+    let file_path = create_test_file(&data, temp_dir.path());
     let file_path_str = file_path.to_str().unwrap();
 
     bencher.bench(|| {
-        black_box(run_uutils_tsort(&[file_path_str]));
+        black_box(run_util_function(uumain, &[file_path_str]));
     });
 }
 
@@ -174,11 +148,11 @@ fn tsort_tree_dag(bencher: Bencher, (depth, branching): (usize, usize)) {
 fn tsort_complex_dag(bencher: Bencher, num_nodes: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = generate_complex_dag(num_nodes);
-    let file_path = create_test_file(&data, &temp_dir);
+    let file_path = create_test_file(&data, temp_dir.path());
     let file_path_str = file_path.to_str().unwrap();
 
     bencher.bench(|| {
-        black_box(run_uutils_tsort(&[file_path_str]));
+        black_box(run_util_function(uumain, &[file_path_str]));
     });
 }
 
@@ -188,11 +162,11 @@ fn tsort_complex_dag(bencher: Bencher, num_nodes: usize) {
 fn tsort_wide_dag(bencher: Bencher, num_nodes: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = generate_wide_dag(num_nodes);
-    let file_path = create_test_file(&data, &temp_dir);
+    let file_path = create_test_file(&data, temp_dir.path());
     let file_path_str = file_path.to_str().unwrap();
 
     bencher.bench(|| {
-        black_box(run_uutils_tsort(&[file_path_str]));
+        black_box(run_util_function(uumain, &[file_path_str]));
     });
 }
 
@@ -213,11 +187,11 @@ fn tsort_input_parsing_heavy(bencher: Bencher, num_edges: usize) {
         }
     }
 
-    let file_path = create_test_file(&data, &temp_dir);
+    let file_path = create_test_file(&data, temp_dir.path());
     let file_path_str = file_path.to_str().unwrap();
 
     bencher.bench(|| {
-        black_box(run_uutils_tsort(&[file_path_str]));
+        black_box(run_util_function(uumain, &[file_path_str]));
     });
 }
 

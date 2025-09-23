@@ -8,6 +8,8 @@
 
 #[cfg(feature = "backup-control")]
 pub mod backup_control;
+#[cfg(feature = "benchmark")]
+pub mod benchmark;
 #[cfg(feature = "buf-copy")]
 pub mod buf_copy;
 #[cfg(feature = "checksum")]
