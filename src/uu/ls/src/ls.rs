@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime
 
+use std::borrow::Cow;
 #[cfg(unix)]
 use std::collections::HashMap;
 #[cfg(unix)]
@@ -3238,7 +3239,7 @@ fn display_inode(metadata: &Metadata) -> String {
 
 /// This returns the `SELinux` security context as UTF8 `String`.
 /// In the long term this should be changed to [`OsStr`], see discussions at #2621/#2656
-fn get_security_context<'a>(path: &'a PathData, config: &'a Config) -> &'a str {
+fn get_security_context<'a>(path: &'a PathData, config: &'a Config) -> Cow<'a, str> {
     static SUBSTITUTE_STRING: &str = "?";
 
     // If we must dereference, ensure that the symlink is actually valid even if the system
@@ -3252,7 +3253,7 @@ fn get_security_context<'a>(path: &'a PathData, config: &'a Config) -> &'a str {
             if config.context {
                 show!(LsError::IOErrorContext(path.p_buf.clone(), err, false));
             }
-            return SUBSTITUTE_STRING;
+            return Cow::Borrowed(SUBSTITUTE_STRING);
         }
     }
 
@@ -3267,27 +3268,31 @@ fn get_security_context<'a>(path: &'a PathData, config: &'a Config) -> &'a str {
                 Err(_r) => {
                     // TODO: show the actual reason why it failed
                     show_warning!("failed to get security context of: {}", path.p_buf.quote());
-                    return SUBSTITUTE_STRING;
+                    return Cow::Borrowed(SUBSTITUTE_STRING);
                 }
-                Ok(None) => return SUBSTITUTE_STRING,
+                Ok(None) => return Cow::Borrowed(SUBSTITUTE_STRING),
                 Ok(Some(context)) => {
                     let context = context.as_bytes();
 
                     let context = context.strip_suffix(&[0]).unwrap_or(context);
-                    return String::from_utf8(context.to_vec()).unwrap_or_else(|e| {
+
+                    let res: String = String::from_utf8(context.to_vec()).unwrap_or_else(|e| {
                         show_warning!(
                             "getting security context of: {}: {}",
                             path.p_buf.quote(),
                             e.to_string()
                         );
-                        String::from_utf8_lossy(context).into_owned()
+
+                        String::from_utf8_lossy(context).to_string()
                     });
+
+                    return Cow::Owned(res);
                 }
             }
         }
     }
 
-    SUBSTITUTE_STRING
+    Cow::Borrowed(SUBSTITUTE_STRING)
 }
 
 #[cfg(unix)]
