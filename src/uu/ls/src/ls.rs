@@ -1867,7 +1867,8 @@ impl PathData {
         self.md
             .get_or_init(|| {
                 // if not, check if we can use Path metadata
-                match get_metadata_with_deref_opt(self.p_buf.as_path(), self.must_dereference) {
+                match get_metadata_with_deref_opt(self.p_buf.as_path(), None, self.must_dereference)
+                {
                     Err(err) => {
                         // FIXME: A bit tricky to propagate the result here
                         let mut out = stdout().lock();
@@ -2136,7 +2137,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             !match md {
                 None | Some(None) => {
                     // If it metadata cannot be determined, treat as a file.
-                    get_metadata_with_deref_opt(p.p_buf.as_path(), true)
+                    get_metadata_with_deref_opt(p.p_buf.as_path(), p.metadata(), true)
                         .map_or_else(|_| false, |m| m.is_dir())
                 }
                 Some(Some(m)) => m.is_dir(),
@@ -2303,10 +2304,18 @@ fn enter_directory(
     Ok(())
 }
 
-fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
+fn get_metadata_with_deref_opt(
+    p_buf: &Path,
+    opt_metadata: Option<&Metadata>,
+    dereference: bool,
+) -> std::io::Result<Metadata> {
     if dereference {
         p_buf.metadata()
     } else {
+        if let Some(md) = opt_metadata {
+            return Ok(md.clone());
+        }
+
         p_buf.symlink_metadata()
     }
 }
@@ -3245,8 +3254,10 @@ fn get_security_context<'a>(path: &'a PathData, config: &'a Config) -> Cow<'a, s
     // If we must dereference, ensure that the symlink is actually valid even if the system
     // does not support SELinux.
     // Conforms to the GNU coreutils where a dangling symlink results in exit code 1.
-    if path.must_dereference && path.metadata().is_none() {
-        if let Err(err) = get_metadata_with_deref_opt(&path.p_buf, path.must_dereference) {
+    if path.must_dereference {
+        if let Err(err) =
+            get_metadata_with_deref_opt(&path.p_buf, path.metadata(), path.must_dereference)
+        {
             // The Path couldn't be dereferenced, so return early and set exit code 1
             // to indicate a minor error
             // Only show error when context display is requested to avoid duplicate messages
