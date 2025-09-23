@@ -387,7 +387,6 @@ jobs:
         test -h /tmp/usr/local/bin/sha512sum
         test -h /tmp/usr/local/bin/shake128sum
         test -h /tmp/usr/local/bin/shake256sum
-  
   build_rust_stable:
     name: Build/stable
     needs: [ min_version, deps ]
