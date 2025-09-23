@@ -22,19 +22,14 @@ pub fn create_test_file(data: &[u8], temp_dir: &Path) -> PathBuf {
     file_path
 }
 
-/// Run a uutils binary with given arguments using the coreutils multicall binary
-pub fn run_uutils_binary(util_name: &str, args: &[&str]) -> i32 {
-    use std::process::{Command, Stdio};
-
-    // Use the multicall binary
-    let output = Command::new("../../../target/release/coreutils")
-        .args([util_name].iter().chain(args.iter()))
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .expect("Failed to execute command");
-
-    i32::from(!output.success())
+/// Run a utility function directly with given arguments
+/// This calls the uumain function that returns i32 (like the fuzzing approach)
+pub fn run_util_function<F>(util_func: F, args: &[&str]) -> i32
+where
+    F: FnOnce(std::vec::IntoIter<std::ffi::OsString>) -> i32,
+{
+    let os_args: Vec<std::ffi::OsString> = args.iter().map(|s| (*s).into()).collect();
+    util_func(os_args.into_iter())
 }
 
 /// Generate test data with different characteristics for text processing utilities

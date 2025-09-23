@@ -4,7 +4,8 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
-use uucore::benchmark::{create_test_file, run_uutils_binary};
+use uu_tsort::uumain;
+use uucore::benchmark::{create_test_file, run_util_function};
 
 /// Generate topological sort test data with different characteristics
 fn generate_linear_chain(num_nodes: usize) -> Vec<u8> {
@@ -125,7 +126,7 @@ fn tsort_linear_chain(bencher: Bencher, num_nodes: usize) {
     let file_path_str = file_path.to_str().unwrap();
 
     bencher.bench(|| {
-        black_box(run_uutils_binary("tsort", &[file_path_str]));
+        black_box(run_util_function(uumain, &[file_path_str]));
     });
 }
 
@@ -138,7 +139,7 @@ fn tsort_tree_dag(bencher: Bencher, (depth, branching): (usize, usize)) {
     let file_path_str = file_path.to_str().unwrap();
 
     bencher.bench(|| {
-        black_box(run_uutils_binary("tsort", &[file_path_str]));
+        black_box(run_util_function(uumain, &[file_path_str]));
     });
 }
 
@@ -151,7 +152,7 @@ fn tsort_complex_dag(bencher: Bencher, num_nodes: usize) {
     let file_path_str = file_path.to_str().unwrap();
 
     bencher.bench(|| {
-        black_box(run_uutils_binary("tsort", &[file_path_str]));
+        black_box(run_util_function(uumain, &[file_path_str]));
     });
 }
 
@@ -165,7 +166,7 @@ fn tsort_wide_dag(bencher: Bencher, num_nodes: usize) {
     let file_path_str = file_path.to_str().unwrap();
 
     bencher.bench(|| {
-        black_box(run_uutils_binary("tsort", &[file_path_str]));
+        black_box(run_util_function(uumain, &[file_path_str]));
     });
 }
 
@@ -190,7 +191,7 @@ fn tsort_input_parsing_heavy(bencher: Bencher, num_edges: usize) {
     let file_path_str = file_path.to_str().unwrap();
 
     bencher.bench(|| {
-        black_box(run_uutils_binary("tsort", &[file_path_str]));
+        black_box(run_util_function(uumain, &[file_path_str]));
     });
 }
 
