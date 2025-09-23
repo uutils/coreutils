@@ -32,6 +32,7 @@ libc = { workspace = true }
 [dev-dependencies]
 divan = { workspace = true }
 tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
 
 [[bin]]
 name = "wc"
