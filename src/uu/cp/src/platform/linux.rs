@@ -58,17 +58,18 @@ fn clone<P>(source: P, dest: P, fallback: CloneFallback) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
-    let src_file = File::open(&source)?;
-    let dst_file = File::create(&dest)?;
+    let mut src_file = File::open(&source)?;
+    let mut dst_file = File::create(&dest)?;
     let src_fd = src_file.as_raw_fd();
     let dst_fd = dst_file.as_raw_fd();
     let result = unsafe { libc::ioctl(dst_fd, libc::FICLONE, src_fd) };
     if result == 0 {
         return Ok(());
     }
+
     match fallback {
         CloneFallback::Error => Err(std::io::Error::last_os_error()),
-        CloneFallback::FSCopy => std::fs::copy(source, dest).map(|_| ()),
+        CloneFallback::FSCopy => std::io::copy(&mut src_file, &mut dst_file).map(|_| ()),
         CloneFallback::SparseCopy => sparse_copy(source, dest),
         CloneFallback::SparseCopyWithoutHole => sparse_copy_without_hole(source, dest),
     }
