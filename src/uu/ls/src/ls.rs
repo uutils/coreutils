@@ -1865,7 +1865,7 @@ impl PathData {
         self.md
             .get_or_init(|| {
                 // if not, check if we can use Path metadata
-                match get_metadata_with_deref_opt(self.p_buf.as_path(), self.must_dereference) {
+                match get_metadata_with_deref_opt(self.path(), self.must_dereference) {
                     Err(err) => {
                         // FIXME: A bit tricky to propagate the result here
                         let mut out = stdout().lock();
@@ -1876,12 +1876,12 @@ impl PathData {
                         // is entered, here we match that GNU behavior, by handing
                         // back the non-dereferenced metadata upon an EBADF
                         if self.must_dereference && errno == 9i32 {
-                            if let Ok(file) = self.p_buf.read_link() {
+                            if let Ok(file) = self.path().read_link() {
                                 return file.symlink_metadata().ok();
                             }
                         }
                         show!(LsError::IOErrorContext(
-                            self.p_buf.clone(),
+                            self.path().to_path_buf(),
                             err,
                             self.command_line
                         ));
@@ -1913,6 +1913,14 @@ impl PathData {
     fn security_context(&self) -> &str {
         &self.security_context
     }
+
+    fn path<'a>(&'a self) -> &'a Path {
+        &self.p_buf
+    }
+
+    fn display_name<'a>(&'a self) -> &'a OsStr {
+        &self.display_name
+    }
 }
 
 /// Show the directory name in the case where several arguments are given to ls
@@ -1932,7 +1940,7 @@ fn show_dir_name(
     config: &Config,
 ) -> std::io::Result<()> {
     let escaped_name =
-        locale_aware_escape_dir_name(path_data.p_buf.as_os_str(), config.quoting_style);
+        locale_aware_escape_dir_name(path_data.path().as_os_str(), config.quoting_style);
 
     let name = if config.hyperlink && !config.dired {
         create_hyperlink(&escaped_name, path_data)
@@ -2026,12 +2034,12 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     for (pos, path_data) in dirs.iter().enumerate() {
         // Do read_dir call here to match GNU semantics by printing
         // read_dir errors before directory headings, names and totals
-        let read_dir = match fs::read_dir(&path_data.p_buf) {
+        let read_dir = match fs::read_dir(path_data.path()) {
             Err(err) => {
                 // flush stdout buffer before the error to preserve formatting and order
                 state.out.flush()?;
                 show!(LsError::IOErrorContext(
-                    path_data.p_buf.clone(),
+                    path_data.path().to_path_buf(),
                     err,
                     path_data.command_line
                 ));
@@ -2050,7 +2058,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 writeln!(state.out)?;
                 if config.dired {
                     // First directory displayed
-                    let dir_len = path_data.display_name.len();
+                    let dir_len = path_data.display_name().len();
                     // add the //SUBDIRED// coordinates
                     dired::calculate_subdired(&mut dired, dir_len);
                     // Add the padding for the dir name
@@ -2064,7 +2072,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         }
         let mut listed_ancestors = HashSet::new();
         listed_ancestors.insert(FileInformation::from_path(
-            &path_data.p_buf,
+            path_data.path(),
             path_data.must_dereference,
         )?);
         enter_directory(
@@ -2095,25 +2103,25 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             entries.sort_by_key(|k| Reverse(k.metadata().map_or(0, |md| md.len())));
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
+        Sort::Name => entries.sort_by(|a, b| a.display_name().cmp(&b.display_name())),
         Sort::Version => entries.sort_by(|a, b| {
             version_cmp(
-                os_str_as_bytes_lossy(a.p_buf.as_os_str()).as_ref(),
-                os_str_as_bytes_lossy(b.p_buf.as_os_str()).as_ref(),
+                os_str_as_bytes_lossy(a.path().as_os_str()).as_ref(),
+                os_str_as_bytes_lossy(b.path().as_os_str()).as_ref(),
             )
-            .then(a.p_buf.to_string_lossy().cmp(&b.p_buf.to_string_lossy()))
+            .then(a.path().to_string_lossy().cmp(&b.path().to_string_lossy()))
         }),
         Sort::Extension => entries.sort_by(|a, b| {
-            a.p_buf
+            a.path()
                 .extension()
-                .cmp(&b.p_buf.extension())
-                .then(a.p_buf.file_stem().cmp(&b.p_buf.file_stem()))
+                .cmp(&b.path().extension())
+                .then(a.path().file_stem().cmp(&b.path().file_stem()))
         }),
         Sort::Width => entries.sort_by(|a, b| {
-            a.display_name
+            a.display_name()
                 .len()
-                .cmp(&b.display_name.len())
-                .then(a.display_name.cmp(&b.display_name))
+                .cmp(&b.display_name().len())
+                .then(a.display_name().cmp(&b.display_name()))
         }),
         Sort::None => {}
     }
@@ -2133,7 +2141,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             !match md {
                 None | Some(None) => {
                     // If it metadata cannot be determined, treat as a file.
-                    get_metadata_with_deref_opt(p.p_buf.as_path(), true)
+                    get_metadata_with_deref_opt(p.path(), true)
                         .map_or_else(|_| false, |m| m.is_dir())
                 }
                 Some(Some(m)) => m.is_dir(),
@@ -2200,14 +2208,14 @@ fn enter_directory(
     let mut entries: Vec<PathData> = if config.files == Files::All {
         vec![
             PathData::new(
-                path_data.p_buf.clone(),
+                path_data.path().to_path_buf(),
                 None,
                 Some(".".into()),
                 config,
                 false,
             ),
             PathData::new(
-                path_data.p_buf.join(".."),
+                path_data.path().join(".."),
                 None,
                 Some("..".into()),
                 config,
@@ -2255,18 +2263,18 @@ fn enter_directory(
             .skip(if config.files == Files::All { 2 } else { 0 })
             .filter(|p| p.file_type().is_some_and(|ft| ft.is_dir()))
         {
-            match fs::read_dir(&e.p_buf) {
+            match fs::read_dir(e.path()) {
                 Err(err) => {
                     state.out.flush()?;
                     show!(LsError::IOErrorContext(
-                        e.p_buf.clone(),
+                        e.path().to_path_buf(),
                         err,
                         e.command_line
                     ));
                 }
                 Ok(rd) => {
                     if listed_ancestors
-                        .insert(FileInformation::from_path(&e.p_buf, e.must_dereference)?)
+                        .insert(FileInformation::from_path(e.path(), e.must_dereference)?)
                     {
                         // when listing several directories in recursive mode, we show
                         // "dirname:" at the beginning of the file list
@@ -2277,7 +2285,7 @@ fn enter_directory(
                             // 2 = \n + \n
                             dired.padding = 2;
                             dired::indent(&mut state.out)?;
-                            let dir_name_size = e.p_buf.to_string_lossy().len();
+                            let dir_name_size = e.path().to_string_lossy().len();
                             dired::calculate_subdired(dired, dir_name_size);
                             // inject dir name
                             dired::add_dir_name(dired, dir_name_size);
@@ -2287,10 +2295,10 @@ fn enter_directory(
                         writeln!(state.out)?;
                         enter_directory(e, rd, config, state, listed_ancestors, dired)?;
                         listed_ancestors
-                            .remove(&FileInformation::from_path(&e.p_buf, e.must_dereference)?);
+                            .remove(&FileInformation::from_path(e.path(), e.must_dereference)?);
                     } else {
                         state.out.flush()?;
-                        show!(LsError::AlreadyListedError(e.p_buf.clone()));
+                        show!(LsError::AlreadyListedError(e.path().to_path_buf()));
                     }
                 }
             }
@@ -2431,7 +2439,7 @@ fn display_items(
     // option, print the security context to the left of the size column.
 
     let quoted = items.iter().any(|item| {
-        let name = locale_aware_escape_name(&item.display_name, config.quoting_style);
+        let name = locale_aware_escape_name(&item.display_name(), config.quoting_style);
         os_str_starts_with(&name, b"'")
     });
 
@@ -2702,7 +2710,7 @@ fn display_item_long(
         // TODO: See how Mac should work here
         let is_acl_set = false;
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let is_acl_set = has_acl(item.display_name.as_os_str());
+        let is_acl_set = has_acl(item.display_name());
         output_display.extend(display_permissions(md, true).as_bytes());
         if item.security_context().len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
@@ -3067,7 +3075,7 @@ fn display_item_name(
     current_column: LazyCell<usize, Box<dyn FnOnce() -> usize + '_>>,
 ) -> OsString {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
-    let mut name = locale_aware_escape_name(&path.display_name, config.quoting_style);
+    let mut name = locale_aware_escape_name(&path.display_name(), config.quoting_style);
 
     let is_wrap =
         |namelen: usize| config.width != 0 && *current_column + namelen > config.width.into();
@@ -3118,7 +3126,7 @@ fn display_item_name(
         && path.file_type().is_some_and(|ft| ft.is_symlink())
         && !path.must_dereference
     {
-        match path.p_buf.read_link() {
+        match path.path().read_link() {
             Ok(target_path) => {
                 name.push(" -> ");
 
@@ -3130,7 +3138,7 @@ fn display_item_name(
                     // This is because relative symlinks will fail to get_metadata.
                     let mut absolute_target = target_path.clone();
                     if target_path.is_relative() {
-                        if let Some(parent) = path.p_buf.parent() {
+                        if let Some(parent) = path.path().parent() {
                             absolute_target = parent.join(absolute_target);
                         }
                     }
@@ -3162,7 +3170,11 @@ fn display_item_name(
                 }
             }
             Err(err) => {
-                show!(LsError::IOErrorContext(path.p_buf.clone(), err, false));
+                show!(LsError::IOErrorContext(
+                    path.path().to_path_buf(),
+                    err,
+                    false
+                ));
             }
         }
     }
@@ -3190,7 +3202,7 @@ fn create_hyperlink(name: &OsStr, path: &PathData) -> OsString {
     let hostname = hostname::get().unwrap_or_else(|_| OsString::from(""));
     let hostname = hostname.to_string_lossy();
 
-    let absolute_path = fs::canonicalize(&path.p_buf).unwrap_or_default();
+    let absolute_path = fs::canonicalize(path.path()).unwrap_or_default();
     let absolute_path = absolute_path.to_string_lossy();
 
     #[cfg(not(target_os = "windows"))]

@@ -9,7 +9,7 @@ use std::fs::Metadata;
 
 impl Colorable for PathData {
     fn file_name(&self) -> OsString {
-        self.display_name.clone()
+        self.display_name().to_os_string()
     }
     fn file_type(&self) -> Option<std::fs::FileType> {
         self.file_type().copied()
@@ -18,7 +18,7 @@ impl Colorable for PathData {
         self.metadata().cloned()
     }
     fn path(&self) -> std::path::PathBuf {
-        self.p_buf.clone()
+        self.path().to_path_buf()
     }
 }
 
