@@ -1772,7 +1772,7 @@ struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
-    security_context: OnceCell<String>,
+    security_context: OnceCell<Box<str>>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
     // PathBuf that all above data corresponds to
@@ -1911,9 +1911,9 @@ impl PathData {
             && self.metadata().is_some_and(file_is_executable)
     }
 
-    fn security_context(&self, config: &Config) -> &String {
+    fn security_context(&self, config: &Config) -> &str {
         self.security_context
-            .get_or_init(|| get_security_context(self, config))
+            .get_or_init(|| get_security_context(self, config).into())
     }
 }
 
@@ -3174,10 +3174,11 @@ fn display_item_name(
     if config.context {
         if let Some(pad_count) = prefix_context {
             let security_context = if matches!(config.format, Format::Commas) {
-                path.security_context(config).clone()
+                path.security_context(config).to_string()
             } else {
-                pad_left(path.security_context(config), pad_count).clone()
+                pad_left(path.security_context(config), pad_count)
             };
+
             let old_name = name;
             name = format!("{security_context} ").into();
             name.push(old_name);
@@ -3237,8 +3238,9 @@ fn display_inode(metadata: &Metadata) -> String {
 
 /// This returns the `SELinux` security context as UTF8 `String`.
 /// In the long term this should be changed to [`OsStr`], see discussions at #2621/#2656
-fn get_security_context(path: &PathData, config: &Config) -> String {
-    let substitute_string = "?".to_string();
+fn get_security_context<'a>(path: &'a PathData, config: &'a Config) -> &'a str {
+    static SUBSTITUTE_STRING: &'static str = "?";
+
     // If we must dereference, ensure that the symlink is actually valid even if the system
     // does not support SELinux.
     // Conforms to the GNU coreutils where a dangling symlink results in exit code 1.
@@ -3250,9 +3252,10 @@ fn get_security_context(path: &PathData, config: &Config) -> String {
             if config.context {
                 show!(LsError::IOErrorContext(path.p_buf.clone(), err, false));
             }
-            return substitute_string;
+            return SUBSTITUTE_STRING;
         }
     }
+
     if config.selinux_supported {
         #[cfg(feature = "selinux")]
         {
@@ -3264,31 +3267,27 @@ fn get_security_context(path: &PathData, config: &Config) -> String {
                 Err(_r) => {
                     // TODO: show the actual reason why it failed
                     show_warning!("failed to get security context of: {}", path.p_buf.quote());
-                    substitute_string
+                    return SUBSTITUTE_STRING;
                 }
-                Ok(None) => substitute_string,
+                Ok(None) => return SUBSTITUTE_STRING,
                 Ok(Some(context)) => {
                     let context = context.as_bytes();
 
                     let context = context.strip_suffix(&[0]).unwrap_or(context);
-                    String::from_utf8(context.to_vec()).unwrap_or_else(|e| {
+                    return String::from_utf8(context.to_vec()).unwrap_or_else(|e| {
                         show_warning!(
                             "getting security context of: {}: {}",
                             path.p_buf.quote(),
                             e.to_string()
                         );
                         String::from_utf8_lossy(context).into_owned()
-                    })
+                    });
                 }
             }
         }
-        #[cfg(not(feature = "selinux"))]
-        {
-            substitute_string
-        }
-    } else {
-        substitute_string
     }
+
+    SUBSTITUTE_STRING
 }
 
 #[cfg(unix)]
