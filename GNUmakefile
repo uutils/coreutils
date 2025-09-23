@@ -398,13 +398,13 @@ distclean: clean
 ifeq ($(MANPAGES),y)
 manpages: build-coreutils
 	mkdir -p $(BUILDDIR)/man/
-	$(foreach prog, $(INSTALLEES), \
+	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS), \
 		$(BUILDDIR)/coreutils manpage $(prog) > $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(newline) \
 	)
 
 install-manpages: manpages
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/man/man1
-	$(foreach prog, $(INSTALLEES), \
+	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS), \
 		$(INSTALL) -m 644 $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(DESTDIR)$(DATAROOTDIR)/man/man1/ $(newline) \
 	)
 else
