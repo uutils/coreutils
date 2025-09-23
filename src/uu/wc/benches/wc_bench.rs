@@ -85,34 +85,8 @@ fn run_uutils_wc(args: &[&str]) -> i32 {
     i32::from(!output.success())
 }
 
-/// Benchmark different file sizes for line counting
-#[divan::bench(args = [1, 5, 10, 25, 50])]
-fn wc_lines_synthetic(bencher: Bencher, size_mb: usize) {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let data = generate_test_data(size_mb, 80);
-    let file_path = create_test_file(&data, &temp_dir);
-    let file_path_str = file_path.to_str().unwrap();
-
-    bencher.bench(|| {
-        black_box(run_uutils_wc(&["-l", file_path_str]));
-    });
-}
-
-/// Benchmark different file sizes for character counting
-#[divan::bench(args = [1, 5, 10, 25])]
-fn wc_chars_synthetic(bencher: Bencher, size_mb: usize) {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let data = generate_test_data(size_mb, 80);
-    let file_path = create_test_file(&data, &temp_dir);
-    let file_path_str = file_path.to_str().unwrap();
-
-    bencher.bench(|| {
-        black_box(run_uutils_wc(&["-m", file_path_str]));
-    });
-}
-
 /// Benchmark different file sizes for byte counting
-#[divan::bench(args = [1, 5, 10, 50, 100])]
+#[divan::bench(args = [10, 50, 100])]
 fn wc_bytes_synthetic(bencher: Bencher, size_mb: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = generate_test_data(size_mb, 80);
@@ -124,8 +98,7 @@ fn wc_bytes_synthetic(bencher: Bencher, size_mb: usize) {
     });
 }
 
-/// Benchmark word counting (should use traditional read path)
-#[divan::bench(args = [1, 5, 10, 25])]
+#[divan::bench(args = [10, 100, 1_000])]
 fn wc_words_synthetic(bencher: Bencher, size_mb: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = generate_test_data(size_mb, 80);
@@ -138,7 +111,7 @@ fn wc_words_synthetic(bencher: Bencher, size_mb: usize) {
 }
 
 /// Benchmark combined byte+line counting
-#[divan::bench(args = [1, 5, 10, 50])]
+#[divan::bench(args = [10, 100, 1_000])]
 fn wc_bytes_lines_synthetic(bencher: Bencher, size_mb: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = generate_test_data(size_mb, 80);
@@ -147,19 +120,6 @@ fn wc_bytes_lines_synthetic(bencher: Bencher, size_mb: usize) {
 
     bencher.bench(|| {
         black_box(run_uutils_wc(&["-cl", file_path_str]));
-    });
-}
-
-/// Benchmark default wc behavior (bytes, lines, words)
-#[divan::bench(args = [1, 5, 10])]
-fn wc_default_synthetic(bencher: Bencher, size_mb: usize) {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let data = generate_test_data(size_mb, 80);
-    let file_path = create_test_file(&data, &temp_dir);
-    let file_path_str = file_path.to_str().unwrap();
-
-    bencher.bench(|| {
-        black_box(run_uutils_wc(&[file_path_str]));
     });
 }
 
