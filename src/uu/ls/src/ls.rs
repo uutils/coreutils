@@ -2103,25 +2103,25 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             entries.sort_by_key(|k| Reverse(k.metadata().map_or(0, |md| md.len())));
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_by(|a, b| a.display_name().cmp(&b.display_name())),
+        Sort::Name => entries.sort_by(|a, b| a.display_name().cmp(b.display_name())),
         Sort::Version => entries.sort_by(|a, b| {
             version_cmp(
                 os_str_as_bytes_lossy(a.path().as_os_str()).as_ref(),
                 os_str_as_bytes_lossy(b.path().as_os_str()).as_ref(),
             )
-            .then(a.path().to_string_lossy().cmp(&b.path().to_string_lossy()))
+            .then(a.path().to_string_lossy().cmp(b.path().to_string_lossy()))
         }),
         Sort::Extension => entries.sort_by(|a, b| {
             a.path()
                 .extension()
-                .cmp(&b.path().extension())
-                .then(a.path().file_stem().cmp(&b.path().file_stem()))
+                .cmp(b.path().extension())
+                .then(a.path().file_stem().cmp(b.path().file_stem()))
         }),
         Sort::Width => entries.sort_by(|a, b| {
             a.display_name()
                 .len()
-                .cmp(&b.display_name().len())
-                .then(a.display_name().cmp(&b.display_name()))
+                .cmp(b.display_name().len())
+                .then(a.display_name().cmp(b.display_name()))
         }),
         Sort::None => {}
     }
@@ -2439,7 +2439,7 @@ fn display_items(
     // option, print the security context to the left of the size column.
 
     let quoted = items.iter().any(|item| {
-        let name = locale_aware_escape_name(&item.display_name(), config.quoting_style);
+        let name = locale_aware_escape_name(item.display_name(), config.quoting_style);
         os_str_starts_with(&name, b"'")
     });
 
@@ -3075,7 +3075,7 @@ fn display_item_name(
     current_column: LazyCell<usize, Box<dyn FnOnce() -> usize + '_>>,
 ) -> OsString {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
-    let mut name = locale_aware_escape_name(&path.display_name(), config.quoting_style);
+    let mut name = locale_aware_escape_name(path.display_name(), config.quoting_style);
 
     let is_wrap =
         |namelen: usize| config.width != 0 && *current_column + namelen > config.width.into();
