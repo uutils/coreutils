@@ -1914,11 +1914,11 @@ impl PathData {
         &self.security_context
     }
 
-    fn path<'a>(&'a self) -> &'a Path {
+    fn path(&self) -> &Path {
         &self.p_buf
     }
 
-    fn display_name<'a>(&'a self) -> &'a OsStr {
+    fn display_name(&self) -> &OsStr {
         &self.display_name
     }
 }
