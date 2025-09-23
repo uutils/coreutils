@@ -1823,29 +1823,26 @@ impl PathData {
 
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
-        fn get_file_type(de: &DirEntry, p_buf: &Path, must_dereference: bool) -> Option<FileType> {
-            if must_dereference {
-                // wait for metadata call to populate file type
-                return p_buf.metadata().ok().map(|md| md.file_type());
-            }
-
-            if let Ok(ft_de) = de.file_type() {
-                return Some(ft_de);
-            }
-
-            None
-        }
-
-        let ft = match dir_entry.as_ref() {
-            Some(de) => OnceCell::from(get_file_type(de, &p_buf, must_dereference)),
-            None => OnceCell::new(),
-        };
-
         let md = match dir_entry.as_ref() {
             Some(de) if !must_dereference => {
                 // check if we can use DirEntry metadata
                 // it will avoid a call to stat()
-                OnceCell::from(de.metadata().ok())
+                if let Ok(md) = de.metadata() {
+                    OnceCell::from(Some(md))
+                } else {
+                    OnceCell::new()
+                }
+            }
+            _ => OnceCell::new(),
+        };
+
+        let ft = match dir_entry.as_ref() {
+            Some(de) if !must_dereference => {
+                if let Ok(ft) = de.file_type() {
+                    OnceCell::from(Some(ft))
+                } else {
+                    OnceCell::new()
+                }
             }
             _ => OnceCell::new(),
         };
