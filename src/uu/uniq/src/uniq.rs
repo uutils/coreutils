@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore badoption 
+// spell-checker:ignore badoption
 use clap::{
     Arg, ArgAction, ArgMatches, Command, builder::ValueParser, error::ContextKind, error::Error,
     error::ErrorKind,
@@ -312,10 +312,7 @@ impl Uniq {
 
     // This function does not use `self`, so make it an associated function.
     // Also remove needless explicit lifetimes to satisfy clippy::needless-lifetimes.
-    fn build_count_prefix(
-        count: usize,
-        buf: &mut [u8; Self::COUNT_PREFIX_BUF_SIZE],
-    ) -> &[u8] {
+    fn build_count_prefix(count: usize,buf: &mut [u8; Self::COUNT_PREFIX_BUF_SIZE],) -> &[u8] {
         let mut digits_buf = [0u8; 20];
         let mut value = count;
         let mut idx = digits_buf.len();
