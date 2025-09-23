@@ -2103,7 +2103,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             entries.sort_by_key(|k| Reverse(k.metadata().map_or(0, |md| md.len())));
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_by(|a, b| a.display_name().cmp(&b.display_name())),
+        Sort::Name => entries.sort_by(|a, b| a.display_name().cmp(b.display_name())),
         Sort::Version => entries.sort_by(|a, b| {
             version_cmp(
                 os_str_as_bytes_lossy(a.path().as_os_str()).as_ref(),
@@ -2121,7 +2121,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             a.display_name()
                 .len()
                 .cmp(&b.display_name().len())
-                .then(a.display_name().cmp(&b.display_name()))
+                .then(a.display_name().cmp(b.display_name()))
         }),
         Sort::None => {}
     }
@@ -3259,7 +3259,7 @@ fn get_security_context<'a>(
     // does not support SELinux.
     // Conforms to the GNU coreutils where a dangling symlink results in exit code 1.
     if must_dereference {
-        if let Err(err) = get_metadata_with_deref_opt(&path, must_dereference) {
+        if let Err(err) = get_metadata_with_deref_opt(path, must_dereference) {
             // The Path couldn't be dereferenced, so return early and set exit code 1
             // to indicate a minor error
             // Only show error when context display is requested to avoid duplicate messages
