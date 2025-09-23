@@ -81,7 +81,7 @@ impl Uniq {
         let writer = &mut writer;
 
         let mut current_buf = Vec::with_capacity(1024);
-        if !self.read_line(&mut reader, &mut current_buf, line_terminator)? {
+        if !Self::read_line(&mut reader, &mut current_buf, line_terminator)? {
             return Ok(());
         }
         let mut current_meta = LineMeta::default();
@@ -91,7 +91,7 @@ impl Uniq {
         let mut next_meta = LineMeta::default();
 
         loop {
-            if !self.read_line(&mut reader, &mut next_buf, line_terminator)? {
+            if !Self::read_line(&mut reader, &mut next_buf, line_terminator)? {
                 break;
             }
 
@@ -247,7 +247,6 @@ impl Uniq {
     }
 
     fn read_line(
-        &self,
         reader: &mut impl BufRead,
         buffer: &mut Vec<u8>,
         line_terminator: u8,
