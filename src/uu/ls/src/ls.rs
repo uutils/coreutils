@@ -3239,7 +3239,7 @@ fn display_inode(metadata: &Metadata) -> String {
 /// This returns the `SELinux` security context as UTF8 `String`.
 /// In the long term this should be changed to [`OsStr`], see discussions at #2621/#2656
 fn get_security_context<'a>(path: &'a PathData, config: &'a Config) -> &'a str {
-    static SUBSTITUTE_STRING: &'static str = "?";
+    static SUBSTITUTE_STRING: &str = "?";
 
     // If we must dereference, ensure that the symlink is actually valid even if the system
     // does not support SELinux.
