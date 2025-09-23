@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::env;
 use std::ffi::OsString;
-use std::fs;
+use std::fs::{self, File};
 use std::io;
 #[cfg(unix)]
 use std::os::unix;
@@ -1124,13 +1124,17 @@ fn rename_file_fallback(
     }
 
     // Regular file copy
+    let mut src_file: File = File::open(from)?;
+    let mut dst_file: File = File::create(to)?;
+
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    fs::copy(from, to)
+    io::copy(&mut src_file, &mut dst_file)
         .and_then(|_| fsxattr::copy_xattrs(&from, &to))
         .and_then(|_| fs::remove_file(from))
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+
     #[cfg(any(target_os = "macos", target_os = "redox", not(unix)))]
-    fs::copy(from, to)
+    io::copy(&mut src_file, &mut dst_file)
         .and_then(|_| fs::remove_file(from))
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
     Ok(())
