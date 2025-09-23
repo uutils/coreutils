@@ -3273,7 +3273,7 @@ fn get_security_context<'a>(
     if config.selinux_supported {
         #[cfg(feature = "selinux")]
         {
-            match selinux::SecurityContext::of_path(path.to_path_buf(), must_dereference, false) {
+            match selinux::SecurityContext::of_path(path, must_dereference, false) {
                 Err(_r) => {
                     // TODO: show the actual reason why it failed
                     show_warning!("failed to get security context of: {}", path.quote());
