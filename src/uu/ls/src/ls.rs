@@ -1773,7 +1773,7 @@ struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
-    security_context: OnceCell<Box<str>>,
+    security_context: Box<str>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
     // PathBuf that all above data corresponds to
@@ -1847,7 +1847,10 @@ impl PathData {
             _ => OnceCell::new(),
         };
 
-        let security_context = OnceCell::new();
+        let security_context: Box<str> = md
+            .get()
+            .map(|md| get_security_context(&p_buf, md, must_dereference, config).into())
+            .unwrap_or_default();
 
         Self {
             md,
@@ -1910,9 +1913,8 @@ impl PathData {
             && self.metadata().is_some_and(file_is_executable)
     }
 
-    fn security_context(&self, config: &Config) -> &str {
-        self.security_context
-            .get_or_init(|| get_security_context(self, config).into())
+    fn security_context(&self) -> &str {
+        &self.security_context
     }
 }
 
@@ -2465,7 +2467,7 @@ fn display_items(
         let mut longest_context_len = 1;
         let prefix_context = if config.context {
             for item in items {
-                let context_len = item.security_context(config).len();
+                let context_len = item.security_context().len();
                 longest_context_len = context_len.max(longest_context_len);
             }
             Some(longest_context_len)
@@ -2713,7 +2715,7 @@ fn display_item_long(
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
         let is_acl_set = has_acl(item.display_name.as_os_str());
         output_display.extend(display_permissions(md, true).as_bytes());
-        if item.security_context(config).len() > 1 {
+        if item.security_context().len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
             output_display.extend(b".");
@@ -2735,7 +2737,7 @@ fn display_item_long(
 
         if config.context {
             output_display.extend(b" ");
-            output_display.extend_pad_right(item.security_context(config), padding.context);
+            output_display.extend_pad_right(item.security_context(), padding.context);
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
@@ -2847,7 +2849,7 @@ fn display_item_long(
 
         output_display.extend(leading_char.as_bytes());
         output_display.extend(b"?????????");
-        if item.security_context(config).len() > 1 {
+        if item.security_context().len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
             output_display.extend(b".");
@@ -2867,7 +2869,7 @@ fn display_item_long(
 
         if config.context {
             output_display.extend(b" ");
-            output_display.extend_pad_right(item.security_context(config), padding.context);
+            output_display.extend_pad_right(item.security_context(), padding.context);
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
@@ -3181,9 +3183,9 @@ fn display_item_name(
     if config.context {
         if let Some(pad_count) = prefix_context {
             let security_context = if matches!(config.format, Format::Commas) {
-                path.security_context(config).to_string()
+                path.security_context().to_string()
             } else {
-                pad_left(path.security_context(config), pad_count)
+                pad_left(path.security_context(), pad_count)
             };
 
             let old_name = name;
@@ -3245,21 +3247,24 @@ fn display_inode(metadata: &Metadata) -> String {
 
 /// This returns the `SELinux` security context as UTF8 `String`.
 /// In the long term this should be changed to [`OsStr`], see discussions at #2621/#2656
-fn get_security_context<'a>(path: &'a PathData, config: &'a Config) -> Cow<'a, str> {
+fn get_security_context<'a>(
+    path: &'a Path,
+    md: &'a Option<Metadata>,
+    must_dereference: bool,
+    config: &'a Config,
+) -> Cow<'a, str> {
     static SUBSTITUTE_STRING: &str = "?";
 
     // If we must dereference, ensure that the symlink is actually valid even if the system
     // does not support SELinux.
     // Conforms to the GNU coreutils where a dangling symlink results in exit code 1.
-    if path.must_dereference {
-        if let Err(err) =
-            get_metadata_with_deref_opt(&path.p_buf, path.metadata(), path.must_dereference)
-        {
+    if must_dereference && md.is_none() {
+        if let Err(err) = get_metadata_with_deref_opt(&path, md.as_ref(), must_dereference) {
             // The Path couldn't be dereferenced, so return early and set exit code 1
             // to indicate a minor error
             // Only show error when context display is requested to avoid duplicate messages
             if config.context {
-                show!(LsError::IOErrorContext(path.p_buf.clone(), err, false));
+                show!(LsError::IOErrorContext(path.to_path_buf(), err, false));
             }
             return Cow::Borrowed(SUBSTITUTE_STRING);
         }
@@ -3268,14 +3273,10 @@ fn get_security_context<'a>(path: &'a PathData, config: &'a Config) -> Cow<'a, s
     if config.selinux_supported {
         #[cfg(feature = "selinux")]
         {
-            match selinux::SecurityContext::of_path(
-                path.p_buf.clone(),
-                path.must_dereference,
-                false,
-            ) {
+            match selinux::SecurityContext::of_path(path.clone(), must_dereference, false) {
                 Err(_r) => {
                     // TODO: show the actual reason why it failed
-                    show_warning!("failed to get security context of: {}", path.p_buf.quote());
+                    show_warning!("failed to get security context of: {}", path.quote());
                     return Cow::Borrowed(SUBSTITUTE_STRING);
                 }
                 Ok(None) => return Cow::Borrowed(SUBSTITUTE_STRING),
@@ -3287,7 +3288,7 @@ fn get_security_context<'a>(path: &'a PathData, config: &'a Config) -> Cow<'a, s
                     let res: String = String::from_utf8(context.to_vec()).unwrap_or_else(|e| {
                         show_warning!(
                             "getting security context of: {}: {}",
-                            path.p_buf.quote(),
+                            path.quote(),
                             e.to_string()
                         );
 
@@ -3340,7 +3341,7 @@ fn calculate_padding_collection(
         }
 
         if config.format == Format::Long {
-            let context_len = item.security_context(config).len();
+            let context_len = item.security_context().len();
             let (link_count_len, uname_len, group_len, size_len, major_len, minor_len) =
                 display_dir_entry_size(item, config, state);
             padding_collections.link_count = link_count_len.max(padding_collections.link_count);
@@ -3389,7 +3390,7 @@ fn calculate_padding_collection(
             }
         }
 
-        let context_len = item.security_context(config).len();
+        let context_len = item.security_context().len();
         let (link_count_len, uname_len, group_len, size_len, _major_len, _minor_len) =
             display_dir_entry_size(item, config, state);
         padding_collections.link_count = link_count_len.max(padding_collections.link_count);
