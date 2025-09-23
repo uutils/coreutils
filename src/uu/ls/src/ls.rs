@@ -1935,7 +1935,8 @@ impl PathData {
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     fn has_acl(&self) -> bool {
         self.xattrs().as_ref().is_some_and(|map| {
-            map.contains_key(&*POSIX_ACL_ACCESS_KEY) || map.contains_key(&*POSIX_ACL_DEFAULT_KEY)
+            map.contains_key(OsStr::new(POSIX_ACL_ACCESS_KEY))
+                || map.contains_key(OsStr::new(POSIX_ACL_DEFAULT_KEY))
         })
     }
 
@@ -1944,7 +1945,7 @@ impl PathData {
         // don't use exacl here, it is doing more getxattr call then needed
         self.xattrs()
             .as_ref()
-            .is_some_and(|map| map.contains_key(&*SET_CAPABILITY_KEY))
+            .is_some_and(|map| map.contains_key(OsStr::new(SET_CAPABILITY_KEY)))
     }
 }
 
