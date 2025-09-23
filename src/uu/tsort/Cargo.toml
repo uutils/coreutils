@@ -26,3 +26,11 @@ fluent = { workspace = true }
 [[bin]]
 name = "tsort"
 path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+
+[[bench]]
+name = "tsort_bench"
+harness = false
