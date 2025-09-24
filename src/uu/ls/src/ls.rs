@@ -37,6 +37,8 @@ use thiserror::Error;
 
 #[cfg(unix)]
 use uucore::entries;
+#[cfg(target_os = "windows")]
+use uucore::fs::FileInformation;
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 use uucore::fsxattr::has_acl;
 #[cfg(unix)]
@@ -2249,6 +2251,11 @@ fn recursive_loop(
 ) -> UResult<()> {
     let mut queue: Vec<PathData> = enter_directory(path_data, read_dir, config, state, dired)?;
 
+    #[cfg(target_os = "windows")]
+    let listed_ancestor_md =
+        FileInformation::from_path(path_data.p_buf, path_data.must_dereference)?;
+
+    #[cfg(not(target_os = "windows"))]
     let listed_ancestor_md = match path_data.get_metadata(&mut state.out) {
         Some(md) => md,
         None => &get_metadata_with_deref_opt(&path_data.p_buf, path_data.must_dereference)?,
@@ -2266,16 +2273,18 @@ fn recursive_loop(
                     ));
                 }
                 Ok(rd) => {
+                    #[cfg(target_os = "windows")]
+                    let item_info_md =
+                        FileInformation::from_path(item.p_buf, item.must_dereference)?;
+
+                    #[cfg(not(target_os = "windows"))]
                     let item_info_md = match item.get_metadata(&mut state.out) {
                         Some(md) => md,
                         None => &get_metadata_with_deref_opt(&item.p_buf, item.must_dereference)?,
                     };
 
                     #[cfg(target_os = "windows")]
-                    if item_info_md.volume_serial_number()
-                        == listed_ancestor_md.volume_serial_number()
-                        && item_info_md.file_index() == listed_ancestor_md.file_index()
-                    {
+                    if item_info_md == listed_ancestor_md {
                         state.out.flush()?;
                         show!(LsError::AlreadyListedError(item.p_buf.clone()));
                         continue;
