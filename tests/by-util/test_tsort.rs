@@ -122,3 +122,34 @@ fn test_two_cycles() {
         .stdout_is("a\nc\nd\nb\n")
         .stderr_is("tsort: -: input contains a loop:\ntsort: b\ntsort: c\ntsort: -: input contains a loop:\ntsort: b\ntsort: d\n");
 }
+
+#[test]
+fn test_long_loop_no_stack_overflow() {
+    use std::fmt::Write;
+    const N: usize = 100_000;
+    let mut input = String::new();
+    for v in 0..N {
+        let next = (v + 1) % N;
+        let _ = write!(input, "{v} {next} ");
+    }
+    new_ucmd!()
+        .pipe_in(input)
+        .fails_with_code(1)
+        .stderr_contains("tsort: -: input contains a loop");
+}
+
+#[test]
+fn test_loop_for_iterative_dfs_correctness() {
+    let input = r"
+        A B
+        B C
+        C B
+        C D
+        D A
+    ";
+
+    new_ucmd!()
+        .pipe_in(input)
+        .fails_with_code(1)
+        .stderr_contains("tsort: -: input contains a loop:\ntsort: B\ntsort: C");
+}
