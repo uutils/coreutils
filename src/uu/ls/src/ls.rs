@@ -2250,6 +2250,7 @@ fn enter_directory(
             p.ft.get()
                 .is_some_and(|o_ft| o_ft.is_some_and(|ft| ft.is_dir()))
         })
+        .rev()
         .collect();
 
     Ok(res)
