@@ -2249,7 +2249,7 @@ fn recursive_loop(
     state: &mut ListState,
     dired: &mut DiredOutput,
 ) -> UResult<()> {
-    let mut queue: Vec<PathData> = enter_directory(path_data, read_dir, config, state, dired)?;
+    let mut stack: Vec<PathData> = enter_directory(path_data, read_dir, config, state, dired)?;
 
     #[cfg(target_os = "windows")]
     let listed_ancestor_md =
@@ -2262,7 +2262,7 @@ fn recursive_loop(
     };
 
     if config.recursive {
-        while let Some(item) = queue.pop() {
+        while let Some(item) = stack.pop() {
             match fs::read_dir(&item.p_buf) {
                 Err(err) => {
                     state.out.flush()?;
@@ -2316,7 +2316,7 @@ fn recursive_loop(
                     show_dir_name(&item, &mut state.out, config)?;
                     writeln!(state.out)?;
                     let mut res = enter_directory(&item, rd, config, state, dired)?;
-                    queue.append(&mut res);
+                    stack.append(&mut res);
                 }
             }
         }
