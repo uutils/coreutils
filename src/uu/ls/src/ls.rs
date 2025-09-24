@@ -2274,25 +2274,24 @@ fn recursive_loop(
                 }
                 Ok(rd) => {
                     #[cfg(target_os = "windows")]
-                    let item_info_md =
-                        FileInformation::from_path(item.p_buf, item.must_dereference)?;
+                    let item_md = FileInformation::from_path(item.p_buf, item.must_dereference)?;
 
                     #[cfg(not(target_os = "windows"))]
-                    let item_info_md = match item.get_metadata(&mut state.out) {
+                    let item_md = match item.get_metadata(&mut state.out) {
                         Some(md) => md,
                         None => &get_metadata_with_deref_opt(&item.p_buf, item.must_dereference)?,
                     };
 
                     #[cfg(target_os = "windows")]
-                    if item_info_md == listed_ancestor_md {
+                    if item_md == listed_ancestor_md {
                         state.out.flush()?;
                         show!(LsError::AlreadyListedError(item.p_buf.clone()));
                         continue;
                     }
 
                     #[cfg(not(target_os = "windows"))]
-                    if item_info_md.dev() == listed_ancestor_md.dev()
-                        && item_info_md.ino() == listed_ancestor_md.ino()
+                    if item_md.dev() == listed_ancestor_md.dev()
+                        && item_md.ino() == listed_ancestor_md.ino()
                     {
                         state.out.flush()?;
                         show!(LsError::AlreadyListedError(item.p_buf.clone()));
