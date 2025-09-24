@@ -2243,7 +2243,16 @@ fn enter_directory(
 
     display_items(&entries, config, state, dired)?;
 
-    Ok(entries)
+    let res = entries
+        .into_iter()
+        .skip(if config.files == Files::All { 2 } else { 0 })
+        .filter(|p| {
+            p.ft.get()
+                .is_some_and(|o_ft| o_ft.is_some_and(|ft| ft.is_dir()))
+        })
+        .collect();
+
+    Ok(res)
 }
 
 fn recursive_loop(
@@ -2254,14 +2263,7 @@ fn recursive_loop(
     listed_ancestors: &mut HashSet<FileInformation>,
     dired: &mut DiredOutput,
 ) -> UResult<()> {
-    let mut queue: Vec<PathData> = enter_directory(path_data, read_dir, config, state, dired)?
-        .into_iter()
-        .skip(if config.files == Files::All { 2 } else { 0 })
-        .filter(|p| {
-            p.ft.get()
-                .is_some_and(|o_ft| o_ft.is_some_and(|ft| ft.is_dir()))
-        })
-        .collect();
+    let mut queue: Vec<PathData> = enter_directory(path_data, read_dir, config, state, dired)?;
 
     if config.recursive {
         while let Some(item) = queue.pop() {
