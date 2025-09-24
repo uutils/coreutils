@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime
 
+use std::borrow::Cow;
 #[cfg(unix)]
 use std::collections::HashMap;
 #[cfg(unix)]
@@ -2660,10 +2661,7 @@ fn display_grid(
         };
 
         // FIXME: the Grid crate only supports &str, so can't display raw bytes
-        let names: Vec<_> = names
-            .into_iter()
-            .map(|s| s.to_string_lossy().into_owned())
-            .collect();
+        let names: Vec<Cow<str>> = names.iter().map(|s| s.to_string_lossy()).collect();
 
         // Since tab_size=0 means no \t, use Spaces separator for optimization.
         let filling = match tab_size {
