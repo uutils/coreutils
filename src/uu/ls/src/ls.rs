@@ -38,8 +38,6 @@ use thiserror::Error;
 
 #[cfg(unix)]
 use uucore::entries;
-#[cfg(target_os = "windows")]
-use uucore::fs::FileInformation;
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 use uucore::fsxattr::has_acl;
 #[cfg(unix)]
