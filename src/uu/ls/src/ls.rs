@@ -2019,7 +2019,6 @@ struct ListState<'a> {
 }
 
 #[allow(clippy::cognitive_complexity)]
-#[allow(clippy::mutable_key_type)]
 pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
@@ -2244,7 +2243,6 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
 }
 
 #[allow(clippy::cognitive_complexity)]
-#[allow(clippy::mutable_key_type)]
 fn enter_directory(
     path_data: &PathData,
     read_dir: ReadDir,
