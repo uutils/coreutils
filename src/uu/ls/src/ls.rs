@@ -200,7 +200,6 @@ enum LsError {
     #[error("{}", translate!("ls-error-dired-and-zero-incompatible"))]
     DiredAndZeroAreIncompatible,
 
-    #[allow(dead_code)]
     #[error("{}", translate!("ls-error-not-listing-already-listed", "path" => .0.to_string_lossy()))]
     AlreadyListedError(PathBuf),
 
@@ -2276,13 +2275,13 @@ fn recurse_directories(
                         err,
                         item.command_line
                     ));
-                    continue;
                 }
                 Ok(rd) => {
                     let file_info = FileInformation::from_path(&item.p_buf, item.must_dereference)?;
 
                     if listed_ancestors.contains(&file_info) {
-                        // GNU does not error out here
+                        state.out.flush()?;
+                        show!(LsError::AlreadyListedError(item.p_buf.clone()));
                         continue;
                     }
 
