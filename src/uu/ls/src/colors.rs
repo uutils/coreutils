@@ -197,12 +197,7 @@ pub(crate) fn color_name(
         // use the optional target_symlink
         // Use fn symlink_metadata directly instead of get_metadata() here because ls
         // should not exit with an err, if we are unable to obtain the target_metadata
-        let md_option: Option<Metadata> = target
-            .metadata()
-            .cloned()
-            .or_else(|| path.p_buf.symlink_metadata().ok());
-
-        style_manager.apply_style_based_on_metadata(path, md_option.as_ref(), name, wrap)
+        style_manager.apply_style_based_on_colorable(target, name, wrap)
     } else {
         let md_option: Option<Metadata> = path
             .metadata()
