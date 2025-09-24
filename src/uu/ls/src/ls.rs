@@ -2063,7 +2063,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
             &path_data.p_buf,
             path_data.must_dereference,
         )?);
-        enter_directory(
+        recursive_loop(
             path_data,
             read_dir,
             config,
@@ -2183,15 +2183,13 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
         .any(|p| p.matches_with(&file_name, options))
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn enter_directory(
     path_data: &PathData,
     read_dir: ReadDir,
     config: &Config,
     state: &mut ListState,
-    listed_ancestors: &mut HashSet<FileInformation>,
     dired: &mut DiredOutput,
-) -> UResult<()> {
+) -> UResult<Vec<PathData>> {
     // Create vec of entries with initial dot files
     let mut entries: Vec<PathData> = if config.files == Files::All {
         vec![
@@ -2245,28 +2243,42 @@ fn enter_directory(
 
     display_items(&entries, config, state, dired)?;
 
+    Ok(entries)
+}
+
+fn recursive_loop(
+    path_data: &PathData,
+    read_dir: ReadDir,
+    config: &Config,
+    state: &mut ListState,
+    listed_ancestors: &mut HashSet<FileInformation>,
+    dired: &mut DiredOutput,
+) -> UResult<()> {
+    let mut queue: Vec<PathData> = enter_directory(path_data, read_dir, config, state, dired)?
+        .into_iter()
+        .skip(if config.files == Files::All { 2 } else { 0 })
+        .filter(|p| {
+            p.ft.get()
+                .is_some_and(|o_ft| o_ft.is_some_and(|ft| ft.is_dir()))
+        })
+        .collect();
+
     if config.recursive {
-        for e in entries
-            .iter()
-            .skip(if config.files == Files::All { 2 } else { 0 })
-            .filter(|p| {
-                p.ft.get()
-                    .is_some_and(|o_ft| o_ft.is_some_and(|ft| ft.is_dir()))
-            })
-        {
-            match fs::read_dir(&e.p_buf) {
+        while let Some(item) = queue.pop() {
+            match fs::read_dir(&item.p_buf) {
                 Err(err) => {
                     state.out.flush()?;
                     show!(LsError::IOErrorContext(
-                        e.p_buf.clone(),
+                        item.p_buf.clone(),
                         err,
-                        e.command_line
+                        item.command_line
                     ));
                 }
                 Ok(rd) => {
-                    if listed_ancestors
-                        .insert(FileInformation::from_path(&e.p_buf, e.must_dereference)?)
-                    {
+                    if listed_ancestors.insert(FileInformation::from_path(
+                        &item.p_buf,
+                        item.must_dereference,
+                    )?) {
                         // when listing several directories in recursive mode, we show
                         // "dirname:" at the beginning of the file list
                         writeln!(state.out)?;
@@ -2276,20 +2288,23 @@ fn enter_directory(
                             // 2 = \n + \n
                             dired.padding = 2;
                             dired::indent(&mut state.out)?;
-                            let dir_name_size = e.p_buf.to_string_lossy().len();
+                            let dir_name_size = item.p_buf.to_string_lossy().len();
                             dired::calculate_subdired(dired, dir_name_size);
                             // inject dir name
                             dired::add_dir_name(dired, dir_name_size);
                         }
 
-                        show_dir_name(e, &mut state.out, config)?;
+                        show_dir_name(&item, &mut state.out, config)?;
                         writeln!(state.out)?;
-                        enter_directory(e, rd, config, state, listed_ancestors, dired)?;
-                        listed_ancestors
-                            .remove(&FileInformation::from_path(&e.p_buf, e.must_dereference)?);
+                        let mut res = enter_directory(&item, rd, config, state, dired)?;
+                        queue.append(&mut res);
+                        listed_ancestors.remove(&FileInformation::from_path(
+                            &item.p_buf,
+                            item.must_dereference,
+                        )?);
                     } else {
                         state.out.flush()?;
-                        show!(LsError::AlreadyListedError(e.p_buf.clone()));
+                        show!(LsError::AlreadyListedError(item.p_buf.clone()));
                     }
                 }
             }
