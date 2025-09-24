@@ -2251,7 +2251,10 @@ fn recursive_loop(
     dired: &mut DiredOutput,
 ) -> UResult<()> {
     let mut listed_ancestors = HashSet::new();
-    listed_ancestors.insert(FileInformation::from_path(&path_data.p_buf, true)?);
+    listed_ancestors.insert(FileInformation::from_path(
+        &path_data.p_buf,
+        path_data.must_dereference,
+    )?);
 
     let mut stack: Vec<PathData> = Vec::new();
 
@@ -2269,7 +2272,7 @@ fn recursive_loop(
                     ));
                 }
                 Ok(rd) => {
-                    let file_info = FileInformation::from_path(&item.p_buf, true)?;
+                    let file_info = FileInformation::from_path(&item.p_buf, item.must_dereference)?;
 
                     if listed_ancestors.contains(&file_info) {
                         state.out.flush()?;
