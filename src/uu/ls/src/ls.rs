@@ -2120,7 +2120,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 writeln!(state.out)?;
             }
         }
-        let mut listed_ancestors = HashSet::new();
+        let mut listed_ancestors: HashSet<PathData> = HashSet::new();
         listed_ancestors.insert(path_data.clone());
         enter_directory(
             path_data,
@@ -2318,32 +2318,34 @@ fn enter_directory(
                         err,
                         e.command_line
                     ));
+                    continue;
                 }
                 Ok(rd) => {
                     if !listed_ancestors.contains(e) {
-                        // when listing several directories in recursive mode, we show
-                        // "dirname:" at the beginning of the file list
-                        writeln!(state.out)?;
-                        if config.dired {
-                            // We already injected the first dir
-                            // Continue with the others
-                            // 2 = \n + \n
-                            dired.padding = 2;
-                            dired::indent(&mut state.out)?;
-                            let dir_name_size = e.path().to_string_lossy().len();
-                            dired::calculate_subdired(dired, dir_name_size);
-                            // inject dir name
-                            dired::add_dir_name(dired, dir_name_size);
-                        }
-
-                        show_dir_name(e, &mut state.out, config)?;
-                        writeln!(state.out)?;
-                        enter_directory(e, rd, config, state, listed_ancestors, dired)?;
-                        listed_ancestors.insert(e.clone());
-                    } else {
                         state.out.flush()?;
                         show!(LsError::AlreadyListedError(e.path().to_path_buf()));
+                        continue;
                     }
+
+                    // when listing several directories in recursive mode, we show
+                    // "dirname:" at the beginning of the file list
+                    writeln!(state.out)?;
+                    if config.dired {
+                        // We already injected the first dir
+                        // Continue with the others
+                        // 2 = \n + \n
+                        dired.padding = 2;
+                        dired::indent(&mut state.out)?;
+                        let dir_name_size = e.path().to_string_lossy().len();
+                        dired::calculate_subdired(dired, dir_name_size);
+                        // inject dir name
+                        dired::add_dir_name(dired, dir_name_size);
+                    }
+
+                    show_dir_name(e, &mut state.out, config)?;
+                    writeln!(state.out)?;
+                    enter_directory(e, rd, config, state, listed_ancestors, dired)?;
+                    listed_ancestors.insert(e.clone());
                 }
             }
         }
