@@ -3214,9 +3214,8 @@ fn display_item_name(
             } else {
                 &pad_left(&path.security_context, pad_count)
             };
-            let old_name = name;
-            name = format!("{security_context} ").into();
-            name.push(old_name);
+            let old_name = name.to_string_lossy();
+            name = format!("{security_context} {old_name}").into();
         }
     }
 
