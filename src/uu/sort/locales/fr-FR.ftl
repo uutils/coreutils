@@ -10,6 +10,11 @@ sort-after-help = Le format de clé est CHAMP[.CAR][OPTIONS][,CHAMP[.CAR]][OPTIO
 
   Les options valides sont : MbdfhnRrV. Elles remplacent les options globales pour cette clé.
 
+  Tri selon la locale :
+  Les variables d'environnement LC_ALL, LC_COLLATE et LANG affectent l'ordre de tri.
+  LC_ALL=C utilise une comparaison rapide par octets. D'autres locales utilisent une collation Unicode plus lente mais correcte.
+  Pour des scénarios critiques en performance avec des données ASCII, considérez l'utilisation de LC_ALL=C.
+
 # Messages d'erreur
 sort-open-failed = échec d'ouverture : {$path} : {$error}
 sort-parse-key-error = échec d'analyse de la clé {$key} : {$msg}

@@ -10,6 +10,11 @@ sort-after-help = The key format is FIELD[.CHAR][OPTIONS][,FIELD[.CHAR]][OPTIONS
 
   Valid options are: MbdfhnRrV. They override the global options for this key.
 
+  Locale-aware sorting:
+  The LC_ALL, LC_COLLATE, and LANG environment variables affect sorting order.
+  LC_ALL=C uses fast byte-wise comparison. Other locales use slower but correct Unicode collation.
+  For performance-critical scenarios with ASCII data, consider using LC_ALL=C.
+
 # Error messages
 sort-open-failed = open failed: {$path}: {$error}
 sort-parse-key-error = failed to parse key {$key}: {$msg}
