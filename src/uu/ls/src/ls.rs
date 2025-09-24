@@ -2253,7 +2253,7 @@ fn recursive_loop(
 
     #[cfg(target_os = "windows")]
     let listed_ancestor_md =
-        FileInformation::from_path(path_data.p_buf, path_data.must_dereference)?;
+        FileInformation::from_path(&path_data.p_buf, path_data.must_dereference)?;
 
     #[cfg(not(target_os = "windows"))]
     let listed_ancestor_md = match path_data.get_metadata(&mut state.out) {
@@ -2274,7 +2274,7 @@ fn recursive_loop(
                 }
                 Ok(rd) => {
                     #[cfg(target_os = "windows")]
-                    let item_md = FileInformation::from_path(item.p_buf, item.must_dereference)?;
+                    let item_md = FileInformation::from_path(&item.p_buf, item.must_dereference)?;
 
                     #[cfg(not(target_os = "windows"))]
                     let item_md = match item.get_metadata(&mut state.out) {
