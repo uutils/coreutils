@@ -1929,11 +1929,7 @@ impl std::hash::Hash for PathData {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         #[cfg(windows)]
         {
-            if Ok(self_fi) = FileInformation::from_path(self.p_buf).hash(state) {
-                return self_fi.hash(state);
-            }
-
-            self.path().hash(state);
+            return FileInformation::from_path(self.p_buf).hash(state);
         }
         #[cfg(not(windows))]
         match self.metadata() {
@@ -1958,17 +1954,8 @@ impl PartialEq for PathData {
     fn eq(&self, other: &Self) -> bool {
         #[cfg(windows)]
         {
-            if let Ok(self_fi) = FileInformation::from_path(self.p_buf, self.must_dereference) {
-                if let Ok(other_fi) =
-                    FileInformation::from_path(other.p_buf, other.must_dereference)
-                {
-                    {
-                        return self_fi == other_fi;
-                    }
-                }
-            }
-
-            self.path() == other.path()
+            return FileInformation::from_path(self.p_buf)
+                == FileInformation::from_path(other.p_buf);
         }
         #[cfg(not(windows))]
         {
