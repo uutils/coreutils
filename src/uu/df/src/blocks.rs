@@ -242,28 +242,45 @@ mod tests {
     use crate::blocks::{BlockSize, SuffixType, to_magnitude_and_suffix};
 
     #[test]
-    fn test_to_magnitude_and_suffix_powers_of_1024() {
+    fn test_to_magnitude_and_suffix_add_tracing_zero() {
         assert_eq!(to_magnitude_and_suffix(1024, SuffixType::Iec, true), "1.0K");
+        assert_eq!(to_magnitude_and_suffix(2048, SuffixType::Iec, true), "2.0K");
         assert_eq!(to_magnitude_and_suffix(10240, SuffixType::Iec, true), "10K");
+
+        assert_eq!(to_magnitude_and_suffix(1024, SuffixType::Iec, false), "1K");
+        assert_eq!(to_magnitude_and_suffix(2048, SuffixType::Iec, false), "2K");
+        assert_eq!(
+            to_magnitude_and_suffix(10240, SuffixType::Iec, false),
+            "10K"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_powers_of_1024() {
+        assert_eq!(to_magnitude_and_suffix(1024, SuffixType::Iec, false), "1K");
+        assert_eq!(
+            to_magnitude_and_suffix(10240, SuffixType::Iec, false),
+            "10K"
+        );
         assert_eq!(to_magnitude_and_suffix(2048, SuffixType::Iec, false), "2K");
         assert_eq!(
             to_magnitude_and_suffix(1024 * 40, SuffixType::Iec, false),
             "40K"
         );
         assert_eq!(
-            to_magnitude_and_suffix(1024 * 1024, SuffixType::Iec, true),
-            "1.0M"
+            to_magnitude_and_suffix(1024 * 1024, SuffixType::Iec, false),
+            "1M"
         );
         assert_eq!(
-            to_magnitude_and_suffix(2 * 1024 * 1024, SuffixType::Iec, true),
-            "2.0M"
+            to_magnitude_and_suffix(2 * 1024 * 1024, SuffixType::Iec, false),
+            "2M"
         );
         assert_eq!(
-            to_magnitude_and_suffix(1024 * 1024 * 1024, SuffixType::Iec, true),
-            "1.0G"
+            to_magnitude_and_suffix(1024 * 1024 * 1024, SuffixType::Iec, false),
+            "1G"
         );
         assert_eq!(
-            to_magnitude_and_suffix(34 * 1024 * 1024 * 1024, SuffixType::Iec, true),
+            to_magnitude_and_suffix(34 * 1024 * 1024 * 1024, SuffixType::Iec, false),
             "34G"
         );
     }
