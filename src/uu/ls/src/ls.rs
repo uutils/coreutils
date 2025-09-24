@@ -14,7 +14,6 @@ use std::os::windows::fs::MetadataExt;
 use std::{
     cell::{LazyCell, OnceCell},
     cmp::Reverse,
-    collections::HashSet,
     ffi::{OsStr, OsString},
     fmt::Write as FmtWrite,
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
@@ -2058,19 +2057,8 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 writeln!(state.out)?;
             }
         }
-        let mut listed_ancestors = HashSet::new();
-        listed_ancestors.insert(FileInformation::from_path(
-            &path_data.p_buf,
-            path_data.must_dereference,
-        )?);
-        recursive_loop(
-            path_data,
-            read_dir,
-            config,
-            &mut state,
-            &mut listed_ancestors,
-            &mut dired,
-        )?;
+
+        recursive_loop(path_data, read_dir, config, &mut state, &mut dired)?;
     }
     if config.dired && !config.hyperlink {
         dired::print_dired_output(config, &dired, &mut state.out)?;
@@ -2261,10 +2249,11 @@ fn recursive_loop(
     read_dir: ReadDir,
     config: &Config,
     state: &mut ListState,
-    listed_ancestors: &mut HashSet<FileInformation>,
     dired: &mut DiredOutput,
 ) -> UResult<()> {
     let mut queue: Vec<PathData> = enter_directory(path_data, read_dir, config, state, dired)?;
+
+    let listed_ancestor = FileInformation::from_path(&path_data.p_buf, path_data.must_dereference)?;
 
     if config.recursive {
         while let Some(item) = queue.pop() {
@@ -2277,16 +2266,15 @@ fn recursive_loop(
                         item.command_line
                     ));
                 }
-                Ok(_rd)
-                    if listed_ancestors.contains(&FileInformation::from_path(
-                        &item.p_buf,
-                        item.must_dereference,
-                    )?) =>
-                {
-                    state.out.flush()?;
-                    show!(LsError::AlreadyListedError(item.p_buf.clone()));
-                }
                 Ok(rd) => {
+                    let item_info = FileInformation::from_path(&item.p_buf, item.must_dereference)?;
+
+                    if item_info == listed_ancestor {
+                        state.out.flush()?;
+                        show!(LsError::AlreadyListedError(item.p_buf.clone()));
+                        continue;
+                    }
+
                     // when listing several directories in recursive mode, we show
                     // "dirname:" at the beginning of the file list
                     writeln!(state.out)?;
