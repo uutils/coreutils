@@ -2056,7 +2056,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
             }
         }
 
-        recursive_loop(path_data, read_dir, config, &mut state, &mut dired)?;
+        recurse_directories(path_data, read_dir, config, &mut state, &mut dired)?;
     }
     if config.dired && !config.hyperlink {
         dired::print_dired_output(config, &dired, &mut state.out)?;
@@ -2175,7 +2175,7 @@ fn enter_directory(
     config: &Config,
     state: &mut ListState,
     dired: &mut DiredOutput,
-    stack: &mut Vec<PathData>,
+    entries_stack: &mut Vec<PathData>,
 ) -> UResult<()> {
     // Create vec of entries with initial dot files
     let mut entries: Vec<PathData> = if config.files == Files::All {
@@ -2230,18 +2230,18 @@ fn enter_directory(
 
     display_items(&entries, config, state, dired)?;
 
-    let iter = entries
+    let new_dirs = entries
         .into_iter()
         .skip(if config.files == Files::All { 2 } else { 0 })
         .filter(|p| p.file_type(&mut state.out).is_some_and(|ft| ft.is_dir()))
         .rev();
 
-    stack.extend(iter);
+    entries_stack.extend(new_dirs);
 
     Ok(())
 }
 
-fn recursive_loop(
+fn recurse_directories(
     path_data: &PathData,
     read_dir: ReadDir,
     config: &Config,
@@ -2254,12 +2254,19 @@ fn recursive_loop(
         path_data.must_dereference,
     )?);
 
-    let mut stack: Vec<PathData> = Vec::new();
+    let mut entries_stack: Vec<PathData> = Vec::new();
 
-    enter_directory(path_data, read_dir, config, state, dired, &mut stack)?;
+    enter_directory(
+        path_data,
+        read_dir,
+        config,
+        state,
+        dired,
+        &mut entries_stack,
+    )?;
 
     if config.recursive {
-        while let Some(item) = stack.pop() {
+        while let Some(item) = entries_stack.pop() {
             match fs::read_dir(&item.p_buf) {
                 Err(err) => {
                     state.out.flush()?;
@@ -2295,7 +2302,7 @@ fn recursive_loop(
 
                     show_dir_name(&item, &mut state.out, config)?;
                     writeln!(state.out)?;
-                    enter_directory(&item, rd, config, state, dired, &mut stack)?;
+                    enter_directory(&item, rd, config, state, dired, &mut entries_stack)?;
                     listed_ancestors.insert(file_info);
                 }
             }
