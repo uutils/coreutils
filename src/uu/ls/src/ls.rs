@@ -2320,10 +2320,31 @@ fn display_dir_entry_size(
             }
             SizeOrDeviceId::Size(size) => (size.len(), 0usize, 0usize),
         };
+
+        let long_format = &config.long;
+
+        let display_symlink_count = if long_format.numeric_uid_gid {
+            display_symlink_count(md).len()
+        } else {
+            0
+        };
+
+        let display_uname = if long_format.owner {
+            display_uname(md, config, state).len()
+        } else {
+            0
+        };
+
+        let display_group = if long_format.group {
+            display_group(md, config, state).len()
+        } else {
+            0
+        };
+
         (
-            display_symlink_count(md).len(),
-            display_uname(md, config, state).len(),
-            display_group(md, config, state).len(),
+            display_symlink_count,
+            display_uname,
+            display_group,
             size_len,
             major_len,
             minor_len,
