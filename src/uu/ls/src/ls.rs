@@ -2290,8 +2290,8 @@ fn recursive_loop(
                     }
 
                     #[cfg(not(target_os = "windows"))]
-                    if item_md.dev() == listed_ancestor_md.dev()
-                        && item_md.ino() == listed_ancestor_md.ino()
+                    if item_md.ino() == listed_ancestor_md.ino()
+                        && item_md.dev() == listed_ancestor_md.dev()
                     {
                         state.out.flush()?;
                         show!(LsError::AlreadyListedError(item.p_buf.clone()));
