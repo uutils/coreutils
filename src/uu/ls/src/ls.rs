@@ -2271,6 +2271,17 @@ fn recursive_loop(
                         None => &get_metadata_with_deref_opt(&item.p_buf, item.must_dereference)?,
                     };
 
+                    #[cfg(target_os = "windows")]
+                    if item_info_md.volume_serial_number()
+                        == listed_ancestor_md.volume_serial_number()
+                        && item_info_md.file_index() == listed_ancestor_md.file_index()
+                    {
+                        state.out.flush()?;
+                        show!(LsError::AlreadyListedError(item.p_buf.clone()));
+                        continue;
+                    }
+
+                    #[cfg(not(target_os = "windows"))]
                     if item_info_md.dev() == listed_ancestor_md.dev()
                         && item_info_md.ino() == listed_ancestor_md.ino()
                     {
