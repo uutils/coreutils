@@ -25,7 +25,6 @@ id-error-cannot-find-user-name = impossible de trouver le nom pour l'ID utilisat
 id-error-audit-retrieve = impossible de récupérer les informations
 
 # Texte d'aide pour les arguments de ligne de commande
-id-help-ignore = ignore, pour compatibilité avec d'autres versions
 id-help-audit = Affiche l'ID utilisateur d'audit du processus et autres propriétés d'audit,
   ce qui nécessite des privilèges (non disponible sous Linux).
 id-help-user = Affiche uniquement l'ID utilisateur effectif sous forme de nombre.

@@ -29,7 +29,7 @@ env:
   TEST_ROOT_FULL_SUMMARY_FILE: 'gnu-root-full-result.json'
   TEST_SELINUX_FULL_SUMMARY_FILE: 'selinux-gnu-full-result.json'
   TEST_SELINUX_ROOT_FULL_SUMMARY_FILE: 'selinux-root-gnu-full-result.json'
-  REPO_GNU_REF: "v9.8"
+  REPO_GNU_REF: "v9.7"
 
 jobs:
   native:

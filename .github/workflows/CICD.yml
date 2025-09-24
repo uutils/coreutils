@@ -1327,6 +1327,6 @@ jobs:
             echo "Running benchmarks for packages: ${{ steps.benchmark_list.outputs.benchmark_packages }}"
             for package in ${{ steps.benchmark_list.outputs.benchmark_packages }}; do
               echo "Running benchmarks for $package"
-              cargo codspeed run -p $package > /dev/null
+              cargo codspeed run -p $package
             done
           token: ${{ secrets.CODSPEED_TOKEN }}

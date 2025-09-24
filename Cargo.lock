@@ -3731,9 +3731,7 @@ name = "uu_numfmt"
 version = "0.2.2"
 dependencies = [
  "clap",
- "codspeed-divan-compat",
  "fluent",
- "tempfile",
  "thiserror 2.0.16",
  "uucore",
 ]

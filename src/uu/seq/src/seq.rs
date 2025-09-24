@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat biguint
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 use std::io::{BufWriter, ErrorKind, Write, stdout};
 
 use clap::{Arg, ArgAction, Command};
@@ -39,8 +39,8 @@ const ARG_NUMBERS: &str = "numbers";
 
 #[derive(Clone)]
 struct SeqOptions<'a> {
-    separator: OsString,
-    terminator: OsString,
+    separator: String,
+    terminator: String,
     equal_width: bool,
     format: Option<&'a str>,
 }
@@ -105,11 +105,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let options = SeqOptions {
         separator: matches
-            .get_one::<OsString>(OPT_SEPARATOR)
-            .map_or(OsString::from("\n"), |s| s.to_os_string()),
+            .get_one::<String>(OPT_SEPARATOR)
+            .map_or("\n", |s| s.as_str())
+            .to_string(),
         terminator: matches
-            .get_one::<OsString>(OPT_TERMINATOR)
-            .map_or(OsString::from("\n"), |s| s.to_os_string()),
+            .get_one::<String>(OPT_TERMINATOR)
+            .map(|s| s.as_str())
+            .unwrap_or("\n")
+            .to_string(),
         equal_width: matches.get_flag(OPT_EQUAL_WIDTH),
         format: matches.get_one::<String>(OPT_FORMAT).map(|s| s.as_str()),
     };
@@ -226,15 +229,13 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_SEPARATOR)
                 .short('s')
                 .long("separator")
-                .help(translate!("seq-help-separator"))
-                .value_parser(clap::value_parser!(OsString)),
+                .help(translate!("seq-help-separator")),
         )
         .arg(
             Arg::new(OPT_TERMINATOR)
                 .short('t')
                 .long("terminator")
-                .help(translate!("seq-help-terminator"))
-                .value_parser(clap::value_parser!(OsString)),
+                .help(translate!("seq-help-terminator")),
         )
         .arg(
             Arg::new(OPT_EQUAL_WIDTH)
@@ -266,8 +267,8 @@ fn fast_print_seq(
     first: &BigUint,
     increment: u64,
     last: &BigUint,
-    separator: &OsStr,
-    terminator: &OsStr,
+    separator: &str,
+    terminator: &str,
     padding: usize,
 ) -> std::io::Result<()> {
     // Nothing to do, just return.
@@ -304,7 +305,7 @@ fn fast_print_seq(
 
     // Initialize buf with first and separator.
     buf[start..num_end].copy_from_slice(first_str.as_bytes());
-    buf[num_end..].copy_from_slice(separator.as_encoded_bytes());
+    buf[num_end..].copy_from_slice(separator.as_bytes());
 
     // Normally, if padding is > 0, it should be equal to last_length,
     // so start would be == 0, but there are corner cases.
@@ -320,7 +321,7 @@ fn fast_print_seq(
     }
     // Write the last number without separator, but with terminator.
     stdout.write_all(&buf[start..num_end])?;
-    stdout.write_all(terminator.as_encoded_bytes())?;
+    write!(stdout, "{terminator}")?;
     stdout.flush()?;
     Ok(())
 }
@@ -336,8 +337,8 @@ fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> boo
 /// Arbitrary precision decimal number code path ("slow" path)
 fn print_seq(
     range: RangeFloat,
-    separator: &OsStr,
-    terminator: &OsStr,
+    separator: &str,
+    terminator: &str,
     format: &Format<num_format::Float, &ExtendedBigDecimal>,
     fast_allowed: bool,
     padding: usize, // Used by fast path only
@@ -374,7 +375,7 @@ fn print_seq(
     let mut is_first_iteration = true;
     while !done_printing(&value, &increment, &last) {
         if !is_first_iteration {
-            stdout.write_all(separator.as_encoded_bytes())?;
+            stdout.write_all(separator.as_bytes())?;
         }
         format.fmt(&mut stdout, &value)?;
         // TODO Implement augmenting addition.
@@ -382,7 +383,7 @@ fn print_seq(
         is_first_iteration = false;
     }
     if !is_first_iteration {
-        stdout.write_all(terminator.as_encoded_bytes())?;
+        stdout.write_all(terminator.as_bytes())?;
     }
     stdout.flush()?;
     Ok(())
