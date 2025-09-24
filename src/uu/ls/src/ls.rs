@@ -2234,10 +2234,7 @@ fn enter_directory(
     let res = entries
         .into_iter()
         .skip(if config.files == Files::All { 2 } else { 0 })
-        .filter(|p| {
-            p.ft.get()
-                .is_some_and(|o_ft| o_ft.is_some_and(|ft| ft.is_dir()))
-        })
+        .filter(|p| p.file_type(&mut state.out).is_some_and(|ft| ft.is_dir()))
         .rev()
         .collect();
 
@@ -2304,10 +2301,10 @@ fn recursive_loop(
 
 fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
     if dereference {
-        p_buf.metadata()
-    } else {
-        p_buf.symlink_metadata()
+        return p_buf.metadata();
     }
+
+    p_buf.symlink_metadata()
 }
 
 fn display_dir_entry_size(
