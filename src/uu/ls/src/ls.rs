@@ -2178,7 +2178,8 @@ fn enter_directory(
     config: &Config,
     state: &mut ListState,
     dired: &mut DiredOutput,
-) -> UResult<Vec<PathData>> {
+    stack: &mut Vec<PathData>,
+) -> UResult<()> {
     // Create vec of entries with initial dot files
     let mut entries: Vec<PathData> = if config.files == Files::All {
         vec![
@@ -2232,14 +2233,15 @@ fn enter_directory(
 
     display_items(&entries, config, state, dired)?;
 
-    let res = entries
+    let iter = entries
         .into_iter()
         .skip(if config.files == Files::All { 2 } else { 0 })
         .filter(|p| p.file_type(&mut state.out).is_some_and(|ft| ft.is_dir()))
-        .rev()
-        .collect();
+        .rev();
 
-    Ok(res)
+    stack.extend(iter);
+
+    Ok(())
 }
 
 fn recursive_loop(
@@ -2249,7 +2251,9 @@ fn recursive_loop(
     state: &mut ListState,
     dired: &mut DiredOutput,
 ) -> UResult<()> {
-    let mut stack: Vec<PathData> = enter_directory(path_data, read_dir, config, state, dired)?;
+    let mut stack: Vec<PathData> = Vec::new();
+
+    enter_directory(path_data, read_dir, config, state, dired, &mut stack)?;
 
     #[cfg(target_os = "windows")]
     let listed_ancestor_md =
@@ -2315,8 +2319,7 @@ fn recursive_loop(
 
                     show_dir_name(&item, &mut state.out, config)?;
                     writeln!(state.out)?;
-                    let mut res = enter_directory(&item, rd, config, state, dired)?;
-                    stack.append(&mut res);
+                    enter_directory(&item, rd, config, state, dired, &mut stack)?;
                 }
             }
         }
