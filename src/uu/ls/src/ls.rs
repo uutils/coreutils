@@ -12,7 +12,6 @@ use std::collections::HashMap;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
-
 use std::{
     cell::{LazyCell, OnceCell},
     cmp::Reverse,
@@ -40,8 +39,6 @@ use thiserror::Error;
 
 #[cfg(unix)]
 use uucore::entries;
-#[cfg(windows)]
-use uucore::fs::FileInformation;
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 use uucore::fsxattr::has_acl;
 #[cfg(unix)]
@@ -64,6 +61,7 @@ use uucore::{
     error::{UError, UResult, set_exit_code},
     format::human::{SizeFormat, human_readable},
     format_usage,
+    fs::FileInformation,
     fs::display_permissions,
     fsext::{MetadataTimeField, metadata_get_time},
     line_ending::LineEnding,
@@ -1770,7 +1768,7 @@ pub fn uu_app() -> Command {
 /// Represents a Path along with it's associated data.
 /// Any data that will be reused several times makes sense to be added to this structure.
 /// Caching data here helps eliminate redundant syscalls to fetch same information.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
@@ -1925,54 +1923,6 @@ impl PathData {
     }
 }
 
-impl std::hash::Hash for PathData {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        #[cfg(windows)]
-        {
-            return FileInformation::from_path(self.p_buf).hash(state);
-        }
-        #[cfg(not(windows))]
-        match self.metadata() {
-            Some(md) => {
-                md.ino().hash(state);
-                md.dev().hash(state);
-            }
-            None => match self.path().symlink_metadata() {
-                Ok(md) => {
-                    md.ino().hash(state);
-                    md.dev().hash(state);
-                }
-                Err(_) => {
-                    self.path().hash(state);
-                }
-            },
-        }
-    }
-}
-
-impl PartialEq for PathData {
-    fn eq(&self, other: &Self) -> bool {
-        #[cfg(windows)]
-        {
-            return FileInformation::from_path(self.p_buf)
-                == FileInformation::from_path(other.p_buf);
-        }
-        #[cfg(not(windows))]
-        {
-            if let Some(self_md) = self.metadata() {
-                if let Some(other_md) = other.metadata() {
-                    {
-                        return self_md.ino() == other_md.ino() && self_md.dev() == other_md.dev();
-                    }
-                }
-            }
-            self.path() == other.path()
-        }
-    }
-}
-
-impl Eq for PathData {}
-
 /// Show the directory name in the case where several arguments are given to ls
 /// or the recursive flag is passed.
 ///
@@ -2121,7 +2071,10 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
             }
         }
         let mut listed_ancestors = HashSet::new();
-        listed_ancestors.insert(path_data.clone());
+        listed_ancestors.insert(FileInformation::from_path(
+            path_data.path(),
+            path_data.must_dereference,
+        )?);
         enter_directory(
             path_data,
             read_dir,
@@ -2248,7 +2201,7 @@ fn enter_directory(
     read_dir: ReadDir,
     config: &Config,
     state: &mut ListState,
-    listed_ancestors: &mut HashSet<PathData>,
+    listed_ancestors: &mut HashSet<FileInformation>,
     dired: &mut DiredOutput,
 ) -> UResult<()> {
     // Create vec of entries with initial dot files
@@ -2320,7 +2273,9 @@ fn enter_directory(
                     ));
                 }
                 Ok(rd) => {
-                    if !listed_ancestors.contains(e) {
+                    if listed_ancestors
+                        .insert(FileInformation::from_path(e.path(), e.must_dereference)?)
+                    {
                         // when listing several directories in recursive mode, we show
                         // "dirname:" at the beginning of the file list
                         writeln!(state.out)?;
@@ -2339,7 +2294,8 @@ fn enter_directory(
                         show_dir_name(e, &mut state.out, config)?;
                         writeln!(state.out)?;
                         enter_directory(e, rd, config, state, listed_ancestors, dired)?;
-                        listed_ancestors.insert(e.clone());
+                        listed_ancestors
+                            .remove(&FileInformation::from_path(e.path(), e.must_dereference)?);
                     } else {
                         state.out.flush()?;
                         show!(LsError::AlreadyListedError(e.path().to_path_buf()));
