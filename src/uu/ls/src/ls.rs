@@ -7,6 +7,7 @@
 
 #[cfg(unix)]
 use std::collections::HashMap;
+use std::collections::HashSet;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
@@ -61,13 +62,11 @@ use uucore::{
     error::{UError, UResult, set_exit_code},
     format::human::{SizeFormat, human_readable},
     format_usage,
-    fs::display_permissions,
+    fs::{FileInformation, display_permissions},
     fsext::{MetadataTimeField, metadata_get_time},
     line_ending::LineEnding,
     os_str_as_bytes_lossy,
-    parser::parse_glob,
-    parser::parse_size::parse_size_u64,
-    parser::shortcut_value_parser::ShortcutValueParser,
+    parser::{parse_glob, parse_size::parse_size_u64, shortcut_value_parser::ShortcutValueParser},
     quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
     show, show_error, show_warning,
     time::{FormatSystemTimeFallback, format, format_system_time},
@@ -2251,19 +2250,12 @@ fn recursive_loop(
     state: &mut ListState,
     dired: &mut DiredOutput,
 ) -> UResult<()> {
+    let mut listed_ancestors = HashSet::new();
+    listed_ancestors.insert(FileInformation::from_path(&path_data.p_buf, true)?);
+
     let mut stack: Vec<PathData> = Vec::new();
 
     enter_directory(path_data, read_dir, config, state, dired, &mut stack)?;
-
-    #[cfg(target_os = "windows")]
-    let listed_ancestor_md =
-        FileInformation::from_path(&path_data.p_buf, path_data.must_dereference)?;
-
-    #[cfg(not(target_os = "windows"))]
-    let listed_ancestor_md = match path_data.get_metadata(&mut state.out) {
-        Some(md) => md,
-        None => &get_metadata_with_deref_opt(&path_data.p_buf, path_data.must_dereference)?,
-    };
 
     if config.recursive {
         while let Some(item) = stack.pop() {
@@ -2277,26 +2269,9 @@ fn recursive_loop(
                     ));
                 }
                 Ok(rd) => {
-                    #[cfg(target_os = "windows")]
-                    let item_md = FileInformation::from_path(&item.p_buf, item.must_dereference)?;
+                    let file_info = FileInformation::from_path(&item.p_buf, true)?;
 
-                    #[cfg(not(target_os = "windows"))]
-                    let item_md = match item.get_metadata(&mut state.out) {
-                        Some(md) => md,
-                        None => &get_metadata_with_deref_opt(&item.p_buf, item.must_dereference)?,
-                    };
-
-                    #[cfg(target_os = "windows")]
-                    if item_md == listed_ancestor_md {
-                        state.out.flush()?;
-                        show!(LsError::AlreadyListedError(item.p_buf.clone()));
-                        continue;
-                    }
-
-                    #[cfg(not(target_os = "windows"))]
-                    if item_md.ino() == listed_ancestor_md.ino()
-                        && item_md.dev() == listed_ancestor_md.dev()
-                    {
+                    if listed_ancestors.contains(&file_info) {
                         state.out.flush()?;
                         show!(LsError::AlreadyListedError(item.p_buf.clone()));
                         continue;
@@ -2320,6 +2295,7 @@ fn recursive_loop(
                     show_dir_name(&item, &mut state.out, config)?;
                     writeln!(state.out)?;
                     enter_directory(&item, rd, config, state, dired, &mut stack)?;
+                    listed_ancestors.insert(file_info);
                 }
             }
         }
