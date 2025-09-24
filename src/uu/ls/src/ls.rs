@@ -2277,38 +2277,35 @@ fn recursive_loop(
                         item.command_line
                     ));
                 }
-                Ok(rd) => {
-                    if listed_ancestors.insert(FileInformation::from_path(
+                Ok(_rd)
+                    if listed_ancestors.contains(&FileInformation::from_path(
                         &item.p_buf,
                         item.must_dereference,
-                    )?) {
-                        // when listing several directories in recursive mode, we show
-                        // "dirname:" at the beginning of the file list
-                        writeln!(state.out)?;
-                        if config.dired {
-                            // We already injected the first dir
-                            // Continue with the others
-                            // 2 = \n + \n
-                            dired.padding = 2;
-                            dired::indent(&mut state.out)?;
-                            let dir_name_size = item.p_buf.to_string_lossy().len();
-                            dired::calculate_subdired(dired, dir_name_size);
-                            // inject dir name
-                            dired::add_dir_name(dired, dir_name_size);
-                        }
-
-                        show_dir_name(&item, &mut state.out, config)?;
-                        writeln!(state.out)?;
-                        let mut res = enter_directory(&item, rd, config, state, dired)?;
-                        queue.append(&mut res);
-                        listed_ancestors.remove(&FileInformation::from_path(
-                            &item.p_buf,
-                            item.must_dereference,
-                        )?);
-                    } else {
-                        state.out.flush()?;
-                        show!(LsError::AlreadyListedError(item.p_buf.clone()));
+                    )?) =>
+                {
+                    state.out.flush()?;
+                    show!(LsError::AlreadyListedError(item.p_buf.clone()));
+                }
+                Ok(rd) => {
+                    // when listing several directories in recursive mode, we show
+                    // "dirname:" at the beginning of the file list
+                    writeln!(state.out)?;
+                    if config.dired {
+                        // We already injected the first dir
+                        // Continue with the others
+                        // 2 = \n + \n
+                        dired.padding = 2;
+                        dired::indent(&mut state.out)?;
+                        let dir_name_size = item.p_buf.to_string_lossy().len();
+                        dired::calculate_subdired(dired, dir_name_size);
+                        // inject dir name
+                        dired::add_dir_name(dired, dir_name_size);
                     }
+
+                    show_dir_name(&item, &mut state.out, config)?;
+                    writeln!(state.out)?;
+                    let mut res = enter_directory(&item, rd, config, state, dired)?;
+                    queue.append(&mut res);
                 }
             }
         }
