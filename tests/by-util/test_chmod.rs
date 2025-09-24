@@ -391,6 +391,10 @@ fn test_chmod_recursive() {
     make_file(&at.plus_as_string("a/b/b"), 0o100444);
     make_file(&at.plus_as_string("a/b/c/c"), 0o100444);
     make_file(&at.plus_as_string("z/y"), 0o100444);
+    #[cfg(not(target_os = "linux"))]
+    let err_msg = "chmod: Permission denied\n";
+    #[cfg(target_os = "linux")]
+    let err_msg = "chmod: 'z': Permission denied\n";
 
     // only the permissions of folder `a` and `z` are changed
     // folder can't be read after read permission is removed
@@ -401,7 +405,7 @@ fn test_chmod_recursive() {
         .arg("z")
         .umask(0)
         .fails()
-        .stderr_is("chmod: Permission denied\n");
+        .stderr_is(err_msg);
 
     assert_eq!(at.metadata("z/y").permissions().mode(), 0o100444);
     assert_eq!(at.metadata("a/a").permissions().mode(), 0o100444);
