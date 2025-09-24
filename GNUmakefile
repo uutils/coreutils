@@ -191,6 +191,23 @@ SELINUX_PROGS := \
 	chcon \
 	runcon
 
+HASHSUM_PROGS := \
+	b2sum \
+	b3sum \
+	md5sum \
+	sha1sum \
+	sha224sum \
+	sha256sum \
+	sha3-224sum \
+	sha3-256sum \
+	sha3-384sum \
+	sha3-512sum \
+	sha384sum \
+	sha3sum \
+	sha512sum \
+	shake128sum \
+	shake256sum
+
 $(info Detected OS = $(OS))
 
 # Don't build the SELinux programs on macOS (Darwin) and FreeBSD
@@ -381,13 +398,13 @@ distclean: clean
 ifeq ($(MANPAGES),y)
 manpages: build-coreutils
 	mkdir -p $(BUILDDIR)/man/
-	$(foreach prog, $(INSTALLEES), \
+	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS), \
 		$(BUILDDIR)/coreutils manpage $(prog) > $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(newline) \
 	)
 
 install-manpages: manpages
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/man/man1
-	$(foreach prog, $(INSTALLEES), \
+	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS), \
 		$(INSTALL) -m 644 $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(DESTDIR)$(DATAROOTDIR)/man/man1/ $(newline) \
 	)
 else
@@ -397,7 +414,7 @@ endif
 ifeq ($(COMPLETIONS),y)
 completions: build-coreutils
 	mkdir -p $(BUILDDIR)/completions/zsh $(BUILDDIR)/completions/bash $(BUILDDIR)/completions/fish
-	$(foreach prog, $(INSTALLEES), \
+	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS) , \
 		$(BUILDDIR)/coreutils completion $(prog) zsh > $(BUILDDIR)/completions/zsh/_$(PROG_PREFIX)$(prog) $(newline) \
 		$(BUILDDIR)/coreutils completion $(prog) bash > $(BUILDDIR)/completions/bash/$(PROG_PREFIX)$(prog) $(newline) \
 		$(BUILDDIR)/coreutils completion $(prog) fish > $(BUILDDIR)/completions/fish/$(PROG_PREFIX)$(prog).fish $(newline) \
@@ -407,7 +424,7 @@ install-completions: completions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d
-	$(foreach prog, $(INSTALLEES), \
+	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS) , \
 		$(INSTALL) -m 644 $(BUILDDIR)/completions/zsh/_$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/ $(newline) \
 		$(INSTALL) -m 644 $(BUILDDIR)/completions/bash/$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/ $(newline) \
 		$(INSTALL) -m 644 $(BUILDDIR)/completions/fish/$(PROG_PREFIX)$(prog).fish $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/ $(newline) \
@@ -464,10 +481,16 @@ ifeq (${MULTICALL}, y)
 	$(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
 		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
 	)
+	$(foreach prog, $(HASHSUM_PROGS), \
+		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
+	)
 	$(if $(findstring test,$(INSTALLEES)), cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
 else
 	$(foreach prog, $(INSTALLEES), \
 		$(INSTALL) -m 755 $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog) $(newline) \
+	)
+	$(foreach prog, $(HASHSUM_PROGS), \
+		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)hashsum $(PROG_PREFIX)$(prog) $(newline) \
 	)
 	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) -m 755 $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
 endif

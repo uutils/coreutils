@@ -27,6 +27,7 @@ allow = [
   "CC0-1.0",
   "Unicode-3.0",
   "Zlib",
+  "MPL-2.0",
 ]
 confidence-threshold = 0.8
 
@@ -106,6 +107,8 @@ skip = [
   { name = "rand_core", version = "0.6.4" },
   # utmp-classic
   { name = "zerocopy", version = "0.7.35" },
+  # divans/codspeed tooling
+  { name = "nix", version = "0.29.0" },
 ]
 # spell-checker: enable
 

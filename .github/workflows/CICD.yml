@@ -5,7 +5,7 @@ name: CICD
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata
 # spell-checker:ignore (people) Peltoche rivy dtolnay Anson dawidd
 # spell-checker:ignore (shell/tools) binutils choco clippy dmake dpkg esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libfuse libssl limactl mkdir nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache utmpdump xargs
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils libsystemd
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils libsystemd codspeed
 
 env:
   PROJECT_NAME: coreutils
@@ -321,9 +321,9 @@ jobs:
         # Check that the utils are present
         test -f /tmp/usr/local/bin/tty
         # Check that the manpage is present
-        test -f /tmp/usr/local/share/man/man1/whoami.1
+        test -f /tmp/usr/local/share/man/man1/md5sum.1
         # Check that the completion is present
-        test -f /tmp/usr/local/share/zsh/site-functions/_install
+        test -f /tmp/usr/local/share/zsh/site-functions/_b2sum
         test -f /tmp/usr/local/share/bash-completion/completions/head
         test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
       env:
@@ -341,7 +341,52 @@ jobs:
         ! test -f /tmp/usr/local/share/zsh/site-functions/_install
         ! test -f /tmp/usr/local/share/bash-completion/completions/head
         ! test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
-
+    - name: "`make install MULTICALL=n`"
+      shell: bash
+      run: |
+        set -x
+        DESTDIR=/tmp/ make PROFILE=release MULTICALL=n install
+        # Check that the utils are present
+        test -f /tmp/usr/local/bin/hashsum
+        # Check that hashsum symlinks are present
+        test -h /tmp/usr/local/bin/b2sum
+        test -h /tmp/usr/local/bin/b3sum
+        test -h /tmp/usr/local/bin/md5sum
+        test -h /tmp/usr/local/bin/sha1sum
+        test -h /tmp/usr/local/bin/sha224sum
+        test -h /tmp/usr/local/bin/sha256sum
+        test -h /tmp/usr/local/bin/sha3-224sum
+        test -h /tmp/usr/local/bin/sha3-256sum
+        test -h /tmp/usr/local/bin/sha3-384sum
+        test -h /tmp/usr/local/bin/sha3-512sum
+        test -h /tmp/usr/local/bin/sha384sum
+        test -h /tmp/usr/local/bin/sha3sum
+        test -h /tmp/usr/local/bin/sha512sum
+        test -h /tmp/usr/local/bin/shake128sum
+        test -h /tmp/usr/local/bin/shake256sum
+    - name: "`make install MULTICALL=y`"
+      shell: bash
+      run: |
+        set -x
+        DESTDIR=/tmp/ make PROFILE=release MULTICALL=y install
+        # Check that the utils are present
+        test -f /tmp/usr/local/bin/coreutils
+        # Check that hashsum symlinks are present
+        test -h /tmp/usr/local/bin/b2sum
+        test -h /tmp/usr/local/bin/b3sum
+        test -h /tmp/usr/local/bin/md5sum
+        test -h /tmp/usr/local/bin/sha1sum
+        test -h /tmp/usr/local/bin/sha224sum
+        test -h /tmp/usr/local/bin/sha256sum
+        test -h /tmp/usr/local/bin/sha3-224sum
+        test -h /tmp/usr/local/bin/sha3-256sum
+        test -h /tmp/usr/local/bin/sha3-384sum
+        test -h /tmp/usr/local/bin/sha3-512sum
+        test -h /tmp/usr/local/bin/sha384sum
+        test -h /tmp/usr/local/bin/sha3sum
+        test -h /tmp/usr/local/bin/sha512sum
+        test -h /tmp/usr/local/bin/shake128sum
+        test -h /tmp/usr/local/bin/shake256sum
   build_rust_stable:
     name: Build/stable
     needs: [ min_version, deps ]
@@ -1221,3 +1266,67 @@ jobs:
         lima bash -c "cd work && cargo test --features 'feat_selinux'"
     - name: Lint with SELinux
       run: lima bash -c "cd work && cargo clippy --all-targets --features 'feat_selinux' -- -D warnings"
+
+  benchmarks:
+    name: Run benchmarks (CodSpeed)
+    runs-on: ubuntu-latest
+    needs: min_version
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Install system dependencies
+        shell: bash
+        run: |
+          sudo apt-get -y update
+          sudo apt-get -y install libselinux1-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Install cargo-codspeed
+        shell: bash
+        run: cargo install cargo-codspeed --locked
+
+      - name: Get benchmark list
+        id: benchmark_list
+        shell: bash
+        run: |
+          echo "Finding all utilities with benchmarks..."
+          benchmark_packages=""
+          for bench_dir in $(ls -d src/uu/*/benches 2>/dev/null); do
+            prog_dir=$(dirname "$bench_dir")
+            prog_name=$(basename "$prog_dir")
+            echo "Found benchmarks for uu_$prog_name"
+            benchmark_packages="$benchmark_packages uu_$prog_name"
+          done
+          echo "benchmark_packages=${benchmark_packages}" >> $GITHUB_OUTPUT
+          echo "Found benchmark packages:${benchmark_packages}"
+
+      - name: Build benchmarks
+        shell: bash
+        run: |
+          echo "Building benchmarks for packages: ${{ steps.benchmark_list.outputs.benchmark_packages }}"
+          for package in ${{ steps.benchmark_list.outputs.benchmark_packages }}; do
+            echo "Building benchmarks for $package"
+            cargo codspeed build -p $package
+          done
+
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v4
+        env:
+          CODSPEED_LOG: debug
+        with:
+          mode: instrumentation
+          run: |
+            echo "Running benchmarks for packages: ${{ steps.benchmark_list.outputs.benchmark_packages }}"
+            for package in ${{ steps.benchmark_list.outputs.benchmark_packages }}; do
+              echo "Running benchmarks for $package"
+              cargo codspeed run -p $package > /dev/null
+            done
+          token: ${{ secrets.CODSPEED_TOKEN }}
