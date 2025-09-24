@@ -2320,8 +2320,19 @@ fn display_dir_entry_size(
         };
 
         let long_format = &config.long;
+        let numeric_uid_gid;
 
-        let display_symlink_count = if long_format.numeric_uid_gid {
+        #[cfg(unix)]
+        {
+            numeric_uid_gid = long_format.numeric_uid_gid;
+        }
+
+        #[cfg(not(unix))]
+        {
+            numeric_uid_gid = false;
+        }
+
+        let display_symlink_count = if numeric_uid_gid {
             display_symlink_count(md).len()
         } else {
             0
