@@ -2173,10 +2173,8 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
     // https://github.com/rust-lang/glob/issues/23
     // https://github.com/rust-lang/glob/issues/78
     // https://github.com/BurntSushi/ripgrep/issues/1250
-    let file_name = match file_name.to_str() {
-        Some(s) => s.to_string(),
-        None => file_name.to_string_lossy().into_owned(),
-    };
+    let file_name = file_name.to_string_lossy();
+
     !config
         .ignore_patterns
         .iter()
@@ -2379,7 +2377,7 @@ impl ExtendPad for Vec<u8> {
 
 // TODO: Consider converting callers to use ExtendPad instead, as it avoids
 // additional copies.
-fn pad_left(string: &str, count: usize) -> String {
+fn pad_left<T: std::fmt::Display>(string: &T, count: usize) -> String {
     format!("{string:>count$}")
 }
 
@@ -2416,19 +2414,20 @@ fn display_additional_leading_info(
     {
         if config.inode {
             let i = if let Some(md) = item.get_metadata(out) {
-                get_inode(md)
+                &display_inode(md)
             } else {
-                "?".to_owned()
+                "?"
             };
+
             write!(result, "{} ", pad_left(&i, padding.inode)).unwrap();
         }
     }
 
     if config.alloc_size {
         let s = if let Some(md) = item.get_metadata(out) {
-            display_size(get_block_size(md, config), config)
+            &display_size(get_block_size(md, config), config)
         } else {
-            "?".to_owned()
+            "?"
         };
         // extra space is insert to align the sizes, as needed for all formats, except for the comma format.
         if config.format == Format::Commas {
@@ -3038,26 +3037,26 @@ fn file_is_executable(md: &Metadata) -> bool {
     return md.mode() & ((S_IXUSR | S_IXGRP | S_IXOTH) as u32) != 0;
 }
 
-fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
+fn classify_file<'a>(path: &'a PathData, out: &mut BufWriter<Stdout>) -> Option<&'a str> {
     let file_type = path.file_type(out)?;
 
     if file_type.is_dir() {
-        Some('/')
+        Some("/")
     } else if file_type.is_symlink() {
-        Some('@')
+        Some("@")
     } else {
         #[cfg(unix)]
         {
             if file_type.is_socket() {
-                Some('=')
+                Some("=")
             } else if file_type.is_fifo() {
-                Some('|')
+                Some("|")
             } else if file_type.is_file()
                 // Safe unwrapping if the file was removed between listing and display
                 // See https://github.com/uutils/coreutils/issues/5371
                 && path.get_metadata(out).is_some_and(file_is_executable)
             {
-                Some('*')
+                Some("*")
             } else {
                 None
             }
@@ -3121,19 +3120,19 @@ fn display_item_name(
     if config.indicator_style != IndicatorStyle::None {
         let sym = classify_file(path, &mut state.out);
 
-        let char_opt = match config.indicator_style {
+        let char_opt: Option<&str> = match config.indicator_style {
             IndicatorStyle::Classify => sym,
             IndicatorStyle::FileType => {
                 // Don't append an asterisk.
                 match sym {
-                    Some('*') => None,
+                    Some("*") => None,
                     _ => sym,
                 }
             }
             IndicatorStyle::Slash => {
                 // Append only a slash.
                 match sym {
-                    Some('/') => Some('/'),
+                    Some("/") => Some("/"),
                     _ => None,
                 }
             }
@@ -3141,7 +3140,7 @@ fn display_item_name(
         };
 
         if let Some(c) = char_opt {
-            name.push(OsStr::new(&c.to_string()));
+            name.push(c);
         }
     }
 
@@ -3211,9 +3210,9 @@ fn display_item_name(
     if config.context {
         if let Some(pad_count) = prefix_context {
             let security_context = if matches!(config.format, Format::Commas) {
-                path.security_context.clone()
+                &path.security_context
             } else {
-                pad_left(&path.security_context, pad_count)
+                &pad_left(&path.security_context, pad_count)
             };
             let old_name = name;
             name = format!("{security_context} ").into();
@@ -3237,16 +3236,16 @@ fn create_hyperlink(name: &OsStr, path: &PathData) -> OsString {
     let unencoded_chars = "_-.:~/\\";
 
     // percentage encoding of path
-    let absolute_path: String = absolute_path
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || unencoded_chars.contains(c) {
-                c.to_string()
-            } else {
-                format!("%{:02x}", c as u8)
-            }
-        })
-        .collect();
+    let absolute_path: String = absolute_path.chars().fold(String::new(), |mut acc, c| {
+        if c.is_alphanumeric() || unencoded_chars.contains(c) {
+            acc.push(c);
+        } else {
+            let x = format!("%{:02x}", c as u8);
+            acc.push_str(&x);
+        };
+
+        acc
+    });
 
     // \x1b = ESC, \x07 = BEL
     let mut ret: OsString = format!("\x1b]8;;file://{hostname}{absolute_path}\x07").into();
