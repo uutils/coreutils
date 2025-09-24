@@ -217,8 +217,10 @@ endif
 
 ifneq ($(OS),Windows_NT)
 	PROGS := $(PROGS) $(UNIX_PROGS)
-# Build the selinux command even if not on the system
-	PROGS := $(PROGS) $(SELINUX_PROGS)
+# Build the selinux command if on the system
+	ifeq ($(SELINUX_ENABLED),1)
+	 PROGS := $(PROGS) $(SELINUX_PROGS)
+	endif
 # Always use external libstdbuf when building with make (Unix only)
 	CARGOFLAGS += --features feat_external_libstdbuf
 endif
