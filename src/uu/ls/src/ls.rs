@@ -59,7 +59,6 @@ use uucore::{
     error::{UError, UResult, set_exit_code},
     format::human::{SizeFormat, human_readable},
     format_usage,
-    fs::FileInformation,
     fs::display_permissions,
     fsext::{MetadataTimeField, metadata_get_time},
     line_ending::LineEnding,
@@ -2250,7 +2249,10 @@ fn recursive_loop(
 ) -> UResult<()> {
     let mut queue: Vec<PathData> = enter_directory(path_data, read_dir, config, state, dired)?;
 
-    let listed_ancestor = FileInformation::from_path(&path_data.p_buf, path_data.must_dereference)?;
+    let listed_ancestor_md = match path_data.get_metadata(&mut state.out) {
+        Some(md) => md,
+        None => &get_metadata_with_deref_opt(&path_data.p_buf, path_data.must_dereference)?,
+    };
 
     if config.recursive {
         while let Some(item) = queue.pop() {
@@ -2264,9 +2266,14 @@ fn recursive_loop(
                     ));
                 }
                 Ok(rd) => {
-                    let item_info = FileInformation::from_path(&item.p_buf, item.must_dereference)?;
+                    let item_info_md = match item.get_metadata(&mut state.out) {
+                        Some(md) => md,
+                        None => &get_metadata_with_deref_opt(&item.p_buf, item.must_dereference)?,
+                    };
 
-                    if item_info == listed_ancestor {
+                    if item_info_md.dev() == listed_ancestor_md.dev()
+                        && item_info_md.ino() == listed_ancestor_md.ino()
+                    {
                         state.out.flush()?;
                         show!(LsError::AlreadyListedError(item.p_buf.clone()));
                         continue;
