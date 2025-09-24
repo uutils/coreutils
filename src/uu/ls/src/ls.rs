@@ -1929,7 +1929,7 @@ impl std::hash::Hash for PathData {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         #[cfg(windows)]
         {
-            if Ok(self_fi) = FileInformation::from_path(self.p_buf).hash(state) {
+            if let Ok(self_fi) = FileInformation::from_path(self.p_buf).hash(state) {
                 return self_fi.hash(state);
             }
 
