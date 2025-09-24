@@ -70,18 +70,18 @@ fi
 
 ###
 
-release_tag_GNU="v9.7"
+release_tag_GNU="v9.8"
 
 # check if the GNU coreutils has been cloned, if not print instructions
 # note: the ${path_GNU} might already exist, so we check for the .git directory
 if test ! -d "${path_GNU}/.git"; then
-    echo "Could not find GNU coreutils (expected at '${path_GNU}')"
-    echo "Run the following to download into the expected path:"
-    echo "git clone --recurse-submodules https://github.com/coreutils/coreutils.git \"${path_GNU}\""
-    echo "After downloading GNU coreutils to \"${path_GNU}\" run the following commands to checkout latest release tag"
-    echo "cd \"${path_GNU}\""
-    echo "git fetch --all --tags"
-    echo "git checkout tags/${release_tag_GNU}"
+    echo "Could not find the GNU coreutils (expected at '${path_GNU}')"
+    echo "Download them to the expected path:"
+    echo "  git clone --recurse-submodules https://github.com/coreutils/coreutils.git \"${path_GNU}\""
+    echo "Afterwards, checkout the latest release tag:"
+    echo "  cd \"${path_GNU}\""
+    echo "  git fetch --all --tags"
+    echo "  git checkout tags/${release_tag_GNU}"
     exit 1
 fi
 
