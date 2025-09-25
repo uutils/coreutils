@@ -8,6 +8,23 @@ use crate::OutputState;
 static TRUECOLOR_ESCAPE_START: &str = "\x1b[38;2";
 static ANSI_ESCAPE_START: &str = "\x1b[38;5;";
 
+static ANSI_PALETTE: [[f64; 3]; 12] = [
+    // regular
+    [128., 0., 0.],
+    [0., 128., 0.],
+    [128., 128., 0.],
+    [0., 0., 128.],
+    [128., 0., 128.],
+    [0., 128., 128.],
+    // bright
+    [255., 0., 0.],
+    [0., 255., 0.],
+    [255., 255., 0.],
+    [0., 0., 255.],
+    [255., 0., 255.],
+    [0., 255., 255.],
+];
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ColorMode {
     TrueColor,
@@ -17,22 +34,43 @@ pub enum ColorMode {
 
 impl ColorMode {
     fn conv_color(&self, color: [f64; 3]) -> Color {
-        let fit_linear_curve = |x: f64| (127. * x + 128.) as u8;
-        let retrofit_ansi = |color: [f64; 3]| {
-            let ratio = [36, 6, 1];
-            let ascii_color_offset = 16u16;
-            color
-                .into_iter()
-                .map(fit_linear_curve)
-                .zip(ratio)
-                .fold(ascii_color_offset, |acc, (c, m)| {
-                    acc + ((6. * (c as f64 / 256.)).floor() as u16) * m
-                })
-        };
+        let fit_linear_curve = |x: f64| 127. * x + 128.;
         match self {
-            ColorMode::TrueColor => Color::Color24b(color.map(fit_linear_curve)),
-            ColorMode::Ansi256 => Color::Ansi256(retrofit_ansi(color)),
-            ColorMode::Ansi => Color::Ansi(retrofit_ansi(color) as u8),
+            ColorMode::TrueColor => Color::Color24b(color.map(|x| fit_linear_curve(x) as u8)),
+            ColorMode::Ansi256 => {
+                let ratio = [36, 6, 1];
+                let ascii_color_offset = 16u16;
+                Color::Ansi256(
+                    color
+                        .into_iter()
+                        .map(fit_linear_curve)
+                        .zip(ratio)
+                        .fold(ascii_color_offset, |acc, (c, m)| {
+                            acc + ((6. * (c / 256.)).floor() as u16) * m
+                        }),
+                )
+            }
+            ColorMode::Ansi => {
+                let [ansi_normal_radix, ansi_bright_radix] = [31, 91];
+                let taxi_cab_distance = |b: [f64; 3]| {
+                    color
+                        .into_iter()
+                        .map(fit_linear_curve)
+                        .zip(b)
+                        .fold(0., |acc, (a, b)| acc + (a - b).abs())
+                };
+                let closest_match = ANSI_PALETTE
+                    .into_iter()
+                    .map(taxi_cab_distance)
+                    .enumerate()
+                    .reduce(|m @ (_, min), e @ (_, n)| if min <= n { m } else { e })
+                    .map_or(0, |(i, _)| i as u8);
+                Color::Ansi(if closest_match < 6 {
+                    ansi_normal_radix + closest_match
+                } else {
+                    ansi_bright_radix + (closest_match - 6)
+                })
+            }
         }
     }
 }
