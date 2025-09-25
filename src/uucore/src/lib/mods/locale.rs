@@ -235,20 +235,18 @@ fn create_english_bundle_from_embedded(
         ));
     }
 
-    let embedded_locales = get_embedded_locales();
     let mut bundle = FluentBundle::new(vec![locale.clone()]);
     bundle.set_use_isolating(false);
 
     // First, try to load common uucore strings
-    let uucore_key = "uucore/en-US.ftl";
-    if let Some(uucore_content) = embedded_locales.get(uucore_key) {
+    if let Some(uucore_content) = get_embedded_locale("uucore/en-US.ftl") {
         let uucore_resource = parse_fluent_resource(uucore_content)?;
         bundle.add_resource_overriding(uucore_resource);
     }
 
     // Then, try to load utility-specific strings
     let locale_key = format!("{util_name}/en-US.ftl");
-    if let Some(ftl_content) = embedded_locales.get(locale_key.as_str()) {
+    if let Some(ftl_content) = get_embedded_locale(&locale_key) {
         let resource = parse_fluent_resource(ftl_content)?;
         bundle.add_resource_overriding(resource);
     }
