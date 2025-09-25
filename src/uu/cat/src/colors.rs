@@ -136,7 +136,7 @@ impl<'w, W: Write> ColorWriter<'w, W> {
     }
 
     /// Compute color in sinus-image range; heavily based on
-    /// https://github.com/ur0/lolcat; MIT-licensed and
+    /// <https://github.com/ur0/lolcat>; MIT-licensed and
     /// co-copyright of Umang Raghuvanshi et al.
     fn get_color(&self) -> Color {
         let color = Self::COLOR_DIFFUSION * self.state.color_seed[0];
@@ -163,7 +163,7 @@ impl<'w, W: Write> ColorWriter<'w, W> {
 
     /// Along with the color gradient algorithm,
     /// this escape sequence parser is heavily based
-    /// on https://github.com/ur0/lolcat; MIT-licensed
+    /// on <https://github.com/ur0/lolcat>; MIT-licensed
     /// and co-copyright of Umang Raghuvanshi et al.
     // Beware of the following spaghetti.
     fn parse_escape_seq<'a, 'b>(
