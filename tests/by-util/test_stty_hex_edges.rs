@@ -13,7 +13,7 @@ fn dev_tty_available() -> bool {
     #[cfg(unix)]
     {
         use std::fs::File;
-        use std::os::fd::AsRawFd;
+
         if !Path::new("/dev/tty").exists() {
             return false;
         }
