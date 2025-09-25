@@ -17,7 +17,8 @@
     "hexdigit",
     "gfmt",
     "Termux",
-    "rsplit"
+    "rsplit",
+    "bitfields"
   ],
   "ignorePaths": [
     "**/target/**",
