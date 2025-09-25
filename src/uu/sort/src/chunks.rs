@@ -15,7 +15,7 @@ use std::{
     sync::mpsc::SyncSender,
 };
 
-use memchr::memrchr;
+use memchr::memchr_iter;
 use self_cell::self_cell;
 use uucore::error::{UResult, USimpleError};
 
@@ -282,55 +282,79 @@ fn read_to_buffer<T: Read>(
     start_offset: usize,
     separator: u8,
 ) -> UResult<(usize, bool, bool)> {
-    let mut filled = start_offset;
-    let mut last_separator = memrchr(separator, &buffer[..filled]);
-    let mut current_file_had_data = filled > 0;
-
+    let mut read_target = &mut buffer[start_offset..];
+    let mut last_file_empty = true;
+    // Only search for newlines in regions we haven't scanned before to avoid quadratic behavior.
+    let mut newline_search_offset = 0;
+    let mut found_newline = false;
     loop {
-        if filled == buffer.len() {
-            if let Some(last) = last_separator {
-                return Ok((last + 1, true, false));
-            }
-            // Buffer full and we haven't seen a separator yet
-            if let Some(max) = max_buffer_size {
-                if buffer.len() >= max {
-                    // Signal to caller that we need to spill this oversized record.
-                    return Ok((0, true, true));
-                }
-            }
-            grow_buffer(buffer, max_buffer_size);
-            continue;
-        }
-
-        match file.read(&mut buffer[filled..]) {
+        match file.read(read_target) {
             Ok(0) => {
-                if current_file_had_data && (filled == 0 || buffer[filled - 1] != separator) {
-                    if filled == buffer.len() {
-                        grow_buffer(buffer, max_buffer_size);
+                if read_target.is_empty() {
+                    // Buffer full
+                    if let Some(max) = max_buffer_size {
+                        if max > buffer.len() {
+                            // We can grow the buffer
+                            let prev_len = buffer.len();
+                            if buffer.len() < max / 2 {
+                                buffer.resize(buffer.len() * 2, 0);
+                            } else {
+                                buffer.resize(max, 0);
+                            }
+                            read_target = &mut buffer[prev_len..];
+                            continue;
+                        }
                     }
-                    buffer[filled] = separator;
-                    filled += 1;
-                    last_separator = Some(filled - 1);
-                }
 
-                if let Some(next_file) = next_files.next() {
-                    *file = next_file?;
-                    current_file_had_data = false;
-                    continue;
+                    // Buffer cannot grow further or exactly filled: find the last newline seen so far
+                    let mut sep_iter =
+                        memchr_iter(separator, &buffer[newline_search_offset..buffer.len()]).rev();
+                    newline_search_offset = buffer.len();
+                    if let Some(last_line_end) = sep_iter.next() {
+                        if found_newline || sep_iter.next().is_some() {
+                            // We read enough lines. Include the separator so it isn't carried over.
+                            return Ok((last_line_end + 1, true, false));
+                        }
+                        found_newline = true;
+                    }
+
+                    // Need more data for a full line
+                    if let Some(max) = max_buffer_size {
+                        if buffer.len() >= max {
+                            // Hard cap hit and no newline yet: signal spill
+                            return Ok((0, true, true));
+                        }
+                    }
+                    let len = buffer.len();
+                    buffer.resize(len + 1024 * 10, 0);
+                    read_target = &mut buffer[len..];
+                } else {
+                    // This file has been fully read.
+                    let mut leftover_len = read_target.len();
+                    if !last_file_empty {
+                        // The file was not empty: ensure a trailing separator
+                        let read_len = buffer.len() - leftover_len;
+                        if buffer[read_len - 1] != separator {
+                            buffer[read_len] = separator;
+                            leftover_len -= 1;
+                        }
+                        let read_len = buffer.len() - leftover_len;
+                        read_target = &mut buffer[read_len..];
+                    }
+                    if let Some(next_file) = next_files.next() {
+                        // There is another file.
+                        last_file_empty = true;
+                        *file = next_file?;
+                    } else {
+                        // This was the last file.
+                        let read_len = buffer.len() - leftover_len;
+                        return Ok((read_len, false, false));
+                    }
                 }
-                let read_len = last_separator.map_or(filled, |pos| pos + 1);
-                return Ok((read_len, false, false));
             }
             Ok(n) => {
-                if n == 0 {
-                    continue;
-                }
-                let start = filled;
-                filled += n;
-                current_file_had_data = true;
-                if let Some(rel) = memrchr(separator, &buffer[start..filled]) {
-                    last_separator = Some(start + rel);
-                }
+                read_target = &mut read_target[n..];
+                last_file_empty = false;
             }
             Err(e) if e.kind() == ErrorKind::Interrupted => {
                 // retry
