@@ -3930,6 +3930,7 @@ dependencies = [
  "bigdecimal",
  "binary-heap-plus",
  "clap",
+ "codspeed-divan-compat",
  "compare",
  "ctrlc",
  "fluent",
