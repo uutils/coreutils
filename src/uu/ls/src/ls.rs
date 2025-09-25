@@ -2279,7 +2279,7 @@ fn recurse_directories(
                 Ok(rd) => {
                     let file_info = FileInformation::from_path(&item.p_buf, item.must_dereference)?;
 
-                    if listed_ancestors.contains(&file_info) {
+                    if listed_ancestors.insert(file_info) {
                         state.out.flush()?;
                         show!(LsError::AlreadyListedError(item.p_buf.clone()));
                         continue;
@@ -2303,7 +2303,6 @@ fn recurse_directories(
                     show_dir_name(&item, &mut state.out, config)?;
                     writeln!(state.out)?;
                     enter_directory(&item, rd, config, state, dired, &mut entries_stack)?;
-                    listed_ancestors.insert(file_info);
                 }
             }
         }
