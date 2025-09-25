@@ -3,24 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use super::PathData;
-use lscolors::{Colorable, Indicator, LsColors, Style};
+use super::get_metadata_with_deref_opt;
+use lscolors::{Indicator, LsColors, Style};
 use std::ffi::OsString;
-use std::fs::Metadata;
-
-impl Colorable for PathData {
-    fn file_name(&self) -> OsString {
-        self.display_name().to_os_string()
-    }
-    fn file_type(&self) -> Option<std::fs::FileType> {
-        self.file_type().copied()
-    }
-    fn metadata(&self) -> Option<Metadata> {
-        self.metadata().cloned()
-    }
-    fn path(&self) -> std::path::PathBuf {
-        self.path().to_path_buf()
-    }
-}
+use std::fs::{DirEntry, Metadata};
+use std::io::{BufWriter, Stdout};
 
 /// We need this struct to be able to store the previous style.
 /// This because we need to check the previous value in case we don't need
@@ -148,22 +135,25 @@ impl<'a> StyleManager<'a> {
         self.apply_style(style, name, wrap)
     }
 
-    pub(crate) fn apply_style_based_on_colorable<T: Colorable>(
+    pub(crate) fn apply_style_based_on_dir_entry(
         &mut self,
-        path: &T,
+        dir_entry: &DirEntry,
         name: OsString,
         wrap: bool,
     ) -> OsString {
-        let style = self.colors.style_for(path);
+        let style = self.colors.style_for(dir_entry);
         self.apply_style(style, name, wrap)
     }
 }
 
 /// Colors the provided name based on the style determined for the given path
+/// This function is quite long because it tries to leverage [`DirEntry`] to avoid
+/// unnecessary calls to stat and manages the symlink errors
 pub(crate) fn color_name(
     name: OsString,
     path: &PathData,
     style_manager: &mut StyleManager,
+    out: &mut BufWriter<Stdout>,
     target_symlink: Option<&PathData>,
     wrap: bool,
 ) -> OsString {
@@ -189,21 +179,23 @@ pub(crate) fn color_name(
 
     if !path.must_dereference {
         // If we need to dereference (follow) a symlink, we will need to get the metadata
-        // There is a DirEntry, we don't need to get the metadata for the color
-        return style_manager.apply_style_based_on_colorable(path, name, wrap);
+        if let Some(de) = &path.de {
+            // There is a DirEntry, we don't need to get the metadata for the color
+            return style_manager.apply_style_based_on_dir_entry(de, name, wrap);
+        }
     }
 
     if let Some(target) = target_symlink {
         // use the optional target_symlink
-        // Use fn symlink_metadata directly instead of get_metadata() here because ls
+        // Use fn get_metadata_with_deref_opt instead of get_metadata() here because ls
         // should not exit with an err, if we are unable to obtain the target_metadata
-        style_manager.apply_style_based_on_colorable(target, name, wrap)
+        let md_res = get_metadata_with_deref_opt(&target.p_buf, path.must_dereference);
+        let md = md_res.or_else(|_| path.p_buf.symlink_metadata());
+        style_manager.apply_style_based_on_metadata(path, md.ok().as_ref(), name, wrap)
     } else {
-        let md_option: Option<Metadata> = path
-            .metadata()
-            .cloned()
-            .or_else(|| path.p_buf.symlink_metadata().ok());
-
-        style_manager.apply_style_based_on_metadata(path, md_option.as_ref(), name, wrap)
+        let md_option = path.get_metadata(out);
+        let symlink_metadata = path.p_buf.symlink_metadata().ok();
+        let md = md_option.or(symlink_metadata.as_ref());
+        style_manager.apply_style_based_on_metadata(path, md, name, wrap)
     }
 }

@@ -1773,19 +1773,22 @@ struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
-    security_context: Box<str>,
+    // can be used to avoid reading the metadata. Can be also called d_type:
+    // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
+    de: Option<DirEntry>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
     // PathBuf that all above data corresponds to
     p_buf: PathBuf,
     must_dereference: bool,
+    security_context: String,
     command_line: bool,
 }
 
 impl PathData {
     fn new(
         p_buf: PathBuf,
-        dir_entry: Option<DirEntry>,
+        dir_entry: Option<std::io::Result<DirEntry>>,
         file_name: Option<OsString>,
         config: &Config,
         command_line: bool,
@@ -1795,15 +1798,13 @@ impl PathData {
         let display_name = if let Some(name) = file_name {
             name
         } else if command_line {
-            p_buf.as_os_str().to_os_string()
+            p_buf.clone().into()
         } else {
-            dir_entry
-                .as_ref()
-                .map(|de| de.file_name())
-                .or_else(|| p_buf.file_name().map(|inner| inner.to_os_string()))
-                .unwrap_or_default()
+            p_buf
+                .file_name()
+                .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
+                .to_owned()
         };
-
         let must_dereference = match &config.dereference {
             Dereference::All => true,
             Dereference::Args => command_line,
@@ -1821,67 +1822,78 @@ impl PathData {
             Dereference::None => false,
         };
 
+        let de: Option<DirEntry> = match dir_entry {
+            Some(de) => de.ok(),
+            None => None,
+        };
+
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
-        let md = match dir_entry.as_ref() {
-            Some(de) if !must_dereference => {
-                // check if we can use DirEntry metadata
-                // it will avoid a call to stat()
-                if let Ok(md) = de.metadata() {
-                    OnceCell::from(Some(md))
-                } else {
-                    OnceCell::new()
+        fn get_file_type(
+            de: &DirEntry,
+            p_buf: &Path,
+            must_dereference: bool,
+        ) -> OnceCell<Option<FileType>> {
+            if must_dereference {
+                if let Ok(md_pb) = p_buf.metadata() {
+                    return OnceCell::from(Some(md_pb.file_type()));
                 }
             }
-            _ => OnceCell::new(),
-        };
-
-        let ft = match dir_entry.as_ref() {
-            Some(de) if !must_dereference => {
-                if let Ok(ft) = de.file_type() {
-                    OnceCell::from(Some(ft))
-                } else {
-                    OnceCell::new()
-                }
+            if let Ok(ft_de) = de.file_type() {
+                OnceCell::from(Some(ft_de))
+            } else if let Ok(md_pb) = p_buf.symlink_metadata() {
+                OnceCell::from(Some(md_pb.file_type()))
+            } else {
+                OnceCell::new()
             }
-            _ => OnceCell::new(),
+        }
+        let ft = match de {
+            Some(ref de) => get_file_type(de, &p_buf, must_dereference),
+            None => OnceCell::new(),
         };
 
-        let security_context: Box<str> =
-            get_security_context(&p_buf, must_dereference, config).into();
+        let security_context = get_security_context(config, &p_buf, must_dereference);
 
         Self {
-            md,
+            md: OnceCell::new(),
             ft,
-            security_context,
+            de,
             display_name,
             p_buf,
             must_dereference,
+            security_context,
             command_line,
         }
     }
 
-    fn metadata(&self) -> Option<&Metadata> {
+    fn get_metadata(&self, out: &mut BufWriter<Stdout>) -> Option<&Metadata> {
         self.md
             .get_or_init(|| {
+                // check if we can use DirEntry metadata
+                // it will avoid a call to stat()
+                if !self.must_dereference {
+                    if let Some(dir_entry) = &self.de {
+                        return dir_entry.metadata().ok();
+                    }
+                }
+
                 // if not, check if we can use Path metadata
-                match get_metadata_with_deref_opt(self.path(), self.must_dereference) {
+                match get_metadata_with_deref_opt(self.p_buf.as_path(), self.must_dereference) {
                     Err(err) => {
                         // FIXME: A bit tricky to propagate the result here
-                        let mut out = stdout().lock();
-                        let _ = out.flush();
+                        out.flush().unwrap();
                         let errno = err.raw_os_error().unwrap_or(1i32);
                         // a bad fd will throw an error when dereferenced,
                         // but GNU will not throw an error until a bad fd "dir"
                         // is entered, here we match that GNU behavior, by handing
                         // back the non-dereferenced metadata upon an EBADF
                         if self.must_dereference && errno == 9i32 {
-                            if let Ok(file) = self.path().read_link() {
-                                return file.symlink_metadata().ok();
+                            if let Some(dir_entry) = &self.de {
+                                return dir_entry.metadata().ok();
                             }
                         }
                         show!(LsError::IOErrorContext(
-                            self.path().to_path_buf(),
+                            self.p_buf.clone(),
                             err,
                             self.command_line
                         ));
@@ -1893,33 +1905,10 @@ impl PathData {
             .as_ref()
     }
 
-    fn file_type(&self) -> Option<&FileType> {
+    fn file_type(&self, out: &mut BufWriter<Stdout>) -> Option<&FileType> {
         self.ft
-            .get_or_init(|| self.metadata().map(|md| md.file_type()))
+            .get_or_init(|| self.get_metadata(out).map(|md| md.file_type()))
             .as_ref()
-    }
-
-    fn is_dangling_link(&self) -> bool {
-        // deref enabled, self is real dir entry, self has metadata associated with link, but not with target
-        self.must_dereference && self.file_type().is_none() && self.metadata().is_none()
-    }
-
-    #[cfg(unix)]
-    fn is_executable_file(&self) -> bool {
-        self.file_type().is_some_and(|f| f.is_file())
-            && self.metadata().is_some_and(file_is_executable)
-    }
-
-    fn security_context(&self) -> &str {
-        &self.security_context
-    }
-
-    fn path(&self) -> &Path {
-        &self.p_buf
-    }
-
-    fn display_name(&self) -> &OsStr {
-        &self.display_name
     }
 }
 
@@ -1940,7 +1929,7 @@ fn show_dir_name(
     config: &Config,
 ) -> std::io::Result<()> {
     let escaped_name =
-        locale_aware_escape_dir_name(path_data.path().as_os_str(), config.quoting_style);
+        locale_aware_escape_dir_name(path_data.p_buf.as_os_str(), config.quoting_style);
 
     let name = if config.hyperlink && !config.dired {
         create_hyperlink(&escaped_name, path_data)
@@ -1998,11 +1987,11 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         // Proper GNU handling is don't show if dereferenced symlink DNE
         // but only for the base dir, for a child dir show, and print ?s
         // in long format
-        if path_data.metadata().is_none() {
+        if path_data.get_metadata(&mut state.out).is_none() {
             continue;
         }
 
-        let show_dir_contents = match path_data.file_type() {
+        let show_dir_contents = match path_data.file_type(&mut state.out) {
             Some(ft) => !config.directory && ft.is_dir(),
             None => {
                 set_exit_code(1);
@@ -2017,8 +2006,8 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         }
     }
 
-    sort_entries(&mut files, config);
-    sort_entries(&mut dirs, config);
+    sort_entries(&mut files, config, &mut state.out);
+    sort_entries(&mut dirs, config, &mut state.out);
 
     if let Some(style_manager) = state.style_manager.as_mut() {
         // ls will try to write a reset before anything is written if normal
@@ -2034,12 +2023,12 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     for (pos, path_data) in dirs.iter().enumerate() {
         // Do read_dir call here to match GNU semantics by printing
         // read_dir errors before directory headings, names and totals
-        let read_dir = match fs::read_dir(path_data.path()) {
+        let read_dir = match fs::read_dir(&path_data.p_buf) {
             Err(err) => {
                 // flush stdout buffer before the error to preserve formatting and order
                 state.out.flush()?;
                 show!(LsError::IOErrorContext(
-                    path_data.path().to_path_buf(),
+                    path_data.p_buf.clone(),
                     err,
                     path_data.command_line
                 ));
@@ -2058,7 +2047,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 writeln!(state.out)?;
                 if config.dired {
                     // First directory displayed
-                    let dir_len = path_data.display_name().len();
+                    let dir_len = path_data.display_name.len();
                     // add the //SUBDIRED// coordinates
                     dired::calculate_subdired(&mut dired, dir_len);
                     // Add the padding for the dir name
@@ -2072,7 +2061,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         }
         let mut listed_ancestors = HashSet::new();
         listed_ancestors.insert(FileInformation::from_path(
-            path_data.path(),
+            &path_data.p_buf,
             path_data.must_dereference,
         )?);
         enter_directory(
@@ -2090,38 +2079,38 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     Ok(())
 }
 
-fn sort_entries(entries: &mut [PathData], config: &Config) {
+fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<Stdout>) {
     match config.sort {
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
-                k.metadata()
+                k.get_metadata(out)
                     .and_then(|md| metadata_get_time(md, config.time))
                     .unwrap_or(UNIX_EPOCH),
             )
         }),
         Sort::Size => {
-            entries.sort_by_key(|k| Reverse(k.metadata().map_or(0, |md| md.len())));
+            entries.sort_by_key(|k| Reverse(k.get_metadata(out).map_or(0, |md| md.len())));
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_by(|a, b| a.display_name().cmp(b.display_name())),
+        Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
         Sort::Version => entries.sort_by(|a, b| {
             version_cmp(
-                os_str_as_bytes_lossy(a.path().as_os_str()).as_ref(),
-                os_str_as_bytes_lossy(b.path().as_os_str()).as_ref(),
+                os_str_as_bytes_lossy(a.p_buf.as_os_str()).as_ref(),
+                os_str_as_bytes_lossy(b.p_buf.as_os_str()).as_ref(),
             )
-            .then(a.path().to_string_lossy().cmp(&b.path().to_string_lossy()))
+            .then(a.p_buf.to_string_lossy().cmp(&b.p_buf.to_string_lossy()))
         }),
         Sort::Extension => entries.sort_by(|a, b| {
-            a.path()
+            a.p_buf
                 .extension()
-                .cmp(&b.path().extension())
-                .then(a.path().file_stem().cmp(&b.path().file_stem()))
+                .cmp(&b.p_buf.extension())
+                .then(a.p_buf.file_stem().cmp(&b.p_buf.file_stem()))
         }),
         Sort::Width => entries.sort_by(|a, b| {
-            a.display_name()
+            a.display_name
                 .len()
-                .cmp(&b.display_name().len())
-                .then(a.display_name().cmp(b.display_name()))
+                .cmp(&b.display_name.len())
+                .then(a.display_name.cmp(&b.display_name))
         }),
         Sort::None => {}
     }
@@ -2141,7 +2130,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             !match md {
                 None | Some(None) => {
                     // If it metadata cannot be determined, treat as a file.
-                    get_metadata_with_deref_opt(p.path(), true)
+                    get_metadata_with_deref_opt(p.p_buf.as_path(), true)
                         .map_or_else(|_| false, |m| m.is_dir())
                 }
                 Some(Some(m)) => m.is_dir(),
@@ -2206,14 +2195,14 @@ fn enter_directory(
     let mut entries: Vec<PathData> = if config.files == Files::All {
         vec![
             PathData::new(
-                path_data.path().to_path_buf(),
+                path_data.p_buf.clone(),
                 None,
                 Some(".".into()),
                 config,
                 false,
             ),
             PathData::new(
-                path_data.path().join(".."),
+                path_data.p_buf.join(".."),
                 None,
                 Some("..".into()),
                 config,
@@ -2237,12 +2226,12 @@ fn enter_directory(
 
         if should_display(&dir_entry, config) {
             let entry_path_data =
-                PathData::new(dir_entry.path(), Some(dir_entry), None, config, false);
+                PathData::new(dir_entry.path(), Some(Ok(dir_entry)), None, config, false);
             entries.push(entry_path_data);
         }
     }
 
-    sort_entries(&mut entries, config);
+    sort_entries(&mut entries, config, &mut state.out);
 
     // Print total after any error display
     if config.format == Format::Long || config.alloc_size {
@@ -2259,20 +2248,23 @@ fn enter_directory(
         for e in entries
             .iter()
             .skip(if config.files == Files::All { 2 } else { 0 })
-            .filter(|p| p.file_type().is_some_and(|ft| ft.is_dir()))
+            .filter(|p| {
+                p.ft.get()
+                    .is_some_and(|o_ft| o_ft.is_some_and(|ft| ft.is_dir()))
+            })
         {
-            match fs::read_dir(e.path()) {
+            match fs::read_dir(&e.p_buf) {
                 Err(err) => {
                     state.out.flush()?;
                     show!(LsError::IOErrorContext(
-                        e.path().to_path_buf(),
+                        e.p_buf.clone(),
                         err,
                         e.command_line
                     ));
                 }
                 Ok(rd) => {
                     if listed_ancestors
-                        .insert(FileInformation::from_path(e.path(), e.must_dereference)?)
+                        .insert(FileInformation::from_path(&e.p_buf, e.must_dereference)?)
                     {
                         // when listing several directories in recursive mode, we show
                         // "dirname:" at the beginning of the file list
@@ -2283,7 +2275,7 @@ fn enter_directory(
                             // 2 = \n + \n
                             dired.padding = 2;
                             dired::indent(&mut state.out)?;
-                            let dir_name_size = e.path().to_string_lossy().len();
+                            let dir_name_size = e.p_buf.to_string_lossy().len();
                             dired::calculate_subdired(dired, dir_name_size);
                             // inject dir name
                             dired::add_dir_name(dired, dir_name_size);
@@ -2293,10 +2285,10 @@ fn enter_directory(
                         writeln!(state.out)?;
                         enter_directory(e, rd, config, state, listed_ancestors, dired)?;
                         listed_ancestors
-                            .remove(&FileInformation::from_path(e.path(), e.must_dereference)?);
+                            .remove(&FileInformation::from_path(&e.p_buf, e.must_dereference)?);
                     } else {
                         state.out.flush()?;
-                        show!(LsError::AlreadyListedError(e.path().to_path_buf()));
+                        show!(LsError::AlreadyListedError(e.p_buf.clone()));
                     }
                 }
             }
@@ -2320,7 +2312,7 @@ fn display_dir_entry_size(
     state: &mut ListState,
 ) -> (usize, usize, usize, usize, usize, usize) {
     // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
-    if let Some(md) = entry.metadata() {
+    if let Some(md) = entry.get_metadata(&mut state.out) {
         let (size_len, major_len, minor_len) = match display_len_or_rdev(md, config) {
             SizeOrDeviceId::Device(major, minor) => {
                 (major.len() + minor.len() + 2usize, major.len(), minor.len())
@@ -2409,7 +2401,7 @@ fn return_total(
     let mut total_size = 0;
     for item in items {
         total_size += item
-            .metadata()
+            .get_metadata(out)
             .as_ref()
             .map_or(0, |md| get_block_size(md, config));
     }
@@ -2427,6 +2419,7 @@ fn display_additional_leading_info(
     item: &PathData,
     padding: &PaddingCollection,
     config: &Config,
+    out: &mut BufWriter<Stdout>,
 ) -> UResult<String> {
     let mut result = String::new();
     #[cfg(unix)]
@@ -2470,7 +2463,7 @@ fn display_items(
     // option, print the security context to the left of the size column.
 
     let quoted = items.iter().any(|item| {
-        let name = locale_aware_escape_name(item.display_name(), config.quoting_style);
+        let name = locale_aware_escape_name(&item.display_name, config.quoting_style);
         os_str_starts_with(&name, b"'")
     });
 
@@ -2484,7 +2477,12 @@ fn display_items(
             let should_display_leading_info = config.alloc_size;
 
             if should_display_leading_info {
-                let more_info = display_additional_leading_info(item, &padding_collection, config)?;
+                let more_info = display_additional_leading_info(
+                    item,
+                    &padding_collection,
+                    config,
+                    &mut state.out,
+                )?;
 
                 write!(state.out, "{more_info}")?;
             }
@@ -2495,7 +2493,7 @@ fn display_items(
         let mut longest_context_len = 1;
         let prefix_context = if config.context {
             for item in items {
-                let context_len = item.security_context().len();
+                let context_len = item.security_context.len();
                 longest_context_len = context_len.max(longest_context_len);
             }
             Some(longest_context_len)
@@ -2512,7 +2510,7 @@ fn display_items(
 
         let mut names_vec = Vec::new();
         for i in items {
-            let more_info = display_additional_leading_info(i, &padding, config)?;
+            let more_info = display_additional_leading_info(i, &padding, config, &mut state.out)?;
             // it's okay to set current column to zero which is used to decide
             // whether text will wrap or not, because when format is grid or
             // column ls will try to place the item name in a new line if it
@@ -2733,14 +2731,14 @@ fn display_item_long(
     if config.dired {
         output_display.extend(b"  ");
     }
-    if let Some(md) = item.metadata() {
+    if let Some(md) = item.get_metadata(&mut state.out) {
         #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
         // TODO: See how Mac should work here
         let is_acl_set = false;
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let is_acl_set = has_acl(item.display_name());
+        let is_acl_set = has_acl(item.display_name.as_os_str());
         output_display.extend(display_permissions(md, true).as_bytes());
-        if item.security_context().len() > 1 {
+        if item.security_context.len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
             output_display.extend(b".");
@@ -2762,7 +2760,7 @@ fn display_item_long(
 
         if config.context {
             output_display.extend(b" ");
-            output_display.extend_pad_right(item.security_context(), padding.context);
+            output_display.extend_pad_right(&item.security_context, padding.context);
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
@@ -2837,7 +2835,7 @@ fn display_item_long(
     } else {
         #[cfg(unix)]
         let leading_char = {
-            if let Some(ft) = item.file_type() {
+            if let Some(Some(ft)) = item.ft.get() {
                 if ft.is_char_device() {
                     "c"
                 } else if ft.is_block_device() {
@@ -2849,15 +2847,13 @@ fn display_item_long(
                 } else {
                     "-"
                 }
-            } else if item.is_dangling_link() {
-                "l"
             } else {
                 "-"
             }
         };
         #[cfg(not(unix))]
         let leading_char = {
-            if let Some(ft) = item.file_type() {
+            if let Some(Some(ft)) = item.ft.get() {
                 if ft.is_symlink() {
                     "l"
                 } else if ft.is_dir() {
@@ -2865,8 +2861,6 @@ fn display_item_long(
                 } else {
                     "-"
                 }
-            } else if item.is_dangling_link() {
-                "l"
             } else {
                 "-"
             }
@@ -2874,7 +2868,7 @@ fn display_item_long(
 
         output_display.extend(leading_char.as_bytes());
         output_display.extend(b"?????????");
-        if item.security_context().len() > 1 {
+        if item.security_context.len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
             output_display.extend(b".");
@@ -2894,7 +2888,7 @@ fn display_item_long(
 
         if config.context {
             output_display.extend(b" ");
-            output_display.extend_pad_right(item.security_context(), padding.context);
+            output_display.extend_pad_right(&item.security_context, padding.context);
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
@@ -3052,8 +3046,8 @@ fn file_is_executable(md: &Metadata) -> bool {
     return md.mode() & ((S_IXUSR | S_IXGRP | S_IXOTH) as u32) != 0;
 }
 
-fn classify_file(path: &PathData) -> Option<char> {
-    let file_type = path.file_type()?;
+fn classify_file<'a>(path: &'a PathData, out: &mut BufWriter<Stdout>) -> Option<&'a str> {
+    let file_type = path.file_type(out)?;
 
     if file_type.is_dir() {
         Some("/")
@@ -3072,7 +3066,6 @@ fn classify_file(path: &PathData) -> Option<char> {
                 && path.get_metadata(out).is_some_and(file_is_executable)
             {
                 Some("*")
-
             } else {
                 None
             }
@@ -3106,7 +3099,7 @@ fn display_item_name(
     current_column: LazyCell<usize, Box<dyn FnOnce() -> usize + '_>>,
 ) -> OsString {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
-    let mut name = locale_aware_escape_name(path.display_name(), config.quoting_style);
+    let mut name = locale_aware_escape_name(&path.display_name, config.quoting_style);
 
     let is_wrap =
         |namelen: usize| config.width != 0 && *current_column + namelen > config.width.into();
@@ -3117,7 +3110,14 @@ fn display_item_name(
 
     if let Some(style_manager) = &mut state.style_manager {
         let len = name.len();
-        name = color_name(name, path, style_manager, None, is_wrap(len));
+        name = color_name(
+            name,
+            path,
+            style_manager,
+            &mut state.out,
+            None,
+            is_wrap(len),
+        );
     }
 
     if config.format != Format::Long && !more_info.is_empty() {
@@ -3127,7 +3127,7 @@ fn display_item_name(
     }
 
     if config.indicator_style != IndicatorStyle::None {
-        let sym = classify_file(path);
+        let sym = classify_file(path, &mut state.out);
 
         let char_opt: Option<&str> = match config.indicator_style {
             IndicatorStyle::Classify => sym,
@@ -3154,11 +3154,12 @@ fn display_item_name(
     }
 
     if config.format == Format::Long
-        && path.file_type().is_some_and(|ft| ft.is_symlink())
+        && path.file_type(&mut state.out).is_some()
+        && path.file_type(&mut state.out).unwrap().is_symlink()
         && !path.must_dereference
     {
-        match path.path().read_link() {
-            Ok(target_path) => {
+        match path.p_buf.read_link() {
+            Ok(target) => {
                 name.push(" -> ");
 
                 // We might as well color the symlink output after the arrow.
@@ -3167,9 +3168,9 @@ fn display_item_name(
                 if let Some(style_manager) = &mut state.style_manager {
                     // We get the absolute path to be able to construct PathData with valid Metadata.
                     // This is because relative symlinks will fail to get_metadata.
-                    let mut absolute_target = target_path.clone();
-                    if target_path.is_relative() {
-                        if let Some(parent) = path.path().parent() {
+                    let mut absolute_target = target.clone();
+                    if target.is_relative() {
+                        if let Some(parent) = path.p_buf.parent() {
                             absolute_target = parent.join(absolute_target);
                         }
                     }
@@ -3180,13 +3181,20 @@ fn display_item_name(
                     // Because we use an absolute path, we can assume this is guaranteed to exist.
                     // Otherwise, we use path.md(), which will guarantee we color to the same
                     // color of non-existent symlinks according to style_for_path_with_metadata.
-                    if path.metadata().is_none() && target_data.metadata().is_none() {
-                        name.push(target_path);
+                    if path.get_metadata(&mut state.out).is_none()
+                        && get_metadata_with_deref_opt(
+                            target_data.p_buf.as_path(),
+                            target_data.must_dereference,
+                        )
+                        .is_err()
+                    {
+                        name.push(path.p_buf.read_link().unwrap());
                     } else {
                         name.push(color_name(
-                            locale_aware_escape_name(target_path.as_os_str(), config.quoting_style),
+                            locale_aware_escape_name(target.as_os_str(), config.quoting_style),
                             path,
                             style_manager,
+                            &mut state.out,
                             Some(&target_data),
                             is_wrap(name.len()),
                         ));
@@ -3195,17 +3203,13 @@ fn display_item_name(
                     // If no coloring is required, we just use target as is.
                     // Apply the right quoting
                     name.push(locale_aware_escape_name(
-                        target_path.as_os_str(),
+                        target.as_os_str(),
                         config.quoting_style,
                     ));
                 }
             }
             Err(err) => {
-                show!(LsError::IOErrorContext(
-                    path.path().to_path_buf(),
-                    err,
-                    false
-                ));
+                show!(LsError::IOErrorContext(path.p_buf.clone(), err, false));
             }
         }
     }
@@ -3221,7 +3225,6 @@ fn display_item_name(
             };
             let old_name = name.to_string_lossy();
             name = format!("{security_context} {old_name}").into();
-
         }
     }
 
@@ -3232,7 +3235,7 @@ fn create_hyperlink(name: &OsStr, path: &PathData) -> OsString {
     let hostname = hostname::get().unwrap_or_else(|_| OsString::from(""));
     let hostname = hostname.to_string_lossy();
 
-    let absolute_path = fs::canonicalize(path.path()).unwrap_or_default();
+    let absolute_path = fs::canonicalize(&path.p_buf).unwrap_or_default();
     let absolute_path = absolute_path.to_string_lossy();
 
     #[cfg(not(target_os = "windows"))]
@@ -3278,60 +3281,57 @@ fn display_inode(metadata: &Metadata) -> String {
 
 /// This returns the `SELinux` security context as UTF8 `String`.
 /// In the long term this should be changed to [`OsStr`], see discussions at #2621/#2656
-fn get_security_context<'a>(
-    path: &'a Path,
-    must_dereference: bool,
-    config: &'a Config,
-) -> Cow<'a, str> {
-    static SUBSTITUTE_STRING: &str = "?";
-
+fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -> String {
+    let substitute_string = "?".to_string();
     // If we must dereference, ensure that the symlink is actually valid even if the system
     // does not support SELinux.
     // Conforms to the GNU coreutils where a dangling symlink results in exit code 1.
     if must_dereference {
-        if let Err(err) = get_metadata_with_deref_opt(path, must_dereference) {
-            // The Path couldn't be dereferenced, so return early and set exit code 1
-            // to indicate a minor error
-            // Only show error when context display is requested to avoid duplicate messages
-            if config.context {
-                show!(LsError::IOErrorContext(path.to_path_buf(), err, false));
+        match get_metadata_with_deref_opt(p_buf, must_dereference) {
+            Err(err) => {
+                // The Path couldn't be dereferenced, so return early and set exit code 1
+                // to indicate a minor error
+                // Only show error when context display is requested to avoid duplicate messages
+                if config.context {
+                    show!(LsError::IOErrorContext(p_buf.to_path_buf(), err, false));
+                }
+                return substitute_string;
             }
-            return Cow::Borrowed(SUBSTITUTE_STRING);
+            Ok(_md) => (),
         }
     }
-
     if config.selinux_supported {
         #[cfg(feature = "selinux")]
         {
-            match selinux::SecurityContext::of_path(path, must_dereference, false) {
+            match selinux::SecurityContext::of_path(p_buf, must_dereference.to_owned(), false) {
                 Err(_r) => {
                     // TODO: show the actual reason why it failed
-                    show_warning!("failed to get security context of: {}", path.quote());
-                    return Cow::Borrowed(SUBSTITUTE_STRING);
+                    show_warning!("failed to get security context of: {}", p_buf.quote());
+                    substitute_string
                 }
-                Ok(None) => return Cow::Borrowed(SUBSTITUTE_STRING),
+                Ok(None) => substitute_string,
                 Ok(Some(context)) => {
                     let context = context.as_bytes();
 
                     let context = context.strip_suffix(&[0]).unwrap_or(context);
-
-                    let res: String = String::from_utf8(context.to_vec()).unwrap_or_else(|e| {
+                    String::from_utf8(context.to_vec()).unwrap_or_else(|e| {
                         show_warning!(
                             "getting security context of: {}: {}",
-                            path.quote(),
+                            p_buf.quote(),
                             e.to_string()
                         );
-
-                        String::from_utf8_lossy(context).to_string()
-                    });
-
-                    return Cow::Owned(res);
+                        String::from_utf8_lossy(context).into_owned()
+                    })
                 }
             }
         }
+        #[cfg(not(feature = "selinux"))]
+        {
+            substitute_string
+        }
+    } else {
+        substitute_string
     }
-
-    Cow::Borrowed(SUBSTITUTE_STRING)
 }
 
 #[cfg(unix)]
@@ -3355,7 +3355,7 @@ fn calculate_padding_collection(
     for item in items {
         #[cfg(unix)]
         if config.inode {
-            let inode_len = if let Some(md) = item.metadata() {
+            let inode_len = if let Some(md) = item.get_metadata(&mut state.out) {
                 display_inode(md).len()
             } else {
                 continue;
@@ -3364,14 +3364,14 @@ fn calculate_padding_collection(
         }
 
         if config.alloc_size {
-            if let Some(md) = item.metadata() {
+            if let Some(md) = item.get_metadata(&mut state.out) {
                 let block_size_len = display_size(get_block_size(md, config), config).len();
                 padding_collections.block_size = block_size_len.max(padding_collections.block_size);
             }
         }
 
         if config.format == Format::Long {
-            let context_len = item.security_context().len();
+            let context_len = item.security_context.len();
             let (link_count_len, uname_len, group_len, size_len, major_len, minor_len) =
                 display_dir_entry_size(item, config, state);
             padding_collections.link_count = link_count_len.max(padding_collections.link_count);
@@ -3414,13 +3414,13 @@ fn calculate_padding_collection(
 
     for item in items {
         if config.alloc_size {
-            if let Some(md) = item.metadata() {
+            if let Some(md) = item.get_metadata(&mut state.out) {
                 let block_size_len = display_size(get_block_size(md, config), config).len();
                 padding_collections.block_size = block_size_len.max(padding_collections.block_size);
             }
         }
 
-        let context_len = item.security_context().len();
+        let context_len = item.security_context.len();
         let (link_count_len, uname_len, group_len, size_len, _major_len, _minor_len) =
             display_dir_entry_size(item, config, state);
         padding_collections.link_count = link_count_len.max(padding_collections.link_count);
