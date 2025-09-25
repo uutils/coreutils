@@ -5,14 +5,14 @@ use std::io::{Result as IOResult, Write};
 
 use crate::OutputState;
 
-static TRUECOLOR_ESCAPE_START: &'static str = "\x1b[38;2";
-static ANSI_ESCAPE_START: &'static str = "\x1b[38;5;";
+static TRUECOLOR_ESCAPE_START: &str = "\x1b[38;2";
+static ANSI_ESCAPE_START: &str = "\x1b[38;5;";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ColorMode {
     TrueColor,
-    ANSI256,
-    ANSI,
+    Ansi256,
+    Ansi,
 }
 
 impl ColorMode {
@@ -31,8 +31,8 @@ impl ColorMode {
         };
         match self {
             ColorMode::TrueColor => Color::Color24b(color.map(fit_linear_curve)),
-            ColorMode::ANSI256 => Color::ANSI256(retrofit_ansi(color)),
-            ColorMode::ANSI => Color::ANSI(retrofit_ansi(color) as u8),
+            ColorMode::Ansi256 => Color::Ansi256(retrofit_ansi(color)),
+            ColorMode::Ansi => Color::Ansi(retrofit_ansi(color) as u8),
         }
     }
 }
@@ -40,8 +40,8 @@ impl ColorMode {
 #[derive(Clone, Copy)]
 enum Color {
     Color24b([u8; 3]),
-    ANSI256(u16),
-    ANSI(u8),
+    Ansi256(u16),
+    Ansi(u8),
 }
 
 impl Color {
@@ -53,12 +53,12 @@ impl Color {
             if n == 0 {
                 b.push(ascii_num_radix);
                 return;
-            };
+            }
             while n > 0 {
                 b.push(ascii_num_radix + (n % 10) as u8);
                 n /= 10;
             }
-            (&mut b[buf_len..]).reverse();
+            b[buf_len..].reverse();
         };
 
         // format according to escape sequence needed
@@ -72,13 +72,13 @@ impl Color {
                 buf.push(b'm');
                 buf.push(ch);
             }
-            Color::ANSI256(color) => {
+            Color::Ansi256(color) => {
                 buf.truncate(ANSI_ESCAPE_START.len());
                 format_num(buf, color as usize);
                 buf.push(b'm');
                 buf.push(ch);
             }
-            Color::ANSI(color) => {
+            Color::Ansi(color) => {
                 buf.truncate(ANSI_ESCAPE_START.len());
                 format_num(buf, color as usize);
                 buf.push(b'm');
@@ -92,18 +92,14 @@ impl ColorMode {
     pub fn new() -> Self {
         if cfg!(target_os = "windows")
             || var_os("COLORTERM")
-                .map(|ref x| x == OsStr::new("truecolor") || x == OsStr::new("24bit"))
-                .unwrap_or(false)
+                .is_some_and(|ref x| x == OsStr::new("truecolor") || x == OsStr::new("24bit"))
             || var_os("CI").is_some()
         {
             ColorMode::TrueColor
-        } else if var_os("TERM")
-            .map(|ref x| x == OsStr::new("xterm-256color"))
-            .unwrap_or(false)
-        {
-            ColorMode::ANSI256
+        } else if var_os("TERM").is_some_and(|ref x| x == OsStr::new("xterm-256color")) {
+            ColorMode::Ansi256
         } else {
-            ColorMode::ANSI
+            ColorMode::Ansi
         }
     }
 }
@@ -166,10 +162,7 @@ impl<'w, W: Write> ColorWriter<'w, W> {
     /// on <https://github.com/ur0/lolcat>; MIT-licensed
     /// and co-copyright of Umang Raghuvanshi et al.
     // Beware of the following spaghetti.
-    fn parse_escape_seq<'a, 'b>(
-        &self,
-        chars: &'a mut impl Iterator<Item = &'b u8>,
-    ) -> Result<String, ()> {
+    fn parse_escape_seq<'a, 'b>(chars: &'a mut impl Iterator<Item = &'b u8>) -> Result<String, ()> {
         let mut buf = String::with_capacity(16);
         buf.push('\x1b');
 
@@ -210,12 +203,12 @@ impl<'w, W: Write> ColorWriter<'w, W> {
             '\x30'..='\x3F' | '\x40'..='\x5F' | '\x60'..='\x7E' => return Err(()),
             // Assume the sequence is just one character otherwise
             _ => (),
-        };
+        }
         Ok(buf)
     }
 }
 
-impl<'w, W: Write> Write for ColorWriter<'w, W> {
+impl<W: Write> Write for ColorWriter<'_, W> {
     fn flush(&mut self) -> IOResult<()> {
         // reset colors after flush
         self.inner.write_all(b"\x1b[39m")?;
@@ -229,7 +222,7 @@ impl<'w, W: Write> Write for ColorWriter<'w, W> {
             match ch {
                 // relay escape sequences verbatim
                 b'\x1b' => {
-                    let Ok(buf) = self.parse_escape_seq(&mut chars) else {
+                    let Ok(buf) = Self::parse_escape_seq(&mut chars) else {
                         continue;
                     };
                     self.inner.write_all(buf.as_bytes())?;
@@ -244,7 +237,7 @@ impl<'w, W: Write> Write for ColorWriter<'w, W> {
                     self.get_color().format_char(&mut self.buffer, ch);
                     self.inner.write_all(&self.buffer)?;
                 }
-            };
+            }
             self.next_col();
         }
         self.next_row();
