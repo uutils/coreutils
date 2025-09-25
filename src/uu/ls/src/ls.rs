@@ -2437,133 +2437,144 @@ fn display_items(
     config: &Config,
     state: &mut ListState,
     dired: &mut DiredOutput,
-) -> UResult<()> {
+) -> Result<(), Box<dyn UError + 'static>> {
     // `-Z`, `--context`:
     // Display the SELinux security context or '?' if none is found. When used with the `-l`
     // option, print the security context to the left of the size column.
-
     let quoted = items.iter().any(|item| {
         let name = locale_aware_escape_name(&item.display_name, config.quoting_style);
         os_str_starts_with(&name, b"'")
     });
 
-    if config.format == Format::Long {
-        let padding_collection = calculate_padding_collection(items, config, state);
+    let padding_collection = calculate_padding_collection(items, config, state);
 
-        for item in items {
-            #[cfg(unix)]
-            let should_display_leading_info = config.inode || config.alloc_size;
-            #[cfg(not(unix))]
-            let should_display_leading_info = config.alloc_size;
-
-            if should_display_leading_info {
-                let more_info = display_additional_leading_info(
-                    item,
-                    &padding_collection,
-                    config,
-                    &mut state.out,
-                )?;
-
-                write!(state.out, "{more_info}")?;
-            }
-
-            display_item_long(item, &padding_collection, config, state, dired, quoted)?;
-        }
-    } else {
-        let mut longest_context_len = 1;
-        let prefix_context = if config.context {
+    match config.format {
+        Format::Long => {
             for item in items {
-                let context_len = item.security_context.len();
-                longest_context_len = context_len.max(longest_context_len);
-            }
-            Some(longest_context_len)
-        } else {
-            None
-        };
+                #[cfg(unix)]
+                let should_display_leading_info = config.inode || config.alloc_size;
+                #[cfg(not(unix))]
+                let should_display_leading_info = config.alloc_size;
 
-        let padding = calculate_padding_collection(items, config, state);
+                if should_display_leading_info {
+                    let more_info = display_additional_leading_info(
+                        item,
+                        &padding_collection,
+                        config,
+                        &mut state.out,
+                    )?;
 
-        // we need to apply normal color to non filename output
-        if let Some(style_manager) = &mut state.style_manager {
-            write!(state.out, "{}", style_manager.apply_normal())?;
-        }
-
-        let mut names_vec = Vec::new();
-        for i in items {
-            let more_info = display_additional_leading_info(i, &padding, config, &mut state.out)?;
-            // it's okay to set current column to zero which is used to decide
-            // whether text will wrap or not, because when format is grid or
-            // column ls will try to place the item name in a new line if it
-            // wraps.
-            let cell = display_item_name(
-                i,
-                config,
-                prefix_context,
-                more_info,
-                state,
-                LazyCell::new(Box::new(|| 0)),
-            );
-
-            names_vec.push(cell);
-        }
-
-        let mut names = names_vec.into_iter();
-
-        match config.format {
-            Format::Columns => {
-                display_grid(
-                    names,
-                    config.width,
-                    Direction::TopToBottom,
-                    &mut state.out,
-                    quoted,
-                    config.tab_size,
-                )?;
-            }
-            Format::Across => {
-                display_grid(
-                    names,
-                    config.width,
-                    Direction::LeftToRight,
-                    &mut state.out,
-                    quoted,
-                    config.tab_size,
-                )?;
-            }
-            Format::Commas => {
-                let mut current_col = 0;
-                if let Some(name) = names.next() {
-                    write_os_str(&mut state.out, &name)?;
-                    current_col = ansi_width(&name.to_string_lossy()) as u16 + 2;
+                    write!(state.out, "{more_info}")?;
                 }
-                for name in names {
-                    let name_width = ansi_width(&name.to_string_lossy()) as u16;
-                    // If the width is 0 we print one single line
-                    if config.width != 0 && current_col + name_width + 1 > config.width {
-                        current_col = name_width + 2;
-                        writeln!(state.out, ",")?;
-                    } else {
-                        current_col += name_width + 2;
-                        write!(state.out, ", ")?;
+
+                display_item_long(item, &padding_collection, config, state, dired, quoted)?;
+            }
+        }
+        _ => {
+            let mut names =
+                display_short_common(items, config, state, &padding_collection)?.into_iter();
+
+            match config.format {
+                Format::Columns => {
+                    display_grid(
+                        names,
+                        config.width,
+                        Direction::TopToBottom,
+                        &mut state.out,
+                        quoted,
+                        config.tab_size,
+                    )?;
+                }
+                Format::Across => {
+                    display_grid(
+                        names,
+                        config.width,
+                        Direction::LeftToRight,
+                        &mut state.out,
+                        quoted,
+                        config.tab_size,
+                    )?;
+                }
+                Format::Commas => {
+                    let mut current_col = 0;
+                    if let Some(name) = names.next() {
+                        write_os_str(&mut state.out, &name)?;
+                        current_col = ansi_width(&name.to_string_lossy()) as u16 + 2;
                     }
-                    write_os_str(&mut state.out, &name)?;
+                    for name in names {
+                        let name_width = ansi_width(&name.to_string_lossy()) as u16;
+                        // If the width is 0 we print one single line
+                        if config.width != 0 && current_col + name_width + 1 > config.width {
+                            current_col = name_width + 2;
+                            writeln!(state.out, ",")?;
+                        } else {
+                            current_col += name_width + 2;
+                            write!(state.out, ", ")?;
+                        }
+                        write_os_str(&mut state.out, &name)?;
+                    }
+                    // Current col is never zero again if names have been printed.
+                    // So we print a newline.
+                    if current_col > 0 {
+                        write!(state.out, "{}", config.line_ending)?;
+                    }
                 }
-                // Current col is never zero again if names have been printed.
-                // So we print a newline.
-                if current_col > 0 {
-                    write!(state.out, "{}", config.line_ending)?;
-                }
-            }
-            _ => {
-                for name in names {
-                    write_os_str(&mut state.out, &name)?;
-                    write!(state.out, "{}", config.line_ending)?;
+                _ => {
+                    for name in names {
+                        write_os_str(&mut state.out, &name)?;
+                        write!(state.out, "{}", config.line_ending)?;
+                    }
                 }
             }
         }
     }
 
     Ok(())
+}
+
+fn display_short_common(
+    items: &[PathData],
+    config: &Config,
+    state: &mut ListState,
+    padding_collection: &PaddingCollection,
+) -> Result<Vec<OsString>, Box<dyn UError + 'static>> {
+    let mut longest_context_len = 1;
+    let prefix_context = if config.context {
+        for item in items {
+            let context_len = item.security_context.len();
+            longest_context_len = context_len.max(longest_context_len);
+        }
+        Some(longest_context_len)
+    } else {
+        None
+    };
+
+    // we need to apply normal color to non filename output
+    if let Some(style_manager) = &mut state.style_manager {
+        write!(state.out, "{}", style_manager.apply_normal())?;
+    }
+
+    let mut names_vec = Vec::new();
+    for i in items {
+        let more_info =
+            display_additional_leading_info(i, &padding_collection, config, &mut state.out)?;
+        // it's okay to set current column to zero which is used to decide
+        // whether text will wrap or not, because when format is grid or
+        // column ls will try to place the item name in a new line if it
+        // wraps.
+        let cell = display_item_name(
+            i,
+            config,
+            prefix_context,
+            more_info,
+            state,
+            LazyCell::new(Box::new(|| 0)),
+        );
+
+        names_vec.push(cell);
+    }
+
+    Ok(names_vec)
 }
 
 #[allow(unused_variables)]
