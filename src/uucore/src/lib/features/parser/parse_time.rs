@@ -80,7 +80,14 @@ pub fn from_str(string: &str, allow_suffixes: bool) -> Result<Duration, String> 
 
     // Allow non-negative durations (-0 is fine), and infinity.
     let num = match num {
-        ExtendedBigDecimal::BigDecimal(bd) if !bd.is_negative() => bd,
+        ExtendedBigDecimal::BigDecimal(bd) if !bd.is_negative() => {
+            if bd.fractional_digit_count() <= -20 {
+                // bd >= 10^20 > u64::MAX -- early return to avoid
+                // potentially expensive to-nanoseconds conversion
+                return Ok(Duration::MAX);
+            }
+            bd
+        }
         ExtendedBigDecimal::MinusZero => 0.into(),
         ExtendedBigDecimal::Infinity => return Ok(Duration::MAX),
         _ => return Err(format!("invalid time interval {}", string.quote())),
@@ -128,6 +135,7 @@ mod tests {
     fn test_overflow() {
         // u64 seconds overflow (in Duration)
         assert_eq!(from_str("9223372036854775808d", true), Ok(Duration::MAX));
+        assert_eq!(from_str("1e6666666666668320", true), Ok(Duration::MAX));
         // ExtendedBigDecimal overflow
         assert_eq!(from_str("1e92233720368547758080", false), Ok(Duration::MAX));
         assert_eq!(from_str("1e92233720368547758080", false), Ok(Duration::MAX));
