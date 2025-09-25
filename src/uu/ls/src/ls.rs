@@ -2557,7 +2557,7 @@ fn display_short_common(
     let mut names_vec = Vec::new();
     for i in items {
         let more_info =
-            display_additional_leading_info(i, &padding_collection, config, &mut state.out)?;
+            display_additional_leading_info(i, padding_collection, config, &mut state.out)?;
         // it's okay to set current column to zero which is used to decide
         // whether text will wrap or not, because when format is grid or
         // column ls will try to place the item name in a new line if it
