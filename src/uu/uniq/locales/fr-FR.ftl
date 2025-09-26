@@ -20,6 +20,7 @@ uniq-help-zero-terminated = terminer les lignes avec un octet 0, pas une nouvell
 # Messages d'erreur
 uniq-error-write-line-terminator = Impossible d'écrire le terminateur de ligne
 uniq-error-write-error = erreur d'écriture
+uniq-error-read-error = erreur de lecture
 uniq-error-invalid-argument = Argument invalide pour { $opt_name } : { $arg }
 uniq-error-try-help = Essayez 'uniq --help' pour plus d'informations.
 uniq-error-group-mutually-exclusive = --group est mutuellement exclusif avec -c/-d/-D/-u
