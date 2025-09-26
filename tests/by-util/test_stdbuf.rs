@@ -15,6 +15,7 @@ fn invalid_input() {
     new_ucmd!().arg("-/").fails_with_code(125);
 }
 
+#[cfg(not(feature = "feat_external_libstdbuf"))]
 #[test]
 fn test_permission() {
     new_ucmd!()
@@ -24,6 +25,18 @@ fn test_permission() {
         .stderr_contains("Permission denied");
 }
 
+#[cfg(feature = "feat_external_libstdbuf")]
+#[test]
+fn test_permission_external_missing_lib() {
+    // When built with external libstdbuf, running stdbuf fails early if lib is not installed
+    new_ucmd!()
+        .arg("-o1")
+        .arg(".")
+        .fails_with_code(1)
+        .stderr_contains("External libstdbuf not found");
+}
+
+#[cfg(not(feature = "feat_external_libstdbuf"))]
 #[test]
 fn test_no_such() {
     new_ucmd!()
@@ -31,6 +44,17 @@ fn test_no_such() {
         .arg("no_such")
         .fails_with_code(127)
         .stderr_contains("No such file or directory");
+}
+
+#[cfg(feature = "feat_external_libstdbuf")]
+#[test]
+fn test_no_such_external_missing_lib() {
+    // With external lib mode and missing installation, stdbuf fails before spawning the command
+    new_ucmd!()
+        .arg("-o1")
+        .arg("no_such")
+        .fails_with_code(1)
+        .stderr_contains("External libstdbuf not found");
 }
 
 // Disabled on x86_64-unknown-linux-musl because the cross-rs Docker image for this target
