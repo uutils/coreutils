@@ -219,11 +219,14 @@ ifneq ($(OS),Windows_NT)
 	PROGS := $(PROGS) $(UNIX_PROGS)
 # Build the selinux command even if not on the system
 	PROGS := $(PROGS) $(SELINUX_PROGS)
-# Always use external libstdbuf when building with make (Unix only)
-	CARGOFLAGS += --features feat_external_libstdbuf
 endif
 
 UTILS ?= $(PROGS)
+
+ifneq ($(findstring stdbuf,$(UTILS)),)
+    # Use external libstdbuf per default. It is more robust than embedding libstdbuf.
+	CARGOFLAGS += --features feat_external_libstdbuf
+endif
 
 # Programs with usable tests
 TEST_PROGS  := \
