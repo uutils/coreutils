@@ -11,8 +11,6 @@
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod
 
-#![cfg(target_os = "linux")]
-
 #[cfg(test)]
 use std::os::unix::ffi::OsStringExt;
 
