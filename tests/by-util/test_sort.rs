@@ -1906,4 +1906,10 @@ fn test_color_environment_variables() {
     }
 }
 
+#[test]
+fn test_start_buffer() {
+    // Test that a file with the exact same size as the start buffer is handled correctly
+    test_helper("start_buffer_b", &["start_buffer_a.txt"]);
+}
+
 /* spell-checker: enable */
