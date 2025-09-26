@@ -24,6 +24,7 @@ use std::path::Path;
 
 use nix::dir::Dir;
 use nix::fcntl::{OFlag, openat};
+use nix::libc;
 use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat};
 use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
 

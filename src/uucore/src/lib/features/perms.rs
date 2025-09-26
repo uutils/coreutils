@@ -5,7 +5,7 @@
 
 //! Common functions to manage permissions
 
-// spell-checker:ignore (jargon) TOCTOU fchownat
+// spell-checker:ignore (jargon) TOCTOU fchownat fchown
 
 use crate::display::Quotable;
 use crate::error::{UResult, USimpleError, strip_errno};
@@ -307,14 +307,45 @@ impl ChownExecutor {
         }
 
         let ret = if self.matched(meta.uid(), meta.gid()) {
-            match wrap_chown(
+            // Use safe syscalls for root directory to prevent TOCTOU attacks
+            #[cfg(all(target_os = "linux", feature = "safe-traversal"))]
+            let chown_result = if path.is_dir() {
+                // For directories, use safe traversal from the start
+                match DirFd::open(path) {
+                    Ok(dir_fd) => self.safe_chown_dir(&dir_fd, path, &meta),
+                    Err(_e) => {
+                        // Don't show error here - let safe_dive_into handle directory traversal errors
+                        // This prevents duplicate error messages
+                        Ok(String::new())
+                    }
+                }
+            } else {
+                // For non-directories (files, symlinks), use the regular wrap_chown method
+                #[cfg(not(target_os = "linux"))]
+                {
+                    unreachable!()
+                }
+                wrap_chown(
+                // For non-directories (files, symlinks) or non-Linux systems, use the regular wrap_chown method
+                    &meta,
+                    self.dest_uid,
+                    self.dest_gid,
+                    self.dereference,
+                    self.verbosity.clone(),
+                )
+            };
+
+            #[cfg(not(all(target_os = "linux", feature = "safe-traversal")))]
+            let chown_result = wrap_chown(
                 path,
                 &meta,
                 self.dest_uid,
                 self.dest_gid,
                 self.dereference,
                 self.verbosity.clone(),
-            ) {
+            );
+
+            match chown_result {
                 Ok(n) => {
                     if !n.is_empty() {
                         show_error!("{n}");
@@ -349,6 +380,60 @@ impl ChownExecutor {
         } else {
             ret
         }
+    ) -> Result<(), String> {
+
+    #[cfg(all(target_os = "linux", feature = "safe-traversal"))]
+    fn safe_chown_dir(
+        &self,
+        dir_fd: &DirFd,
+        path: &Path,
+        meta: &Metadata,
+    ) -> Result<String, String> {
+        let dest_uid = self.dest_uid.unwrap_or_else(|| meta.uid());
+        let dest_gid = self.dest_gid.unwrap_or_else(|| meta.gid());
+
+        // Use fchown (safe) to change the directory's ownership
+        if let Err(e) = dir_fd.fchown(self.dest_uid, self.dest_gid) {
+            let mut error_msg = format!(
+                "changing {} of {}: {}",
+                if self.verbosity.groups_only {
+                    "group"
+                } else {
+                    "ownership"
+                },
+                path.quote(),
+                e
+            );
+
+            if self.verbosity.level == VerbosityLevel::Verbose {
+                error_msg = if self.verbosity.groups_only {
+                    let gid = meta.gid();
+                    format!(
+                        "{error_msg}\nfailed to change group of {} from {} to {}",
+                        path.quote(),
+                        entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                        entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
+                    )
+                } else {
+                    let uid = meta.uid();
+                    let gid = meta.gid();
+                    format!(
+                        "{error_msg}\nfailed to change ownership of {} from {}:{} to {}:{}",
+                        path.quote(),
+                        entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                        entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                        entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
+                        entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
+                    )
+        Ok(())
+            }
+
+            return Err(error_msg);
+        }
+
+        // Report the change if verbose (similar to wrap_chown)
+        self.report_ownership_change_success(path, meta.uid(), meta.gid());
+        Ok(String::new())
     }
 
     #[cfg(all(target_os = "linux", feature = "safe-traversal"))]
