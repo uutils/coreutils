@@ -7,6 +7,7 @@
 
 #[cfg(unix)]
 use std::collections::HashMap;
+use std::collections::HashSet;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
@@ -14,7 +15,6 @@ use std::os::windows::fs::MetadataExt;
 use std::{
     cell::{LazyCell, OnceCell},
     cmp::Reverse,
-    collections::HashSet,
     ffi::{OsStr, OsString},
     fmt::Write as FmtWrite,
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
@@ -60,14 +60,11 @@ use uucore::{
     error::{UError, UResult, set_exit_code},
     format::human::{SizeFormat, human_readable},
     format_usage,
-    fs::FileInformation,
-    fs::display_permissions,
+    fs::{FileInformation, display_permissions},
     fsext::{MetadataTimeField, metadata_get_time},
     line_ending::LineEnding,
     os_str_as_bytes_lossy,
-    parser::parse_glob,
-    parser::parse_size::parse_size_u64,
-    parser::shortcut_value_parser::ShortcutValueParser,
+    parser::{parse_glob, parse_size::parse_size_u64, shortcut_value_parser::ShortcutValueParser},
     quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
     show, show_error, show_warning,
     time::{FormatSystemTimeFallback, format, format_system_time},
@@ -2058,19 +2055,8 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 writeln!(state.out)?;
             }
         }
-        let mut listed_ancestors = HashSet::new();
-        listed_ancestors.insert(FileInformation::from_path(
-            &path_data.p_buf,
-            path_data.must_dereference,
-        )?);
-        enter_directory(
-            path_data,
-            read_dir,
-            config,
-            &mut state,
-            &mut listed_ancestors,
-            &mut dired,
-        )?;
+
+        recurse_directories(path_data, read_dir, config, &mut state, &mut dired)?;
     }
     if config.dired && !config.hyperlink {
         dired::print_dired_output(config, &dired, &mut state.out)?;
@@ -2183,14 +2169,13 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
         .any(|p| p.matches_with(&file_name, options))
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn enter_directory(
     path_data: &PathData,
     read_dir: ReadDir,
     config: &Config,
     state: &mut ListState,
-    listed_ancestors: &mut HashSet<FileInformation>,
     dired: &mut DiredOutput,
+    entries_stack: &mut Vec<PathData>,
 ) -> UResult<()> {
     // Create vec of entries with initial dot files
     let mut entries: Vec<PathData> = if config.files == Files::All {
@@ -2245,52 +2230,79 @@ fn enter_directory(
 
     display_items(&entries, config, state, dired)?;
 
+    let new_dirs = entries
+        .into_iter()
+        .skip(if config.files == Files::All { 2 } else { 0 })
+        .filter(|p| p.file_type(&mut state.out).is_some_and(|ft| ft.is_dir()))
+        .rev();
+
+    entries_stack.extend(new_dirs);
+
+    Ok(())
+}
+
+fn recurse_directories(
+    path_data: &PathData,
+    read_dir: ReadDir,
+    config: &Config,
+    state: &mut ListState,
+    dired: &mut DiredOutput,
+) -> UResult<()> {
+    let mut listed_ancestors = HashSet::new();
+    listed_ancestors.insert(FileInformation::from_path(
+        &path_data.p_buf,
+        path_data.must_dereference,
+    )?);
+
+    let mut entries_stack: Vec<PathData> = Vec::new();
+
+    enter_directory(
+        path_data,
+        read_dir,
+        config,
+        state,
+        dired,
+        &mut entries_stack,
+    )?;
+
     if config.recursive {
-        for e in entries
-            .iter()
-            .skip(if config.files == Files::All { 2 } else { 0 })
-            .filter(|p| {
-                p.ft.get()
-                    .is_some_and(|o_ft| o_ft.is_some_and(|ft| ft.is_dir()))
-            })
-        {
-            match fs::read_dir(&e.p_buf) {
+        while let Some(item) = entries_stack.pop() {
+            match fs::read_dir(&item.p_buf) {
                 Err(err) => {
                     state.out.flush()?;
                     show!(LsError::IOErrorContext(
-                        e.p_buf.clone(),
+                        item.p_buf.clone(),
                         err,
-                        e.command_line
+                        item.command_line
                     ));
                 }
                 Ok(rd) => {
-                    if listed_ancestors
-                        .insert(FileInformation::from_path(&e.p_buf, e.must_dereference)?)
-                    {
-                        // when listing several directories in recursive mode, we show
-                        // "dirname:" at the beginning of the file list
-                        writeln!(state.out)?;
-                        if config.dired {
-                            // We already injected the first dir
-                            // Continue with the others
-                            // 2 = \n + \n
-                            dired.padding = 2;
-                            dired::indent(&mut state.out)?;
-                            let dir_name_size = e.p_buf.to_string_lossy().len();
-                            dired::calculate_subdired(dired, dir_name_size);
-                            // inject dir name
-                            dired::add_dir_name(dired, dir_name_size);
-                        }
+                    let file_info = FileInformation::from_path(&item.p_buf, item.must_dereference)?;
 
-                        show_dir_name(e, &mut state.out, config)?;
-                        writeln!(state.out)?;
-                        enter_directory(e, rd, config, state, listed_ancestors, dired)?;
-                        listed_ancestors
-                            .remove(&FileInformation::from_path(&e.p_buf, e.must_dereference)?);
-                    } else {
+                    if !listed_ancestors.insert(file_info) {
                         state.out.flush()?;
-                        show!(LsError::AlreadyListedError(e.p_buf.clone()));
+                        show!(LsError::AlreadyListedError(item.p_buf.clone()));
+                        continue;
                     }
+
+                    // when listing several directories in recursive mode, we show
+                    // "dirname:" at the beginning of the file list
+                    writeln!(state.out)?;
+                    if config.dired {
+                        // We already injected the first dir
+                        // Continue with the others
+                        // 2 = \n + \n
+                        dired.padding = 2;
+                        dired::indent(&mut state.out)?;
+                        let dir_name_size = item.p_buf.to_string_lossy().len();
+                        dired::calculate_subdired(dired, dir_name_size);
+                        // inject dir name
+                        dired::add_dir_name(dired, dir_name_size);
+                    }
+
+                    show_dir_name(&item, &mut state.out, config)?;
+                    writeln!(state.out)?;
+                    enter_directory(&item, rd, config, state, dired, &mut entries_stack)?;
                 }
             }
         }
@@ -2301,10 +2313,10 @@ fn enter_directory(
 
 fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
     if dereference {
-        p_buf.metadata()
-    } else {
-        p_buf.symlink_metadata()
+        return p_buf.metadata();
     }
+
+    p_buf.symlink_metadata()
 }
 
 fn display_dir_entry_size(
@@ -2425,133 +2437,144 @@ fn display_items(
     config: &Config,
     state: &mut ListState,
     dired: &mut DiredOutput,
-) -> UResult<()> {
+) -> Result<(), Box<dyn UError + 'static>> {
     // `-Z`, `--context`:
     // Display the SELinux security context or '?' if none is found. When used with the `-l`
     // option, print the security context to the left of the size column.
-
     let quoted = items.iter().any(|item| {
         let name = locale_aware_escape_name(&item.display_name, config.quoting_style);
         os_str_starts_with(&name, b"'")
     });
 
-    if config.format == Format::Long {
-        let padding_collection = calculate_padding_collection(items, config, state);
+    let padding_collection = calculate_padding_collection(items, config, state);
 
-        for item in items {
-            #[cfg(unix)]
-            let should_display_leading_info = config.inode || config.alloc_size;
-            #[cfg(not(unix))]
-            let should_display_leading_info = config.alloc_size;
-
-            if should_display_leading_info {
-                let more_info = display_additional_leading_info(
-                    item,
-                    &padding_collection,
-                    config,
-                    &mut state.out,
-                )?;
-
-                write!(state.out, "{more_info}")?;
-            }
-
-            display_item_long(item, &padding_collection, config, state, dired, quoted)?;
-        }
-    } else {
-        let mut longest_context_len = 1;
-        let prefix_context = if config.context {
+    match config.format {
+        Format::Long => {
             for item in items {
-                let context_len = item.security_context.len();
-                longest_context_len = context_len.max(longest_context_len);
-            }
-            Some(longest_context_len)
-        } else {
-            None
-        };
+                #[cfg(unix)]
+                let should_display_leading_info = config.inode || config.alloc_size;
+                #[cfg(not(unix))]
+                let should_display_leading_info = config.alloc_size;
 
-        let padding = calculate_padding_collection(items, config, state);
+                if should_display_leading_info {
+                    let more_info = display_additional_leading_info(
+                        item,
+                        &padding_collection,
+                        config,
+                        &mut state.out,
+                    )?;
 
-        // we need to apply normal color to non filename output
-        if let Some(style_manager) = &mut state.style_manager {
-            write!(state.out, "{}", style_manager.apply_normal())?;
-        }
-
-        let mut names_vec = Vec::new();
-        for i in items {
-            let more_info = display_additional_leading_info(i, &padding, config, &mut state.out)?;
-            // it's okay to set current column to zero which is used to decide
-            // whether text will wrap or not, because when format is grid or
-            // column ls will try to place the item name in a new line if it
-            // wraps.
-            let cell = display_item_name(
-                i,
-                config,
-                prefix_context,
-                more_info,
-                state,
-                LazyCell::new(Box::new(|| 0)),
-            );
-
-            names_vec.push(cell);
-        }
-
-        let mut names = names_vec.into_iter();
-
-        match config.format {
-            Format::Columns => {
-                display_grid(
-                    names,
-                    config.width,
-                    Direction::TopToBottom,
-                    &mut state.out,
-                    quoted,
-                    config.tab_size,
-                )?;
-            }
-            Format::Across => {
-                display_grid(
-                    names,
-                    config.width,
-                    Direction::LeftToRight,
-                    &mut state.out,
-                    quoted,
-                    config.tab_size,
-                )?;
-            }
-            Format::Commas => {
-                let mut current_col = 0;
-                if let Some(name) = names.next() {
-                    write_os_str(&mut state.out, &name)?;
-                    current_col = ansi_width(&name.to_string_lossy()) as u16 + 2;
+                    write!(state.out, "{more_info}")?;
                 }
-                for name in names {
-                    let name_width = ansi_width(&name.to_string_lossy()) as u16;
-                    // If the width is 0 we print one single line
-                    if config.width != 0 && current_col + name_width + 1 > config.width {
-                        current_col = name_width + 2;
-                        writeln!(state.out, ",")?;
-                    } else {
-                        current_col += name_width + 2;
-                        write!(state.out, ", ")?;
+
+                display_item_long(item, &padding_collection, config, state, dired, quoted)?;
+            }
+        }
+        _ => {
+            let mut names =
+                display_short_common(items, config, state, &padding_collection)?.into_iter();
+
+            match config.format {
+                Format::Columns => {
+                    display_grid(
+                        names,
+                        config.width,
+                        Direction::TopToBottom,
+                        &mut state.out,
+                        quoted,
+                        config.tab_size,
+                    )?;
+                }
+                Format::Across => {
+                    display_grid(
+                        names,
+                        config.width,
+                        Direction::LeftToRight,
+                        &mut state.out,
+                        quoted,
+                        config.tab_size,
+                    )?;
+                }
+                Format::Commas => {
+                    let mut current_col = 0;
+                    if let Some(name) = names.next() {
+                        write_os_str(&mut state.out, &name)?;
+                        current_col = ansi_width(&name.to_string_lossy()) as u16 + 2;
                     }
-                    write_os_str(&mut state.out, &name)?;
+                    for name in names {
+                        let name_width = ansi_width(&name.to_string_lossy()) as u16;
+                        // If the width is 0 we print one single line
+                        if config.width != 0 && current_col + name_width + 1 > config.width {
+                            current_col = name_width + 2;
+                            writeln!(state.out, ",")?;
+                        } else {
+                            current_col += name_width + 2;
+                            write!(state.out, ", ")?;
+                        }
+                        write_os_str(&mut state.out, &name)?;
+                    }
+                    // Current col is never zero again if names have been printed.
+                    // So we print a newline.
+                    if current_col > 0 {
+                        write!(state.out, "{}", config.line_ending)?;
+                    }
                 }
-                // Current col is never zero again if names have been printed.
-                // So we print a newline.
-                if current_col > 0 {
-                    write!(state.out, "{}", config.line_ending)?;
-                }
-            }
-            _ => {
-                for name in names {
-                    write_os_str(&mut state.out, &name)?;
-                    write!(state.out, "{}", config.line_ending)?;
+                _ => {
+                    for name in names {
+                        write_os_str(&mut state.out, &name)?;
+                        write!(state.out, "{}", config.line_ending)?;
+                    }
                 }
             }
         }
     }
 
     Ok(())
+}
+
+fn display_short_common(
+    items: &[PathData],
+    config: &Config,
+    state: &mut ListState,
+    padding_collection: &PaddingCollection,
+) -> Result<Vec<OsString>, Box<dyn UError + 'static>> {
+    let mut longest_context_len = 1;
+    let prefix_context = if config.context {
+        for item in items {
+            let context_len = item.security_context.len();
+            longest_context_len = context_len.max(longest_context_len);
+        }
+        Some(longest_context_len)
+    } else {
+        None
+    };
+
+    // we need to apply normal color to non filename output
+    if let Some(style_manager) = &mut state.style_manager {
+        write!(state.out, "{}", style_manager.apply_normal())?;
+    }
+
+    let mut names_vec = Vec::new();
+    for i in items {
+        let more_info =
+            display_additional_leading_info(i, padding_collection, config, &mut state.out)?;
+        // it's okay to set current column to zero which is used to decide
+        // whether text will wrap or not, because when format is grid or
+        // column ls will try to place the item name in a new line if it
+        // wraps.
+        let cell = display_item_name(
+            i,
+            config,
+            prefix_context,
+            more_info,
+            state,
+            LazyCell::new(Box::new(|| 0)),
+        );
+
+        names_vec.push(cell);
+    }
+
+    Ok(names_vec)
 }
 
 #[allow(unused_variables)]
