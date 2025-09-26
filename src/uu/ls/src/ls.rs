@@ -3273,7 +3273,7 @@ fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -
         }
     }
     if config.selinux_supported {
-        #[cfg(feature = "selinux")]
+        #[cfg(all(feature = "selinux", target_os = "linux"))]
         {
             match selinux::SecurityContext::of_path(p_buf, must_dereference.to_owned(), false) {
                 Err(_r) => {

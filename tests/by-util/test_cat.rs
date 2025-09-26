@@ -1,5 +1,5 @@
-// Additional write error tests for GNU compatibility
 #[cfg(unix)]
+// Verify cat handles broken pipe without hanging or crashing (GNU-compat focus)
 #[test]
 fn test_cat_broken_pipe_nonzero_and_message() {
     use std::fs::File;
@@ -22,7 +22,7 @@ fn test_cat_broken_pipe_nonzero_and_message() {
             .run();
 
         // Ensure the process exits (no hang) even if platforms differ in exit code/message on SIGPIPE
-        assert!(result.succeeded() || !result.succeeded());
+        assert!(result.try_exit_status().is_some(), "process did not exit");
     }
 }
 

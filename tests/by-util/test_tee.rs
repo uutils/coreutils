@@ -670,10 +670,8 @@ fn test_broken_pipe_early_termination_stdout_only() {
 
         // GNU tee exits nonzero on broken pipe unless configured otherwise; implementation
         // details vary by mode, but we should not panic and should return an exit status.
-        // Accept either success (warn-nopipe style ignoring broken pipe) or failure,
-        // but ensure no unexpected stderr spam (keep this flexible across platforms).
-        // Here we only assert that a status was produced and no crash occurred.
-        assert!(result.succeeded() || !result.succeeded());
+        // Assert that a status was produced (i.e., process exited) and no crash occurred.
+        assert!(result.try_exit_status().is_some(), "process did not exit");
     }
 }
 
