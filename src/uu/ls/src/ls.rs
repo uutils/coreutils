@@ -1828,7 +1828,7 @@ impl PathData {
         let ft: OnceCell<Option<FileType>> = OnceCell::new();
         let md: OnceCell<Option<Metadata>> = OnceCell::new();
 
-        if let Some(ref de) = dir_entry.as_ref() {
+        if let Some(de) = dir_entry.as_ref() {
             if must_dereference {
                 if let Ok(md_pb) = p_buf.metadata() {
                     md.get_or_init(|| Some(md_pb.clone()));
@@ -1839,7 +1839,7 @@ impl PathData {
             if let Ok(ft_de) = de.file_type() {
                 ft.get_or_init(|| Some(ft_de));
             }
-        };
+        }
 
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
