@@ -105,6 +105,7 @@ pub enum Format {
     Base2Lsbf,
     Base2Msbf,
     Z85,
+    Base58,
 }
 
 pub const BASE2LSBF: Encoding = new_encoding! {
@@ -118,6 +119,8 @@ pub const BASE2MSBF: Encoding = new_encoding! {
 };
 
 pub struct Z85Wrapper {}
+
+pub struct Base58Wrapper {}
 
 pub struct EncodingWrapper {
     pub alphabet: &'static [u8],
@@ -179,6 +182,142 @@ pub trait SupportsFastDecodeAndEncode {
     ///
     /// The decoding performed by `fast_decode` depends on this number being correct.
     fn valid_decoding_multiple(&self) -> usize;
+}
+
+impl SupportsFastDecodeAndEncode for Base58Wrapper {
+    fn alphabet(&self) -> &'static [u8] {
+        // Base58 alphabet
+        b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+    }
+
+    fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
+        if input.is_empty() {
+            return Ok(());
+        }
+
+        // Count leading zeros (will become leading 1s in base58)
+        let leading_ones = input.iter().take_while(|&&b| b == b'1').count();
+
+        // Skip leading 1s for conversion
+        let input_trimmed = &input[leading_ones..];
+        if input_trimmed.is_empty() {
+            output.resize(output.len() + leading_ones, 0);
+            return Ok(());
+        }
+
+        // Convert base58 to big integer
+        let mut num: Vec<u32> = vec![0];
+        let alphabet = self.alphabet();
+
+        for &byte in input_trimmed {
+            // Find position in alphabet
+            let digit = alphabet
+                .iter()
+                .position(|&b| b == byte)
+                .ok_or_else(|| USimpleError::new(1, "error: invalid input".to_owned()))?;
+
+            // Multiply by 58 and add digit
+            let mut carry = digit as u32;
+            for n in num.iter_mut() {
+                let tmp = (*n as u64) * 58 + carry as u64;
+                *n = tmp as u32;
+                carry = (tmp >> 32) as u32;
+            }
+            if carry > 0 {
+                num.push(carry);
+            }
+        }
+
+        // Convert to bytes (little endian, then reverse)
+        let mut result = Vec::new();
+        for &n in num.iter() {
+            result.extend_from_slice(&n.to_le_bytes());
+        }
+
+        // Remove trailing zeros and reverse to get big endian
+        while result.last() == Some(&0) && result.len() > 1 {
+            result.pop();
+        }
+        result.reverse();
+
+        // Add leading zeros for leading 1s in input
+        let mut final_result = vec![0; leading_ones];
+        final_result.extend_from_slice(&result);
+
+        output.extend_from_slice(&final_result);
+        Ok(())
+    }
+
+    fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()> {
+        if input.is_empty() {
+            return Ok(());
+        }
+
+        // Count leading zeros
+        let leading_zeros = input.iter().take_while(|&&b| b == 0).count();
+
+        // Skip leading zeros
+        let input_trimmed = &input[leading_zeros..];
+        if input_trimmed.is_empty() {
+            for _ in 0..leading_zeros {
+                output.push_back(b'1');
+            }
+            return Ok(());
+        }
+
+        // Convert bytes to big integer
+        let mut num: Vec<u32> = Vec::new();
+        for &byte in input_trimmed {
+            let mut carry = byte as u32;
+            for n in num.iter_mut() {
+                let tmp = (*n as u64) * 256 + carry as u64;
+                *n = tmp as u32;
+                carry = (tmp >> 32) as u32;
+            }
+            if carry > 0 {
+                num.push(carry);
+            }
+        }
+
+        // Convert to base58
+        let mut result = Vec::new();
+        let alphabet = self.alphabet();
+
+        while !num.is_empty() && num.iter().any(|&n| n != 0) {
+            let mut carry = 0u64;
+            for n in num.iter_mut().rev() {
+                let tmp = carry * (1u64 << 32) + *n as u64;
+                *n = (tmp / 58) as u32;
+                carry = tmp % 58;
+            }
+            result.push(alphabet[carry as usize]);
+
+            // Remove leading zeros
+            while num.last() == Some(&0) && num.len() > 1 {
+                num.pop();
+            }
+        }
+
+        // Add leading 1s for leading zeros in input
+        for _ in 0..leading_zeros {
+            output.push_back(b'1');
+        }
+
+        // Add result (reversed because we built it backwards)
+        for byte in result.into_iter().rev() {
+            output.push_back(byte);
+        }
+
+        Ok(())
+    }
+
+    fn unpadded_multiple(&self) -> usize {
+        1 // Base58 doesn't use padding
+    }
+
+    fn valid_decoding_multiple(&self) -> usize {
+        1 // Any length is valid for Base58
+    }
 }
 
 impl SupportsFastDecodeAndEncode for Z85Wrapper {
