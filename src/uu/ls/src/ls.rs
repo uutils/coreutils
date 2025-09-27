@@ -1822,29 +1822,17 @@ impl PathData {
 
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
-        let md = match dir_entry.as_ref() {
-            Some(de) if !must_dereference => {
-                // check if we can use DirEntry metadata
-                // it will avoid a call to stat()
-                if let Ok(md) = de.metadata() {
-                    OnceCell::from(Some(md))
-                } else {
-                    OnceCell::new()
-                }
-            }
-            _ => OnceCell::new(),
-        };
+        let md = OnceCell::new();
+        let ft = OnceCell::new();
 
-        let ft = match dir_entry.as_ref() {
-            Some(de) if !must_dereference => {
-                if let Ok(ft) = de.file_type() {
-                    OnceCell::from(Some(ft))
-                } else {
-                    OnceCell::new()
-                }
+        if !must_dereference {
+            if let Some(opt_md) = dir_entry.as_ref().map(|de| de.metadata().ok()) {
+                let _ = md.set(opt_md);
             }
-            _ => OnceCell::new(),
-        };
+            if let Some(opt_ft) = dir_entry.as_ref().map(|de| de.file_type().ok()) {
+                let _ = ft.set(opt_ft);
+            }
+        }
 
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
