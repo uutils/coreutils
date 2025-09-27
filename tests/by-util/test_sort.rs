@@ -1405,7 +1405,9 @@ fn test_files0_from_minus_in_stdin() {
         .args(&["--files0-from", "-"])
         .pipe_in("-")
         .fails_with_code(2)
-        .stderr_only("sort: when reading file names from stdin, no file name of '-' allowed\n");
+        .stderr_only(
+            "sort: when reading file names from standard input, no file name of '-' allowed\n",
+        );
 }
 
 #[test]
