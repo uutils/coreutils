@@ -1773,6 +1773,7 @@ struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
+    de: Option<DirEntry>,
     security_context: OnceCell<Box<str>>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
@@ -1822,23 +1823,18 @@ impl PathData {
 
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
-        let md = OnceCell::new();
         let ft = OnceCell::new();
 
         if !must_dereference {
-            if let Some(opt_md) = dir_entry.as_ref().map(|de| de.metadata().ok()) {
-                let _ = md.set(opt_md);
-            }
-            if let Some(opt_ft) = dir_entry.as_ref().map(|de| de.file_type().ok()) {
-                let _ = ft.set(opt_ft);
-            }
+            ft.get_or_init(|| dir_entry.as_ref().and_then(|ft| ft.file_type().ok()));
         }
 
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
         Self {
-            md,
+            md: OnceCell::new(),
             ft,
+            de: dir_entry,
             security_context,
             display_name,
             p_buf,
@@ -1850,7 +1846,10 @@ impl PathData {
     fn metadata(&self) -> Option<&Metadata> {
         self.md
             .get_or_init(|| {
-                // if not, check if we can use Path metadata
+                if !self.must_dereference {
+                    return self.de.as_ref().and_then(|de| de.metadata().ok());
+                }
+
                 match get_metadata_with_deref_opt(self.path(), self.must_dereference) {
                     Err(err) => {
                         // FIXME: A bit tricky to propagate the result here
