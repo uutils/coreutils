@@ -7,21 +7,6 @@ use lscolors::{Colorable, Indicator, LsColors, Style};
 use std::ffi::OsString;
 use std::fs::Metadata;
 
-impl Colorable for PathData {
-    fn file_name(&self) -> OsString {
-        self.display_name().to_os_string()
-    }
-    fn file_type(&self) -> Option<std::fs::FileType> {
-        self.file_type().copied()
-    }
-    fn metadata(&self) -> Option<Metadata> {
-        self.metadata().cloned()
-    }
-    fn path(&self) -> std::path::PathBuf {
-        self.path().to_path_buf()
-    }
-}
-
 /// We need this struct to be able to store the previous style.
 /// This because we need to check the previous value in case we don't need
 /// the reset

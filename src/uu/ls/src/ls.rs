@@ -33,7 +33,7 @@ use clap::{
     builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
 };
 use glob::{MatchOptions, Pattern};
-use lscolors::LsColors;
+use lscolors::{Colorable, LsColors};
 use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
 use thiserror::Error;
 
@@ -1773,6 +1773,8 @@ struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
+    // can be used to avoid reading the filetype. Can be also called d_type:
+    // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
     de: Option<DirEntry>,
     security_context: OnceCell<Box<str>>,
     // Name of the file - will be empty for . or ..
@@ -1823,16 +1825,26 @@ impl PathData {
 
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
-        let ft = OnceCell::new();
+        let ft: OnceCell<Option<FileType>> = OnceCell::new();
+        let md: OnceCell<Option<Metadata>> = OnceCell::new();
 
-        if !must_dereference {
-            ft.get_or_init(|| dir_entry.as_ref().and_then(|ft| ft.file_type().ok()));
-        }
+        if let Some(ref de) = dir_entry.as_ref() {
+            if must_dereference {
+                if let Ok(md_pb) = p_buf.metadata() {
+                    md.get_or_init(|| Some(md_pb.clone()));
+                    ft.get_or_init(|| Some(md_pb.file_type()));
+                }
+            }
+
+            if let Ok(ft_de) = de.file_type() {
+                ft.get_or_init(|| Some(ft_de));
+            }
+        };
 
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
         Self {
-            md: OnceCell::new(),
+            md,
             ft,
             de: dir_entry,
             security_context,
@@ -1847,7 +1859,9 @@ impl PathData {
         self.md
             .get_or_init(|| {
                 if !self.must_dereference {
-                    return self.de.as_ref().and_then(|de| de.metadata().ok());
+                    if let Some(dir_entry) = &self.de {
+                        return dir_entry.metadata().ok();
+                    }
                 }
 
                 match get_metadata_with_deref_opt(self.path(), self.must_dereference) {
@@ -1906,6 +1920,21 @@ impl PathData {
 
     fn display_name(&self) -> &OsStr {
         &self.display_name
+    }
+}
+
+impl Colorable for PathData {
+    fn file_name(&self) -> OsString {
+        self.display_name().to_os_string()
+    }
+    fn file_type(&self) -> Option<FileType> {
+        self.file_type().copied()
+    }
+    fn metadata(&self) -> Option<Metadata> {
+        self.metadata().cloned()
+    }
+    fn path(&self) -> PathBuf {
+        self.path().to_path_buf()
     }
 }
 
