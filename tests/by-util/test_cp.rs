@@ -7079,3 +7079,167 @@ fn test_cp_no_dereference_symlink_with_parents() {
         .succeeds();
     assert_eq!(at.resolve_link("x/symlink-to-directory"), "directory");
 }
+
+/// Test for copying character device files with -r flag.
+/// This ensures that cp -r creates device files instead of copying content,
+/// preventing infinite loops when copying devices like /dev/urandom.
+#[cfg(unix)]
+#[test]
+fn test_cp_char_device() {
+    use uutests::util::run_ucmd_as_root;
+
+    let scenario = TestScenario::new(util_name!());
+    let at = &scenario.fixtures;
+
+    // Create a character device using mknod (requires root)
+    // Using major=1, minor=9 (same as /dev/urandom for consistency)
+    if let Ok(result) = run_ucmd_as_root(
+        &TestScenario::new("mknod"),
+        &["test_char_dev", "c", "1", "9"],
+    ) {
+        result.success();
+
+        // Test copying the character device with -r
+        let mut ucmd = scenario.ucmd();
+        ucmd.arg("-r")
+            .arg("test_char_dev")
+            .arg("copied_char_dev")
+            .succeeds()
+            .no_stderr();
+
+        // Verify the copied file is also a character device
+        assert!(at.is_char_device("copied_char_dev"));
+
+        // Verify device numbers match
+        let orig_metadata = std::fs::metadata(at.plus("test_char_dev")).unwrap();
+        let copy_metadata = std::fs::metadata(at.plus("copied_char_dev")).unwrap();
+        assert_eq!(orig_metadata.rdev(), copy_metadata.rdev());
+    } else {
+        println!("Test skipped; creating character devices requires root privileges");
+    }
+}
+
+/// Test for copying block device files with -r flag.
+#[cfg(unix)]
+#[test]
+fn test_cp_block_device() {
+    use uutests::util::run_ucmd_as_root;
+
+    let scenario = TestScenario::new(util_name!());
+    let at = &scenario.fixtures;
+
+    // Create a block device using mknod (requires root)
+    // Using major=7, minor=0 (similar to loop devices)
+    if let Ok(result) = run_ucmd_as_root(
+        &TestScenario::new("mknod"),
+        &["test_block_dev", "b", "7", "0"],
+    ) {
+        result.success();
+
+        // Test copying the block device with -r
+        let mut ucmd = scenario.ucmd();
+        ucmd.arg("-r")
+            .arg("test_block_dev")
+            .arg("copied_block_dev")
+            .succeeds()
+            .no_stderr();
+
+        // Verify the copied file is a block device
+        // Note: we need a helper method for this, let's check metadata directly
+        let copy_metadata = std::fs::metadata(at.plus("copied_block_dev")).unwrap();
+        assert!(copy_metadata.file_type().is_block_device());
+
+        // Verify device numbers match
+        let orig_metadata = std::fs::metadata(at.plus("test_block_dev")).unwrap();
+        assert_eq!(orig_metadata.rdev(), copy_metadata.rdev());
+    } else {
+        println!("Test skipped; creating block devices requires root privileges");
+    }
+}
+
+/// Test that cp with --copy-contents still copies device content instead of creating device files.
+/// This verifies the --copy-contents flag overrides the default device file creation behavior.
+#[cfg(unix)]
+#[test]
+fn test_cp_device_copy_contents() {
+    use uutests::util::run_ucmd_as_root;
+
+    let scenario = TestScenario::new(util_name!());
+
+    // Create a character device using mknod (requires root)
+    if let Ok(result) = run_ucmd_as_root(
+        &TestScenario::new("mknod"),
+        &["test_char_dev", "c", "1", "8"], // Using /dev/random major/minor for safety
+    ) {
+        result.success();
+
+        // Test copying with --copy-contents flag
+        // This should attempt to copy content, not create a device file
+        // We expect this to succeed and create a regular file (even if empty)
+        let mut ucmd = scenario.ucmd();
+        ucmd.arg("-r")
+            .arg("--copy-contents")
+            .arg("test_char_dev")
+            .arg("copied_content")
+            .succeeds();
+
+        // The result should be a regular file, not a character device
+        let copy_metadata = std::fs::metadata(scenario.fixtures.plus("copied_content")).unwrap();
+        assert!(copy_metadata.file_type().is_file());
+        assert!(!copy_metadata.file_type().is_char_device());
+    } else {
+        println!("Test skipped; creating character devices requires root privileges");
+    }
+}
+
+/// Test error handling when trying to copy devices without sufficient permissions.
+#[cfg(unix)]
+#[test]
+fn test_cp_device_permission_error() {
+    let scenario = TestScenario::new(util_name!());
+
+    // Try to copy a system device file to a location where we can't create device files
+    // This should show our proper error message
+    scenario
+        .ucmd()
+        .arg("-r")
+        .arg("/dev/null")
+        .arg("/tmp/test_null_copy")
+        .fails()
+        .stderr_contains("cannot create character device");
+}
+
+/// Test that copying devices preserves permissions when possible.
+#[cfg(unix)]
+#[test]
+fn test_cp_device_preserve_permissions() {
+    use uutests::util::run_ucmd_as_root;
+
+    let scenario = TestScenario::new(util_name!());
+    let at = &scenario.fixtures;
+
+    if let Ok(result) = run_ucmd_as_root(
+        &TestScenario::new("mknod"),
+        &["test_char_dev", "c", "1", "9"],
+    ) {
+        result.success();
+
+        // Set specific permissions on the source device
+        at.set_mode("test_char_dev", 0o640);
+
+        // Copy with permission preservation
+        let mut ucmd = scenario.ucmd();
+        ucmd.arg("-r")
+            .arg("--preserve=mode")
+            .arg("test_char_dev")
+            .arg("copied_char_dev")
+            .succeeds();
+
+        // Check that permissions are preserved
+        let copy_metadata = std::fs::metadata(at.plus("copied_char_dev")).unwrap();
+        let permissions = copy_metadata.permissions().mode() & 0o777;
+        assert_eq!(permissions, 0o640);
+    } else {
+        println!("Test skipped; creating character devices requires root privileges");
+    }
+}

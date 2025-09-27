@@ -10,7 +10,7 @@ use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::{self, Metadata, OpenOptions, Permissions};
 #[cfg(unix)]
-use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 #[cfg(unix)]
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf, StripPrefixError};
@@ -27,13 +27,13 @@ use thiserror::Error;
 use platform::copy_on_write;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, UUsageError, set_exit_code};
-#[cfg(unix)]
-use uucore::fs::make_fifo;
 use uucore::fs::{
     FileInformation, MissingHandling, ResolveMode, are_hardlinks_to_same_file, canonicalize,
     get_filename, is_symlink_loop, normalize_path, path_ends_with_terminator,
     paths_refer_to_same_file,
 };
+#[cfg(unix)]
+use uucore::fs::{make_block_device, make_char_device, make_fifo};
 use uucore::{backup_control, update_control};
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
 // requires these enum.
@@ -2082,6 +2082,8 @@ fn handle_copy_mode(
     source_in_command_line: bool,
     source_is_fifo: bool,
     source_is_socket: bool,
+    source_is_char_device: bool,
+    source_is_block_device: bool,
     #[cfg(unix)] source_is_stream: bool,
 ) -> CopyResult<PerformedAction> {
     let source_is_symlink = source_metadata.is_symlink();
@@ -2122,6 +2124,8 @@ fn handle_copy_mode(
                 source_is_symlink,
                 source_is_fifo,
                 source_is_socket,
+                source_is_char_device,
+                source_is_block_device,
                 symlinked_files,
                 #[cfg(unix)]
                 source_is_stream,
@@ -2145,6 +2149,8 @@ fn handle_copy_mode(
                             source_is_symlink,
                             source_is_fifo,
                             source_is_socket,
+                            source_is_char_device,
+                            source_is_block_device,
                             symlinked_files,
                             #[cfg(unix)]
                             source_is_stream,
@@ -2181,6 +2187,8 @@ fn handle_copy_mode(
                             source_is_symlink,
                             source_is_fifo,
                             source_is_socket,
+                            source_is_char_device,
+                            source_is_block_device,
                             symlinked_files,
                             #[cfg(unix)]
                             source_is_stream,
@@ -2196,6 +2204,8 @@ fn handle_copy_mode(
                     source_is_symlink,
                     source_is_fifo,
                     source_is_socket,
+                    source_is_char_device,
+                    source_is_block_device,
                     symlinked_files,
                     #[cfg(unix)]
                     source_is_stream,
@@ -2424,10 +2434,18 @@ fn copy_file(
     let source_is_fifo = source_metadata.file_type().is_fifo();
     #[cfg(unix)]
     let source_is_socket = source_metadata.file_type().is_socket();
+    #[cfg(unix)]
+    let source_is_char_device = source_metadata.file_type().is_char_device();
+    #[cfg(unix)]
+    let source_is_block_device = source_metadata.file_type().is_block_device();
     #[cfg(not(unix))]
     let source_is_fifo = false;
     #[cfg(not(unix))]
     let source_is_socket = false;
+    #[cfg(not(unix))]
+    let source_is_char_device = false;
+    #[cfg(not(unix))]
+    let source_is_block_device = false;
 
     let source_is_stream = is_stream(&source_metadata);
 
@@ -2441,6 +2459,8 @@ fn copy_file(
         source_in_command_line,
         source_is_fifo,
         source_is_socket,
+        source_is_char_device,
+        source_is_block_device,
         #[cfg(unix)]
         source_is_stream,
     )?;
@@ -2568,6 +2588,8 @@ fn copy_helper(
     source_is_symlink: bool,
     source_is_fifo: bool,
     source_is_socket: bool,
+    source_is_char_device: bool,
+    source_is_block_device: bool,
     symlinked_files: &mut HashSet<FileInformation>,
     #[cfg(unix)] source_is_stream: bool,
 ) -> CopyResult<()> {
@@ -2586,6 +2608,12 @@ fn copy_helper(
     } else if source_is_fifo && options.recursive && !options.copy_contents {
         #[cfg(unix)]
         copy_fifo(dest, options.overwrite, options.debug)?;
+    } else if source_is_char_device && options.recursive && !options.copy_contents {
+        #[cfg(unix)]
+        copy_char_device(source, dest, options.overwrite, options.debug)?;
+    } else if source_is_block_device && options.recursive && !options.copy_contents {
+        #[cfg(unix)]
+        copy_block_device(source, dest, options.overwrite, options.debug)?;
     } else if source_is_symlink {
         copy_link(source, dest, symlinked_files, options)?;
     } else {
@@ -2618,6 +2646,52 @@ fn copy_fifo(dest: &Path, overwrite: OverwriteMode, debug: bool) -> CopyResult<(
 
     make_fifo(dest)
         .map_err(|_| translate!("cp-error-cannot-create-fifo", "path" => dest.quote()).into())
+}
+
+// "Copies" a character device by creating a new one with the same major/minor numbers.
+#[cfg(unix)]
+fn copy_char_device(
+    source: &Path,
+    dest: &Path,
+    overwrite: OverwriteMode,
+    debug: bool,
+) -> CopyResult<()> {
+    if dest.exists() {
+        overwrite.verify(dest, debug)?;
+        fs::remove_file(dest)?;
+    }
+
+    let source_metadata = fs::metadata(source)?;
+    let device_id = source_metadata.rdev();
+    let major = ((device_id >> 8) & 0xff) as u32;
+    let minor = (device_id & 0xff) as u32;
+
+    make_char_device(dest, major, minor).map_err(|_| {
+        translate!("cp-error-cannot-create-char-device", "path" => dest.quote()).into()
+    })
+}
+
+// "Copies" a block device by creating a new one with the same major/minor numbers.
+#[cfg(unix)]
+fn copy_block_device(
+    source: &Path,
+    dest: &Path,
+    overwrite: OverwriteMode,
+    debug: bool,
+) -> CopyResult<()> {
+    if dest.exists() {
+        overwrite.verify(dest, debug)?;
+        fs::remove_file(dest)?;
+    }
+
+    let source_metadata = fs::metadata(source)?;
+    let device_id = source_metadata.rdev();
+    let major = ((device_id >> 8) & 0xff) as u32;
+    let minor = (device_id & 0xff) as u32;
+
+    make_block_device(dest, major, minor).map_err(|_| {
+        translate!("cp-error-cannot-create-block-device", "path" => dest.quote()).into()
+    })
 }
 
 #[cfg(unix)]

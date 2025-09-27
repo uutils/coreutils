@@ -11,7 +11,7 @@
 use libc::{
     S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, S_IRGRP, S_IROTH,
     S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR, S_IXGRP, S_IXOTH, S_IXUSR,
-    mkfifo, mode_t,
+    makedev, mkfifo, mknod, mode_t,
 };
 use std::collections::HashSet;
 use std::collections::VecDeque;
@@ -832,6 +832,42 @@ pub fn make_fifo(path: &Path) -> std::io::Result<()> {
     let err = unsafe { mkfifo(name.as_ptr(), 0o666) };
     if err == -1 {
         Err(std::io::Error::from_raw_os_error(err))
+    } else {
+        Ok(())
+    }
+}
+
+/// Create a character device file.
+///
+/// # Arguments
+/// * `path` - The path where the device file should be created
+/// * `major` - The major device number
+/// * `minor` - The minor device number
+#[cfg(unix)]
+pub fn make_char_device(path: &Path, major: u32, minor: u32) -> std::io::Result<()> {
+    let name = CString::new(path.to_str().unwrap()).unwrap();
+    let dev = makedev(major, minor);
+    let err = unsafe { mknod(name.as_ptr(), S_IFCHR | 0o666, dev) };
+    if err == -1 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+/// Create a block device file.
+///
+/// # Arguments
+/// * `path` - The path where the device file should be created
+/// * `major` - The major device number
+/// * `minor` - The minor device number
+#[cfg(unix)]
+pub fn make_block_device(path: &Path, major: u32, minor: u32) -> std::io::Result<()> {
+    let name = CString::new(path.to_str().unwrap()).unwrap();
+    let dev = makedev(major, minor);
+    let err = unsafe { mknod(name.as_ptr(), S_IFBLK | 0o666, dev) };
+    if err == -1 {
+        Err(std::io::Error::last_os_error())
     } else {
         Ok(())
     }
