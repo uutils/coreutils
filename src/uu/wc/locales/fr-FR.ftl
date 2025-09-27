@@ -16,7 +16,7 @@ wc-help-words = afficher le nombre de mots
 # Messages d'erreur
 wc-error-files-disabled = opérande supplémentaire '{ $extra }'
   les opérandes de fichier ne peuvent pas être combinées avec --files0-from
-wc-error-stdin-repr-not-allowed = lors de la lecture des noms de fichiers depuis stdin, aucun nom de fichier '-' autorisé
+wc-error-stdin-repr-not-allowed = lors de la lecture des noms de fichiers depuis l'entrée standard, aucun nom de fichier '-' autorisé
 wc-error-zero-length-filename = nom de fichier de longueur nulle invalide
 wc-error-zero-length-filename-ctx = { $path }:{ $idx } : nom de fichier de longueur nulle invalide
 wc-error-cannot-open-for-reading = impossible d'ouvrir { $path } en lecture
