@@ -49,6 +49,7 @@ os_display = "0.1.3"
 
 # Benchmark dependencies (optional)
 divan = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
 
 digest = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
@@ -173,4 +174,4 @@ wide = []
 tty = []
 time = ["jiff"]
 uptime = ["chrono", "libc", "windows-sys", "utmpx", "utmp-classic"]
-benchmark = ["divan"]
+benchmark = ["divan", "tempfile"]

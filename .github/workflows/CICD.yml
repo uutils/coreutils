@@ -321,9 +321,9 @@ jobs:
         # Check that the utils are present
         test -f /tmp/usr/local/bin/tty
         # Check that the manpage is present
-        test -f /tmp/usr/local/share/man/man1/whoami.1
+        test -f /tmp/usr/local/share/man/man1/md5sum.1
         # Check that the completion is present
-        test -f /tmp/usr/local/share/zsh/site-functions/_install
+        test -f /tmp/usr/local/share/zsh/site-functions/_b2sum
         test -f /tmp/usr/local/share/bash-completion/completions/head
         test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
       env:
@@ -387,6 +387,13 @@ jobs:
         test -h /tmp/usr/local/bin/sha512sum
         test -h /tmp/usr/local/bin/shake128sum
         test -h /tmp/usr/local/bin/shake256sum
+    - name: "`make UTILS=XXX`"
+      shell: bash
+      run: |
+        set -x
+        # Regression-test for https://github.com/uutils/coreutils/issues/8701
+        make UTILS="rm chmod chown chgrp mv du"
+
   build_rust_stable:
     name: Build/stable
     needs: [ min_version, deps ]
@@ -1327,6 +1334,6 @@ jobs:
             echo "Running benchmarks for packages: ${{ steps.benchmark_list.outputs.benchmark_packages }}"
             for package in ${{ steps.benchmark_list.outputs.benchmark_packages }}; do
               echo "Running benchmarks for $package"
-              cargo codspeed run -p $package
+              cargo codspeed run -p $package > /dev/null
             done
           token: ${{ secrets.CODSPEED_TOKEN }}
