@@ -1829,9 +1829,8 @@ impl PathData {
         let ft: OnceCell<Option<FileType>> = OnceCell::new();
         let md: OnceCell<Option<Metadata>> = OnceCell::new();
         let security_context: OnceCell<Box<str>> = OnceCell::new();
-        let cell: RefCell<Option<Box<DirEntry>>> = RefCell::new(None);
 
-        if let Some(de) = dir_entry {
+        let de: RefCell<Option<Box<DirEntry>>> = if let Some(de) = dir_entry {
             if must_dereference {
                 if let Ok(md_pb) = p_buf.metadata() {
                     md.get_or_init(|| Some(md_pb.clone()));
@@ -1843,13 +1842,15 @@ impl PathData {
                 ft.get_or_init(|| Some(ft_de));
             }
 
-            let _ = cell.replace(Some(de.into()));
-        }
+            RefCell::new(Some(de.into()))
+        } else {
+            RefCell::new(None)
+        };
 
         Self {
             md,
             ft,
-            de: cell,
+            de,
             security_context,
             display_name,
             p_buf,
