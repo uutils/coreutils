@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime
 
 use std::borrow::Cow;
+use std::cell::RefCell;
 #[cfg(unix)]
 use std::collections::HashMap;
 #[cfg(unix)]
@@ -1775,7 +1776,7 @@ struct PathData {
     ft: OnceCell<Option<FileType>>,
     // can be used to avoid reading the filetype. Can be also called d_type:
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
-    de: Option<DirEntry>,
+    de: RefCell<Option<Box<DirEntry>>>,
     security_context: OnceCell<Box<str>>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
@@ -1827,8 +1828,10 @@ impl PathData {
         // nearly free compared to a metadata() call on a Path
         let ft: OnceCell<Option<FileType>> = OnceCell::new();
         let md: OnceCell<Option<Metadata>> = OnceCell::new();
+        let security_context: OnceCell<Box<str>> = OnceCell::new();
+        let cell: RefCell<Option<Box<DirEntry>>> = RefCell::new(None);
 
-        if let Some(de) = dir_entry.as_ref() {
+        if let Some(de) = dir_entry {
             if must_dereference {
                 if let Ok(md_pb) = p_buf.metadata() {
                     md.get_or_init(|| Some(md_pb.clone()));
@@ -1839,14 +1842,14 @@ impl PathData {
             if let Ok(ft_de) = de.file_type() {
                 ft.get_or_init(|| Some(ft_de));
             }
-        }
 
-        let security_context: OnceCell<Box<str>> = OnceCell::new();
+            let _ = cell.replace(Some(de.into()));
+        }
 
         Self {
             md,
             ft,
-            de: dir_entry,
+            de: cell,
             security_context,
             display_name,
             p_buf,
@@ -1859,7 +1862,7 @@ impl PathData {
         self.md
             .get_or_init(|| {
                 if !self.must_dereference {
-                    if let Some(dir_entry) = &self.de {
+                    if let Some(dir_entry) = RefCell::take(&self.de).as_deref() {
                         return dir_entry.metadata().ok();
                     }
                 }
@@ -1867,7 +1870,7 @@ impl PathData {
                 match get_metadata_with_deref_opt(self.path(), self.must_dereference) {
                     Err(err) => {
                         // FIXME: A bit tricky to propagate the result here
-                        let mut out = stdout().lock();
+                        let mut out: std::io::StdoutLock<'static> = stdout().lock();
                         let _ = out.flush();
                         let errno = err.raw_os_error().unwrap_or(1i32);
                         // a bad fd will throw an error when dereferenced,
