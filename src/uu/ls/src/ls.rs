@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime
+// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime getxattr
 
 #[cfg(unix)]
 use std::collections::HashMap;
@@ -39,7 +39,9 @@ use thiserror::Error;
 #[cfg(unix)]
 use uucore::entries;
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-use uucore::fsxattr::has_acl;
+use uucore::fsxattr::{
+    POSIX_ACL_ACCESS_KEY, POSIX_ACL_DEFAULT_KEY, SET_CAPABILITY_KEY, retrieve_xattrs,
+};
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 #[cfg(any(
@@ -1768,10 +1770,13 @@ pub fn uu_app() -> Command {
 /// Any data that will be reused several times makes sense to be added to this structure.
 /// Caching data here helps eliminate redundant syscalls to fetch same information.
 #[derive(Debug)]
+#[allow(unused)]
 struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    xattrs: OnceCell<Option<HashMap<OsString, Vec<u8>>>>,
     // can be used to avoid reading the metadata. Can be also called d_type:
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
     de: Option<DirEntry>,
@@ -1846,6 +1851,7 @@ impl PathData {
                 OnceCell::new()
             }
         }
+
         let ft = match de {
             Some(ref de) => get_file_type(de, &p_buf, must_dereference),
             None => OnceCell::new(),
@@ -1856,6 +1862,8 @@ impl PathData {
         Self {
             md: OnceCell::new(),
             ft,
+            #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+            xattrs: OnceCell::new(),
             de,
             display_name,
             p_buf,
@@ -1908,6 +1916,36 @@ impl PathData {
         self.ft
             .get_or_init(|| self.get_metadata(out).map(|md| md.file_type()))
             .as_ref()
+    }
+
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    fn xattrs(&self) -> Option<&HashMap<OsString, Vec<u8>>> {
+        self.xattrs
+            .get_or_init(
+                || match retrieve_xattrs(&self.p_buf, self.must_dereference) {
+                    Ok(map) => Some(map),
+                    Err(_) => fs::read_link(&self.p_buf)
+                        .ok()
+                        .and_then(|file| retrieve_xattrs(file, false).ok()),
+                },
+            )
+            .as_ref()
+    }
+
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    fn has_acl(&self) -> bool {
+        self.xattrs().as_ref().is_some_and(|map| {
+            map.contains_key(OsStr::new(POSIX_ACL_ACCESS_KEY))
+                || map.contains_key(OsStr::new(POSIX_ACL_DEFAULT_KEY))
+        })
+    }
+
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    fn has_capability(&self) -> bool {
+        // don't use exacl here, it is doing more getxattr call then needed
+        self.xattrs()
+            .as_ref()
+            .is_some_and(|map| map.contains_key(OsStr::new(SET_CAPABILITY_KEY)))
     }
 }
 
@@ -2705,15 +2743,16 @@ fn display_item_long(
     if let Some(md) = item.get_metadata(&mut state.out) {
         #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
         // TODO: See how Mac should work here
-        let is_acl_set = false;
+        let has_acl = false;
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let is_acl_set = has_acl(item.display_name.as_os_str());
+        let has_acl = { item.has_acl() };
+
         output_display.extend(display_permissions(md, true).as_bytes());
         if item.security_context.len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
             output_display.extend(b".");
-        } else if is_acl_set {
+        } else if has_acl {
             output_display.extend(b"+");
         }
         output_display.extend(b" ");
