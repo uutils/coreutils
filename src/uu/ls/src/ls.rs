@@ -1773,7 +1773,7 @@ struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
-    security_context: Box<str>,
+    security_context: OnceCell<Box<str>>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
     // PathBuf that all above data corresponds to
@@ -1799,8 +1799,7 @@ impl PathData {
         } else {
             dir_entry
                 .as_ref()
-                .map(|de| de.file_name())
-                .or_else(|| p_buf.file_name().map(|inner| inner.to_os_string()))
+                .map(|inner| inner.file_name())
                 .unwrap_or_default()
         };
 
@@ -1847,8 +1846,7 @@ impl PathData {
             _ => OnceCell::new(),
         };
 
-        let security_context: Box<str> =
-            get_security_context(&p_buf, must_dereference, config).into();
+        let security_context: OnceCell<Box<str>> = OnceCell::new();
 
         Self {
             md,
@@ -1910,8 +1908,9 @@ impl PathData {
             && self.metadata().is_some_and(file_is_executable)
     }
 
-    fn security_context(&self) -> &str {
-        &self.security_context
+    fn security_context(&self, config: &Config) -> &str {
+        self.security_context
+            .get_or_init(|| get_security_context(&self.p_buf, self.must_dereference, config).into())
     }
 
     fn path(&self) -> &Path {
@@ -2464,7 +2463,7 @@ fn display_items(
         let mut longest_context_len = 1;
         let prefix_context = if config.context {
             for item in items {
-                let context_len = item.security_context().len();
+                let context_len = item.security_context(config).len();
                 longest_context_len = context_len.max(longest_context_len);
             }
             Some(longest_context_len)
@@ -2712,7 +2711,7 @@ fn display_item_long(
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
         let is_acl_set = has_acl(item.display_name());
         output_display.extend(display_permissions(md, true).as_bytes());
-        if item.security_context().len() > 1 {
+        if item.security_context(config).len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
             output_display.extend(b".");
@@ -2734,7 +2733,7 @@ fn display_item_long(
 
         if config.context {
             output_display.extend(b" ");
-            output_display.extend_pad_right(item.security_context(), padding.context);
+            output_display.extend_pad_right(item.security_context(config), padding.context);
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
@@ -2846,7 +2845,7 @@ fn display_item_long(
 
         output_display.extend(leading_char.as_bytes());
         output_display.extend(b"?????????");
-        if item.security_context().len() > 1 {
+        if item.security_context(config).len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
             output_display.extend(b".");
@@ -2866,7 +2865,7 @@ fn display_item_long(
 
         if config.context {
             output_display.extend(b" ");
-            output_display.extend_pad_right(item.security_context(), padding.context);
+            output_display.extend_pad_right(item.security_context(config), padding.context);
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
@@ -3184,9 +3183,9 @@ fn display_item_name(
     if config.context {
         if let Some(pad_count) = prefix_context {
             let security_context = if matches!(config.format, Format::Commas) {
-                path.security_context().to_string()
+                path.security_context(config).to_string()
             } else {
-                pad_left(path.security_context(), pad_count)
+                pad_left(path.security_context(config), pad_count)
             };
 
             let old_name = name;
@@ -3341,7 +3340,7 @@ fn calculate_padding_collection(
         }
 
         if config.format == Format::Long {
-            let context_len = item.security_context().len();
+            let context_len = item.security_context(config).len();
             let (link_count_len, uname_len, group_len, size_len, major_len, minor_len) =
                 display_dir_entry_size(item, config, state);
             padding_collections.link_count = link_count_len.max(padding_collections.link_count);
@@ -3390,7 +3389,7 @@ fn calculate_padding_collection(
             }
         }
 
-        let context_len = item.security_context().len();
+        let context_len = item.security_context(config).len();
         let (link_count_len, uname_len, group_len, size_len, _major_len, _minor_len) =
             display_dir_entry_size(item, config, state);
         padding_collections.link_count = link_count_len.max(padding_collections.link_count);
