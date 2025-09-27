@@ -1053,6 +1053,7 @@ mod tests {
         assert!(path_ends_with_terminator(Path::new("/some/path/")));
 
         // Path ends with a backslash
+        #[cfg(windows)]
         assert!(path_ends_with_terminator(Path::new("C:\\some\\path\\")));
 
         // Path does not end with a terminator
@@ -1064,6 +1065,7 @@ mod tests {
 
         // Root path
         assert!(path_ends_with_terminator(Path::new("/")));
+        #[cfg(windows)]
         assert!(path_ends_with_terminator(Path::new("C:\\")));
     }
 
