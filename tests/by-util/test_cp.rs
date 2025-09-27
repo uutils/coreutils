@@ -7079,3 +7079,14 @@ fn test_cp_no_dereference_symlink_with_parents() {
         .succeeds();
     assert_eq!(at.resolve_link("x/symlink-to-directory"), "directory");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_cp_recursive_files_ending_in_backslash() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("a");
+    at.touch("a/foo\\");
+    ts.ucmd().args(&["-r", "a", "b"]).succeeds();
+    assert!(at.file_exists("b/foo\\"));
+}
