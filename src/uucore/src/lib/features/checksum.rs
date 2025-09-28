@@ -47,14 +47,16 @@ pub const ALGORITHM_OPTIONS_BLAKE3: &str = "blake3";
 pub const ALGORITHM_OPTIONS_SM3: &str = "sm3";
 pub const ALGORITHM_OPTIONS_SHAKE128: &str = "shake128";
 pub const ALGORITHM_OPTIONS_SHAKE256: &str = "shake256";
+pub const ALGORITHM_OPTIONS_SHA2: &str = "sha2";
 
-pub const SUPPORTED_ALGORITHMS: [&str; 16] = [
+pub const SUPPORTED_ALGORITHMS: [&str; 17] = [
     ALGORITHM_OPTIONS_SYSV,
     ALGORITHM_OPTIONS_BSD,
     ALGORITHM_OPTIONS_CRC,
     ALGORITHM_OPTIONS_CRC32B,
     ALGORITHM_OPTIONS_MD5,
     ALGORITHM_OPTIONS_SHA1,
+    ALGORITHM_OPTIONS_SHA2,
     ALGORITHM_OPTIONS_SHA3,
     ALGORITHM_OPTIONS_SHA224,
     ALGORITHM_OPTIONS_SHA256,
@@ -222,6 +224,10 @@ pub enum ChecksumError {
     BitsRequiredForShake128,
     #[error("--bits required for SHAKE256")]
     BitsRequiredForShake256,
+    #[error("--bits required for SHA2")]
+    BitsRequiredForSha2,
+    #[error("Invalid output size for SHA2 (expected 224, 256, 384, or 512), got {0}")]
+    InvalidSha2Length(usize),
     #[error("unknown algorithm: clap should have prevented this case")]
     UnknownAlgorithm,
     #[error("length is not a multiple of 8")]
@@ -276,6 +282,42 @@ pub fn create_sha3(bits: usize) -> UResult<HashAlgorithm> {
         }),
 
         _ => Err(ChecksumError::InvalidOutputSizeForSha3.into()),
+    }
+}
+
+/// Create a SHA-2 `HashAlgorithm` based on the specified output size in bits.
+///
+/// # Arguments
+///
+/// * `bits` - The output size in bits for the SHA-2 algorithm.
+///
+/// # Returns
+///
+/// Returns a `UResult` with an `HashAlgorithm` or an `Err` if an unsupported
+/// output size is provided.
+pub fn create_sha2(bits: usize) -> UResult<HashAlgorithm> {
+    match bits {
+        224 => Ok(HashAlgorithm {
+            name: ALGORITHM_OPTIONS_SHA224,
+            create_fn: Box::new(|| Box::new(Sha224::new())),
+            bits: 224,
+        }),
+        256 => Ok(HashAlgorithm {
+            name: ALGORITHM_OPTIONS_SHA256,
+            create_fn: Box::new(|| Box::new(Sha256::new())),
+            bits: 256,
+        }),
+        384 => Ok(HashAlgorithm {
+            name: ALGORITHM_OPTIONS_SHA384,
+            create_fn: Box::new(|| Box::new(Sha384::new())),
+            bits: 384,
+        }),
+        512 => Ok(HashAlgorithm {
+            name: ALGORITHM_OPTIONS_SHA512,
+            create_fn: Box::new(|| Box::new(Sha512::new())),
+            bits: 512,
+        }),
+        _ => Err(ChecksumError::InvalidSha2Length(bits).into()),
     }
 }
 
@@ -458,11 +500,14 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
                 bits,
             })
         }
+        ALGORITHM_OPTIONS_SHA2 => {
+            let bits = length.ok_or(ChecksumError::BitsRequiredForSha2)?;
+            create_sha2(bits)
+        }
         _ if algo.starts_with("sha3") => {
             let bits = length.ok_or(ChecksumError::BitsRequiredForSha3)?;
             create_sha3(bits)
         }
-
         _ => Err(ChecksumError::UnknownAlgorithm.into()),
     }
 }
@@ -1435,6 +1480,18 @@ mod tests {
             ALGORITHM_OPTIONS_SHA512
         );
         assert_eq!(
+            detect_algo(ALGORITHM_OPTIONS_SHA2, Some(256)).unwrap().name,
+            ALGORITHM_OPTIONS_SHA256
+        );
+        assert_eq!(
+            detect_algo(ALGORITHM_OPTIONS_SHA2, Some(384)).unwrap().name,
+            ALGORITHM_OPTIONS_SHA384
+        );
+        assert_eq!(
+            detect_algo(ALGORITHM_OPTIONS_SHA2, Some(512)).unwrap().name,
+            ALGORITHM_OPTIONS_SHA512
+        );
+        assert_eq!(
             detect_algo(ALGORITHM_OPTIONS_BLAKE2B, None).unwrap().name,
             ALGORITHM_OPTIONS_BLAKE2B
         );
@@ -1464,6 +1521,7 @@ mod tests {
         assert_eq!(detect_algo("sha3_512", Some(512)).unwrap().name, "SHA3_512");
 
         assert!(detect_algo("sha3_512", None).is_err());
+        assert!(detect_algo(ALGORITHM_OPTIONS_SHA2, None).is_err());
     }
 
     #[test]

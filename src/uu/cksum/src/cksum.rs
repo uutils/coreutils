@@ -14,9 +14,9 @@ use std::iter;
 use std::path::Path;
 use uucore::checksum::{
     ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC,
-    ALGORITHM_OPTIONS_CRC32B, ALGORITHM_OPTIONS_SYSV, ChecksumError, ChecksumOptions,
-    ChecksumVerbose, SUPPORTED_ALGORITHMS, detect_algo, digest_reader, perform_checksum_validation,
-    validate_blake2b_length_with_fluent,
+    ALGORITHM_OPTIONS_CRC32B, ALGORITHM_OPTIONS_SHA2, ALGORITHM_OPTIONS_SYSV, ChecksumError,
+    ChecksumOptions, ChecksumVerbose, SUPPORTED_ALGORITHMS, detect_algo, digest_reader,
+    perform_checksum_validation, validate_blake2b_length,
 };
 use uucore::translate;
 
@@ -255,7 +255,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let length = match input_length {
         Some(length_str) => {
             if algo_name == ALGORITHM_OPTIONS_BLAKE2B {
-                validate_blake2b_length_with_fluent(length_str, "cksum")?
+                validate_blake2b_length(length_str, "cksum")?
+            } else if algo_name == ALGORITHM_OPTIONS_SHA2
+                || algo_name.starts_with("sha3")
+                || algo_name == "shake128"
+                || algo_name == "shake256"
+            {
+                // Parse length for sha2, sha3, and shake algorithms
+                Some(
+                    length_str
+                        .parse::<usize>()
+                        .map_err(|_| ChecksumError::InvalidLength)?,
+                )
             } else {
                 return Err(ChecksumError::LengthOnlyForBlake2b.into());
             }

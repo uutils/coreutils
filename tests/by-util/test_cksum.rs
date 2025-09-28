@@ -2316,4 +2316,198 @@ mod format_mix {
             .stdout_contains("bar: OK")
             .stderr_contains("cksum: WARNING: 1 line is improperly formatted");
     }
+
+    #[test]
+    fn test_sha2_requires_length() {
+        // Test that sha2 algorithm requires a length parameter
+        new_ucmd!()
+            .arg("-a")
+            .arg("sha2")
+            .arg("lorem_ipsum.txt")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("--bits required for SHA2");
+    }
+
+    #[test]
+    fn test_sha2_with_length_224() {
+        // Test sha2 with 224-bit length (equivalent to sha224)
+        let result_sha2 = new_ucmd!()
+            .arg("-a")
+            .arg("sha2")
+            .arg("-l")
+            .arg("224")
+            .pipe_in("test\n")
+            .succeeds()
+            .stdout_str()
+            .to_owned();
+
+        let result_sha224 = new_ucmd!()
+            .arg("-a")
+            .arg("sha224")
+            .pipe_in("test\n")
+            .succeeds()
+            .stdout_str()
+            .to_owned();
+
+        // The outputs should be identical (both produce SHA224)
+        assert_eq!(result_sha2, result_sha224);
+        assert!(result_sha2.contains("SHA224"));
+    }
+
+    #[test]
+    fn test_sha2_with_length_256() {
+        // Test sha2 with 256-bit length (equivalent to sha256)
+        let result_sha2 = new_ucmd!()
+            .arg("-a")
+            .arg("sha2")
+            .arg("-l")
+            .arg("256")
+            .pipe_in("test\n")
+            .succeeds()
+            .stdout_str()
+            .to_owned();
+
+        let result_sha256 = new_ucmd!()
+            .arg("-a")
+            .arg("sha256")
+            .pipe_in("test\n")
+            .succeeds()
+            .stdout_str()
+            .to_owned();
+
+        // The outputs should be identical (both produce SHA256)
+        assert_eq!(result_sha2, result_sha256);
+        assert!(result_sha2.contains("SHA256"));
+    }
+
+    #[test]
+    fn test_sha2_with_length_384() {
+        // Test sha2 with 384-bit length (equivalent to sha384)
+        let result_sha2 = new_ucmd!()
+            .arg("-a")
+            .arg("sha2")
+            .arg("-l")
+            .arg("384")
+            .pipe_in("test\n")
+            .succeeds()
+            .stdout_str()
+            .to_owned();
+
+        let result_sha384 = new_ucmd!()
+            .arg("-a")
+            .arg("sha384")
+            .pipe_in("test\n")
+            .succeeds()
+            .stdout_str()
+            .to_owned();
+
+        // The outputs should be identical (both produce SHA384)
+        assert_eq!(result_sha2, result_sha384);
+        assert!(result_sha2.contains("SHA384"));
+    }
+
+    #[test]
+    fn test_sha2_with_length_512() {
+        // Test sha2 with 512-bit length (equivalent to sha512)
+        let result_sha2 = new_ucmd!()
+            .arg("-a")
+            .arg("sha2")
+            .arg("-l")
+            .arg("512")
+            .pipe_in("test\n")
+            .succeeds()
+            .stdout_str()
+            .to_owned();
+
+        let result_sha512 = new_ucmd!()
+            .arg("-a")
+            .arg("sha512")
+            .pipe_in("test\n")
+            .succeeds()
+            .stdout_str()
+            .to_owned();
+
+        // The outputs should be identical (both produce SHA512)
+        assert_eq!(result_sha2, result_sha512);
+        assert!(result_sha2.contains("SHA512"));
+    }
+
+    #[test]
+    fn test_sha2_invalid_length() {
+        // Test sha2 with invalid length parameters
+        new_ucmd!()
+            .arg("-a")
+            .arg("sha2")
+            .arg("-l")
+            .arg("128")
+            .pipe_in("test\n")
+            .fails_with_code(1)
+            .stderr_contains("Invalid output size for SHA2");
+
+        new_ucmd!()
+            .arg("-a")
+            .arg("sha2")
+            .arg("-l")
+            .arg("1024")
+            .pipe_in("test\n")
+            .fails_with_code(1)
+            .stderr_contains("Invalid output size for SHA2");
+    }
+
+    #[test]
+    fn test_sha2_with_raw_output() {
+        // Test sha2 with raw (binary) output
+        let result = new_ucmd!()
+            .arg("-a")
+            .arg("sha2")
+            .arg("-l")
+            .arg("256")
+            .arg("--raw")
+            .pipe_in("test\n")
+            .succeeds();
+
+        // Raw output should be binary, not hex - check raw bytes instead of trying to convert to string
+        let stdout_bytes = result.stdout();
+        // Raw output should not be empty and should be exactly 32 bytes for SHA256
+        assert_eq!(stdout_bytes.len(), 32);
+        // Should not contain ASCII text like "SHA256"
+        assert!(!stdout_bytes.starts_with(b"SHA256"));
+    }
+
+    #[test]
+    fn test_sha2_with_base64_output() {
+        // Test sha2 with base64 output
+        let result = new_ucmd!()
+            .arg("-a")
+            .arg("sha2")
+            .arg("-l")
+            .arg("256")
+            .arg("--base64")
+            .pipe_in("test\n")
+            .succeeds()
+            .stdout_str()
+            .to_owned();
+
+        // Should contain base64 characters and SHA256 label
+        assert!(result.contains("SHA256"));
+        // Base64 should end with = or == or contain +/
+        assert!(result.contains('=') || result.contains('+') || result.contains('/'));
+    }
+
+    #[test]
+    fn test_sha2_with_file() {
+        // Test sha2 with actual file input
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("test_file.txt", "Hello, world!\n");
+
+        ucmd.arg("-a")
+            .arg("sha2")
+            .arg("-l")
+            .arg("256")
+            .arg("test_file.txt")
+            .succeeds()
+            .stdout_contains("SHA256")
+            .stdout_contains("test_file.txt");
+    }
 }
