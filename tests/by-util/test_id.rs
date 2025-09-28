@@ -18,6 +18,11 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_id_ignore() {
+    new_ucmd!().arg("-a").succeeds();
+}
+
+#[test]
 #[allow(unused_mut)]
 fn test_id_no_specified_user() {
     let ts = TestScenario::new(util_name!());

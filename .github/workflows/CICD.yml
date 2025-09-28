@@ -387,6 +387,13 @@ jobs:
         test -h /tmp/usr/local/bin/sha512sum
         test -h /tmp/usr/local/bin/shake128sum
         test -h /tmp/usr/local/bin/shake256sum
+    - name: "`make UTILS=XXX`"
+      shell: bash
+      run: |
+        set -x
+        # Regression-test for https://github.com/uutils/coreutils/issues/8701
+        make UTILS="rm chmod chown chgrp mv du"
+
   build_rust_stable:
     name: Build/stable
     needs: [ min_version, deps ]
@@ -1327,6 +1334,6 @@ jobs:
             echo "Running benchmarks for packages: ${{ steps.benchmark_list.outputs.benchmark_packages }}"
             for package in ${{ steps.benchmark_list.outputs.benchmark_packages }}; do
               echo "Running benchmarks for $package"
-              cargo codspeed run -p $package
+              cargo codspeed run -p $package > /dev/null
             done
           token: ${{ secrets.CODSPEED_TOKEN }}

@@ -227,6 +227,11 @@ endif
 
 UTILS ?= $(PROGS)
 
+ifneq ($(findstring stdbuf,$(UTILS)),)
+    # Use external libstdbuf per default. It is more robust than embedding libstdbuf.
+	CARGOFLAGS += --features feat_external_libstdbuf
+endif
+
 # Programs with usable tests
 TEST_PROGS  := \
 	base32 \

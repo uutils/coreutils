@@ -3606,11 +3606,13 @@ version = "0.2.2"
 dependencies = [
  "ansi-width",
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "glob",
  "hostname",
  "lscolors",
  "selinux",
+ "tempfile",
  "terminal_size",
  "thiserror 2.0.16",
  "uucore",
@@ -3731,7 +3733,9 @@ name = "uu_numfmt"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
+ "tempfile",
  "thiserror 2.0.16",
  "uucore",
 ]
@@ -3928,6 +3932,7 @@ dependencies = [
  "bigdecimal",
  "binary-heap-plus",
  "clap",
+ "codspeed-divan-compat",
  "compare",
  "ctrlc",
  "fluent",
