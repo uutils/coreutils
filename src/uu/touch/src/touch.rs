@@ -4,17 +4,14 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) filetime datetime lpszfilepath mktime DATETIME datelike timelike
-// spell-checker:ignore (FORMATS) MMDDhhmm YYYYMMDDHHMM YYMMDDHHMM YYYYMMDDHHMMS
+// spell-checker:ignore (FORMATS) mmddhhmm YYYYMMDDHHMM
 
 pub mod error;
 
-use chrono::{
-    DateTime, Datelike, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, NaiveTime,
-    TimeZone, Timelike,
-};
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
 use filetime::{FileTime, set_file_times, set_symlink_file_times};
+use jiff::{Timestamp, ToSpan, Zoned, civil::DateTime, tz::TimeZone};
 use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fs::{self, File};
@@ -27,6 +24,8 @@ use uucore::translate;
 use uucore::{format_usage, show};
 
 use crate::error::TouchError;
+
+const NANO: i128 = 1_000_000_000;
 
 /// Options contains all the possible behaviors and flags for touch.
 ///
@@ -103,35 +102,32 @@ pub mod options {
 
 static ARG_FILES: &str = "files";
 
-mod format {
-    pub(crate) const POSIX_LOCALE: &str = "%a %b %e %H:%M:%S %Y";
-    pub(crate) const ISO_8601: &str = "%Y-%m-%d";
-    // "%Y%m%d%H%M.%S" 15 chars
-    pub(crate) const YYYYMMDDHHMM_DOT_SS: &str = "%Y%m%d%H%M.%S";
-    // "%Y-%m-%d %H:%M:%S.%SS" 12 chars
-    pub(crate) const YYYYMMDDHHMMSS: &str = "%Y-%m-%d %H:%M:%S.%f";
-    // "%Y-%m-%d %H:%M:%S" 12 chars
-    pub(crate) const YYYYMMDDHHMMS: &str = "%Y-%m-%d %H:%M:%S";
-    // "%Y-%m-%d %H:%M" 12 chars
-    // Used for example in tests/touch/no-rights.sh
-    pub(crate) const YYYY_MM_DD_HH_MM: &str = "%Y-%m-%d %H:%M";
-    // "%Y%m%d%H%M" 12 chars
-    pub(crate) const YYYYMMDDHHMM: &str = "%Y%m%d%H%M";
-    // "%Y-%m-%d %H:%M +offset"
-    // Used for example in tests/touch/relative.sh
-    pub(crate) const YYYYMMDDHHMM_OFFSET: &str = "%Y-%m-%d %H:%M %z";
-}
-
-/// Convert a [`DateTime`] with a TZ offset into a [`FileTime`]
+/// Convert a [`Zoned`] into a [`FileTime`]
 ///
-/// The [`DateTime`] is converted into a unix timestamp from which the [`FileTime`] is
-/// constructed.
-fn datetime_to_filetime<T: TimeZone>(dt: &DateTime<T>) -> FileTime {
-    FileTime::from_unix_time(dt.timestamp(), dt.timestamp_subsec_nanos())
+/// The [`Zoned`] is converted into a unix timestamp from which the [`FileTime`]
+/// is constructed.
+///
+/// This function panics if the timestamp cannot be represented as seconds or
+/// nanoseconds within the valid ranges.
+fn datetime_to_filetime(dt: &Zoned) -> FileTime {
+    let ns = dt.timestamp().as_nanosecond();
+    FileTime::from_unix_time(
+        i64::try_from(ns.div_euclid(NANO)).expect("seconds out of i64 range"),
+        u32::try_from(ns.rem_euclid(NANO)).expect("nanoseconds out of u32 range"),
+    )
 }
 
-fn filetime_to_datetime(ft: &FileTime) -> Option<DateTime<Local>> {
-    Some(DateTime::from_timestamp(ft.unix_seconds(), ft.nanoseconds())?.into())
+fn filetime_to_datetime(ft: &FileTime) -> Option<Zoned> {
+    let s = i128::from(ft.seconds());
+    let ns = i128::from(ft.nanoseconds());
+
+    // Validate that nanoseconds are in valid range (0-999,999,999)
+    if ns >= NANO {
+        return None;
+    }
+
+    let ts = Timestamp::from_nanosecond(s.checked_mul(NANO)?.checked_add(ns)?).ok()?;
+    Some(ts.to_zoned(TimeZone::system()))
 }
 
 /// Whether all characters in the string are digits.
@@ -376,7 +372,7 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
             (atime, mtime)
         }
         Source::Now => {
-            let now = datetime_to_filetime(&Local::now());
+            let now = datetime_to_filetime(&Zoned::now());
             (now, now)
         }
         &Source::Timestamp(ts) => (ts, ts),
@@ -588,55 +584,7 @@ fn stat(path: &Path, follow: bool) -> std::io::Result<(FileTime, FileTime)> {
     ))
 }
 
-fn parse_date(ref_time: DateTime<Local>, s: &str) -> Result<FileTime, TouchError> {
-    // This isn't actually compatible with GNU touch, but there doesn't seem to
-    // be any simple specification for what format this parameter allows and I'm
-    // not about to implement GNU parse_datetime.
-    // http://git.savannah.gnu.org/gitweb/?p=gnulib.git;a=blob_plain;f=lib/parse-datetime.y
-
-    // TODO: match on char count?
-
-    // "The preferred date and time representation for the current locale."
-    // "(In the POSIX locale this is equivalent to %a %b %e %H:%M:%S %Y.)"
-    // time 0.1.43 parsed this as 'a b e T Y'
-    // which is equivalent to the POSIX locale: %a %b %e %H:%M:%S %Y
-    // Tue Dec  3 ...
-    // ("%c", POSIX_LOCALE_FORMAT),
-    //
-    if let Ok(parsed) = NaiveDateTime::parse_from_str(s, format::POSIX_LOCALE) {
-        return Ok(datetime_to_filetime(&parsed.and_utc()));
-    }
-
-    // Also support other formats found in the GNU tests like
-    // in tests/misc/stat-nanoseconds.sh
-    // or tests/touch/no-rights.sh
-    for fmt in [
-        format::YYYYMMDDHHMMS,
-        format::YYYYMMDDHHMMSS,
-        format::YYYY_MM_DD_HH_MM,
-        format::YYYYMMDDHHMM_OFFSET,
-    ] {
-        if let Ok(parsed) = NaiveDateTime::parse_from_str(s, fmt) {
-            return Ok(datetime_to_filetime(&parsed.and_utc()));
-        }
-    }
-
-    // "Equivalent to %Y-%m-%d (the ISO 8601 date format). (C99)"
-    // ("%F", ISO_8601_FORMAT),
-    if let Ok(parsed_date) = NaiveDate::parse_from_str(s, format::ISO_8601) {
-        let parsed = Local
-            .from_local_datetime(&parsed_date.and_time(NaiveTime::MIN))
-            .unwrap();
-        return Ok(datetime_to_filetime(&parsed));
-    }
-
-    // "@%s" is "The number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC). (TZ) (Calculated from mktime(tm).)"
-    if s.bytes().next() == Some(b'@') {
-        if let Ok(ts) = &s[1..].parse::<i64>() {
-            return Ok(FileTime::from_unix_time(*ts, 0));
-        }
-    }
-
+fn parse_date(ref_time: Zoned, s: &str) -> Result<FileTime, TouchError> {
     if let Ok(dt) = parse_datetime::parse_datetime_at_date(ref_time, s) {
         return Ok(datetime_to_filetime(&dt));
     }
@@ -672,9 +620,12 @@ fn prepend_century(s: &str) -> UResult<String> {
 /// then cc is 20 for years in the range 0 … 68, and 19 for years in 69 … 99.
 /// in order to be compatible with GNU `touch`.
 fn parse_timestamp(s: &str) -> UResult<FileTime> {
-    use format::*;
+    // "%Y%m%d%H%M.%S" 15 chars
+    const YYYYMMDDHHMM_DOT_SS: &str = "%Y%m%d%H%M.%S";
+    // "%Y%m%d%H%M" 12 chars
+    const YYYYMMDDHHMM: &str = "%Y%m%d%H%M";
 
-    let current_year = || Local::now().year();
+    let current_year = || Zoned::now().year();
 
     let (format, ts) = match s.chars().count() {
         15 => (YYYYMMDDHHMM_DOT_SS, s.to_owned()),
@@ -692,38 +643,33 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
         }
     };
 
-    let local = NaiveDateTime::parse_from_str(&ts, format).map_err(|_| {
+    let dt = DateTime::strptime(format, &ts).map_err(|_| {
         USimpleError::new(
             1,
             translate!("touch-error-invalid-date-ts-format", "date" => ts.quote()),
         )
     })?;
-    let LocalResult::Single(mut local) = Local.from_local_datetime(&local) else {
-        return Err(USimpleError::new(
-            1,
-            translate!("touch-error-invalid-date-ts-format", "date" => ts.quote()),
-        ));
-    };
 
-    // Chrono caps seconds at 59, but 60 is valid. It might be a leap second
-    // or wrap to the next minute. But that doesn't really matter, because we
-    // only care about the timestamp anyway.
+    // Convert the datetime into a `Zoned` object in the system time zone. If
+    // the datetime in the system time zone is ambiguous (e.g., during the "fall
+    // back" or "jump forward" of daylight saving time), the conversion is
+    // rejected and an error is returned.
+    let mut local = TimeZone::system()
+        .to_ambiguous_zoned(dt)
+        .unambiguous()
+        .map_err(|_| {
+            USimpleError::new(
+                1,
+                translate!("touch-error-invalid-date-ts-format", "date" => ts.quote()),
+            )
+        })?;
+
+    // Jiff caps seconds at 59, but 60 is valid. It might be a leap second or
+    // wrap to the next minute. But that doesn't really matter, because we only
+    // care about the timestamp anyway.
     // Tested in gnu/tests/touch/60-seconds
     if local.second() == 59 && ts.ends_with(".60") {
-        local += Duration::try_seconds(1).unwrap();
-    }
-
-    // Due to daylight saving time switch, local time can jump from 1:59 AM to
-    // 3:00 AM, in which case any time between 2:00 AM and 2:59 AM is not
-    // valid. If we are within this jump, chrono takes the offset from before
-    // the jump. If we then jump forward an hour, we get the new corrected
-    // offset. Jumping back will then now correctly take the jump into account.
-    let local2 = local + Duration::try_hours(1).unwrap() - Duration::try_hours(1).unwrap();
-    if local.hour() != local2.hour() {
-        return Err(USimpleError::new(
-            1,
-            translate!("touch-error-invalid-date-format", "date" => s.quote()),
-        ));
+        local += 1.second();
     }
 
     Ok(datetime_to_filetime(&local))

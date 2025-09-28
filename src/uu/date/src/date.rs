@@ -447,22 +447,13 @@ fn make_format_string(settings: &Settings) -> &str {
 }
 
 /// Parse a `String` into a `DateTime`.
-/// If it fails, return a tuple of the `String` along with its `ParseError`.
-// TODO: Convert `parse_datetime` to jiff and remove wrapper from chrono to jiff structures.
+/// If it fails, return a tuple of the `String` along with its `ParseDateTimeError`.
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
 ) -> Result<Zoned, (String, parse_datetime::ParseDateTimeError)> {
-    match parse_datetime::parse_datetime(s.as_ref()) {
-        Ok(date) => {
-            let timestamp =
-                Timestamp::new(date.timestamp(), date.timestamp_subsec_nanos() as i32).unwrap();
-            Ok(Zoned::new(
-                timestamp,
-                TimeZone::try_system().unwrap_or(TimeZone::UTC),
-            ))
-        }
-        Err(e) => Err((s.as_ref().into(), e)),
-    }
+    parse_datetime::parse_datetime(s.as_ref())
+        .map(|d| d.with_time_zone(TimeZone::try_system().unwrap_or(TimeZone::UTC)))
+        .map_err(|e| (s.as_ref().into(), e))
 }
 
 #[cfg(not(any(unix, windows)))]
