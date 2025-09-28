@@ -25,7 +25,7 @@ fn sort_ascii_c_locale(bencher: Bencher) {
 /// Benchmark ASCII-only data sorting with UTF-8 locale
 #[divan::bench]
 fn sort_ascii_utf8_locale(bencher: Bencher) {
-    let data = text_data::generate_ascii_data_simple(10_000);
+    let data = text_data::generate_ascii_data_simple(200_000);
     let file_path = setup_test_file(&data);
 
     bencher.bench(|| {
@@ -39,7 +39,7 @@ fn sort_ascii_utf8_locale(bencher: Bencher) {
 /// Benchmark mixed ASCII/Unicode data with C locale
 #[divan::bench]
 fn sort_mixed_c_locale(bencher: Bencher) {
-    let data = text_data::generate_mixed_locale_data(10_000);
+    let data = text_data::generate_mixed_locale_data(50_000);
     let file_path = setup_test_file(&data);
 
     bencher.bench(|| {
@@ -53,7 +53,7 @@ fn sort_mixed_c_locale(bencher: Bencher) {
 /// Benchmark mixed ASCII/Unicode data with UTF-8 locale
 #[divan::bench]
 fn sort_mixed_utf8_locale(bencher: Bencher) {
-    let data = text_data::generate_mixed_locale_data(10_000);
+    let data = text_data::generate_mixed_locale_data(50_000);
     let file_path = setup_test_file(&data);
 
     bencher.bench(|| {
@@ -67,7 +67,7 @@ fn sort_mixed_utf8_locale(bencher: Bencher) {
 /// Benchmark German locale-specific data with C locale
 #[divan::bench]
 fn sort_german_c_locale(bencher: Bencher) {
-    let data = text_data::generate_german_locale_data(10_000);
+    let data = text_data::generate_german_locale_data(50_000);
     let file_path = setup_test_file(&data);
 
     bencher.bench(|| {
@@ -81,7 +81,7 @@ fn sort_german_c_locale(bencher: Bencher) {
 /// Benchmark German locale-specific data with German locale
 #[divan::bench]
 fn sort_german_locale(bencher: Bencher) {
-    let data = text_data::generate_german_locale_data(10_000);
+    let data = text_data::generate_german_locale_data(50_000);
     let file_path = setup_test_file(&data);
 
     bencher.bench(|| {
@@ -95,7 +95,7 @@ fn sort_german_locale(bencher: Bencher) {
 /// Benchmark random strings of different lengths
 #[divan::bench]
 fn sort_random_strings(bencher: Bencher) {
-    let data = text_data::generate_random_strings(10_000, 50);
+    let data = text_data::generate_random_strings(50_000, 50);
     let file_path = setup_test_file(&data);
 
     bencher.bench(|| {
@@ -110,8 +110,8 @@ fn sort_random_strings(bencher: Bencher) {
 #[divan::bench]
 fn sort_numeric(bencher: Bencher) {
     let mut data = Vec::new();
-    for i in 0..10_000 {
-        let line = format!("{}\n", 10_000 - i);
+    for i in 0..50_000 {
+        let line = format!("{}\n", 50_000 - i);
         data.extend_from_slice(line.as_bytes());
     }
     let file_path = setup_test_file(&data);
@@ -130,7 +130,7 @@ fn sort_numeric(bencher: Bencher) {
 /// Benchmark reverse sorting
 #[divan::bench]
 fn sort_reverse_mixed(bencher: Bencher) {
-    let data = text_data::generate_mixed_locale_data(10_000);
+    let data = text_data::generate_mixed_locale_data(50_000);
     let file_path = setup_test_file(&data);
 
     bencher.bench(|| {
@@ -147,7 +147,7 @@ fn sort_reverse_mixed(bencher: Bencher) {
 /// Benchmark unique sorting
 #[divan::bench]
 fn sort_unique_mixed(bencher: Bencher) {
-    let data = text_data::generate_mixed_locale_data(10_000);
+    let data = text_data::generate_mixed_locale_data(50_000);
     let file_path = setup_test_file(&data);
 
     bencher.bench(|| {

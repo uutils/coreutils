@@ -79,7 +79,7 @@ fn numfmt_large_numbers_si(bencher: Bencher, count: usize) {
 }
 
 /// Benchmark different padding widths
-#[divan::bench(args = [(1_000_000, 5), (1_000_000, 50)])]
+#[divan::bench(args = [(1_000_000, 50)])]
 fn numfmt_padding(bencher: Bencher, (count, padding): (usize, usize)) {
     let data = text_data::generate_numbers(count);
     let file_path = setup_test_file(data.as_bytes());
@@ -95,7 +95,7 @@ fn numfmt_padding(bencher: Bencher, (count, padding): (usize, usize)) {
 }
 
 /// Benchmark round modes with SI formatting
-#[divan::bench(args = [("up", 100_000), ("down", 1_000_000), ("towards-zero", 1_000_000)])]
+#[divan::bench(args = [("up", 1_000_000), ("down", 1_000_000), ("towards-zero", 1_000_000)])]
 fn numfmt_round_modes(bencher: Bencher, (round_mode, count): (&str, usize)) {
     let data = text_data::generate_numbers(count);
     let file_path = setup_test_file(data.as_bytes());
