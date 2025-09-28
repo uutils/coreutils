@@ -2202,16 +2202,19 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
         require_literal_separator: false,
         case_sensitive: true,
     };
+
     let file_name = entry.file_name();
     // If the decoding fails, still match best we can
     // FIXME: use OsStrings or Paths once we have a glob crate that supports it:
     // https://github.com/rust-lang/glob/issues/23
     // https://github.com/rust-lang/glob/issues/78
     // https://github.com/BurntSushi/ripgrep/issues/1250
+
     let file_name = match file_name.to_str() {
-        Some(s) => s.to_string(),
-        None => file_name.to_string_lossy().into_owned(),
+        Some(s) => Cow::Borrowed(s),
+        None => file_name.to_string_lossy(),
     };
+
     !config
         .ignore_patterns
         .iter()
