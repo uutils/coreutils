@@ -216,7 +216,7 @@ ifeq ($(filter $(OS),Darwin FreeBSD),$(OS))
 endif
 
 # Build and test SELinux programs if enabled
-ifeq ($(SELINUX_ENABLED),0)
+ifeq ($(SELINUX_ENABLED),1)
 	PROGS := $(PROGS) $(SELINUX_PROGS)
 else
 	SKIP_UTILS := $(SKIP_UTILS) $(SELINUX_PROGS)
