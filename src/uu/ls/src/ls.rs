@@ -1906,6 +1906,19 @@ impl PathData {
             .get_or_init(|| self.get_metadata(out).map(|md| md.file_type()))
             .as_ref()
     }
+
+    fn with_new_display_name(&self, display_name: &str) -> PathData {
+        PathData {
+            md: self.md.clone(),
+            ft: self.ft.clone(),
+            de: None,
+            display_name: display_name.into(),
+            p_buf: self.p_buf.clone(),
+            security_context: self.security_context.clone(),
+            must_dereference: self.must_dereference,
+            command_line: self.command_line,
+        }
+    }
 }
 
 /// Show the directory name in the case where several arguments are given to ls
@@ -2058,6 +2071,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
 
         recurse_directories(path_data, read_dir, config, &mut state, &mut dired)?;
     }
+
     if config.dired && !config.hyperlink {
         dired::print_dired_output(config, &dired, &mut state.out)?;
     }
@@ -2178,26 +2192,20 @@ fn enter_directory(
     entries_stack: &mut Vec<PathData>,
 ) -> UResult<()> {
     // Create vec of entries with initial dot files
-    let mut entries: Vec<PathData> = if config.files == Files::All {
-        vec![
-            PathData::new(
-                path_data.p_buf.clone(),
-                None,
-                Some(".".into()),
-                config,
-                false,
-            ),
-            PathData::new(
-                path_data.p_buf.join(".."),
-                None,
-                Some("..".into()),
-                config,
-                false,
-            ),
-        ]
-    } else {
-        vec![]
-    };
+    let mut entries: Vec<PathData> = Vec::new();
+
+    if config.files == Files::All {
+        let current_dir = path_data.with_new_display_name(".");
+
+        entries.push(current_dir);
+
+        if let Some(parent) = path_data.p_buf.parent() {
+            let current_parent =
+                PathData::new(parent.to_path_buf(), None, Some("..".into()), config, false);
+
+            entries.push(current_parent);
+        }
+    }
 
     // Convert those entries to the PathData struct
     for raw_entry in read_dir {
@@ -2248,12 +2256,6 @@ fn recurse_directories(
     state: &mut ListState,
     dired: &mut DiredOutput,
 ) -> UResult<()> {
-    let mut listed_ancestors = HashSet::new();
-    listed_ancestors.insert(FileInformation::from_path(
-        &path_data.p_buf,
-        path_data.must_dereference,
-    )?);
-
     let mut entries_stack: Vec<PathData> = Vec::new();
 
     enter_directory(
@@ -2266,6 +2268,12 @@ fn recurse_directories(
     )?;
 
     if config.recursive {
+        let mut listed_ancestors = HashSet::new();
+
+        let file_info = FileInformation::from_path(&path_data.p_buf, path_data.must_dereference)?;
+
+        listed_ancestors.insert(file_info);
+
         while let Some(item) = entries_stack.pop() {
             match fs::read_dir(&item.p_buf) {
                 Err(err) => {
@@ -2532,6 +2540,7 @@ fn display_items(
     Ok(())
 }
 
+#[inline]
 fn display_short_common(
     items: &[PathData],
     config: &Config,
@@ -2555,9 +2564,18 @@ fn display_short_common(
     }
 
     let mut names_vec = Vec::new();
+    #[cfg(unix)]
+    let should_display_leading_info = config.inode || config.alloc_size;
+    #[cfg(not(unix))]
+    let should_display_leading_info = config.alloc_size;
+
     for i in items {
-        let more_info =
-            display_additional_leading_info(i, padding_collection, config, &mut state.out)?;
+        let more_info: Option<String> = if should_display_leading_info {
+            display_additional_leading_info(i, padding_collection, config, &mut state.out).ok()
+        } else {
+            None
+        };
+
         // it's okay to set current column to zero which is used to decide
         // whether text will wrap or not, because when format is grid or
         // column ls will try to place the item name in a new line if it
@@ -2801,7 +2819,7 @@ fn display_item_long(
             item,
             config,
             None,
-            String::new(),
+            None,
             state,
             LazyCell::new(Box::new(|| {
                 ansi_width(&String::from_utf8_lossy(&output_display))
@@ -2896,7 +2914,7 @@ fn display_item_long(
             item,
             config,
             None,
-            String::new(),
+            None,
             state,
             LazyCell::new(Box::new(|| {
                 ansi_width(&String::from_utf8_lossy(&output_display))
@@ -3088,7 +3106,7 @@ fn display_item_name(
     path: &PathData,
     config: &Config,
     prefix_context: Option<usize>,
-    more_info: String,
+    more_info: Option<String>,
     state: &mut ListState,
     current_column: LazyCell<usize, Box<dyn FnOnce() -> usize + '_>>,
 ) -> OsString {
@@ -3114,10 +3132,12 @@ fn display_item_name(
         );
     }
 
-    if config.format != Format::Long && !more_info.is_empty() {
-        let old_name = name;
-        name = more_info.into();
-        name.push(&old_name);
+    if config.format != Format::Long {
+        if let Some(info) = more_info {
+            let old_name = name;
+            name = info.into();
+            name.push(&old_name);
+        }
     }
 
     if config.indicator_style != IndicatorStyle::None {
@@ -3182,7 +3202,7 @@ fn display_item_name(
                         )
                         .is_err()
                     {
-                        name.push(path.p_buf.read_link().unwrap());
+                        name.push(target);
                     } else {
                         name.push(color_name(
                             locale_aware_escape_name(target.as_os_str(), config.quoting_style),
