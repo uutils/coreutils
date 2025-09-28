@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont
+// spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont OFLOW
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -392,6 +392,31 @@ fn test_length_greater_than_512() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_is_fixture("length_larger_than_512.expected");
+}
+
+#[test]
+fn test_length_513_shows_max_length_error() {
+    // Test that length 513 shows "maximum digest length" error before "not multiple of 8" error
+    new_ucmd!()
+        .arg("--length=513")
+        .arg("--algorithm=blake2b")
+        .arg("/dev/null")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("maximum digest length for 'BLAKE2b' is 512 bits");
+}
+
+#[test]
+fn test_length_very_large_number() {
+    // Test that very large numbers like UINTMAX_OFLOW show proper error messages
+    new_ucmd!()
+        .arg("--length=18446744073709551616")
+        .arg("--algorithm=blake2b")
+        .arg("/dev/null")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("invalid length: '18446744073709551616'")
+        .stderr_contains("maximum digest length for 'BLAKE2b' is 512 bits");
 }
 
 #[test]

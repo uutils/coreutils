@@ -269,7 +269,24 @@ fn test_invalid_b2sum_length_option_too_large() {
         .ccmd("b2sum")
         .arg("--length=513")
         .arg(at.subdir.join("testf"))
-        .fails_with_code(1);
+        .fails_with_code(1)
+        .stderr_contains("maximum digest length for 'BLAKE2b' is 512 bits");
+}
+
+#[test]
+fn test_invalid_b2sum_length_very_large_number() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("testf", "foobar\n");
+
+    scene
+        .ccmd("b2sum")
+        .arg("--length=18446744073709551616")
+        .arg(at.subdir.join("testf"))
+        .fails_with_code(1)
+        .stderr_contains("invalid length: '18446744073709551616'")
+        .stderr_contains("maximum digest length for 'BLAKE2b' is 512 bits");
 }
 
 #[test]

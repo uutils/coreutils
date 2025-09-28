@@ -17,6 +17,7 @@ use std::{
 };
 
 use crate::{
+    display::Quotable as DisplayQuotable,
     error::{FromIo, UError, UResult, USimpleError},
     os_str_as_bytes, os_str_from_bytes,
     quoting_style::{QuotingStyle, locale_aware_escape_name},
@@ -25,7 +26,7 @@ use crate::{
         Blake2b, Blake3, Bsd, CRC32B, Crc, Digest, DigestWriter, Md5, Sha1, Sha3_224, Sha3_256,
         Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256, Sm3, SysV,
     },
-    util_name,
+    translate, util_name,
 };
 use thiserror::Error;
 
@@ -1185,21 +1186,46 @@ pub fn digest_reader<T: Read>(
     }
 }
 
+/// Validates and calculates the length of the digest from a string input.
+/// This function handles very large numbers that might not fit in usize.
+pub fn validate_blake2b_length_str(length_str: &str) -> UResult<Option<usize>> {
+    // First try to parse as u128 to handle very large numbers
+    match length_str.parse::<u128>() {
+        Ok(length_u128) => {
+            if length_u128 > usize::MAX as u128 {
+                // For very large numbers, always show the max length error
+                show_error!("invalid length: '{length_str}'");
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "maximum digest length for 'BLAKE2b' is 512 bits",
+                )
+                .into());
+            }
+            let length = length_u128 as usize;
+            calculate_blake2b_length(length)
+        }
+        Err(_) => {
+            show_error!("invalid length: '{length_str}'");
+            Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid length").into())
+        }
+    }
+}
+
 /// Calculates the length of the digest.
 pub fn calculate_blake2b_length(length: usize) -> UResult<Option<usize>> {
     match length {
         0 => Ok(None),
-        n if n % 8 != 0 => {
-            show_error!("invalid length: \u{2018}{length}\u{2019}");
-            Err(io::Error::new(io::ErrorKind::InvalidInput, "length is not a multiple of 8").into())
-        }
         n if n > 512 => {
-            show_error!("invalid length: \u{2018}{length}\u{2019}");
+            show_error!("invalid length: '{length}'");
             Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "maximum digest length for \u{2018}BLAKE2b\u{2019} is 512 bits",
+                "maximum digest length for 'BLAKE2b' is 512 bits",
             )
             .into())
+        }
+        n if n % 8 != 0 => {
+            show_error!("invalid length: '{length}'");
+            Err(io::Error::new(io::ErrorKind::InvalidInput, "length is not a multiple of 8").into())
         }
         n => {
             // Divide by 8, as our blake2b implementation expects bytes instead of bits.
@@ -1210,6 +1236,75 @@ pub fn calculate_blake2b_length(length: usize) -> UResult<Option<usize>> {
             } else {
                 Ok(Some(n / 8))
             }
+        }
+    }
+}
+
+/// Validate BLAKE2b length with Fluent error messages
+/// This function is used by utilities that need localized error messages
+pub fn validate_blake2b_length(length_str: &str, utility_name: &str) -> UResult<Option<usize>> {
+    // First try to parse as u128 to handle very large numbers
+    match length_str.parse::<u128>() {
+        Ok(length_u128) => {
+            if length_u128 > usize::MAX as u128 {
+                // For very large numbers, always show the max length error
+                // Use the original string to avoid precision issues
+                let error_key = format!("{}-error-invalid-length", utility_name);
+                let max_key = format!("{}-error-max-digest-length", utility_name);
+                show_error!(
+                    "{}",
+                    translate!(&error_key, "length" => DisplayQuotable::quote(length_str))
+                );
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    translate!(&max_key, "algorithm" => "BLAKE2b", "max_bits" => 512),
+                )
+                .into());
+            }
+            let length = length_u128 as usize;
+            match length {
+                0 => Ok(None),
+                n if n > 512 => {
+                    let error_key = format!("{}-error-invalid-length", utility_name);
+                    let max_key = format!("{}-error-max-digest-length", utility_name);
+                    show_error!(
+                        "{}",
+                        translate!(&error_key, "length" => DisplayQuotable::quote(length_str))
+                    );
+                    Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        translate!(&max_key, "algorithm" => "BLAKE2b", "max_bits" => 512),
+                    )
+                    .into())
+                }
+                n if n % 8 != 0 => {
+                    let error_key = format!("{}-error-invalid-length", utility_name);
+                    show_error!(
+                        "{}",
+                        translate!(&error_key, "length" => DisplayQuotable::quote(length_str))
+                    );
+                    Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "length is not a multiple of 8",
+                    )
+                    .into())
+                }
+                n => {
+                    // Divide by 8, as our blake2b implementation expects bytes instead of bits.
+                    if n == 512 {
+                        // When length is 512, it is blake2b's default.
+                        // So, don't show it
+                        Ok(None)
+                    } else {
+                        Ok(Some(n / 8))
+                    }
+                }
+            }
+        }
+        Err(_) => {
+            let error_key = format!("{}-error-invalid-length", utility_name);
+            show_error!("{}", translate!(&error_key, "length" => length_str.quote()));
+            Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid length").into())
         }
     }
 }
