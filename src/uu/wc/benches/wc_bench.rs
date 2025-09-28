@@ -8,7 +8,7 @@ use uu_wc::uumain;
 use uucore::benchmark::{create_test_file, run_util_function, text_data};
 
 /// Benchmark different file sizes for byte counting
-#[divan::bench(args = [100])]
+#[divan::bench(args = [500])]
 fn wc_bytes_synthetic(bencher: Bencher, size_mb: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = text_data::generate_by_size(size_mb, 80);
@@ -20,7 +20,7 @@ fn wc_bytes_synthetic(bencher: Bencher, size_mb: usize) {
     });
 }
 
-#[divan::bench(args = [1_000])]
+#[divan::bench(args = [2_000])]
 fn wc_words_synthetic(bencher: Bencher, size_mb: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = text_data::generate_by_size(size_mb, 80);
@@ -33,7 +33,7 @@ fn wc_words_synthetic(bencher: Bencher, size_mb: usize) {
 }
 
 /// Benchmark combined byte+line counting
-#[divan::bench(args = [1_000])]
+#[divan::bench(args = [2_000])]
 fn wc_bytes_lines_synthetic(bencher: Bencher, size_mb: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = text_data::generate_by_size(size_mb, 80);
@@ -46,7 +46,7 @@ fn wc_bytes_lines_synthetic(bencher: Bencher, size_mb: usize) {
 }
 
 /// Test different line lengths impact on performance
-#[divan::bench(args = [(5, 500)])]
+#[divan::bench(args = [(50, 500)])]
 fn wc_lines_variable_length(bencher: Bencher, (size_mb, avg_line_len): (usize, usize)) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = text_data::generate_by_size(size_mb, avg_line_len);

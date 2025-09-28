@@ -148,7 +148,7 @@ fn tsort_linear_chain(bencher: Bencher, num_nodes: usize) {
 }
 
 /// Benchmark tree-like DAG structures
-#[divan::bench(args = [(7, 2)])]
+#[divan::bench(args = [(10, 3)])]
 fn tsort_tree_dag(bencher: Bencher, (depth, branching): (usize, usize)) {
     let data = generate_tree_dag(depth, branching);
     let file_path = setup_test_file(&data);
