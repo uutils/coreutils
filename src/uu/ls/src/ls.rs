@@ -2564,7 +2564,10 @@ fn display_short_common(
     }
 
     let mut names_vec = Vec::new();
+    #[cfg(unix)]
     let should_display_leading_info = config.inode || config.alloc_size;
+    #[cfg(not(unix))]
+    let should_display_leading_info = config.alloc_size;
 
     for i in items {
         let more_info: Option<String> = if should_display_leading_info {
