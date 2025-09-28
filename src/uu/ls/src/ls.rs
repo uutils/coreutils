@@ -3198,7 +3198,7 @@ fn display_item_name(
                         )
                         .is_err()
                     {
-                        name.push(path.p_buf.read_link().unwrap());
+                        name.push(target);
                     } else {
                         name.push(color_name(
                             locale_aware_escape_name(target.as_os_str(), config.quoting_style),
