@@ -28,6 +28,10 @@ rm-help-preserve-root = do not remove '/' (default)
 rm-help-recursive = remove directories and their contents recursively
 rm-help-dir = remove empty directories
 rm-help-verbose = explain what is being done
+rm-help-progress = display a progress bar. Note: this feature is not supported by GNU coreutils.
+
+# Progress messages
+rm-progress-removing = Removing
 
 # Error messages
 rm-error-missing-operand = missing operand
