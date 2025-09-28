@@ -2503,8 +2503,18 @@ fn display_items(
         }
 
         let mut names_vec = Vec::new();
+
+        #[cfg(unix)]
+        let should_display_leading_info = config.inode || config.alloc_size;
+        #[cfg(not(unix))]
+        let should_display_leading_info = config.alloc_size;
+
         for i in items {
-            let more_info = display_additional_leading_info(i, &padding, config)?;
+            let more_info = if should_display_leading_info {
+                Some(display_additional_leading_info(i, &padding, config)?)
+            } else {
+                None
+            };
             // it's okay to set current column to zero which is used to decide
             // whether text will wrap or not, because when format is grid or
             // column ls will try to place the item name in a new line if it
@@ -2804,7 +2814,7 @@ fn display_item_long(
             item,
             config,
             None,
-            String::new(),
+            None,
             state,
             LazyCell::new(Box::new(|| {
                 ansi_width(&String::from_utf8_lossy(&output_display))
@@ -2903,7 +2913,7 @@ fn display_item_long(
             item,
             config,
             None,
-            String::new(),
+            None,
             state,
             LazyCell::new(Box::new(|| {
                 ansi_width(&String::from_utf8_lossy(&output_display))
@@ -3093,7 +3103,7 @@ fn display_item_name(
     path: &PathData,
     config: &Config,
     prefix_context: Option<usize>,
-    more_info: String,
+    more_info: Option<String>,
     state: &mut ListState,
     current_column: LazyCell<usize, Box<dyn FnOnce() -> usize + '_>>,
 ) -> OsString {
@@ -3112,10 +3122,12 @@ fn display_item_name(
         name = color_name(name, path, style_manager, None, is_wrap(len));
     }
 
-    if config.format != Format::Long && !more_info.is_empty() {
-        let old_name = name;
-        name = more_info.into();
-        name.push(&old_name);
+    if config.format != Format::Long {
+        if let Some(info) = more_info {
+            let old_name = name;
+            name = info.into();
+            name.push(&old_name);
+        }
     }
 
     if config.indicator_style != IndicatorStyle::None {
