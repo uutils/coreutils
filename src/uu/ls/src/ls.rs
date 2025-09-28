@@ -2151,19 +2151,23 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
 
     if config.group_directories_first && config.sort != Sort::None {
         entries.sort_by_key(|p| {
-            let md = {
+            let ft = {
                 // We will always try to deref symlinks to group directories, so PathData.md
                 // is not always useful.
-                if p.must_dereference { p.md.get() } else { None }
+                if p.must_dereference {
+                    p.file_type()
+                } else {
+                    None
+                }
             };
 
-            !match md {
-                None | Some(None) => {
+            !match ft {
+                None => {
                     // If it metadata cannot be determined, treat as a file.
-                    get_metadata_with_deref_opt(p.path(), true)
+                    get_metadata_with_deref_opt(p.p_buf.as_path(), true)
                         .map_or_else(|_| false, |m| m.is_dir())
                 }
-                Some(Some(m)) => m.is_dir(),
+                Some(ft) => ft.is_dir(),
             }
         });
     }
