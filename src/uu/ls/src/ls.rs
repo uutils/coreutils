@@ -16,7 +16,6 @@ use std::{
     cell::{LazyCell, OnceCell},
     cmp::Reverse,
     ffi::{OsStr, OsString},
-    fmt::Write as FmtWrite,
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
     io::{BufWriter, ErrorKind, IsTerminal, Stdout, Write, stdout},
     iter,
@@ -2411,7 +2410,8 @@ fn display_additional_leading_info(
             } else {
                 "?".to_owned()
             };
-            write!(result, "{} ", pad_left(&i, padding.inode)).unwrap();
+            result.push_str(&pad_left(&i, padding.inode));
+            result.push(' ');
         }
     }
 
@@ -2423,9 +2423,11 @@ fn display_additional_leading_info(
         };
         // extra space is insert to align the sizes, as needed for all formats, except for the comma format.
         if config.format == Format::Commas {
-            write!(result, "{s} ").unwrap();
+            result.push_str(&s);
+            result.push(' ');
         } else {
-            write!(result, "{} ", pad_left(&s, padding.block_size)).unwrap();
+            result.push_str(&pad_left(&s, padding.block_size));
+            result.push(' ');
         }
     }
     Ok(result)
@@ -2556,8 +2558,22 @@ fn display_short_common(
 
     let mut names_vec = Vec::new();
     for i in items {
-        let more_info =
-            display_additional_leading_info(i, padding_collection, config, &mut state.out)?;
+        #[cfg(unix)]
+        let should_display_leading_info = config.inode || config.alloc_size;
+        #[cfg(not(unix))]
+        let should_display_leading_info = config.alloc_size;
+
+        let more_info = if should_display_leading_info {
+            Some(display_additional_leading_info(
+                i,
+                padding_collection,
+                config,
+                &mut state.out,
+            )?)
+        } else {
+            None
+        };
+
         // it's okay to set current column to zero which is used to decide
         // whether text will wrap or not, because when format is grid or
         // column ls will try to place the item name in a new line if it
@@ -2801,7 +2817,7 @@ fn display_item_long(
             item,
             config,
             None,
-            String::new(),
+            None,
             state,
             LazyCell::new(Box::new(|| {
                 ansi_width(&String::from_utf8_lossy(&output_display))
@@ -2896,7 +2912,7 @@ fn display_item_long(
             item,
             config,
             None,
-            String::new(),
+            None,
             state,
             LazyCell::new(Box::new(|| {
                 ansi_width(&String::from_utf8_lossy(&output_display))
@@ -3088,7 +3104,7 @@ fn display_item_name(
     path: &PathData,
     config: &Config,
     prefix_context: Option<usize>,
-    more_info: String,
+    more_info: Option<String>,
     state: &mut ListState,
     current_column: LazyCell<usize, Box<dyn FnOnce() -> usize + '_>>,
 ) -> OsString {
@@ -3114,10 +3130,12 @@ fn display_item_name(
         );
     }
 
-    if config.format != Format::Long && !more_info.is_empty() {
-        let old_name = name;
-        name = more_info.into();
-        name.push(&old_name);
+    if config.format != Format::Long {
+        if let Some(info) = more_info {
+            let old_name = name;
+            name = info.into();
+            name.push(old_name);
+        }
     }
 
     if config.indicator_style != IndicatorStyle::None {
