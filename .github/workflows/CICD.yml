@@ -295,7 +295,7 @@ jobs:
         mv -t target/ target.cache/release 2>/dev/null || true
     - name: "`make nextest`"
       shell: bash
-      run: make nextest CARGOFLAGS="--profile ci --hide-progress-bar"
+      run: make nextest PROFILE=ci CARGOFLAGS="--hide-progress-bar"
       env:
         RUST_BACKTRACE: "1"
     - name: "`make install PROFILE=release-fast COMPLETIONS=n MANPAGES=n`"
