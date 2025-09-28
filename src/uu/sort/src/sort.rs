@@ -1272,12 +1272,31 @@ fn default_merge_batch_size() -> usize {
     }
 }
 
+/// Check if locale-aware collation will be needed based on sort settings and locale
+fn will_need_locale_collation(settings: &GlobalSettings) -> bool {
+    // First check if we're using the C locale (DEFAULT_LOCALE), which doesn't need collator
+    let (locale, _) = uucore::i18n::get_collating_locale();
+    if *locale == uucore::i18n::DEFAULT_LOCALE {
+        return false;
+    }
+
+    // Check each selector to see if any would use locale comparison
+    for selector in &settings.selectors {
+        let key_settings = &selector.settings;
+        if key_settings.mode == SortMode::Default
+            && !key_settings.ignore_case
+            && !key_settings.ignore_non_printing
+            && !key_settings.dictionary_order
+        {
+            return true;
+        }
+    }
+    false
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // Initialize locale-aware collator for string comparisons
-    uucore::i18n::collator::try_init_collator(CollatorOptions::default());
-
     let mut settings = GlobalSettings::default();
 
     let matches = uucore::clap_localization::handle_clap_result_with_exit_code(
@@ -1574,6 +1593,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let output = Output::new(matches.get_one::<OsString>(options::OUTPUT))?;
 
     settings.init_precomputed();
+
+    // Initialize locale-aware collator only if needed for string comparisons
+    if will_need_locale_collation(&settings) {
+        uucore::i18n::collator::try_init_collator(CollatorOptions::default());
+    }
 
     let result = exec(&mut files, &settings, output, &mut tmp_dir);
     // Wait here if `SIGINT` was received,
