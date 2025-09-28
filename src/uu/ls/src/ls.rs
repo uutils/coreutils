@@ -1918,7 +1918,7 @@ impl PathData {
             .as_ref()
     }
 
-    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    //#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     fn xattrs(&self) -> Option<&HashMap<OsString, Vec<u8>>> {
         self.xattrs
             .get_or_init(
@@ -3159,7 +3159,7 @@ fn display_item_name(
         };
 
         if let Some(c) = char_opt {
-            name.push(OsStr::new(&c.to_string()));
+            name.push(OsStr::new(&c));
         }
     }
 
@@ -3198,7 +3198,7 @@ fn display_item_name(
                         )
                         .is_err()
                     {
-                        name.push(path.p_buf.read_link().unwrap());
+                        name.push(target);
                     } else {
                         name.push(color_name(
                             locale_aware_escape_name(target.as_os_str(), config.quoting_style),
