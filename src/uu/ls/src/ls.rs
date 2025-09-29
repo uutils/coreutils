@@ -5,10 +5,11 @@
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime
 
+#[cfg(unix)]
+use fnv::FnvHashMap as HashMap;
+use fnv::FnvHashSet as HashSet;
 use std::borrow::Cow;
 use std::cell::RefCell;
-#[cfg(unix)]
-use std::collections::HashMap;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
@@ -16,7 +17,6 @@ use std::os::windows::fs::MetadataExt;
 use std::{
     cell::{LazyCell, OnceCell},
     cmp::Reverse,
-    collections::HashSet,
     ffi::{OsStr, OsString},
     fmt::Write as FmtWrite,
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
@@ -1998,9 +1998,9 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         out: BufWriter::new(stdout()),
         style_manager: config.color.as_ref().map(StyleManager::new),
         #[cfg(unix)]
-        uid_cache: HashMap::new(),
+        uid_cache: HashMap::default(),
         #[cfg(unix)]
-        gid_cache: HashMap::new(),
+        gid_cache: HashMap::default(),
         // Time range for which to use the "recent" format. Anything from 0.5 year in the past to now
         // (files with modification time in the future use "old" format).
         // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
@@ -2089,7 +2089,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 writeln!(state.out)?;
             }
         }
-        let mut listed_ancestors = HashSet::new();
+        let mut listed_ancestors = HashSet::default();
         listed_ancestors.insert(FileInformation::from_path(
             path_data.path(),
             path_data.must_dereference,
