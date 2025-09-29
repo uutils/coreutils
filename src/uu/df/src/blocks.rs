@@ -105,7 +105,9 @@ pub(crate) fn to_magnitude_and_suffix(
     } else {
         let tenths_place = rem / (bases[i] / 10);
 
-        if rem % (bases[i] / 10) == 0 {
+        if quot >= 100 && rem > 0 {
+            format!("{}{suffix}", quot + 1)
+        } else if rem % (bases[i] / 10) == 0 {
             format!("{quot}.{tenths_place}{suffix}")
         } else if tenths_place + 1 == 10 || quot >= 10 {
             let quot = quot + 1;
