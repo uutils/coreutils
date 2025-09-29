@@ -124,6 +124,22 @@ fn test_df_output() {
 }
 
 #[test]
+fn test_df_follows_symlinks() {
+    let output = new_ucmd!()
+        .arg("-h")
+        .arg("--output=source")
+        .succeeds()
+        .stdout_str_lossy();
+
+    let filesystems = output.lines().skip(1).collect::<Vec<&str>>();
+    assert!(
+        filesystems
+            .iter()
+            .all(|&x| !std::path::Path::new(x).is_symlink())
+    );
+}
+
+#[test]
 fn test_df_output_overridden() {
     let expected = if cfg!(target_os = "macos") {
         vec![

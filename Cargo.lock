@@ -4172,7 +4172,9 @@ name = "uu_uniq"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
+ "tempfile",
  "uucore",
 ]
 

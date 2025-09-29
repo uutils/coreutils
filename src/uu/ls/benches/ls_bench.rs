@@ -145,7 +145,7 @@ fn create_mixed_tree(base_dir: &Path) -> std::io::Result<()> {
 }
 
 /// Benchmark ls -R on balanced directory tree
-#[divan::bench(args = [(3, 4, 8), (4, 3, 6), (5, 2, 10)])]
+#[divan::bench(args = [(6, 4, 15)])]
 fn ls_recursive_balanced_tree(
     bencher: Bencher,
     (depth, dirs_per_level, files_per_dir): (usize, usize, usize),
@@ -156,7 +156,7 @@ fn ls_recursive_balanced_tree(
 }
 
 /// Benchmark ls -R -a -l on balanced directory tree (tests PR #8728 optimization)
-#[divan::bench(args = [(3, 4, 8), (4, 3, 6), (5, 2, 10)])]
+#[divan::bench(args = [(6, 4, 15)])]
 fn ls_recursive_long_all_balanced_tree(
     bencher: Bencher,
     (depth, dirs_per_level, files_per_dir): (usize, usize, usize),
@@ -167,7 +167,7 @@ fn ls_recursive_long_all_balanced_tree(
 }
 
 /// Benchmark ls -R on wide directory structures
-#[divan::bench(args = [(1000, 200), (5000, 500), (10000, 1000)])]
+#[divan::bench(args = [(10000, 1000)])]
 fn ls_recursive_wide_tree(bencher: Bencher, (total_files, total_dirs): (usize, usize)) {
     let temp_dir = TempDir::new().unwrap();
     create_wide_tree(temp_dir.path(), total_files, total_dirs).unwrap();
@@ -175,7 +175,7 @@ fn ls_recursive_wide_tree(bencher: Bencher, (total_files, total_dirs): (usize, u
 }
 
 /// Benchmark ls -R -a -l on wide directory structures
-#[divan::bench(args = [(1000, 200), (5000, 500)])]
+#[divan::bench(args = [(15000, 1500)])]
 fn ls_recursive_long_all_wide_tree(bencher: Bencher, (total_files, total_dirs): (usize, usize)) {
     let temp_dir = TempDir::new().unwrap();
     create_wide_tree(temp_dir.path(), total_files, total_dirs).unwrap();
@@ -183,7 +183,7 @@ fn ls_recursive_long_all_wide_tree(bencher: Bencher, (total_files, total_dirs): 
 }
 
 /// Benchmark ls -R on deep directory structures
-#[divan::bench(args = [(20, 3), (50, 2), (100, 1)])]
+#[divan::bench(args = [(200, 2)])]
 fn ls_recursive_deep_tree(bencher: Bencher, (depth, files_per_level): (usize, usize)) {
     let temp_dir = TempDir::new().unwrap();
     create_deep_tree(temp_dir.path(), depth, files_per_level).unwrap();
@@ -191,7 +191,7 @@ fn ls_recursive_deep_tree(bencher: Bencher, (depth, files_per_level): (usize, us
 }
 
 /// Benchmark ls -R -a -l on deep directory structures
-#[divan::bench(args = [(20, 3), (50, 2)])]
+#[divan::bench(args = [(100, 4)])]
 fn ls_recursive_long_all_deep_tree(bencher: Bencher, (depth, files_per_level): (usize, usize)) {
     let temp_dir = TempDir::new().unwrap();
     create_deep_tree(temp_dir.path(), depth, files_per_level).unwrap();
