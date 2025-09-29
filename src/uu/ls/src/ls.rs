@@ -2508,6 +2508,10 @@ fn display_additional_leading_info(
             result.push(' ');
         }
     }
+    #[cfg(not(unix))]
+    {
+        let _ = item.metadata();
+    }
 
     if config.alloc_size {
         let s = if let Some(md) = item.metadata() {
