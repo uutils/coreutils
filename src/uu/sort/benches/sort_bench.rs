@@ -8,7 +8,7 @@ use uu_sort::uumain;
 use uucore::benchmark::{run_util_function, setup_test_file, text_data};
 
 /// Benchmark sorting ASCII-only data
-#[divan::bench(args = [100_000, 500_000])]
+#[divan::bench(args = [500_000])]
 fn sort_ascii_only(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_ascii_data(num_lines);
     let file_path = setup_test_file(&data);
@@ -19,7 +19,7 @@ fn sort_ascii_only(bencher: Bencher, num_lines: usize) {
 }
 
 /// Benchmark sorting accented/non-ASCII data
-#[divan::bench(args = [100_000, 500_000])]
+#[divan::bench(args = [500_000])]
 fn sort_accented_data(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_accented_data(num_lines);
     let file_path = setup_test_file(&data);
@@ -30,7 +30,7 @@ fn sort_accented_data(bencher: Bencher, num_lines: usize) {
 }
 
 /// Benchmark sorting mixed ASCII/non-ASCII data
-#[divan::bench(args = [100_000, 500_000])]
+#[divan::bench(args = [500_000])]
 fn sort_mixed_data(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_mixed_data(num_lines);
     let file_path = setup_test_file(&data);
@@ -41,7 +41,7 @@ fn sort_mixed_data(bencher: Bencher, num_lines: usize) {
 }
 
 /// Benchmark case-sensitive sorting with mixed case data
-#[divan::bench(args = [100_000, 500_000])]
+#[divan::bench(args = [500_000])]
 fn sort_case_sensitive(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_case_sensitive_data(num_lines);
     let file_path = setup_test_file(&data);
@@ -52,7 +52,7 @@ fn sort_case_sensitive(bencher: Bencher, num_lines: usize) {
 }
 
 /// Benchmark case-insensitive sorting (fold case)
-#[divan::bench(args = [100_000, 500_000])]
+#[divan::bench(args = [500_000])]
 fn sort_case_insensitive(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_case_sensitive_data(num_lines);
     let file_path = setup_test_file(&data);
@@ -66,7 +66,7 @@ fn sort_case_insensitive(bencher: Bencher, num_lines: usize) {
 }
 
 /// Benchmark dictionary order sorting (only blanks and alphanumeric)
-#[divan::bench(args = [100_000, 500_000])]
+#[divan::bench(args = [500_000])]
 fn sort_dictionary_order(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_mixed_data(num_lines);
     let file_path = setup_test_file(&data);
@@ -80,7 +80,7 @@ fn sort_dictionary_order(bencher: Bencher, num_lines: usize) {
 }
 
 /// Benchmark numeric sorting with mixed data
-#[divan::bench(args = [100_000, 500_000])]
+#[divan::bench(args = [500_000])]
 fn sort_numeric(bencher: Bencher, num_lines: usize) {
     let mut data = Vec::new();
 
@@ -101,7 +101,7 @@ fn sort_numeric(bencher: Bencher, num_lines: usize) {
 }
 
 /// Benchmark reverse sorting with locale-aware data
-#[divan::bench(args = [100_000, 500_000])]
+#[divan::bench(args = [500_000])]
 fn sort_reverse_locale(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_accented_data(num_lines);
     let file_path = setup_test_file(&data);
@@ -115,7 +115,7 @@ fn sort_reverse_locale(bencher: Bencher, num_lines: usize) {
 }
 
 /// Benchmark sorting with specific key field
-#[divan::bench(args = [100_000, 500_000])]
+#[divan::bench(args = [500_000])]
 fn sort_key_field(bencher: Bencher, num_lines: usize) {
     let mut data = Vec::new();
 
@@ -140,7 +140,7 @@ fn sort_key_field(bencher: Bencher, num_lines: usize) {
 }
 
 /// Benchmark unique sorting with locale-aware data
-#[divan::bench(args = [100_000, 500_000])]
+#[divan::bench(args = [500_000])]
 fn sort_unique_locale(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_accented_data(num_lines);
     let file_path = setup_test_file(&data);

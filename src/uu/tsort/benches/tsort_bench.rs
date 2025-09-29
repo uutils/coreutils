@@ -136,7 +136,7 @@ fn generate_input_parsing_heavy(num_edges: usize) -> Vec<u8> {
 
 /// Benchmark linear chain graphs of different sizes
 /// This tests the performance improvements mentioned in PR #8694
-#[divan::bench(args = [1_000, 10_000, 100_000, 1_000_000])]
+#[divan::bench(args = [1_000_000])]
 fn tsort_linear_chain(bencher: Bencher, num_nodes: usize) {
     let data = generate_linear_chain(num_nodes);
     let file_path = setup_test_file(&data);
@@ -148,7 +148,7 @@ fn tsort_linear_chain(bencher: Bencher, num_nodes: usize) {
 }
 
 /// Benchmark tree-like DAG structures
-#[divan::bench(args = [(4, 3), (5, 3), (6, 2), (7, 2)])]
+#[divan::bench(args = [(10, 3)])]
 fn tsort_tree_dag(bencher: Bencher, (depth, branching): (usize, usize)) {
     let data = generate_tree_dag(depth, branching);
     let file_path = setup_test_file(&data);
@@ -160,7 +160,7 @@ fn tsort_tree_dag(bencher: Bencher, (depth, branching): (usize, usize)) {
 }
 
 /// Benchmark complex DAG with cross-dependencies
-#[divan::bench(args = [1_000, 5_000, 10_000, 50_000])]
+#[divan::bench(args = [50_000])]
 fn tsort_complex_dag(bencher: Bencher, num_nodes: usize) {
     let data = generate_complex_dag(num_nodes);
     let file_path = setup_test_file(&data);
@@ -173,7 +173,7 @@ fn tsort_complex_dag(bencher: Bencher, num_nodes: usize) {
 
 /// Benchmark wide DAG with many parallel chains
 /// This should stress the hashmap optimizations from PR #8694
-#[divan::bench(args = [10_000, 50_000, 100_000])]
+#[divan::bench(args = [100_000])]
 fn tsort_wide_dag(bencher: Bencher, num_nodes: usize) {
     let data = generate_wide_dag(num_nodes);
     let file_path = setup_test_file(&data);
@@ -185,7 +185,7 @@ fn tsort_wide_dag(bencher: Bencher, num_nodes: usize) {
 }
 
 /// Benchmark input parsing vs computation by using files with different edge densities
-#[divan::bench(args = [10_000, 50_000])]
+#[divan::bench(args = [50_000])]
 fn tsort_input_parsing_heavy(bencher: Bencher, num_edges: usize) {
     let data = generate_input_parsing_heavy(num_edges);
     let file_path = setup_test_file(&data);
