@@ -472,10 +472,10 @@ endif
 
 install: build install-manpages install-completions install-locales
 	mkdir -p $(INSTALLDIR_BIN)
-ifneq ($(OS),Windows_NT)
 	mkdir -p $(DESTDIR)$(LIBSTDBUF_DIR)
-	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf* $(DESTDIR)$(LIBSTDBUF_DIR)/
-endif
+	# Do not fail if libstdbuf was not built (e.g. on Windows)
+	$(INSTALL) -vm 644 $(BUILDDIR)/deps/libstdbuf* $(DESTDIR)$(LIBSTDBUF_DIR)/ || :
+
 ifeq (${MULTICALL}, y)
 	$(INSTALL) -m 755 $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
 	$(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
