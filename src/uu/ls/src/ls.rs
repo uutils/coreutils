@@ -1911,6 +1911,7 @@ impl PathData {
     }
 }
 
+#[cfg(not(windows))]
 impl PartialEq for PathData {
     fn eq(&self, other: &Self) -> bool {
         self.get_metadata().map(|md| md.ino()) == other.get_metadata().map(|md| md.ino())
@@ -1918,8 +1919,10 @@ impl PartialEq for PathData {
     }
 }
 
+#[cfg(not(windows))]
 impl Eq for PathData {}
 
+#[cfg(not(windows))]
 impl Hash for PathData {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         if let Some(md) = self.get_metadata() {
