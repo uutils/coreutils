@@ -705,7 +705,7 @@ mod tests {
 
         for key in &required_keys {
             let message = get_message(key);
-            assert_ne!(message, *key, "Translation missing for key: {}", key);
+            assert_ne!(message, *key, "Translation missing for key: {key}");
         }
     }
 

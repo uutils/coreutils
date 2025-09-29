@@ -609,7 +609,7 @@ mod tests {
             crc.hash_finalize(&mut output);
             let result = u64::from_ne_bytes(output);
 
-            assert_eq!(result, expected, "CRC mismatch for input: '{}'", input);
+            assert_eq!(result, expected, "CRC mismatch for input: '{input}'");
         }
     }
 
