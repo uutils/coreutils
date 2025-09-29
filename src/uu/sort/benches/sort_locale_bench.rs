@@ -5,6 +5,7 @@
 
 use divan::{Bencher, black_box};
 use std::env;
+use tempfile::NamedTempFile;
 use uu_sort::uumain;
 use uucore::benchmark::{run_util_function, setup_test_file, text_data};
 
@@ -18,7 +19,12 @@ fn sort_ascii_c_locale(bencher: Bencher) {
         unsafe {
             env::set_var("LC_ALL", "C");
         }
-        black_box(run_util_function(uumain, &[file_path.to_str().unwrap()]));
+        let output_file = NamedTempFile::new().unwrap();
+        let output_path = output_file.path().to_str().unwrap();
+        black_box(run_util_function(
+            uumain,
+            &["-o", output_path, file_path.to_str().unwrap()],
+        ));
     });
 }
 
@@ -32,7 +38,12 @@ fn sort_ascii_utf8_locale(bencher: Bencher) {
         unsafe {
             env::set_var("LC_ALL", "en_US.UTF-8");
         }
-        black_box(run_util_function(uumain, &[file_path.to_str().unwrap()]));
+        let output_file = NamedTempFile::new().unwrap();
+        let output_path = output_file.path().to_str().unwrap();
+        black_box(run_util_function(
+            uumain,
+            &["-o", output_path, file_path.to_str().unwrap()],
+        ));
     });
 }
 
@@ -46,7 +57,12 @@ fn sort_mixed_c_locale(bencher: Bencher) {
         unsafe {
             env::set_var("LC_ALL", "C");
         }
-        black_box(run_util_function(uumain, &[file_path.to_str().unwrap()]));
+        let output_file = NamedTempFile::new().unwrap();
+        let output_path = output_file.path().to_str().unwrap();
+        black_box(run_util_function(
+            uumain,
+            &["-o", output_path, file_path.to_str().unwrap()],
+        ));
     });
 }
 
@@ -60,7 +76,12 @@ fn sort_mixed_utf8_locale(bencher: Bencher) {
         unsafe {
             env::set_var("LC_ALL", "en_US.UTF-8");
         }
-        black_box(run_util_function(uumain, &[file_path.to_str().unwrap()]));
+        let output_file = NamedTempFile::new().unwrap();
+        let output_path = output_file.path().to_str().unwrap();
+        black_box(run_util_function(
+            uumain,
+            &["-o", output_path, file_path.to_str().unwrap()],
+        ));
     });
 }
 
@@ -74,7 +95,12 @@ fn sort_german_c_locale(bencher: Bencher) {
         unsafe {
             env::set_var("LC_ALL", "C");
         }
-        black_box(run_util_function(uumain, &[file_path.to_str().unwrap()]));
+        let output_file = NamedTempFile::new().unwrap();
+        let output_path = output_file.path().to_str().unwrap();
+        black_box(run_util_function(
+            uumain,
+            &["-o", output_path, file_path.to_str().unwrap()],
+        ));
     });
 }
 
@@ -88,7 +114,12 @@ fn sort_german_locale(bencher: Bencher) {
         unsafe {
             env::set_var("LC_ALL", "de_DE.UTF-8");
         }
-        black_box(run_util_function(uumain, &[file_path.to_str().unwrap()]));
+        let output_file = NamedTempFile::new().unwrap();
+        let output_path = output_file.path().to_str().unwrap();
+        black_box(run_util_function(
+            uumain,
+            &["-o", output_path, file_path.to_str().unwrap()],
+        ));
     });
 }
 
@@ -102,7 +133,12 @@ fn sort_random_strings(bencher: Bencher) {
         unsafe {
             env::set_var("LC_ALL", "en_US.UTF-8");
         }
-        black_box(run_util_function(uumain, &[file_path.to_str().unwrap()]));
+        let output_file = NamedTempFile::new().unwrap();
+        let output_path = output_file.path().to_str().unwrap();
+        black_box(run_util_function(
+            uumain,
+            &["-o", output_path, file_path.to_str().unwrap()],
+        ));
     });
 }
 
