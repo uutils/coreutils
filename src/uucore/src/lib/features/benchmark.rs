@@ -19,6 +19,9 @@ pub fn create_test_file(data: &[u8], temp_dir: &Path) -> PathBuf {
     let mut writer = BufWriter::new(file);
     writer.write_all(data).unwrap();
     writer.flush().unwrap();
+    // Ensure data is fully written to disk before returning
+    std::mem::drop(writer);
+    File::open(&file_path).unwrap().sync_all().unwrap();
     file_path
 }
 
@@ -28,7 +31,9 @@ pub fn run_util_function<F>(util_func: F, args: &[&str]) -> i32
 where
     F: FnOnce(std::vec::IntoIter<std::ffi::OsString>) -> i32,
 {
-    let os_args: Vec<std::ffi::OsString> = args.iter().map(|s| (*s).into()).collect();
+    // Prepend a dummy program name as argv[0] since clap expects it
+    let mut os_args: Vec<std::ffi::OsString> = vec!["benchmark".into()];
+    os_args.extend(args.iter().map(|s| (*s).into()));
     util_func(os_args.into_iter())
 }
 
