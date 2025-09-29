@@ -1776,7 +1776,7 @@ struct PathData {
     ft: OnceCell<Option<FileType>>,
     // can be used to avoid reading the filetype. Can be also called d_type:
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
-    de: RefCell<Option<Box<DirEntry>>>,
+    de: RefCell<Option<DirEntry>>,
     security_context: OnceCell<Box<str>>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
@@ -1830,11 +1830,11 @@ impl PathData {
         let md: OnceCell<Option<Metadata>> = OnceCell::new();
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
-        let de: RefCell<Option<Box<DirEntry>>> = if let Some(de) = dir_entry {
+        let de: RefCell<Option<DirEntry>> = if let Some(de) = dir_entry {
             if must_dereference {
                 if let Ok(md_pb) = p_buf.metadata() {
-                    md.get_or_init(|| Some(md_pb.clone()));
                     ft.get_or_init(|| Some(md_pb.file_type()));
+                    md.get_or_init(|| Some(md_pb));
                 }
             }
 
@@ -1842,7 +1842,7 @@ impl PathData {
                 ft.get_or_init(|| Some(ft_de));
             }
 
-            RefCell::new(Some(de.into()))
+            RefCell::new(Some(de))
         } else {
             RefCell::new(None)
         };
@@ -1863,7 +1863,7 @@ impl PathData {
         self.md
             .get_or_init(|| {
                 if !self.must_dereference {
-                    if let Some(dir_entry) = RefCell::take(&self.de).as_deref() {
+                    if let Some(dir_entry) = RefCell::take(&self.de) {
                         return dir_entry.metadata().ok();
                     }
                 }
@@ -1871,7 +1871,7 @@ impl PathData {
                 match get_metadata_with_deref_opt(self.path(), self.must_dereference) {
                     Err(err) => {
                         // FIXME: A bit tricky to propagate the result here
-                        let mut out: std::io::StdoutLock<'static> = stdout().lock();
+                        let mut out = stdout();
                         let _ = out.flush();
                         let errno = err.raw_os_error().unwrap_or(1i32);
                         // a bad fd will throw an error when dereferenced,
@@ -2507,10 +2507,6 @@ fn display_additional_leading_info(
             result.push_str(&pad_left(&i, padding.inode));
             result.push(' ');
         }
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = item.metadata();
     }
 
     if config.alloc_size {
