@@ -6303,7 +6303,6 @@ fn test_ls_time_style_precedence_last_wins() {
 #[test]
 fn test_ls_time_sort_without_long() {
     let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
 
     // Create two files with deterministic, distinct modification times using touch -d
     #[cfg(feature = "touch")]
@@ -6319,6 +6318,7 @@ fn test_ls_time_sort_without_long() {
     }
     #[cfg(not(feature = "touch"))]
     {
+        let at = &scene.fixtures;
         at.touch("a");
         // Fallback: sleep long enough to ensure FS timestamp resolution differences
         std::thread::sleep(Duration::from_secs(2));
