@@ -644,6 +644,33 @@ fn test_output_error_flag_without_value_defaults_warn_nopipe() {
     assert!(at.file_exists(file_out));
     assert_eq!(at.read(file_out), content);
 }
+// Unix-only: presence-only --output-error should not crash on broken pipe.
+// Current implementation may exit zero; we only assert the process exits to avoid flakiness.
+// TODO: When semantics are aligned with GNU warn-nopipe, strengthen assertions here.
+#[cfg(all(unix, not(target_os = "freebsd")))]
+#[test]
+fn test_output_error_presence_only_broken_pipe_unix() {
+    use std::fs::File;
+    use std::os::unix::io::FromRawFd;
+
+    unsafe {
+        let mut fds: [libc::c_int; 2] = [0, 0];
+        assert_eq!(libc::pipe(fds.as_mut_ptr()), 0, "Failed to create pipe");
+        // Close the read end to simulate a broken pipe on stdout
+        let _read_end = File::from_raw_fd(fds[0]);
+        let write_end = File::from_raw_fd(fds[1]);
+
+        let content = (0..10_000).map(|_| "x").collect::<String>();
+        let result = new_ucmd!()
+            .arg("--output-error") // presence-only flag
+            .set_stdout(write_end)
+            .pipe_in(content.as_bytes())
+            .run();
+
+        // Assert that a status was produced (i.e., process exited) and no crash occurred.
+        assert!(result.try_exit_status().is_some(), "process did not exit");
+    }
+}
 
 // Skip on FreeBSD due to repeated CI hangs in FreeBSD VM (see PR #8684)
 #[cfg(all(unix, not(target_os = "freebsd")))]

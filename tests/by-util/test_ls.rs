@@ -6173,6 +6173,7 @@ fn test_ls_time_style_env_full_iso() {
 
     let out = scene
         .ucmd()
+        .env("TZ", "UTC")
         .env("TIME_STYLE", "full-iso")
         .arg("-l")
         .arg("t1")
@@ -6197,6 +6198,7 @@ fn test_ls_time_style_iso_recent_and_older() {
     // Recent format for --time-style=iso is %m-%d %H:%M
     let recent = scene
         .ucmd()
+        .env("TZ", "UTC")
         .arg("-l")
         .arg("--time-style=iso")
         .arg("recent")
@@ -6242,6 +6244,7 @@ fn test_ls_time_style_posix_locale_override() {
     // With LC_ALL=POSIX and TIME_STYLE=posix-full-iso, GNU falls back to locale format like "%b %e %H:%M"
     let out = scene
         .ucmd()
+        .env("TZ", "UTC")
         .env("LC_ALL", "POSIX")
         .env("TIME_STYLE", "posix-full-iso")
         .arg("-l")
@@ -6301,20 +6304,35 @@ fn test_ls_time_style_precedence_last_wins() {
 fn test_ls_time_sort_without_long() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch("a");
-    // Ensure distinct modification times
-    std::thread::sleep(Duration::from_millis(10));
-    at.touch("b");
 
-    // With -u (access time) sorting selected without -l, the first line should be the most recent by time key
-    // Here we simply check that the order changes between default and -tu sorts
+    // Create two files with deterministic, distinct modification times using touch -d
+    #[cfg(feature = "touch")]
+    {
+        scene
+            .ccmd("touch")
+            .args(&["-d", "1970-01-01 00:00:00 UTC", "a"])
+            .succeeds();
+        scene
+            .ccmd("touch")
+            .args(&["-d", "1970-01-02 00:00:00 UTC", "b"])
+            .succeeds();
+    }
+    #[cfg(not(feature = "touch"))]
+    {
+        at.touch("a");
+        // Fallback: sleep long enough to ensure FS timestamp resolution differences
+        std::thread::sleep(Duration::from_secs(2));
+        at.touch("b");
+    }
+
+    // Compare default (name order) vs time-sorted (-t) order; they should differ
     let default_out = scene.ucmd().succeeds();
-    let tu_out = scene.ucmd().arg("-tu").succeeds();
+    let t_out = scene.ucmd().arg("-t").succeeds();
 
     let def = default_out.stdout_str();
-    let tu = tu_out.stdout_str();
+    let t = t_out.stdout_str();
     assert_ne!(
         def.lines().next().unwrap_or(""),
-        tu.lines().next().unwrap_or("")
+        t.lines().next().unwrap_or("")
     );
 }

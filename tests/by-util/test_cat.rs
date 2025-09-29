@@ -1,31 +1,3 @@
-#[cfg(unix)]
-// Verify cat handles broken pipe without hanging or crashing (GNU-compat focus)
-#[test]
-fn test_cat_broken_pipe_nonzero_and_message() {
-    use std::fs::File;
-    use std::os::unix::io::FromRawFd;
-    use uutests::new_ucmd;
-
-    unsafe {
-        let mut fds: [libc::c_int; 2] = [0, 0];
-        assert_eq!(libc::pipe(fds.as_mut_ptr()), 0, "Failed to create pipe");
-        // Close the read end to simulate a broken pipe on stdout
-        let read_end = File::from_raw_fd(fds[0]);
-        // Explicitly drop the read-end so writers see EPIPE instead of blocking on a full pipe
-        std::mem::drop(read_end);
-        let write_end = File::from_raw_fd(fds[1]);
-
-        let content = (0..10000).map(|_| "x").collect::<String>();
-        let result = new_ucmd!()
-            .set_stdout(write_end)
-            .pipe_in(content.as_bytes())
-            .run();
-
-        // Ensure the process exits (no hang) even if platforms differ in exit code/message on SIGPIPE
-        assert!(result.try_exit_status().is_some(), "process did not exit");
-    }
-}
-
 // This file is part of the uutils coreutils package.
 //
 // For the full copyright and license information, please view the LICENSE
@@ -45,6 +17,32 @@ use uutests::util::TestScenario;
 #[cfg(not(windows))]
 use uutests::util::vec_of_size;
 use uutests::util_name;
+
+#[cfg(unix)]
+// Verify cat handles a broken pipe on stdout without hanging or crashing and exits nonzero
+#[test]
+fn test_cat_broken_pipe_nonzero_and_message() {
+    use std::fs::File;
+    use std::os::unix::io::FromRawFd;
+    use uutests::new_ucmd;
+
+    unsafe {
+        let mut fds: [libc::c_int; 2] = [0, 0];
+        assert_eq!(libc::pipe(fds.as_mut_ptr()), 0, "Failed to create pipe");
+        // Close the read end to simulate a broken pipe on stdout
+        let read_end = File::from_raw_fd(fds[0]);
+        // Explicitly drop the read-end so writers see EPIPE instead of blocking on a full pipe
+        std::mem::drop(read_end);
+        let write_end = File::from_raw_fd(fds[1]);
+
+        let content = (0..10000).map(|_| "x").collect::<String>();
+        // On Unix, SIGPIPE should lead to a non-zero exit; ensure process exits and fails
+        new_ucmd!()
+            .set_stdout(write_end)
+            .pipe_in(content.as_bytes())
+            .fails();
+    }
+}
 
 #[test]
 fn test_output_simple() {

@@ -25,6 +25,11 @@ fn test_permission() {
         .stderr_contains("Permission denied");
 }
 
+// TODO: Tests below are brittle when feat_external_libstdbuf is enabled and libstdbuf is not installed.
+// Align stdbuf with GNU search order to enable deterministic testing without installation:
+// 1) search for libstdbuf next to the stdbuf binary, 2) then in LIBSTDBUF_DIR, 3) then system locations.
+// After implementing this, rework tests to provide a temporary symlink rather than depending on system state.
+
 #[cfg(feature = "feat_external_libstdbuf")]
 #[test]
 fn test_permission_external_missing_lib() {
