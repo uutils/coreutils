@@ -3608,6 +3608,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "fnv",
  "glob",
  "hostname",
  "lscolors",
