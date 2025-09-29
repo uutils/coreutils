@@ -244,6 +244,34 @@ mod tests {
     use crate::blocks::{BlockSize, SuffixType, to_magnitude_and_suffix};
 
     #[test]
+    fn test_to_magnitude_and_suffix_rounding() {
+        assert_eq!(
+            to_magnitude_and_suffix(999_440, SuffixType::Si, true),
+            "1.0MB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(819_200, SuffixType::Si, true),
+            "820kB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(819_936, SuffixType::Si, true),
+            "820kB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(818_400, SuffixType::Si, true),
+            "819kB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(817_600, SuffixType::Si, true),
+            "818kB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(817_200, SuffixType::Si, true),
+            "818kB"
+        );
+    }
+
+    #[test]
     fn test_to_magnitude_and_suffix_add_tracing_zero() {
         assert_eq!(to_magnitude_and_suffix(1024, SuffixType::Iec, true), "1.0K");
         assert_eq!(to_magnitude_and_suffix(2048, SuffixType::Iec, true), "2.0K");

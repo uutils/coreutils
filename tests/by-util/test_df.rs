@@ -152,6 +152,18 @@ fn test_df_trailing_zeros() {
 }
 
 #[test]
+fn test_df_rounding() {
+    use regex::Regex;
+
+    new_ucmd!()
+        .arg("-H")
+        .arg("--output=size,used")
+        .arg("--total")
+        .succeeds()
+        .stdout_does_not_match(&Regex::new("\\s\\d{3}\\.\\d[A-Z]").unwrap());
+}
+
+#[test]
 fn test_df_output_overridden() {
     let expected = if cfg!(target_os = "macos") {
         vec![
