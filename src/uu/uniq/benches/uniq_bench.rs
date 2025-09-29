@@ -29,7 +29,7 @@ fn generate_duplicate_heavy_data(num_groups: usize, duplicates_per_group: usize)
 
 /// Benchmark 1: Heavy duplicates - the main optimization target
 /// Many consecutive duplicate lines that stress the line comparison optimization
-#[divan::bench(args = [10_000_000])]
+#[divan::bench(args = [10_000])]
 fn uniq_heavy_duplicates(bencher: Bencher, num_lines: usize) {
     // Create 1000 groups with ~10,000 duplicates each
     // This maximizes the benefit of PR #8703's optimization
@@ -46,7 +46,7 @@ fn uniq_heavy_duplicates(bencher: Bencher, num_lines: usize) {
 
 /// Benchmark 2: Mixed duplicates with counting
 /// Tests the -c flag with a mix of duplicate groups
-#[divan::bench(args = [5_000_000])]
+#[divan::bench(args = [10_000])]
 fn uniq_with_count(bencher: Bencher, num_lines: usize) {
     // Create more groups with fewer duplicates for varied counting
     let num_groups = num_lines / 100;
@@ -61,7 +61,7 @@ fn uniq_with_count(bencher: Bencher, num_lines: usize) {
 
 /// Benchmark 3: Case-insensitive comparison with duplicates
 /// Tests the -i flag which requires case folding during comparison
-#[divan::bench(args = [2_000_000])]
+#[divan::bench(args = [10_000])]
 fn uniq_case_insensitive(bencher: Bencher, num_lines: usize) {
     let mut data = Vec::new();
     let words = [
