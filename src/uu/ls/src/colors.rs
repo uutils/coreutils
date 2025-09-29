@@ -180,7 +180,7 @@ pub(crate) fn color_name(
 
     if let Some(target) = target_symlink {
         // use the optional target_symlink
-        // Use fn symlink_metadata directly instead of get_metadata() here because ls
+        // Use fn symlink_metadata directly instead of metadata here because ls
         // should not exit with an err, if we are unable to obtain the target_metadata
         style_manager.apply_style_based_on_colorable(target, name, wrap)
     } else {

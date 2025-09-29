@@ -10,6 +10,8 @@ use fnv::FnvHashMap as HashMap;
 use fnv::FnvHashSet as HashSet;
 use std::borrow::Cow;
 use std::cell::RefCell;
+#[cfg(not(windows))]
+use std::hash::Hash;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
@@ -19,7 +21,6 @@ use std::{
     cmp::Reverse,
     ffi::{OsStr, OsString},
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
-    hash::Hash,
     io::{BufWriter, ErrorKind, IsTerminal, Stdout, Write, stdout},
     iter,
     num::IntErrorKind,
@@ -1944,8 +1945,8 @@ impl Colorable for PathData {
 #[cfg(not(windows))]
 impl PartialEq for PathData {
     fn eq(&self, other: &Self) -> bool {
-        self.get_metadata().map(|md| md.ino()) == other.get_metadata().map(|md| md.ino())
-            && self.get_metadata().map(|md| md.dev()) == other.get_metadata().map(|md| md.dev())
+        self.metadata().map(|md| md.ino()) == other.metadata().map(|md| md.ino())
+            && self.metadata().map(|md| md.dev()) == other.metadata().map(|md| md.dev())
     }
 }
 
@@ -1955,7 +1956,7 @@ impl Eq for PathData {}
 #[cfg(not(windows))]
 impl Hash for PathData {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        if let Some(md) = self.get_metadata() {
+        if let Some(md) = self.metadata() {
             md.ino().hash(state);
             md.dev().hash(state);
         }
@@ -1967,7 +1968,7 @@ impl Clone for PathData {
         Self {
             md: self.md.clone(),
             ft: self.ft.clone(),
-            de: None,
+            de: RefCell::new(None),
             display_name: self.display_name.clone(),
             p_buf: self.p_buf.clone(),
             must_dereference: self.must_dereference,
@@ -2126,7 +2127,6 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         }
 
         recurse_directories(path_data, read_dir, config, &mut state, &mut dired)?;
-
     }
     if config.dired && !config.hyperlink {
         dired::print_dired_output(config, &dired, &mut state.out)?;
@@ -2326,19 +2326,6 @@ fn recurse_directories(
     state: &mut ListState,
     dired: &mut DiredOutput,
 ) -> UResult<()> {
-    #[cfg(target_os = "windows")]
-    let mut listed_ancestors = HashSet::new();
-    #[cfg(target_os = "windows")]
-    listed_ancestors.insert(FileInformation::from_path(
-        path_data.p_buf,
-        path_data.must_dereference,
-    ));
-
-    #[cfg(not(target_os = "windows"))]
-    let mut listed_ancestors: HashSet<PathData> = HashSet::new();
-    #[cfg(not(target_os = "windows"))]
-    listed_ancestors.insert(path_data.clone());
-
     let mut entries_stack: Vec<PathData> = Vec::new();
 
     enter_directory(
@@ -2351,13 +2338,25 @@ fn recurse_directories(
     )?;
 
     if config.recursive {
+        #[cfg(target_os = "windows")]
+        let mut listed_ancestors: HashSet<FileInformation> = HashSet::default();
+        #[cfg(target_os = "windows")]
+        listed_ancestors.insert(FileInformation::from_path(
+            path_data.path(),
+            path_data.must_dereference,
+        )?);
+
+        #[cfg(not(target_os = "windows"))]
+        let mut listed_ancestors: HashSet<PathData> = HashSet::default();
+        #[cfg(not(target_os = "windows"))]
+        listed_ancestors.insert(path_data.clone());
+
         while let Some(item) = entries_stack.pop() {
             match fs::read_dir(&item.p_buf) {
                 Err(err) => {
                     state.out.flush()?;
                     show!(LsError::IOErrorContext(
                         item.p_buf.clone(),
-
                         err,
                         item.command_line
                     ));
@@ -2365,9 +2364,9 @@ fn recurse_directories(
                 Ok(rd) => {
                     #[cfg(target_os = "windows")]
                     if !listed_ancestors.insert(FileInformation::from_path(
-                        path_data.p_buf,
-                        path_data.must_dereference,
-                    )) {
+                        item.path(),
+                        item.must_dereference,
+                    )?) {
                         state.out.flush()?;
                         show!(LsError::AlreadyListedError(item.p_buf.clone()));
                         continue;
@@ -2538,22 +2537,22 @@ fn display_items(
     // `-Z`, `--context`:
     // Display the SELinux security context or '?' if none is found. When used with the `-l`
     // option, print the security context to the left of the size column.
-    let quoted = items.iter().any(|item| {
-        let name = locale_aware_escape_name(item.display_name(), config.quoting_style);
-        os_str_starts_with(&name, b"'")
-    });
-
-    let padding_collection = calculate_padding_collection(items, config, state);
+    #[cfg(unix)]
+    let should_display_additional_info = config.inode || config.alloc_size;
+    #[cfg(not(unix))]
+    let should_display_additional_info = config.alloc_size;
 
     match config.format {
         Format::Long => {
+            let padding_collection = calculate_padding_collection(items, config, state);
+
+            let quoted = items.iter().any(|item| {
+                let name = locale_aware_escape_name(item.display_name(), config.quoting_style);
+                os_str_starts_with(&name, b"'")
+            });
+
             for item in items {
-                #[cfg(unix)]
-                let should_display_leading_info = config.inode || config.alloc_size;
-                #[cfg(not(unix))]
-                let should_display_leading_info = config.alloc_size;
-              
-                if should_display_leading_info {
+                if should_display_additional_info {
                     let more_info =
                         display_additional_leading_info(item, &padding_collection, config)?;
 
@@ -2564,11 +2563,24 @@ fn display_items(
             }
         }
         _ => {
+            let padding_collection = if should_display_additional_info {
+                Some(calculate_padding_collection(items, config, state))
+            } else {
+                None
+            };
+
             let mut names =
-                display_short_common(items, config, state, &padding_collection)?.into_iter();
+                display_short_common(items, config, state, padding_collection.as_ref())?
+                    .into_iter();
 
             match config.format {
                 Format::Columns => {
+                    let quoted = items.iter().any(|item| {
+                        let name =
+                            locale_aware_escape_name(item.display_name(), config.quoting_style);
+                        os_str_starts_with(&name, b"'")
+                    });
+
                     display_grid(
                         names,
                         config.width,
@@ -2579,6 +2591,12 @@ fn display_items(
                     )?;
                 }
                 Format::Across => {
+                    let quoted = items.iter().any(|item| {
+                        let name =
+                            locale_aware_escape_name(item.display_name(), config.quoting_style);
+                        os_str_starts_with(&name, b"'")
+                    });
+
                     display_grid(
                         names,
                         config.width,
@@ -2625,16 +2643,17 @@ fn display_items(
     Ok(())
 }
 
+#[inline]
 fn display_short_common(
     items: &[PathData],
     config: &Config,
     state: &mut ListState,
-    padding_collection: &PaddingCollection,
+    padding_collection: Option<&PaddingCollection>,
 ) -> Result<Vec<OsString>, Box<dyn UError + 'static>> {
     let mut longest_context_len = 1;
     let prefix_context = if config.context {
         for item in items {
-            let context_len = item.security_context.len();
+            let context_len = item.security_context(config).len();
             longest_context_len = context_len.max(longest_context_len);
         }
         Some(longest_context_len)
@@ -2649,17 +2668,8 @@ fn display_short_common(
 
     let mut names_vec = Vec::new();
     for i in items {
-        #[cfg(unix)]
-        let should_display_leading_info = config.inode || config.alloc_size;
-        #[cfg(not(unix))]
-        let should_display_leading_info = config.alloc_size;
-
-        let more_info = if should_display_leading_info {
-            Some(display_additional_leading_info(
-                i,
-                padding_collection,
-                config,
-            )?)
+        let more_info = if let Some(padding) = padding_collection {
+            Some(display_additional_leading_info(i, padding, config)?)
         } else {
             None
         };
