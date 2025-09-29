@@ -1785,6 +1785,7 @@ struct PathData {
     p_buf: PathBuf,
     must_dereference: bool,
     command_line: bool,
+    is_symlink: bool,
 }
 
 impl PathData {
@@ -1830,6 +1831,7 @@ impl PathData {
         let ft: OnceCell<Option<FileType>> = OnceCell::new();
         let md: OnceCell<Option<Metadata>> = OnceCell::new();
         let security_context: OnceCell<Box<str>> = OnceCell::new();
+        let mut is_symlink = false;
 
         let de: RefCell<Option<DirEntry>> = if let Some(de) = dir_entry {
             if must_dereference {
@@ -1841,6 +1843,7 @@ impl PathData {
 
             if let Ok(ft_de) = de.file_type() {
                 ft.get_or_init(|| Some(ft_de));
+                is_symlink = ft_de.is_symlink();
             }
 
             RefCell::new(Some(de))
@@ -1857,6 +1860,7 @@ impl PathData {
             p_buf,
             must_dereference,
             command_line,
+            is_symlink,
         }
     }
 
@@ -1905,7 +1909,7 @@ impl PathData {
 
     fn is_dangling_link(&self) -> bool {
         // deref enabled, self is real dir entry, self has metadata associated with link, but not with target
-        self.must_dereference && self.file_type().is_none() && self.metadata().is_none()
+        self.must_dereference && self.is_symlink && self.metadata().is_none()
     }
 
     #[cfg(unix)]
@@ -1975,6 +1979,7 @@ impl Clone for PathData {
             must_dereference: self.must_dereference,
             security_context: self.security_context.clone(),
             command_line: self.command_line,
+            is_symlink: self.is_symlink,
         }
     }
 }
@@ -3262,9 +3267,7 @@ fn display_item_name(
         }
     }
 
-    let is_symlink = path.file_type().is_some_and(|ft| ft.is_symlink());
-
-    if config.format == Format::Long && is_symlink && !path.must_dereference {
+    if config.format == Format::Long && path.is_symlink && !path.must_dereference {
         match path.path().read_link() {
             Ok(target_path) => {
                 name.push(" -> ");
@@ -3321,7 +3324,7 @@ fn display_item_name(
     // if there has been no other reason to request metadata
     // request now if must_deref is set, because we must print an error
     // for any dangling links
-    if is_symlink && path.must_dereference {
+    if path.must_dereference && path.is_symlink {
         path.metadata();
     }
 
