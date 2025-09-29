@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 //spell-checker:ignore TAOCP indegree
 use clap::{Arg, Command};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::ffi::OsString;
 use std::path::Path;
 use thiserror::Error;
@@ -140,11 +140,20 @@ impl<'input> Graph<'input> {
     }
 
     fn add_edge(&mut self, from: &'input str, to: &'input str) {
-        let from_node = self.nodes.entry(from).or_default();
+        // Ensure both endpoints exist without holding long mutable borrows
+        self.nodes.entry(from).or_default();
         if from != to {
-            from_node.add_successor(to);
-            let to_node = self.nodes.entry(to).or_default();
-            to_node.predecessor_count += 1;
+            self.nodes.entry(to).or_default();
+            // Check for duplicate edge using an immutable borrow
+            let need_add = {
+                let from_node_ro = self.nodes.get(from).unwrap();
+                !from_node_ro.successor_names.contains(&to)
+            };
+            if need_add {
+                // Now perform mutations via short, separate mutable borrows
+                self.nodes.get_mut(from).unwrap().add_successor(to);
+                self.nodes.get_mut(to).unwrap().predecessor_count += 1;
+            }
         }
     }
 
@@ -223,58 +232,134 @@ impl<'input> Graph<'input> {
 
     fn find_and_break_cycle(&mut self, frontier: &mut VecDeque<&'input str>) {
         let cycle = self.detect_cycle();
+        // Print a consistent loop header and each node in the detected cycle.
+        // We report a minimal cycle subpath (no path prefix), matching GNU expectations
+        // for cycle reporting while keeping runs deterministic.
         show!(TsortError::Loop(self.name.clone()));
         for node in &cycle {
             show!(TsortError::LoopNode((*node).to_string()));
         }
-        let u = cycle[0];
-        let v = cycle[1];
+        // Remove the precise back-edge that closes the cycle: last -> first.
+        // Rationale: removing the exact closing edge for the minimal cycle ensures
+        // coherent follow-up behavior when multiple cycles exist. This strategy closely
+        // matches the GNU example discussed in #8743 (B<->C first, then A->B->C->D->A).
+        let u = *cycle.last().expect("cycle must be non-empty");
+        let v = cycle[0];
         self.remove_edge(u, v);
+        // If removing this edge unveils a new zero-indegree node, enqueue it so the main
+        // topological loop can proceed without immediately triggering another cycle search.
         if self.indegree(v).unwrap() == 0 {
             frontier.push_back(v);
         }
     }
 
     fn detect_cycle(&self) -> Vec<&'input str> {
-        // Sort the nodes just to make this function deterministic.
-        let mut nodes: Vec<_> = self.nodes.keys().collect();
-        nodes.sort_unstable();
+        // Delegate to CycleDetector which implements an iterative DFS to find and
+        // reconstruct a true cycle deterministically.
+        let detector = CycleDetector::new(self);
+        detector
+            .find_cycle()
+            .expect("a cycle must exist when detect_cycle is called")
+    }
+}
 
-        let mut visited = HashSet::new();
-        let mut stack = Vec::with_capacity(self.nodes.len());
-        for node in nodes {
-            if !visited.contains(node) && self.dfs(node, &mut visited, &mut stack) {
-                return stack;
-            }
-        }
-        unreachable!();
+/// Helper responsible for deterministic cycle detection using an explicit stack.
+///
+/// This separates concerns from Graph and enables easier swapping of algorithms
+/// later (e.g., Tarjan/Kosaraju SCC) while keeping reporting behavior stable.
+struct CycleDetector<'g, 'input> {
+    graph: &'g Graph<'input>,
+}
+
+impl<'g, 'input> CycleDetector<'g, 'input> {
+    fn new(graph: &'g Graph<'input>) -> Self {
+        Self { graph }
     }
 
-    fn dfs(
-        &self,
-        node: &'input str,
-        visited: &mut HashSet<&'input str>,
-        stack: &mut Vec<&'input str>,
-    ) -> bool {
-        if stack.contains(&node) {
-            return true;
-        }
-        if visited.contains(&node) {
-            return false;
+    /// Finds and returns a single cycle as a sequence of node names in which the last
+    /// element connects back to the first (via the back-edge). Returns None if no cycle
+    /// is found.
+    ///
+    /// Implementation notes:
+    /// - We intern node names to integer IDs to speed up detection on large graphs.
+    /// - We then run an iterative DFS over Vec-backed structures (visited, onstack, parent, adjacency).
+    /// - When we find a back-edge (u -> v) with v on the stack, we reconstruct the minimal cycle
+    ///   subpath [v, ..., u] and map IDs back to names for reporting.
+    fn find_cycle(&self) -> Option<Vec<&'input str>> {
+        use std::collections::HashMap;
+
+        // 1) Collect and deterministically order node names for stable ID assignment.
+        let mut names: Vec<&'input str> = self.graph.nodes.keys().copied().collect();
+        names.sort_unstable();
+
+        // 2) Build name -> id map and adjacency using IDs.
+        let mut id_of: HashMap<&'input str, usize> = HashMap::with_capacity(names.len());
+        for (i, &name) in names.iter().enumerate() {
+            id_of.insert(name, i);
         }
 
-        visited.insert(node);
-        stack.push(node);
-
-        if let Some(successor_names) = self.nodes.get(node).map(|n| &n.successor_names) {
-            for &successor in successor_names {
-                if self.dfs(successor, visited, stack) {
-                    return true;
+        let n = names.len();
+        let mut adj: Vec<Vec<usize>> = vec![Vec::new(); n];
+        for (&name, node) in &self.graph.nodes {
+            let u = id_of[&name];
+            // successor_names may contain dupes; keep as-is since Graph.add_edge now dedups.
+            for &s in &node.successor_names {
+                if let Some(&v) = id_of.get(&s) {
+                    adj[u].push(v);
                 }
             }
         }
 
-        stack.pop();
-        false
+        // 3) Iterative DFS with explicit stack and parent tracking (Vec-based).
+        let mut visited = vec![false; n];
+        let mut onstack = vec![false; n];
+        let mut parent: Vec<Option<usize>> = vec![None; n];
+
+        for start in 0..n {
+            if visited[start] {
+                continue;
+            }
+            let mut stack: Vec<(usize, usize)> = Vec::new(); // (node_id, next_succ_idx)
+            visited[start] = true;
+            onstack[start] = true;
+            stack.push((start, 0));
+
+            while let Some((u, idx)) = stack.last_mut() {
+                if *idx < adj[*u].len() {
+                    let v = adj[*u][*idx];
+                    *idx += 1;
+                    if !visited[v] {
+                        parent[v] = Some(*u);
+                        visited[v] = true;
+                        onstack[v] = true;
+                        stack.push((v, 0));
+                    } else if onstack[v] {
+                        // Found back-edge u -> v. Reconstruct minimal cycle IDs [v, ..., u]
+                        let mut cycle_ids: Vec<usize> = Vec::new();
+                        cycle_ids.push(v);
+                        let mut cur = *u;
+                        let mut path: Vec<usize> = vec![cur];
+                        while cur != v {
+                            cur =
+                                parent[cur].expect("parent must exist while reconstructing cycle");
+                            path.push(cur);
+                        }
+                        path.pop();
+                        path.reverse();
+                        cycle_ids.extend(path);
+
+                        // Map IDs back to names for reporting.
+                        let cycle_names: Vec<&'input str> =
+                            cycle_ids.into_iter().map(|id| names[id]).collect();
+                        return Some(cycle_names);
+                    }
+                } else {
+                    onstack[*u] = false;
+                    stack.pop();
+                }
+            }
+        }
+
+        None
     }
 }

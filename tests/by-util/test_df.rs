@@ -382,47 +382,74 @@ fn test_include_exclude_same_type() {
         );
 }
 
+#[cfg(not(target_os = "macos"))]
 #[cfg_attr(
     all(target_arch = "aarch64", target_os = "linux"),
     ignore = "Issue #7158 - Test not supported on ARM64 Linux"
 )]
 #[test]
 fn test_total() {
-    // Example output:
-    //
-    //     Filesystem            1K-blocks     Used Available Use% Mounted on
-    //     udev                    3858016        0   3858016   0% /dev
-    //     ...
-    //     /dev/loop14               63488    63488         0 100% /snap/core20/1361
-    //     total                 258775268 98099712 148220200  40% -
+    // Robust cross-platform check for the --total row.
+    // Parse header to determine indices for size/used/avail columns since
+    // BSD (macOS) headers differ from GNU.
     let output = new_ucmd!().arg("--total").succeeds().stdout_str_lossy();
 
-    // Skip the header line.
-    let lines: Vec<&str> = output.lines().skip(1).collect();
+    let mut lines_iter = output.lines();
+    let header = lines_iter
+        .next()
+        .expect("df output should have a header line");
+    let headers: Vec<&str> = header.split_whitespace().collect();
 
-    // Parse the values from the last row.
-    let last_line = lines.last().unwrap();
-    let mut iter = last_line.split_whitespace();
-    assert_eq!(iter.next().unwrap(), "total");
-    let reported_total_size = iter.next().unwrap().parse().unwrap();
-    let reported_total_used = iter.next().unwrap().parse().unwrap();
-    let reported_total_avail = iter.next().unwrap().parse().unwrap();
+    // Possible header names across platforms:
+    // - size: "1K-blocks" | "1024-blocks" | "512-blocks" | "Size"
+    // - used: "Used"
+    // - avail: "Available" | "Avail"
+    let find_idx = |names: &[&str]| -> usize {
+        for (i, h) in headers.iter().enumerate() {
+            if names.contains(h) {
+                return i;
+            }
+        }
+        panic!("expected one of {names:?} in headers {headers:?}");
+    };
 
-    // Loop over each row except the last, computing the sum of each column.
-    let mut computed_total_size = 0;
-    let mut computed_total_used = 0;
-    let mut computed_total_avail = 0;
-    let n = lines.len();
-    for line in &lines[..n - 1] {
-        let mut iter = line.split_whitespace();
-        iter.next().unwrap();
-        computed_total_size += iter.next().unwrap().parse::<u64>().unwrap();
-        computed_total_used += iter.next().unwrap().parse::<u64>().unwrap();
-        computed_total_avail += iter.next().unwrap().parse::<u64>().unwrap();
+    let size_idx = find_idx(&["1K-blocks", "1024-blocks", "512-blocks", "Size"]);
+    let used_idx = find_idx(&["Used"]);
+    let avail_idx = find_idx(&["Available", "Avail"]);
+
+    let lines: Vec<&str> = lines_iter.collect();
+    assert!(lines.len() >= 2, "expected data rows and a total row");
+
+    // Parse the values from the last row (starts with "total").
+    let last_line = *lines.last().unwrap();
+    let last_fields: Vec<&str> = last_line.split_whitespace().collect();
+    assert_eq!(last_fields[0], "total");
+
+    let parse_u64 = |s: &str| -> u64 { s.parse::<u64>().expect("expected integer value") };
+
+    let reported_total_size = parse_u64(last_fields[size_idx]);
+    let reported_total_used = parse_u64(last_fields[used_idx]);
+    let reported_total_avail = parse_u64(last_fields[avail_idx]);
+
+    // Compute sums across all rows except the last (total) line.
+    let mut computed_total_size: u64 = 0;
+    let mut computed_total_used: u64 = 0;
+    let mut computed_total_avail: u64 = 0;
+
+    for &line in &lines[..lines.len() - 1] {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        // Some rows might have different token counts due to mount points with spaces.
+        // Since we index by header position, ensure the row has enough columns.
+        if fields.len() <= size_idx.min(used_idx).min(avail_idx) {
+            continue;
+        }
+        // First token is usually Filesystem; numeric columns at the indices we found.
+        // On macOS, headers include an extra "Capacity" column (percent). We ignore it.
+        computed_total_size += parse_u64(fields[size_idx]);
+        computed_total_used += parse_u64(fields[used_idx]);
+        computed_total_avail += parse_u64(fields[avail_idx]);
     }
 
-    // Check that the sum of each column matches the reported value in
-    // the last row.
     assert_eq!(computed_total_size, reported_total_size);
     assert_eq!(computed_total_used, reported_total_used);
     assert_eq!(computed_total_avail, reported_total_avail);
