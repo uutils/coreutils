@@ -2089,7 +2089,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     for (pos, path_data) in dirs.iter().enumerate() {
         // Do read_dir call here to match GNU semantics by printing
         // read_dir errors before directory headings, names and totals
-        let read_dir = match fs::read_dir(path_data.path()) {
+        let read_dir = match std::fs::read_dir(path_data.path()) {
             Err(err) => {
                 // flush stdout buffer before the error to preserve formatting and order
                 state.out.flush()?;
@@ -2128,6 +2128,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
 
         recurse_directories(path_data, read_dir, config, &mut state, &mut dired)?;
     }
+
     if config.dired && !config.hyperlink {
         dired::print_dired_output(config, &dired, &mut state.out)?;
     }
@@ -2673,6 +2674,12 @@ fn display_short_common(
         } else {
             None
         };
+
+        // if there has been no other reason to request metadata
+        // request now if must_deref is set
+        if i.must_dereference {
+            i.metadata();
+        }
 
         // it's okay to set current column to zero which is used to decide
         // whether text will wrap or not, because when format is grid or
