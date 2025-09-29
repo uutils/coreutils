@@ -3151,7 +3151,9 @@ name = "uu_base64"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
+ "tempfile",
  "uu_base32",
  "uucore",
 ]
