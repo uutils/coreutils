@@ -311,6 +311,7 @@ pub mod text_data {
 /// Filesystem tree generation utilities for benchmarking
 pub mod fs_tree {
     use std::fs::{self, File};
+    use std::io::Write;
     use std::path::Path;
 
     /// Create a balanced directory tree for benchmarking
@@ -380,6 +381,52 @@ pub mod fs_tree {
                 let next_dir = current_dir.join("d");
                 fs::create_dir(&next_dir).unwrap();
                 current_dir = next_dir;
+            }
+        }
+    }
+
+    /// Create a tree with mixed file types and permissions for comprehensive testing
+    ///
+    /// Creates files with different extensions, sizes, and permissions (on Unix).
+    /// Useful for testing file type detection, permission handling, and formatting.
+    pub fn create_mixed_tree(base_dir: &Path) {
+        let extensions = ["txt", "log", "dat", "tmp", "bak", "cfg"];
+        let sizes = [0, 100, 1024, 10240];
+
+        for (i, ext) in extensions.iter().enumerate() {
+            for (j, &size) in sizes.iter().enumerate() {
+                let file_path = base_dir.join(format!("mixed_file_{i}_{j}.{ext}"));
+                let mut file = File::create(&file_path).unwrap();
+
+                if size > 0 {
+                    let content = "x".repeat(size);
+                    file.write_all(content.as_bytes()).unwrap();
+                }
+
+                // Set permissions only on Unix platforms
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let perms = fs::Permissions::from_mode(match (i + j) % 4 {
+                        0 => 0o644,
+                        1 => 0o755,
+                        2 => 0o600,
+                        _ => 0o444,
+                    });
+                    fs::set_permissions(&file_path, perms).unwrap();
+                }
+            }
+        }
+
+        // Create some subdirectories
+        for i in 0..5 {
+            let dir_path = base_dir.join(format!("mixed_subdir_{i}"));
+            fs::create_dir(&dir_path).unwrap();
+
+            for j in 0..3 {
+                let file_path = dir_path.join(format!("sub_file_{j}.txt"));
+                let mut file = File::create(&file_path).unwrap();
+                writeln!(file, "File {j} in subdir {i}").unwrap();
             }
         }
     }
