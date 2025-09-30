@@ -307,3 +307,80 @@ pub mod text_data {
             .join("\n")
     }
 }
+
+/// Filesystem tree generation utilities for benchmarking
+pub mod fs_tree {
+    use std::fs::{self, File};
+    use std::path::Path;
+
+    /// Create a balanced directory tree for benchmarking
+    ///
+    /// Creates a tree with specified depth, number of directories per level, and files per directory.
+    /// This creates a realistic filesystem structure for testing recursive operations.
+    pub fn create_balanced_tree(
+        base_dir: &Path,
+        depth: usize,
+        dirs_per_level: usize,
+        files_per_dir: usize,
+    ) {
+        if depth == 0 {
+            return;
+        }
+
+        // Create files in current directory
+        for file_idx in 0..files_per_dir {
+            let file_path = base_dir.join(format!("f{file_idx}"));
+            File::create(&file_path).unwrap();
+        }
+
+        // Create subdirectories and recurse
+        for dir_idx in 0..dirs_per_level {
+            let dir_path = base_dir.join(format!("d{dir_idx}"));
+            fs::create_dir(&dir_path).unwrap();
+            create_balanced_tree(&dir_path, depth - 1, dirs_per_level, files_per_dir);
+        }
+    }
+
+    /// Create a wide directory tree (many files/dirs at shallow depth)
+    ///
+    /// This creates a flat structure with many files and directories at a shallow depth,
+    /// useful for benchmarking operations that need to traverse many entries quickly.
+    pub fn create_wide_tree(base_dir: &Path, total_files: usize, total_dirs: usize) {
+        // Create many files in root
+        for file_idx in 0..total_files {
+            let file_path = base_dir.join(format!("f{file_idx}"));
+            File::create(&file_path).unwrap();
+        }
+
+        // Create many directories with few files each
+        for dir_idx in 0..total_dirs {
+            let dir_path = base_dir.join(format!("d{dir_idx}"));
+            fs::create_dir(&dir_path).unwrap();
+            for file_idx in 0..5 {
+                File::create(dir_path.join(format!("f{file_idx}"))).unwrap();
+            }
+        }
+    }
+
+    /// Create a deep directory tree (deep nesting)
+    ///
+    /// This creates a linear chain of deeply nested directories, useful for testing
+    /// recursion depth handling and stack usage.
+    pub fn create_deep_tree(base_dir: &Path, depth: usize, files_per_level: usize) {
+        let mut current_dir = base_dir.to_path_buf();
+
+        for level in 0..depth {
+            // Create files at this level
+            for file_idx in 0..files_per_level {
+                File::create(current_dir.join(format!("f{file_idx}"))).unwrap();
+            }
+
+            // Create next level directory
+            if level < depth - 1 {
+                let next_dir = current_dir.join("d");
+                fs::create_dir(&next_dir).unwrap();
+                current_dir = next_dir;
+            }
+        }
+    }
+}
