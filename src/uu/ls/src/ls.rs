@@ -2257,7 +2257,7 @@ fn enter_directory(
     entries_stack: &mut Vec<PathData>,
 ) -> UResult<()> {
     // Create vec of entries with initial dot files
-    let mut entries: Vec<PathData> = if config.files == Files::All {
+    let mut new_entries: Vec<PathData> = if config.files == Files::All {
         vec![
             PathData::new(
                 path_data.path().to_path_buf(),
@@ -2292,24 +2292,24 @@ fn enter_directory(
         if should_display(&dir_entry, config) {
             let entry_path_data =
                 PathData::new(dir_entry.path(), Some(dir_entry), None, config, false);
-            entries.push(entry_path_data);
+            new_entries.push(entry_path_data);
         }
     }
 
-    sort_entries(&mut entries, config);
+    sort_entries(&mut new_entries, config);
 
     // Print total after any error display
     if config.format == Format::Long || config.alloc_size {
-        let total = return_total(&entries, config, &mut state.out)?;
+        let total = return_total(&new_entries, config, &mut state.out)?;
         write!(state.out, "{}", total.as_str())?;
         if config.dired {
             dired::add_total(dired, total.len());
         }
     }
 
-    display_items(&entries, config, state, dired)?;
+    display_items(&new_entries, config, state, dired)?;
 
-    let new_dirs = entries
+    let new_dirs = new_entries
         .into_iter()
         .skip(if config.files == Files::All { 2 } else { 0 })
         .filter(|p| p.file_type().is_some_and(|ft| ft.is_dir()))
@@ -2328,7 +2328,7 @@ fn recurse_directories(
     state: &mut ListState,
     dired: &mut DiredOutput,
 ) -> UResult<()> {
-    let mut entries_stack: Vec<PathData> = Vec::new();
+    let mut entries_stack: Vec<PathData> = Vec::with_capacity(64);
 
     enter_directory(
         path_data,
