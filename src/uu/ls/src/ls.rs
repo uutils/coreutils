@@ -1777,7 +1777,7 @@ struct PathData {
     ft: OnceCell<Option<FileType>>,
     // can be used to avoid reading the filetype. Can be also called d_type:
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
-    de: RefCell<Option<DirEntry>>,
+    de: RefCell<Option<Box<DirEntry>>>,
     security_context: OnceCell<Box<str>>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
@@ -1831,19 +1831,19 @@ impl PathData {
         let md: OnceCell<Option<Metadata>> = OnceCell::new();
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
-        let de: RefCell<Option<DirEntry>> = if let Some(de) = dir_entry {
+        let de: RefCell<Option<Box<DirEntry>>> = if let Some(de) = dir_entry {
             if must_dereference {
                 if let Ok(md_pb) = p_buf.metadata() {
                     ft.get_or_init(|| Some(md_pb.file_type()));
                     md.get_or_init(|| Some(md_pb));
                 }
+            } else {
+                if let Ok(ft_de) = de.file_type() {
+                    ft.get_or_init(|| Some(ft_de));
+                }
             }
 
-            if let Ok(ft_de) = de.file_type() {
-                ft.get_or_init(|| Some(ft_de));
-            }
-
-            RefCell::new(Some(de))
+            RefCell::new(Some(de.into()))
         } else {
             RefCell::new(None)
         };
@@ -1864,7 +1864,7 @@ impl PathData {
         self.md
             .get_or_init(|| {
                 if !self.must_dereference {
-                    if let Some(dir_entry) = RefCell::take(&self.de) {
+                    if let Some(dir_entry) = self.de.take().as_deref() {
                         return dir_entry.metadata().ok();
                     }
                 }
