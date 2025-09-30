@@ -228,7 +228,7 @@ ifneq ($(OS),Windows_NT)
 	PROGS := $(PROGS) $(SELINUX_PROGS)
 endif
 
-UTILS ?= $(PROGS)
+UTILS ?= $(filter-out $(SKIP_UTILS),$(PROGS))
 
 ifneq ($(findstring stdbuf,$(UTILS)),)
     # Use external libstdbuf per default. It is more robust than embedding libstdbuf.
@@ -306,7 +306,7 @@ TEST_PROGS  := \
 	who
 
 TESTS       := \
-	$(sort $(filter $(UTILS),$(filter-out $(SKIP_UTILS),$(TEST_PROGS))))
+	$(sort $(filter $(UTILS),$(TEST_PROGS)))
 
 TEST_NO_FAIL_FAST :=
 TEST_SPEC_FEATURE :=
@@ -326,7 +326,7 @@ endef
 
 # Output names
 EXES        := \
-	$(sort $(filter $(UTILS),$(filter-out $(SKIP_UTILS),$(PROGS))))
+	$(sort $(UTILS))
 
 INSTALLEES  := ${EXES}
 ifeq (${MULTICALL}, y)
@@ -352,7 +352,7 @@ build-coreutils:
 
 build: build-coreutils build-pkgs locales
 
-$(foreach test,$(filter-out $(SKIP_UTILS),$(PROGS)),$(eval $(call TEST_BUSYBOX,$(test))))
+$(foreach test,$(UTILS),$(eval $(call TEST_BUSYBOX,$(test))))
 
 test:
 	${CARGO} test ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
