@@ -1645,7 +1645,7 @@ mod tests {
         for (filename, result, prefix, expected) in cases {
             let mut buffer: Vec<u8> = vec![];
             print_file_report(&mut buffer, filename, *result, prefix, opts.verbose);
-            assert_eq!(&buffer, expected)
+            assert_eq!(&buffer, expected);
         }
     }
 }
