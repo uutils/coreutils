@@ -305,8 +305,8 @@ jobs:
         DESTDIR=/tmp/ make PROFILE=release COMPLETIONS=n MANPAGES=n SELINUX_ENABLED=0 install
         # Check that the utils are present
         test -f /tmp/usr/local/bin/tty
-        # Check that SELinux utils are disabled
-        ! test -f /tmp/usr/local/bin/chcon
+        # Check that SELinux utils are exists if libselinux is installed even SELINUX_ENABLED=0
+        pkg-config --extsts libselinux && test -f /tmp/usr/local/bin/chcon
         # Check that the manpage is not present
         ! test -f /tmp/usr/local/share/man/man1/whoami.1
         # Check that the completion is not present
