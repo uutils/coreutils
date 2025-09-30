@@ -212,7 +212,6 @@ $(info Detected OS = $(OS))
 
 # Since we don't have dummies of SELinux progs, we build them if libselinux installed even SELINUX_ENABLED=0
 ifeq ($(shell pkg-config --exists libselinux ; echo $$?),0)
-	$(info linselinux found)
 	PROGS := $(PROGS) $(SELINUX_PROGS)
 endif
 
