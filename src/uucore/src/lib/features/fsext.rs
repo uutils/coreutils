@@ -985,6 +985,7 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x7372_7279 => "btrfs_test".into(),
         0x00C3_6400 => "ceph".into(),
         0x0027_E0EB => "cgroupfs".into(),
+        0x6367_7270 => "cgroup2fs".into(),
         0xFF53_4D42 => "cifs".into(),
         0x7375_7245 => "coda".into(),
         0x012F_F7B7 => "coh".into(),
