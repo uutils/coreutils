@@ -2969,7 +2969,7 @@ fn display_uname<'a>(metadata: &Metadata, config: &Config, state: &'a mut ListSt
 fn display_group<'a>(metadata: &Metadata, config: &Config, state: &'a mut ListState) -> &'a String {
     let gid = metadata.gid();
     state.gid_cache.entry(gid).or_insert_with(|| {
-        if cfg!(target_os = "redox") || config.long.numeric_uid_gid {
+        if config.long.numeric_uid_gid {
             gid.to_string()
         } else {
             entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string())
