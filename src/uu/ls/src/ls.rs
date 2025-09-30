@@ -1837,10 +1837,8 @@ impl PathData {
                     ft.get_or_init(|| Some(md_pb.file_type()));
                     md.get_or_init(|| Some(md_pb));
                 }
-            } else {
-                if let Ok(ft_de) = de.file_type() {
-                    ft.get_or_init(|| Some(ft_de));
-                }
+            } else if let Ok(ft_de) = de.file_type() {
+                ft.get_or_init(|| Some(ft_de));
             }
 
             RefCell::new(Some(de.into()))
