@@ -742,13 +742,14 @@ pub fn configure_symlink_and_recursion(
         None // Default behavior
     };
 
-    let mut traverse_symlinks = default_traverse_symlinks;
-    if matches.get_flag("L") {
-        traverse_symlinks = TraverseSymlinks::All
+    let mut traverse_symlinks = if matches.get_flag("L") {
+        TraverseSymlinks::All
     } else if matches.get_flag("H") {
-        traverse_symlinks = TraverseSymlinks::First
+        TraverseSymlinks::First
     } else if matches.get_flag("P") {
-        traverse_symlinks = TraverseSymlinks::None
+        TraverseSymlinks::None
+    } else {
+        default_traverse_symlinks
     };
 
     let recursive = matches.get_flag(options::RECURSIVE);
