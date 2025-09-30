@@ -193,7 +193,6 @@ enum LsError {
             },
         },
         _ => match .1.raw_os_error().unwrap_or(1) {
-            40 => translate!("ls-error-cannot-access-too-many-levels-of-symbolic-links", "path" => .0.to_string_lossy(), "error" => format!("{:?}", .1)),
             9 => translate!("ls-error-cannot-open-directory-bad-descriptor", "path" => .0.to_string_lossy()),
             _ => translate!("ls-error-unknown-io-error", "path" => .0.to_string_lossy(), "error" => format!("{:?}", .1)),
         },
