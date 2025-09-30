@@ -556,10 +556,10 @@ impl SystemdUtmpxCompat {
     /// A.K.A. ut.ut_line
     pub fn tty_device(&self) -> String {
         // Return raw device name for device access if available, otherwise formatted seat_or_tty
-        if !self.record.raw_device.is_empty() {
-            self.record.raw_device.clone()
-        } else {
+        if self.record.raw_device.is_empty() {
             self.record.seat_or_tty.clone()
+        } else {
+            self.record.raw_device.clone()
         }
     }
 
