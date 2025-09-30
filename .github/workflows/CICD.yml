@@ -1276,7 +1276,7 @@ jobs:
 
   benchmarks:
     name: Run benchmarks (CodSpeed)
-    runs-on: ubuntu-latest
+    runs-on: Linux-high-perf
     needs: min_version
     steps:
       - uses: actions/checkout@v5
