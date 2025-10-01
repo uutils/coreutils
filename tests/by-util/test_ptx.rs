@@ -3,12 +3,21 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore roff
-
+// spell-checker:ignore funnnnnnnnnnnnnnnnn
 use uutests::new_ucmd;
 
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[test]
+fn test_truncation_no_extra_space_in_after() {
+    new_ucmd!()
+        .args(&["-G", "-w", "30"])
+        .pipe_in("Rust is funnnnnnnnnnnnnnnnn")
+        .succeeds()
+        .stdout_contains(".xx \"\" \"Rust\" \"is/\" \"\"");
 }
 
 #[test]

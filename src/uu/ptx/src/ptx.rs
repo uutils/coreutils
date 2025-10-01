@@ -403,7 +403,7 @@ fn trim_idx(s: &[char], beg: usize, end: usize) -> (usize, usize) {
     while b < e && s[b].is_whitespace() {
         b += 1;
     }
-    while b < e && s[e - 1].is_whitespace() {
+    while beg < e && s[e - 1].is_whitespace() {
         e -= 1;
     }
     (b, e)
