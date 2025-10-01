@@ -12,6 +12,15 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_truncation_no_extra_space_in_after() {
+    new_ucmd!()
+        .args(&["-G", "-w", "30"])
+        .pipe_in("Rust is funnnnnnnnnnnnnnnnn")
+        .succeeds()
+        .stdout_contains(".xx \"\" \"Rust\" \"is/\" \"\"");
+}
+
+#[test]
 fn gnu_ext_disabled_rightward_no_ref() {
     new_ucmd!()
         .args(&["-G", "-R", "input"])
