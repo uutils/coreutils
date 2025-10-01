@@ -1832,9 +1832,16 @@ impl PathData {
 
         let de: RefCell<Option<Box<DirEntry>>> = if let Some(de) = dir_entry {
             if must_dereference {
-                if let Ok(md_pb) = p_buf.metadata() {
-                    ft.get_or_init(|| Some(md_pb.file_type()));
-                    md.get_or_init(|| Some(md_pb));
+                match p_buf.metadata() {
+                    Ok(pb_md) => {
+                        ft.get_or_init(|| Some(pb_md.file_type()));
+                        md.get_or_init(|| Some(pb_md));
+                    }
+                    Err(err) => {
+                        Self::handle_metadata_error(&p_buf, command_line, err);
+                        ft.get_or_init(|| None);
+                        md.get_or_init(|| None);
+                    }
                 }
             } else if let Ok(ft_de) = de.file_type() {
                 ft.get_or_init(|| Some(ft_de));
@@ -1868,30 +1875,38 @@ impl PathData {
 
                 match get_metadata_with_deref_opt(self.path(), self.must_dereference) {
                     Err(err) => {
-                        // FIXME: A bit tricky to propagate the result here
-                        let mut out = stdout();
-                        let _ = out.flush();
                         let errno = err.raw_os_error().unwrap_or(1i32);
+
                         // a bad fd will throw an error when dereferenced,
                         // but GNU will not throw an error until a bad fd "dir"
                         // is entered, here we match that GNU behavior, by handing
                         // back the non-dereferenced metadata upon an EBADF
                         if self.must_dereference && errno == 9i32 {
-                            if let Ok(file) = self.path().read_link() {
-                                return file.symlink_metadata().ok();
+                            if let Ok(target) = self.path().read_link() {
+                                return target.symlink_metadata().ok();
                             }
                         }
-                        show!(LsError::IOErrorContext(
-                            self.path().to_path_buf(),
-                            err,
-                            self.command_line
-                        ));
+
+                        Self::handle_metadata_error(self.path(), self.command_line, err);
+
                         None
                     }
                     Ok(md) => Some(md),
                 }
             })
             .as_ref()
+    }
+
+    fn handle_metadata_error(path: &Path, command_line: bool, err: std::io::Error) {
+        // FIXME: A bit tricky to propagate the result here
+        let mut out = stdout();
+        let _ = out.flush();
+
+        show!(LsError::IOErrorContext(
+            path.to_path_buf(),
+            err,
+            command_line
+        ));
     }
 
     fn file_type(&self) -> Option<&FileType> {
@@ -2672,13 +2687,6 @@ fn display_short_common(
         } else {
             None
         };
-
-        // if there has been no other reason to request metadata
-        // request now if must_deref is set, because we must print an error
-        // for any dangling links
-        if i.must_dereference {
-            i.metadata();
-        }
 
         // it's okay to set current column to zero which is used to decide
         // whether text will wrap or not, because when format is grid or
