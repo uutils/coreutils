@@ -1831,17 +1831,18 @@ impl PathData {
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
         let de: RefCell<Option<Box<DirEntry>>> = if let Some(de) = dir_entry {
-            if must_dereference && command_line {
+            if must_dereference {
                 match p_buf.metadata() {
                     Ok(pb_md) => {
                         ft.get_or_init(|| Some(pb_md.file_type()));
                         md.get_or_init(|| Some(pb_md));
                     }
-                    Err(err) => {
+                    Err(err) if command_line => {
                         Self::handle_metadata_error(&p_buf, command_line, err);
                         ft.get_or_init(|| None);
                         md.get_or_init(|| None);
                     }
+                    Err(_) => (),
                 }
             } else if let Ok(ft_de) = de.file_type() {
                 ft.get_or_init(|| Some(ft_de));
