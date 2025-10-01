@@ -2322,13 +2322,15 @@ fn enter_directory(
 
     display_items(&new_entries, config, state, dired)?;
 
-    let new_dirs = new_entries
-        .into_iter()
-        .skip(if config.files == Files::All { 2 } else { 0 })
-        .filter(|p| p.file_type().is_some_and(|ft| ft.is_dir()))
-        .rev();
+    if config.recursive {
+        let new_dirs = new_entries
+            .into_iter()
+            .skip(if config.files == Files::All { 2 } else { 0 })
+            .filter(|p| p.file_type().is_some_and(|ft| ft.is_dir()))
+            .rev();
 
-    entries_stack.extend(new_dirs);
+        entries_stack.extend(new_dirs);
+    }
 
     Ok(())
 }
