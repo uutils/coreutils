@@ -3151,7 +3151,9 @@ name = "uu_base64"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
+ "tempfile",
  "uu_base32",
  "uucore",
 ]
@@ -3372,8 +3374,10 @@ name = "uu_du"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "glob",
+ "tempfile",
  "thiserror 2.0.16",
  "uucore",
  "windows-sys 0.61.0",
