@@ -93,7 +93,7 @@ pub fn apply_xattrs<P: AsRef<Path>>(
 /// `true` if the file has extended attributes (indicating an ACL), `false` otherwise.
 pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
     // don't use exacl here, it is doing more getxattr call then needed
-    xattr::get_deref(&file, OsStr::new(POSIX_ACL_ACCESS_KEY))
+    xattr::get_deref(&file, POSIX_ACL_ACCESS_KEY)
         .ok()
         .flatten()
         .or_else(|| {
@@ -115,7 +115,7 @@ pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
 /// `true` if the file has a capability extended attribute, `false` otherwise.
 pub fn has_capability<P: AsRef<Path>>(file: P) -> bool {
     // don't use exacl here, it is doing more getxattr call then needed
-    xattr::get_deref(&file, OsStr::new(SET_CAPABILITY_KEY))
+    xattr::get_deref(&file, SET_CAPABILITY_KEY)
         .ok()
         .flatten()
         .is_some_and(|vec| !vec.is_empty())
