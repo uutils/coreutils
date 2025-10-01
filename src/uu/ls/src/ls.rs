@@ -1831,7 +1831,7 @@ impl PathData {
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
         let de: RefCell<Option<Box<DirEntry>>> = if let Some(de) = dir_entry {
-            if must_dereference {
+            if must_dereference && command_line {
                 match p_buf.metadata() {
                     Ok(pb_md) => {
                         ft.get_or_init(|| Some(pb_md.file_type()));
