@@ -223,12 +223,14 @@ impl<'input> Graph<'input> {
 
     fn find_and_break_cycle(&mut self, frontier: &mut VecDeque<&'input str>) {
         let cycle = self.detect_cycle();
+        // Report only the minimal cycle subpath (no non-cycle prefix)
         show!(TsortError::Loop(self.name.clone()));
         for node in &cycle {
             show!(TsortError::LoopNode((*node).to_string()));
         }
-        let u = cycle[0];
-        let v = cycle[1];
+        // Remove precise back-edge that closes the cycle: last -> first
+        let u = *cycle.last().expect("cycle must be non-empty");
+        let v = cycle[0];
         self.remove_edge(u, v);
         if self.indegree(v).unwrap() == 0 {
             frontier.push_back(v);
@@ -236,18 +238,21 @@ impl<'input> Graph<'input> {
     }
 
     fn detect_cycle(&self) -> Vec<&'input str> {
-        // Sort the nodes just to make this function deterministic.
-        let mut nodes: Vec<_> = self.nodes.keys().collect();
+        // Sort nodes for determinism
+        let mut nodes: Vec<_> = self.nodes.keys().copied().collect();
         nodes.sort_unstable();
 
-        let mut visited = HashSet::new();
-        let mut stack = Vec::with_capacity(self.nodes.len());
+        let mut visited: HashSet<&'input str> = HashSet::new();
+        let mut stack: Vec<&'input str> = Vec::with_capacity(self.nodes.len());
         for node in nodes {
-            if !visited.contains(node) && self.dfs(node, &mut visited, &mut stack) {
-                return stack;
+            if visited.contains(&node) {
+                continue;
+            }
+            if let Some(cycle) = self.dfs(node, &mut visited, &mut stack) {
+                return cycle;
             }
         }
-        unreachable!();
+        unreachable!("detect_cycle called only when a cycle exists");
     }
 
     fn dfs(
@@ -255,12 +260,13 @@ impl<'input> Graph<'input> {
         node: &'input str,
         visited: &mut HashSet<&'input str>,
         stack: &mut Vec<&'input str>,
-    ) -> bool {
-        if stack.contains(&node) {
-            return true;
+    ) -> Option<Vec<&'input str>> {
+        // If we reached a node already on the current path, extract minimal cycle
+        if let Some(pos) = stack.iter().position(|&n| n == node) {
+            return Some(stack[pos..].to_vec());
         }
         if visited.contains(&node) {
-            return false;
+            return None;
         }
 
         visited.insert(node);
@@ -268,13 +274,13 @@ impl<'input> Graph<'input> {
 
         if let Some(successor_names) = self.nodes.get(node).map(|n| &n.successor_names) {
             for &successor in successor_names {
-                if self.dfs(successor, visited, stack) {
-                    return true;
+                if let Some(cycle) = self.dfs(successor, visited, stack) {
+                    return Some(cycle);
                 }
             }
         }
 
         stack.pop();
-        false
+        None
     }
 }
