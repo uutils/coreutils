@@ -58,3 +58,7 @@ path = "src/main.rs"
 [[bench]]
 name = "sort_bench"
 harness = false
+
+[[bench]]
+name = "sort_locale_bench"
+harness = false
