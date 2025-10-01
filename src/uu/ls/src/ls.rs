@@ -2673,6 +2673,13 @@ fn display_short_common(
             None
         };
 
+        // if there has been no other reason to request metadata
+        // request now if must_deref is set, because we must print an error
+        // for any dangling links
+        if i.must_dereference {
+            i.metadata();
+        }
+
         // it's okay to set current column to zero which is used to decide
         // whether text will wrap or not, because when format is grid or
         // column ls will try to place the item name in a new line if it
@@ -3259,9 +3266,10 @@ fn display_item_name(
         }
     }
 
-    let is_symlink = path.file_type().is_some_and(|ft| ft.is_symlink());
-
-    if config.format == Format::Long && is_symlink && !path.must_dereference {
+    if config.format == Format::Long
+        && path.file_type().is_some_and(|ft| ft.is_symlink())
+        && !path.must_dereference
+    {
         match path.path().read_link() {
             Ok(target_path) => {
                 name.push(" -> ");
@@ -3313,13 +3321,6 @@ fn display_item_name(
                 ));
             }
         }
-    }
-
-    // if there has been no other reason to request metadata
-    // request now if must_deref is set, because we must print an error
-    // for any dangling links
-    if is_symlink && path.must_dereference {
-        path.metadata();
     }
 
     // Prepend the security context to the `name` and adjust `width` in order
