@@ -484,7 +484,18 @@ fn get_output_chunks(
     let tail_end = trim_broken_word_right(all_after, tail_beg, tail_end);
 
     // trim away whitespace again.
-    let (tail_beg, tail_end) = trim_idx(all_after, tail_beg, tail_end);
+    let (tail_beg, mut tail_end) = trim_idx(all_after, tail_beg, tail_end);
+    // Fix: Manually trim trailing char (like "a") that are preceded by a space.
+    // This handles cases like "is a" which are not correctly trimmed by the
+    // preceding functions.
+    if tail_end >= 2
+        && (tail_end - 2) > tail_beg
+        && all_after[tail_end - 2].is_whitespace()
+        && !all_after[tail_end - 1].is_whitespace()
+    {
+        tail_end -= 1;
+        (_, tail_end) = trim_idx(all_after, tail_beg, tail_end);
+    }
 
     // and get the string
     let tail_str: String = all_after[tail_beg..tail_end].iter().collect();
