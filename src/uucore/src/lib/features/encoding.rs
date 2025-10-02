@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (encodings) lsbf msbf
 // spell-checker:ignore unpadded
+// spell-checker:ignore ABCDEFGHJKLMNPQRSTUVWXY Zabcdefghijkmnopqrstuvwxyz
 
 use crate::error::{UResult, USimpleError};
 use base64_simd;
@@ -218,7 +219,7 @@ impl SupportsFastDecodeAndEncode for Base58Wrapper {
 
             // Multiply by 58 and add digit
             let mut carry = digit as u32;
-            for n in num.iter_mut() {
+            for n in &mut num {
                 let tmp = (*n as u64) * 58 + carry as u64;
                 *n = tmp as u32;
                 carry = (tmp >> 32) as u32;
@@ -230,7 +231,7 @@ impl SupportsFastDecodeAndEncode for Base58Wrapper {
 
         // Convert to bytes (little endian, then reverse)
         let mut result = Vec::new();
-        for &n in num.iter() {
+        for &n in &num {
             result.extend_from_slice(&n.to_le_bytes());
         }
 
@@ -269,7 +270,7 @@ impl SupportsFastDecodeAndEncode for Base58Wrapper {
         let mut num: Vec<u32> = Vec::new();
         for &byte in input_trimmed {
             let mut carry = byte as u32;
-            for n in num.iter_mut() {
+            for n in &mut num {
                 let tmp = (*n as u64) * 256 + carry as u64;
                 *n = tmp as u32;
                 carry = (tmp >> 32) as u32;
