@@ -2,9 +2,6 @@
 # like e.g. out-of-tree builds ( https://github.com/rust-lang/cargo/issues/2930 ).
 # For this reason this file should be avoided as much as possible when there are alternatives.
 
-[registries]
-crates-io-2 = { index = "sparse+https://index.crates.io/" }
-
 [target.x86_64-unknown-redox]
 linker = "x86_64-unknown-redox-gcc"
 
