@@ -4363,7 +4363,6 @@ name = "uutests"
 version = "0.2.2"
 dependencies = [
  "ctor",
- "fnv",
  "libc",
  "nix",
  "pretty_assertions",
