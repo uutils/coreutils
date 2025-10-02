@@ -79,7 +79,7 @@ fn detect_target_utility() -> Option<String> {
     // Auto-detect utility name from CARGO_PKG_NAME if it's a uu_* package
     if let Ok(pkg_name) = env::var("CARGO_PKG_NAME") {
         if let Some(util_name) = pkg_name.strip_prefix("uu_") {
-            println!("cargo:warning=Auto-detected utility name: {}", util_name);
+            println!("cargo:warning=Auto-detected utility name: {util_name}");
             return Some(util_name.to_string());
         }
     }

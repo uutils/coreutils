@@ -638,7 +638,7 @@ pedantic = { level = "deny", priority = -1 }
 # Eventually the clippy settings from the `[lints]` section should be moved here.
 # In order to use these, all crates have `[lints] workspace = true` section.
 [workspace.lints.rust]
-unused_qualifications = "warn"
+#unused_qualifications = "warn" // TODO: fix warnings in uucore, then re-enable this lint
 
 [workspace.lints.clippy]
 # The counts were generated with this command:
@@ -683,3 +683,23 @@ inline_always = "allow"                      # 6
 fn_params_excessive_bools = "allow"          # 6
 used_underscore_items = "allow"              # 2
 should_panic_without_expect = "allow"        # 2
+
+doc_markdown = "allow"
+unused_self = "allow"
+map_unwrap_or = "allow"
+enum_glob_use = "allow"
+ptr_cast_constness = "allow"
+borrow_as_ptr = "allow"
+ptr_as_ptr = "allow"
+manual_let_else = "allow"
+unnecessary_semicolon = "allow"
+needless_raw_string_hashes = "allow"
+unreadable_literal = "allow"
+unnested_or_patterns = "allow"
+implicit_hasher = "allow"
+struct_field_names = "allow"
+doc_link_with_quotes = "allow"
+format_push_string = "allow"
+flat_map_option = "allow"
+from_iter_instead_of_collect = "allow"
+large_types_passed_by_value = "allow"
