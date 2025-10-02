@@ -782,6 +782,9 @@ jobs:
             # We also create a couple optional files pinky looks for
             touch /home/runner/.project
             echo "foo" > /home/runner/.plan
+            # add user with digital username for testing with issue #7787
+            echo 200:x:2000:2000::/home/200:/bin/bash | sudo tee -a /etc/passwd
+            echo 200:x:2000: | sudo tee -a /etc/group
             ;;
         esac
     - uses: taiki-e/install-action@v2
@@ -1156,6 +1159,9 @@ jobs:
             # We also create a couple optional files pinky looks for
             touch /home/runner/.project
             echo "foo" > /home/runner/.plan
+            # add user with digital username for testing with issue #7787
+            echo 200:x:2000:2000::/home/200:/bin/bash | sudo tee -a /etc/passwd
+            echo 200:x:2000: | sudo tee -a /etc/group
             ;;
         esac
 
