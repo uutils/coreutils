@@ -380,8 +380,7 @@ uutils_term_grid = "0.7"
 walkdir = "2.5"
 winapi-util = "0.1.8"
 windows-sys = { version = "0.61.0", default-features = false }
-# xattr = "1.6.1" is latest we are waiting on 1.6.2 or later
-xattr = { git = "https://github.com/Stebalien/xattr", branch = "master" }
+xattr = "1.6.1"
 zip = { version = "5.0.0", default-features = false, features = ["deflate"] }
 
 hex = "0.4.3"
