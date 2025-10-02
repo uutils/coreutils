@@ -1937,7 +1937,8 @@ impl PathData {
         self.xattrs()
             .as_ref()
             .is_some_and(|map| map.contains_key(OsStr::new(SET_CAPABILITY_KEY)))
-      
+    }
+
     fn is_dangling_link(&self) -> bool {
         // deref enabled, self is real dir entry, self has metadata associated with link, but not with target
         self.must_dereference && self.file_type().is_none() && self.metadata().is_none()
@@ -1975,7 +1976,6 @@ impl Colorable for PathData {
     }
     fn path(&self) -> PathBuf {
         self.path().to_path_buf()
-
     }
 }
 

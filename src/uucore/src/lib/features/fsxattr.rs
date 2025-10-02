@@ -6,7 +6,7 @@
 // spell-checker:ignore getxattr posix_acl_default
 
 //! Set of functions to manage xattr on files and dirs
-use std::collections::HashMap;
+use fnv::FnvHashMap as HashMap;
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
@@ -46,7 +46,7 @@ pub fn retrieve_xattrs<P: AsRef<Path>>(
     source: P,
     must_dereference: bool,
 ) -> std::io::Result<HashMap<OsString, Vec<u8>>> {
-    let mut attrs = HashMap::new();
+    let mut attrs = HashMap::default();
 
     let iter = if must_dereference {
         xattr::list_deref(&source)?

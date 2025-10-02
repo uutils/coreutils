@@ -4291,6 +4291,7 @@ dependencies = [
  "fluent",
  "fluent-bundle",
  "fluent-syntax",
+ "fnv",
  "glob",
  "hex",
  "icu_collator",
