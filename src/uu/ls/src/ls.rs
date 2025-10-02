@@ -42,8 +42,6 @@ use uucore::fsxattr;
 
 #[cfg(unix)]
 use uucore::entries;
-#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-use uucore::fsxattr::{POSIX_ACL_ACCESS_KEY, POSIX_ACL_DEFAULT_KEY, retrieve_xattrs};
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 #[cfg(any(
@@ -1777,12 +1775,13 @@ struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
-    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-    xattrs: OnceCell<Option<HashMap<OsString, Vec<u8>>>>,
     // can be used to avoid reading the metadata. Can be also called d_type:
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
     de: RefCell<Option<Box<DirEntry>>>,
     security_context: OnceCell<Box<str>>,
+    has_acl: OnceCell<bool>,
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    has_capability: OnceCell<bool>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
     // PathBuf that all above data corresponds to
@@ -1855,14 +1854,15 @@ impl PathData {
         Self {
             md,
             ft,
-            #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-            xattrs: OnceCell::new(),
             de,
             security_context,
             display_name,
             p_buf,
             must_dereference,
             command_line,
+            has_acl: OnceCell::new(),
+            #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+            has_capability: OnceCell::new(),
         }
     }
 
@@ -1909,38 +1909,24 @@ impl PathData {
             .as_ref()
     }
 
-    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-    fn xattrs(&self) -> Option<&HashMap<OsString, Vec<u8>>> {
-        self.xattrs
-            .get_or_init(
-                || match retrieve_xattrs(&self.p_buf, self.must_dereference) {
-                    Ok(map) => Some(map),
-                    Err(_) => fs::read_link(&self.p_buf)
-                        .ok()
-                        .and_then(|file| retrieve_xattrs(file, false).ok()),
-                },
-            )
-            .as_ref()
-    }
-
-    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     fn has_acl(&self) -> bool {
-        self.xattrs().as_ref().is_some_and(|map| {
-            map.contains_key(OsStr::new(POSIX_ACL_ACCESS_KEY))
-                || map.contains_key(OsStr::new(POSIX_ACL_DEFAULT_KEY))
-        })
+        #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+        {
+            *self.has_acl.get_or_init(|| fsxattr::has_acl(self.path()))
+        }
+
+        #[cfg(not(all(unix, not(any(target_os = "android", target_os = "macos")))))]
+        {
+            *self.has_acl.get_or_init(|| false)
+        }
     }
 
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     fn has_capability(&self) -> bool {
         // don't use exacl here, it is doing more getxattr call then needed
-
-        // cannot access via a xattr dump, needs to be specifically requested
-        // self.xattrs()
-        //     .as_ref()
-        //     .is_some_and(|map| map.contains_key(OsStr::new(POSIX_ACL_ACCESS_KEY)))
-
-        fsxattr::has_capability(self.path())
+        *self
+            .has_capability
+            .get_or_init(|| fsxattr::has_capability(self.path()))
     }
 
     fn is_dangling_link(&self) -> bool {
@@ -2783,11 +2769,7 @@ fn display_item_long(
         output_display.extend(b"  ");
     }
     if let Some(md) = item.metadata() {
-        #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
-        // TODO: See how Mac should work here
-        let has_acl = false;
-        #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let has_acl = { item.has_acl() };
+        let has_acl = item.has_acl();
 
         output_display.extend(display_permissions(md, true).as_bytes());
         if item.security_context(config).len() > 1 {

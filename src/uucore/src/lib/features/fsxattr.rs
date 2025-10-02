@@ -12,7 +12,7 @@ use std::path::Path;
 
 pub static POSIX_ACL_ACCESS_KEY: &str = "system.posix_acl_access";
 pub static POSIX_ACL_DEFAULT_KEY: &str = "system.posix_acl_default";
-pub static SET_CAPABILITY_KEY: &str = "security.capability";
+pub static SECURITY_CAPABILITY_KEY: &str = "security.capability";
 
 /// Copies extended attributes (xattrs) from one file or directory to another.
 ///
@@ -54,11 +54,14 @@ pub fn retrieve_xattrs<P: AsRef<Path>>(
         xattr::list(&source)?
     };
 
+    attrs.reserve(iter.size_hint().0);
+
     for attr_name in iter {
         if let Some(value) = xattr::get(&source, &attr_name)? {
             attrs.insert(attr_name, value);
         }
     }
+
     Ok(attrs)
 }
 
@@ -92,16 +95,18 @@ pub fn apply_xattrs<P: AsRef<Path>>(
 ///
 /// `true` if the file has extended attributes (indicating an ACL), `false` otherwise.
 pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
+    let access = OsStr::new(POSIX_ACL_ACCESS_KEY);
+    let default = OsStr::new(POSIX_ACL_DEFAULT_KEY);
+
     // don't use exacl here, it is doing more getxattr call then needed
-    xattr::get_deref(&file, OsStr::new(POSIX_ACL_ACCESS_KEY))
+    xattr::list_deref(&file)
         .ok()
+        .into_iter()
         .flatten()
-        .or_else(|| {
-            xattr::get_deref(&file, POSIX_ACL_DEFAULT_KEY)
-                .ok()
-                .flatten()
-        })
-        .is_some_and(|vec| !vec.is_empty())
+        .filter(|name| name.as_os_str() == access || name.as_os_str() == default)
+        .filter_map(|name| xattr::get_deref(&file, &name).ok())
+        .flatten()
+        .any(|item| !item.is_empty())
 }
 
 /// Checks if a file has an Capability set based on its extended attributes.
@@ -115,7 +120,7 @@ pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
 /// `true` if the file has a capability extended attribute, `false` otherwise.
 pub fn has_capability<P: AsRef<Path>>(file: P) -> bool {
     // don't use exacl here, it is doing more getxattr call then needed
-    xattr::get_deref(&file, OsStr::new(SET_CAPABILITY_KEY))
+    xattr::get_deref(&file, OsStr::new(SECURITY_CAPABILITY_KEY))
         .ok()
         .flatten()
         .is_some_and(|vec| !vec.is_empty())
