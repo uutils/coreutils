@@ -3,6 +3,7 @@
 # Config options
 PROFILE         ?= debug
 MULTICALL       ?= n
+LN              ?= ln -sf
 COMPLETIONS     ?= y
 MANPAGES        ?= y
 LOCALES         ?= y
@@ -481,22 +482,19 @@ ifneq ($(OS),Windows_NT)
 endif
 ifeq (${MULTICALL}, y)
 	$(INSTALL) -m 755 $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
-	$(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
-		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
+	$(foreach prog, $(HASHSUM_PROGS) $(filter-out coreutils, $(INSTALLEES)), \
+		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
 	)
-	$(foreach prog, $(HASHSUM_PROGS), \
-		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
-	)
-	$(if $(findstring test,$(INSTALLEES)), cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
 else
 	$(foreach prog, $(INSTALLEES), \
 		$(INSTALL) -m 755 $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog) $(newline) \
 	)
 	$(foreach prog, $(HASHSUM_PROGS), \
-		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)hashsum $(PROG_PREFIX)$(prog) $(newline) \
+		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)hashsum $(PROG_PREFIX)$(prog) $(newline) \
 	)
-	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) -m 755 $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
 endif
+# symlink test if we have
+$(shell cd $(INSTALLDIR_BIN) && $(LN) $(shell readlink $(PROG_PREFIX)test) $(PROG_PREFIX)[ || true)
 
 uninstall:
 ifneq ($(OS),Windows_NT)
