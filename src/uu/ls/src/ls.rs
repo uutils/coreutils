@@ -37,13 +37,13 @@ use glob::{MatchOptions, Pattern};
 use lscolors::{Colorable, LsColors};
 use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
 use thiserror::Error;
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+use uucore::fsxattr;
 
 #[cfg(unix)]
 use uucore::entries;
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-use uucore::fsxattr::{
-    POSIX_ACL_ACCESS_KEY, POSIX_ACL_DEFAULT_KEY, SET_CAPABILITY_KEY, retrieve_xattrs,
-};
+use uucore::fsxattr::{POSIX_ACL_ACCESS_KEY, POSIX_ACL_DEFAULT_KEY, retrieve_xattrs};
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 #[cfg(any(
@@ -1934,9 +1934,13 @@ impl PathData {
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     fn has_capability(&self) -> bool {
         // don't use exacl here, it is doing more getxattr call then needed
-        self.xattrs()
-            .as_ref()
-            .is_some_and(|map| map.contains_key(OsStr::new(SET_CAPABILITY_KEY)))
+
+        // cannot access via a xattr dump, needs to be specifically requested
+        // self.xattrs()
+        //     .as_ref()
+        //     .is_some_and(|map| map.contains_key(OsStr::new(POSIX_ACL_ACCESS_KEY)))
+
+        fsxattr::has_capability(self.path())
     }
 
     fn is_dangling_link(&self) -> bool {
