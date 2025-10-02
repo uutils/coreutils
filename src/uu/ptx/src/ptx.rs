@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDOs) corasick memchr Roff trunc oset iset CHARCLASS
 
 use std::cmp;
+use std::cmp::PartialEq;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::fmt::Write as FmtWrite;
@@ -22,7 +23,7 @@ use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::format_usage;
 use uucore::translate;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum OutFormat {
     Dumb,
     Roff,
@@ -511,19 +512,21 @@ fn get_output_chunks(
     // and get the string.
     let head_str: String = all_before[head_beg..head_end].iter().collect();
     head.push_str(&head_str);
+    //The TeX mode does not output truncation characters.
+    if config.format != OutFormat::Tex {
+        // put right context truncation string if needed
+        if after_end != all_after.len() && tail_beg == tail_end {
+            after.push_str(&config.trunc_str);
+        } else if after_end != all_after.len() && tail_end != all_after.len() {
+            tail.push_str(&config.trunc_str);
+        }
 
-    // put right context truncation string if needed
-    if after_end != all_after.len() && tail_beg == tail_end {
-        after.push_str(&config.trunc_str);
-    } else if after_end != all_after.len() && tail_end != all_after.len() {
-        tail.push_str(&config.trunc_str);
-    }
-
-    // put left context truncation string if needed
-    if before_beg != 0 && head_beg == head_end {
-        before = format!("{}{before}", config.trunc_str);
-    } else if before_beg != 0 && head_beg != 0 {
-        head = format!("{}{head}", config.trunc_str);
+        // put left context truncation string if needed
+        if before_beg != 0 && head_beg == head_end {
+            before = format!("{}{before}", config.trunc_str);
+        } else if before_beg != 0 && head_beg != 0 {
+            head = format!("{}{head}", config.trunc_str);
+        }
     }
 
     (tail, before, after, head)
