@@ -207,7 +207,7 @@ mod tests {
 
         File::create(&file_path).unwrap();
 
-        let mut test_xattrs = HashMap::new();
+        let mut test_xattrs = HashMap::default();
         let test_attr = "user.test_attr";
         let test_value = b"test value";
         test_xattrs.insert(OsString::from(test_attr), test_value.to_vec());

@@ -533,6 +533,7 @@ yes = { optional = true, version = "0.2.2", package = "uu_yes", path = "src/uu/y
 #pin_cc = { version="1.0.61, < 1.0.62", package="cc" } ## cc v1.0.62 has compiler errors for MinRustV v1.32.0, requires 1.34 (for `std::str::split_ascii_whitespace()`)
 
 [dev-dependencies]
+fnv.workspace = true
 chrono.workspace = true
 ctor.workspace = true
 filetime.workspace = true
