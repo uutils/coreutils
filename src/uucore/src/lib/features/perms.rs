@@ -308,27 +308,23 @@ impl ChownExecutor {
 
         let ret = if self.matched(meta.uid(), meta.gid()) {
             // Use safe syscalls for root directory to prevent TOCTOU attacks on Linux
-            let chown_result = if cfg!(target_os = "linux") && path.is_dir() {
+            #[cfg(target_os = "linux")]
+            let chown_result = if path.is_dir() {
                 // For directories on Linux, use safe traversal from the start
-                #[cfg(target_os = "linux")]
-                {
-                    match DirFd::open(path) {
-                        Ok(dir_fd) => self.safe_chown_dir(&dir_fd, path, &meta).map(|_| String::new()),
-                        Err(_e) => {
-                            // Don't show error here - let safe_dive_into handle directory traversal errors
-                            // This prevents duplicate error messages
-                            Ok(String::new())
-                        }
+                match DirFd::open(path) {
+                    Ok(dir_fd) => self
+                        .safe_chown_dir(&dir_fd, path, &meta)
+                        .map(|_| String::new()),
+                    Err(_e) => {
+                        // Don't show error here - let safe_dive_into handle directory traversal errors
+                        // This prevents duplicate error messages
+                        Ok(String::new())
                     }
                 }
             } else {
                 // For non-directories (files, symlinks), use the regular wrap_chown method
-                #[cfg(not(target_os = "linux"))]
-                {
-                    unreachable!()
-                }
                 wrap_chown(
-                // For non-directories (files, symlinks) or non-Linux systems, use the regular wrap_chown method
+                    path,
                     &meta,
                     self.dest_uid,
                     self.dest_gid,
@@ -336,6 +332,16 @@ impl ChownExecutor {
                     self.verbosity.clone(),
                 )
             };
+
+            #[cfg(not(target_os = "linux"))]
+            let chown_result = wrap_chown(
+                path,
+                &meta,
+                self.dest_uid,
+                self.dest_gid,
+                self.dereference,
+                self.verbosity.clone(),
+            );
 
             match chown_result {
                 Ok(n) => {
@@ -372,15 +378,10 @@ impl ChownExecutor {
         } else {
             ret
         }
-    ) -> Result<(), String> {
+    }
 
     #[cfg(target_os = "linux")]
-    fn safe_chown_dir(
-        &self,
-        dir_fd: &DirFd,
-        path: &Path,
-        meta: &Metadata,
-    ) -> Result<String, String> {
+    fn safe_chown_dir(&self, dir_fd: &DirFd, path: &Path, meta: &Metadata) -> Result<(), String> {
         let dest_uid = self.dest_uid.unwrap_or_else(|| meta.uid());
         let dest_gid = self.dest_gid.unwrap_or_else(|| meta.gid());
 
@@ -417,7 +418,7 @@ impl ChownExecutor {
                         entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
                         entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                     )
-        Ok(())
+                };
             }
 
             return Err(error_msg);
@@ -425,7 +426,7 @@ impl ChownExecutor {
 
         // Report the change if verbose (similar to wrap_chown)
         self.report_ownership_change_success(path, meta.uid(), meta.gid());
-        Ok(String::new())
+        Ok(())
     }
 
     #[cfg(target_os = "linux")]
