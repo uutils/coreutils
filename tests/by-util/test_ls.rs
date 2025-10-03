@@ -6211,28 +6211,21 @@ fn test_ls_time_style_iso_recent_and_older() {
     );
 
     // Older format appends a full ISO date padded (year present)
-    // Only run this part when the test binary includes `touch`
-    #[cfg(feature = "touch")]
-    {
-        // Older file: set mtime to 1970-01-01 using uutils touch
-        scene
-            .ccmd("touch")
-            .args(&["-d", "1970-01-01", "older"]) // RFC3339-ish date understood by GNU and uutils touch
-            .succeeds();
+    let f = at.make_file("older");
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
-        let older = scene
-            .ucmd()
-            .arg("-l")
-            .arg("--time-style=iso")
-            .arg("older")
-            .succeeds();
-        let re_older = Regex::new(r"(^|\n).*\d{4}-\d{2}-\d{2}  +").unwrap();
-        assert!(
-            re_older.is_match(older.stdout_str()),
-            "older not matched: {}",
-            older.stdout_str()
-        );
-    }
+    let older = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=iso")
+        .arg("older")
+        .succeeds();
+    let re_older = Regex::new(r"(^|\n).*\d{4}-\d{2}-\d{2}  +").unwrap();
+    assert!(
+        re_older.is_match(older.stdout_str()),
+        "older not matched: {}",
+        older.stdout_str()
+    );
 }
 
 #[test]
@@ -6304,26 +6297,11 @@ fn test_ls_time_style_precedence_last_wins() {
 fn test_ls_time_sort_without_long() {
     let scene = TestScenario::new(util_name!());
 
-    // Create two files with deterministic, distinct modification times using touch -d
-    #[cfg(feature = "touch")]
-    {
-        scene
-            .ccmd("touch")
-            .args(&["-d", "1970-01-01 00:00:00 UTC", "a"])
-            .succeeds();
-        scene
-            .ccmd("touch")
-            .args(&["-d", "1970-01-02 00:00:00 UTC", "b"])
-            .succeeds();
-    }
-    #[cfg(not(feature = "touch"))]
-    {
-        let at = &scene.fixtures;
-        at.touch("a");
-        // Fallback: sleep long enough to ensure FS timestamp resolution differences
-        std::thread::sleep(Duration::from_secs(2));
-        at.touch("b");
-    }
+    // Create two files with deterministic, distinct modification times
+    let at = &scene.fixtures;
+    let f = at.make_file("a");
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
+    at.touch("b");
 
     // Compare default (name order) vs time-sorted (-t) order; they should differ
     let default_out = scene.ucmd().succeeds();
@@ -6331,8 +6309,5 @@ fn test_ls_time_sort_without_long() {
 
     let def = default_out.stdout_str();
     let t = t_out.stdout_str();
-    assert_ne!(
-        def.lines().next().unwrap_or(""),
-        t.lines().next().unwrap_or("")
-    );
+    assert_ne!(def, t);
 }
