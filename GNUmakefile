@@ -3,7 +3,6 @@
 # Config options
 PROFILE         ?= debug
 MULTICALL       ?= n
-LN              ?= ln -sf
 COMPLETIONS     ?= y
 MANPAGES        ?= y
 LOCALES         ?= y
@@ -69,6 +68,13 @@ TOYBOX_SRC  := $(TOYBOX_ROOT)/toybox-$(TOYBOX_VER)
 # (Linux, Darwin, FreeBSD, …).
 #------------------------------------------------------------------------
 OS ?= $(shell uname -s)
+
+# Windows does not allow symlink by default
+ifeq ($(OS),Windows_NT)
+	LN ?= ln
+else
+	LN ?= ln -sf
+endif
 
 ifdef SELINUX_ENABLED
 	override SELINUX_ENABLED := 0
