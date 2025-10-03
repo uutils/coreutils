@@ -223,12 +223,10 @@ impl<'input> Graph<'input> {
 
     fn find_and_break_cycle(&mut self, frontier: &mut VecDeque<&'input str>) {
         let cycle = self.detect_cycle();
-        // Report only the minimal cycle subpath (no non-cycle prefix)
         show!(TsortError::Loop(self.name.clone()));
         for node in &cycle {
             show!(TsortError::LoopNode((*node).to_string()));
         }
-        // Remove precise back-edge that closes the cycle: last -> first
         let u = *cycle.last().expect("cycle must be non-empty");
         let v = cycle[0];
         self.remove_edge(u, v);
@@ -238,7 +236,6 @@ impl<'input> Graph<'input> {
     }
 
     fn detect_cycle(&self) -> Vec<&'input str> {
-        // Sort nodes for determinism
         let mut nodes: Vec<_> = self.nodes.keys().copied().collect();
         nodes.sort_unstable();
 
@@ -261,7 +258,6 @@ impl<'input> Graph<'input> {
         visited: &mut HashSet<&'input str>,
         stack: &mut Vec<&'input str>,
     ) -> Option<Vec<&'input str>> {
-        // If we reached a node already on the current path, extract minimal cycle
         if let Some(pos) = stack.iter().position(|&n| n == node) {
             return Some(stack[pos..].to_vec());
         }
