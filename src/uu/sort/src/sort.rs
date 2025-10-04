@@ -24,8 +24,10 @@ use clap::{Arg, ArgAction, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
+#[cfg(target_family = "unix")]
+use libc::{_SC_PAGESIZE, _SC_PHYS_PAGES};
 #[cfg(target_os = "linux")]
-use nix::libc::{RLIMIT_NOFILE, getrlimit, rlimit};
+use libc::{RLIMIT_NOFILE, rlimit};
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{Rng, rng};
 use rayon::prelude::*;
@@ -115,10 +117,12 @@ const DECIMAL_PT: u8 = b'.';
 const NEGATIVE: &u8 = &b'-';
 const POSITIVE: &u8 = &b'+';
 
-// Choosing a higher buffer size does not result in performance improvements
-// (at least not on my machine). TODO: In the future, we should also take the amount of
-// available memory into consideration, instead of relying on this constant only.
-const DEFAULT_BUF_SIZE: usize = 1_000_000_000; // 1 GB
+// NOTE: The automatic buffer heuristics clamp to this range to avoid
+// overcommitting memory on constrained systems while still keeping
+// reasonably large chunks for typical workloads.
+const MIN_AUTOMATIC_BUF_SIZE: usize = 512 * 1024; // 512 KiB
+const FALLBACK_AUTOMATIC_BUF_SIZE: usize = 4 * 1024 * 1024; // 4 MiB
+const MAX_AUTOMATIC_BUF_SIZE: usize = 128 * 1024 * 1024; // 128 MiB
 
 #[derive(Debug, Error)]
 pub enum SortError {
@@ -359,7 +363,7 @@ impl Default for GlobalSettings {
             separator: None,
             threads: String::new(),
             line_ending: LineEnding::Newline,
-            buffer_size: DEFAULT_BUF_SIZE,
+            buffer_size: FALLBACK_AUTOMATIC_BUF_SIZE,
             compress_prog: None,
             merge_batch_size: 32,
             precomputed: Precomputed::default(),
@@ -1029,13 +1033,117 @@ fn get_rlimit() -> UResult<usize> {
         rlim_cur: 0,
         rlim_max: 0,
     };
-    match unsafe { getrlimit(RLIMIT_NOFILE, &raw mut limit) } {
+    match unsafe { libc::getrlimit(RLIMIT_NOFILE, &mut limit) } {
         0 => Ok(limit.rlim_cur as usize),
         _ => Err(UUsageError::new(2, translate!("sort-failed-fetch-rlimit"))),
     }
 }
 
 const STDIN_FILE: &str = "-";
+
+fn automatic_buffer_size(files: &[OsString]) -> usize {
+    let file_hint = file_size_hint(files);
+    let mem_hint = available_memory_hint();
+
+    match (file_hint, mem_hint) {
+        (Some(file), Some(mem)) => file.min(mem),
+        (Some(file), None) => file,
+        (None, Some(mem)) => mem,
+        (None, None) => FALLBACK_AUTOMATIC_BUF_SIZE,
+    }
+}
+
+fn file_size_hint(files: &[OsString]) -> Option<usize> {
+    let mut total_bytes: u128 = 0;
+
+    for file in files {
+        if file == STDIN_FILE {
+            continue;
+        }
+
+        let Ok(metadata) = std::fs::metadata(file) else {
+            continue;
+        };
+
+        if !metadata.is_file() {
+            continue;
+        }
+
+        total_bytes = total_bytes.saturating_add(metadata.len() as u128);
+
+        if total_bytes >= (MAX_AUTOMATIC_BUF_SIZE as u128) * 4 {
+            break;
+        }
+    }
+
+    if total_bytes == 0 {
+        return None;
+    }
+
+    Some(clamp_hint(total_bytes / 4))
+}
+
+fn available_memory_hint() -> Option<usize> {
+    #[cfg(target_os = "linux")]
+    if let Some(bytes) = available_memory_bytes() {
+        return Some(clamp_hint(bytes / 8));
+    }
+
+    physical_memory_bytes().map(|bytes| clamp_hint(bytes / 8))
+}
+
+fn clamp_hint(bytes: u128) -> usize {
+    let min = MIN_AUTOMATIC_BUF_SIZE as u128;
+    let max = MAX_AUTOMATIC_BUF_SIZE as u128;
+    let clamped = bytes.clamp(min, max);
+    clamped.min(usize::MAX as u128) as usize
+}
+
+#[cfg(target_os = "linux")]
+fn available_memory_bytes() -> Option<u128> {
+    let meminfo = std::fs::read_to_string("/proc/meminfo").ok()?;
+    let mut mem_available = None;
+    let mut mem_total = None;
+
+    for line in meminfo.lines() {
+        if let Some(value) = line.strip_prefix("MemAvailable:") {
+            mem_available = parse_meminfo_value(value);
+        } else if let Some(value) = line.strip_prefix("MemTotal:") {
+            mem_total = parse_meminfo_value(value);
+        }
+
+        if mem_available.is_some() && mem_total.is_some() {
+            break;
+        }
+    }
+
+    mem_available.or(mem_total)
+}
+
+#[cfg(target_os = "linux")]
+fn parse_meminfo_value(value: &str) -> Option<u128> {
+    let amount_kib = value.split_whitespace().next()?.parse::<u128>().ok()?;
+    Some(amount_kib * 1024)
+}
+
+fn physical_memory_bytes() -> Option<u128> {
+    #[cfg(target_family = "unix")]
+    {
+        let pages = unsafe { libc::sysconf(_SC_PHYS_PAGES) };
+        let page_size = unsafe { libc::sysconf(_SC_PAGESIZE) };
+        if pages <= 0 || page_size <= 0 {
+            return None;
+        }
+        let pages = u128::try_from(pages).ok()?;
+        let page_size = u128::try_from(page_size).ok()?;
+        Some(pages.saturating_mul(page_size))
+    }
+
+    #[cfg(not(target_family = "unix"))]
+    {
+        None
+    }
+}
 
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
@@ -1157,14 +1265,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    settings.buffer_size =
-        matches
-            .get_one::<String>(options::BUF_SIZE)
-            .map_or(Ok(DEFAULT_BUF_SIZE), |s| {
-                GlobalSettings::parse_byte_count(s).map_err(|e| {
-                    USimpleError::new(2, format_error_message(&e, s, options::BUF_SIZE))
-                })
-            })?;
+    settings.buffer_size = matches.get_one::<String>(options::BUF_SIZE).map_or_else(
+        || Ok(automatic_buffer_size(&files)),
+        |s| {
+            GlobalSettings::parse_byte_count(s)
+                .map_err(|e| USimpleError::new(2, format_error_message(&e, s, options::BUF_SIZE)))
+        },
+    )?;
 
     let mut tmp_dir = TmpDirWrapper::new(
         matches
