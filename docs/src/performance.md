@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore taskset -->
+<!-- spell-checker:ignore taskset usize -->
 
 # Performance Profiling Tutorial
 
