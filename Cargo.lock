@@ -3267,6 +3267,7 @@ name = "uu_cp"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "exacl",
  "filetime",
  "fluent",
@@ -3274,6 +3275,7 @@ dependencies = [
  "libc",
  "linux-raw-sys",
  "selinux",
+ "tempfile",
  "thiserror 2.0.16",
  "uucore",
  "walkdir",
