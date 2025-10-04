@@ -71,10 +71,9 @@ OS ?= $(shell uname -s)
 
 # Windows does not allow symlink by default
 ifeq ($(OS),Windows_NT)
-	LN ?= ln
-else
-	LN ?= ln -sf
+	LN ?= ln -v
 endif
+LN ?= ln -svf
 
 ifdef SELINUX_ENABLED
 	override SELINUX_ENABLED := 0
