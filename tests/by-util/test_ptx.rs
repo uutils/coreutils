@@ -3,12 +3,40 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore roff
-
+// spell-checker:ignore funnnnnnnnnnnnnnnnn
 use uutests::new_ucmd;
 
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[test]
+fn test_tex_format_no_truncation_markers() {
+    let input = "Hello world Rust is a fun language";
+    new_ucmd!()
+        .args(&["-G", "-w", "30", "--format=tex"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only_fixture("test_tex_format_no_truncation_markers.expected");
+}
+#[test]
+fn gnu_ext_disabled_chunk_no_over_reading() {
+    let input = "Hello World Rust is a fun language";
+    new_ucmd!()
+        .args(&["-G", "-w", "30"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_chunk_no_over_reading.expected");
+}
+
+#[test]
+fn test_truncation_no_extra_space_in_after() {
+    new_ucmd!()
+        .args(&["-G", "-w", "30"])
+        .pipe_in("Rust is funnnnnnnnnnnnnnnnn")
+        .succeeds()
+        .stdout_contains(".xx \"\" \"Rust\" \"is/\" \"\"");
 }
 
 #[test]

@@ -600,12 +600,14 @@ lto = true
 [profile.release-fast]
 inherits = "release"
 panic = "abort"
+codegen-units = 1
 
 # A release-like profile that is as small as possible.
 [profile.release-small]
 inherits = "release"
 opt-level = "z"
 panic = "abort"
+codegen-units = 1
 strip = true
 
 # A release-like profile with debug info, useful for profiling.

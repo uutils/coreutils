@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDOs) corasick memchr Roff trunc oset iset CHARCLASS
 
 use std::cmp;
+use std::cmp::PartialEq;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::fmt::Write as FmtWrite;
@@ -22,7 +23,7 @@ use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::format_usage;
 use uucore::translate;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum OutFormat {
     Dumb,
     Roff,
@@ -403,7 +404,7 @@ fn trim_idx(s: &[char], beg: usize, end: usize) -> (usize, usize) {
     while b < e && s[b].is_whitespace() {
         b += 1;
     }
-    while b < e && s[e - 1].is_whitespace() {
+    while beg < e && s[e - 1].is_whitespace() {
         e -= 1;
     }
     (b, e)
@@ -483,7 +484,18 @@ fn get_output_chunks(
     let tail_end = trim_broken_word_right(all_after, tail_beg, tail_end);
 
     // trim away whitespace again.
-    let (tail_beg, tail_end) = trim_idx(all_after, tail_beg, tail_end);
+    let (tail_beg, mut tail_end) = trim_idx(all_after, tail_beg, tail_end);
+    // Fix: Manually trim trailing char (like "a") that are preceded by a space.
+    // This handles cases like "is a" which are not correctly trimmed by the
+    // preceding functions.
+    if tail_end >= 2
+        && (tail_end - 2) > tail_beg
+        && all_after[tail_end - 2].is_whitespace()
+        && !all_after[tail_end - 1].is_whitespace()
+    {
+        tail_end -= 1;
+        (_, tail_end) = trim_idx(all_after, tail_beg, tail_end);
+    }
 
     // and get the string
     let tail_str: String = all_after[tail_beg..tail_end].iter().collect();
@@ -511,19 +523,21 @@ fn get_output_chunks(
     // and get the string.
     let head_str: String = all_before[head_beg..head_end].iter().collect();
     head.push_str(&head_str);
+    //The TeX mode does not output truncation characters.
+    if config.format != OutFormat::Tex {
+        // put right context truncation string if needed
+        if after_end != all_after.len() && tail_beg == tail_end {
+            after.push_str(&config.trunc_str);
+        } else if after_end != all_after.len() && tail_end != all_after.len() {
+            tail.push_str(&config.trunc_str);
+        }
 
-    // put right context truncation string if needed
-    if after_end != all_after.len() && tail_beg == tail_end {
-        after.push_str(&config.trunc_str);
-    } else if after_end != all_after.len() && tail_end != all_after.len() {
-        tail.push_str(&config.trunc_str);
-    }
-
-    // put left context truncation string if needed
-    if before_beg != 0 && head_beg == head_end {
-        before = format!("{}{before}", config.trunc_str);
-    } else if before_beg != 0 && head_beg != 0 {
-        head = format!("{}{head}", config.trunc_str);
+        // put left context truncation string if needed
+        if before_beg != 0 && head_beg == head_end {
+            before = format!("{}{before}", config.trunc_str);
+        } else if before_beg != 0 && head_beg != 0 {
+            head = format!("{}{head}", config.trunc_str);
+        }
     }
 
     (tail, before, after, head)
