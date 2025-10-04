@@ -435,9 +435,16 @@ pub(crate) fn copy_directory(
         match direntry_result {
             Ok(direntry) => {
                 let direntry_type = direntry.file_type();
-                let entry_is_symlink = direntry_type.is_symlink();
-                let entry_is_dir_no_follow = direntry_type.is_dir();
-                let entry = Entry::new(&context, direntry.path(), options.no_target_dir)?;
+                let direntry_path = direntry.path();
+                let (entry_is_symlink, entry_is_dir_no_follow) =
+                    match direntry_path.symlink_metadata() {
+                        Ok(metadata) => {
+                            let file_type = metadata.file_type();
+                            (file_type.is_symlink(), file_type.is_dir())
+                        }
+                        Err(_) => (direntry_type.is_symlink(), direntry_type.is_dir()),
+                    };
+                let entry = Entry::new(&context, &direntry_path, options.no_target_dir)?;
 
                 copy_direntry(
                     progress_bar,
@@ -464,7 +471,7 @@ pub(crate) fn copy_directory(
                 // `./a/b/c` into `./a/`, in which case we'll need to fix the
                 // permissions of both `./a/b/c` and `./a/b`, in that order.)
                 let is_dir_for_permissions =
-                    entry_is_dir_no_follow || (options.dereference && direntry.path().is_dir());
+                    entry_is_dir_no_follow || (options.dereference && direntry_path.is_dir());
                 if is_dir_for_permissions {
                     // Add this directory to our list for permission fixing later
                     dirs_needing_permissions
@@ -473,7 +480,7 @@ pub(crate) fn copy_directory(
                     // If true, last_iter is not a parent of this iter.
                     // The means we just exited a directory.
                     let went_up = if let Some(last_iter) = &last_iter {
-                        last_iter.path().strip_prefix(direntry.path()).is_ok()
+                        last_iter.path().strip_prefix(&direntry_path).is_ok()
                     } else {
                         false
                     };
@@ -487,14 +494,14 @@ pub(crate) fn copy_directory(
                         //
                         // All the unwraps() here are unreachable.
                         let last_iter = last_iter.as_ref().unwrap();
-                        let diff = last_iter.path().strip_prefix(direntry.path()).unwrap();
+                        let diff = last_iter.path().strip_prefix(&direntry_path).unwrap();
 
                         // Fix permissions for every entry in `diff`, inside-out.
                         // We skip the last directory (which will be `.`) because
                         // its permissions will be fixed when we walk _out_ of it.
                         // (at this point, we might not be done copying `.`!)
                         for p in skip_last(diff.ancestors()) {
-                            let src = direntry.path().join(p);
+                            let src = direntry_path.join(p);
                             let entry = Entry::new(&context, &src, options.no_target_dir)?;
 
                             copy_attributes(
