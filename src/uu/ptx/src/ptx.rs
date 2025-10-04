@@ -352,11 +352,15 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
 
 fn get_reference(config: &Config, word_ref: &WordRef, line: &str, context_reg: &Regex) -> String {
     if config.auto_ref {
-        format!(
-            "{}:{}",
-            word_ref.filename.maybe_quote(),
-            word_ref.local_line_nr + 1
-        )
+        if word_ref.filename == "-" {
+            format!(":{}", word_ref.local_line_nr + 1)
+        } else {
+            format!(
+                "{}:{}",
+                word_ref.filename.maybe_quote(),
+                word_ref.local_line_nr + 1
+            )
+        }
     } else if config.input_ref {
         let (beg, end) = match context_reg.find(line) {
             Some(x) => (x.start(), x.end()),
