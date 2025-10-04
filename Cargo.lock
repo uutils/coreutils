@@ -3151,7 +3151,9 @@ name = "uu_base64"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
+ "tempfile",
  "uu_base32",
  "uucore",
 ]
@@ -3265,6 +3267,7 @@ name = "uu_cp"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "exacl",
  "filetime",
  "fluent",
@@ -3272,6 +3275,7 @@ dependencies = [
  "libc",
  "linux-raw-sys",
  "selinux",
+ "tempfile",
  "thiserror 2.0.16",
  "uucore",
  "walkdir",
@@ -3372,8 +3376,10 @@ name = "uu_du"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "glob",
+ "tempfile",
  "thiserror 2.0.16",
  "uucore",
  "windows-sys 0.61.0",
@@ -3405,7 +3411,9 @@ name = "uu_expand"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
+ "tempfile",
  "thiserror 2.0.16",
  "unicode-width 0.2.1",
  "uucore",
@@ -3472,7 +3480,9 @@ name = "uu_fold"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
+ "tempfile",
  "uucore",
 ]
 

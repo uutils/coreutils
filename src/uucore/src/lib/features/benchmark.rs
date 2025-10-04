@@ -19,6 +19,9 @@ pub fn create_test_file(data: &[u8], temp_dir: &Path) -> PathBuf {
     let mut writer = BufWriter::new(file);
     writer.write_all(data).unwrap();
     writer.flush().unwrap();
+    // Ensure data is fully written to disk before returning
+    std::mem::drop(writer);
+    File::open(&file_path).unwrap().sync_all().unwrap();
     file_path
 }
 
@@ -28,7 +31,9 @@ pub fn run_util_function<F>(util_func: F, args: &[&str]) -> i32
 where
     F: FnOnce(std::vec::IntoIter<std::ffi::OsString>) -> i32,
 {
-    let os_args: Vec<std::ffi::OsString> = args.iter().map(|s| (*s).into()).collect();
+    // Prepend a dummy program name as argv[0] since clap expects it
+    let mut os_args: Vec<std::ffi::OsString> = vec!["benchmark".into()];
+    os_args.extend(args.iter().map(|s| (*s).into()));
     util_func(os_args.into_iter())
 }
 
@@ -300,5 +305,129 @@ pub mod text_data {
             .map(|n| n.to_string())
             .collect::<Vec<_>>()
             .join("\n")
+    }
+}
+
+/// Filesystem tree generation utilities for benchmarking
+pub mod fs_tree {
+    use std::fs::{self, File};
+    use std::io::Write;
+    use std::path::Path;
+
+    /// Create a balanced directory tree for benchmarking
+    ///
+    /// Creates a tree with specified depth, number of directories per level, and files per directory.
+    /// This creates a realistic filesystem structure for testing recursive operations.
+    pub fn create_balanced_tree(
+        base_dir: &Path,
+        depth: usize,
+        dirs_per_level: usize,
+        files_per_dir: usize,
+    ) {
+        if depth == 0 {
+            return;
+        }
+
+        // Create files in current directory
+        for file_idx in 0..files_per_dir {
+            let file_path = base_dir.join(format!("f{file_idx}"));
+            File::create(&file_path).unwrap();
+        }
+
+        // Create subdirectories and recurse
+        for dir_idx in 0..dirs_per_level {
+            let dir_path = base_dir.join(format!("d{dir_idx}"));
+            fs::create_dir(&dir_path).unwrap();
+            create_balanced_tree(&dir_path, depth - 1, dirs_per_level, files_per_dir);
+        }
+    }
+
+    /// Create a wide directory tree (many files/dirs at shallow depth)
+    ///
+    /// This creates a flat structure with many files and directories at a shallow depth,
+    /// useful for benchmarking operations that need to traverse many entries quickly.
+    pub fn create_wide_tree(base_dir: &Path, total_files: usize, total_dirs: usize) {
+        // Create many files in root
+        for file_idx in 0..total_files {
+            let file_path = base_dir.join(format!("f{file_idx}"));
+            File::create(&file_path).unwrap();
+        }
+
+        // Create many directories with few files each
+        for dir_idx in 0..total_dirs {
+            let dir_path = base_dir.join(format!("d{dir_idx}"));
+            fs::create_dir(&dir_path).unwrap();
+            for file_idx in 0..5 {
+                File::create(dir_path.join(format!("f{file_idx}"))).unwrap();
+            }
+        }
+    }
+
+    /// Create a deep directory tree (deep nesting)
+    ///
+    /// This creates a linear chain of deeply nested directories, useful for testing
+    /// recursion depth handling and stack usage.
+    pub fn create_deep_tree(base_dir: &Path, depth: usize, files_per_level: usize) {
+        let mut current_dir = base_dir.to_path_buf();
+
+        for level in 0..depth {
+            // Create files at this level
+            for file_idx in 0..files_per_level {
+                File::create(current_dir.join(format!("f{file_idx}"))).unwrap();
+            }
+
+            // Create next level directory
+            if level < depth - 1 {
+                let next_dir = current_dir.join("d");
+                fs::create_dir(&next_dir).unwrap();
+                current_dir = next_dir;
+            }
+        }
+    }
+
+    /// Create a tree with mixed file types and permissions for comprehensive testing
+    ///
+    /// Creates files with different extensions, sizes, and permissions (on Unix).
+    /// Useful for testing file type detection, permission handling, and formatting.
+    pub fn create_mixed_tree(base_dir: &Path) {
+        let extensions = ["txt", "log", "dat", "tmp", "bak", "cfg"];
+        let sizes = [0, 100, 1024, 10240];
+
+        for (i, ext) in extensions.iter().enumerate() {
+            for (j, &size) in sizes.iter().enumerate() {
+                let file_path = base_dir.join(format!("mixed_file_{i}_{j}.{ext}"));
+                let mut file = File::create(&file_path).unwrap();
+
+                if size > 0 {
+                    let content = "x".repeat(size);
+                    file.write_all(content.as_bytes()).unwrap();
+                }
+
+                // Set permissions only on Unix platforms
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let perms = fs::Permissions::from_mode(match (i + j) % 4 {
+                        0 => 0o644,
+                        1 => 0o755,
+                        2 => 0o600,
+                        _ => 0o444,
+                    });
+                    fs::set_permissions(&file_path, perms).unwrap();
+                }
+            }
+        }
+
+        // Create some subdirectories
+        for i in 0..5 {
+            let dir_path = base_dir.join(format!("mixed_subdir_{i}"));
+            fs::create_dir(&dir_path).unwrap();
+
+            for j in 0..3 {
+                let file_path = dir_path.join(format!("sub_file_{j}.txt"));
+                let mut file = File::create(&file_path).unwrap();
+                writeln!(file, "File {j} in subdir {i}").unwrap();
+            }
+        }
     }
 }

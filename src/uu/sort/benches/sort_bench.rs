@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
+use tempfile::NamedTempFile;
 use uu_sort::uumain;
 use uucore::benchmark::{run_util_function, setup_test_file, text_data};
 
@@ -12,9 +13,14 @@ use uucore::benchmark::{run_util_function, setup_test_file, text_data};
 fn sort_ascii_only(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_ascii_data(num_lines);
     let file_path = setup_test_file(&data);
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap();
 
     bencher.bench(|| {
-        black_box(run_util_function(uumain, &[file_path.to_str().unwrap()]));
+        black_box(run_util_function(
+            uumain,
+            &["-o", output_path, file_path.to_str().unwrap()],
+        ));
     });
 }
 
@@ -23,9 +29,14 @@ fn sort_ascii_only(bencher: Bencher, num_lines: usize) {
 fn sort_accented_data(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_accented_data(num_lines);
     let file_path = setup_test_file(&data);
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap();
 
     bencher.bench(|| {
-        black_box(run_util_function(uumain, &[file_path.to_str().unwrap()]));
+        black_box(run_util_function(
+            uumain,
+            &["-o", output_path, file_path.to_str().unwrap()],
+        ));
     });
 }
 
@@ -34,9 +45,14 @@ fn sort_accented_data(bencher: Bencher, num_lines: usize) {
 fn sort_mixed_data(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_mixed_data(num_lines);
     let file_path = setup_test_file(&data);
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap();
 
     bencher.bench(|| {
-        black_box(run_util_function(uumain, &[file_path.to_str().unwrap()]));
+        black_box(run_util_function(
+            uumain,
+            &["-o", output_path, file_path.to_str().unwrap()],
+        ));
     });
 }
 
@@ -45,9 +61,14 @@ fn sort_mixed_data(bencher: Bencher, num_lines: usize) {
 fn sort_case_sensitive(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_case_sensitive_data(num_lines);
     let file_path = setup_test_file(&data);
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap();
 
     bencher.bench(|| {
-        black_box(run_util_function(uumain, &[file_path.to_str().unwrap()]));
+        black_box(run_util_function(
+            uumain,
+            &["-o", output_path, file_path.to_str().unwrap()],
+        ));
     });
 }
 
@@ -56,11 +77,13 @@ fn sort_case_sensitive(bencher: Bencher, num_lines: usize) {
 fn sort_case_insensitive(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_case_sensitive_data(num_lines);
     let file_path = setup_test_file(&data);
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap();
 
     bencher.bench(|| {
         black_box(run_util_function(
             uumain,
-            &["-f", file_path.to_str().unwrap()],
+            &["-f", "-o", output_path, file_path.to_str().unwrap()],
         ));
     });
 }
@@ -70,11 +93,13 @@ fn sort_case_insensitive(bencher: Bencher, num_lines: usize) {
 fn sort_dictionary_order(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_mixed_data(num_lines);
     let file_path = setup_test_file(&data);
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap();
 
     bencher.bench(|| {
         black_box(run_util_function(
             uumain,
-            &["-d", file_path.to_str().unwrap()],
+            &["-d", "-o", output_path, file_path.to_str().unwrap()],
         ));
     });
 }
@@ -92,10 +117,13 @@ fn sort_numeric(bencher: Bencher, num_lines: usize) {
 
     let file_path = setup_test_file(&data);
 
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap();
+
     bencher.bench(|| {
         black_box(run_util_function(
             uumain,
-            &["-n", file_path.to_str().unwrap()],
+            &["-n", "-o", output_path, file_path.to_str().unwrap()],
         ));
     });
 }
@@ -105,11 +133,13 @@ fn sort_numeric(bencher: Bencher, num_lines: usize) {
 fn sort_reverse_locale(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_accented_data(num_lines);
     let file_path = setup_test_file(&data);
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap();
 
     bencher.bench(|| {
         black_box(run_util_function(
             uumain,
-            &["-r", file_path.to_str().unwrap()],
+            &["-r", "-o", output_path, file_path.to_str().unwrap()],
         ));
     });
 }
@@ -130,11 +160,14 @@ fn sort_key_field(bencher: Bencher, num_lines: usize) {
 
     let file_path = setup_test_file(&data);
 
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap();
+
     bencher.bench(|| {
         // Sort by second field
         black_box(run_util_function(
             uumain,
-            &["-k", "2", file_path.to_str().unwrap()],
+            &["-k", "2", "-o", output_path, file_path.to_str().unwrap()],
         ));
     });
 }
@@ -144,11 +177,13 @@ fn sort_key_field(bencher: Bencher, num_lines: usize) {
 fn sort_unique_locale(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_accented_data(num_lines);
     let file_path = setup_test_file(&data);
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap();
 
     bencher.bench(|| {
         black_box(run_util_function(
             uumain,
-            &["-u", file_path.to_str().unwrap()],
+            &["-u", "-o", output_path, file_path.to_str().unwrap()],
         ));
     });
 }
