@@ -463,10 +463,9 @@ pub(crate) fn copy_directory(
                 // (Note that there can be more than one! We might step out of
                 // `./a/b/c` into `./a/`, in which case we'll need to fix the
                 // permissions of both `./a/b/c` and `./a/b`, in that order.)
-                let is_dir_for_permissions = entry_is_dir_no_follow
-                    || (options.dereference && direntry.path().is_dir());
-                if is_dir_for_permissions
-                {
+                let is_dir_for_permissions =
+                    entry_is_dir_no_follow || (options.dereference && direntry.path().is_dir());
+                if is_dir_for_permissions {
                     // Add this directory to our list for permission fixing later
                     dirs_needing_permissions
                         .push((entry.source_absolute.clone(), entry.local_to_target.clone()));
