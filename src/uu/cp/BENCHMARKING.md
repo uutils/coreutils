@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore hyperfine tmpfs reflink fsxattr xattrs clonefile -->
+<!-- spell-checker:ignore hyperfine tmpfs reflink fsxattr xattrs clonefile vmtouch APFS pathlib Btrfs fallocate journaling -->
 
 # Benchmarking cp
 
@@ -30,10 +30,10 @@ being exercised so results can be interpreted correctly.
 - Build a release binary first: `cargo build --release -p uu_cp`.
 - Use `hyperfine` for timing and rely on the `--prepare` hook to reset state
 between runs.
-- Prefer running on a fast device (RAM disk, tmpfs, NVMe) to minimise raw
+- Prefer running on a fast device (RAM disk, tmpfs, NVMe) to minimize raw
 storage latency when isolating the cost of the tool.
 - On Linux, control the page cache where appropriate using tools like
-`vmtouch` or `echo 3 > /proc/sys/vm/drop_caches` (root required). Prioritise
+`vmtouch` or `echo 3 > /proc/sys/vm/drop_caches` (root required). Prioritize
 repeatability and stay within the policies of the host system.
 - Keep the workload definition explicit. When comparing against GNU `cp` or
 other implementations, ensure identical datasets and mount options.
@@ -56,7 +56,7 @@ hyperfine \
 What to record:
 
 - Achieved throughput (MB/s) for large sequential copies.
-- Behaviour with `--reflink=auto` or `--sparse=auto` on filesystems that
+- Behavior with `--reflink=auto` or `--sparse=auto` on filesystems that
 support copy-on-write or sparse regions.
 - CPU overhead when enabling attribute preservation such as
 `--preserve=mode,timestamps,xattr`.
@@ -93,7 +93,7 @@ What to record:
 - Time spent in directory traversal and metadata replication.
 - Impact of toggling options such as `--preserve`, `--no-preserve`, `--link`,
 `--hard-link`, and `--archive`.
-- Behaviour when symbolic links or hard links are present, especially with
+- Behavior when symbolic links or hard links are present, especially with
 `--dereference` versus `--no-dereference`.
 
 ## Copy-on-write and sparse files
@@ -127,7 +127,7 @@ features are active.
 `--backup=numbered`) to see the impact of extra file operations.
 
 Supplementary analysis with `strace -c` or `perf record` can show which system
-calls dominate and guide optimisation work.
+calls dominate and guide optimization work.
 
 ## Interpreting results
 
