@@ -1975,7 +1975,13 @@ fn delete_dest_if_needed_and_allowed(
     };
 
     if delete_dest {
-        fs::remove_file(dest)?;
+        match fs::remove_file(dest) {
+            Ok(()) => {}
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                // target could have been deleted earlier (e.g. same-file with --remove-destination)
+            }
+            Err(err) => return Err(err.into()),
+        }
     }
 
     Ok(())
