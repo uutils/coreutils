@@ -42,5 +42,7 @@
   "ignoreWords": [],
 
   // words to always consider correct
-  "words": []
+  "words": [
+    "sysconf"
+  ]
 }
