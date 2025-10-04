@@ -498,8 +498,8 @@ else
 		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)hashsum $(PROG_PREFIX)$(prog) $(newline) \
 	)
 endif
-# symlink test if we have
-$(shell cd $(INSTALLDIR_BIN) && $(LN) $(shell readlink $(PROG_PREFIX)test) $(PROG_PREFIX)[ || true)
+	# symlink test if we have
+	$(shell cd $(INSTALLDIR_BIN) && $(LN) $(shell readlink $(PROG_PREFIX)test) $(PROG_PREFIX)[ || true)
 
 uninstall:
 ifneq ($(OS),Windows_NT)
