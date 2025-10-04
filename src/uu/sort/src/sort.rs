@@ -117,8 +117,8 @@ const DECIMAL_PT: u8 = b'.';
 const NEGATIVE: &u8 = &b'-';
 const POSITIVE: &u8 = &b'+';
 
-// NOTE: The automatic buffer heuristics clamp to this range to avoid
-// overcommitting memory on constrained systems while still keeping
+// The automatic buffer heuristics clamp to this range to avoid
+// over-committing memory on constrained systems while still keeping
 // reasonably large chunks for typical workloads.
 const MIN_AUTOMATIC_BUF_SIZE: usize = 512 * 1024; // 512 KiB
 const FALLBACK_AUTOMATIC_BUF_SIZE: usize = 4 * 1024 * 1024; // 4 MiB
