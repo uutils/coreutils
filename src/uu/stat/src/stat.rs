@@ -439,7 +439,13 @@ fn quote_file_name(file_name: &str, quoting_style: &QuotingStyle) -> String {
             let escaped = file_name.replace('\'', r"\'");
             format!("'{escaped}'")
         }
-        QuotingStyle::ShellEscapeAlways => format!("\'{file_name}\'"),
+        QuotingStyle::ShellEscapeAlways => {
+            if file_name.contains('\'') {
+                format!("\"{file_name}\"")
+            } else {
+                format!("\'{file_name}\'")
+            }
+        }
         QuotingStyle::Quote => file_name.to_string(),
     }
 }
