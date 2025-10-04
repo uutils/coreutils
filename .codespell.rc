@@ -1,6 +1,4 @@
 [codespell]
-ignore-words-list = crate
+ignore-words-list = crate,sysconf
 skip = ./.git/**,./.vscode/cspell.dictionaries/**,./target/**,./tests/fixtures/**
 
-[default.extend-words]
-sysconf = "sysconf"
