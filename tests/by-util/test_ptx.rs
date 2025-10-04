@@ -10,7 +10,25 @@ use uutests::new_ucmd;
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
-
+#[test]
+fn test_reference_format_for_stdin() {
+    let input = "Rust is good language";
+    let expected_output = concat!(
+        r#".xx "" "" "Rust is good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Rust is" "good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Rust" "is good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Rust is good" "language" "" ":1""#,
+        "\n",
+    );
+    new_ucmd!()
+        .args(&["-G", "-A"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected_output);
+}
 #[test]
 fn test_tex_format_no_truncation_markers() {
     let input = "Hello world Rust is a fun language";
