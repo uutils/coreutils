@@ -444,7 +444,7 @@ pub(crate) fn copy_directory(
                         }
                         Err(_) => (direntry_type.is_symlink(), direntry_type.is_dir()),
                     };
-                let entry = Entry::new(&context, &direntry_path, options.no_target_dir)?;
+                let entry = Entry::new(&context, direntry_path, options.no_target_dir)?;
 
                 copy_direntry(
                     progress_bar,
@@ -480,7 +480,7 @@ pub(crate) fn copy_directory(
                     // If true, last_iter is not a parent of this iter.
                     // The means we just exited a directory.
                     let went_up = if let Some(last_iter) = &last_iter {
-                        last_iter.path().strip_prefix(&direntry_path).is_ok()
+                        last_iter.path().strip_prefix(direntry_path).is_ok()
                     } else {
                         false
                     };
@@ -494,7 +494,7 @@ pub(crate) fn copy_directory(
                         //
                         // All the unwraps() here are unreachable.
                         let last_iter = last_iter.as_ref().unwrap();
-                        let diff = last_iter.path().strip_prefix(&direntry_path).unwrap();
+                        let diff = last_iter.path().strip_prefix(direntry_path).unwrap();
 
                         // Fix permissions for every entry in `diff`, inside-out.
                         // We skip the last directory (which will be `.`) because
