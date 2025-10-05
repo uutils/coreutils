@@ -1335,6 +1335,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
     // remember the copied destinations for further usage.
     // we can't use copied_files as it is because the key is the source file's information.
     let mut copied_destinations: HashSet<PathBuf> = HashSet::with_capacity(sources.len());
+    let mut created_parent_dirs: HashSet<PathBuf> = HashSet::new();
 
     let progress_bar = if options.progress_bar {
         let pb = ProgressBar::new(disk_usage(sources, options.recursive)?)
@@ -1390,6 +1391,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 &mut symlinked_files,
                 &copied_destinations,
                 &mut copied_files,
+                &mut created_parent_dirs,
             ) {
                 show_error_if_needed(&error);
                 if !matches!(error, CpError::Skipped(false)) {
@@ -1464,6 +1466,7 @@ fn copy_source(
     symlinked_files: &mut HashSet<FileInformation>,
     copied_destinations: &HashSet<PathBuf>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
+    created_parent_dirs: &mut HashSet<PathBuf>,
 ) -> CopyResult<()> {
     let source_path = Path::new(&source);
     if source_path.is_dir() && (options.dereference || !source_path.is_symlink()) {
@@ -1476,6 +1479,7 @@ fn copy_source(
             symlinked_files,
             copied_destinations,
             copied_files,
+            created_parent_dirs,
             true,
         )
     } else {
@@ -1489,6 +1493,7 @@ fn copy_source(
             symlinked_files,
             copied_destinations,
             copied_files,
+            created_parent_dirs,
             true,
         );
         if options.parents {
@@ -1970,19 +1975,16 @@ fn delete_dest_if_needed_and_allowed(
     };
 
     if delete_dest {
-        fs::remove_file(dest)?;
+        match fs::remove_file(dest) {
+            Ok(()) => {}
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                // target could have been deleted earlier (e.g. same-file with --remove-destination)
+            }
+            Err(err) => return Err(err.into()),
+        }
     }
 
     Ok(())
-}
-
-/// Decide whether the given path exists.
-fn file_or_link_exists(path: &Path) -> bool {
-    // Using `Path.exists()` or `Path.try_exists()` is not sufficient,
-    // because if `path` is a symbolic link and there are too many
-    // levels of symbolic link, then those methods will return false
-    // or an OS error.
-    path.symlink_metadata().is_ok()
 }
 
 /// Zip the ancestors of a source path and destination path.
@@ -2082,6 +2084,7 @@ fn handle_copy_mode(
     source_in_command_line: bool,
     source_is_fifo: bool,
     source_is_socket: bool,
+    created_parent_dirs: &mut HashSet<PathBuf>,
     #[cfg(unix)] source_is_stream: bool,
 ) -> CopyResult<PerformedAction> {
     let source_is_symlink = source_metadata.is_symlink();
@@ -2123,6 +2126,7 @@ fn handle_copy_mode(
                 source_is_fifo,
                 source_is_socket,
                 symlinked_files,
+                created_parent_dirs,
                 #[cfg(unix)]
                 source_is_stream,
             )?;
@@ -2146,6 +2150,7 @@ fn handle_copy_mode(
                             source_is_fifo,
                             source_is_socket,
                             symlinked_files,
+                            created_parent_dirs,
                             #[cfg(unix)]
                             source_is_stream,
                         )?;
@@ -2182,6 +2187,7 @@ fn handle_copy_mode(
                             source_is_fifo,
                             source_is_socket,
                             symlinked_files,
+                            created_parent_dirs,
                             #[cfg(unix)]
                             source_is_stream,
                         )?;
@@ -2197,6 +2203,7 @@ fn handle_copy_mode(
                     source_is_fifo,
                     source_is_socket,
                     symlinked_files,
+                    created_parent_dirs,
                     #[cfg(unix)]
                     source_is_stream,
                 )?;
@@ -2228,16 +2235,14 @@ fn handle_copy_mode(
 // Allow unused variables for Windows (on options)
 #[allow(unused_variables)]
 fn calculate_dest_permissions(
+    dest_metadata: Option<&Metadata>,
     dest: &Path,
     source_metadata: &Metadata,
     options: &Options,
     context: &str,
 ) -> CopyResult<Permissions> {
-    if dest.exists() {
-        Ok(dest
-            .symlink_metadata()
-            .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?
-            .permissions())
+    if let Some(metadata) = dest_metadata {
+        Ok(metadata.permissions())
     } else {
         #[cfg(unix)]
         {
@@ -2277,10 +2282,16 @@ fn copy_file(
     symlinked_files: &mut HashSet<FileInformation>,
     copied_destinations: &HashSet<PathBuf>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
+    created_parent_dirs: &mut HashSet<PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
     let source_is_symlink = source.is_symlink();
-    let dest_is_symlink = dest.is_symlink();
+    let initial_dest_metadata = dest.symlink_metadata().ok();
+    let dest_is_symlink = initial_dest_metadata
+        .as_ref()
+        .map(|md| md.file_type().is_symlink())
+        .unwrap_or(false);
+    let dest_target_exists = dest.try_exists().unwrap_or(false);
     // Fail if dest is a dangling symlink or a symlink this program created previously
     if dest_is_symlink {
         if FileInformation::from_path(dest, false)
@@ -2302,7 +2313,7 @@ fn copy_file(
 
         let copy_contents = options.dereference(source_in_command_line) || !source_is_symlink;
         if copy_contents
-            && !dest.exists()
+            && !dest_target_exists
             && !matches!(
                 options.overwrite,
                 OverwriteMode::Clobber(ClobberMode::RemoveDestination)
@@ -2335,7 +2346,7 @@ fn copy_file(
         fs::remove_file(dest)?;
     }
 
-    if file_or_link_exists(dest)
+    if initial_dest_metadata.is_some()
         && (!options.attributes_only
             || matches!(
                 options.overwrite,
@@ -2418,7 +2429,15 @@ fn copy_file(
         })?
     };
 
-    let dest_permissions = calculate_dest_permissions(dest, &source_metadata, options, context)?;
+    let dest_metadata = dest.symlink_metadata().ok();
+
+    let dest_permissions = calculate_dest_permissions(
+        dest_metadata.as_ref(),
+        dest,
+        &source_metadata,
+        options,
+        context,
+    )?;
 
     #[cfg(unix)]
     let source_is_fifo = source_metadata.file_type().is_fifo();
@@ -2441,6 +2460,7 @@ fn copy_file(
         source_in_command_line,
         source_is_fifo,
         source_is_socket,
+        created_parent_dirs,
         #[cfg(unix)]
         source_is_stream,
     )?;
@@ -2493,7 +2513,7 @@ fn copy_file(
     );
 
     if let Some(progress_bar) = progress_bar {
-        progress_bar.inc(fs::metadata(source)?.len());
+        progress_bar.inc(source_metadata.len());
     }
 
     Ok(())
@@ -2569,11 +2589,14 @@ fn copy_helper(
     source_is_fifo: bool,
     source_is_socket: bool,
     symlinked_files: &mut HashSet<FileInformation>,
+    created_parent_dirs: &mut HashSet<PathBuf>,
     #[cfg(unix)] source_is_stream: bool,
 ) -> CopyResult<()> {
     if options.parents {
         let parent = dest.parent().unwrap_or(dest);
-        fs::create_dir_all(parent)?;
+        if created_parent_dirs.insert(parent.to_path_buf()) {
+            fs::create_dir_all(parent)?;
+        }
     }
 
     if path_ends_with_terminator(dest) && !dest.is_dir() {
