@@ -42,6 +42,7 @@ basenc-help-base2msbf = bit string with most significant bit (msb) first
 basenc-help-z85 = ascii85-like encoding;
   when encoding, input length must be a multiple of 4;
   when decoding, input length must be a multiple of 5
+basenc-help-base58 = visually unambiguous base58 encoding
 
 # Error messages
 basenc-error-missing-encoding-type = missing encoding type

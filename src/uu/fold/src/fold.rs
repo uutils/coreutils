@@ -7,7 +7,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -108,6 +108,8 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
 }
 
 fn fold(filenames: &[String], bytes: bool, spaces: bool, width: usize) -> UResult<()> {
+    let mut output = BufWriter::new(stdout());
+
     for filename in filenames {
         let filename: &str = filename;
         let mut stdin_buf;
@@ -121,11 +123,15 @@ fn fold(filenames: &[String], bytes: bool, spaces: bool, width: usize) -> UResul
         });
 
         if bytes {
-            fold_file_bytewise(buffer, spaces, width)?;
+            fold_file_bytewise(buffer, spaces, width, &mut output)?;
         } else {
-            fold_file(buffer, spaces, width)?;
+            fold_file(buffer, spaces, width, &mut output)?;
         }
     }
+
+    output
+        .flush()
+        .map_err_context(|| translate!("fold-error-failed-to-write"))?;
     Ok(())
 }
 
@@ -137,7 +143,12 @@ fn fold(filenames: &[String], bytes: bool, spaces: bool, width: usize) -> UResul
 /// to all other characters in the stream.
 ///
 ///  If `spaces` is `true`, attempt to break lines at whitespace boundaries.
-fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) -> UResult<()> {
+fn fold_file_bytewise<T: Read, W: Write>(
+    mut file: BufReader<T>,
+    spaces: bool,
+    width: usize,
+    output: &mut W,
+) -> UResult<()> {
     let mut line = Vec::new();
 
     loop {
@@ -150,7 +161,7 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
         }
 
         if line == [NL] {
-            println!();
+            output.write_all(&[NL])?;
             line.truncate(0);
             continue;
         }
@@ -189,10 +200,10 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
             let at_eol = i >= len;
 
             if at_eol {
-                stdout().write_all(slice)?;
+                output.write_all(slice)?;
             } else {
-                stdout().write_all(slice)?;
-                stdout().write_all(&[NL])?;
+                output.write_all(slice)?;
+                output.write_all(&[NL])?;
             }
         }
 
@@ -211,7 +222,12 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
 /// If `spaces` is `true`, attempt to break lines at whitespace boundaries.
 #[allow(unused_assignments)]
 #[allow(clippy::cognitive_complexity)]
-fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) -> UResult<()> {
+fn fold_file<T: Read, W: Write>(
+    mut file: BufReader<T>,
+    spaces: bool,
+    width: usize,
+    writer: &mut W,
+) -> UResult<()> {
     let mut line = Vec::new();
     let mut output = Vec::new();
     let mut col_count = 0;
@@ -229,8 +245,8 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) -> URe
                 None => output.len(),
             };
 
-            stdout().write_all(&output[..consume])?;
-            stdout().write_all(&[NL])?;
+            writer.write_all(&output[..consume])?;
+            writer.write_all(&[NL])?;
             output.drain(..consume);
 
             // we know there are no tabs left in output, so each char counts
@@ -289,7 +305,7 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) -> URe
         }
 
         if !output.is_empty() {
-            stdout().write_all(&output)?;
+            writer.write_all(&output)?;
             output.truncate(0);
         }
 

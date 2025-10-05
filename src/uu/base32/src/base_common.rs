@@ -12,8 +12,8 @@ use std::io::{self, ErrorKind, Read, Seek};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::encoding::{
-    BASE2LSBF, BASE2MSBF, Base64SimdWrapper, EncodingWrapper, Format, SupportsFastDecodeAndEncode,
-    Z85Wrapper,
+    BASE2LSBF, BASE2MSBF, Base58Wrapper, Base64SimdWrapper, EncodingWrapper, Format,
+    SupportsFastDecodeAndEncode, Z85Wrapper,
     for_base_common::{BASE32, BASE32HEX, BASE64URL, HEXUPPER_PERMISSIVE},
 };
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
@@ -285,6 +285,7 @@ pub fn get_supports_fast_decode_and_encode(
             b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789=_-",
         )),
         Format::Z85 => Box::from(Z85Wrapper {}),
+        Format::Base58 => Box::from(Base58Wrapper {}),
     }
 }
 
