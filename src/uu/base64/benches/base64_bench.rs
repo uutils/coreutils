@@ -3,46 +3,39 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use divan::{Bencher, black_box};
+use divan::Bencher;
 use std::ffi::OsString;
 use uu_base64::uumain;
-use uucore::benchmark::{create_test_file, run_util_function, text_data};
-
-fn create_tmp_file(size_mb: usize) -> String {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let data = text_data::generate_by_size(size_mb, 80);
-    let file_path = create_test_file(&data, temp_dir.path());
-    String::from(file_path.to_str().unwrap())
-}
+use uucore::benchmark::{bench_util, create_test_file, run_util_function, text_data};
 
 /// Benchmark for base64 encoding
 #[divan::bench()]
 fn b64_encode_synthetic(bencher: Bencher) {
-    let file_path_str = &create_tmp_file(5_000);
-
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[file_path_str]));
-    });
+    let data = text_data::generate_by_size(5_000, 80);
+    bench_util(bencher, data, &[], uumain);
 }
 
 // Benchmark for base64 decoding
 #[divan::bench()]
 fn b64_decode_synthetic(bencher: Bencher) {
     let temp_dir = tempfile::tempdir().unwrap();
-    let file_path_str = &create_tmp_file(5_000);
-    let in_file = create_test_file(b"", temp_dir.path());
-    let in_file_str = in_file.to_str().unwrap();
+    let source_data = text_data::generate_by_size(5_000, 80);
+    let source_file = create_test_file(&source_data, temp_dir.path());
+    let encoded_file = create_test_file(b"", temp_dir.path());
+    let encoded_file_str = encoded_file.to_str().unwrap();
+
+    // First encode the data to create the test input
     uumain(
         [
-            OsString::from(file_path_str),
-            OsString::from(format!(">{in_file_str}")),
+            OsString::from(source_file.to_str().unwrap()),
+            OsString::from(format!(">{encoded_file_str}")),
         ]
         .iter()
         .map(|x| (*x).clone()),
     );
 
     bencher.bench(|| {
-        black_box(run_util_function(uumain, &["-d", in_file_str]));
+        divan::black_box(run_util_function(uumain, &["-d", encoded_file_str]));
     });
 }
 
@@ -50,20 +43,23 @@ fn b64_decode_synthetic(bencher: Bencher) {
 #[divan::bench()]
 fn b64_decode_ignore_garbage_synthetic(bencher: Bencher) {
     let temp_dir = tempfile::tempdir().unwrap();
-    let file_path_str = &create_tmp_file(5_000);
-    let in_file = create_test_file(b"", temp_dir.path());
-    let in_file_str = in_file.to_str().unwrap();
+    let source_data = text_data::generate_by_size(5_000, 80);
+    let source_file = create_test_file(&source_data, temp_dir.path());
+    let encoded_file = create_test_file(b"", temp_dir.path());
+    let encoded_file_str = encoded_file.to_str().unwrap();
+
+    // First encode the data to create the test input
     uumain(
         [
-            OsString::from(file_path_str),
-            OsString::from(format!(">{in_file_str}")),
+            OsString::from(source_file.to_str().unwrap()),
+            OsString::from(format!(">{encoded_file_str}")),
         ]
         .iter()
         .map(|x| (*x).clone()),
     );
 
     bencher.bench(|| {
-        black_box(run_util_function(uumain, &["-d", "-i", in_file_str]));
+        divan::black_box(run_util_function(uumain, &["-d", "-i", encoded_file_str]));
     });
 }
 
