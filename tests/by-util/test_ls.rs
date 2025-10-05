@@ -6311,3 +6311,220 @@ fn test_ls_time_sort_without_long() {
     let t = t_out.stdout_str();
     assert_ne!(def, t);
 }
+
+// Tests for -f flag implementation
+#[test]
+fn test_f_flag_enables_all() {
+    // Test that -f enables -a (shows all files including . and ..)
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("visible");
+    at.touch(".hidden");
+
+    scene
+        .ucmd()
+        .arg("-f")
+        .succeeds()
+        .stdout_contains("visible")
+        .stdout_contains(".hidden");
+}
+
+#[test]
+fn test_f_flag_disables_sorting() {
+    // Test that -f disables sorting (equivalent to -U)
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("zebra");
+    at.touch("apple");
+    at.touch("banana");
+
+    // Without -f, files should be sorted alphabetically
+    let sorted = scene.ucmd().succeeds().stdout_move_str();
+    let sorted_lines: Vec<&str> = sorted.lines().collect();
+    assert!(sorted_lines[0].contains("apple"));
+
+    // With -f, files should NOT be sorted
+    let unsorted = scene.ucmd().arg("-f").succeeds().stdout_move_str();
+    assert!(unsorted.contains("zebra"));
+    assert!(unsorted.contains("apple"));
+    assert!(unsorted.contains("banana"));
+}
+
+#[test]
+fn test_f_flag_disables_implicit_color() {
+    // Test that -f disables implicit color (not explicitly set)
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.touch("file.txt");
+
+    // -f without explicit --color: should not have color
+    let result = scene.ucmd().arg("-f").succeeds().stdout_move_str();
+    assert!(
+        !result.contains("\x1b["),
+        "Color should be disabled with -f alone"
+    );
+}
+
+#[test]
+fn test_explicit_color_always_works_with_f() {
+    // Test that explicit --color always enables color, regardless of -f
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.touch("file.txt");
+
+    // --color then -f: explicit --color should still enable color
+    let result1 = scene
+        .ucmd()
+        .arg("--color=always")
+        .arg("-f")
+        .succeeds()
+        .stdout_move_str();
+    assert!(
+        result1.contains("\x1b["),
+        "Explicit --color should work even with -f after"
+    );
+
+    // -f then --color: explicit --color should enable color
+    let result2 = scene
+        .ucmd()
+        .arg("-f")
+        .arg("--color=always")
+        .succeeds()
+        .stdout_move_str();
+    assert!(
+        result2.contains("\x1b["),
+        "Explicit --color should work even with -f before"
+    );
+}
+
+#[test]
+fn test_f_overrides_a_and_big_a() {
+    // Test last-flag-wins: -f after -a/-A
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("visible");
+    at.touch(".hidden");
+
+    // -A then -f: should show all files
+    scene
+        .ucmd()
+        .arg("-A")
+        .arg("-f")
+        .succeeds()
+        .stdout_contains(".hidden");
+
+    // -f then -A: should honor -A (almost all)
+    let output = scene
+        .ucmd()
+        .arg("-f")
+        .arg("-A")
+        .succeeds()
+        .stdout_move_str();
+    assert!(output.contains(".hidden"));
+}
+
+#[test]
+fn test_f_overrides_sort_flags() {
+    // Test last-flag-wins: -f overrides -t, -S, -v, -X
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file1.txt");
+    at.touch("file2.txt");
+    at.touch("file3.txt");
+
+    // -t then -f: should disable sorting
+    let unsorted = scene
+        .ucmd()
+        .arg("-t")
+        .arg("-f")
+        .succeeds()
+        .stdout_move_str();
+    assert!(unsorted.contains("file1.txt"));
+    assert!(unsorted.contains("file2.txt"));
+    assert!(unsorted.contains("file3.txt"));
+
+    // -f then -t: should honor -t (sort by time)
+    scene.ucmd().arg("-f").arg("-t").succeeds();
+}
+
+#[test]
+fn test_a_overrides_f_files() {
+    // Test that -a after -f still shows all files
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("visible");
+    at.touch(".hidden");
+
+    scene
+        .ucmd()
+        .arg("-f")
+        .arg("-a")
+        .succeeds()
+        .stdout_contains(".hidden")
+        .stdout_contains("visible");
+}
+
+#[test]
+fn test_big_u_overrides_f_sort() {
+    // Test that -U after -f still disables sorting
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("zebra");
+    at.touch("apple");
+
+    let result = scene
+        .ucmd()
+        .arg("-f")
+        .arg("-U")
+        .succeeds()
+        .stdout_move_str();
+    // Both -f and -U disable sorting, so files appear in directory order
+    assert!(result.contains("zebra"));
+    assert!(result.contains("apple"));
+}
+
+#[test]
+fn test_f_flag_combined_behavior() {
+    // Test that -f behaves correctly with all its effects together
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("zebra.txt");
+    at.touch(".hidden");
+    at.touch("apple.txt");
+    at.mkdir("directory");
+
+    let result = scene.ucmd().arg("-f").succeeds().stdout_move_str();
+
+    // Should show hidden files
+    assert!(result.contains(".hidden"));
+    // Should show all files
+    assert!(result.contains("zebra.txt"));
+    assert!(result.contains("apple.txt"));
+    assert!(result.contains("directory"));
+    // Should not contain ANSI color codes
+    assert!(!result.contains("\x1b["));
+}
+
+#[test]
+fn test_f_with_long_format() {
+    // Test that -f works with long format (-l)
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file1");
+    at.touch(".hidden");
+
+    let result = scene
+        .ucmd()
+        .arg("-f")
+        .arg("-l")
+        .succeeds()
+        .stdout_move_str();
+
+    // Should show hidden files in long format
+    assert!(result.contains(".hidden"));
+    assert!(result.contains("file1"));
+    // Long format should still work (contains permissions, etc.)
+    assert!(result.contains("-rw"));
+}
