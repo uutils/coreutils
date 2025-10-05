@@ -17,6 +17,7 @@ use regex::Regex;
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
 use std::ffi::OsStr;
+#[cfg(all(unix, not(target_os = "macos")))]
 use std::io::BufRead;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStrExt;
@@ -6180,7 +6181,7 @@ fn test_acl_display_symlink() {
         .ucmd()
         .arg("-la")
         .arg(dir_name)
-        .arg(line_name)
+        .arg(link_name)
         .succeeds()
         .stdout();
 
