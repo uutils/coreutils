@@ -1280,6 +1280,40 @@ jobs:
     - name: Lint with SELinux
       run: lima bash -c "cd work && cargo clippy --all-targets --features 'feat_selinux' -- -D warnings"
 
+  test_selinux_stubs:
+    name: Build/SELinux-Stubs (Non-Linux)
+    needs: [ min_version, deps ]
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: macos-latest   , features: feat_os_macos }
+          - { os: windows-latest , features: feat_os_windows }
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    
+    - name: Build SELinux utilities as stubs
+      run: cargo build -p uu_chcon -p uu_runcon
+        
+    - name: Verify stub binaries exist
+      shell: bash
+      run: |
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          test -f target/debug/chcon.exe || exit 1
+          test -f target/debug/runcon.exe || exit 1
+        else
+          test -f target/debug/chcon || exit 1
+          test -f target/debug/runcon || exit 1
+        fi
+        
+    - name: Verify workspace builds with stubs
+      run: cargo build --features ${{ matrix.job.features }}
+
   benchmarks:
     name: Run benchmarks (CodSpeed)
     runs-on: ubuntu-latest
