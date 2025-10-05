@@ -17,8 +17,6 @@ use regex::Regex;
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
 use std::ffi::OsStr;
-#[cfg(all(unix, not(target_os = "macos")))]
-use std::io::BufRead;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(not(windows))]
@@ -6177,22 +6175,17 @@ fn test_acl_display_symlink() {
         .succeeds()
         .stdout_matches(&re_with_acl);
 
-    let out = scene
-        .ucmd()
-        .arg("-la")
-        .arg(dir_name)
-        .arg(link_name)
-        .succeeds()
-        .stdout();
+    let test2: uutests::util::CmdResult = scene.ucmd().arg("-l").succeeds();
 
-    let iter = out
-        .lines()
-        .flatten()
-        .map(|line| line.position(|b| b.is_digit()));
+    let mut iter = test2
+        .stdout()
+        .split(|b| b == &b'\n')
+        .skip(1)
+        .filter_map(|line: &[u8]| line.iter().position(|b: &u8| b.is_ascii_digit()));
 
-    if let Some(element) = iter.first() {
-        assert!(iter.all(|i| i == element))
-    }
+    let first = iter.next().unwrap();
+
+    assert!(iter.all(|i| i == first))
 }
 
 #[test]
