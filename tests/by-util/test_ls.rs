@@ -6163,10 +6163,13 @@ fn test_acl_display_symlink() {
     }
 
     at.symlink_dir(dir_name, link_name);
+    at.mkdir("new");
 
     let re_with_acl = Regex::new(r"[a-z-]*\+\s\d+\s.*link").unwrap();
+
     ucmd.arg("-lLd")
         .arg(link_name)
+        .arg("new")
         .succeeds()
         .stdout_matches(&re_with_acl);
 }
