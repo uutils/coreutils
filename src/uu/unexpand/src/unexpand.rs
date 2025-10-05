@@ -328,7 +328,7 @@ fn unexpand_line(
     let mut pctype = CharType::Other;
 
     // Fast path for leading spaces in non-UTF8 mode: count consecutive spaces/tabs at start
-    if !options.uflag && init && !options.aflag {
+    if !options.uflag && !options.aflag {
         // In default mode (not -a), we only convert leading spaces
         // So we can batch process them and then copy the rest
         while byte < buf.len() {
