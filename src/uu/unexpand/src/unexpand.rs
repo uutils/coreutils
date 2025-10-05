@@ -313,11 +313,51 @@ fn unexpand_line(
     lastcol: usize,
     ts: &[usize],
 ) -> UResult<()> {
+    // Fast path: if we're not converting all spaces (-a flag not set)
+    // and the line doesn't start with spaces, just write it directly
+    if !options.aflag && !buf.is_empty() && buf[0] != b' ' && buf[0] != b'\t' {
+        output.write_all(buf)?;
+        buf.truncate(0);
+        return Ok(());
+    }
+
     let mut byte = 0; // offset into the buffer
     let mut col = 0; // the current column
     let mut scol = 0; // the start col for the current span, i.e., the already-printed width
     let mut init = true; // are we at the start of the line?
     let mut pctype = CharType::Other;
+
+    // Fast path for leading spaces in non-UTF8 mode: count consecutive spaces/tabs at start
+    if !options.uflag && init && !options.aflag {
+        // In default mode (not -a), we only convert leading spaces
+        // So we can batch process them and then copy the rest
+        while byte < buf.len() {
+            match buf[byte] {
+                b' ' => {
+                    col += 1;
+                    byte += 1;
+                }
+                b'\t' => {
+                    col += next_tabstop(ts, col).unwrap_or(1);
+                    byte += 1;
+                    pctype = CharType::Tab;
+                }
+                _ => break,
+            }
+        }
+
+        // If we found spaces/tabs, write them as tabs
+        if byte > 0 {
+            write_tabs(output, ts, 0, col, pctype == CharType::Tab, true, true)?;
+        }
+
+        // Write the rest of the line directly (no more tab conversion needed)
+        if byte < buf.len() {
+            output.write_all(&buf[byte..])?;
+        }
+        buf.truncate(0);
+        return Ok(());
+    }
 
     while byte < buf.len() {
         // when we have a finite number of columns, never convert past the last column
@@ -379,7 +419,6 @@ fn unexpand_line(
 
     // write out anything remaining
     write_tabs(output, ts, scol, col, pctype == CharType::Tab, init, true)?;
-    output.flush()?;
     buf.truncate(0); // clear out the buffer
 
     Ok(())
@@ -407,6 +446,7 @@ fn unexpand(options: &Options) -> UResult<()> {
             unexpand_line(&mut buf, &mut output, options, lastcol, ts)?;
         }
     }
+    output.flush()?;
     Ok(())
 }
 
