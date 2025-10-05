@@ -358,6 +358,15 @@ fn expand_line(
 ) -> std::io::Result<()> {
     use self::CharType::{Backspace, Other, Tab};
 
+    // Fast path: if there are no tabs, backspaces, and (in UTF-8 mode or no carriage returns),
+    // we can write the buffer directly without character-by-character processing
+    if !buf.contains(&b'\t') && !buf.contains(&b'\x08') && (options.uflag || !buf.contains(&b'\r'))
+    {
+        output.write_all(buf)?;
+        buf.truncate(0);
+        return Ok(());
+    }
+
     let mut col = 0;
     let mut byte = 0;
     let mut init = true;
@@ -435,7 +444,6 @@ fn expand_line(
         byte += nbytes; // advance the pointer
     }
 
-    output.flush()?;
     buf.truncate(0); // clear the buffer
 
     Ok(())
@@ -471,6 +479,10 @@ fn expand(options: &Options) -> UResult<()> {
             }
         }
     }
+    // Flush once at the end
+    output
+        .flush()
+        .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
     Ok(())
 }
 

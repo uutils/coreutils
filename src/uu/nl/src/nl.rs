@@ -6,7 +6,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, stdin};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
 use uucore::{format_usage, show_error, translate};
@@ -346,6 +346,7 @@ pub fn uu_app() -> Command {
 
 /// `nl` implements the main functionality for an individual buffer.
 fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings) -> UResult<()> {
+    let mut writer = BufWriter::new(stdout());
     let mut current_numbering_style = &settings.body_numbering;
     let mut line = Vec::new();
 
@@ -382,7 +383,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
             if settings.renumber {
                 stats.line_number = Some(settings.starting_line_number);
             }
-            println!();
+            writeln!(writer).map_err_context(|| translate!("nl-error-could-not-write"))?;
         } else {
             let is_line_numbered = match current_numbering_style {
                 // consider $join_blank_lines consecutive empty lines to be one logical line
@@ -407,14 +408,16 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                         translate!("nl-error-line-number-overflow"),
                     ));
                 };
-                println!(
+                writeln!(
+                    writer,
                     "{}{}{}",
                     settings
                         .number_format
                         .format(line_number, settings.number_width),
                     settings.number_separator.to_string_lossy(),
                     String::from_utf8_lossy(&line),
-                );
+                )
+                .map_err_context(|| translate!("nl-error-could-not-write"))?;
                 // update line number for the potential next line
                 match line_number.checked_add(settings.line_increment) {
                     Some(new_line_number) => stats.line_number = Some(new_line_number),
@@ -422,10 +425,14 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                 }
             } else {
                 let spaces = " ".repeat(settings.number_width + 1);
-                println!("{spaces}{}", String::from_utf8_lossy(&line));
+                writeln!(writer, "{spaces}{}", String::from_utf8_lossy(&line))
+                    .map_err_context(|| translate!("nl-error-could-not-write"))?;
             }
         }
     }
+    writer
+        .flush()
+        .map_err_context(|| translate!("nl-error-could-not-write"))?;
     Ok(())
 }
 
