@@ -6185,7 +6185,7 @@ fn test_acl_display_symlink() {
 
     let first = iter.next().unwrap();
 
-    assert!(iter.all(|i| i == first))
+    assert!(iter.all(|i| i == first));
 }
 
 #[test]
