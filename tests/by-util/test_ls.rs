@@ -17,6 +17,7 @@ use regex::Regex;
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
 use std::ffi::OsStr;
+use std::io::BufRead;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(not(windows))]
@@ -6139,7 +6140,9 @@ fn test_unknown_format_specifier() {
 fn test_acl_display_symlink() {
     use std::process::Command;
 
-    let (at, mut ucmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
     let dir_name = "dir";
     let link_name = "link";
     at.mkdir(dir_name);
@@ -6163,15 +6166,32 @@ fn test_acl_display_symlink() {
     }
 
     at.symlink_dir(dir_name, link_name);
-    at.mkdir("new");
 
     let re_with_acl = Regex::new(r"[a-z-]*\+\s\d+\s.*link").unwrap();
 
-    ucmd.arg("-lLd")
+    scene
+        .ucmd()
+        .arg("-lLd")
         .arg(link_name)
-        .arg("new")
         .succeeds()
         .stdout_matches(&re_with_acl);
+
+    let out = scene
+        .ucmd()
+        .arg("-la")
+        .arg(dir_name)
+        .arg(line_name)
+        .succeeds()
+        .stdout();
+
+    let iter = out
+        .lines()
+        .flatten()
+        .map(|line| line.position(|b| b.is_digit()));
+
+    if let Some(element) = iter.first() {
+        assert!(iter.all(|i| i == element))
+    }
 }
 
 #[test]
