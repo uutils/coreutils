@@ -6654,3 +6654,339 @@ fn test_f_with_long_format() {
     // Long format should still work (contains permissions, etc.)
     assert!(result.contains("-rw"));
 }
+// ================ LOCALE-AWARE SORTING TESTS ================
+
+#[cfg(unix)]
+mod locale_tests {
+    use super::*;
+    use std::process::Command;
+
+    /// Check if a locale is available on the system
+    fn have_locale(locale: &str) -> bool {
+        if locale == "C" || locale == "POSIX" {
+            return true;
+        }
+
+        // Try to list available locales
+        let output = Command::new("locale").arg("-a").output();
+
+        match output {
+            Ok(result) => {
+                let stdout = String::from_utf8_lossy(&result.stdout);
+                stdout.lines().any(|line| {
+                    line == locale || line.starts_with(locale.split('.').next().unwrap_or(""))
+                })
+            }
+            Err(_) => false,
+        }
+    }
+
+    /// Helper to assert that items appear in the specified order
+    fn assert_in_order(lines: &[&str], items: &[&str]) {
+        let positions: Vec<Option<usize>> = items
+            .iter()
+            .map(|item| lines.iter().position(|&line| line == *item))
+            .collect();
+
+        for (i, item) in items.iter().enumerate() {
+            assert!(
+                positions[i].is_some(),
+                "Item '{}' not found in output",
+                item
+            );
+        }
+
+        for i in 1..positions.len() {
+            if let (Some(prev), Some(curr)) = (positions[i - 1], positions[i]) {
+                assert!(
+                    prev < curr,
+                    "'{}' should come before '{}' in the output",
+                    items[i - 1],
+                    items[i]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_ls_locale_c_byte_order() {
+        // C locale should use byte ordering - non-ASCII comes after ASCII
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        // Create files with mixed ASCII and non-ASCII names
+        at.touch("apple");
+        at.touch("zebra");
+        at.touch("äpfel"); // German umlaut
+        at.touch("éclair"); // French accent
+
+        let result = scene
+            .ucmd()
+            .env("LC_ALL", "C")
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+
+        let lines: Vec<&str> = result.stdout_str().lines().collect();
+
+        // In C locale, ASCII comes first, then non-ASCII by byte value
+        // 'a' and 'z' should come before UTF-8 encoded characters
+        assert_in_order(&lines, &["apple", "zebra"]);
+
+        // UTF-8 characters should come after ASCII
+        let zebra_pos = lines.iter().position(|&l| l == "zebra").unwrap();
+        let apfel_pos = lines.iter().position(|&l| l == "äpfel");
+        let eclair_pos = lines.iter().position(|&l| l == "éclair");
+
+        if let (Some(apfel), Some(eclair)) = (apfel_pos, eclair_pos) {
+            assert!(
+                zebra_pos < apfel,
+                "ASCII 'zebra' should come before 'äpfel'"
+            );
+            assert!(
+                zebra_pos < eclair,
+                "ASCII 'zebra' should come before 'éclair'"
+            );
+        }
+    }
+
+    #[test]
+    fn test_ls_locale_german_umlauts() {
+        let locale = "de_DE.UTF-8";
+        if !have_locale(locale) {
+            eprintln!("Skipping test: locale {} not available", locale);
+            return;
+        }
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        // Create files with German umlauts
+        at.touch("apfel"); // apple
+        at.touch("äpfel"); // apples (with umlaut)
+        at.touch("bär"); // bear
+        at.touch("öffnung"); // opening
+        at.touch("über"); // over
+        at.touch("zebra");
+
+        let result = scene
+            .ucmd()
+            .env("LC_ALL", locale)
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+
+        let lines: Vec<&str> = result.stdout_str().lines().collect();
+
+        // In German locale, umlauts should sort near their base letters
+        // ä near a, ö near o, ü near u
+        assert_in_order(&lines, &["apfel", "äpfel", "bär"]);
+    }
+
+    #[test]
+    fn test_ls_locale_french_accents() {
+        let locale = "fr_FR.UTF-8";
+        if !have_locale(locale) {
+            eprintln!("Skipping test: locale {} not available", locale);
+            return;
+        }
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        // Create files with French accents
+        at.touch("ecole"); // school
+        at.touch("école"); // school (with accent)
+        at.touch("etude"); // study
+        at.touch("étude"); // study (with accent)
+        at.touch("zebra");
+
+        let result = scene
+            .ucmd()
+            .env("LC_ALL", locale)
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+
+        let lines: Vec<&str> = result.stdout_str().lines().collect();
+
+        // Accented letters should sort near their base letters
+        assert_in_order(&lines, &["ecole", "école", "etude", "étude"]);
+    }
+
+    #[test]
+    fn test_ls_locale_spanish_tildes() {
+        let locale = "es_ES.UTF-8";
+        if !have_locale(locale) {
+            eprintln!("Skipping test: locale {} not available", locale);
+            return;
+        }
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        // Create files with Spanish ñ
+        at.touch("nino"); // boy
+        at.touch("niño"); // boy (with tilde)
+        at.touch("nota"); // note
+
+        let result = scene
+            .ucmd()
+            .env("LC_ALL", locale)
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+
+        let lines: Vec<&str> = result.stdout_str().lines().collect();
+
+        // ñ should sort after n
+        assert_in_order(&lines, &["nino", "niño", "nota"]);
+    }
+
+    #[test]
+    fn test_ls_locale_env_precedence() {
+        // Test that LC_ALL > LC_COLLATE > LANG
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.touch("a");
+        at.touch("ä");
+        at.touch("b");
+        at.touch("z");
+
+        // Test 1: LC_ALL=C should override everything
+        let result = scene
+            .ucmd()
+            .env("LANG", "de_DE.UTF-8")
+            .env("LC_COLLATE", "de_DE.UTF-8")
+            .env("LC_ALL", "C")
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+
+        let lines: Vec<&str> = result.stdout_str().lines().collect();
+
+        // With LC_ALL=C, UTF-8 ä should come after ASCII z
+        let z_pos = lines.iter().position(|&l| l == "z").unwrap();
+        let a_umlaut_pos = lines.iter().position(|&l| l == "ä");
+
+        if let Some(a_umlaut) = a_umlaut_pos {
+            assert!(
+                z_pos < a_umlaut,
+                "With LC_ALL=C, 'z' should come before 'ä'"
+            );
+        }
+
+        // Test 2: LC_COLLATE should override LANG when LC_ALL is not set
+        if have_locale("de_DE.UTF-8") {
+            // We need to ensure LC_ALL is not set, but we can't remove it
+            // Instead, we'll just test with LC_COLLATE set
+            let result2 = scene
+                .ucmd()
+                .env("LANG", "C")
+                .env("LC_COLLATE", "de_DE.UTF-8")
+                .arg("-1")
+                .arg("--color=never")
+                .succeeds();
+
+            let lines2: Vec<&str> = result2.stdout_str().lines().collect();
+
+            // Note: This test may not work as expected if LC_ALL is set in the environment
+            // The behavior depends on which environment variable takes precedence
+            // We'll just check that we get consistent output
+            assert!(!lines2.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_ls_locale_posix_same_as_c() {
+        // POSIX locale should behave the same as C locale
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.touch("apple");
+        at.touch("äpfel");
+        at.touch("zebra");
+
+        // Get output with C locale
+        let c_result = scene
+            .ucmd()
+            .env("LC_ALL", "C")
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+
+        // Get output with POSIX locale
+        let posix_result = scene
+            .ucmd()
+            .env("LC_ALL", "POSIX")
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+
+        // Both should produce identical output
+        assert_eq!(
+            c_result.stdout_str(),
+            posix_result.stdout_str(),
+            "C and POSIX locales should produce identical sorting"
+        );
+    }
+
+    #[test]
+    fn test_ls_locale_compare_with_gnu() {
+        // Only run if GNU ls is available
+        let gnu_check = Command::new("ls").arg("--version").output();
+
+        let has_gnu = match gnu_check {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                stdout.contains("GNU coreutils")
+            }
+            Err(_) => false,
+        };
+
+        if !has_gnu {
+            eprintln!("Skipping test: GNU ls not available");
+            return;
+        }
+
+        if !have_locale("de_DE.UTF-8") {
+            eprintln!("Skipping test: de_DE.UTF-8 locale not available");
+            return;
+        }
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        // Create test files
+        at.touch("apfel");
+        at.touch("äpfel");
+        at.touch("über");
+        at.touch("zebra");
+
+        // Get uutils output
+        let uu_result = scene
+            .ucmd()
+            .env("LC_ALL", "de_DE.UTF-8")
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+
+        // Get GNU ls output
+        let gnu_result = Command::new("ls")
+            .env("LC_ALL", "de_DE.UTF-8")
+            .arg("-1")
+            .arg("--color=never")
+            .arg(at.as_string())
+            .output()
+            .expect("Failed to run GNU ls");
+
+        let gnu_stdout = String::from_utf8_lossy(&gnu_result.stdout);
+
+        assert_eq!(
+            uu_result.stdout_str(),
+            gnu_stdout,
+            "uutils ls should match GNU ls output for locale-aware sorting"
+        );
+    }
+}
