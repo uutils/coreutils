@@ -81,8 +81,7 @@ fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) -> UR
         return Err(USimpleError::new(
             2,
             translate!("sort-failed-to-set-up-signal-handler", "error" => e),
-        )
-        .into());
+        ));
     }
 
     Ok(())

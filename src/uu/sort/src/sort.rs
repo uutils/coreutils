@@ -1785,7 +1785,7 @@ fn compare_by<'a>(
     b_line_data: &LineData<'a>,
 ) -> Ordering {
     if global_settings.precomputed.fast_lexicographic {
-        let cmp = a.line.cmp(&b.line);
+        let cmp = a.line.cmp(b.line);
         return if global_settings.reverse {
             cmp.reverse()
         } else {
@@ -1918,11 +1918,7 @@ fn compare_by<'a>(
 fn ascii_case_insensitive_cmp(a: &[u8], b: &[u8]) -> Ordering {
     #[inline]
     fn lower(byte: u8) -> u8 {
-        if (b'A'..=b'Z').contains(&byte) {
-            byte + 32
-        } else {
-            byte
-        }
+        byte.to_ascii_lowercase()
     }
 
     for (lhs, rhs) in a.iter().copied().zip(b.iter().copied()) {
