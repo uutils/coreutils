@@ -440,11 +440,8 @@ fn quote_file_name(file_name: &str, quoting_style: &QuotingStyle) -> String {
             format!("'{escaped}'")
         }
         QuotingStyle::ShellEscapeAlways => {
-            if file_name.contains('\'') {
-                format!("\"{file_name}\"")
-            } else {
-                format!("\'{file_name}\'")
-            }
+            let quote = if file_name.contains('\'') { '"' } else { '\'' };
+            format!("{quote}{file_name}{quote}")
         }
         QuotingStyle::Quote => file_name.to_string(),
     }
@@ -1384,7 +1381,7 @@ fn pretty_time(meta: &Metadata, md_time_field: MetadataTimeField) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::{pad_and_print_bytes, print_padding};
+    use crate::{pad_and_print_bytes, print_padding, quote_file_name};
 
     use super::{Flags, Precision, ScanUtil, Stater, Token, group_num, precision_trunc};
 
@@ -1534,5 +1531,20 @@ mod tests {
         let mut buffer = Vec::new();
         print_padding(&mut buffer, 5).unwrap();
         assert_eq!(&buffer, b"     ");
+    }
+
+    #[test]
+    fn test_quote_file_name() {
+        let file_name = "nice' file";
+        assert_eq!(
+            quote_file_name(file_name, &crate::QuotingStyle::ShellEscapeAlways),
+            "\"nice' file\""
+        );
+
+        let file_name = "nice\" file";
+        assert_eq!(
+            quote_file_name(file_name, &crate::QuotingStyle::ShellEscapeAlways),
+            "\'nice\" file\'"
+        );
     }
 }
