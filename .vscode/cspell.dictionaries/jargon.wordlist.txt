@@ -243,3 +243,13 @@ Hijri
 Nowruz
 charmap
 hijri
+
+# * locale and typography
+CTYPE
+Guillemets
+guillemets
+
+# * locale and typography
+CTYPE
+Guillemets
+guillemets

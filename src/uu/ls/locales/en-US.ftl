@@ -48,6 +48,7 @@ ls-help-set-quoting-style = Set quoting style.
 ls-help-literal-quoting-style = Use literal quoting style. Equivalent to `--quoting-style=literal`
 ls-help-escape-quoting-style = Use escape quoting style. Equivalent to `--quoting-style=escape`
 ls-help-c-quoting-style = Use C quoting style. Equivalent to `--quoting-style=c`
+ls-help-locale-quoting-style = Use locale-aware quoting style. Uses quotation marks appropriate for the current locale (e.g., « » for French, „ " for German, 「 」 for Japanese). Equivalent to `--quoting-style=locale`
 ls-help-replace-control-chars = Replace control characters with '?' if they are not escaped.
 ls-help-show-control-chars = Show control characters 'as is' if they are not escaped.
 ls-help-show-time-field = Show time in <field>:
