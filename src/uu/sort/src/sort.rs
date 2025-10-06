@@ -121,7 +121,7 @@ const POSITIVE: &u8 = &b'+';
 // over-committing memory on constrained systems while still keeping
 // reasonably large chunks for typical workloads.
 const MIN_AUTOMATIC_BUF_SIZE: usize = 512 * 1024; // 512 KiB
-const FALLBACK_AUTOMATIC_BUF_SIZE: usize = 4 * 1024 * 1024; // 4 MiB
+const FALLBACK_AUTOMATIC_BUF_SIZE: usize = 32 * 1024 * 1024; // 32 MiB
 const MAX_AUTOMATIC_BUF_SIZE: usize = 1024 * 1024 * 1024; // 1 GiB
 
 #[derive(Debug, Error)]
@@ -300,6 +300,8 @@ struct Precomputed {
     num_infos_per_line: usize,
     floats_per_line: usize,
     selections_per_line: usize,
+    fast_lexicographic: bool,
+    fast_ascii_insensitive: bool,
 }
 
 impl GlobalSettings {
@@ -340,6 +342,38 @@ impl GlobalSettings {
             .iter()
             .filter(|s| matches!(s.settings.mode, SortMode::GeneralNumeric))
             .count();
+
+        self.precomputed.fast_lexicographic = self.mode == SortMode::Default
+            && !self.ignore_case
+            && !self.dictionary_order
+            && !self.ignore_non_printing
+            && !self.ignore_leading_blanks
+            && self.selectors.len() == 1
+            && {
+                let selector = &self.selectors[0];
+                !selector.needs_selection
+                    && matches!(selector.settings.mode, SortMode::Default)
+                    && !selector.settings.ignore_case
+                    && !selector.settings.dictionary_order
+                    && !selector.settings.ignore_non_printing
+                    && !selector.settings.ignore_blanks
+            };
+
+        self.precomputed.fast_ascii_insensitive = self.mode == SortMode::Default
+            && self.ignore_case
+            && !self.dictionary_order
+            && !self.ignore_non_printing
+            && !self.ignore_leading_blanks
+            && self.selectors.len() == 1
+            && {
+                let selector = &self.selectors[0];
+                !selector.needs_selection
+                    && matches!(selector.settings.mode, SortMode::Default)
+                    && selector.settings.ignore_case
+                    && !selector.settings.dictionary_order
+                    && !selector.settings.ignore_non_printing
+                    && !selector.settings.ignore_blanks
+            };
     }
 }
 
@@ -365,7 +399,7 @@ impl Default for GlobalSettings {
             line_ending: LineEnding::Newline,
             buffer_size: FALLBACK_AUTOMATIC_BUF_SIZE,
             compress_prog: None,
-            merge_batch_size: 32,
+            merge_batch_size: default_merge_batch_size(),
             precomputed: Precomputed::default(),
         }
     }
@@ -1041,6 +1075,21 @@ fn get_rlimit() -> UResult<usize> {
 
 const STDIN_FILE: &str = "-";
 
+fn default_merge_batch_size() -> usize {
+    #[cfg(target_os = "linux")]
+    {
+        match get_rlimit() {
+            Ok(limit) => limit.saturating_div(4).clamp(32, 256),
+            Err(_) => 64,
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        64
+    }
+}
+
 fn automatic_buffer_size(files: &[OsString]) -> usize {
     let file_hint = file_size_hint(files);
     let mem_hint = available_memory_hint();
@@ -1087,10 +1136,10 @@ fn file_size_hint(files: &[OsString]) -> Option<usize> {
 fn available_memory_hint() -> Option<usize> {
     #[cfg(target_os = "linux")]
     if let Some(bytes) = available_memory_bytes() {
-        return Some(clamp_hint(bytes / 8));
+        return Some(clamp_hint(bytes / 4));
     }
 
-    physical_memory_bytes().map(|bytes| clamp_hint(bytes / 8))
+    physical_memory_bytes().map(|bytes| clamp_hint(bytes / 4))
 }
 
 fn clamp_hint(bytes: u128) -> usize {
@@ -1735,6 +1784,26 @@ fn compare_by<'a>(
     a_line_data: &LineData<'a>,
     b_line_data: &LineData<'a>,
 ) -> Ordering {
+    if global_settings.precomputed.fast_lexicographic {
+        let cmp = a.line.cmp(&b.line);
+        return if global_settings.reverse {
+            cmp.reverse()
+        } else {
+            cmp
+        };
+    }
+
+    if global_settings.precomputed.fast_ascii_insensitive {
+        let cmp = ascii_case_insensitive_cmp(a.line, b.line);
+        if cmp != Ordering::Equal || a.line == b.line {
+            return if global_settings.reverse {
+                cmp.reverse()
+            } else {
+                cmp
+            };
+        }
+    }
+
     let mut selection_index = 0;
     let mut num_info_index = 0;
     let mut parsed_float_index = 0;
@@ -1844,6 +1913,27 @@ fn compare_by<'a>(
     } else {
         cmp
     }
+}
+
+fn ascii_case_insensitive_cmp(a: &[u8], b: &[u8]) -> Ordering {
+    #[inline]
+    fn lower(byte: u8) -> u8 {
+        if (b'A'..=b'Z').contains(&byte) {
+            byte + 32
+        } else {
+            byte
+        }
+    }
+
+    for (lhs, rhs) in a.iter().copied().zip(b.iter().copied()) {
+        let l = lower(lhs);
+        let r = lower(rhs);
+        if l != r {
+            return l.cmp(&r);
+        }
+    }
+
+    a.len().cmp(&b.len())
 }
 
 // This function cleans up the initial comparison done by leading_num_common for a general numeric compare.
