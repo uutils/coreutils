@@ -175,3 +175,8 @@ nofield
 # * clippy
 uninlined
 nonminimal
+
+# * locale and internationalization
+CTYPE
+CLDR
+Guillemets

@@ -82,6 +82,8 @@ use dired::{DiredOutput, is_dired_arg_present};
 mod colors;
 use crate::options::QUOTING_STYLE;
 use colors::{StyleManager, color_name};
+mod locale_time;
+use locale_time::get_locale_time_formats;
 
 pub mod options {
     pub mod format {
@@ -255,9 +257,6 @@ enum Files {
 }
 
 fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String>), LsError> {
-    // TODO: Using correct locale string is not implemented.
-    const LOCALE_FORMAT: (&str, Option<&str>) = ("%b %e %H:%M", Some("%b %e  %Y"));
-
     // Convert time_styles references to owned String/option.
     fn ok((recent, older): (&str, Option<&str>)) -> Result<(String, Option<String>), LsError> {
         Ok((recent.to_string(), older.map(String::from)))
@@ -284,7 +283,7 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                 if std::env::var("LC_TIME").unwrap_or_default() == "POSIX"
                     || std::env::var("LC_ALL").unwrap_or_default() == "POSIX"
                 {
-                    return ok(LOCALE_FORMAT);
+                    return ok(get_locale_time_formats());
                 }
                 field
             } else {
@@ -299,7 +298,7 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                     "%m-%d %H:%M".to_string(),
                     Some(format::ISO.to_string() + " "),
                 )),
-                "locale" => ok(LOCALE_FORMAT),
+                "locale" => ok(get_locale_time_formats()),
                 _ => match field.chars().next().unwrap() {
                     '+' => {
                         // recent/older formats are (optionally) separated by a newline
@@ -318,7 +317,7 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
     } else if options.get_flag(options::FULL_TIME) {
         ok((format::FULL_ISO, None))
     } else {
-        ok(LOCALE_FORMAT)
+        ok(get_locale_time_formats())
     }
 }
 
