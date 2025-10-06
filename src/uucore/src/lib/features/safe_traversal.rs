@@ -11,8 +11,6 @@
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod
 
-#![cfg(target_os = "linux")]
-
 #[cfg(test)]
 use std::os::unix::ffi::OsStringExt;
 
@@ -24,6 +22,7 @@ use std::path::Path;
 
 use nix::dir::Dir;
 use nix::fcntl::{OFlag, openat};
+use nix::libc;
 use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat};
 use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
 

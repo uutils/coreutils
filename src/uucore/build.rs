@@ -69,6 +69,9 @@ fn project_root() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
 fn detect_target_utility() -> Option<String> {
     use std::fs;
 
+    // Tell Cargo to rerun if this environment variable changes
+    println!("cargo:rerun-if-env-changed=UUCORE_TARGET_UTIL");
+
     // First check if an explicit environment variable was set
     if let Ok(target_util) = env::var("UUCORE_TARGET_UTIL") {
         if !target_util.is_empty() {

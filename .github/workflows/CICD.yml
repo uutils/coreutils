@@ -1280,16 +1280,15 @@ jobs:
         job:
           - { os: macos-latest   , features: feat_os_macos }
           - { os: windows-latest , features: feat_os_windows }
+
     steps:
     - uses: actions/checkout@v5
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
-
     - name: Build SELinux utilities as stubs
       run: cargo build -p uu_chcon -p uu_runcon
-
     - name: Verify stub binaries exist
       shell: bash
       run: |
@@ -1300,9 +1299,26 @@ jobs:
           test -f target/debug/chcon || exit 1
           test -f target/debug/runcon || exit 1
         fi
-
     - name: Verify workspace builds with stubs
       run: cargo build --features ${{ matrix.job.features }}
+
+  test_safe_traversal:
+    name: Safe Traversal Security Check
+    runs-on: ubuntu-latest
+    needs: [ min_version, deps ]
+
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    - name: Install strace
+      run: sudo apt-get update && sudo apt-get install -y strace
+    - name: Build utilities with safe traversal
+      run: cargo build --release -p uu_rm -p uu_chmod -p uu_chown -p uu_chgrp -p uu_mv -p uu_du
+    - name: Run safe traversal verification
+      run: ./util/check-safe-traversal.sh
 
   benchmarks:
     name: Run benchmarks (CodSpeed)
