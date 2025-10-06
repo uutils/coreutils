@@ -65,6 +65,7 @@ use uucore::{
     fs::FileInformation,
     fs::display_permissions,
     fsext::{MetadataTimeField, metadata_get_time},
+    i18n::collator::{CollatorOptions, init_collator, locale_cmp},
     line_ending::LineEnding,
     os_str_as_bytes_lossy,
     parser::parse_glob,
@@ -1182,6 +1183,9 @@ impl Config {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
 
+    // Initialize collator for locale-aware sorting
+    init_collator(CollatorOptions::default());
+
     let config = Config::from(&matches)?;
 
     let locs = matches
@@ -2202,8 +2206,12 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
         Sort::Size => {
             entries.sort_by_key(|k| Reverse(k.metadata().map_or(0, |md| md.len())));
         }
-        // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_by(|a, b| a.display_name().cmp(b.display_name())),
+        // The default sort in GNU ls respects locale collation (LC_COLLATE)
+        Sort::Name => entries.sort_by(|a, b| {
+            let a_bytes = os_str_as_bytes_lossy(a.p_buf.as_os_str());
+            let b_bytes = os_str_as_bytes_lossy(b.p_buf.as_os_str());
+            locale_cmp(&a_bytes, &b_bytes)
+        }),
         Sort::Version => entries.sort_by(|a, b| {
             version_cmp(
                 os_str_as_bytes_lossy(a.path().as_os_str()).as_ref(),
