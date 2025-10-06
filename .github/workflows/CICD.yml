@@ -473,7 +473,9 @@ jobs:
         # strip the results
         strip target/size*/usr/local/bin/*
     - name: Test for hardlinks
-      run: [ $(stat -c %i target/size-multi-release/usr/local/bin/cp) = $(stat -c %i target/size-multi-release/usr/local/bin/coreutils) ]
+      shell: bash
+      run: |
+        [ $(stat -c %i target/size-multi-release/usr/local/bin/cp) = $(stat -c %i target/size-multi-release/usr/local/bin/coreutils) ]
     - name: Compute uutil release sizes
       shell: bash
       run: |
@@ -1284,10 +1286,10 @@ jobs:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
-    
+
     - name: Build SELinux utilities as stubs
       run: cargo build -p uu_chcon -p uu_runcon
-        
+
     - name: Verify stub binaries exist
       shell: bash
       run: |
@@ -1298,7 +1300,7 @@ jobs:
           test -f target/debug/chcon || exit 1
           test -f target/debug/runcon || exit 1
         fi
-        
+
     - name: Verify workspace builds with stubs
       run: cargo build --features ${{ matrix.job.features }}
 
