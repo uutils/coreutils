@@ -210,7 +210,7 @@ HASHSUM_PROGS := \
 
 $(info Detected OS = $(OS))
 
-# Since we don't have dummies of SELinux progs, we build them if libselinux installed even SELINUX_ENABLED=0
+# Build SELinux progs if libselinux is installed
 ifeq ($(shell pkg-config --exists libselinux ; echo $$?),0)
 	PROGS := $(PROGS) $(SELINUX_PROGS)
 endif
