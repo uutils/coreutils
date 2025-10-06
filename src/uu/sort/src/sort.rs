@@ -287,6 +287,7 @@ pub struct GlobalSettings {
     threads: String,
     line_ending: LineEnding,
     buffer_size: usize,
+    buffer_size_is_explicit: bool,
     compress_prog: Option<String>,
     merge_batch_size: usize,
     precomputed: Precomputed,
@@ -398,6 +399,7 @@ impl Default for GlobalSettings {
             threads: String::new(),
             line_ending: LineEnding::Newline,
             buffer_size: FALLBACK_AUTOMATIC_BUF_SIZE,
+            buffer_size_is_explicit: false,
             compress_prog: None,
             merge_batch_size: default_merge_batch_size(),
             precomputed: Precomputed::default(),
@@ -1331,13 +1333,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    settings.buffer_size = matches.get_one::<String>(options::BUF_SIZE).map_or_else(
-        || Ok(automatic_buffer_size(&files)),
-        |s| {
-            GlobalSettings::parse_byte_count(s)
-                .map_err(|e| USimpleError::new(2, format_error_message(&e, s, options::BUF_SIZE)))
-        },
-    )?;
+    if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
+        settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|e| {
+            USimpleError::new(2, format_error_message(&e, size_str, options::BUF_SIZE))
+        })?;
+        settings.buffer_size_is_explicit = true;
+    } else {
+        settings.buffer_size = automatic_buffer_size(&files);
+        settings.buffer_size_is_explicit = false;
+    }
 
     let mut tmp_dir = TmpDirWrapper::new(
         matches

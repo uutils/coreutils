@@ -85,11 +85,13 @@ fn reader_writer<
 ) -> UResult<()> {
     let separator = settings.line_ending.into();
 
-    let buffer_size = match settings.buffer_size {
+    let mut buffer_size = match settings.buffer_size {
         size if size <= 512 * 1024 * 1024 => size,
         size => size / 2,
+    };
+    if !settings.buffer_size_is_explicit {
+        buffer_size = buffer_size.max(8 * 1024 * 1024);
     }
-    .max(8 * 1024 * 1024);
     let read_result: ReadResult<Tmp> = read_write_loop(
         files,
         tmp_dir,
