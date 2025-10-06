@@ -341,29 +341,21 @@ jobs:
         ! test -f /tmp/usr/local/share/zsh/site-functions/_install
         ! test -f /tmp/usr/local/share/bash-completion/completions/head
         ! test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
-    - name: "`make install MULTICALL=n`"
+    - name: "`make install MULTICALL=n LN=ln -sf`"
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/ make PROFILE=release MULTICALL=n install
+        DESTDIR=/tmp/ make PROFILE=release MULTICALL=n LN="ln -sf" install
+        # Check that [ is symlink to test
+        [ $(readlink "/tmp/usr/local/bin/[") = test ]
         # Check that the utils are present
+        test -f /tmp/usr/local/bin/test
         test -f /tmp/usr/local/bin/hashsum
         # Check that hashsum symlinks are present
-        test -h /tmp/usr/local/bin/b2sum
-        test -h /tmp/usr/local/bin/b3sum
-        test -h /tmp/usr/local/bin/md5sum
-        test -h /tmp/usr/local/bin/sha1sum
-        test -h /tmp/usr/local/bin/sha224sum
-        test -h /tmp/usr/local/bin/sha256sum
-        test -h /tmp/usr/local/bin/sha3-224sum
-        test -h /tmp/usr/local/bin/sha3-256sum
-        test -h /tmp/usr/local/bin/sha3-384sum
-        test -h /tmp/usr/local/bin/sha3-512sum
-        test -h /tmp/usr/local/bin/sha384sum
-        test -h /tmp/usr/local/bin/sha3sum
-        test -h /tmp/usr/local/bin/sha512sum
-        test -h /tmp/usr/local/bin/shake128sum
-        test -h /tmp/usr/local/bin/shake256sum
+        [ $(readlink "/tmp/usr/local/bin/b2sum") = hashsum ]
+        [ $(readlink "/tmp/usr/local/bin/sha1sum") = hashsum ]
+        [ $(readlink "/tmp/usr/local/bin/sha3sum") = hashsum ]
+        [ $(readlink "/tmp/usr/local/bin/shake128sum") = hashsum ]
     - name: "`make install MULTICALL=y LN=ln -svf`"
       shell: bash
       run: |
