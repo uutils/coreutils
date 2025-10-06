@@ -122,7 +122,7 @@ const POSITIVE: &u8 = &b'+';
 // reasonably large chunks for typical workloads.
 const MIN_AUTOMATIC_BUF_SIZE: usize = 512 * 1024; // 512 KiB
 const FALLBACK_AUTOMATIC_BUF_SIZE: usize = 4 * 1024 * 1024; // 4 MiB
-const MAX_AUTOMATIC_BUF_SIZE: usize = 128 * 1024 * 1024; // 128 MiB
+const MAX_AUTOMATIC_BUF_SIZE: usize = 1024 * 1024 * 1024; // 1 GiB
 
 #[derive(Debug, Error)]
 pub enum SortError {
@@ -1071,7 +1071,7 @@ fn file_size_hint(files: &[OsString]) -> Option<usize> {
 
         total_bytes = total_bytes.saturating_add(metadata.len() as u128);
 
-        if total_bytes >= (MAX_AUTOMATIC_BUF_SIZE as u128) * 4 {
+        if total_bytes >= (MAX_AUTOMATIC_BUF_SIZE as u128) * 8 {
             break;
         }
     }
@@ -1080,7 +1080,8 @@ fn file_size_hint(files: &[OsString]) -> Option<usize> {
         return None;
     }
 
-    Some(clamp_hint(total_bytes / 4))
+    let desired_bytes = desired_file_buffer_bytes(total_bytes);
+    Some(clamp_hint(desired_bytes))
 }
 
 fn available_memory_hint() -> Option<usize> {
@@ -1097,6 +1098,22 @@ fn clamp_hint(bytes: u128) -> usize {
     let max = MAX_AUTOMATIC_BUF_SIZE as u128;
     let clamped = bytes.clamp(min, max);
     clamped.min(usize::MAX as u128) as usize
+}
+
+fn desired_file_buffer_bytes(total_bytes: u128) -> u128 {
+    if total_bytes == 0 {
+        return 0;
+    }
+
+    let max = MAX_AUTOMATIC_BUF_SIZE as u128;
+
+    if total_bytes <= max {
+        let expanded = total_bytes.saturating_mul(12).clamp(total_bytes, max);
+        return expanded;
+    }
+
+    let quarter = total_bytes / 4;
+    quarter.max(max)
 }
 
 #[cfg(target_os = "linux")]
@@ -2089,6 +2106,23 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
 mod tests {
 
     use super::*;
+
+    #[test]
+    fn desired_buffer_matches_total_when_small() {
+        let six_mebibytes = 6 * 1024 * 1024;
+        let expected = ((six_mebibytes as u128) * 12)
+            .clamp(six_mebibytes as u128, MAX_AUTOMATIC_BUF_SIZE as u128);
+        assert_eq!(desired_file_buffer_bytes(six_mebibytes as u128), expected);
+    }
+
+    #[test]
+    fn desired_buffer_caps_at_max_for_large_inputs() {
+        let large = 256 * 1024 * 1024; // 256 MiB
+        assert_eq!(
+            desired_file_buffer_bytes(large as u128),
+            MAX_AUTOMATIC_BUF_SIZE as u128
+        );
+    }
 
     fn tokenize_helper(line: &[u8], separator: Option<u8>) -> Vec<Field> {
         let mut buffer = vec![];

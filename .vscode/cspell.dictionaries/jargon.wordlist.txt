@@ -130,6 +130,7 @@ symlink
 symlinks
 syscall
 syscalls
+sysconf
 tokenize
 toolchain
 truthy
