@@ -37,9 +37,6 @@ mod tests {
         },
     };
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    use std::os::fd::AsRawFd;
-
     use std::io::{Read, Write};
 
     #[cfg(unix)]
@@ -49,6 +46,7 @@ mod tests {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(temp_dir.path().join("file.txt"))
             .unwrap()
     }
@@ -61,7 +59,7 @@ mod tests {
         let n = pipe_write.write(data).unwrap();
         assert_eq!(n, data.len());
         let mut buf = [0; 1024];
-        let n = copy_exact(pipe_read.as_raw_fd(), &pipe_write, data.len()).unwrap();
+        let n = copy_exact(&pipe_read, &pipe_write, data.len()).unwrap();
         let n2 = pipe_read.read(&mut buf).unwrap();
         assert_eq!(n, n2);
         assert_eq!(&buf[..n], data);
@@ -79,7 +77,7 @@ mod tests {
         });
         let result = copy_stream(&mut pipe_read, &mut dest_file).unwrap();
         thread.join().unwrap();
-        assert!(result == data.len() as u64);
+        assert_eq!(result, data.len() as u64);
 
         // We would have been at the end already, so seek again to the start.
         dest_file.seek(SeekFrom::Start(0)).unwrap();

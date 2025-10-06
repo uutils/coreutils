@@ -1,17 +1,18 @@
 [package]
 name = "uu_ln"
-version = "0.0.30"
-authors = ["uutils developers"]
-license = "MIT"
 description = "ln ~ (uutils) create a (file system) link to TARGET"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/ln"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2024"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/ln.rs"
@@ -20,6 +21,7 @@ path = "src/ln.rs"
 clap = { workspace = true }
 uucore = { workspace = true, features = ["backup-control", "fs"] }
 thiserror = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "ln"

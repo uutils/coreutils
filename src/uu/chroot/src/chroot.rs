@@ -14,13 +14,12 @@ use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process;
 use uucore::entries::{Locate, Passwd, grp2gid, usr2uid};
-use uucore::error::{UClapError, UResult, UUsageError, set_exit_code};
+use uucore::error::{UResult, UUsageError, set_exit_code};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::{format_usage, show};
 
-static ABOUT: &str = help_about!("chroot.md");
-static USAGE: &str = help_usage!("chroot.md");
+use uucore::translate;
 
 mod options {
     pub const NEWROOT: &str = "newroot";
@@ -53,33 +52,31 @@ struct Options {
 ///
 /// The `spec` must be of the form `[USER][:[GROUP]]`, otherwise an
 /// error is returned.
-fn parse_userspec(spec: &str) -> UResult<UserSpec> {
-    match &spec.splitn(2, ':').collect::<Vec<&str>>()[..] {
+fn parse_userspec(spec: &str) -> UserSpec {
+    match spec.split_once(':') {
         // ""
-        [""] => Ok(UserSpec::NeitherGroupNorUser),
+        None if spec.is_empty() => UserSpec::NeitherGroupNorUser,
         // "usr"
-        [usr] => Ok(UserSpec::UserOnly(usr.to_string())),
+        None => UserSpec::UserOnly(spec.to_string()),
         // ":"
-        ["", ""] => Ok(UserSpec::NeitherGroupNorUser),
+        Some(("", "")) => UserSpec::NeitherGroupNorUser,
         // ":grp"
-        ["", grp] => Ok(UserSpec::GroupOnly(grp.to_string())),
+        Some(("", grp)) => UserSpec::GroupOnly(grp.to_string()),
         // "usr:"
-        [usr, ""] => Ok(UserSpec::UserOnly(usr.to_string())),
+        Some((usr, "")) => UserSpec::UserOnly(usr.to_string()),
         // "usr:grp"
-        [usr, grp] => Ok(UserSpec::UserAndGroup(usr.to_string(), grp.to_string())),
-        // everything else
-        _ => Err(ChrootError::InvalidUserspec(spec.to_string()).into()),
+        Some((usr, grp)) => UserSpec::UserAndGroup(usr.to_string(), grp.to_string()),
     }
 }
 
-// Pre-condition: `list_str` is non-empty.
+/// Pre-condition: `list_str` is non-empty.
 fn parse_group_list(list_str: &str) -> Result<Vec<String>, ChrootError> {
-    let split: Vec<&str> = list_str.split(",").collect();
+    let split: Vec<&str> = list_str.split(',').collect();
     if split.len() == 1 {
         let name = split[0].trim();
         if name.is_empty() {
             // --groups=" "
-            // chroot: invalid group ‘ ’
+            // chroot: invalid group ' '
             Err(ChrootError::InvalidGroup(name.to_string()))
         } else {
             // --groups="blah"
@@ -87,7 +84,7 @@ fn parse_group_list(list_str: &str) -> Result<Vec<String>, ChrootError> {
         }
     } else if split.iter().all(|s| s.is_empty()) {
         // --groups=","
-        // chroot: invalid group list ‘,’
+        // chroot: invalid group list ','
         Err(ChrootError::InvalidGroupList(list_str.to_string()))
     } else {
         let mut result = vec![];
@@ -98,19 +95,19 @@ fn parse_group_list(list_str: &str) -> Result<Vec<String>, ChrootError> {
                 if name.is_empty() {
                     // --groups=","
                     continue;
-                } else {
-                    // --groups=", "
-                    // chroot: invalid group ‘ ’
-                    show!(ChrootError::InvalidGroup(name.to_string()));
-                    err = true;
                 }
+
+                // --groups=", "
+                // chroot: invalid group ' '
+                show!(ChrootError::InvalidGroup(name.to_string()));
+                err = true;
             } else {
                 // TODO Figure out a better condition here.
                 if trimmed_name.starts_with(char::is_numeric)
                     && trimmed_name.ends_with(|c: char| !c.is_numeric())
                 {
                     // --groups="0trail"
-                    // chroot: invalid group ‘0trail’
+                    // chroot: invalid group '0trail'
                     show!(ChrootError::InvalidGroup(name.to_string()));
                     err = true;
                 } else {
@@ -144,10 +141,9 @@ impl Options {
             }
         };
         let skip_chdir = matches.get_flag(options::SKIP_CHDIR);
-        let userspec = match matches.get_one::<String>(options::USERSPEC) {
-            None => None,
-            Some(s) => Some(parse_userspec(s)?),
-        };
+        let userspec = matches
+            .get_one::<String>(options::USERSPEC)
+            .map(|s| parse_userspec(s));
         Ok(Self {
             newroot,
             skip_chdir,
@@ -159,7 +155,8 @@ impl Options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
+    let matches =
+        uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
     let default_shell: &'static str = "/bin/sh";
     let default_option: &'static str = "-i";
@@ -180,7 +177,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     {
         return Err(UUsageError::new(
             125,
-            "option --skip-chdir only permitted if NEWROOT is old '/'",
+            translate!("chroot-error-skip-chdir-only-permitted"),
         ));
     }
 
@@ -238,12 +235,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(translate!("chroot-about"))
+        .override_usage(format_usage(&translate!("chroot-usage")))
         .infer_long_args(true)
-        .trailing_var_arg(true)
+        .trailing_var_arg(true);
+    uucore::clap_localization::configure_localized_command(cmd)
         .arg(
             Arg::new(options::NEWROOT)
                 .value_hint(clap::ValueHint::DirPath)
@@ -255,23 +253,19 @@ pub fn uu_app() -> Command {
             Arg::new(options::GROUPS)
                 .long(options::GROUPS)
                 .overrides_with(options::GROUPS)
-                .help("Comma-separated list of groups to switch to")
+                .help(translate!("chroot-help-groups"))
                 .value_name("GROUP1,GROUP2..."),
         )
         .arg(
             Arg::new(options::USERSPEC)
                 .long(options::USERSPEC)
-                .help("Colon-separated user and group to switch to.")
+                .help(translate!("chroot-help-userspec"))
                 .value_name("USER:GROUP"),
         )
         .arg(
             Arg::new(options::SKIP_CHDIR)
                 .long(options::SKIP_CHDIR)
-                .help(
-                    "Use this option to not change the working directory \
-                    to / after changing the root directory to newroot, \
-                    i.e., inside the chroot.",
-                )
+                .help(translate!("chroot-help-skip-chdir"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -390,7 +384,7 @@ fn handle_missing_groups(strategy: Strategy) -> Result<(), ChrootError> {
 /// Set supplemental groups for this process.
 fn set_supplemental_gids_with_strategy(
     strategy: Strategy,
-    groups: &Option<Vec<String>>,
+    groups: Option<&Vec<String>>,
 ) -> Result<(), ChrootError> {
     match groups {
         None => handle_missing_groups(strategy),
@@ -410,27 +404,27 @@ fn set_context(options: &Options) -> UResult<()> {
     match &options.userspec {
         None | Some(UserSpec::NeitherGroupNorUser) => {
             let strategy = Strategy::Nothing;
-            set_supplemental_gids_with_strategy(strategy, &options.groups)?;
+            set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
         }
         Some(UserSpec::UserOnly(user)) => {
             let uid = name_to_uid(user)?;
             let gid = uid as libc::gid_t;
             let strategy = Strategy::FromUID(uid, false);
-            set_supplemental_gids_with_strategy(strategy, &options.groups)?;
+            set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(user.to_string(), e))?;
             set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_string(), e))?;
         }
         Some(UserSpec::GroupOnly(group)) => {
             let gid = name_to_gid(group)?;
             let strategy = Strategy::Nothing;
-            set_supplemental_gids_with_strategy(strategy, &options.groups)?;
+            set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_string(), e))?;
         }
         Some(UserSpec::UserAndGroup(user, group)) => {
             let uid = name_to_uid(user)?;
             let gid = name_to_gid(group)?;
             let strategy = Strategy::FromUID(uid, true);
-            set_supplemental_gids_with_strategy(strategy, &options.groups)?;
+            set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_string(), e))?;
             set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_string(), e))?;
         }
@@ -442,15 +436,16 @@ fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
     let err = unsafe {
         chroot(
             CString::new(root.as_os_str().as_bytes().to_vec())
-                .unwrap()
+                .map_err(|e| ChrootError::CannotEnter("root".to_string(), e.into()))?
                 .as_bytes_with_nul()
-                .as_ptr() as *const libc::c_char,
+                .as_ptr()
+                .cast::<libc::c_char>(),
         )
     };
 
     if err == 0 {
         if !skip_chdir {
-            std::env::set_current_dir(root).unwrap();
+            std::env::set_current_dir("/")?;
         }
         Ok(())
     } else {

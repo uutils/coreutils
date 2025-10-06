@@ -9,7 +9,7 @@ use std::{env, fmt};
 
 use uucore::{
     display::Quotable,
-    parse_size::{ParseSizeError, parse_size_u64},
+    parser::parse_size::{ParseSizeError, parse_size_u64},
 };
 
 /// The first ten powers of 1024.
@@ -40,8 +40,8 @@ const SI_BASES: [u128; 10] = [
     1_000_000_000_000_000_000_000_000_000,
 ];
 
-/// A SuffixType determines whether the suffixes are 1000 or 1024 based, and whether they are
-/// intended for HumanReadable mode or not.
+/// A `SuffixType` determines whether the suffixes are 1000 or 1024 based, and whether they are
+/// intended for `HumanReadable` mode or not.
 #[derive(Clone, Copy)]
 pub(crate) enum SuffixType {
     Iec,
@@ -98,9 +98,9 @@ pub(crate) fn to_magnitude_and_suffix(n: u128, suffix_type: SuffixType) -> Strin
         if rem % (bases[i] / 10) == 0 {
             format!("{quot}.{tenths_place}{suffix}")
         } else if tenths_place + 1 == 10 || quot >= 10 {
-            format!("{}{}", quot + 1, suffix)
+            format!("{}{suffix}", quot + 1)
         } else {
-            format!("{}.{}{}", quot, tenths_place + 1, suffix)
+            format!("{quot}.{}{suffix}", tenths_place + 1)
         }
     }
 }
@@ -184,11 +184,7 @@ pub(crate) fn read_block_size(matches: &ArgMatches) -> Result<BlockSize, ParseSi
 fn block_size_from_env() -> Option<u64> {
     for env_var in ["DF_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
         if let Ok(env_size) = env::var(env_var) {
-            if let Ok(size) = parse_size_u64(&env_size) {
-                return Some(size);
-            } else {
-                return None;
-            }
+            return parse_size_u64(&env_size).ok();
         }
     }
 

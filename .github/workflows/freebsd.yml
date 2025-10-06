@@ -1,6 +1,6 @@
 name: FreeBSD
 
-# spell-checker:ignore sshfs usesh vmactions taiki Swatinem esac fdescfs fdesc sccache nextest copyback
+# spell-checker:ignore sshfs usesh vmactions taiki Swatinem esac fdescfs fdesc sccache nextest copyback logind
 
 env:
   # * style job configuration
@@ -24,7 +24,7 @@ jobs:
   style:
     name: Style and Lint
     runs-on: ${{ matrix.job.os }}
-    timeout-minutes: 90
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -34,14 +34,14 @@ jobs:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.1.9
+      uses: vmactions/freebsd-vm@v1.2.4
       with:
         usesh: true
         sync: rsync
@@ -107,7 +107,7 @@ jobs:
           if [ -z "\${FAULT}" ]; then
             echo "## cargo clippy lint testing"
             # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-            S=\$(cargo clippy --all-targets \${CARGO_UTILITY_LIST_OPTIONS} -- -W clippy::manual_string_new -D warnings 2>&1) && printf "%s\n" "\$S" || { printf "%s\n" "\$S" ; printf "%s" "\$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*\$/::\${FAULT_TYPE} file=\2,line=\3,col=\4::\${FAULT_PREFIX}: \\\`cargo clippy\\\`: \1 (file:'\2', line:\3)/p;" -e '}' ; FAULT=true ; }
+            S=\$(cargo clippy --all-targets \${CARGO_UTILITY_LIST_OPTIONS} -- -D warnings 2>&1) && printf "%s\n" "\$S" || { printf "%s\n" "\$S" ; printf "%s" "\$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*\$/::\${FAULT_TYPE} file=\2,line=\3,col=\4::\${FAULT_PREFIX}: \\\`cargo clippy\\\`: \1 (file:'\2', line:\3)/p;" -e '}' ; FAULT=true ; }
           fi
           # Clean to avoid to rsync back the files
           cargo clean
@@ -117,7 +117,7 @@ jobs:
   test:
     name: Tests
     runs-on: ${{ matrix.job.os }}
-    timeout-minutes: 90
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -128,19 +128,19 @@ jobs:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.1.9
+      uses: vmactions/freebsd-vm@v1.2.4
       with:
         usesh: true
         sync: rsync
         copyback: false
-        prepare: pkg install -y curl gmake sudo
+        prepare: pkg install -y curl gmake sudo jq
         run: |
           ## Prepare, build, and test
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
@@ -194,7 +194,13 @@ jobs:
           export RUST_BACKTRACE=1
           export CARGO_TERM_COLOR=always
           if (test -z "\$FAULT"); then cargo nextest run --hide-progress-bar --profile ci --features '${{ matrix.job.features }}' || FAULT=1 ; fi
-          if (test -z "\$FAULT"); then cargo nextest run --hide-progress-bar --profile ci --all-features -p uucore || FAULT=1 ; fi
+          # There is no systemd-logind on FreeBSD, so test all features except feat_systemd_logind ( https://github.com/rust-lang/cargo/issues/3126#issuecomment-2523441905 )
+          if (test -z "\$FAULT"); then
+            UUCORE_FEATURES=\$(cargo metadata --format-version=1 --no-deps -p uucore | jq -r '.packages[] | select(.name == "uucore") | .features | keys | .[]' | grep -v "feat_systemd_logind" | paste -s -d "," -)
+            cargo nextest run --hide-progress-bar --profile ci --features "\$UUCORE_FEATURES" -p uucore || FAULT=1
+          fi
+          # Test building with make
+          if (test -z "\$FAULT"); then make PROFILE=ci || FAULT=1 ; fi
           # Clean to avoid to rsync back the files
           cargo clean
           if (test -n "\$FAULT"); then exit 1 ; fi

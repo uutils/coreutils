@@ -9,28 +9,43 @@ mod unit_tests;
 
 use super::{ConversionMode, IConvFlags, IFlags, Num, OConvFlags, OFlags, Settings, StatusLevel};
 use crate::conversion_tables::ConversionTable;
-use std::error::Error;
+use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
-use uucore::parse_size::{ParseSizeError, Parser as SizeParser};
+use uucore::parser::parse_size::{ParseSizeError, Parser as SizeParser};
 use uucore::show_warning;
+use uucore::translate;
 
 /// Parser Errors describe errors with parser input
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Error)]
 pub enum ParseError {
+    #[error("{}", translate!("dd-error-unrecognized-operand", "operand" => .0.clone()))]
     UnrecognizedOperand(String),
+    #[error("{}", translate!("dd-error-multiple-format-table"))]
     MultipleFmtTable,
+    #[error("{}", translate!("dd-error-multiple-case"))]
     MultipleUCaseLCase,
+    #[error("{}", translate!("dd-error-multiple-block"))]
     MultipleBlockUnblock,
+    #[error("{}", translate!("dd-error-multiple-excl"))]
     MultipleExclNoCreate,
+    #[error("{}", translate!("dd-error-invalid-flag", "flag" => .0.clone(), "cmd" => uucore::execution_phrase()))]
     FlagNoMatch(String),
+    #[error("{}", translate!("dd-error-conv-flag-no-match", "flag" => .0.clone()))]
     ConvFlagNoMatch(String),
+    #[error("{}", translate!("dd-error-multiplier-parse-failure", "input" => .0.clone()))]
     MultiplierStringParseFailure(String),
+    #[error("{}", translate!("dd-error-multiplier-overflow", "input" => .0.clone()))]
     MultiplierStringOverflow(String),
+    #[error("{}", translate!("dd-error-block-without-cbs"))]
     BlockUnblockWithoutCBS,
+    #[error("{}", translate!("dd-error-status-not-recognized", "level" => .0.clone()))]
     StatusLevelNotRecognized(String),
+    #[error("{}", translate!("dd-error-unimplemented", "feature" => .0.clone()))]
     Unimplemented(String),
+    #[error("{}", translate!("dd-error-bs-out-of-range", "param" => .0.clone()))]
     BsOutOfRange(String),
+    #[error("{}", translate!("dd-error-invalid-number", "input" => .0.clone()))]
     InvalidNumber(String),
 }
 
@@ -112,13 +127,19 @@ impl Parser {
         Self::default()
     }
 
-    pub(crate) fn parse(self, operands: &[&str]) -> Result<Settings, ParseError> {
+    pub(crate) fn parse(
+        self,
+        operands: impl IntoIterator<Item: AsRef<str>>,
+    ) -> Result<Settings, ParseError> {
         self.read(operands)?.validate()
     }
 
-    pub(crate) fn read(mut self, operands: &[&str]) -> Result<Self, ParseError> {
+    pub(crate) fn read(
+        mut self,
+        operands: impl IntoIterator<Item: AsRef<str>>,
+    ) -> Result<Self, ParseError> {
         for operand in operands {
-            self.parse_operand(operand)?;
+            self.parse_operand(operand.as_ref())?;
         }
 
         Ok(self)
@@ -396,69 +417,6 @@ impl Parser {
     }
 }
 
-impl std::fmt::Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::UnrecognizedOperand(arg) => {
-                write!(f, "Unrecognized operand '{arg}'")
-            }
-            Self::MultipleFmtTable => {
-                write!(
-                    f,
-                    "Only one of conv=ascii conv=ebcdic or conv=ibm may be specified"
-                )
-            }
-            Self::MultipleUCaseLCase => {
-                write!(f, "Only one of conv=lcase or conv=ucase may be specified")
-            }
-            Self::MultipleBlockUnblock => {
-                write!(f, "Only one of conv=block or conv=unblock may be specified")
-            }
-            Self::MultipleExclNoCreate => {
-                write!(f, "Only one ov conv=excl or conv=nocreat may be specified")
-            }
-            Self::FlagNoMatch(arg) => {
-                // Additional message about 'dd --help' is displayed only in this situation.
-                write!(
-                    f,
-                    "invalid input flag: ‘{}’\nTry '{} --help' for more information.",
-                    arg,
-                    uucore::execution_phrase()
-                )
-            }
-            Self::ConvFlagNoMatch(arg) => {
-                write!(f, "Unrecognized conv=CONV -> {arg}")
-            }
-            Self::MultiplierStringParseFailure(arg) => {
-                write!(f, "invalid number: ‘{arg}’")
-            }
-            Self::MultiplierStringOverflow(arg) => {
-                write!(
-                    f,
-                    "Multiplier string would overflow on current system -> {arg}"
-                )
-            }
-            Self::BlockUnblockWithoutCBS => {
-                write!(f, "conv=block or conv=unblock specified without cbs=N")
-            }
-            Self::StatusLevelNotRecognized(arg) => {
-                write!(f, "status=LEVEL not recognized -> {arg}")
-            }
-            Self::BsOutOfRange(arg) => {
-                write!(f, "{arg}=N cannot fit into memory")
-            }
-            Self::Unimplemented(arg) => {
-                write!(f, "feature not implemented on this system -> {arg}")
-            }
-            Self::InvalidNumber(arg) => {
-                write!(f, "invalid number: ‘{arg}’")
-            }
-        }
-    }
-}
-
-impl Error for ParseError {}
-
 impl UError for ParseError {
     fn code(&self) -> i32 {
         1
@@ -467,13 +425,12 @@ impl UError for ParseError {
 
 fn show_zero_multiplier_warning() {
     show_warning!(
-        "{} is a zero multiplier; use {} if that is intended",
-        "0x".quote(),
-        "00x".quote()
+        "{}",
+        translate!("dd-warning-zero-multiplier", "zero" => "0x".quote(), "alternative" => "00x".quote())
     );
 }
 
-/// Parse bytes using str::parse, then map error if needed.
+/// Parse bytes using [`str::parse`], then map error if needed.
 fn parse_bytes_only(s: &str, i: usize) -> Result<u64, ParseError> {
     s[..i]
         .parse()
@@ -491,7 +448,7 @@ fn parse_bytes_only(s: &str, i: usize) -> Result<u64, ParseError> {
 /// 512. You can also use standard block size suffixes like `'k'` for
 /// 1024.
 ///
-/// If the number would be too large, return [`std::u64::MAX`] instead.
+/// If the number would be too large, return [`u64::MAX`] instead.
 ///
 /// # Errors
 ///
@@ -529,7 +486,7 @@ fn parse_bytes_no_x(full: &str, s: &str) -> Result<u64, ParseError> {
 }
 
 /// Parse byte and multiplier like 512, 5KiB, or 1G.
-/// Uses uucore::parse_size, and adds the 'w' and 'c' suffixes which are mentioned
+/// Uses [`uucore::parser::parse_size`], and adds the 'w' and 'c' suffixes which are mentioned
 /// in dd's info page.
 pub fn parse_bytes_with_opt_multiplier(s: &str) -> Result<u64, ParseError> {
     // TODO On my Linux system, there seems to be a maximum block size of 4096 bytes:

@@ -6,46 +6,33 @@
 // spell-checker:ignore (ToDO) nums aflag uflag scol prevtab amode ctype cwidth nbytes lastcol pctype Preprocess
 
 use clap::{Arg, ArgAction, Command};
-use std::error::Error;
-use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
+use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage, show};
-
-const USAGE: &str = help_usage!("unexpand.md");
-const ABOUT: &str = help_about!("unexpand.md");
+use uucore::translate;
+use uucore::{format_usage, show};
 
 const DEFAULT_TABSTOP: usize = 8;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum ParseError {
+    #[error("{}", translate!("unexpand-error-invalid-character", "char" => _0.quote()))]
     InvalidCharacter(String),
+    #[error("{}", translate!("unexpand-error-tab-size-cannot-be-zero"))]
     TabSizeCannotBeZero,
+    #[error("{}", translate!("unexpand-error-tab-size-too-large"))]
     TabSizeTooLarge,
+    #[error("{}", translate!("unexpand-error-tab-sizes-must-be-ascending"))]
     TabSizesMustBeAscending,
 }
 
-impl Error for ParseError {}
 impl UError for ParseError {}
-
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::InvalidCharacter(s) => {
-                write!(f, "tab size contains invalid character(s): {}", s.quote())
-            }
-            Self::TabSizeCannotBeZero => write!(f, "tab size cannot be 0"),
-            Self::TabSizeTooLarge => write!(f, "tab stop value is too large"),
-            Self::TabSizesMustBeAscending => write!(f, "tab sizes must be ascending"),
-        }
-    }
-}
 
 fn tabstops_parse(s: &str) -> Result<Vec<usize>, ParseError> {
     let words = s.split(',');
@@ -55,18 +42,18 @@ fn tabstops_parse(s: &str) -> Result<Vec<usize>, ParseError> {
     for word in words {
         match word.parse::<usize>() {
             Ok(num) => nums.push(num),
-            Err(e) => match e.kind() {
-                IntErrorKind::PosOverflow => return Err(ParseError::TabSizeTooLarge),
-                _ => {
-                    return Err(ParseError::InvalidCharacter(
+            Err(e) => {
+                return match e.kind() {
+                    IntErrorKind::PosOverflow => Err(ParseError::TabSizeTooLarge),
+                    _ => Err(ParseError::InvalidCharacter(
                         word.trim_start_matches(char::is_numeric).to_string(),
-                    ));
-                }
-            },
+                    )),
+                };
+            }
         }
     }
 
-    if nums.iter().any(|&n| n == 0) {
+    if nums.contains(&0) {
         return Err(ParseError::TabSizeCannotBeZero);
     }
 
@@ -160,7 +147,7 @@ fn expand_shortcuts(args: &[String]) -> Vec<String> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
 
-    let matches = uu_app().try_get_matches_from(expand_shortcuts(&args))?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), expand_shortcuts(&args))?;
 
     unexpand(&Options::new(&matches)?)
 }
@@ -168,8 +155,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .override_usage(format_usage(&translate!("unexpand-usage")))
+        .about(translate!("unexpand-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE)
@@ -181,23 +169,21 @@ pub fn uu_app() -> Command {
             Arg::new(options::ALL)
                 .short('a')
                 .long(options::ALL)
-                .help("convert all blanks, instead of just initial blanks")
+                .help(translate!("unexpand-help-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FIRST_ONLY)
+                .short('f')
                 .long(options::FIRST_ONLY)
-                .help("convert only leading sequences of blanks (overrides -a)")
+                .help(translate!("unexpand-help-first-only"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TABS)
                 .short('t')
                 .long(options::TABS)
-                .help(
-                    "use comma separated LIST of tab positions or have tabs N characters \
-                apart instead of 8 (enables -a)",
-                )
+                .help(translate!("unexpand-help-tabs"))
                 .action(ArgAction::Append)
                 .value_name("N, LIST"),
         )
@@ -205,7 +191,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::NO_UTF8)
                 .short('U')
                 .long(options::NO_UTF8)
-                .help("interpret input file as 8-bit ASCII rather than UTF-8")
+                .help(translate!("unexpand-help-no-utf8"))
                 .action(ArgAction::SetTrue),
         )
 }
@@ -216,7 +202,7 @@ fn open(path: &str) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     if filename.is_dir() {
         Err(Box::new(USimpleError {
             code: 1,
-            message: format!("{}: Is a directory", filename.display()),
+            message: translate!("unexpand-error-is-directory", "path" => filename.display()),
         }))
     } else if path == "-" {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
@@ -322,16 +308,56 @@ fn next_char_info(uflag: bool, buf: &[u8], byte: usize) -> (CharType, usize, usi
 #[allow(clippy::cognitive_complexity)]
 fn unexpand_line(
     buf: &mut Vec<u8>,
-    output: &mut BufWriter<std::io::Stdout>,
+    output: &mut BufWriter<Stdout>,
     options: &Options,
     lastcol: usize,
     ts: &[usize],
 ) -> UResult<()> {
+    // Fast path: if we're not converting all spaces (-a flag not set)
+    // and the line doesn't start with spaces, just write it directly
+    if !options.aflag && !buf.is_empty() && buf[0] != b' ' && buf[0] != b'\t' {
+        output.write_all(buf)?;
+        buf.truncate(0);
+        return Ok(());
+    }
+
     let mut byte = 0; // offset into the buffer
     let mut col = 0; // the current column
     let mut scol = 0; // the start col for the current span, i.e., the already-printed width
     let mut init = true; // are we at the start of the line?
     let mut pctype = CharType::Other;
+
+    // Fast path for leading spaces in non-UTF8 mode: count consecutive spaces/tabs at start
+    if !options.uflag && !options.aflag {
+        // In default mode (not -a), we only convert leading spaces
+        // So we can batch process them and then copy the rest
+        while byte < buf.len() {
+            match buf[byte] {
+                b' ' => {
+                    col += 1;
+                    byte += 1;
+                }
+                b'\t' => {
+                    col += next_tabstop(ts, col).unwrap_or(1);
+                    byte += 1;
+                    pctype = CharType::Tab;
+                }
+                _ => break,
+            }
+        }
+
+        // If we found spaces/tabs, write them as tabs
+        if byte > 0 {
+            write_tabs(output, ts, 0, col, pctype == CharType::Tab, true, true)?;
+        }
+
+        // Write the rest of the line directly (no more tab conversion needed)
+        if byte < buf.len() {
+            output.write_all(&buf[byte..])?;
+        }
+        buf.truncate(0);
+        return Ok(());
+    }
 
     while byte < buf.len() {
         // when we have a finite number of columns, never convert past the last column
@@ -393,7 +419,6 @@ fn unexpand_line(
 
     // write out anything remaining
     write_tabs(output, ts, scol, col, pctype == CharType::Tab, init, true)?;
-    output.flush()?;
     buf.truncate(0); // clear out the buffer
 
     Ok(())
@@ -421,6 +446,7 @@ fn unexpand(options: &Options) -> UResult<()> {
             unexpand_line(&mut buf, &mut output, options, lastcol, ts)?;
         }
     }
+    output.flush()?;
     Ok(())
 }
 

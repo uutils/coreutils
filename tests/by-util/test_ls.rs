@@ -2,8 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo
-// spell-checker:ignore (words) fakeroot setcap
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps
 #![allow(
     clippy::similar_names,
     clippy::too_many_lines,
@@ -19,13 +19,11 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStrExt;
-#[cfg(all(unix, feature = "chmod"))]
-use std::os::unix::io::IntoRawFd;
-use std::path::Path;
 #[cfg(not(windows))]
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
+use std::{path::Path, time::SystemTime};
 use uutests::new_ucmd;
 #[cfg(unix)]
 use uutests::unwrap_or_return;
@@ -85,6 +83,42 @@ fn test_invalid_value_returns_1() {
     }
 }
 
+/* spellchecker: disable */
+#[test]
+fn test_localized_possible_values() {
+    let test_cases = vec![
+        (
+            "en_US.UTF-8",
+            vec![
+                "error: invalid value 'invalid_test_value' for '--color",
+                "[possible values:",
+            ],
+        ),
+        (
+            "fr_FR.UTF-8",
+            vec![
+                "erreur : valeur invalide 'invalid_test_value' pour '--color",
+                "[valeurs possibles:",
+            ],
+        ),
+    ];
+
+    for (locale, expected_strings) in test_cases {
+        let result = new_ucmd!()
+            .env("LANG", locale)
+            .env("LC_ALL", locale)
+            .arg("--color=invalid_test_value")
+            .fails();
+
+        result.code_is(1);
+        let stderr = result.stderr_str();
+        for expected in expected_strings {
+            assert!(stderr.contains(expected));
+        }
+    }
+}
+/* spellchecker: enable */
+
 #[test]
 fn test_invalid_value_returns_2() {
     // Invalid values to flags *sometimes* result in error code 2:
@@ -108,6 +142,7 @@ fn test_invalid_value_time_style() {
         .arg("-g")
         .arg("--time-style=definitely_invalid_value")
         .fails_with_code(2)
+        .stderr_contains("time-style argument 'definitely_invalid_value'")
         .no_stdout();
     // If it only looks temporarily like it might be used, no error:
     new_ucmd!()
@@ -544,50 +579,53 @@ fn test_ls_io_errors() {
 
     #[cfg(unix)]
     {
+        use std::os::fd::AsRawFd;
+
         at.touch("some-dir4/bad-fd.txt");
-        let fd1 = at.open("some-dir4/bad-fd.txt").into_raw_fd();
-        let fd2 = dup(dbg!(fd1)).unwrap();
+        let fd1 = at.open("some-dir4/bad-fd.txt");
+        let fd2 = dup(dbg!(&fd1)).unwrap();
         close(fd1).unwrap();
 
         // on the mac and in certain Linux containers bad fds are typed as dirs,
         // however sometimes bad fds are typed as links and directory entry on links won't fail
-        if PathBuf::from(format!("/dev/fd/{fd2}")).is_dir() {
+        if PathBuf::from(format!("/dev/fd/{}", fd2.as_raw_fd())).is_dir() {
             scene
                 .ucmd()
                 .arg("-alR")
-                .arg(format!("/dev/fd/{fd2}"))
+                .arg(format!("/dev/fd/{}", fd2.as_raw_fd()))
                 .fails()
                 .stderr_contains(format!(
-                    "cannot open directory '/dev/fd/{fd2}': Bad file descriptor"
+                    "cannot open directory '/dev/fd/{}': Bad file descriptor",
+                    fd2.as_raw_fd()
                 ))
-                .stdout_does_not_contain(format!("{fd2}:\n"));
+                .stdout_does_not_contain(format!("{}:\n", fd2.as_raw_fd()));
 
             scene
                 .ucmd()
                 .arg("-RiL")
-                .arg(format!("/dev/fd/{fd2}"))
+                .arg(format!("/dev/fd/{}", fd2.as_raw_fd()))
                 .fails()
-                .stderr_contains(format!("cannot open directory '/dev/fd/{fd2}': Bad file descriptor"))
+                .stderr_contains(format!("cannot open directory '/dev/fd/{}': Bad file descriptor", fd2.as_raw_fd()))
                 // don't double print bad fd errors
-                .stderr_does_not_contain(format!("ls: cannot open directory '/dev/fd/{fd2}': Bad file descriptor\nls: cannot open directory '/dev/fd/{fd2}': Bad file descriptor"));
+                .stderr_does_not_contain(format!("ls: cannot open directory '/dev/fd/{0}': Bad file descriptor\nls: cannot open directory '/dev/fd/{0}': Bad file descriptor", fd2.as_raw_fd()));
         } else {
             scene
                 .ucmd()
                 .arg("-alR")
-                .arg(format!("/dev/fd/{fd2}"))
+                .arg(format!("/dev/fd/{}", fd2.as_raw_fd()))
                 .succeeds();
 
             scene
                 .ucmd()
                 .arg("-RiL")
-                .arg(format!("/dev/fd/{fd2}"))
+                .arg(format!("/dev/fd/{}", fd2.as_raw_fd()))
                 .succeeds();
         }
 
         scene
             .ucmd()
             .arg("-alL")
-            .arg(format!("/dev/fd/{fd2}"))
+            .arg(format!("/dev/fd/{}", fd2.as_raw_fd()))
             .succeeds();
 
         let _ = close(fd2);
@@ -837,7 +875,7 @@ fn test_ls_columns() {
 
     for option in COLUMN_ARGS {
         let result = scene.ucmd().arg(option).succeeds();
-        result.stdout_only("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n");
+        result.stdout_only("test-columns-1\ttest-columns-2\ttest-columns-3\ttest-columns-4\n");
     }
 
     for option in COLUMN_ARGS {
@@ -846,7 +884,7 @@ fn test_ls_columns() {
             .arg("-w=40")
             .arg(option)
             .succeeds()
-            .stdout_only("test-columns-1  test-columns-3\ntest-columns-2  test-columns-4\n");
+            .stdout_only("test-columns-1\ttest-columns-3\ntest-columns-2\ttest-columns-4\n");
     }
 
     // On windows we are always able to get the terminal size, so we can't simulate falling back to the
@@ -859,7 +897,7 @@ fn test_ls_columns() {
                 .env("COLUMNS", "40")
                 .arg(option)
                 .succeeds()
-                .stdout_only("test-columns-1  test-columns-3\ntest-columns-2  test-columns-4\n");
+                .stdout_only("test-columns-1\ttest-columns-3\ntest-columns-2\ttest-columns-4\n");
         }
 
         scene
@@ -867,7 +905,7 @@ fn test_ls_columns() {
             .env("COLUMNS", "garbage")
             .arg("-C")
             .succeeds()
-            .stdout_is("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n")
+            .stdout_is("test-columns-1\ttest-columns-2\ttest-columns-3\ttest-columns-4\n")
             .stderr_is("ls: ignoring invalid width in environment variable COLUMNS: 'garbage'\n");
     }
     scene
@@ -1130,7 +1168,7 @@ fn test_ls_long_format() {
     // and followed by a single space.
     // Whatever comes after is irrelevant to this specific test.
     let re = &Regex::new(
-            r"\n[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3}\.? +\d+ [^ ]+ +[^ ]+( +[^ ]+)? +\d+ [A-Z][a-z]{2} {0,2}\d{0,2} {0,2}[0-9:]+ "
+            r"\n[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3}[.+]? +\d+ [^ ]+ +[^ ]+( +[^ ]+)? +\d+ [A-Z][a-z]{2} {0,2}\d{0,2} {0,2}[0-9:]+ "
         ).unwrap();
 
     for arg in LONG_ARGS {
@@ -1144,7 +1182,7 @@ fn test_ls_long_format() {
 
     // This checks for the line with the .. entry. The uname and group should be digits.
     scene.ucmd().arg("-lan").arg("test-long-dir").succeeds().stdout_matches(&Regex::new(
-        r"\nd([r-][w-][xt-]){3}\.? +\d+ \d+ +\d+( +\d+)? +\d+ [A-Z][a-z]{2} {0,2}\d{0,2} {0,2}[0-9:]+ \.\."
+        r"\nd([r-][w-][xt-]){3}[.+]? +\d+ \d+ +\d+( +\d+)? +\d+ [A-Z][a-z]{2} {0,2}\d{0,2} {0,2}[0-9:]+ \.\."
     ).unwrap());
 }
 
@@ -1491,28 +1529,28 @@ fn test_ls_long_formats() {
     // Zero or one "." for indicating a file with security context
 
     // Regex for three names, so all of author, group and owner
-    let re_three = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z.A-Z]+ ){3}0").unwrap();
+    let re_three = Regex::new(r"[xrw-]{9}[.+]? \d ([-0-9_a-z.A-Z]+ ){3}0").unwrap();
 
     #[cfg(unix)]
-    let re_three_num = Regex::new(r"[xrw-]{9}\.? \d (\d+ ){3}0").unwrap();
+    let re_three_num = Regex::new(r"[xrw-]{9}[.+]? \d (\d+ ){3}0").unwrap();
 
     // Regex for two names, either:
     // - group and owner
     // - author and owner
     // - author and group
-    let re_two = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z.A-Z]+ ){2}0").unwrap();
+    let re_two = Regex::new(r"[xrw-]{9}[.+]? \d ([-0-9_a-z.A-Z]+ ){2}0").unwrap();
 
     #[cfg(unix)]
-    let re_two_num = Regex::new(r"[xrw-]{9}\.? \d (\d+ ){2}0").unwrap();
+    let re_two_num = Regex::new(r"[xrw-]{9}[.+]? \d (\d+ ){2}0").unwrap();
 
     // Regex for one name: author, group or owner
-    let re_one = Regex::new(r"[xrw-]{9}\.? \d [-0-9_a-z.A-Z]+ 0").unwrap();
+    let re_one = Regex::new(r"[xrw-]{9}[.+]? \d [-0-9_a-z.A-Z]+ 0").unwrap();
 
     #[cfg(unix)]
-    let re_one_num = Regex::new(r"[xrw-]{9}\.? \d \d+ 0").unwrap();
+    let re_one_num = Regex::new(r"[xrw-]{9}[.+]? \d \d+ 0").unwrap();
 
     // Regex for no names
-    let re_zero = Regex::new(r"[xrw-]{9}\.? \d 0").unwrap();
+    let re_zero = Regex::new(r"[xrw-]{9}[.+]? \d 0").unwrap();
 
     scene
         .ucmd()
@@ -1733,7 +1771,9 @@ fn test_ls_group_directories_first() {
         .succeeds();
     assert_eq!(
         result.stdout_str().split('\n').collect::<Vec<_>>(),
-        (dirnames.into_iter().rev())
+        dirnames
+            .into_iter()
+            .rev()
             .chain(dots.into_iter().rev())
             .chain(filenames.into_iter().rev())
             .chain([""].into_iter())
@@ -1894,7 +1934,7 @@ fn test_ls_long_ctime() {
 }
 
 #[test]
-#[ignore]
+#[ignore = ""]
 fn test_ls_order_birthtime() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1919,24 +1959,38 @@ fn test_ls_order_birthtime() {
 }
 
 #[test]
-fn test_ls_styles() {
+fn test_ls_time_styles() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
+    // Create a recent and old (<6 months) file, as format can be different.
     at.touch("test");
+    let f3 = at.make_file("test-old");
+    f3.set_modified(SystemTime::now() - Duration::from_secs(3600 * 24 * 365))
+        .unwrap();
 
-    let re_full = Regex::new(
+    let re_full_recent = Regex::new(
         r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d* (\+|\-)\d{4} test\n",
     )
     .unwrap();
-    let re_long =
+    let re_long_recent =
         Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
-    let re_iso =
+    let re_iso_recent =
         Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
-    let re_locale =
+    let re_locale_recent =
         Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* [A-Z][a-z]{2} ( |\d)\d \d{2}:\d{2} test\n")
             .unwrap();
-    let re_custom_format =
-        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}__\d{2} test\n").unwrap();
+    let re_full_old = Regex::new(
+            r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d* (\+|\-)\d{4} test-old\n",
+        )
+        .unwrap();
+    let re_long_old =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2} test-old\n")
+            .unwrap();
+    let re_iso_old =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}-\d{2}-\d{2}  test-old\n").unwrap();
+    let re_locale_old =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* [A-Z][a-z]{2} ( |\d)\d  \d{4} test-old\n")
+            .unwrap();
 
     //full-iso
     scene
@@ -1944,42 +1998,112 @@ fn test_ls_styles() {
         .arg("-l")
         .arg("--time-style=full-iso")
         .succeeds()
-        .stdout_matches(&re_full);
+        .stdout_matches(&re_full_recent)
+        .stdout_matches(&re_full_old);
     //long-iso
     scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=long-iso")
         .succeeds()
-        .stdout_matches(&re_long);
+        .stdout_matches(&re_long_recent)
+        .stdout_matches(&re_long_old);
     //iso
     scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=iso")
         .succeeds()
-        .stdout_matches(&re_iso);
+        .stdout_matches(&re_iso_recent)
+        .stdout_matches(&re_iso_old);
     //locale
     scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=locale")
         .succeeds()
-        .stdout_matches(&re_locale);
+        .stdout_matches(&re_locale_recent)
+        .stdout_matches(&re_locale_old);
+
+    //posix-full-iso
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=posix-full-iso")
+        .succeeds()
+        .stdout_matches(&re_full_recent)
+        .stdout_matches(&re_full_old);
+    //posix-long-iso
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=posix-long-iso")
+        .succeeds()
+        .stdout_matches(&re_long_recent)
+        .stdout_matches(&re_long_old);
+    //posix-iso
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=posix-iso")
+        .succeeds()
+        .stdout_matches(&re_iso_recent)
+        .stdout_matches(&re_iso_old);
+
+    //posix-* with LC_TIME/LC_ALL=POSIX is equivalent to locale
+    scene
+        .ucmd()
+        .env("LC_TIME", "POSIX")
+        .arg("-l")
+        .arg("--time-style=posix-full-iso")
+        .succeeds()
+        .stdout_matches(&re_locale_recent)
+        .stdout_matches(&re_locale_old);
+    scene
+        .ucmd()
+        .env("LC_ALL", "POSIX")
+        .arg("-l")
+        .arg("--time-style=posix-iso")
+        .succeeds()
+        .stdout_matches(&re_locale_recent)
+        .stdout_matches(&re_locale_old);
 
     //+FORMAT
+    let re_custom_format_recent =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}__\d{2} test\n").unwrap();
+    let re_custom_format_old =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}__\d{2} test-old\n").unwrap();
     scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=+%Y__%M")
         .succeeds()
-        .stdout_matches(&re_custom_format);
+        .stdout_matches(&re_custom_format_recent)
+        .stdout_matches(&re_custom_format_old);
+
+    //+FORMAT_RECENT\nFORMAT_OLD
+    let re_custom_format_old =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}--\d{2} test-old\n").unwrap();
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=+%Y__%M\n%Y--%M")
+        .succeeds()
+        .stdout_matches(&re_custom_format_recent)
+        .stdout_matches(&re_custom_format_old);
 
     // Also fails due to not having full clap support for time_styles
     scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=invalid")
+        .fails_with_code(2);
+
+    // Cannot have 2 new lines in custom format
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=+%Y__%M\n%Y--%M\n")
         .fails_with_code(2);
 
     //Overwrite options tests
@@ -1989,19 +2113,19 @@ fn test_ls_styles() {
         .arg("--time-style=long-iso")
         .arg("--time-style=iso")
         .succeeds()
-        .stdout_matches(&re_iso);
+        .stdout_matches(&re_iso_recent);
     scene
         .ucmd()
         .arg("--time-style=iso")
         .arg("--full-time")
         .succeeds()
-        .stdout_matches(&re_full);
+        .stdout_matches(&re_full_recent);
     scene
         .ucmd()
         .arg("--full-time")
         .arg("--time-style=iso")
         .succeeds()
-        .stdout_matches(&re_iso);
+        .stdout_matches(&re_iso_recent);
 
     scene
         .ucmd()
@@ -2009,7 +2133,7 @@ fn test_ls_styles() {
         .arg("--time-style=iso")
         .arg("--full-time")
         .succeeds()
-        .stdout_matches(&re_full);
+        .stdout_matches(&re_full_recent);
 
     scene
         .ucmd()
@@ -2017,15 +2141,109 @@ fn test_ls_styles() {
         .arg("-x")
         .arg("-l")
         .succeeds()
-        .stdout_matches(&re_full);
+        .stdout_matches(&re_full_recent);
 
-    at.touch("test2");
     scene
         .ucmd()
         .arg("--full-time")
         .arg("-x")
         .succeeds()
-        .stdout_is("test  test2\n");
+        .stdout_is("test  test-old\n");
+
+    // Time style can also be setup from environment
+    scene
+        .ucmd()
+        .env("TIME_STYLE", "full-iso")
+        .arg("-l")
+        .succeeds()
+        .stdout_matches(&re_full_recent);
+
+    // ... but option takes precedence
+    scene
+        .ucmd()
+        .env("TIME_STYLE", "full-iso")
+        .arg("-l")
+        .arg("--time-style=long-iso")
+        .succeeds()
+        .stdout_matches(&re_long_recent);
+}
+
+#[test]
+fn test_ls_time_recent_future() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let f = at.make_file("test");
+
+    let re_iso_recent =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
+    let re_iso_old =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}-\d{2}-\d{2}  test\n").unwrap();
+
+    // `test` has just been created, so it's recent
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=iso")
+        .succeeds()
+        .stdout_matches(&re_iso_recent);
+
+    // 100 days ago is still recent (<0.5 years)
+    f.set_modified(SystemTime::now() - Duration::from_secs(3600 * 24 * 100))
+        .unwrap();
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=iso")
+        .succeeds()
+        .stdout_matches(&re_iso_recent);
+
+    // 200 days ago is not recent
+    f.set_modified(SystemTime::now() - Duration::from_secs(3600 * 24 * 200))
+        .unwrap();
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=iso")
+        .succeeds()
+        .stdout_matches(&re_iso_old);
+
+    // A timestamp in the future (even just a minute), is not considered "recent"
+    f.set_modified(SystemTime::now() + Duration::from_secs(60))
+        .unwrap();
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=iso")
+        .succeeds()
+        .stdout_matches(&re_iso_old);
+
+    // Also test that we can set a format that varies for recent of older files.
+    //+FORMAT_RECENT\nFORMAT_OLD
+    f.set_modified(SystemTime::now()).unwrap();
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=+RECENT\nOLD")
+        .succeeds()
+        .stdout_contains("RECENT");
+
+    // Old file
+    f.set_modified(SystemTime::now() - Duration::from_secs(3600 * 24 * 200))
+        .unwrap();
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=+RECENT\nOLD")
+        .succeeds()
+        .stdout_contains("OLD");
+
+    // RECENT format is still used if no "OLD" one provided.
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=+RECENT")
+        .succeeds()
+        .stdout_contains("RECENT");
 }
 
 #[test]
@@ -2072,24 +2290,29 @@ fn test_ls_order_time() {
     let result = scene.ucmd().arg("--sort=time").arg("-r").succeeds();
     result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
 
+    let args: [&[&str]; 10] = [
+        &["-t", "-u"],
+        &["-u"], //-t is optional: when -l is not set -u/--time controls sorting
+        &["-t", "--time=atime"],
+        &["--time=atime"],
+        &["--time=atim"], // spell-checker:disable-line
+        &["--time=a"],
+        &["-t", "--time=access"],
+        &["--time=access"],
+        &["-t", "--time=use"],
+        &["--time=use"],
+    ];
     // 3 was accessed last in the read
     // So the order should be 2 3 4 1
-    for arg in [
-        "-u",
-        "--time=atime",
-        "--time=atim", // spell-checker:disable-line
-        "--time=a",
-        "--time=access",
-        "--time=use",
-    ] {
-        let result = scene.ucmd().arg("-t").arg(arg).succeeds();
+    for args in args {
+        let result = scene.ucmd().args(args).succeeds();
         at.open("test-3").metadata().unwrap().accessed().unwrap();
         at.open("test-4").metadata().unwrap().accessed().unwrap();
 
         // It seems to be dependent on the platform whether the access time is actually set
         #[cfg(unix)]
         {
-            let expected = unwrap_or_return!(expected_result(&scene, &["-t", arg]));
+            let expected = unwrap_or_return!(expected_result(&scene, args));
             at.open("test-3").metadata().unwrap().accessed().unwrap();
             at.open("test-4").metadata().unwrap().accessed().unwrap();
 
@@ -2104,6 +2327,10 @@ fn test_ls_order_time() {
     #[cfg(unix)]
     {
         let result = scene.ucmd().arg("-tc").succeeds();
+        result.stdout_only("test-2\ntest-4\ntest-3\ntest-1\n");
+
+        // When -l is not set, -c also controls sorting
+        let result = scene.ucmd().arg("-c").succeeds();
         result.stdout_only("test-2\ntest-4\ntest-3\ntest-1\n");
     }
 }
@@ -2247,14 +2474,12 @@ mod quoting {
             at.mkdir(dirname);
 
             let expected = format!(
-                "{}:\n{}\n\n{}:\n",
+                "{}:\n{regular_mode}\n\n{dir_mode}:\n",
                 match *qt_style {
                     "shell-always" | "shell-escape-always" => "'.'",
                     "c" => "\".\"",
                     _ => ".",
                 },
-                regular_mode,
-                dir_mode
             );
 
             scene
@@ -2688,6 +2913,71 @@ mod quoting {
             &[],
         );
     }
+
+    #[cfg(not(any(target_vendor = "apple", target_os = "windows", target_os = "openbsd")))]
+    #[test]
+    /// This test creates files with an UTF-8 encoded name and verify that it
+    /// gets escaped depending on the used locale.
+    fn test_locale_aware_quoting() {
+        let cases: &[(&[u8], _, _, &[&str])] = &[
+            (
+                "😁".as_bytes(),               // == b"\xF0\x9F\x98\x81"
+                "''$'\\360\\237\\230\\201'\n", // ASCII sees 4 bytes
+                "😁\n",                        // UTF-8 sees an emoji
+                &["--quoting-style=shell-escape"],
+            ),
+            (
+                "€".as_bytes(),           // == b"\xE2\x82\xAC"
+                "''$'\\342\\202\\254'\n", // ASCII sees 3 bytes
+                "€\n",                    // UTF-8 still only 2
+                &["--quoting-style=shell-escape"],
+            ),
+            (
+                b"\xC2\x80\xC2\x81", // 2 first Unicode control characters
+                "????\n",            // ASCII sees 4 bytes
+                "??\n",              // UTF-8 sees only 2
+                &["--quoting-style=literal", "--hide-control-char"],
+            ),
+            (
+                b"\xC2\xC2\x81",
+                "???\n", // ASCII sees 3 bytes
+                "??\n",  // UTF-8 still only 2
+                &["--quoting-style=literal", "--hide-control-char"],
+            ),
+            (
+                b"\xC2\x81\xC2",
+                "???\n", // ASCII sees 3 bytes
+                "??\n",  // UTF-8 still only 2
+                &["--quoting-style=literal", "--hide-control-char"],
+            ),
+        ];
+
+        for (filename, ascii_ref, utf_8_ref, args) in cases {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+
+            let filename = uucore::os_str_from_bytes(filename)
+                .expect("Filename is valid Unicode supported on Linux");
+
+            at.touch(filename);
+
+            // When the locale does not handle UTF-8 encoding, escaping is done.
+            scene
+                .ucmd()
+                .env("LC_ALL", "C") // Non UTF-8 locale
+                .args(args)
+                .succeeds()
+                .stdout_only(ascii_ref);
+
+            // When the locale has UTF-8 support, the symbol is shown as-is.
+            scene
+                .ucmd()
+                .env("LC_ALL", "en_US.UTF-8") // UTF-8 locale
+                .args(args)
+                .succeeds()
+                .stdout_only(utf_8_ref);
+        }
+    }
 }
 
 #[test]
@@ -2769,7 +3059,8 @@ fn test_ls_inode() {
     at.touch(file);
 
     let re_short = Regex::new(r" *(\d+) test_inode").unwrap();
-    let re_long = Regex::new(r" *(\d+) [xrw-]{10}\.? \d .+ test_inode").unwrap();
+    let re_long =
+        Regex::new(r" *(\d+) [-bcdlpsDx]([r-][w-][xt-]){3}[.+]? +\d .+ test_inode").unwrap();
 
     let result = scene.ucmd().arg("test_inode").arg("-i").succeeds();
     assert!(re_short.is_match(result.stdout_str()));
@@ -4051,7 +4342,7 @@ fn test_ls_path() {
         .succeeds()
         .stdout_is(expected_stdout);
 
-    let abs_path = format!("{}/{}", at.as_string(), path);
+    let abs_path = format!("{}/{path}", at.as_string());
     let expected_stdout = format!("{abs_path}\n");
 
     scene
@@ -4153,14 +4444,13 @@ fn test_ls_dangling_symlinks() {
 #[test]
 #[cfg(feature = "feat_selinux")]
 fn test_ls_context1() {
-    use selinux::{self, KernelSupport};
-    if selinux::kernel_support() == KernelSupport::Unsupported {
-        println!("test skipped: Kernel has no support for SElinux context",);
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("test skipped: Kernel has no support for SElinux context");
         return;
     }
 
     let file = "test_ls_context_file";
-    let expected = format!("unconfined_u:object_r:user_tmp_t:s0 {}\n", file);
+    let expected = format!("unconfined_u:object_r:user_tmp_t:s0 {file}\n");
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch(file);
     ucmd.args(&["-Z", file]).succeeds().stdout_is(expected);
@@ -4169,9 +4459,8 @@ fn test_ls_context1() {
 #[test]
 #[cfg(feature = "feat_selinux")]
 fn test_ls_context2() {
-    use selinux::{self, KernelSupport};
-    if selinux::kernel_support() == KernelSupport::Unsupported {
-        println!("test skipped: Kernel has no support for SElinux context",);
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("test skipped: Kernel has no support for SElinux context");
         return;
     }
     let ts = TestScenario::new(util_name!());
@@ -4185,10 +4474,28 @@ fn test_ls_context2() {
 
 #[test]
 #[cfg(feature = "feat_selinux")]
+fn test_ls_context_long() {
+    if !uucore::selinux::is_selinux_enabled() {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("foo");
+    for c_flag in ["-Zl", "-Zal"] {
+        let result = scene.ucmd().args(&[c_flag, "foo"]).succeeds();
+
+        let line: Vec<_> = result.stdout_str().split(' ').collect();
+        assert!(line[0].ends_with('.'));
+        assert!(line[4].starts_with("unconfined_u"));
+        validate_selinux_context(line[4]);
+    }
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
 fn test_ls_context_format() {
-    use selinux::{self, KernelSupport};
-    if selinux::kernel_support() == KernelSupport::Unsupported {
-        println!("test skipped: Kernel has no support for SElinux context",);
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("test skipped: Kernel has no support for SElinux context");
         return;
     }
     let ts = TestScenario::new(util_name!());
@@ -4204,13 +4511,118 @@ fn test_ls_context_format() {
         // "verbose",
         "vertical",
     ] {
-        let format = format!("--format={}", word);
+        let format = format!("--format={word}");
         ts.ucmd()
             .args(&["-Z", format.as_str(), "/"])
             .succeeds()
             .stdout_only(
                 unwrap_or_return!(expected_result(&ts, &["-Z", format.as_str(), "/"])).stdout_str(),
             );
+    }
+}
+
+/// Helper function to validate `SELinux` context format
+#[cfg(feature = "feat_selinux")]
+fn validate_selinux_context(context: &str) {
+    assert!(
+        context.contains(':'),
+        "Expected SELinux context format (user:role:type:level), got: {context}"
+    );
+
+    assert_eq!(
+        context.split(':').count(),
+        4,
+        "SELinux context should have 4 components separated by colons, got: {context}"
+    );
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_ls_selinux_context_format() {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("test skipped: Kernel has no support for SElinux context");
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("file");
+    at.symlink_file("file", "link");
+
+    // Test that ls -lnZ properly shows the context
+    for file in ["file", "link"] {
+        let result = scene.ucmd().args(&["-lnZ", file]).succeeds();
+        let output = result.stdout_str();
+
+        let lines: Vec<&str> = output.lines().collect();
+        assert!(!lines.is_empty(), "Output should contain at least one line");
+
+        let first_line = lines[0];
+        let parts: Vec<&str> = first_line.split_whitespace().collect();
+        assert!(parts.len() >= 6, "Line should have at least 6 fields");
+
+        // The 5th field (0-indexed position 4) should contain the SELinux context
+        // Format: permissions links owner group context size date time name
+        let context = parts[4];
+        validate_selinux_context(context);
+    }
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_ls_selinux_context_indicator() {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("test skipped: Kernel has no support for SElinux context");
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("file");
+    at.symlink_file("file", "link");
+
+    // Test that ls -l shows "." indicator for files with SELinux contexts
+    for file in ["file", "link"] {
+        let result = scene.ucmd().args(&["-l", file]).succeeds();
+        let output = result.stdout_str();
+
+        // The 11th character should be "." indicating SELinux context
+        // -rw-rw-r--. (permissions + context indicator)
+        let lines: Vec<&str> = output.lines().collect();
+        assert!(!lines.is_empty(), "Output should contain at least one line");
+
+        let first_line = lines[0];
+        let chars: Vec<char> = first_line.chars().collect();
+        assert!(
+            chars.len() >= 11,
+            "Line should be at least 11 characters long"
+        );
+
+        // The 11th character (0-indexed position 10) should be "." for SELinux context
+        assert_eq!(
+            chars[10], '.',
+            "Expected '.' indicator for SELinux context in position 11, got '{}' in line: {}",
+            chars[10], first_line
+        );
+    }
+
+    // Test that ls -lnZ properly shows the context
+    for file in ["file", "link"] {
+        let result = scene.ucmd().args(&["-lnZ", file]).succeeds();
+        let output = result.stdout_str();
+
+        let lines: Vec<&str> = output.lines().collect();
+        assert!(!lines.is_empty(), "Output should contain at least one line");
+
+        let first_line = lines[0];
+        let parts: Vec<&str> = first_line.split_whitespace().collect();
+        assert!(parts.len() >= 6, "Line should have at least 6 fields");
+
+        // The 5th field (0-indexed position 4) should contain the SELinux context
+        // Format: permissions links owner group context size date time name
+        validate_selinux_context(parts[4]);
     }
 }
 
@@ -4366,28 +4778,52 @@ fn test_tabsize_option() {
     scene.ucmd().arg("-T").fails();
 }
 
-#[ignore = "issue #3624"]
 #[test]
 fn test_tabsize_formatting() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
 
     at.touch("aaaaaaaa");
     at.touch("bbbb");
     at.touch("cccc");
     at.touch("dddddddd");
 
-    ucmd.args(&["-T", "4"])
+    scene
+        .ucmd()
+        .args(&["-x", "-w18", "-T4"])
         .succeeds()
-        .stdout_is("aaaaaaaa bbbb\ncccc\t dddddddd");
+        .stdout_is("aaaaaaaa  bbbb\ncccc\t  dddddddd\n");
 
-    ucmd.args(&["-T", "2"])
+    scene
+        .ucmd()
+        .args(&["-C", "-w18", "-T4"])
         .succeeds()
-        .stdout_is("aaaaaaaa bbbb\ncccc\t\t dddddddd");
+        .stdout_is("aaaaaaaa  cccc\nbbbb\t  dddddddd\n");
+
+    scene
+        .ucmd()
+        .args(&["-x", "-w18", "-T2"])
+        .succeeds()
+        .stdout_is("aaaaaaaa\tbbbb\ncccc\t\t\tdddddddd\n");
+
+    scene
+        .ucmd()
+        .args(&["-C", "-w18", "-T2"])
+        .succeeds()
+        .stdout_is("aaaaaaaa\tcccc\nbbbb\t\t\tdddddddd\n");
+
+    scene
+        .ucmd()
+        .args(&["-x", "-w18", "-T0"])
+        .succeeds()
+        .stdout_is("aaaaaaaa  bbbb\ncccc      dddddddd\n");
 
     // use spaces
-    ucmd.args(&["-T", "0"])
+    scene
+        .ucmd()
+        .args(&["-C", "-w18", "-T0"])
         .succeeds()
-        .stdout_is("aaaaaaaa bbbb\ncccc     dddddddd");
+        .stdout_is("aaaaaaaa  cccc\nbbbb      dddddddd\n");
 }
 
 #[cfg(any(
@@ -4448,6 +4884,7 @@ fn test_ls_perm_io_errors() {
     let at = &scene.fixtures;
     at.mkdir("d");
     at.symlink_file("/", "d/s");
+    at.touch("d/f");
 
     scene.ccmd("chmod").arg("600").arg("d").succeeds();
 
@@ -4456,7 +4893,10 @@ fn test_ls_perm_io_errors() {
         .arg("-l")
         .arg("d")
         .fails_with_code(1)
-        .stderr_contains("Permission denied");
+        .stderr_contains("Permission denied")
+        .stdout_contains("total 0")
+        .stdout_contains("l????????? ? ? ? ?            ? s")
+        .stdout_contains("-????????? ? ? ? ?            ? f");
 }
 
 #[test]
@@ -5272,14 +5712,15 @@ fn test_acl_display() {
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    let path = "a42";
-    at.mkdir(path);
 
-    let path = at.plus_as_string(path);
+    at.mkdir("with_acl");
+    let path_with_acl = at.plus_as_string("with_acl");
+    at.mkdir("without_acl");
+
     // calling the command directly. xattr requires some dev packages to be installed
     // and it adds a complex dependency just for a test
     match Command::new("setfacl")
-        .args(["-d", "-m", "group::rwx", &path])
+        .args(["-d", "-m", "group::rwx", &path_with_acl])
         .status()
         .map(|status| status.code())
     {
@@ -5294,11 +5735,19 @@ fn test_acl_display() {
         }
     }
 
+    // Expected output (we just look for `+` presence and absence in the first column):
+    // ...
+    // drwxr-xr-x+  2 user group   40 Apr 21 12:44 with_acl
+    // drwxr-xr-x  2 user group   40 Apr 21 12:44 without_acl
+    let re_with_acl = Regex::new(r"[a-z-]*\+ .*with_acl").unwrap();
+    let re_without_acl = Regex::new(r"[a-z-]* .*without_acl").unwrap();
+
     scene
         .ucmd()
-        .args(&["-lda", &path])
+        .args(&["-la", &at.as_string()])
         .succeeds()
-        .stdout_contains("+");
+        .stdout_matches(&re_with_acl)
+        .stdout_matches(&re_without_acl);
 }
 
 // Make sure that "ls --color" correctly applies color "normal" to text and
@@ -5650,4 +6099,215 @@ fn test_time_style_timezone_name() {
         .args(&["-l", "--time-style=+%Z"])
         .succeeds()
         .stdout_matches(&re_custom_format);
+}
+
+#[test]
+fn test_unknown_format_specifier() {
+    let re_custom_format = Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d+ \d{4} %0 \d{9} f\n").unwrap();
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    ucmd.args(&["-l", "--time-style=+%Y %0 %N"])
+        .succeeds()
+        .stdout_matches(&re_custom_format);
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+#[test]
+fn test_acl_display_symlink() {
+    use std::process::Command;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir_name = "dir";
+    let link_name = "link";
+    at.mkdir(dir_name);
+
+    // calling the command directly. xattr requires some dev packages to be installed
+    // and it adds a complex dependency just for a test
+    match Command::new("setfacl")
+        .args(["-d", "-m", "u:bin:rwx", &at.plus_as_string(dir_name)])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: setfacl failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfacl failed with {e}");
+            return;
+        }
+    }
+
+    at.symlink_dir(dir_name, link_name);
+
+    let re_with_acl = Regex::new(r"[a-z-]*\+ .*link").unwrap();
+    ucmd.arg("-lLd")
+        .arg(link_name)
+        .succeeds()
+        .stdout_matches(&re_with_acl);
+}
+
+#[test]
+fn ls_emoji_alignment() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("a");
+    at.touch("💐");
+    at.touch("漢");
+    scene
+        .ucmd()
+        .succeeds()
+        .stdout_contains("a")
+        .stdout_contains("💐")
+        .stdout_contains("漢");
+}
+
+// Additional tests for TIME_STYLE and time sorting compatibility with GNU
+#[test]
+fn test_ls_time_style_env_full_iso() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("t1");
+
+    let out = scene
+        .ucmd()
+        .env("TZ", "UTC")
+        .env("TIME_STYLE", "full-iso")
+        .arg("-l")
+        .arg("t1")
+        .succeeds();
+
+    // Expect an ISO-like timestamp in output (YYYY-MM-DD HH:MM)
+    let re = Regex::new(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}").unwrap();
+    assert!(
+        re.is_match(out.stdout_str()),
+        "unexpected timestamp: {}",
+        out.stdout_str()
+    );
+}
+
+#[test]
+fn test_ls_time_style_iso_recent_and_older() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    // Recent file (now)
+    at.touch("recent");
+
+    // Recent format for --time-style=iso is %m-%d %H:%M
+    let recent = scene
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("-l")
+        .arg("--time-style=iso")
+        .arg("recent")
+        .succeeds();
+    let re_recent = Regex::new(r"(^|\n).*\d{2}-\d{2} \d{2}:\d{2} ").unwrap();
+    assert!(
+        re_recent.is_match(recent.stdout_str()),
+        "recent not matched: {}",
+        recent.stdout_str()
+    );
+
+    // Older format appends a full ISO date padded (year present)
+    let f = at.make_file("older");
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
+
+    let older = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=iso")
+        .arg("older")
+        .succeeds();
+    let re_older = Regex::new(r"(^|\n).*\d{4}-\d{2}-\d{2}  +").unwrap();
+    assert!(
+        re_older.is_match(older.stdout_str()),
+        "older not matched: {}",
+        older.stdout_str()
+    );
+}
+
+#[test]
+fn test_ls_time_style_posix_locale_override() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("p1");
+
+    // With LC_ALL=POSIX and TIME_STYLE=posix-full-iso, GNU falls back to locale format like "%b %e %H:%M"
+    let out = scene
+        .ucmd()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "POSIX")
+        .env("TIME_STYLE", "posix-full-iso")
+        .arg("-l")
+        .arg("p1")
+        .succeeds();
+    // Expect month name rather than ISO dashes
+    let re_locale = Regex::new(r" [A-Z][a-z]{2} +\d{1,2} +\d{2}:\d{2} ").unwrap();
+    assert!(
+        re_locale.is_match(out.stdout_str()),
+        "locale format not matched: {}",
+        out.stdout_str()
+    );
+}
+
+#[test]
+fn test_ls_time_style_precedence_last_wins() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("timefile");
+
+    // time-style first, full-time last -> expect full-iso-like (seconds)
+    let out1 = scene
+        .ucmd()
+        .arg("--time-style=long-iso")
+        .arg("--full-time")
+        .arg("-l")
+        .arg("timefile")
+        .succeeds();
+    let has_seconds = Regex::new(r"\d{2}:\d{2}:\d{2}")
+        .unwrap()
+        .is_match(out1.stdout_str());
+    assert!(
+        has_seconds,
+        "expected seconds in full-time: {}",
+        out1.stdout_str()
+    );
+
+    // full-time first, time-style last -> expect style override (no seconds for long-iso)
+    let out2 = scene
+        .ucmd()
+        .arg("--full-time")
+        .arg("--time-style=long-iso")
+        .arg("-l")
+        .arg("timefile")
+        .succeeds();
+    let no_seconds = !Regex::new(r"\d{2}:\d{2}:\d{2}")
+        .unwrap()
+        .is_match(out2.stdout_str());
+    assert!(
+        no_seconds,
+        "expected no seconds in long-iso: {}",
+        out2.stdout_str()
+    );
+}
+
+#[test]
+fn test_ls_time_sort_without_long() {
+    let scene = TestScenario::new(util_name!());
+
+    // Create two files with deterministic, distinct modification times
+    let at = &scene.fixtures;
+    let f = at.make_file("a");
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
+    at.touch("b");
+
+    // Compare default (name order) vs time-sorted (-t) order; they should differ
+    let default_out = scene.ucmd().succeeds();
+    let t_out = scene.ucmd().arg("-t").succeeds();
+
+    let def = default_out.stdout_str();
+    let t = t_out.stdout_str();
+    assert_ne!(def, t);
 }

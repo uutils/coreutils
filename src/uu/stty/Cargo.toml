@@ -1,17 +1,18 @@
 [package]
 name = "uu_stty"
-version = "0.0.30"
-authors = ["uutils developers"]
-license = "MIT"
 description = "stty ~ (uutils) print or change terminal characteristics"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/stty"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2024"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/stty.rs"
@@ -20,6 +21,7 @@ path = "src/stty.rs"
 clap = { workspace = true }
 uucore = { workspace = true }
 nix = { workspace = true, features = ["term", "ioctl"] }
+fluent = { workspace = true }
 
 [[bin]]
 name = "stty"

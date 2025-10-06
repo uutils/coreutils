@@ -93,6 +93,14 @@ fn test_single_1_line() {
 }
 
 #[test]
+fn test_single_1_line_presume_input_pipe() {
+    new_ucmd!()
+        .args(&["---presume-input-pipe", "-n", "1", INPUT])
+        .succeeds()
+        .stdout_is_fixture("lorem_ipsum_1_line.expected");
+}
+
+#[test]
 fn test_single_5_chars() {
     new_ucmd!()
         .args(&["-c", "5", INPUT])
@@ -147,6 +155,15 @@ fn test_zero_terminated_syntax_2() {
         .pipe_in("x\0y")
         .succeeds()
         .stdout_is("x\0y");
+}
+
+#[test]
+fn test_non_terminated_input() {
+    new_ucmd!()
+        .args(&["-n", "-1"])
+        .pipe_in("x\ny")
+        .succeeds()
+        .stdout_is("x\n");
 }
 
 #[test]
@@ -321,24 +338,20 @@ fn test_bad_utf8_lines() {
 fn test_head_invalid_num() {
     new_ucmd!()
         .args(&["-c", "1024R", "emptyfile.txt"])
-        .fails()
-        .stderr_is(
-            "head: invalid number of bytes: '1024R': Value too large for defined data type\n",
-        );
+        .succeeds()
+        .no_output();
     new_ucmd!()
         .args(&["-n", "1024R", "emptyfile.txt"])
-        .fails()
-        .stderr_is(
-            "head: invalid number of lines: '1024R': Value too large for defined data type\n",
-        );
+        .succeeds()
+        .no_output();
     new_ucmd!()
         .args(&["-c", "1Y", "emptyfile.txt"])
-        .fails()
-        .stderr_is("head: invalid number of bytes: '1Y': Value too large for defined data type\n");
+        .succeeds()
+        .no_output();
     new_ucmd!()
         .args(&["-n", "1Y", "emptyfile.txt"])
-        .fails()
-        .stderr_is("head: invalid number of lines: '1Y': Value too large for defined data type\n");
+        .succeeds()
+        .no_output();
     #[cfg(target_pointer_width = "32")]
     {
         let sizes = ["1000G", "10T"];
@@ -350,10 +363,7 @@ fn test_head_invalid_num() {
     {
         let sizes = ["-1000G", "-10T"];
         for size in &sizes {
-            new_ucmd!()
-                .args(&["-c", size])
-                .fails()
-                .stderr_is("head: out of range integral type conversion attempted: number of -bytes or -lines is too large\n");
+            new_ucmd!().args(&["-c", size]).succeeds().no_output();
         }
     }
     new_ucmd!()
@@ -435,7 +445,7 @@ fn test_all_but_last_bytes_large_file_piped() {
         .len();
     scene
         .ucmd()
-        .args(&["-c", &format!("-{}", seq_19001_20000_file_length)])
+        .args(&["-c", &format!("-{seq_19001_20000_file_length}")])
         .pipe_in_fixture(seq_20000_file_name)
         .succeeds()
         .stdout_only_fixture(seq_19000_file_name);
@@ -449,11 +459,18 @@ fn test_all_but_last_lines_large_file() {
     let scene = TestScenario::new(util_name!());
     let fixtures = &scene.fixtures;
     let seq_20000_file_name = "seq_20000";
+    let seq_20000_truncated_file_name = "seq_20000_truncated";
     let seq_1000_file_name = "seq_1000";
     scene
         .cmd("seq")
         .arg("20000")
         .set_stdout(fixtures.make_file(seq_20000_file_name))
+        .succeeds();
+    // Create a file the same as seq_20000 except for the final terminating endline.
+    scene
+        .ucmd()
+        .args(&["-c", "-1", seq_20000_file_name])
+        .set_stdout(fixtures.make_file(seq_20000_truncated_file_name))
         .succeeds();
     scene
         .cmd("seq")
@@ -466,7 +483,7 @@ fn test_all_but_last_lines_large_file() {
         .ucmd()
         .args(&["-n", "-19000", seq_20000_file_name])
         .succeeds()
-        .stdout_only_fixture("seq_1000");
+        .stdout_only_fixture(seq_1000_file_name);
 
     scene
         .ucmd()
@@ -477,6 +494,25 @@ fn test_all_but_last_lines_large_file() {
     scene
         .ucmd()
         .args(&["-n", "-20001", seq_20000_file_name])
+        .succeeds()
+        .stdout_only_fixture("emptyfile.txt");
+
+    // Confirm correct behavior when the input file doesn't end with a newline.
+    scene
+        .ucmd()
+        .args(&["-n", "-19000", seq_20000_truncated_file_name])
+        .succeeds()
+        .stdout_only_fixture(seq_1000_file_name);
+
+    scene
+        .ucmd()
+        .args(&["-n", "-20000", seq_20000_truncated_file_name])
+        .succeeds()
+        .stdout_only_fixture("emptyfile.txt");
+
+    scene
+        .ucmd()
+        .args(&["-n", "-20001", seq_20000_truncated_file_name])
         .succeeds()
         .stdout_only_fixture("emptyfile.txt");
 }
@@ -695,7 +731,7 @@ fn test_validate_stdin_offset_bytes() {
         .len();
     scene
         .ucmd()
-        .args(&["-c", &format!("-{}", seq_19001_20000_file_length)])
+        .args(&["-c", &format!("-{seq_19001_20000_file_length}")])
         .set_stdin(file)
         .succeeds()
         .stdout_only_fixture(seq_19000_file_name);
@@ -735,7 +771,11 @@ fn test_read_backwards_bytes_proc_fs_modules() {
 
     let args = ["-c", "-1", "/proc/modules"];
     let result = ts.ucmd().args(&args).succeeds();
-    assert!(!result.stdout().is_empty());
+
+    // Only expect output if the file is not empty, e.g. it is empty in default WSL2.
+    if !ts.fixtures.read("/proc/modules").is_empty() {
+        assert!(!result.stdout().is_empty());
+    }
 }
 
 #[cfg(all(
@@ -751,7 +791,11 @@ fn test_read_backwards_lines_proc_fs_modules() {
 
     let args = ["--lines", "-1", "/proc/modules"];
     let result = ts.ucmd().args(&args).succeeds();
-    assert!(!result.stdout().is_empty());
+
+    // Only expect output if the file is not empty, e.g. it is empty in default WSL2.
+    if !ts.fixtures.read("/proc/modules").is_empty() {
+        assert!(!result.stdout().is_empty());
+    }
 }
 
 #[cfg(all(
@@ -764,7 +808,11 @@ fn test_read_backwards_lines_proc_fs_modules() {
 #[test]
 fn test_read_backwards_bytes_sys_kernel_profiling() {
     let ts = TestScenario::new(util_name!());
-
+    // in case the kernel was not built with profiling support, e.g. WSL
+    if !ts.fixtures.file_exists("/sys/kernel/profiling") {
+        println!("test skipped: /sys/kernel/profiling does not exist");
+        return;
+    }
     let args = ["-c", "-1", "/sys/kernel/profiling"];
     let result = ts.ucmd().args(&args).succeeds();
     let stdout_str = result.stdout_str();
@@ -778,8 +826,7 @@ fn test_value_too_large() {
 
     new_ucmd!()
         .args(&["-n", format!("{MAX}0").as_str(), "lorem_ipsum.txt"])
-        .fails()
-        .stderr_contains("Value too large for defined data type");
+        .succeeds();
 }
 
 #[test]
@@ -811,3 +858,27 @@ fn test_write_to_dev_full() {
         }
     }
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_head_non_utf8_paths() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a test file with non-UTF-8 bytes in the name
+    let non_utf8_bytes = b"test_\xFF\xFE.txt";
+    let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
+
+    std::fs::write(at.plus(non_utf8_name), "line1\nline2\nline3\n").unwrap();
+
+    let result = scene.ucmd().arg(non_utf8_name).succeeds();
+
+    let output = result.stdout_str_lossy();
+    assert!(output.contains("line1"));
+    assert!(output.contains("line2"));
+    assert!(output.contains("line3"));
+}
+// Test that head handles non-UTF-8 file names without crashing

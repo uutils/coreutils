@@ -13,7 +13,7 @@ use crate::{
 /// Buffer-based copying utilities for unix (excluding Linux).
 use std::{
     io::{Read, Write},
-    os::fd::{AsFd, AsRawFd, RawFd},
+    os::fd::{AsFd, AsRawFd},
 };
 
 use super::common::Error;
@@ -105,7 +105,7 @@ where
                     // we can recover by copying the data that we have from the
                     // intermediate pipe to stdout using normal read/write. Then
                     // we tell the caller to fall back.
-                    copy_exact(pipe_rd.as_raw_fd(), dest, n)?;
+                    copy_exact(&pipe_rd, dest, n)?;
                     return Ok((bytes, true));
                 }
 
@@ -122,7 +122,7 @@ where
 /// and `write` calls.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub(crate) fn copy_exact(
-    read_fd: RawFd,
+    read_fd: &impl AsFd,
     write_fd: &impl AsFd,
     num_bytes: usize,
 ) -> std::io::Result<usize> {

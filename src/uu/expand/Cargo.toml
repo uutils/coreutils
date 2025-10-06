@@ -1,17 +1,18 @@
 [package]
 name = "uu_expand"
-version = "0.0.30"
-authors = ["uutils developers"]
-license = "MIT"
 description = "expand ~ (uutils) convert input tabs to spaces"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/expand"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2024"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/expand.rs"
@@ -20,7 +21,18 @@ path = "src/expand.rs"
 clap = { workspace = true }
 unicode-width = { workspace = true }
 uucore = { workspace = true }
+thiserror = { workspace = true }
+fluent = { workspace = true }
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
 
 [[bin]]
 name = "expand"
 path = "src/main.rs"
+
+[[bench]]
+name = "expand_bench"
+harness = false

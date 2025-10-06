@@ -1,27 +1,28 @@
 [package]
 name = "uu_sync"
-version = "0.0.30"
-authors = ["uutils developers"]
-license = "MIT"
 description = "sync ~ (uutils) synchronize cache writes to storage"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/sync"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2024"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/sync.rs"
 
 [dependencies]
 clap = { workspace = true }
-libc = { workspace = true }
 uucore = { workspace = true, features = ["wide"] }
+fluent = { workspace = true }
 
-[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+[target.'cfg(unix)'.dependencies]
 nix = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]

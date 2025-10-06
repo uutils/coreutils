@@ -1,6 +1,13 @@
 # Benchmarking ls
 
 ls majorly involves fetching a lot of details (depending upon what details are requested, eg. time/date, inode details, etc) for each path using system calls. Ideally, any system call should be done only once for each of the paths - not adhering to this principle leads to a lot of system call overhead multiplying and bubbling up, especially for recursive ls, therefore it is important to always benchmark multiple scenarios.
+
+ls _also_ prints a lot of information, so optimizing formatting operations is also critical:
+ - Try to avoid using `format` unless required.
+ - Try to avoid repeated string copies unless necessary.
+ - If a temporary buffer is required, try to allocate a reasonable capacity to start with to avoid repeated reallocations.
+ - Some values might be expensive to compute (e.g. current line width), but are only required in some cases. Consider delaying computations, e.g. by wrapping the evaluation in a LazyCell.
+
 This is an overview over what was benchmarked, and if you make changes to `ls`, you are encouraged to check
 how performance was affected for the workloads listed below. Feel free to add other workloads to the
 list that we should improve / make sure not to regress.

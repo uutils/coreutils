@@ -1,17 +1,18 @@
 [package]
 name = "uu_shred"
-version = "0.0.30"
-authors = ["uutils developers"]
-license = "MIT"
 description = "shred ~ (uutils) hide former FILE contents with repeated overwrites"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/shred"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2024"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/shred.rs"
@@ -19,8 +20,9 @@ path = "src/shred.rs"
 [dependencies]
 clap = { workspace = true }
 rand = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["parser"] }
 libc = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "shred"

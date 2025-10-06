@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
-//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV sigbus tmpfs
+//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV sigbus tmpfs mksocket
 
 #![allow(dead_code)]
 #![allow(
@@ -12,6 +12,7 @@
     clippy::missing_errors_doc
 )]
 
+use core::str;
 #[cfg(unix)]
 use libc::mode_t;
 #[cfg(unix)]
@@ -32,6 +33,8 @@ use std::io::{self, BufWriter, Read, Result, Write};
 use std::os::fd::OwnedFd;
 #[cfg(unix)]
 use std::os::unix::fs::{PermissionsExt, symlink as symlink_dir, symlink as symlink_file};
+#[cfg(unix)]
+use std::os::unix::net::UnixListener;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 #[cfg(unix)]
@@ -216,8 +219,8 @@ impl CmdResult {
         assert!(
             predicate(&self.stdout),
             "Predicate for stdout as `bytes` evaluated to false.\nstdout='{:?}'\nstderr='{:?}'\n",
-            &self.stdout,
-            &self.stderr
+            self.stdout,
+            self.stderr
         );
         self
     }
@@ -246,8 +249,8 @@ impl CmdResult {
         assert!(
             predicate(&self.stderr),
             "Predicate for stderr as `bytes` evaluated to false.\nstdout='{:?}'\nstderr='{:?}'\n",
-            &self.stdout,
-            &self.stderr
+            self.stdout,
+            self.stderr
         );
         self
     }
@@ -306,8 +309,7 @@ impl CmdResult {
     pub fn signal_is(&self, value: i32) -> &Self {
         let actual = self.signal().unwrap_or_else(|| {
             panic!(
-                "Expected process to be terminated by the '{}' signal, but exit status is: '{}'",
-                value,
+                "Expected process to be terminated by the '{value}' signal, but exit status is: '{}'",
                 self.try_exit_status()
                     .map_or("Not available".to_string(), |e| e.to_string())
             )
@@ -337,8 +339,7 @@ impl CmdResult {
 
         let actual = self.signal().unwrap_or_else(|| {
             panic!(
-                "Expected process to be terminated by the '{}' signal, but exit status is: '{}'",
-                name,
+                "Expected process to be terminated by the '{name}' signal, but exit status is: '{}'",
                 self.try_exit_status()
                     .map_or("Not available".to_string(), |e| e.to_string())
             )
@@ -356,6 +357,11 @@ impl CmdResult {
     /// Returns the program's standard output as a string slice
     pub fn stdout_str(&self) -> &str {
         std::str::from_utf8(&self.stdout).unwrap()
+    }
+
+    /// Returns the program's standard output as a string, automatically handling invalid utf8
+    pub fn stdout_str_lossy(self) -> String {
+        String::from_utf8_lossy(&self.stdout).to_string()
     }
 
     /// Returns the program's standard output as a string
@@ -527,9 +533,8 @@ impl CmdResult {
     pub fn stdout_is_any<T: AsRef<str> + std::fmt::Debug>(&self, expected: &[T]) -> &Self {
         assert!(
             expected.iter().any(|msg| self.stdout_str() == msg.as_ref()),
-            "stdout was {}\nExpected any of {:#?}",
+            "stdout was {}\nExpected any of {expected:#?}",
             self.stdout_str(),
-            expected
         );
         self
     }
@@ -697,7 +702,11 @@ impl CmdResult {
     #[track_caller]
     pub fn fails_silently(&self) -> &Self {
         assert!(!self.succeeded());
-        assert!(self.stderr.is_empty());
+        assert!(
+            self.stderr.is_empty(),
+            "Expected stderr to be empty, but it's:\n{}",
+            self.stderr_str()
+        );
         self
     }
 
@@ -761,6 +770,29 @@ impl CmdResult {
         self
     }
 
+    /// Verify if stdout contains a byte sequence
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// new_ucmd!()
+    /// .arg("--help")
+    /// .succeeds()
+    /// .stdout_contains_bytes(b"hello \xff");
+    /// ```
+    #[track_caller]
+    pub fn stdout_contains_bytes<T: AsRef<[u8]>>(&self, cmp: T) -> &Self {
+        assert!(
+            self.stdout()
+                .windows(cmp.as_ref().len())
+                .any(|sub| sub == cmp.as_ref()),
+            "'{:?}'\ndoes not contain\n'{:?}'",
+            self.stdout(),
+            cmp.as_ref()
+        );
+        self
+    }
+
     /// Verify if stderr contains a specific string
     ///
     /// # Examples
@@ -778,6 +810,29 @@ impl CmdResult {
             self.stderr_str().contains(cmp.as_ref()),
             "'{}' does not contain '{}'",
             self.stderr_str(),
+            cmp.as_ref()
+        );
+        self
+    }
+
+    /// Verify if stderr contains a byte sequence
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// new_ucmd!()
+    /// .arg("--help")
+    /// .succeeds()
+    /// .stdout_contains_bytes(b"hello \xff");
+    /// ```
+    #[track_caller]
+    pub fn stderr_contains_bytes<T: AsRef<[u8]>>(&self, cmp: T) -> &Self {
+        assert!(
+            self.stderr()
+                .windows(cmp.as_ref().len())
+                .any(|sub| sub == cmp.as_ref()),
+            "'{:?}'\ndoes not contain\n'{:?}'",
+            self.stderr(),
             cmp.as_ref()
         );
         self
@@ -1059,7 +1114,7 @@ impl AtPath {
     pub fn make_file(&self, name: &str) -> File {
         match File::create(self.plus(name)) {
             Ok(f) => f,
-            Err(e) => panic!("{}", e),
+            Err(e) => panic!("{e}"),
         }
     }
 
@@ -1079,6 +1134,13 @@ impl AtPath {
         }
     }
 
+    #[cfg(unix)]
+    pub fn mksocket(&self, socket: &str) {
+        let full_path = self.plus_as_string(socket);
+        log_info("mksocket", &full_path);
+        UnixListener::bind(full_path).expect("Socket file creation failed.");
+    }
+
     #[cfg(not(windows))]
     pub fn is_fifo(&self, fifo: &str) -> bool {
         unsafe {
@@ -1086,6 +1148,19 @@ impl AtPath {
             let mut stat: libc::stat = std::mem::zeroed();
             if libc::stat(name.as_ptr(), &mut stat) >= 0 {
                 libc::S_IFIFO & stat.st_mode as libc::mode_t != 0
+            } else {
+                false
+            }
+        }
+    }
+
+    #[cfg(not(windows))]
+    pub fn is_char_device(&self, char_dev: &str) -> bool {
+        unsafe {
+            let name = CString::new(self.plus_as_string(char_dev)).unwrap();
+            let mut stat: libc::stat = std::mem::zeroed();
+            if libc::stat(name.as_ptr(), &mut stat) >= 0 {
+                libc::S_IFCHR & stat.st_mode as libc::mode_t != 0
             } else {
                 false
             }
@@ -1121,7 +1196,7 @@ impl AtPath {
         let original = original.replace('/', MAIN_SEPARATOR_STR);
         log_info(
             "symlink",
-            format!("{},{}", &original, &self.plus_as_string(link)),
+            format!("{original},{}", self.plus_as_string(link)),
         );
         symlink_file(original, self.plus(link)).unwrap();
     }
@@ -1143,7 +1218,7 @@ impl AtPath {
         let original = original.replace('/', MAIN_SEPARATOR_STR);
         log_info(
             "symlink",
-            format!("{},{}", &original, &self.plus_as_string(link)),
+            format!("{original},{}", self.plus_as_string(link)),
         );
         symlink_dir(original, self.plus(link)).unwrap();
     }
@@ -1176,14 +1251,14 @@ impl AtPath {
     pub fn symlink_metadata(&self, path: &str) -> fs::Metadata {
         match fs::symlink_metadata(self.plus(path)) {
             Ok(m) => m,
-            Err(e) => panic!("{}", e),
+            Err(e) => panic!("{e}"),
         }
     }
 
     pub fn metadata(&self, path: &str) -> fs::Metadata {
         match fs::metadata(self.plus(path)) {
             Ok(m) => m,
-            Err(e) => panic!("{}", e),
+            Err(e) => panic!("{e}"),
         }
     }
 
@@ -1195,14 +1270,14 @@ impl AtPath {
     }
 
     /// Decide whether the named symbolic link exists in the test directory.
-    pub fn symlink_exists(&self, path: &str) -> bool {
+    pub fn symlink_exists<P: AsRef<Path>>(&self, path: P) -> bool {
         match fs::symlink_metadata(self.plus(path)) {
             Ok(m) => m.file_type().is_symlink(),
             Err(_) => false,
         }
     }
 
-    pub fn dir_exists(&self, path: &str) -> bool {
+    pub fn dir_exists<P: AsRef<Path>>(&self, path: P) -> bool {
         match fs::metadata(self.plus(path)) {
             Ok(m) => m.is_dir(),
             Err(_) => false,
@@ -1374,9 +1449,9 @@ pub struct TerminalSimulation {
 
 /// A `UCommand` is a builder wrapping an individual Command that provides several additional features:
 /// 1. it has convenience functions that are more ergonomic to use for piping in stdin, spawning the command
-///       and asserting on the results.
+///    and asserting on the results.
 /// 2. it tracks arguments provided so that in test cases which may provide variations of an arg in loops
-///     the test failure can display the exact call which preceded an assertion failure.
+///    the test failure can display the exact call which preceded an assertion failure.
 /// 3. it provides convenience construction methods to set the Command uutils utility and temporary directory.
 ///
 /// Per default `UCommand` runs a command given as an argument in a shell, platform independently.
@@ -1522,8 +1597,7 @@ impl UCommand {
     pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> &mut Self {
         assert!(
             self.bytes_into_stdin.is_none(),
-            "{}",
-            MULTIPLE_STDIN_MEANINGLESS
+            "{MULTIPLE_STDIN_MEANINGLESS}",
         );
         self.set_stdin(Stdio::piped());
         self.bytes_into_stdin = Some(input.into());
@@ -1762,6 +1836,11 @@ impl UCommand {
             }
         }
 
+        // Forward the LLVM_PROFILE_FILE variable to the call, for coverage purposes.
+        if let Some(ld_preload) = env::var_os("LLVM_PROFILE_FILE") {
+            command.env("LLVM_PROFILE_FILE", ld_preload);
+        }
+
         command
             .envs(DEFAULT_ENV)
             .envs(self.env_vars.iter().cloned());
@@ -1889,7 +1968,7 @@ impl UCommand {
     /// Spawns the command, feeds the stdin if any, and returns the
     /// child process immediately.
     pub fn run_no_wait(&mut self) -> UChild {
-        assert!(!self.has_run, "{}", ALREADY_RUN);
+        assert!(!self.has_run, "{ALREADY_RUN}");
         self.has_run = true;
 
         let (mut command, captured_stdout, captured_stderr, stdin_pty) = self.build();
@@ -2157,9 +2236,8 @@ impl<'a> UChildAssertion<'a> {
     pub fn is_alive(&mut self) -> &mut Self {
         match self.uchild.raw.try_wait() {
             Ok(Some(status)) => panic!(
-                "Assertion failed. Expected '{}' to be running but exited with status={}.\nstdout: {}\nstderr: {}",
+                "Assertion failed. Expected '{}' to be running but exited with status={status}.\nstdout: {}\nstderr: {}",
                 uucore::util_name(),
-                status,
                 self.uchild.stdout_all(),
                 self.uchild.stderr_all()
             ),
@@ -2249,12 +2327,12 @@ impl UChild {
     }
 
     /// Return a [`UChildAssertion`]
-    pub fn make_assertion(&mut self) -> UChildAssertion {
+    pub fn make_assertion(&mut self) -> UChildAssertion<'_> {
         UChildAssertion::new(self)
     }
 
     /// Convenience function for calling [`UChild::delay`] and then [`UChild::make_assertion`]
-    pub fn make_assertion_with_delay(&mut self, millis: u64) -> UChildAssertion {
+    pub fn make_assertion_with_delay(&mut self, millis: u64) -> UChildAssertion<'_> {
         self.delay(millis).make_assertion()
     }
 
@@ -2286,10 +2364,10 @@ impl UChild {
             if start.elapsed() < timeout {
                 self.delay(10);
             } else {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("kill: Timeout of '{}s' reached", timeout.as_secs_f64()),
-                ));
+                return Err(io::Error::other(format!(
+                    "kill: Timeout of '{}s' reached",
+                    timeout.as_secs_f64()
+                )));
             }
             hint::spin_loop();
         }
@@ -2354,10 +2432,10 @@ impl UChild {
             if start.elapsed() < timeout {
                 self.delay(10);
             } else {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("kill: Timeout of '{}s' reached", timeout.as_secs_f64()),
-                ));
+                return Err(io::Error::other(format!(
+                    "kill: Timeout of '{}s' reached",
+                    timeout.as_secs_f64()
+                )));
             }
             hint::spin_loop();
         }
@@ -2446,10 +2524,10 @@ impl UChild {
                     handle.join().unwrap().unwrap();
                     result
                 }
-                Err(RecvTimeoutError::Timeout) => Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("wait: Timeout of '{}s' reached", timeout.as_secs_f64()),
-                )),
+                Err(RecvTimeoutError::Timeout) => Err(io::Error::other(format!(
+                    "wait: Timeout of '{}s' reached",
+                    timeout.as_secs_f64()
+                ))),
                 Err(RecvTimeoutError::Disconnected) => {
                     handle.join().expect("Panic caused disconnect").unwrap();
                     panic!("Error receiving from waiting thread because of unexpected disconnect");
@@ -2691,10 +2769,9 @@ impl UChild {
             .name("pipe_in".to_string())
             .spawn(
                 move || match writer.write_all(&content).and_then(|()| writer.flush()) {
-                    Err(error) if !ignore_stdin_write_error => Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        format!("failed to write to stdin of child: {error}"),
-                    )),
+                    Err(error) if !ignore_stdin_write_error => Err(io::Error::other(format!(
+                        "failed to write to stdin of child: {error}"
+                    ))),
                     Ok(()) | Err(_) => Ok(()),
                 },
             )
@@ -2736,10 +2813,9 @@ impl UChild {
         let mut writer = self.access_stdin_as_writer();
 
         match writer.write_all(&data.into()).and_then(|()| writer.flush()) {
-            Err(error) if !ignore_stdin_write_error => Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("failed to write to stdin of child: {error}"),
-            )),
+            Err(error) if !ignore_stdin_write_error => Err(io::Error::other(format!(
+                "failed to write to stdin of child: {error}"
+            ))),
             Ok(()) | Err(_) => Ok(()),
         }
     }
@@ -2812,7 +2888,7 @@ pub fn whoami() -> String {
 
 /// Add prefix 'g' for `util_name` if not on linux
 #[cfg(unix)]
-pub fn host_name_for(util_name: &str) -> Cow<str> {
+pub fn host_name_for(util_name: &str) -> Cow<'_, str> {
     // In some environments, e.g. macOS/freebsd, the GNU coreutils are prefixed with "g"
     // to not interfere with the BSD counterparts already in `$PATH`.
     #[cfg(not(target_os = "linux"))]
@@ -2927,6 +3003,11 @@ fn parse_coreutil_version(version_string: &str) -> f32 {
 /// If the `util_name` in `$PATH` doesn't include a coreutils version string,
 /// or the version is too low, this returns an error and the test should be skipped.
 ///
+/// Arguments:
+/// - `ts`: The test context.
+/// - `args`: Command-line variables applied to the command.
+/// - `envs`: Environment variables applied to the command invocation.
+///
 /// Example:
 ///
 /// ```no_run
@@ -2943,7 +3024,11 @@ fn parse_coreutil_version(version_string: &str) -> f32 {
 /// }
 ///```
 #[cfg(unix)]
-pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<CmdResult, String> {
+pub fn gnu_cmd_result(
+    ts: &TestScenario,
+    args: &[&str],
+    envs: &[(&str, &str)],
+) -> std::result::Result<CmdResult, String> {
     let util_name = ts.util_name.as_str();
     println!("{}", check_coreutil_version(util_name, VERSION_MIN)?);
     let util_name = host_name_for(util_name);
@@ -2952,6 +3037,7 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
         .cmd(util_name.as_ref())
         .env("PATH", PATH)
         .envs(DEFAULT_ENV)
+        .envs(envs.iter().copied())
         .args(args)
         .run();
 
@@ -2978,6 +3064,31 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
         stdout.as_bytes(),
         stderr.as_bytes(),
     ))
+}
+
+/// This runs the GNU coreutils `util_name` binary in `$PATH` in order to
+/// dynamically gather reference values on the system.
+/// If the `util_name` in `$PATH` doesn't include a coreutils version string,
+/// or the version is too low, this returns an error and the test should be skipped.
+///
+/// Example:
+///
+/// ```no_run
+/// use uutests::util::*;
+/// #[test]
+/// fn test_xyz() {
+///     let ts = TestScenario::new(util_name!());
+///     let result = ts.ucmd().run();
+///     let exp_result = unwrap_or_return!(expected_result(&ts, &[]));
+///     result
+///         .stdout_is(exp_result.stdout_str())
+///         .stderr_is(exp_result.stderr_str())
+///         .code_is(exp_result.code());
+/// }
+///```
+#[cfg(unix)]
+pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<CmdResult, String> {
+    gnu_cmd_result(ts, args, &[])
 }
 
 /// This is a convenience wrapper to run a ucmd with root permissions.

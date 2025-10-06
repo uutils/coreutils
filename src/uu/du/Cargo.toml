@@ -1,28 +1,35 @@
 [package]
 name = "uu_du"
-version = "0.0.30"
-authors = ["uutils developers"]
-license = "MIT"
 description = "du ~ (uutils) display disk usage"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/du"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2024"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/du.rs"
 
 [dependencies]
-chrono = { workspace = true }
 # For the --exclude & --exclude-from options
 glob = { workspace = true }
 clap = { workspace = true }
-uucore = { workspace = true, features = ["format"] }
+uucore = { workspace = true, features = [
+  "format",
+  "fsext",
+  "parser",
+  "time",
+  "safe-traversal",
+] }
 thiserror = { workspace = true }
+fluent = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true, features = [
@@ -33,3 +40,12 @@ windows-sys = { workspace = true, features = [
 [[bin]]
 name = "du"
 path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "du_bench"
+harness = false

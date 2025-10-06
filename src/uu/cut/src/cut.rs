@@ -19,14 +19,11 @@ use uucore::os_str_as_bytes;
 use self::searcher::Searcher;
 use matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
 use uucore::ranges::Range;
-use uucore::{format_usage, help_about, help_section, help_usage, show_error, show_if_err};
+use uucore::translate;
+use uucore::{format_usage, show_error, show_if_err};
 
 mod matcher;
 mod searcher;
-
-const USAGE: &str = help_usage!("cut.md");
-const ABOUT: &str = help_about!("cut.md");
-const AFTER_HELP: &str = help_section!("after help", "cut.md");
 
 struct Options<'a> {
     out_delimiter: Option<&'a [u8]>,
@@ -62,14 +59,6 @@ impl<'a> From<&'a OsString> for Delimiter<'a> {
     }
 }
 
-fn stdout_writer() -> Box<dyn Write> {
-    if std::io::stdout().is_terminal() {
-        Box::new(stdout())
-    } else {
-        Box::new(BufWriter::new(stdout())) as Box<dyn Write>
-    }
-}
-
 fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
     if complement {
         Range::from_list(list).map(|r| uucore::ranges::complement(&r))
@@ -78,10 +67,14 @@ fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
     }
 }
 
-fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()> {
+fn cut_bytes<R: Read, W: Write>(
+    reader: R,
+    out: &mut W,
+    ranges: &[Range],
+    opts: &Options,
+) -> UResult<()> {
     let newline_char = opts.line_ending.into();
     let mut buf_in = BufReader::new(reader);
-    let mut out = stdout_writer();
     let out_delim = opts.out_delimiter.unwrap_or(b"\t");
 
     let result = buf_in.for_byte_record(newline_char, |line| {
@@ -111,9 +104,10 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()
     Ok(())
 }
 
-// Output delimiter is explicitly specified
-fn cut_fields_explicit_out_delim<R: Read, M: Matcher>(
+/// Output delimiter is explicitly specified
+fn cut_fields_explicit_out_delim<R: Read, W: Write, M: Matcher>(
     reader: R,
+    out: &mut W,
     matcher: &M,
     ranges: &[Range],
     only_delimited: bool,
@@ -121,7 +115,6 @@ fn cut_fields_explicit_out_delim<R: Read, M: Matcher>(
     out_delim: &[u8],
 ) -> UResult<()> {
     let mut buf_in = BufReader::new(reader);
-    let mut out = stdout_writer();
 
     let result = buf_in.for_byte_record_with_terminator(newline_char, |line| {
         let mut fields_pos = 1;
@@ -196,16 +189,16 @@ fn cut_fields_explicit_out_delim<R: Read, M: Matcher>(
     Ok(())
 }
 
-// Output delimiter is the same as input delimiter
-fn cut_fields_implicit_out_delim<R: Read, M: Matcher>(
+/// Output delimiter is the same as input delimiter
+fn cut_fields_implicit_out_delim<R: Read, W: Write, M: Matcher>(
     reader: R,
+    out: &mut W,
     matcher: &M,
     ranges: &[Range],
     only_delimited: bool,
     newline_char: u8,
 ) -> UResult<()> {
     let mut buf_in = BufReader::new(reader);
-    let mut out = stdout_writer();
 
     let result = buf_in.for_byte_record_with_terminator(newline_char, |line| {
         let mut fields_pos = 1;
@@ -267,15 +260,15 @@ fn cut_fields_implicit_out_delim<R: Read, M: Matcher>(
     Ok(())
 }
 
-// The input delimiter is identical to `newline_char`
-fn cut_fields_newline_char_delim<R: Read>(
+/// The input delimiter is identical to `newline_char`
+fn cut_fields_newline_char_delim<R: Read, W: Write>(
     reader: R,
+    out: &mut W,
     ranges: &[Range],
     newline_char: u8,
     out_delim: &[u8],
 ) -> UResult<()> {
     let buf_in = BufReader::new(reader);
-    let mut out = stdout_writer();
 
     let segments: Vec<_> = buf_in.split(newline_char).filter_map(|x| x.ok()).collect();
     let mut print_delim = false;
@@ -299,19 +292,25 @@ fn cut_fields_newline_char_delim<R: Read>(
     Ok(())
 }
 
-fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()> {
+fn cut_fields<R: Read, W: Write>(
+    reader: R,
+    out: &mut W,
+    ranges: &[Range],
+    opts: &Options,
+) -> UResult<()> {
     let newline_char = opts.line_ending.into();
     let field_opts = opts.field_opts.as_ref().unwrap(); // it is safe to unwrap() here - field_opts will always be Some() for cut_fields() call
     match field_opts.delimiter {
         Delimiter::Slice(delim) if delim == [newline_char] => {
             let out_delim = opts.out_delimiter.unwrap_or(delim);
-            cut_fields_newline_char_delim(reader, ranges, newline_char, out_delim)
+            cut_fields_newline_char_delim(reader, out, ranges, newline_char, out_delim)
         }
         Delimiter::Slice(delim) => {
             let matcher = ExactMatcher::new(delim);
             match opts.out_delimiter {
                 Some(out_delim) => cut_fields_explicit_out_delim(
                     reader,
+                    out,
                     &matcher,
                     ranges,
                     field_opts.only_delimited,
@@ -320,6 +319,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<(
                 ),
                 None => cut_fields_implicit_out_delim(
                     reader,
+                    out,
                     &matcher,
                     ranges,
                     field_opts.only_delimited,
@@ -331,6 +331,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<(
             let matcher = WhitespaceMatcher {};
             cut_fields_explicit_out_delim(
                 reader,
+                out,
                 &matcher,
                 ranges,
                 field_opts.only_delimited,
@@ -341,12 +342,18 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<(
     }
 }
 
-fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
+fn cut_files(mut filenames: Vec<OsString>, mode: &Mode) {
     let mut stdin_read = false;
 
     if filenames.is_empty() {
-        filenames.push("-".to_owned());
+        filenames.push(OsString::from("-"));
     }
+
+    let mut out: Box<dyn Write> = if stdout().is_terminal() {
+        Box::new(stdout())
+    } else {
+        Box::new(BufWriter::new(stdout())) as Box<dyn Write>
+    };
 
     for filename in &filenames {
         if filename == "-" {
@@ -355,47 +362,56 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
             }
 
             show_if_err!(match mode {
-                Mode::Bytes(ranges, opts) => cut_bytes(stdin(), ranges, opts),
-                Mode::Characters(ranges, opts) => cut_bytes(stdin(), ranges, opts),
-                Mode::Fields(ranges, opts) => cut_fields(stdin(), ranges, opts),
+                Mode::Bytes(ranges, opts) => cut_bytes(stdin(), &mut out, ranges, opts),
+                Mode::Characters(ranges, opts) => cut_bytes(stdin(), &mut out, ranges, opts),
+                Mode::Fields(ranges, opts) => cut_fields(stdin(), &mut out, ranges, opts),
             });
 
             stdin_read = true;
         } else {
-            let path = Path::new(&filename[..]);
+            let path = Path::new(filename);
 
             if path.is_dir() {
-                show_error!("{}: Is a directory", filename.maybe_quote());
+                show_error!(
+                    "{}: {}",
+                    filename.to_string_lossy().maybe_quote(),
+                    translate!("cut-error-is-directory")
+                );
                 set_exit_code(1);
                 continue;
             }
 
             show_if_err!(
                 File::open(path)
-                    .map_err_context(|| filename.maybe_quote().to_string())
+                    .map_err_context(|| filename.to_string_lossy().to_string())
                     .and_then(|file| {
                         match &mode {
                             Mode::Bytes(ranges, opts) | Mode::Characters(ranges, opts) => {
-                                cut_bytes(file, ranges, opts)
+                                cut_bytes(file, &mut out, ranges, opts)
                             }
-                            Mode::Fields(ranges, opts) => cut_fields(file, ranges, opts),
+                            Mode::Fields(ranges, opts) => cut_fields(file, &mut out, ranges, opts),
                         }
                     })
             );
         }
     }
+
+    show_if_err!(
+        out.flush()
+            .map_err_context(|| translate!("cut-error-write-error"))
+    );
 }
 
-// Get delimiter and output delimiter from `-d`/`--delimiter` and `--output-delimiter` options respectively
-// Allow either delimiter to have a value that is neither UTF-8 nor ASCII to align with GNU behavior
-fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter, Option<&[u8]>)> {
+/// Get delimiter and output delimiter from `-d`/`--delimiter` and `--output-delimiter` options respectively
+/// Allow either delimiter to have a value that is neither UTF-8 nor ASCII to align with GNU behavior
+fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter<'_>, Option<&[u8]>)> {
     let whitespace_delimited = matches.get_flag(options::WHITESPACE_DELIMITED);
     let delim_opt = matches.get_one::<OsString>(options::DELIMITER);
     let delim = match delim_opt {
         Some(_) if whitespace_delimited => {
             return Err(USimpleError::new(
                 1,
-                "invalid input: Only one of --delimiter (-d) or -w option can be specified",
+                translate!("cut-error-delimiter-and-whitespace-conflict"),
             ));
         }
         Some(os_string) => {
@@ -411,11 +427,10 @@ fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter, Option<&[u8]>)> {
                 {
                     return Err(USimpleError::new(
                         1,
-                        "the delimiter must be a single character",
+                        translate!("cut-error-delimiter-must-be-single-character"),
                     ));
-                } else {
-                    Delimiter::from(os_string)
                 }
+                Delimiter::from(os_string)
             }
         }
         None => {
@@ -467,7 +482,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         })
         .collect();
 
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let complement = matches.get_flag(options::COMPLEMENT);
     let only_delimited = matches.get_flag(options::ONLY_DELIMITED);
@@ -493,39 +508,50 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         matches.get_one::<String>(options::CHARACTERS),
         matches.get_one::<String>(options::FIELDS),
     ) {
-        (1, Some(byte_ranges), None, None) => list_to_ranges(byte_ranges, complement).map(|ranges| {
-            Mode::Bytes(
-                ranges,
-                Options {
-                    out_delimiter,
-                    line_ending,
-                    field_opts: None,
-                },
-            )
-        }),
-        (1, None, Some(char_ranges), None) => list_to_ranges(char_ranges, complement).map(|ranges| {
-            Mode::Characters(
-                ranges,
-                Options {
-                    out_delimiter,
-                    line_ending,
-                    field_opts: None,
-                },
-            )
-        }),
-        (1, None, None, Some(field_ranges)) => list_to_ranges(field_ranges, complement).map(|ranges| {
-            Mode::Fields(
-                ranges,
-                Options {
-                    out_delimiter,
-                    line_ending,
-                    field_opts: Some(FieldOptions { delimiter, only_delimited })},
-            )
-        }),
-        (2.., _, _, _) => Err(
-            "invalid usage: expects no more than one of --fields (-f), --chars (-c) or --bytes (-b)".into()
-        ),
-        _ => Err("invalid usage: expects one of --fields (-f), --chars (-c) or --bytes (-b)".into()),
+        (1, Some(byte_ranges), None, None) => {
+            list_to_ranges(byte_ranges, complement).map(|ranges| {
+                Mode::Bytes(
+                    ranges,
+                    Options {
+                        out_delimiter,
+                        line_ending,
+                        field_opts: None,
+                    },
+                )
+            })
+        }
+
+        (1, None, Some(char_ranges), None) => {
+            list_to_ranges(char_ranges, complement).map(|ranges| {
+                Mode::Characters(
+                    ranges,
+                    Options {
+                        out_delimiter,
+                        line_ending,
+                        field_opts: None,
+                    },
+                )
+            })
+        }
+
+        (1, None, None, Some(field_ranges)) => {
+            list_to_ranges(field_ranges, complement).map(|ranges| {
+                Mode::Fields(
+                    ranges,
+                    Options {
+                        out_delimiter,
+                        line_ending,
+                        field_opts: Some(FieldOptions {
+                            delimiter,
+                            only_delimited,
+                        }),
+                    },
+                )
+            })
+        }
+
+        (2.., _, _, _) => Err(translate!("cut-error-multiple-mode-args")),
+        _ => Err(translate!("cut-error-missing-mode-arg")),
     };
 
     let mode_parse = match mode_parse {
@@ -534,24 +560,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Mode::Bytes(_, _) | Mode::Characters(_, _)
                 if matches.contains_id(options::DELIMITER) =>
             {
-                Err("invalid input: The '--delimiter' ('-d') option only usable if printing a sequence of fields".into())
+                Err(translate!("cut-error-delimiter-only-with-fields"))
             }
             Mode::Bytes(_, _) | Mode::Characters(_, _)
                 if matches.get_flag(options::WHITESPACE_DELIMITED) =>
             {
-                Err("invalid input: The '-w' option only usable if printing a sequence of fields".into())
+                Err(translate!("cut-error-whitespace-only-with-fields"))
             }
             Mode::Bytes(_, _) | Mode::Characters(_, _)
                 if matches.get_flag(options::ONLY_DELIMITED) =>
             {
-                Err("invalid input: The '--only-delimited' ('-s') option only usable if printing a sequence of fields".into())
+                Err(translate!("cut-error-only-delimited-only-with-fields"))
             }
             _ => Ok(mode),
         },
     };
 
-    let files: Vec<String> = matches
-        .get_many::<String>(options::FILE)
+    let files: Vec<OsString> = matches
+        .get_many::<OsString>(options::FILE)
         .unwrap_or_default()
         .cloned()
         .collect();
@@ -568,9 +594,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .override_usage(format_usage(&translate!("cut-usage")))
+        .about(translate!("cut-about"))
+        .after_help(translate!("cut-after-help"))
         .infer_long_args(true)
         // While `args_override_self(true)` for some arguments, such as `-d`
         // and `--output-delimiter`, is consistent to the behavior of GNU cut,
@@ -584,7 +611,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::BYTES)
                 .short('b')
                 .long(options::BYTES)
-                .help("filter byte columns from the input source")
+                .help(translate!("cut-help-bytes"))
                 .allow_hyphen_values(true)
                 .value_name("LIST")
                 .action(ArgAction::Append),
@@ -593,7 +620,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::CHARACTERS)
                 .short('c')
                 .long(options::CHARACTERS)
-                .help("alias for character mode")
+                .help(translate!("cut-help-characters"))
                 .allow_hyphen_values(true)
                 .value_name("LIST")
                 .action(ArgAction::Append),
@@ -603,13 +630,13 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(options::DELIMITER)
                 .value_parser(ValueParser::os_string())
-                .help("specify the delimiter character that separates fields in the input source. Defaults to Tab.")
+                .help(translate!("cut-help-delimiter"))
                 .value_name("DELIM"),
         )
         .arg(
             Arg::new(options::WHITESPACE_DELIMITED)
                 .short('w')
-                .help("Use any number of whitespace (Space, Tab) to separate fields in the input source (FreeBSD extension).")
+                .help(translate!("cut-help-whitespace-delimited"))
                 .value_name("WHITESPACE")
                 .action(ArgAction::SetTrue),
         )
@@ -617,7 +644,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::FIELDS)
                 .short('f')
                 .long(options::FIELDS)
-                .help("filter field columns from the input source")
+                .help(translate!("cut-help-fields"))
                 .allow_hyphen_values(true)
                 .value_name("LIST")
                 .action(ArgAction::Append),
@@ -625,34 +652,35 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::COMPLEMENT)
                 .long(options::COMPLEMENT)
-                .help("invert the filter - instead of displaying only the filtered columns, display all but those columns")
+                .help(translate!("cut-help-complement"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ONLY_DELIMITED)
                 .short('s')
                 .long(options::ONLY_DELIMITED)
-                .help("in field mode, only print lines which contain the delimiter")
+                .help(translate!("cut-help-only-delimited"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ZERO_TERMINATED)
                 .short('z')
                 .long(options::ZERO_TERMINATED)
-                .help("instead of filtering columns based on line, filter columns based on \\0 (NULL character)")
+                .help(translate!("cut-help-zero-terminated"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OUTPUT_DELIMITER)
                 .long(options::OUTPUT_DELIMITER)
                 .value_parser(ValueParser::os_string())
-                .help("in field mode, replace the delimiter in output lines with this option's argument")
+                .help(translate!("cut-help-output-delimiter"))
                 .value_name("NEW_DELIM"),
         )
         .arg(
             Arg::new(options::FILE)
-            .hide(true)
-            .action(ArgAction::Append)
-            .value_hint(clap::ValueHint::FilePath)
+                .hide(true)
+                .action(ArgAction::Append)
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
 }

@@ -6,22 +6,12 @@
 // spell-checker:ignore bincode serde utmp runlevel testusr testx
 #![allow(clippy::cast_possible_wrap, clippy::unreadable_literal)]
 
+#[cfg(not(target_os = "openbsd"))]
 use uutests::at_and_ucmd;
-use uutests::new_ucmd;
 use uutests::util::TestScenario;
-use uutests::util_name;
+use uutests::{new_ucmd, util_name};
 
-#[cfg(not(any(target_os = "macos", target_os = "openbsd")))]
-use bincode::serialize;
 use regex::Regex;
-#[cfg(not(any(target_os = "macos", target_os = "openbsd")))]
-use serde::Serialize;
-#[cfg(not(any(target_os = "macos", target_os = "openbsd")))]
-use serde_big_array::BigArray;
-#[cfg(not(any(target_os = "macos", target_os = "openbsd")))]
-use std::fs::File;
-#[cfg(not(any(target_os = "macos", target_os = "openbsd")))]
-use std::{io::Write, path::PathBuf};
 
 #[test]
 fn test_invalid_arg() {
@@ -30,8 +20,7 @@ fn test_invalid_arg() {
 
 #[test]
 fn test_uptime() {
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .succeeds()
         .stdout_contains("load average:")
         .stdout_contains(" up ");
@@ -89,9 +78,7 @@ fn test_uptime_with_fifo() {
 fn test_uptime_with_non_existent_file() {
     // Disabled for freebsd, since it doesn't use the utmpxname() sys call to change the default utmpx
     // file that is accessed using getutxent()
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd()
+    new_ucmd!()
         .arg("file1")
         .fails()
         .stderr_contains("uptime: couldn't get boot time: No such file or directory")
@@ -102,24 +89,30 @@ fn test_uptime_with_non_existent_file() {
 // This will pass
 #[test]
 #[cfg(not(any(target_os = "openbsd", target_os = "macos")))]
+#[cfg(not(target_env = "musl"))]
 #[cfg_attr(
     all(target_arch = "aarch64", target_os = "linux"),
     ignore = "Issue #7159 - Test not supported on ARM64 Linux"
 )]
 #[allow(clippy::too_many_lines, clippy::items_after_statements)]
 fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
+    use bincode::{config, serde::encode_to_vec};
+    use serde::Serialize;
+    use serde_big_array::BigArray;
+    use std::fs::File;
+    use std::{io::Write, path::PathBuf};
+
     // This test will pass for freebsd but we currently don't support changing the utmpx file for
     // freebsd.
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
     // Regex matches for "up   00::00" ,"up 12 days  00::00", the time can be any valid time and
     // the days can be more than 1 digit or not there. This will match even if the amount of whitespace is
     // wrong between the days and the time.
 
     let re = Regex::new(r"up [(\d){1,} days]*\d{1,2}:\d\d").unwrap();
     utmp(&at.plus("testx"));
-    ts.ucmd()
-        .arg("testx")
+
+    ucmd.arg("testx")
         .succeeds()
         .stdout_matches(&re)
         .stdout_contains("load average");
@@ -133,12 +126,14 @@ fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
         }
         arr
     }
+
     // Creates a file utmp records of three different types including a valid BOOT_TIME entry
     fn utmp(path: &PathBuf) {
         // Definitions of our utmpx structs
         const BOOT_TIME: i32 = 2;
         const RUN_LVL: i32 = 1;
         const USER_PROCESS: i32 = 7;
+
         #[derive(Serialize)]
         #[repr(C)]
         pub struct TimeVal {
@@ -152,6 +147,7 @@ fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
             e_termination: i16,
             e_exit: i16,
         }
+
         #[derive(Serialize)]
         #[repr(C, align(4))]
         pub struct Utmp {
@@ -229,9 +225,10 @@ fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
             glibc_reserved: [0; 20],
         };
 
-        let mut buf = serialize(&utmp).unwrap();
-        buf.append(&mut serialize(&utmp1).unwrap());
-        buf.append(&mut serialize(&utmp2).unwrap());
+        let config = config::legacy();
+        let mut buf = encode_to_vec(utmp, config).unwrap();
+        buf.append(&mut encode_to_vec(utmp1, config).unwrap());
+        buf.append(&mut encode_to_vec(utmp2, config).unwrap());
         let mut f = File::create(path).unwrap();
         f.write_all(&buf).unwrap();
     }
@@ -239,23 +236,20 @@ fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
 
 #[test]
 fn test_uptime_with_extra_argument() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd()
+    new_ucmd!()
         .arg("a")
         .arg("b")
         .fails()
-        .stderr_contains("extra operand 'b'");
+        .stderr_contains("unexpected value 'b'");
 }
 /// Checks whether uptime displays the correct stderr msg when its called with a directory
 #[test]
 fn test_uptime_with_dir() {
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
+
     at.mkdir("dir1");
 
-    ts.ucmd()
-        .arg("dir1")
+    ucmd.arg("dir1")
         .fails()
         .stderr_contains("uptime: couldn't get boot time: Is a directory")
         .stdout_contains("up ???? days ??:??");

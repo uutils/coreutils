@@ -1,27 +1,34 @@
-# spell-checker:ignore datetime
+# spell-checker:ignore datetime tzdb zoneinfo
 [package]
 name = "uu_date"
-version = "0.0.30"
-authors = ["uutils developers"]
-license = "MIT"
 description = "date ~ (uutils) display or set the current time"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/date"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2024"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/date.rs"
 
 [dependencies]
-chrono = { workspace = true }
 clap = { workspace = true }
-uucore = { workspace = true, features = ["custom-tz-fmt"] }
+chrono = { workspace = true } # TODO: Eventually we'll want to remove this
+jiff = { workspace = true, features = [
+  "tzdb-bundle-platform",
+  "tzdb-zoneinfo",
+  "tzdb-concatenated",
+] }
+uucore = { workspace = true, features = ["parser"] }
 parse_datetime = { workspace = true }
+fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }

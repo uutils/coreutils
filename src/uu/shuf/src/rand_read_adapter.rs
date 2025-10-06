@@ -125,7 +125,7 @@ mod test {
         let mut rng = ReadRng::new(&v[..]);
         rng.fill_bytes(&mut w);
 
-        assert!(v == w);
+        assert_eq!(v, w);
     }
 
     #[test]

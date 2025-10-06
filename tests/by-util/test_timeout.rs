@@ -1,11 +1,14 @@
+use std::time::Duration;
+
 // This file is part of the uutils coreutils package.
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore dont
+use rstest::rstest;
+
+use uucore::display::Quotable;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
@@ -22,12 +25,14 @@ fn test_subcommand_return_code() {
     new_ucmd!().arg("1").arg("false").fails_with_code(1);
 }
 
-#[test]
-fn test_invalid_time_interval() {
+#[rstest]
+#[case::alphabetic("xyz")]
+#[case::single_quote("'1")]
+fn test_invalid_time_interval(#[case] input: &str) {
     new_ucmd!()
-        .args(&["xyz", "sleep", "0"])
+        .args(&[input, "sleep", "0"])
         .fails_with_code(125)
-        .usage_error("invalid time interval 'xyz'");
+        .usage_error(format!("invalid time interval {}", input.quote()));
 }
 
 #[test]
@@ -77,7 +82,7 @@ fn test_command_empty_args() {
     new_ucmd!()
         .args(&["", ""])
         .fails()
-        .stderr_contains("timeout: empty string");
+        .stderr_contains("timeout: invalid time interval ''");
 }
 
 #[test]
@@ -122,6 +127,24 @@ fn test_dont_overflow() {
     new_ucmd!()
         .args(&["-k", "9223372036854775808d", "10", "sleep", "0"])
         .succeeds()
+        .no_output();
+}
+
+#[test]
+fn test_dont_underflow() {
+    new_ucmd!()
+        .args(&[".0000000001", "sleep", "1"])
+        .fails_with_code(124)
+        .no_output();
+    new_ucmd!()
+        .args(&["1e-100", "sleep", "1"])
+        .fails_with_code(124)
+        .no_output();
+    // Unlike GNU coreutils, we underflow to 1ns for very short timeouts.
+    // https://debbugs.gnu.org/cgi/bugreport.cgi?bug=77535
+    new_ucmd!()
+        .args(&["1e-18172487393827593258", "sleep", "1"])
+        .fails_with_code(124)
         .no_output();
 }
 
@@ -171,4 +194,33 @@ fn test_kill_subprocess() {
         .fails_with_code(124)
         .stdout_contains("inside_trap")
         .stderr_contains("Terminated");
+}
+
+#[test]
+fn test_hex_timeout_ending_with_d() {
+    new_ucmd!()
+        .args(&["0x0.1d", "sleep", "10"])
+        .timeout(Duration::from_secs(1))
+        .fails_with_code(124)
+        .no_output();
+}
+
+#[test]
+fn test_terminate_child_on_receiving_terminate() {
+    let mut timeout_cmd = new_ucmd!()
+        .args(&[
+            "10",
+            "sh",
+            "-c",
+            "trap 'echo child received TERM' TERM; sleep 5",
+        ])
+        .run_no_wait();
+    timeout_cmd.delay(100);
+    timeout_cmd.kill_with_custom_signal(nix::sys::signal::Signal::SIGTERM);
+    timeout_cmd
+        .make_assertion()
+        .is_not_alive()
+        .with_current_output()
+        .code_is(143)
+        .stdout_contains("child received TERM");
 }

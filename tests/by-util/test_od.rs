@@ -3,7 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore abcdefghijklmnopqrstuvwxyz Anone
+// spell-checker:ignore abcdefghijklmnopqrstuvwxyz Anone fdbb
+
+#[cfg(unix)]
+use std::io::Read;
 
 use unindent::unindent;
 use uutests::at_and_ucmd;
@@ -203,14 +206,70 @@ fn test_f16() {
     ]; // 0x8400 -6.104e-5
     let expected_output = unindent(
         "
-            0000000     1.000         0        -0       inf
-            0000010      -inf       NaN -6.104e-5
+            0000000       1.0000000               0              -0             inf
+            0000010            -inf             NaN   -6.1035156e-5
             0000016
             ",
     );
     new_ucmd!()
         .arg("--endian=little")
         .arg("-tf2")
+        .arg("-w8")
+        .run_piped_stdin(&input[..])
+        .success()
+        .no_stderr()
+        .stdout_is(expected_output);
+}
+
+#[test]
+fn test_fh() {
+    let input: [u8; 14] = [
+        0x00, 0x3c, // 0x3C00 1.0
+        0x00, 0x00, // 0x0000 0.0
+        0x00, 0x80, // 0x8000 -0.0
+        0x00, 0x7c, // 0x7C00 Inf
+        0x00, 0xfc, // 0xFC00 -Inf
+        0x00, 0xfe, // 0xFE00 NaN
+        0x00, 0x84,
+    ]; // 0x8400 -6.1035156e-5
+    let expected_output = unindent(
+        "
+            0000000       1.0000000               0              -0             inf
+            0000010            -inf             NaN   -6.1035156e-5
+            0000016
+        ",
+    );
+    new_ucmd!()
+        .arg("--endian=little")
+        .arg("-tfH")
+        .arg("-w8")
+        .run_piped_stdin(&input[..])
+        .success()
+        .no_stderr()
+        .stdout_is(expected_output);
+}
+
+#[test]
+fn test_fb() {
+    let input: [u8; 14] = [
+        0x80, 0x3f, // 1.0
+        0x00, 0x00, // 0.0
+        0x00, 0x80, // -0.0
+        0x80, 0x7f, // Inf
+        0x80, 0xff, // -Inf
+        0xc0, 0x7f, // NaN
+        0x80, 0xb8,
+    ]; // -6.1035156e-5
+    let expected_output = unindent(
+        "
+            0000000       1.0000000               0              -0             inf
+            0000010            -inf             NaN   -6.1035156e-5
+            0000016
+        ",
+    );
+    new_ucmd!()
+        .arg("--endian=little")
+        .arg("-tfB")
         .arg("-w8")
         .run_piped_stdin(&input[..])
         .success()
@@ -231,8 +290,8 @@ fn test_f32() {
     ]; // 0x807f0000 -1.1663108E-38
     let expected_output = unindent(
         "
-            0000000     -1.2345679       12345678  -9.8765427e37             -0
-            0000020            NaN          1e-40 -1.1663108e-38
+            0000000      -1.2345679        12345678  -9.8765427e+37              -0
+            0000020             NaN           1e-40  -1.1663108e-38
             0000034
             ",
     );
@@ -276,18 +335,19 @@ fn test_f64() {
 
 #[test]
 fn test_multibyte() {
+    let input = "’‐ˆ‘˜語🙂✅🐶𝛑Universität Tübingen \u{1B000}"; // spell-checker:disable-line
     new_ucmd!()
-        .arg("-c")
-        .arg("-w12")
-        .run_piped_stdin("Universität Tübingen \u{1B000}".as_bytes()) // spell-checker:disable-line
+        .args(&["-t", "c"])
+        .run_piped_stdin(input.as_bytes())
         .success()
         .no_stderr()
         .stdout_is(unindent(
-            "
-            0000000   U   n   i   v   e   r   s   i   t   ä  **   t
-            0000014       T   ü  **   b   i   n   g   e   n       \u{1B000}
-            0000030  **  **  **
-            0000033
+            r"
+            0000000 342 200 231 342 200 220 313 206 342 200 230 313 234 350 252 236
+            0000020 360 237 231 202 342 234 205 360 237 220 266 360 235 233 221   U
+            0000040   n   i   v   e   r   s   i   t 303 244   t       T 303 274   b
+            0000060   i   n   g   e   n     360 233 200 200
+            0000072
             ",
         ));
 }
@@ -407,10 +467,10 @@ fn test_big_endian() {
 
     let expected_output = unindent(
         "
-        0000000           -2.0000000000000000
-                    -2.0000000              0
-                      c0000000       00000000
-                   c000   0000    0000   0000
+        0000000             -2.0000000000000000
+                     -2.0000000               0
+                       c0000000        00000000
+                   c000    0000    0000    0000
         0000010
         ",
     );
@@ -660,14 +720,40 @@ fn test_skip_bytes_error() {
 
 #[test]
 fn test_read_bytes() {
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
     let input = "abcdefghijklmnopqrstuvwxyz\n12345678";
-    new_ucmd!()
+
+    fixtures.write("f1", input);
+    let file = fixtures.open("f1");
+    #[cfg(unix)]
+    let mut file_shadow = file.try_clone().unwrap();
+
+    scene
+        .ucmd()
         .arg("--endian=little")
         .arg("--read-bytes=27")
-        .run_piped_stdin(input.as_bytes())
-        .no_stderr()
-        .success()
-        .stdout_is(unindent(ALPHA_OUT));
+        .set_stdin(file)
+        .succeeds()
+        .stdout_only(unindent(ALPHA_OUT));
+
+    // On unix platforms, confirm that only 27 bytes and strictly no more were read from stdin.
+    // Leaving stdin in the correct state is required for GNU compatibility.
+    #[cfg(unix)]
+    {
+        // skip(27) to skip the 27 bytes that should have been consumed with the
+        // --read-bytes flag.
+        let expected_bytes_remaining_in_stdin: Vec<_> = input.bytes().skip(27).collect();
+        let mut bytes_remaining_in_stdin = vec![];
+        assert_eq!(
+            file_shadow
+                .read_to_end(&mut bytes_remaining_in_stdin)
+                .unwrap(),
+            expected_bytes_remaining_in_stdin.len()
+        );
+        assert_eq!(expected_bytes_remaining_in_stdin, bytes_remaining_in_stdin);
+    }
 }
 
 #[test]
@@ -685,10 +771,10 @@ fn test_ascii_dump() {
             r"
             0000000  00  01  0a  0d  10  1f  20  61  62  63  7d  7e  7f  80  90  a0  >...... abc}~....<
                     nul soh  nl  cr dle  us  sp   a   b   c   }   ~ del nul dle  sp
-                     \0 001  \n  \r 020 037       a   b   c   }   ~ 177  **  **  **  >...... abc}~....<
+                     \0 001  \n  \r 020 037       a   b   c   }   ~ 177 200 220 240  >...... abc}~....<
             0000020  b0  c0  d0  e0  f0  ff                                          >......<
                       0   @   P   `   p del
-                     ** 300 320 340 360 377                                          >......<
+                    260 300 320 340 360 377                                          >......<
             0000026
             ",
         ));
@@ -888,4 +974,21 @@ fn test_od_invalid_bytes() {
             .fails_with_code(1)
             .stderr_only(format!("od: {option} argument '{BIG_SIZE}' too large\n"));
     }
+}
+
+#[test]
+fn test_od_options_after_filename() {
+    let file = "test";
+    let (at, mut ucmd) = at_and_ucmd!();
+    let input: [u8; 4] = [0x68, 0x1c, 0xbb, 0xfd];
+    at.write_bytes(file, &input);
+
+    ucmd.arg(file)
+        .arg("-v")
+        .arg("-An")
+        .arg("-t")
+        .arg("x2")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(" 1c68 fdbb\n");
 }

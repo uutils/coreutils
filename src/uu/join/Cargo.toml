@@ -1,17 +1,18 @@
 [package]
 name = "uu_join"
-version = "0.0.30"
-authors = ["uutils developers"]
-license = "MIT"
 description = "join ~ (uutils) merge lines from inputs with matching join fields"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/join"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2024"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/join.rs"
@@ -21,6 +22,7 @@ clap = { workspace = true }
 uucore = { workspace = true }
 memchr = { workspace = true }
 thiserror = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "join"

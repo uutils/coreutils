@@ -8,15 +8,12 @@
 use libfuzzer_sys::fuzz_target;
 use uu_test::uumain;
 
-use rand::prelude::IndexedRandom;
 use rand::Rng;
+use rand::prelude::IndexedRandom;
 use std::ffi::OsString;
 
-mod fuzz_common;
-use crate::fuzz_common::CommandResult;
-use crate::fuzz_common::{
-    compare_result, generate_and_run_uumain, generate_random_string, run_gnu_cmd,
-};
+use uufuzz::CommandResult;
+use uufuzz::{compare_result, generate_and_run_uumain, generate_random_string, run_gnu_cmd};
 
 #[allow(clippy::upper_case_acronyms)]
 #[derive(PartialEq, Debug, Clone)]
@@ -138,28 +135,25 @@ fn generate_test_arg() -> String {
             if test_arg.arg_type == ArgType::INTEGER {
                 arg.push_str(&format!(
                     "{} {} {}",
-                    &rng.random_range(-100..=100).to_string(),
+                    rng.random_range(-100..=100).to_string(),
                     test_arg.arg,
-                    &rng.random_range(-100..=100).to_string()
+                    rng.random_range(-100..=100).to_string()
                 ));
             } else if test_arg.arg_type == ArgType::STRINGSTRING {
                 let random_str = generate_random_string(rng.random_range(1..=10));
                 let random_str2 = generate_random_string(rng.random_range(1..=10));
 
-                arg.push_str(&format!(
-                    "{} {} {}",
-                    &random_str, test_arg.arg, &random_str2
-                ));
+                arg.push_str(&format!("{random_str} {} {random_str2}", test_arg.arg,));
             } else if test_arg.arg_type == ArgType::STRING {
                 let random_str = generate_random_string(rng.random_range(1..=10));
-                arg.push_str(&format!("{} {}", test_arg.arg, &random_str));
+                arg.push_str(&format!("{} {random_str}", test_arg.arg));
             } else if test_arg.arg_type == ArgType::FILEFILE {
                 let path = generate_random_path(&mut rng);
                 let path2 = generate_random_path(&mut rng);
-                arg.push_str(&format!("{} {} {}", path, test_arg.arg, path2));
+                arg.push_str(&format!("{path} {} {path2}", test_arg.arg));
             } else if test_arg.arg_type == ArgType::FILE {
                 let path = generate_random_path(&mut rng);
-                arg.push_str(&format!("{} {}", test_arg.arg, path));
+                arg.push_str(&format!("{} {path}", test_arg.arg));
             }
         }
         4 => {
@@ -176,7 +170,7 @@ fn generate_test_arg() -> String {
                 .collect();
 
             if let Some(test_arg) = file_test_args.choose(&mut rng) {
-                arg.push_str(&format!("{}{}", test_arg.arg, path));
+                arg.push_str(&format!("{}{path}", test_arg.arg));
             }
         }
     }

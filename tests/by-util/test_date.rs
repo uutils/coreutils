@@ -1,15 +1,16 @@
-use chrono::{DateTime, Duration, Utc};
 // This file is part of the uutils coreutils package.
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+//
+// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds
+
+use chrono::{DateTime, Datelike, Duration, NaiveTime, Utc}; // spell-checker:disable-line
 use regex::Regex;
 #[cfg(all(unix, not(target_os = "macos")))]
 use uucore::process::geteuid;
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
 use uutests::util::TestScenario;
-use uutests::util_name;
+use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 #[test]
 fn test_invalid_arg() {
@@ -18,7 +19,7 @@ fn test_invalid_arg() {
 
 #[test]
 fn test_date_email() {
-    for param in ["--rfc-email", "--rfc-e", "-R"] {
+    for param in ["--rfc-email", "--rfc-e", "-R", "--rfc-2822", "--rfc-822"] {
         new_ucmd!().arg(param).succeeds();
     }
 }
@@ -165,6 +166,14 @@ fn test_date_format_y() {
 
     re = Regex::new(r"^\d{2}\n$").unwrap();
     scene.ucmd().arg("+%y").succeeds().stdout_matches(&re);
+}
+
+#[test]
+fn test_date_format_q() {
+    let scene = TestScenario::new(util_name!());
+
+    let re = Regex::new(r"^[1-4]\n$").unwrap();
+    scene.ucmd().arg("+%q").succeeds().stdout_matches(&re);
 }
 
 #[test]
@@ -344,6 +353,22 @@ fn test_date_for_file() {
 }
 
 #[test]
+fn test_date_for_file_mtime() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "reference_file";
+    at.touch(file);
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    let result = ucmd.arg("--reference").arg(file).arg("+%s%N").succeeds();
+    let mtime = at.metadata(file).modified().unwrap();
+    let mtime_nanos = mtime
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
+        .to_string();
+    assert_eq!(result.stdout_str().trim(), &mtime_nanos[..]);
+}
+
+#[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 /// TODO: expected to fail currently; change to `succeeds()` when required.
 fn test_date_set_valid_3() {
@@ -379,10 +404,12 @@ fn test_invalid_format_string() {
 }
 
 #[test]
-fn test_unsupported_format() {
-    let result = new_ucmd!().arg("+%#z").fails();
-    result.no_stdout();
-    assert!(result.stderr_str().starts_with("date: invalid format %#z"));
+fn test_capitalized_numeric_time_zone() {
+    // %z     +hhmm numeric time zone (e.g., -0400)
+    // # is supposed to capitalize, which makes little sense here, but chrono crashes
+    // on such format so it's good to test.
+    let re = Regex::new(r"^[+-]\d{4,4}\n$").unwrap();
+    new_ucmd!().arg("+%#z").succeeds().stdout_matches(&re);
 }
 
 #[test]
@@ -397,10 +424,13 @@ fn test_date_string_human() {
         "30 minutes ago",
         "10 seconds",
         "last day",
+        "last monday",
         "last week",
         "last month",
         "last year",
+        "this monday",
         "next day",
+        "next monday",
         "next week",
         "next month",
         "next year",
@@ -435,9 +465,39 @@ fn test_negative_offset() {
 
                 // Is the resulting date roughly what is expected?
                 let expected_date = Utc::now() - offset;
-                date > expected_date - Duration::minutes(10)
-                    && date < expected_date + Duration::minutes(10)
+                (date.to_utc() - expected_date).abs() < Duration::minutes(10)
             });
+    }
+}
+
+#[test]
+fn test_relative_weekdays() {
+    // Truncate time component to midnight
+    let today = Utc::now().with_time(NaiveTime::MIN).unwrap();
+    // Loop through each day of the week, starting with today
+    for offset in 0..7 {
+        for direction in ["last", "this", "next"] {
+            let weekday = (today + Duration::days(offset))
+                .weekday()
+                .to_string()
+                .to_lowercase();
+            new_ucmd!()
+                .arg("-d")
+                .arg(format!("{direction} {weekday}"))
+                .arg("--rfc-3339=seconds")
+                .arg("--utc")
+                .succeeds()
+                .stdout_str_check(|out| {
+                    let result = DateTime::parse_from_rfc3339(out.trim()).unwrap().to_utc();
+                    let expected = match (direction, offset) {
+                        ("last", _) => today - Duration::days(7 - offset),
+                        ("this", 0) => today,
+                        ("next", 0) => today + Duration::days(7),
+                        _ => today + Duration::days(offset),
+                    };
+                    result == expected
+                });
+        }
     }
 }
 
@@ -449,6 +509,28 @@ fn test_invalid_date_string() {
         .fails()
         .no_stdout()
         .stderr_contains("invalid date");
+
+    new_ucmd!()
+        .arg("-d")
+        // cSpell:disable
+        .arg("this fooday")
+        // cSpell:enable
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_multiple_dates() {
+    new_ucmd!()
+        .arg("-d")
+        .arg("invalid")
+        .arg("-d")
+        .arg("2000-02-02")
+        .arg("+%Y")
+        .succeeds()
+        .stdout_is("2000\n")
+        .no_stderr();
 }
 
 #[test]
@@ -513,11 +595,186 @@ fn test_date_from_stdin() {
         );
 }
 
+const JAN2: &str = "2024-01-02 12:00:00 +0000";
+const JUL2: &str = "2024-07-02 12:00:00 +0000";
+
 #[test]
-fn test_date_empty_tz() {
+fn test_date_tz() {
+    fn test_tz(tz: &str, date: &str, output: &str) {
+        println!("Test with TZ={tz}, date=\"{date}\".");
+        new_ucmd!()
+            .env("TZ", tz)
+            .arg("-d")
+            .arg(date)
+            .arg("+%Y-%m-%d %H:%M:%S %Z")
+            .succeeds()
+            .stdout_only(output);
+    }
+
+    // Empty TZ, UTC0, invalid timezone.
+    test_tz("", JAN2, "2024-01-02 12:00:00 UTC\n");
+    test_tz("UTC0", JAN2, "2024-01-02 12:00:00 UTC\n");
+    // TODO: We do not handle invalid timezones the same way as GNU coreutils
+    //test_tz("Invalid/Timezone", JAN2, "2024-01-02 12:00:00 Invalid\n");
+
+    // Test various locations, some of them use daylight saving, some don't.
+    test_tz("America/Vancouver", JAN2, "2024-01-02 04:00:00 PST\n");
+    test_tz("America/Vancouver", JUL2, "2024-07-02 05:00:00 PDT\n");
+    test_tz("Europe/Berlin", JAN2, "2024-01-02 13:00:00 CET\n");
+    test_tz("Europe/Berlin", JUL2, "2024-07-02 14:00:00 CEST\n");
+    test_tz("Africa/Cairo", JAN2, "2024-01-02 14:00:00 EET\n");
+    // Egypt restored daylight saving in 2023, so if the database is outdated, this will fail.
+    //test_tz("Africa/Cairo", JUL2, "2024-07-02 15:00:00 EEST\n");
+    test_tz("Asia/Tokyo", JAN2, "2024-01-02 21:00:00 JST\n");
+    test_tz("Asia/Tokyo", JUL2, "2024-07-02 21:00:00 JST\n");
+    test_tz("Australia/Sydney", JAN2, "2024-01-02 23:00:00 AEDT\n");
+    test_tz("Australia/Sydney", JUL2, "2024-07-02 22:00:00 AEST\n"); // Shifts the other way.
+    test_tz("Pacific/Tahiti", JAN2, "2024-01-02 02:00:00 -10\n"); // No abbreviation.
+    test_tz("Pacific/Auckland", JAN2, "2024-01-03 01:00:00 NZDT\n");
+    test_tz("Pacific/Auckland", JUL2, "2024-07-03 00:00:00 NZST\n");
+}
+
+#[test]
+fn test_date_tz_with_utc_flag() {
     new_ucmd!()
-        .env("TZ", "")
+        .env("TZ", "Europe/Berlin")
+        .arg("-u")
         .arg("+%Z")
         .succeeds()
         .stdout_only("UTC\n");
+}
+
+#[test]
+fn test_date_tz_various_formats() {
+    fn test_tz(tz: &str, date: &str, output: &str) {
+        println!("Test with TZ={tz}, date=\"{date}\".");
+        new_ucmd!()
+            .env("TZ", tz)
+            .arg("-d")
+            .arg(date)
+            .arg("+%z %:z %::z %:::z %Z")
+            .succeeds()
+            .stdout_only(output);
+    }
+
+    test_tz(
+        "America/Vancouver",
+        JAN2,
+        "-0800 -08:00 -08:00:00 -08 PST\n",
+    );
+    // Half-hour timezone
+    test_tz("Asia/Kolkata", JAN2, "+0530 +05:30 +05:30:00 +05:30 IST\n");
+    test_tz("Europe/Berlin", JAN2, "+0100 +01:00 +01:00:00 +01 CET\n");
+    test_tz(
+        "Australia/Sydney",
+        JAN2,
+        "+1100 +11:00 +11:00:00 +11 AEDT\n",
+    );
+}
+
+#[test]
+fn test_date_tz_with_relative_time() {
+    new_ucmd!()
+        .env("TZ", "America/Vancouver")
+        .arg("-d")
+        .arg("1 hour ago")
+        .arg("+%Y-%m-%d %H:%M:%S %Z")
+        .succeeds()
+        .stdout_matches(&Regex::new(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} P[DS]T\n$").unwrap());
+}
+
+#[test]
+fn test_date_utc_time() {
+    // Test that -u flag shows correct UTC time
+    // We get 2 UTC times just in case we're really unlucky and this runs around
+    // an hour change.
+    let utc_hour_1: i32 = new_ucmd!()
+        .env("TZ", "Asia/Taipei")
+        .arg("-u")
+        .arg("+%-H")
+        .succeeds()
+        .stdout_str()
+        .trim_end()
+        .parse()
+        .unwrap();
+    let tpe_hour: i32 = new_ucmd!()
+        .env("TZ", "Asia/Taipei")
+        .arg("+%-H")
+        .succeeds()
+        .stdout_str()
+        .trim_end()
+        .parse()
+        .unwrap();
+    let utc_hour_2: i32 = new_ucmd!()
+        .env("TZ", "Asia/Taipei")
+        .arg("-u")
+        .arg("+%-H")
+        .succeeds()
+        .stdout_str()
+        .trim_end()
+        .parse()
+        .unwrap();
+    // Taipei is always 8 hours ahead of UTC (no daylight savings)
+    assert!(
+        (tpe_hour - utc_hour_1 + 24) % 24 == 8 || (tpe_hour - utc_hour_2 + 24) % 24 == 8,
+        "TPE: {tpe_hour} UTC: {utc_hour_1}/{utc_hour_2}"
+    );
+
+    // Test that -u flag shows UTC timezone
+    new_ucmd!()
+        .arg("-u")
+        .arg("+%Z")
+        .succeeds()
+        .stdout_only("UTC\n");
+
+    // Test that -u flag with specific timestamp shows correct UTC time
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("@0")
+        .succeeds()
+        .stdout_only("Thu Jan  1 00:00:00 UTC 1970\n");
+}
+
+#[test]
+fn test_date_empty_tz_time() {
+    new_ucmd!()
+        .env("TZ", "")
+        .arg("-d")
+        .arg("@0")
+        .succeeds()
+        .stdout_only("Thu Jan  1 00:00:00 UTC 1970\n");
+}
+
+#[test]
+fn test_date_resolution() {
+    // Test that --resolution flag returns a floating point number by default
+    new_ucmd!()
+        .arg("--resolution")
+        .succeeds()
+        .stdout_str_check(|s| s.trim().parse::<f64>().is_ok());
+
+    // Test that --resolution flag can be passed twice to match gnu
+    new_ucmd!()
+        .arg("--resolution")
+        .arg("--resolution")
+        .succeeds()
+        .stdout_str_check(|s| s.trim().parse::<f64>().is_ok());
+
+    // Test that can --resolution output can be formatted as a date
+    new_ucmd!()
+        .arg("--resolution")
+        .arg("-Iseconds")
+        .succeeds()
+        .stdout_only("1970-01-01T00:00:00+00:00\n");
+}
+
+#[test]
+fn test_date_resolution_no_combine() {
+    // Test that date fails when --resolution flag is passed with date flag
+    new_ucmd!()
+        .arg("--resolution")
+        .arg("-d")
+        .arg("2025-01-01")
+        .fails();
 }

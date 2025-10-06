@@ -1,1 +1,5 @@
-{ "cSpell.import": [".vscode/cspell.json"] }
+{
+    "cSpell.import": [
+        "./.vscode/cSpell.json"
+    ]
+}

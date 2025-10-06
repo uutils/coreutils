@@ -5,8 +5,9 @@
 // spell-checker:ignore formatteriteminfo docopt fvox fvoxw vals acdx
 
 use uucore::display::Quotable;
+use uucore::translate;
 
-use crate::formatteriteminfo::FormatterItemInfo;
+use crate::formatter_item_info::FormatterItemInfo;
 use crate::prn_char::*;
 use crate::prn_float::*;
 use crate::prn_int::*;
@@ -150,7 +151,7 @@ pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo
         }
     }
     if expect_type_string {
-        return Err("missing format specification after '--format' / '-t'".to_string());
+        return Err(translate!("od-error-missing-format-spec"));
     }
 
     if formats.is_empty() {
@@ -233,6 +234,10 @@ fn is_format_size_char(
             *byte_size = 8;
             true
         }
+        (FormatTypeCategory::Float, Some('H' | 'B')) => {
+            *byte_size = 2;
+            true
+        }
         // FormatTypeCategory::Float, 'L' => *byte_size = 16, // TODO support f128
         _ => false,
     }
@@ -273,11 +278,7 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
 
     while let Some(type_char) = ch {
         let type_char = format_type(type_char).ok_or_else(|| {
-            format!(
-                "unexpected char '{}' in format specification {}",
-                type_char,
-                params.quote()
-            )
+            translate!("od-error-unexpected-char", "char" => type_char, "spec" => params.quote())
         })?;
 
         let type_cat = format_type_category(type_char);
@@ -286,7 +287,43 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
 
         let mut byte_size = 0u8;
         let mut show_ascii_dump = false;
-        if is_format_size_char(ch, type_cat, &mut byte_size) {
+        let mut float_variant = None;
+        if type_cat == FormatTypeCategory::Float {
+            match ch {
+                Some(var @ ('B' | 'H')) => {
+                    byte_size = 2;
+                    float_variant = Some(var);
+                    ch = chars.next();
+                }
+                Some('F') => {
+                    byte_size = 4;
+                    ch = chars.next();
+                }
+                Some('D') => {
+                    byte_size = 8;
+                    ch = chars.next();
+                }
+                _ => {
+                    if is_format_size_char(ch, type_cat, &mut byte_size) {
+                        ch = chars.next();
+                    } else {
+                        let mut decimal_size = String::new();
+                        while is_format_size_decimal(ch, type_cat, &mut decimal_size) {
+                            ch = chars.next();
+                        }
+                        if !decimal_size.is_empty() {
+                            byte_size = decimal_size.parse().map_err(|_| {
+                                translate!(
+                                    "od-error-invalid-number",
+                                    "number" => decimal_size.quote(),
+                                    "spec" => params.quote()
+                                )
+                            })?;
+                        }
+                    }
+                }
+            }
+        } else if is_format_size_char(ch, type_cat, &mut byte_size) {
             ch = chars.next();
         } else {
             let mut decimal_size = String::new();
@@ -295,11 +332,7 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
             }
             if !decimal_size.is_empty() {
                 byte_size = decimal_size.parse().map_err(|_| {
-                    format!(
-                        "invalid number {} in format specification {}",
-                        decimal_size.quote(),
-                        params.quote()
-                    )
+                    translate!("od-error-invalid-number", "number" => decimal_size.quote(), "spec" => params.quote())
                 })?;
             }
         }
@@ -307,13 +340,21 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
             ch = chars.next();
         }
 
-        let ft = od_format_type(type_char, byte_size).ok_or_else(|| {
-            format!(
-                "invalid size '{}' in format specification {}",
-                byte_size,
-                params.quote()
-            )
-        })?;
+        let ft = if let Some(v) = float_variant {
+            match v {
+                'B' => FORMAT_ITEM_BF16,
+                'H' => FORMAT_ITEM_F16,
+                _ => unreachable!(),
+            }
+        } else {
+            od_format_type(type_char, byte_size).ok_or_else(|| {
+                translate!(
+                    "od-error-invalid-size",
+                    "size" => byte_size,
+                    "spec" => params.quote()
+                )
+            })?
+        };
         formats.push(ParsedFormatterItemInfo::new(ft, show_ascii_dump));
     }
 
@@ -322,7 +363,7 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
 
 #[cfg(test)]
 pub fn parse_format_flags_str(args_str: &[&'static str]) -> Result<Vec<FormatterItemInfo>, String> {
-    let args: Vec<String> = args_str.iter().map(|s| s.to_string()).collect();
+    let args: Vec<String> = args_str.iter().map(|s| (*s).to_string()).collect();
     parse_format_flags(&args).map(|v| {
         // tests using this function assume add_ascii_dump is not set
         v.into_iter()

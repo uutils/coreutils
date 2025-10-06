@@ -39,6 +39,7 @@ executable
 executables
 exponentiate
 eval
+esac
 falsey
 fileio
 filesystem
@@ -47,6 +48,7 @@ flamegraph
 fsxattr
 fullblock
 getfacl
+getfattr
 getopt
 gibi
 gibibytes
@@ -67,6 +69,7 @@ kibi
 kibibytes
 libacl
 lcase
+listxattr
 llistxattr
 lossily
 lstat

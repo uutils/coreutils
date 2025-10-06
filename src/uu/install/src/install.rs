@@ -10,6 +10,7 @@ mod mode;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use file_diff::diff;
 use filetime::{FileTime, set_file_times};
+use std::ffi::OsString;
 use std::fmt::Debug;
 use std::fs::File;
 use std::fs::{self, metadata};
@@ -25,7 +26,10 @@ use uucore::fs::dir_strip_dot_for_creation;
 use uucore::mode::get_umask;
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 use uucore::process::{getegid, geteuid};
-use uucore::{format_usage, help_about, help_usage, show, show_error, show_if_err};
+#[cfg(feature = "selinux")]
+use uucore::selinux::{contexts_differ, set_selinux_security_context};
+use uucore::translate;
+use uucore::{format_usage, show, show_error, show_if_err};
 
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
@@ -50,62 +54,72 @@ pub struct Behavior {
     strip_program: String,
     create_leading: bool,
     target_dir: Option<String>,
+    no_target_dir: bool,
+    preserve_context: bool,
+    context: Option<String>,
 }
 
 #[derive(Error, Debug)]
 enum InstallError {
-    #[error("Unimplemented feature: {0}")]
-    Unimplemented(String),
-
-    #[error("{} with -d requires at least one argument.", uucore::util_name())]
+    #[error("{}", translate!("install-error-dir-needs-arg", "util_name" => uucore::util_name()))]
     DirNeedsArg,
 
-    #[error("failed to create {0}")]
+    #[error("{}", translate!("install-error-create-dir-failed", "path" => .0.quote()))]
     CreateDirFailed(PathBuf, #[source] std::io::Error),
 
-    #[error("failed to chmod {}", .0.quote())]
+    #[error("{}", translate!("install-error-chmod-failed", "path" => .0.quote()))]
     ChmodFailed(PathBuf),
 
-    #[error("failed to chown {}: {}", .0.quote(), .1)]
+    #[error("{}", translate!("install-error-chown-failed", "path" => .0.quote(), "error" => .1.clone()))]
     ChownFailed(PathBuf, String),
 
-    #[error("invalid target {}: No such file or directory", .0.quote())]
+    #[error("{}", translate!("install-error-invalid-target", "path" => .0.quote()))]
     InvalidTarget(PathBuf),
 
-    #[error("target {} is not a directory", .0.quote())]
+    #[error("{}", translate!("install-error-target-not-dir", "path" => .0.quote()))]
     TargetDirIsntDir(PathBuf),
 
-    #[error("cannot backup {0} to {1}")]
+    #[error("{}", translate!("install-error-backup-failed", "from" => .0.to_string_lossy(), "to" => .1.to_string_lossy()))]
     BackupFailed(PathBuf, PathBuf, #[source] std::io::Error),
 
-    #[error("cannot install {0} to {1}")]
+    #[error("{}", translate!("install-error-install-failed", "from" => .0.to_string_lossy(), "to" => .1.to_string_lossy()))]
     InstallFailed(PathBuf, PathBuf, #[source] std::io::Error),
 
-    #[error("strip program failed: {0}")]
+    #[error("{}", translate!("install-error-strip-failed", "error" => .0.clone()))]
     StripProgramFailed(String),
 
-    #[error("metadata error")]
+    #[error("{}", translate!("install-error-metadata-failed"))]
     MetadataFailed(#[source] std::io::Error),
 
-    #[error("invalid user: {}", .0.quote())]
+    #[error("{}", translate!("install-error-invalid-user", "user" => .0.quote()))]
     InvalidUser(String),
 
-    #[error("invalid group: {}", .0.quote())]
+    #[error("{}", translate!("install-error-invalid-group", "group" => .0.quote()))]
     InvalidGroup(String),
 
-    #[error("omitting directory {}", .0.quote())]
+    #[error("{}", translate!("install-error-omitting-directory", "path" => .0.quote()))]
     OmittingDirectory(PathBuf),
 
-    #[error("failed to access {}: Not a directory", .0.quote())]
+    #[error("{}", translate!("install-error-not-a-directory", "path" => .0.quote()))]
     NotADirectory(PathBuf),
+
+    #[error("{}", translate!("install-error-override-directory-failed", "dir" => .0.quote(), "file" => .1.quote()))]
+    OverrideDirectoryFailed(PathBuf, PathBuf),
+
+    #[error("{}", translate!("install-error-same-file", "file1" => .0.to_string_lossy(), "file2" => .1.to_string_lossy()))]
+    SameFile(PathBuf, PathBuf),
+
+    #[error("{}", translate!("install-error-extra-operand", "operand" => .0.quote(), "usage" => .1.clone()))]
+    ExtraOperand(String, String),
+
+    #[cfg(feature = "selinux")]
+    #[error("{}", .0)]
+    SelinuxContextFailed(String),
 }
 
 impl UError for InstallError {
     fn code(&self) -> i32 {
-        match self {
-            Self::Unimplemented(_) => 2,
-            _ => 1,
-        }
+        1
     }
 
     fn usage(&self) -> bool {
@@ -124,15 +138,9 @@ pub enum MainFunction {
 impl Behavior {
     /// Determine the mode for chmod after copy.
     pub fn mode(&self) -> u32 {
-        match self.specified_mode {
-            Some(x) => x,
-            None => DEFAULT_MODE,
-        }
+        self.specified_mode.unwrap_or(DEFAULT_MODE)
     }
 }
-
-const ABOUT: &str = help_about!("install.md");
-const USAGE: &str = help_usage!("install.md");
 
 static OPT_COMPARE: &str = "compare";
 static OPT_DIRECTORY: &str = "directory";
@@ -158,14 +166,12 @@ static ARG_FILES: &str = "files";
 ///
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let paths: Vec<String> = matches
-        .get_many::<String>(ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
+    let paths: Vec<OsString> = matches
+        .get_many::<OsString>(ARG_FILES)
+        .map(|v| v.cloned().collect())
         .unwrap_or_default();
-
-    check_unimplemented(&matches)?;
 
     let behavior = behavior(&matches)?;
 
@@ -178,66 +184,58 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("install-about"))
+        .override_usage(format_usage(&translate!("install-usage")))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(backup_control::arguments::backup())
         .arg(backup_control::arguments::backup_no_args())
         .arg(
             Arg::new(OPT_IGNORED)
                 .short('c')
-                .help("ignored")
+                .help(translate!("install-help-ignored"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_COMPARE)
                 .short('C')
                 .long(OPT_COMPARE)
-                .help(
-                    "compare each pair of source and destination files, and in some cases, \
-                    do not modify the destination at all",
-                )
+                .help(translate!("install-help-compare"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_DIRECTORY)
                 .short('d')
                 .long(OPT_DIRECTORY)
-                .help(
-                    "treat all arguments as directory names. create all components of \
-                        the specified directories",
-                )
+                .help(translate!("install-help-directory"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            // TODO implement flag
             Arg::new(OPT_CREATE_LEADING)
                 .short('D')
-                .help(
-                    "create all leading components of DEST except the last, then copy \
-                        SOURCE to DEST",
-                )
+                .help(translate!("install-help-create-leading"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_GROUP)
                 .short('g')
                 .long(OPT_GROUP)
-                .help("set group ownership, instead of process's current group")
+                .help(translate!("install-help-group"))
                 .value_name("GROUP"),
         )
         .arg(
             Arg::new(OPT_MODE)
                 .short('m')
                 .long(OPT_MODE)
-                .help("set permission mode (as in chmod), instead of rwxr-xr-x")
+                .help(translate!("install-help-mode"))
                 .value_name("MODE"),
         )
         .arg(
             Arg::new(OPT_OWNER)
                 .short('o')
                 .long(OPT_OWNER)
-                .help("set ownership (super-user only)")
+                .help(translate!("install-help-owner"))
                 .value_name("OWNER")
                 .value_hint(clap::ValueHint::Username),
         )
@@ -245,95 +243,69 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_PRESERVE_TIMESTAMPS)
                 .short('p')
                 .long(OPT_PRESERVE_TIMESTAMPS)
-                .help(
-                    "apply access/modification times of SOURCE files to \
-                    corresponding destination files",
-                )
+                .help(translate!("install-help-preserve-timestamps"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_STRIP)
                 .short('s')
                 .long(OPT_STRIP)
-                .help("strip symbol tables (no action Windows)")
+                .help(translate!("install-help-strip"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_STRIP_PROGRAM)
                 .long(OPT_STRIP_PROGRAM)
-                .help("program used to strip binaries (no action Windows)")
+                .help(translate!("install-help-strip-program"))
                 .value_name("PROGRAM")
                 .value_hint(clap::ValueHint::CommandName),
         )
         .arg(backup_control::arguments::suffix())
         .arg(
-            // TODO implement flag
             Arg::new(OPT_TARGET_DIRECTORY)
                 .short('t')
                 .long(OPT_TARGET_DIRECTORY)
-                .help("move all SOURCE arguments into DIRECTORY")
+                .help(translate!("install-help-target-directory"))
                 .value_name("DIRECTORY")
                 .value_hint(clap::ValueHint::DirPath),
         )
         .arg(
-            // TODO implement flag
             Arg::new(OPT_NO_TARGET_DIRECTORY)
                 .short('T')
                 .long(OPT_NO_TARGET_DIRECTORY)
-                .help("(unimplemented) treat DEST as a normal file")
+                .help(translate!("install-help-no-target-directory"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
                 .short('v')
                 .long(OPT_VERBOSE)
-                .help("explain what is being done")
+                .help(translate!("install-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            // TODO implement flag
             Arg::new(OPT_PRESERVE_CONTEXT)
                 .short('P')
                 .long(OPT_PRESERVE_CONTEXT)
-                .help("(unimplemented) preserve security context")
+                .help(translate!("install-help-preserve-context"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            // TODO implement flag
             Arg::new(OPT_CONTEXT)
                 .short('Z')
                 .long(OPT_CONTEXT)
-                .help("(unimplemented) set security context of files and directories")
+                .help(translate!("install-help-context"))
                 .value_name("CONTEXT")
-                .action(ArgAction::SetTrue),
+                .value_parser(clap::value_parser!(String))
+                .num_args(0..=1),
         )
         .arg(
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .num_args(1..)
-                .value_hint(clap::ValueHint::AnyPath),
+                .value_hint(clap::ValueHint::AnyPath)
+                .value_parser(clap::value_parser!(OsString)),
         )
-}
-
-/// Check for unimplemented command line arguments.
-///
-/// Either return the degenerate Ok value, or an Err with string.
-///
-/// # Errors
-///
-/// Error datum is a string of the unimplemented argument.
-///
-///
-fn check_unimplemented(matches: &ArgMatches) -> UResult<()> {
-    if matches.get_flag(OPT_NO_TARGET_DIRECTORY) {
-        Err(InstallError::Unimplemented(String::from("--no-target-directory, -T")).into())
-    } else if matches.get_flag(OPT_PRESERVE_CONTEXT) {
-        Err(InstallError::Unimplemented(String::from("--preserve-context, -P")).into())
-    } else if matches.get_flag(OPT_CONTEXT) {
-        Err(InstallError::Unimplemented(String::from("--context, -Z")).into())
-    } else {
-        Ok(())
-    }
 }
 
 /// Determine behavior, given command line arguments.
@@ -356,7 +328,10 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let specified_mode: Option<u32> = if matches.contains_id(OPT_MODE) {
         let x = matches.get_one::<String>(OPT_MODE).ok_or(1)?;
         Some(mode::parse(x, considering_dir, get_umask()).map_err(|err| {
-            show_error!("Invalid mode string: {}", err);
+            show_error!(
+                "{}",
+                translate!("install-error-invalid-mode", "error" => err)
+            );
             1
         })?)
     } else {
@@ -365,23 +340,44 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     let backup_mode = backup_control::determine_backup_mode(matches)?;
     let target_dir = matches.get_one::<String>(OPT_TARGET_DIRECTORY).cloned();
+    let no_target_dir = matches.get_flag(OPT_NO_TARGET_DIRECTORY);
+    if target_dir.is_some() && no_target_dir {
+        show_error!("{}", translate!("install-error-mutually-exclusive-target"));
+        return Err(1.into());
+    }
 
     let preserve_timestamps = matches.get_flag(OPT_PRESERVE_TIMESTAMPS);
     let compare = matches.get_flag(OPT_COMPARE);
     let strip = matches.get_flag(OPT_STRIP);
     if preserve_timestamps && compare {
-        show_error!("Options --compare and --preserve-timestamps are mutually exclusive");
+        show_error!(
+            "{}",
+            translate!("install-error-mutually-exclusive-compare-preserve")
+        );
         return Err(1.into());
     }
     if compare && strip {
-        show_error!("Options --compare and --strip are mutually exclusive");
+        show_error!(
+            "{}",
+            translate!("install-error-mutually-exclusive-compare-strip")
+        );
         return Err(1.into());
+    }
+
+    // Check if compare is used with non-permission mode bits
+    // TODO use a let chain once we have a MSRV of 1.88 or greater
+    if compare {
+        if let Some(mode) = specified_mode {
+            let non_permission_bits = 0o7000; // setuid, setgid, sticky bits
+            if mode & non_permission_bits != 0 {
+                show_error!("{}", translate!("install-warning-compare-ignored"));
+            }
+        }
     }
 
     let owner = matches
         .get_one::<String>(OPT_OWNER)
-        .map(|s| s.as_str())
-        .unwrap_or("")
+        .map_or("", |s| s.as_str())
         .to_string();
 
     let owner_id = if owner.is_empty() {
@@ -395,8 +391,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     let group = matches
         .get_one::<String>(OPT_GROUP)
-        .map(|s| s.as_str())
-        .unwrap_or("")
+        .map_or("", |s| s.as_str())
         .to_string();
 
     let group_id = if group.is_empty() {
@@ -407,6 +402,8 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
             Err(_) => return Err(InstallError::InvalidGroup(group.clone()).into()),
         }
     };
+
+    let context = matches.get_one::<String>(OPT_CONTEXT).cloned();
 
     Ok(Behavior {
         main_function,
@@ -422,11 +419,13 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         strip_program: String::from(
             matches
                 .get_one::<String>(OPT_STRIP_PROGRAM)
-                .map(|s| s.as_str())
-                .unwrap_or(DEFAULT_STRIP_PROGRAM),
+                .map_or(DEFAULT_STRIP_PROGRAM, |s| s.as_str()),
         ),
         create_leading: matches.get_flag(OPT_CREATE_LEADING),
         target_dir,
+        no_target_dir,
+        preserve_context: matches.get_flag(OPT_PRESERVE_CONTEXT),
+        context,
     })
 }
 
@@ -437,7 +436,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 ///
 /// Returns a Result type with the Err variant containing the error message.
 ///
-fn directory(paths: &[String], b: &Behavior) -> UResult<()> {
+fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
     if paths.is_empty() {
         Err(InstallError::DirNeedsArg.into())
     } else {
@@ -466,7 +465,10 @@ fn directory(paths: &[String], b: &Behavior) -> UResult<()> {
                 }
 
                 if b.verbose {
-                    println!("creating directory {}", path_to_create.quote());
+                    println!(
+                        "{}",
+                        translate!("install-verbose-creating-directory", "path" => path_to_create.quote())
+                    );
                 }
             }
 
@@ -477,6 +479,10 @@ fn directory(paths: &[String], b: &Behavior) -> UResult<()> {
             }
 
             show_if_err!(chown_optional_user_group(path, b));
+
+            // Set SELinux context for directory if needed
+            #[cfg(feature = "selinux")]
+            show_if_err!(set_selinux_context(path, b));
         }
         // If the exit code was set, or show! has been called at least once
         // (which sets the exit code as well), function execution will end after
@@ -489,8 +495,7 @@ fn directory(paths: &[String], b: &Behavior) -> UResult<()> {
 /// created immediately
 fn is_new_file_path(path: &Path) -> bool {
     !path.exists()
-        && (path.parent().map(Path::is_dir).unwrap_or(true)
-            || path.parent().unwrap().as_os_str().is_empty()) // In case of a simple file
+        && (path.parent().is_none_or(Path::is_dir) || path.parent().unwrap().as_os_str().is_empty()) // In case of a simple file
 }
 
 /// Test if the path is an existing directory or ends with a trailing separator.
@@ -514,10 +519,20 @@ fn is_potential_directory_path(path: &Path) -> bool {
 /// Returns a Result type with the Err variant containing the error message.
 ///
 #[allow(clippy::cognitive_complexity)]
-fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
+fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
     // first check that paths contains at least one element
     if paths.is_empty() {
-        return Err(UUsageError::new(1, "missing file operand"));
+        return Err(UUsageError::new(
+            1,
+            translate!("install-error-missing-file-operand"),
+        ));
+    }
+    if b.no_target_dir && paths.len() > 2 {
+        return Err(InstallError::ExtraOperand(
+            paths[2].to_string_lossy().into_owned(),
+            format_usage(&translate!("install-usage")),
+        )
+        .into());
     }
 
     // get the target from either "-t foo" param or from the last given paths argument
@@ -530,10 +545,7 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
         if paths.is_empty() {
             return Err(UUsageError::new(
                 1,
-                format!(
-                    "missing destination file operand after '{}'",
-                    last_path.to_str().unwrap()
-                ),
+                translate!("install-error-missing-destination-operand", "path" => last_path.to_string_lossy()),
             ));
         }
 
@@ -555,10 +567,18 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
 
         if let Some(to_create) = to_create {
             // if the path ends in /, remove it
-            let to_create = if to_create.to_string_lossy().ends_with('/') {
-                Path::new(to_create.to_str().unwrap().trim_end_matches('/'))
-            } else {
-                to_create
+            let to_create_owned;
+            let to_create = match uucore::os_str_as_bytes(to_create.as_os_str()) {
+                Ok(path_bytes) if path_bytes.ends_with(b"/") => {
+                    let mut trimmed_bytes = path_bytes;
+                    while trimmed_bytes.ends_with(b"/") {
+                        trimmed_bytes = &trimmed_bytes[..trimmed_bytes.len() - 1];
+                    }
+                    let trimmed_os_str = std::ffi::OsStr::from_bytes(trimmed_bytes);
+                    to_create_owned = PathBuf::from(trimmed_os_str);
+                    to_create_owned.as_path()
+                }
+                _ => to_create,
             };
 
             if !to_create.exists() {
@@ -569,7 +589,10 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
                         result.push(part.as_os_str());
                         if !result.is_dir() {
                             // Don't display when the directory already exists
-                            println!("install: creating directory {}", result.quote());
+                            println!(
+                                "{}",
+                                translate!("install-verbose-creating-directory-step", "path" => result.quote())
+                            );
                         }
                     }
                 }
@@ -588,13 +611,23 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
         }
     }
 
-    if sources.len() > 1 || is_potential_directory_path(&target) {
+    if sources.len() > 1 {
         copy_files_into_dir(sources, &target, b)
     } else {
         let source = sources.first().unwrap();
 
         if source.is_dir() {
             return Err(InstallError::OmittingDirectory(source.clone()).into());
+        }
+
+        if b.no_target_dir && target.is_dir() {
+            return Err(
+                InstallError::OverrideDirectoryFailed(target.clone(), source.clone()).into(),
+            );
+        }
+
+        if is_potential_directory_path(&target) {
+            return copy_files_into_dir(sources, &target, b);
         }
 
         if target.is_file() || is_new_file_path(&target) {
@@ -612,8 +645,8 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
 ///
 /// # Parameters
 ///
-/// _files_ must all exist as non-directories.
-/// _target_dir_ must be a directory.
+/// `files` must all exist as non-directories.
+/// `target_dir` must be a directory.
 ///
 fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UResult<()> {
     if !target_dir.is_dir() {
@@ -678,7 +711,7 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
         return Ok(());
     };
 
-    let meta = match fs::metadata(path) {
+    let meta = match metadata(path) {
         Ok(meta) => meta,
         Err(e) => return Err(InstallError::MetadataFailed(e).into()),
     };
@@ -705,16 +738,16 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
 fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
     if to.exists() {
         if b.verbose {
-            println!("removed {}", to.quote());
+            println!(
+                "{}",
+                translate!("install-verbose-removed", "path" => to.quote())
+            );
         }
         let backup_path = backup_control::get_backup_path(b.backup_mode, to, &b.suffix);
         if let Some(ref backup_path) = backup_path {
-            // TODO!!
-            if let Err(err) = fs::rename(to, backup_path) {
-                return Err(
-                    InstallError::BackupFailed(to.to_path_buf(), backup_path.clone(), err).into(),
-                );
-            }
+            fs::rename(to, backup_path).map_err(|err| {
+                InstallError::BackupFailed(to.to_path_buf(), backup_path.clone(), err)
+            })?;
         }
         Ok(backup_path)
     } else {
@@ -722,7 +755,7 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
     }
 }
 
-/// Copy a non-special file using std::fs::copy.
+/// Copy a non-special file using [`fs::copy`].
 ///
 /// # Parameters
 /// * `from` - The source file path.
@@ -751,14 +784,26 @@ fn copy_normal_file(from: &Path, to: &Path) -> UResult<()> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn copy_file(from: &Path, to: &Path) -> UResult<()> {
+    if let Ok(to_abs) = to.canonicalize() {
+        if from.canonicalize()? == to_abs {
+            return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
+        }
+    }
+
+    if to.is_dir() && !from.is_dir() {
+        return Err(InstallError::OverrideDirectoryFailed(
+            to.to_path_buf().clone(),
+            from.to_path_buf().clone(),
+        )
+        .into());
+    }
     // fs::copy fails if destination is a invalid symlink.
     // so lets just remove all existing files at destination before copy.
     if let Err(e) = fs::remove_file(to) {
         if e.kind() != std::io::ErrorKind::NotFound {
             show_error!(
-                "Failed to remove existing file {}. Error: {:?}",
-                to.display(),
-                e
+                "{}",
+                translate!("install-error-failed-to-remove", "path" => to.display(), "error" => format!("{e:?}"))
             );
         }
     }
@@ -799,7 +844,7 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
 ///
 fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
     // Check if the filename starts with a hyphen and adjust the path
-    let to_str = to.as_os_str().to_str().unwrap_or_default();
+    let to_str = to.to_string_lossy();
     let to = if to_str.starts_with('-') {
         let mut new_path = PathBuf::from(".");
         new_path.push(to);
@@ -812,10 +857,9 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
             if !status.success() {
                 // Follow GNU's behavior: if strip fails, removes the target
                 let _ = fs::remove_file(to);
-                return Err(InstallError::StripProgramFailed(format!(
-                    "strip process terminated abnormally - exit code: {}",
-                    status.code().unwrap()
-                ))
+                return Err(InstallError::StripProgramFailed(
+                    translate!("install-error-strip-abnormal", "code" => status.code().unwrap()),
+                )
                 .into());
             }
         }
@@ -863,7 +907,7 @@ fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
-    let meta = match fs::metadata(from) {
+    let meta = match metadata(from) {
         Ok(meta) => meta,
         Err(e) => return Err(InstallError::MetadataFailed(e).into()),
     };
@@ -871,13 +915,11 @@ fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
     let modified_time = FileTime::from_last_modification_time(&meta);
     let accessed_time = FileTime::from_last_access_time(&meta);
 
-    match set_file_times(to, accessed_time, modified_time) {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            show_error!("{}", e);
-            Ok(())
-        }
+    if let Err(e) = set_file_times(to, accessed_time, modified_time) {
+        show_error!("{e}");
+        // ignore error
     }
+    Ok(())
 }
 
 /// Copy one file to a new location, changing metadata.
@@ -894,7 +936,7 @@ fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
 /// If the copy system call fails, we print a verbose error and return an empty error value.
 ///
 fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
-    if b.compare && !need_copy(from, to, b)? {
+    if b.compare && !need_copy(from, to, b) {
         return Ok(());
     }
     // Declare the path here as we may need it for the verbose output below.
@@ -913,15 +955,52 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
         preserve_timestamps(from, to)?;
     }
 
+    #[cfg(feature = "selinux")]
+    if b.preserve_context {
+        uucore::selinux::preserve_security_context(from, to)
+            .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
+    } else if b.context.is_some() {
+        set_selinux_context(to, b)?;
+    }
+
     if b.verbose {
-        print!("{} -> {}", from.quote(), to.quote());
+        print!(
+            "{}",
+            translate!("install-verbose-copy", "from" => from.quote(), "to" => to.quote())
+        );
         match backup_path {
-            Some(path) => println!(" (backup: {})", path.quote()),
+            Some(path) => println!(
+                " {}",
+                translate!("install-verbose-backup", "backup" => path.quote())
+            ),
             None => println!(),
         }
     }
 
     Ok(())
+}
+
+/// Check if a file needs to be copied due to ownership differences when no explicit group is specified.
+/// Returns true if the destination file's ownership would differ from what it should be after installation.
+fn needs_copy_for_ownership(to: &Path, to_meta: &fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    // Check if the destination file's owner differs from the effective user ID
+    if to_meta.uid() != geteuid() {
+        return true;
+    }
+
+    // For group, we need to determine what the group would be after installation
+    // If no group is specified, the behavior depends on the directory:
+    // - If the directory has setgid bit, the file inherits the directory's group
+    // - Otherwise, the file gets the user's effective group
+    let expected_gid = to
+        .parent()
+        .and_then(|parent| metadata(parent).ok())
+        .filter(|parent_meta| parent_meta.mode() & 0o2000 != 0)
+        .map_or(getegid(), |parent_meta| parent_meta.gid());
+
+    to_meta.gid() != expected_gid
 }
 
 /// Return true if a file is necessary to copy. This is the case when:
@@ -941,20 +1020,25 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
 ///
 /// Crashes the program if a nonexistent owner or group is specified in _b_.
 ///
-fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
+fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     // Attempt to retrieve metadata for the source file.
     // If this fails, assume the file needs to be copied.
-    let from_meta = match fs::metadata(from) {
-        Ok(meta) => meta,
-        Err(_) => return Ok(true),
+    let Ok(from_meta) = metadata(from) else {
+        return true;
     };
 
     // Attempt to retrieve metadata for the destination file.
     // If this fails, assume the file needs to be copied.
-    let to_meta = match fs::metadata(to) {
-        Ok(meta) => meta,
-        Err(_) => return Ok(true),
+    let Ok(to_meta) = metadata(to) else {
+        return true;
     };
+
+    // Check if the destination is a symlink (should always be replaced)
+    if let Ok(to_symlink_meta) = fs::symlink_metadata(to) {
+        if to_symlink_meta.file_type().is_symlink() {
+            return true;
+        }
+    }
 
     // Define special file mode bits (setuid, setgid, sticky).
     let extra_mode: u32 = 0o7000;
@@ -964,26 +1048,31 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
 
     // Check if any special mode bits are set in the specified mode,
     // source file mode, or destination file mode.
-    if b.specified_mode.unwrap_or(0) & extra_mode != 0
+    if b.mode() & extra_mode != 0
         || from_meta.mode() & extra_mode != 0
         || to_meta.mode() & extra_mode != 0
     {
-        return Ok(true);
+        return true;
     }
 
     // Check if the mode of the destination file differs from the specified mode.
     if b.mode() != to_meta.mode() & all_modes {
-        return Ok(true);
+        return true;
     }
 
     // Check if either the source or destination is not a file.
     if !from_meta.is_file() || !to_meta.is_file() {
-        return Ok(true);
+        return true;
     }
 
     // Check if the file sizes differ.
     if from_meta.len() != to_meta.len() {
-        return Ok(true);
+        return true;
+    }
+
+    #[cfg(feature = "selinux")]
+    if b.preserve_context && contexts_differ(from, to) {
+        return true;
     }
 
     // TODO: if -P (#1809) and from/to contexts mismatch, return true.
@@ -991,28 +1080,33 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
     // Check if the owner ID is specified and differs from the destination file's owner.
     if let Some(owner_id) = b.owner_id {
         if owner_id != to_meta.uid() {
-            return Ok(true);
+            return true;
         }
     }
 
     // Check if the group ID is specified and differs from the destination file's group.
     if let Some(group_id) = b.group_id {
         if group_id != to_meta.gid() {
-            return Ok(true);
+            return true;
         }
-    } else {
-        #[cfg(not(target_os = "windows"))]
-        // Check if the destination file's owner or group
-        // differs from the effective user/group ID of the process.
-        if to_meta.uid() != geteuid() || to_meta.gid() != getegid() {
-            return Ok(true);
-        }
+    } else if needs_copy_for_ownership(to, &to_meta) {
+        return true;
     }
 
     // Check if the contents of the source and destination files differ.
-    if !diff(from.to_str().unwrap(), to.to_str().unwrap()) {
-        return Ok(true);
+    if !diff(&from.to_string_lossy(), &to.to_string_lossy()) {
+        return true;
     }
 
-    Ok(false)
+    false
+}
+
+#[cfg(feature = "selinux")]
+fn set_selinux_context(path: &Path, behavior: &Behavior) -> UResult<()> {
+    if !behavior.preserve_context && behavior.context.is_some() {
+        // Use the provided context set by -Z/--context
+        set_selinux_security_context(path, behavior.context.as_ref())
+            .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
+    }
+    Ok(())
 }

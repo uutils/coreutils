@@ -12,27 +12,24 @@ use blocks::HumanReadable;
 use clap::builder::ValueParser;
 use table::HeaderMode;
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult, USimpleError};
+use uucore::error::{UError, UResult, USimpleError, get_exit_code};
 use uucore::fsext::{MountInfo, read_fs_list};
-use uucore::parse_size::ParseSizeError;
-use uucore::{format_usage, help_about, help_section, help_usage, show};
+use uucore::parser::parse_size::ParseSizeError;
+use uucore::translate;
+use uucore::{format_usage, show};
 
 use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 
-use std::error::Error;
 use std::ffi::OsString;
-use std::fmt;
+use std::io::stdout;
 use std::path::Path;
+use thiserror::Error;
 
 use crate::blocks::{BlockSize, read_block_size};
 use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
 use crate::filesystem::FsError;
 use crate::table::Table;
-
-const ABOUT: &str = help_about!("df.md");
-const USAGE: &str = help_usage!("df.md");
-const AFTER_HELP: &str = help_section!("after help", "df.md");
 
 static OPT_HELP: &str = "help";
 static OPT_ALL: &str = "all";
@@ -114,50 +111,33 @@ impl Default for Options {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum OptionsError {
+    // TODO This needs to vary based on whether `--block-size`
+    // or `-B` were provided.
+    #[error("{}", translate!("df-error-block-size-too-large", "size" => .0.clone()))]
     BlockSizeTooLarge(String),
+    // TODO This needs to vary based on whether `--block-size`
+    // or `-B` were provided.,
+    #[error("{}", translate!("df-error-invalid-block-size", "size" => .0.clone()))]
     InvalidBlockSize(String),
+    // TODO This needs to vary based on whether `--block-size`
+    // or `-B` were provided.
+    #[error("{}", translate!("df-error-invalid-suffix", "size" => .0.clone()))]
     InvalidSuffix(String),
 
     /// An error getting the columns to display in the output table.
+    #[error("{}", translate!("df-error-field-used-more-than-once", "field" => format!("{}", .0)))]
     ColumnError(ColumnError),
 
+    #[error(
+        "{}",
+        .0.iter()
+            .map(|t| translate!("df-error-filesystem-type-both-selected-and-excluded", "type" => t.quote()))
+            .collect::<Vec<_>>()
+            .join(format!("\n{}: ", uucore::util_name()).as_str())
+    )]
     FilesystemTypeBothSelectedAndExcluded(Vec<String>),
-}
-
-impl fmt::Display for OptionsError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            // TODO This needs to vary based on whether `--block-size`
-            // or `-B` were provided.
-            Self::BlockSizeTooLarge(s) => {
-                write!(f, "--block-size argument {} too large", s.quote())
-            }
-            // TODO This needs to vary based on whether `--block-size`
-            // or `-B` were provided.
-            Self::InvalidBlockSize(s) => write!(f, "invalid --block-size argument {s}"),
-            // TODO This needs to vary based on whether `--block-size`
-            // or `-B` were provided.
-            Self::InvalidSuffix(s) => write!(f, "invalid suffix in --block-size argument {s}"),
-            Self::ColumnError(ColumnError::MultipleColumns(s)) => write!(
-                f,
-                "option --output: field {} used more than once",
-                s.quote()
-            ),
-            #[allow(clippy::print_in_format_impl)]
-            Self::FilesystemTypeBothSelectedAndExcluded(types) => {
-                for t in types {
-                    eprintln!(
-                        "{}: file system type {} both selected and excluded",
-                        uucore::util_name(),
-                        t.quote()
-                    );
-                }
-                Ok(())
-            }
-        }
-    }
 }
 
 impl Options {
@@ -243,7 +223,10 @@ fn is_included(mi: &MountInfo, opt: &Options) -> bool {
     }
 
     // Don't show pseudo filesystems unless `--all` has been given.
-    if mi.dummy && !opt.show_all_fs {
+    // The "lofs" filesystem is a loopback
+    // filesystem present on Solaris and FreeBSD systems. It
+    // is similar to a symbolic link.
+    if (mi.dummy || mi.fs_type == "lofs") && !opt.show_all_fs {
         return false;
     }
 
@@ -306,28 +289,6 @@ fn is_best(previous: &[MountInfo], mi: &MountInfo) -> bool {
     true
 }
 
-/// Keep only the specified subset of [`MountInfo`] instances.
-///
-/// The `opt` argument specifies a variety of ways of excluding
-/// [`MountInfo`] instances; see [`Options`] for more information.
-///
-/// Finally, if there are duplicate entries, the one with the shorter
-/// path is kept.
-fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
-    let mut result = vec![];
-    for mi in vmi {
-        // TODO The running time of the `is_best()` function is linear
-        // in the length of `result`. That makes the running time of
-        // this loop quadratic in the length of `vmi`. This could be
-        // improved by a more efficient implementation of `is_best()`,
-        // but `vmi` is probably not very long in practice.
-        if is_included(&mi, opt) && is_best(&result, &mi) {
-            result.push(mi);
-        }
-    }
-    result
-}
-
 /// Get all currently mounted filesystems.
 ///
 /// `opt` excludes certain filesystems from consideration and allows for the synchronization of filesystems before running; see
@@ -344,11 +305,28 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
         }
     }
 
-    // The list of all mounted filesystems.
-    //
-    // Filesystems excluded by the command-line options are
-    // not considered.
-    let mounts: Vec<MountInfo> = filter_mount_list(read_fs_list()?, opt);
+    let mut mounts = vec![];
+    for mut mi in read_fs_list()? {
+        // TODO The running time of the `is_best()` function is linear
+        // in the length of `result`. That makes the running time of
+        // this loop quadratic in the length of `vmi`. This could be
+        // improved by a more efficient implementation of `is_best()`,
+        // but `vmi` is probably not very long in practice.
+        if is_included(&mi, opt) && is_best(&mounts, &mi) {
+            let dev_path: &Path = Path::new(&mi.dev_name);
+            if dev_path.is_symlink() {
+                if let Ok(canonicalized_symlink) = uucore::fs::canonicalize(
+                    dev_path,
+                    uucore::fs::MissingHandling::Existing,
+                    uucore::fs::ResolveMode::Logical,
+                ) {
+                    mi.dev_name = canonicalized_symlink.to_string_lossy().to_string();
+                }
+            }
+
+            mounts.push(mi);
+        }
+    }
 
     // Convert each `MountInfo` into a `Filesystem`, which contains
     // both the mount information and usage information.
@@ -379,60 +357,57 @@ where
     P: AsRef<Path>,
 {
     // The list of all mounted filesystems.
-    //
-    // Filesystems marked as `dummy` or of type "lofs" are not
-    // considered. The "lofs" filesystem is a loopback
-    // filesystem present on Solaris and FreeBSD systems. It
-    // is similar to a symbolic link.
-    let mounts: Vec<MountInfo> = filter_mount_list(read_fs_list()?, opt)
-        .into_iter()
-        .filter(|mi| mi.fs_type != "lofs" && !mi.dummy)
-        .collect();
+    let mounts: Vec<MountInfo> = read_fs_list()?;
 
     let mut result = vec![];
-
-    // this happens if the file system type doesn't exist
-    if mounts.is_empty() {
-        show!(USimpleError::new(1, "no file systems processed"));
-        return Ok(result);
-    }
 
     // Convert each path into a `Filesystem`, which contains
     // both the mount information and usage information.
     for path in paths {
         match Filesystem::from_path(&mounts, path) {
-            Ok(fs) => result.push(fs),
+            Ok(fs) => {
+                if is_included(&fs.mount_info, opt) {
+                    result.push(fs);
+                }
+            }
             Err(FsError::InvalidPath) => {
                 show!(USimpleError::new(
                     1,
-                    format!("{}: No such file or directory", path.as_ref().display())
+                    translate!("df-error-no-such-file-or-directory", "path" => path.as_ref().display())
                 ));
             }
             Err(FsError::MountMissing) => {
-                show!(USimpleError::new(1, "no file systems processed"));
+                show!(USimpleError::new(
+                    1,
+                    translate!("df-error-no-file-systems-processed")
+                ));
             }
             #[cfg(not(windows))]
             Err(FsError::OverMounted) => {
                 show!(USimpleError::new(
                     1,
-                    format!(
-                        "cannot access {}: over-mounted by another device",
-                        path.as_ref().quote()
-                    )
+                    translate!("df-error-cannot-access-over-mounted", "path" => path.as_ref().quote())
                 ));
             }
         }
     }
+    if get_exit_code() == 0 && result.is_empty() {
+        show!(USimpleError::new(
+            1,
+            translate!("df-error-no-file-systems-processed")
+        ));
+        return Ok(result);
+    }
+
     Ok(result)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum DfError {
     /// A problem while parsing command-line options.
+    #[error("{}", .0)]
     OptionsError(OptionsError),
 }
-
-impl Error for DfError {}
 
 impl UError for DfError {
     fn usage(&self) -> bool {
@@ -440,37 +415,35 @@ impl UError for DfError {
     }
 }
 
-impl fmt::Display for DfError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::OptionsError(e) => e.fmt(f),
-        }
-    }
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     #[cfg(windows)]
     {
         if matches.get_flag(OPT_INODES) {
-            println!("{}: doesn't support -i option", uucore::util_name());
+            println!(
+                "{}",
+                translate!("df-error-inodes-not-supported-windows", "program" => uucore::util_name())
+            );
             return Ok(());
         }
     }
 
     let opt = Options::from(&matches).map_err(DfError::OptionsError)?;
     // Get the list of filesystems to display in the output table.
-    let filesystems: Vec<Filesystem> = match matches.get_many::<String>(OPT_PATHS) {
+    let filesystems: Vec<Filesystem> = match matches.get_many::<OsString>(OPT_PATHS) {
         None => {
             let filesystems = get_all_filesystems(&opt).map_err(|e| {
-                let context = "cannot read table of mounted file systems";
+                let context = translate!("df-error-cannot-read-table-of-mounted-filesystems");
                 USimpleError::new(e.code(), format!("{context}: {e}"))
             })?;
 
             if filesystems.is_empty() {
-                return Err(USimpleError::new(1, "no file systems processed"));
+                return Err(USimpleError::new(
+                    1,
+                    translate!("df-error-no-file-systems-processed"),
+                ));
             }
 
             filesystems
@@ -478,7 +451,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(paths) => {
             let paths: Vec<_> = paths.collect();
             let filesystems = get_named_filesystems(&paths, &opt).map_err(|e| {
-                let context = "cannot read table of mounted file systems";
+                let context = translate!("df-error-cannot-read-table-of-mounted-filesystems");
                 USimpleError::new(e.code(), format!("{context}: {e}"))
             })?;
 
@@ -492,7 +465,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    println!("{}", Table::new(&opt, filesystems));
+    Table::new(&opt, filesystems).write_to(&mut stdout())?;
 
     Ok(())
 }
@@ -500,15 +473,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("df-about"))
+        .override_usage(format_usage(&translate!("df-usage")))
+        .after_help(translate!("df-after-help"))
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(
             Arg::new(OPT_HELP)
                 .long(OPT_HELP)
-                .help("Print help information.")
+                .help(translate!("df-help-print-help"))
                 .action(ArgAction::Help),
         )
         .arg(
@@ -516,7 +490,7 @@ pub fn uu_app() -> Command {
                 .short('a')
                 .long("all")
                 .overrides_with(OPT_ALL)
-                .help("include dummy file systems")
+                .help(translate!("df-help-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -525,16 +499,13 @@ pub fn uu_app() -> Command {
                 .long("block-size")
                 .value_name("SIZE")
                 .overrides_with_all([OPT_KILO, OPT_BLOCKSIZE])
-                .help(
-                    "scale sizes by SIZE before printing them; e.g.\
-                    '-BM' prints sizes in units of 1,048,576 bytes",
-                ),
+                .help(translate!("df-help-block-size")),
         )
         .arg(
             Arg::new(OPT_TOTAL)
                 .long("total")
                 .overrides_with(OPT_TOTAL)
-                .help("produce a grand total")
+                .help(translate!("df-help-total"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -542,7 +513,7 @@ pub fn uu_app() -> Command {
                 .short('h')
                 .long("human-readable")
                 .overrides_with_all([OPT_HUMAN_READABLE_DECIMAL, OPT_HUMAN_READABLE_BINARY])
-                .help("print sizes in human readable format (e.g., 1K 234M 2G)")
+                .help(translate!("df-help-human-readable"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -550,7 +521,7 @@ pub fn uu_app() -> Command {
                 .short('H')
                 .long("si")
                 .overrides_with_all([OPT_HUMAN_READABLE_BINARY, OPT_HUMAN_READABLE_DECIMAL])
-                .help("likewise, but use powers of 1000 not 1024")
+                .help(translate!("df-help-si"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -558,13 +529,13 @@ pub fn uu_app() -> Command {
                 .short('i')
                 .long("inodes")
                 .overrides_with(OPT_INODES)
-                .help("list inode information instead of block usage")
+                .help(translate!("df-help-inodes"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_KILO)
                 .short('k')
-                .help("like --block-size=1K")
+                .help(translate!("df-help-kilo"))
                 .overrides_with_all([OPT_BLOCKSIZE, OPT_KILO])
                 .action(ArgAction::SetTrue),
         )
@@ -573,14 +544,14 @@ pub fn uu_app() -> Command {
                 .short('l')
                 .long("local")
                 .overrides_with(OPT_LOCAL)
-                .help("limit listing to local file systems")
+                .help(translate!("df-help-local"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_NO_SYNC)
                 .long("no-sync")
                 .overrides_with_all([OPT_SYNC, OPT_NO_SYNC])
-                .help("do not invoke sync before getting usage info (default)")
+                .help(translate!("df-help-no-sync"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -595,24 +566,21 @@ pub fn uu_app() -> Command {
                 .default_missing_values(OUTPUT_FIELD_LIST)
                 .default_values(["source", "size", "used", "avail", "pcent", "target"])
                 .conflicts_with_all([OPT_INODES, OPT_PORTABILITY, OPT_PRINT_TYPE])
-                .help(
-                    "use the output format defined by FIELD_LIST, \
-                     or print all fields if FIELD_LIST is omitted.",
-                ),
+                .help(translate!("df-help-output")),
         )
         .arg(
             Arg::new(OPT_PORTABILITY)
                 .short('P')
                 .long("portability")
                 .overrides_with(OPT_PORTABILITY)
-                .help("use the POSIX output format")
+                .help(translate!("df-help-portability"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_SYNC)
                 .long("sync")
                 .overrides_with_all([OPT_NO_SYNC, OPT_SYNC])
-                .help("invoke sync before getting usage info (non-windows only)")
+                .help(translate!("df-help-sync"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -622,14 +590,14 @@ pub fn uu_app() -> Command {
                 .value_parser(ValueParser::os_string())
                 .value_name("TYPE")
                 .action(ArgAction::Append)
-                .help("limit listing to file systems of type TYPE"),
+                .help(translate!("df-help-type")),
         )
         .arg(
             Arg::new(OPT_PRINT_TYPE)
                 .short('T')
                 .long("print-type")
                 .overrides_with(OPT_PRINT_TYPE)
-                .help("print file system type")
+                .help(translate!("df-help-print-type"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -640,11 +608,12 @@ pub fn uu_app() -> Command {
                 .value_parser(ValueParser::os_string())
                 .value_name("TYPE")
                 .use_value_delimiter(true)
-                .help("limit listing to file systems not of type TYPE"),
+                .help(translate!("df-help-exclude-type")),
         )
         .arg(
             Arg::new(OPT_PATHS)
                 .action(ArgAction::Append)
+                .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }
@@ -663,9 +632,9 @@ mod tests {
                 dev_id: String::new(),
                 dev_name: String::from(dev_name),
                 fs_type: String::new(),
-                mount_dir: String::from(mount_dir),
+                mount_dir: mount_dir.into(),
                 mount_option: String::new(),
-                mount_root: String::from(mount_root),
+                mount_root: mount_root.into(),
                 remote: false,
                 dummy: false,
             }
@@ -713,9 +682,9 @@ mod tests {
                 dev_id: String::from(dev_id),
                 dev_name: String::new(),
                 fs_type: String::new(),
-                mount_dir: String::from(mount_dir),
+                mount_dir: mount_dir.into(),
                 mount_option: String::new(),
-                mount_root: String::new(),
+                mount_root: "/".into(),
                 remote: false,
                 dummy: false,
             }
@@ -731,7 +700,7 @@ mod tests {
         fn test_different_dev_id() {
             let m1 = mount_info("0", "/mnt/bar");
             let m2 = mount_info("1", "/mnt/bar");
-            assert!(is_best(&[m1.clone()], &m2));
+            assert!(is_best(std::slice::from_ref(&m1), &m2));
             assert!(is_best(&[m2], &m1));
         }
 
@@ -742,7 +711,7 @@ mod tests {
             // one condition in this test.
             let m1 = mount_info("0", "/mnt/bar");
             let m2 = mount_info("0", "/mnt/bar/baz");
-            assert!(!is_best(&[m1.clone()], &m2));
+            assert!(!is_best(std::slice::from_ref(&m1), &m2));
             assert!(is_best(&[m2], &m1));
         }
     }
@@ -758,9 +727,9 @@ mod tests {
                 dev_id: String::new(),
                 dev_name: String::new(),
                 fs_type: String::from(fs_type),
-                mount_dir: String::from(mount_dir),
+                mount_dir: mount_dir.into(),
                 mount_option: String::new(),
-                mount_root: String::new(),
+                mount_root: "/".into(),
                 remote,
                 dummy,
             }
@@ -881,18 +850,6 @@ mod tests {
             };
             let m = mount_info("ext4", "/mnt/foo", false, false);
             assert!(is_included(&m, &opt));
-        }
-    }
-
-    mod filter_mount_list {
-
-        use crate::{Options, filter_mount_list};
-
-        #[test]
-        fn test_empty() {
-            let opt = Options::default();
-            let mount_infos = vec![];
-            assert!(filter_mount_list(mount_infos, &opt).is_empty());
         }
     }
 }

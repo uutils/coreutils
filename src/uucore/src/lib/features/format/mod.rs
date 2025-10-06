@@ -33,14 +33,16 @@
 
 mod argument;
 mod escape;
-pub mod extendedbigdecimal;
 pub mod human;
 pub mod num_format;
-pub mod num_parser;
 mod spec;
 
-pub use argument::*;
-pub use extendedbigdecimal::ExtendedBigDecimal;
+pub use self::escape::{EscapedChar, OctalParsing};
+use crate::extendedbigdecimal::ExtendedBigDecimal;
+pub use argument::{FormatArgument, FormatArguments};
+
+use self::{escape::parse_escape_code, num_format::Formatter};
+use crate::{NonUtf8OsStrError, error::UError};
 pub use spec::Spec;
 use std::{
     error::Error,
@@ -51,13 +53,6 @@ use std::{
 };
 
 use os_display::Quotable;
-
-use crate::error::UError;
-
-pub use self::{
-    escape::{EscapedChar, OctalParsing, parse_escape_code},
-    num_format::Formatter,
-};
 
 #[derive(Debug)]
 pub enum FormatError {
@@ -73,6 +68,10 @@ pub enum FormatError {
     EndsWithPercent(Vec<u8>),
     /// The escape sequence `\x` appears without a literal hexadecimal value.
     MissingHex,
+    /// The hexadecimal characters represent a code point that cannot represent a
+    /// Unicode character (e.g., a surrogate code point)
+    InvalidCharacter(char, Vec<u8>),
+    InvalidEncoding(NonUtf8OsStrError),
 }
 
 impl Error for FormatError {}
@@ -81,6 +80,12 @@ impl UError for FormatError {}
 impl From<std::io::Error> for FormatError {
     fn from(value: std::io::Error) -> Self {
         Self::IoError(value)
+    }
+}
+
+impl From<NonUtf8OsStrError> for FormatError {
+    fn from(value: NonUtf8OsStrError) -> FormatError {
+        FormatError::InvalidEncoding(value)
     }
 }
 
@@ -112,6 +117,12 @@ impl Display for FormatError {
             Self::NoMoreArguments => write!(f, "no more arguments"),
             Self::InvalidArgument(_) => write!(f, "invalid argument"),
             Self::MissingHex => write!(f, "missing hexadecimal number in escape"),
+            Self::InvalidCharacter(escape_char, digits) => write!(
+                f,
+                "invalid universal character name \\{escape_char}{}",
+                String::from_utf8_lossy(digits)
+            ),
+            Self::InvalidEncoding(no) => no.fmt(f),
         }
     }
 }
@@ -154,10 +165,10 @@ impl FormatChar for EscapedChar {
 }
 
 impl<C: FormatChar> FormatItem<C> {
-    pub fn write<'a>(
+    pub fn write(
         &self,
         writer: impl Write,
-        args: &mut impl Iterator<Item = &'a FormatArgument>,
+        args: &mut FormatArguments,
     ) -> Result<ControlFlow<()>, FormatError> {
         match self {
             Self::Spec(spec) => spec.write(writer, args)?,
@@ -188,12 +199,7 @@ pub fn parse_spec_and_escape(
         }
         [b'\\', rest @ ..] => {
             current = rest;
-            Some(
-                match parse_escape_code(&mut current, OctalParsing::default()) {
-                    Ok(c) => Ok(FormatItem::Char(c)),
-                    Err(_) => Err(FormatError::MissingHex),
-                },
-            )
+            Some(parse_escape_code(&mut current, OctalParsing::default()).map(FormatItem::Char))
         }
         [c, rest @ ..] => {
             current = rest;
@@ -278,9 +284,12 @@ fn printf_writer<'a>(
     format_string: impl AsRef<[u8]>,
     args: impl IntoIterator<Item = &'a FormatArgument>,
 ) -> Result<(), FormatError> {
-    let mut args = args.into_iter();
+    let args = args.into_iter().cloned().collect::<Vec<_>>();
+    let mut args = FormatArguments::new(&args);
     for item in parse_spec_only(format_string.as_ref()) {
-        item?.write(&mut writer, &mut args)?;
+        if item?.write(&mut writer, &mut args)?.is_break() {
+            break;
+        }
     }
     Ok(())
 }

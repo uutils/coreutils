@@ -6,17 +6,17 @@
 // spell-checker:ignore (ToDO) delim mkdelim pairable
 
 use std::cmp::Ordering;
+use std::ffi::OsString;
 use std::fs::{File, metadata};
 use std::io::{self, BufRead, BufReader, Read, Stdin, stdin};
+use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::format_usage;
 use uucore::fs::paths_refer_to_same_file;
 use uucore::line_ending::LineEnding;
-use uucore::{format_usage, help_about, help_usage};
+use uucore::translate;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-
-const ABOUT: &str = help_about!("comm.md");
-const USAGE: &str = help_usage!("comm.md");
 
 mod options {
     pub const COLUMN_1: &str = "1";
@@ -101,11 +101,11 @@ impl OrderChecker {
             return true;
         }
 
-        let is_ordered = current_line >= &self.last_line;
+        let is_ordered = *current_line >= *self.last_line;
         if !is_ordered && !self.has_error {
             eprintln!(
-                "comm: file {} is not in sorted order",
-                self.file_num.as_str()
+                "{}",
+                translate!("comm-error-file-not-sorted", "file_num" => self.file_num.as_str())
             );
             self.has_error = true;
         }
@@ -116,10 +116,10 @@ impl OrderChecker {
 }
 
 // Check if two files are identical by comparing their contents
-pub fn are_files_identical(path1: &str, path2: &str) -> io::Result<bool> {
+pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
     // First compare file sizes
-    let metadata1 = std::fs::metadata(path1)?;
-    let metadata2 = std::fs::metadata(path2)?;
+    let metadata1 = metadata(path1)?;
+    let metadata2 = metadata(path2)?;
 
     if metadata1.len() != metadata2.len() {
         return Ok(false);
@@ -175,11 +175,11 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
     let should_check_order = !no_check_order
         && (check_order
             || if let (Some(file1), Some(file2)) = (
-                opts.get_one::<String>(options::FILE_1),
-                opts.get_one::<String>(options::FILE_2),
+                opts.get_one::<OsString>(options::FILE_1),
+                opts.get_one::<OsString>(options::FILE_2),
             ) {
-                !(paths_refer_to_same_file(file1, file2, true)
-                    || are_files_identical(file1, file2).unwrap_or(false))
+                !(paths_refer_to_same_file(file1.as_os_str(), file2.as_os_str(), true)
+                    || are_files_identical(Path::new(file1), Path::new(file2)).unwrap_or(false))
             } else {
                 true
             });
@@ -248,13 +248,16 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
 
     if opts.get_flag(options::TOTAL) {
         let line_ending = LineEnding::from_zero_flag(opts.get_flag(options::ZERO_TERMINATED));
-        print!("{total_col_1}{delim}{total_col_2}{delim}{total_col_3}{delim}total{line_ending}");
+        print!(
+            "{total_col_1}{delim}{total_col_2}{delim}{total_col_3}{delim}{}{line_ending}",
+            translate!("comm-total")
+        );
     }
 
     if should_check_order && (checker1.has_error || checker2.has_error) {
         // Print the input error message once at the end
         if input_error {
-            eprintln!("comm: input is not in sorted order");
+            eprintln!("{}", translate!("comm-error-input-not-sorted"));
         }
         Err(USimpleError::new(1, ""))
     } else {
@@ -262,12 +265,12 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
     }
 }
 
-fn open_file(name: &str, line_ending: LineEnding) -> io::Result<LineReader> {
+fn open_file(name: &OsString, line_ending: LineEnding) -> io::Result<LineReader> {
     if name == "-" {
         Ok(LineReader::new(Input::Stdin(stdin()), line_ending))
     } else {
         if metadata(name)?.is_dir() {
-            return Err(io::Error::new(io::ErrorKind::Other, "Is a directory"));
+            return Err(io::Error::other(translate!("comm-error-is-directory")));
         }
         let f = File::open(name)?;
         Ok(LineReader::new(
@@ -279,12 +282,14 @@ fn open_file(name: &str, line_ending: LineEnding) -> io::Result<LineReader> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
-    let filename1 = matches.get_one::<String>(options::FILE_1).unwrap();
-    let filename2 = matches.get_one::<String>(options::FILE_2).unwrap();
-    let mut f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string())?;
-    let mut f2 = open_file(filename2, line_ending).map_err_context(|| filename2.to_string())?;
+    let filename1 = matches.get_one::<OsString>(options::FILE_1).unwrap();
+    let filename2 = matches.get_one::<OsString>(options::FILE_2).unwrap();
+    let mut f1 = open_file(filename1, line_ending)
+        .map_err_context(|| filename1.to_string_lossy().to_string())?;
+    let mut f2 = open_file(filename2, line_ending)
+        .map_err_context(|| filename2.to_string_lossy().to_string())?;
 
     // Due to default_value(), there must be at least one value here, thus unwrap() must not panic.
     let all_delimiters = matches
@@ -299,7 +304,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // Note: This intentionally deviate from the GNU error message by inserting the word "conflicting".
             return Err(USimpleError::new(
                 1,
-                "multiple conflicting output delimiters specified",
+                translate!("comm-error-multiple-conflicting-delimiters"),
             ));
         }
     }
@@ -314,32 +319,33 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("comm-about"))
+        .override_usage(format_usage(&translate!("comm-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
             Arg::new(options::COLUMN_1)
                 .short('1')
-                .help("suppress column 1 (lines unique to FILE1)")
+                .help(translate!("comm-help-column-1"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COLUMN_2)
                 .short('2')
-                .help("suppress column 2 (lines unique to FILE2)")
+                .help(translate!("comm-help-column-2"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COLUMN_3)
                 .short('3')
-                .help("suppress column 3 (lines that appear in both files)")
+                .help(translate!("comm-help-column-3"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DELIMITER)
                 .long(options::DELIMITER)
-                .help("separate columns with STR")
+                .help(translate!("comm-help-delimiter"))
                 .value_name("STR")
                 .default_value(options::DELIMITER_DEFAULT)
                 .allow_hyphen_values(true)
@@ -351,35 +357,37 @@ pub fn uu_app() -> Command {
                 .long(options::ZERO_TERMINATED)
                 .short('z')
                 .overrides_with(options::ZERO_TERMINATED)
-                .help("line delimiter is NUL, not newline")
+                .help(translate!("comm-help-zero-terminated"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILE_1)
                 .required(true)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::FILE_2)
                 .required(true)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::TOTAL)
                 .long(options::TOTAL)
-                .help("output a summary")
+                .help(translate!("comm-help-total"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CHECK_ORDER)
                 .long(options::CHECK_ORDER)
-                .help("check that the input is correctly sorted, even if all input lines are pairable")
+                .help(translate!("comm-help-check-order"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_CHECK_ORDER)
                 .long(options::NO_CHECK_ORDER)
-                .help("do not check that the input is correctly sorted")
+                .help(translate!("comm-help-no-check-order"))
                 .action(ArgAction::SetTrue)
                 .conflicts_with(options::CHECK_ORDER),
         )

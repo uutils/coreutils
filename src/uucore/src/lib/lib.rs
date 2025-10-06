@@ -5,7 +5,7 @@
 //! library ~ (core/bundler file)
 // #![deny(missing_docs)] //TODO: enable this
 //
-// spell-checker:ignore sigaction SIGBUS SIGSEGV
+// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil logind
 
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
@@ -18,44 +18,48 @@ pub extern crate windows_sys;
 mod features; // feature-gated code modules
 mod macros; // crate macros (macro_rules-type; exported to `crate::...`)
 mod mods; // core cross-platform modules
-mod parser; // string parsing modules
 
 pub use uucore_procs::*;
 
 // * cross-platform modules
+pub use crate::mods::clap_localization;
 pub use crate::mods::display;
 pub use crate::mods::error;
+#[cfg(feature = "fs")]
 pub use crate::mods::io;
 pub use crate::mods::line_ending;
+pub use crate::mods::locale;
 pub use crate::mods::os;
 pub use crate::mods::panic;
 pub use crate::mods::posix;
 
-// * string parsing modules
-pub use crate::parser::parse_glob;
-pub use crate::parser::parse_size;
-pub use crate::parser::parse_time;
-pub use crate::parser::shortcut_value_parser;
-
 // * feature-gated modules
 #[cfg(feature = "backup-control")]
 pub use crate::features::backup_control;
+#[cfg(feature = "benchmark")]
+pub use crate::features::benchmark;
 #[cfg(feature = "buf-copy")]
 pub use crate::features::buf_copy;
 #[cfg(feature = "checksum")]
 pub use crate::features::checksum;
 #[cfg(feature = "colors")]
 pub use crate::features::colors;
-#[cfg(feature = "custom-tz-fmt")]
-pub use crate::features::custom_tz_fmt;
 #[cfg(feature = "encoding")]
 pub use crate::features::encoding;
+#[cfg(feature = "extendedbigdecimal")]
+pub use crate::features::extendedbigdecimal;
+#[cfg(feature = "fast-inc")]
+pub use crate::features::fast_inc;
 #[cfg(feature = "format")]
 pub use crate::features::format;
 #[cfg(feature = "fs")]
 pub use crate::features::fs;
+#[cfg(feature = "i18n-common")]
+pub use crate::features::i18n;
 #[cfg(feature = "lines")]
 pub use crate::features::lines;
+#[cfg(feature = "parser")]
+pub use crate::features::parser;
 #[cfg(feature = "quoting-style")]
 pub use crate::features::quoting_style;
 #[cfg(feature = "ranges")]
@@ -64,6 +68,10 @@ pub use crate::features::ranges;
 pub use crate::features::ringbuffer;
 #[cfg(feature = "sum")]
 pub use crate::features::sum;
+#[cfg(feature = "feat_systemd_logind")]
+pub use crate::features::systemd_logind;
+#[cfg(feature = "time")]
+pub use crate::features::time;
 #[cfg(feature = "update-control")]
 pub use crate::features::update_control;
 #[cfg(feature = "uptime")]
@@ -84,6 +92,8 @@ pub use crate::features::perms;
 pub use crate::features::pipes;
 #[cfg(all(unix, feature = "process"))]
 pub use crate::features::process;
+#[cfg(target_os = "linux")]
+pub use crate::features::safe_traversal;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
 pub use crate::features::signals;
 #[cfg(all(
@@ -92,7 +102,6 @@ pub use crate::features::signals;
     not(target_os = "fuchsia"),
     not(target_os = "openbsd"),
     not(target_os = "redox"),
-    not(target_env = "musl"),
     feature = "utmpx"
 ))]
 pub use crate::features::utmpx;
@@ -105,6 +114,9 @@ pub use crate::features::fsext;
 
 #[cfg(all(unix, feature = "fsxattr"))]
 pub use crate::features::fsxattr;
+
+#[cfg(all(target_os = "linux", feature = "selinux"))]
+pub use crate::features::selinux;
 
 //## core functions
 
@@ -121,6 +133,7 @@ use std::iter;
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::str;
+use std::str::Utf8Chunk;
 use std::sync::{LazyLock, atomic::Ordering};
 
 /// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
@@ -142,6 +155,25 @@ pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
     Ok(())
 }
 
+pub fn get_canonical_util_name(util_name: &str) -> &str {
+    // remove the "uu_" prefix
+    let util_name = &util_name[3..];
+    match util_name {
+        // uu_test aliases - '[' is an alias for test
+        "[" => "test",
+
+        // hashsum aliases - all these hash commands are aliases for hashsum
+        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum"
+        | "sha3sum" | "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum"
+        | "shake128sum" | "shake256sum" | "b2sum" | "b3sum" => "hashsum",
+
+        "dir" => "ls", // dir is an alias for ls
+
+        // Default case - return the util name as is
+        _ => util_name,
+    }
+}
+
 /// Execute utility code for `util`.
 ///
 /// This macro expands to a main function that invokes the `uumain` function in `util`
@@ -151,13 +183,26 @@ macro_rules! bin {
     ($util:ident) => {
         pub fn main() {
             use std::io::Write;
+            use uucore::locale;
             // suppress extraneous error output for SIGPIPE failures/panics
             uucore::panic::mute_sigpipe_panic();
+            locale::setup_localization(uucore::get_canonical_util_name(stringify!($util)))
+                .unwrap_or_else(|err| {
+                    match err {
+                        uucore::locale::LocalizationError::ParseResource {
+                            error: err_msg,
+                            snippet,
+                        } => eprintln!("Localization parse error at {snippet}: {err_msg:?}"),
+                        other => eprintln!("Could not init the localization system: {other}"),
+                    }
+                    std::process::exit(99)
+                });
+
             // execute utility code
             let code = $util::uumain(uucore::args_os());
             // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
             if let Err(e) = std::io::stdout().flush() {
-                eprintln!("Error flushing stdout: {}", e);
+                eprintln!("Error flushing stdout: {e}");
             }
 
             std::process::exit(code);
@@ -169,18 +214,10 @@ macro_rules! bin {
 ///
 /// The generated string has the format `(<project name>) <version>`, for
 /// example: "(uutils coreutils) 0.30.0". clap will then prefix it with the util name.
-///
-/// To use this macro, you have to add `PROJECT_NAME_FOR_VERSION_STRING = "<project name>"` to the
-/// `[env]` section in `.cargo/config.toml`.
 #[macro_export]
 macro_rules! crate_version {
     () => {
-        concat!(
-            "(",
-            env!("PROJECT_NAME_FOR_VERSION_STRING"),
-            ") ",
-            env!("CARGO_PKG_VERSION")
-        )
+        concat!("(uutils coreutils) ", env!("CARGO_PKG_VERSION"))
     };
 }
 
@@ -194,6 +231,80 @@ macro_rules! crate_version {
 pub fn format_usage(s: &str) -> String {
     let s = s.replace('\n', &format!("\n{}", " ".repeat(7)));
     s.replace("{}", crate::execution_phrase())
+}
+
+/// Creates a localized help template for clap commands.
+///
+/// This function returns a help template that uses the localized
+/// "Usage:" label from the translation files. This ensures consistent
+/// localization across all utilities.
+///
+/// Note: We avoid using clap's `{usage-heading}` placeholder because it is
+/// hardcoded to "Usage:" and cannot be localized. Instead, we manually
+/// construct the usage line with the localized label.
+///
+/// # Parameters
+/// - `util_name`: The name of the utility (for localization setup)
+///
+/// # Example
+/// ```no_run
+/// use clap::Command;
+/// use uucore::localized_help_template;
+///
+/// let app = Command::new("myutil")
+///     .help_template(localized_help_template("myutil"));
+/// ```
+pub fn localized_help_template(util_name: &str) -> clap::builder::StyledStr {
+    use std::io::IsTerminal;
+
+    // Determine if colors should be enabled - same logic as configure_localized_command
+    let colors_enabled = if std::env::var("NO_COLOR").is_ok() {
+        false
+    } else if std::env::var("CLICOLOR_FORCE").is_ok() || std::env::var("FORCE_COLOR").is_ok() {
+        true
+    } else {
+        IsTerminal::is_terminal(&std::io::stdout())
+            && std::env::var("TERM").unwrap_or_default() != "dumb"
+    };
+
+    localized_help_template_with_colors(util_name, colors_enabled)
+}
+
+/// Create a localized help template with explicit color control
+/// This ensures color detection consistency between clap and our template
+pub fn localized_help_template_with_colors(
+    util_name: &str,
+    colors_enabled: bool,
+) -> clap::builder::StyledStr {
+    use std::fmt::Write;
+
+    // Ensure localization is initialized for this utility
+    let _ = crate::locale::setup_localization(util_name);
+
+    // Get the localized "Usage" label
+    let usage_label = crate::locale::translate!("common-usage");
+
+    // Create a styled template
+    let mut template = clap::builder::StyledStr::new();
+
+    // Add the basic template parts
+    writeln!(template, "{{before-help}}{{about-with-newline}}").unwrap();
+
+    // Add styled usage header (bold + underline like clap's default)
+    if colors_enabled {
+        write!(
+            template,
+            "\x1b[1m\x1b[4m{usage_label}:\x1b[0m {{usage}}\n\n"
+        )
+        .unwrap();
+    } else {
+        write!(template, "{usage_label}: {{usage}}\n\n").unwrap();
+    }
+
+    // Add the rest
+    write!(template, "{{all-args}}{{after-help}}").unwrap();
+
+    template
 }
 
 /// Used to check if the utility is the second argument.
@@ -275,40 +386,54 @@ pub fn read_yes() -> bool {
     }
 }
 
+#[derive(Debug)]
+pub struct NonUtf8OsStrError {
+    input_lossy_string: String,
+}
+
+impl std::fmt::Display for NonUtf8OsStrError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use os_display::Quotable;
+        let quoted = self.input_lossy_string.quote();
+        f.write_fmt(format_args!(
+            "invalid UTF-8 input {quoted} encountered when converting to bytes on a platform that doesn't expose byte arguments",
+        ))
+    }
+}
+
+impl std::error::Error for NonUtf8OsStrError {}
+impl error::UError for NonUtf8OsStrError {}
+
 /// Converts an `OsStr` to a UTF-8 `&[u8]`.
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the string can't be coerced to UTF-8.
-pub fn os_str_as_bytes(os_string: &OsStr) -> mods::error::UResult<&[u8]> {
+pub fn os_str_as_bytes(os_string: &OsStr) -> Result<&[u8], NonUtf8OsStrError> {
     #[cfg(unix)]
-    let bytes = os_string.as_bytes();
+    return Ok(os_string.as_bytes());
 
     #[cfg(not(unix))]
-    let bytes = os_string
+    os_string
         .to_str()
-        .ok_or_else(|| {
-            mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
-        })?
-        .as_bytes();
-
-    Ok(bytes)
+        .ok_or_else(|| NonUtf8OsStrError {
+            input_lossy_string: os_string.to_string_lossy().into_owned(),
+        })
+        .map(|s| s.as_bytes())
 }
 
 /// Performs a potentially lossy conversion from `OsStr` to UTF-8 bytes.
 ///
 /// This is always lossless on unix platforms,
 /// and wraps [`OsStr::to_string_lossy`] on non-unix platforms.
-pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<[u8]> {
+pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<'_, [u8]> {
     #[cfg(unix)]
-    let bytes = Cow::from(os_string.as_bytes());
+    return Cow::from(os_string.as_bytes());
 
     #[cfg(not(unix))]
-    let bytes = match os_string.to_string_lossy() {
+    match os_string.to_string_lossy() {
         Cow::Borrowed(slice) => Cow::from(slice.as_bytes()),
         Cow::Owned(owned) => Cow::from(owned.into_bytes()),
-    };
-
-    bytes
+    }
 }
 
 /// Converts a `&[u8]` to an `&OsStr`,
@@ -318,13 +443,12 @@ pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<[u8]> {
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
 pub fn os_str_from_bytes(bytes: &[u8]) -> mods::error::UResult<Cow<'_, OsStr>> {
     #[cfg(unix)]
-    let os_str = Cow::Borrowed(OsStr::from_bytes(bytes));
-    #[cfg(not(unix))]
-    let os_str = Cow::Owned(OsString::from(str::from_utf8(bytes).map_err(|_| {
-        mods::error::UUsageError::new(1, "Unable to transform bytes into OsStr")
-    })?));
+    return Ok(Cow::Borrowed(OsStr::from_bytes(bytes)));
 
-    Ok(os_str)
+    #[cfg(not(unix))]
+    Ok(Cow::Owned(OsString::from(str::from_utf8(bytes).map_err(
+        |_| mods::error::UUsageError::new(1, "Unable to transform bytes into OsStr"),
+    )?)))
 }
 
 /// Converts a `Vec<u8>` into an `OsString`, parsing as UTF-8 on non-unix platforms.
@@ -333,13 +457,30 @@ pub fn os_str_from_bytes(bytes: &[u8]) -> mods::error::UResult<Cow<'_, OsStr>> {
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
 pub fn os_string_from_vec(vec: Vec<u8>) -> mods::error::UResult<OsString> {
     #[cfg(unix)]
-    let s = OsString::from_vec(vec);
-    #[cfg(not(unix))]
-    let s = OsString::from(String::from_utf8(vec).map_err(|_| {
-        mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
-    })?);
+    return Ok(OsString::from_vec(vec));
 
-    Ok(s)
+    #[cfg(not(unix))]
+    Ok(OsString::from(String::from_utf8(vec).map_err(|_| {
+        mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
+    })?))
+}
+
+/// Converts an `OsString` into a `Vec<u8>`, parsing as UTF-8 on non-unix platforms.
+///
+/// This always succeeds on unix platforms,
+/// and fails on other platforms if the bytes can't be parsed as UTF-8.
+pub fn os_string_to_vec(s: OsString) -> mods::error::UResult<Vec<u8>> {
+    #[cfg(unix)]
+    let v = s.into_vec();
+    #[cfg(not(unix))]
+    let v = s
+        .into_string()
+        .map_err(|_| {
+            mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
+        })?
+        .into();
+
+    Ok(v)
 }
 
 /// Equivalent to `std::BufRead::lines` which outputs each line as a `Vec<u8>`,
@@ -386,7 +527,7 @@ pub fn read_os_string_lines<R: std::io::Read>(
 /// ```
 /// use uucore::prompt_yes;
 /// let file = "foo.rs";
-/// prompt_yes!("Do you want to delete '{}'?", file);
+/// prompt_yes!("Do you want to delete '{file}'?");
 /// ```
 /// will print something like below to `stderr` (with `util_name` substituted by the actual
 /// util name) and will wait for user input.
@@ -407,6 +548,91 @@ macro_rules! prompt_yes(
         uucore::read_yes()
     })
 );
+
+/// Represent either a character or a byte.
+/// Used to iterate on partially valid UTF-8 data
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CharByte {
+    Char(char),
+    Byte(u8),
+}
+
+impl From<char> for CharByte {
+    fn from(value: char) -> Self {
+        CharByte::Char(value)
+    }
+}
+
+impl From<u8> for CharByte {
+    fn from(value: u8) -> Self {
+        CharByte::Byte(value)
+    }
+}
+
+impl From<&u8> for CharByte {
+    fn from(value: &u8) -> Self {
+        CharByte::Byte(*value)
+    }
+}
+
+struct Utf8ChunkIterator<'a> {
+    iter: Box<dyn Iterator<Item = CharByte> + 'a>,
+}
+
+impl Iterator for Utf8ChunkIterator<'_> {
+    type Item = CharByte;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
+impl<'a> From<Utf8Chunk<'a>> for Utf8ChunkIterator<'a> {
+    fn from(chk: Utf8Chunk<'a>) -> Utf8ChunkIterator<'a> {
+        Self {
+            iter: Box::new(
+                chk.valid()
+                    .chars()
+                    .map(CharByte::from)
+                    .chain(chk.invalid().iter().map(CharByte::from)),
+            ),
+        }
+    }
+}
+
+/// Iterates on the valid and invalid parts of a byte sequence with regard to
+/// the UTF-8 encoding.
+pub struct CharByteIterator<'a> {
+    iter: Box<dyn Iterator<Item = CharByte> + 'a>,
+}
+
+impl<'a> CharByteIterator<'a> {
+    /// Make a `CharByteIterator` from a byte slice.
+    /// [`CharByteIterator`]
+    pub fn new(input: &'a [u8]) -> CharByteIterator<'a> {
+        Self {
+            iter: Box::new(input.utf8_chunks().flat_map(Utf8ChunkIterator::from)),
+        }
+    }
+}
+
+impl Iterator for CharByteIterator<'_> {
+    type Item = CharByte;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
+pub trait IntoCharByteIterator<'a> {
+    fn iter_char_bytes(self) -> CharByteIterator<'a>;
+}
+
+impl<'a> IntoCharByteIterator<'a> for &'a [u8] {
+    fn iter_char_bytes(self) -> CharByteIterator<'a> {
+        CharByteIterator::new(self)
+    }
+}
 
 #[cfg(test)]
 mod tests {

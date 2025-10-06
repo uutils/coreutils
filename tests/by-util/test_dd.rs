@@ -7,7 +7,7 @@
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
-#[cfg(unix)]
+#[cfg(all(unix, not(feature = "feat_selinux")))]
 use uutests::util::run_ucmd_as_root_with_stdin_stdout;
 #[cfg(all(not(windows), feature = "printf"))]
 use uutests::util::{UCommand, get_tests_binary};
@@ -51,7 +51,7 @@ macro_rules! fixture_path {
 macro_rules! assert_fixture_exists {
     ($fname:expr) => {{
         let fpath = fixture_path!($fname);
-        assert!(fpath.exists(), "Fixture missing: {:?}", fpath);
+        assert!(fpath.exists(), "Fixture missing: {fpath:?}");
     }};
 }
 
@@ -59,7 +59,7 @@ macro_rules! assert_fixture_exists {
 macro_rules! assert_fixture_not_exists {
     ($fname:expr) => {{
         let fpath = PathBuf::from(format!("./fixtures/dd/{}", $fname));
-        assert!(!fpath.exists(), "Fixture present: {:?}", fpath);
+        assert!(!fpath.exists(), "Fixture present: {fpath:?}");
     }};
 }
 
@@ -396,11 +396,11 @@ fn test_null_fullblock() {
 }
 
 #[cfg(unix)]
-#[ignore] // See note below before using this test.
+#[ignore = "See note below before using this test."]
 #[test]
 fn test_fullblock() {
     let tname = "fullblock-from-urand";
-    let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
+    let tmp_fn = format!("TESTFILE-{tname}.tmp");
     let exp_stats = vec![
         "1+0 records in\n",
         "1+0 records out\n",
@@ -458,11 +458,11 @@ fn test_zeros_to_stdout() {
 fn test_oversized_bs_32_bit() {
     for bs_param in ["bs", "ibs", "obs", "cbs"] {
         new_ucmd!()
-            .args(&[format!("{}=5GB", bs_param)])
+            .args(&[format!("{bs_param}=5GB")])
             .fails()
             .no_stdout()
             .code_is(1)
-            .stderr_is(format!("dd: {}=N cannot fit into memory\n", bs_param));
+            .stderr_is(format!("dd: {bs_param}=N cannot fit into memory\n"));
     }
 }
 
@@ -493,7 +493,7 @@ fn test_ascii_10k_to_stdout() {
 fn test_zeros_to_file() {
     let tname = "zero-256k";
     let test_fn = format!("{tname}.txt");
-    let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
+    let tmp_fn = format!("TESTFILE-{tname}.tmp");
     assert_fixture_exists!(test_fn);
 
     let (fix, mut ucmd) = at_and_ucmd!();
@@ -511,7 +511,7 @@ fn test_zeros_to_file() {
 fn test_to_file_with_ibs_obs() {
     let tname = "zero-256k";
     let test_fn = format!("{tname}.txt");
-    let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
+    let tmp_fn = format!("TESTFILE-{tname}.tmp");
     assert_fixture_exists!(test_fn);
 
     let (fix, mut ucmd) = at_and_ucmd!();
@@ -535,7 +535,7 @@ fn test_to_file_with_ibs_obs() {
 fn test_ascii_521k_to_file() {
     let tname = "ascii-521k";
     let input = build_ascii_block(512 * 1024);
-    let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
+    let tmp_fn = format!("TESTFILE-{tname}.tmp");
 
     let (fix, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["status=none", &of!(tmp_fn)])
@@ -555,12 +555,12 @@ fn test_ascii_521k_to_file() {
     );
 }
 
-#[ignore]
+#[ignore = ""]
 #[cfg(unix)]
 #[test]
 fn test_ascii_5_gibi_to_file() {
     let tname = "ascii-5G";
-    let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
+    let tmp_fn = format!("TESTFILE-{tname}.tmp");
 
     let (fix, mut ucmd) = at_and_ucmd!();
     ucmd.args(&[
@@ -597,7 +597,7 @@ fn test_self_transfer() {
 fn test_unicode_filenames() {
     let tname = "😎💚🦊";
     let test_fn = format!("{tname}.txt");
-    let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
+    let tmp_fn = format!("TESTFILE-{tname}.tmp");
     assert_fixture_exists!(test_fn);
 
     let (fix, mut ucmd) = at_and_ucmd!();
@@ -1559,7 +1559,9 @@ fn test_skip_past_dev() {
     // NOTE: This test intends to trigger code which can only be reached with root permissions.
     let ts = TestScenario::new(util_name!());
 
-    if let Ok(result) = run_ucmd_as_root_with_stdin_stdout(
+    if !ts.fixtures.file_exists("/dev/sda1") {
+        print!("Test skipped; no /dev/sda1 device found");
+    } else if let Ok(result) = run_ucmd_as_root_with_stdin_stdout(
         &ts,
         &["bs=1", "skip=10000000000000000", "count=0", "status=noxfer"],
         Some("/dev/sda1"),
@@ -1581,7 +1583,9 @@ fn test_seek_past_dev() {
     // NOTE: This test intends to trigger code which can only be reached with root permissions.
     let ts = TestScenario::new(util_name!());
 
-    if let Ok(result) = run_ucmd_as_root_with_stdin_stdout(
+    if !ts.fixtures.file_exists("/dev/sda1") {
+        print!("Test skipped; no /dev/sda1 device found");
+    } else if let Ok(result) = run_ucmd_as_root_with_stdin_stdout(
         &ts,
         &["bs=1", "seek=10000000000000000", "count=0", "status=noxfer"],
         None,
@@ -1617,6 +1621,7 @@ fn test_reading_partial_blocks_from_fifo() {
         .args(["dd", "ibs=3", "obs=3", &format!("if={fifoname}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        .env("LC_ALL", "C")
         .spawn()
         .unwrap();
 
@@ -1661,6 +1666,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
         .args(["dd", "bs=3", "ibs=1", "obs=1", &format!("if={fifoname}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        .env("LC_ALL", "C")
         .spawn()
         .unwrap();
 
@@ -1767,10 +1773,10 @@ fn test_wrong_number_err_msg() {
     new_ucmd!()
         .args(&["count=kBb"])
         .fails()
-        .stderr_contains("dd: invalid number: ‘kBb’\n");
+        .stderr_contains("dd: invalid number: 'kBb'\n");
 
     new_ucmd!()
         .args(&["count=1kBb555"])
         .fails()
-        .stderr_contains("dd: invalid number: ‘1kBb555’\n");
+        .stderr_contains("dd: invalid number: '1kBb555'\n");
 }

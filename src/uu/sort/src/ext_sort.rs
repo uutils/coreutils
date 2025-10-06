@@ -115,9 +115,9 @@ fn reader_writer<
                     }),
                     settings,
                     output,
-                );
+                )?;
             } else {
-                print_sorted(chunk.lines().iter(), settings, output);
+                print_sorted(chunk.lines().iter(), settings, output)?;
             }
         }
         ReadResult::SortedTwoChunks([a, b]) => {
@@ -138,9 +138,9 @@ fn reader_writer<
                         .map(|(line, _)| line),
                     settings,
                     output,
-                );
+                )?;
             } else {
-                print_sorted(merged_iter.map(|(line, _)| line), settings, output);
+                print_sorted(merged_iter.map(|(line, _)| line), settings, output)?;
             }
         }
         ReadResult::EmptyInput => {
@@ -272,7 +272,7 @@ fn write<I: WriteableTmpFile>(
 
 fn write_lines<T: Write>(lines: &[Line], writer: &mut T, separator: u8) {
     for s in lines {
-        writer.write_all(s.line.as_bytes()).unwrap();
+        writer.write_all(s.line).unwrap();
         writer.write_all(&[separator]).unwrap();
     }
 }

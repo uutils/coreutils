@@ -3,7 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) seekable seek'd tail'ing ringbuffer ringbuf unwatch Uncategorized filehandle Signum
+// spell-checker:ignore (ToDO) seekable seek'd tail'ing ringbuffer ringbuf unwatch
+// spell-checker:ignore (ToDO) Uncategorized filehandle Signum memrchr
 // spell-checker:ignore (libs) kqueue
 // spell-checker:ignore (acronyms)
 // spell-checker:ignore (env/flags)
@@ -24,18 +25,30 @@ pub use args::uu_app;
 use args::{FilterMode, Settings, Signum, parse_args};
 use chunks::ReverseChunks;
 use follow::Observer;
-use paths::{FileExtTail, HeaderPrinter, Input, InputKind, MetadataExtTail};
+use memchr::{memchr_iter, memrchr_iter};
+use paths::{FileExtTail, HeaderPrinter, Input, InputKind};
 use same_file::Handle;
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write, stdin, stdout};
+use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin, stdout};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, get_exit_code, set_exit_code};
+use uucore::translate;
+
 use uucore::{show, show_error};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // When we receive a SIGPIPE signal, we want to terminate the process so
+    // that we don't print any error messages to stderr. Rust ignores SIGPIPE
+    // (see https://github.com/rust-lang/rust/issues/62569), so we restore it's
+    // default action here.
+    #[cfg(not(target_os = "windows"))]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+
     let settings = parse_args(args)?;
     settings.check_warnings();
 
@@ -43,7 +56,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         args::VerificationResult::CannotFollowStdinByName => {
             return Err(USimpleError::new(
                 1,
-                format!("cannot follow {} by name", text::DASH.quote()),
+                translate!("tail-error-cannot-follow-stdin-by-name", "stdin" => text::DASH.quote()),
             ));
         }
         // Exit early if we do not output anything. Note, that this may break a pipe
@@ -93,7 +106,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
     }
 
     if get_exit_code() > 0 && paths::stdin_is_bad_fd() {
-        show_error!("-: {}", text::BAD_FD);
+        show_error!("{}: {}", text::DASH, translate!("tail-bad-fd"));
     }
 
     Ok(())
@@ -110,44 +123,46 @@ fn tail_file(
     if !path.exists() {
         set_exit_code(1);
         show_error!(
-            "cannot open '{}' for reading: {}",
-            input.display_name,
-            text::NO_SUCH_FILE
+            "{}",
+            translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name.clone(), "error" => translate!("tail-no-such-file-or-directory"))
         );
         observer.add_bad_path(path, input.display_name.as_str(), false)?;
     } else if path.is_dir() {
         set_exit_code(1);
 
         header_printer.print_input(input);
-        let err_msg = "Is a directory".to_string();
+        let err_msg = translate!("tail-is-a-directory");
 
-        show_error!("error reading '{}': {}", input.display_name, err_msg);
+        show_error!(
+            "{}",
+            translate!("tail-error-reading-file", "file" => input.display_name.clone(), "error" => err_msg)
+        );
         if settings.follow.is_some() {
             let msg = if settings.retry {
                 ""
             } else {
-                "; giving up on this name"
+                &translate!("tail-giving-up-on-this-name")
             };
             show_error!(
-                "{}: cannot follow end of this type of file{}",
-                input.display_name,
-                msg
+                "{}",
+                translate!("tail-error-cannot-follow-file-type", "file" => input.display_name.clone(), "msg" => msg)
             );
         }
-        if !(observer.follow_name_retry()) {
+        if !observer.follow_name_retry() {
             // skip directory if not retry
             return Ok(());
         }
         observer.add_bad_path(path, input.display_name.as_str(), false)?;
-    } else if input.is_tailable() {
-        let metadata = path.metadata().ok();
+    } else {
         match File::open(path) {
             Ok(mut file) => {
+                let st = file.metadata()?;
+                let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
                 header_printer.print_input(input);
                 let mut reader;
                 if !settings.presume_input_pipe
                     && file.is_seekable(if input.is_stdin() { offset } else { 0 })
-                    && metadata.as_ref().unwrap().get_block_size() > 0
+                    && (!st.is_file() || st.len() > blksize_limit)
                 {
                     bounded_tail(&mut file, settings);
                     reader = BufReader::new(file);
@@ -155,28 +170,30 @@ fn tail_file(
                     reader = BufReader::new(file);
                     unbounded_tail(&mut reader, settings)?;
                 }
-                observer.add_path(
-                    path,
-                    input.display_name.as_str(),
-                    Some(Box::new(reader)),
-                    true,
-                )?;
+                if input.is_tailable() {
+                    observer.add_path(
+                        path,
+                        input.display_name.as_str(),
+                        Some(Box::new(reader)),
+                        true,
+                    )?;
+                } else {
+                    observer.add_bad_path(path, input.display_name.as_str(), false)?;
+                }
             }
-            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            Err(e) if e.kind() == ErrorKind::PermissionDenied => {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 show!(e.map_err_context(|| {
-                    format!("cannot open '{}' for reading", input.display_name)
+                    translate!("tail-error-cannot-open-for-reading", "file" => input.display_name.clone())
                 }));
             }
             Err(e) => {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 return Err(e.map_err_context(|| {
-                    format!("cannot open '{}' for reading", input.display_name)
+                    translate!("tail-error-cannot-open-for-reading", "file" => input.display_name.clone())
                 }));
             }
         }
-    } else {
-        observer.add_bad_path(path, input.display_name.as_str(), false)?;
     }
 
     Ok(())
@@ -188,6 +205,28 @@ fn tail_stdin(
     input: &Input,
     observer: &mut Observer,
 ) -> UResult<()> {
+    // on macOS, resolve() will always return None for stdin,
+    // we need to detect if stdin is a directory ourselves.
+    // fstat-ing certain descriptors under /dev/fd fails with
+    // bad file descriptor or might not catch directory cases
+    // e.g. see the differences between running ls -l /dev/stdin /dev/fd/0
+    // on macOS and Linux.
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(mut stdin_handle) = Handle::stdin() {
+            if let Ok(meta) = stdin_handle.as_file_mut().metadata() {
+                if meta.file_type().is_dir() {
+                    set_exit_code(1);
+                    show_error!(
+                        "{}",
+                        translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name.clone(), "error" => translate!("tail-no-such-file-or-directory"))
+                    );
+                    return Ok(());
+                }
+            }
+        }
+    }
+
     match input.resolve() {
         // fifo
         Some(path) => {
@@ -216,15 +255,13 @@ fn tail_stdin(
             if paths::stdin_is_bad_fd() {
                 set_exit_code(1);
                 show_error!(
-                    "cannot fstat {}: {}",
-                    text::STDIN_HEADER.quote(),
-                    text::BAD_FD
+                    "{}",
+                    translate!("tail-error-cannot-fstat", "file" => translate!("tail-stdin-header"), "error" => translate!("tail-bad-fd"))
                 );
                 if settings.follow.is_some() {
                     show_error!(
-                        "error reading {}: {}",
-                        text::STDIN_HEADER.quote(),
-                        text::BAD_FD
+                        "{}",
+                        translate!("tail-error-reading-file", "file" => translate!("tail-stdin-header"), "error" => translate!("tail-bad-fd"))
                     );
                 }
             } else {
@@ -233,7 +270,7 @@ fn tail_stdin(
                 observer.add_stdin(input.display_name.as_str(), Some(Box::new(reader)), true)?;
             }
         }
-    };
+    }
 
     Ok(())
 }
@@ -285,34 +322,42 @@ fn tail_stdin(
 /// let i = forwards_thru_file(&mut reader, 2, b'\n').unwrap();
 /// assert_eq!(i, 2);
 /// ```
-fn forwards_thru_file<R>(
-    reader: &mut R,
+fn forwards_thru_file(
+    reader: &mut impl Read,
     num_delimiters: u64,
     delimiter: u8,
-) -> std::io::Result<usize>
-where
-    R: Read,
-{
-    let mut reader = BufReader::new(reader);
-
-    let mut buf = vec![];
+) -> io::Result<usize> {
+    // If num_delimiters == 0, always return 0.
+    if num_delimiters == 0 {
+        return Ok(0);
+    }
+    // Use a 32K buffer.
+    let mut buf = [0; 32 * 1024];
     let mut total = 0;
-    for _ in 0..num_delimiters {
-        match reader.read_until(delimiter, &mut buf) {
-            Ok(0) => {
-                return Ok(total);
-            }
+    let mut count = 0;
+    // Iterate through the input, using `count` to record the number of times `delimiter`
+    // is seen. Once we find `num_delimiters` instances, return the offset of the byte
+    // immediately following that delimiter.
+    loop {
+        match reader.read(&mut buf) {
+            // Ok(0) => EoF before we found `num_delimiters` instance of `delimiter`.
+            // Return the total number of bytes read in that case.
+            Ok(0) => return Ok(total),
             Ok(n) => {
+                // Use memchr_iter since it greatly improves search performance.
+                for offset in memchr_iter(delimiter, &buf[..n]) {
+                    count += 1;
+                    if count == num_delimiters {
+                        // Return offset of the byte after the `delimiter` instance.
+                        return Ok(total + offset + 1);
+                    }
+                }
                 total += n;
-                buf.clear();
-                continue;
             }
-            Err(e) => {
-                return Err(e);
-            }
+            Err(e) if e.kind() == ErrorKind::Interrupted => (),
+            Err(e) => return Err(e),
         }
     }
-    Ok(total)
 }
 
 /// Iterate over bytes in the file, in reverse, until we find the
@@ -322,35 +367,36 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
     // This variable counts the number of delimiters found in the file
     // so far (reading from the end of the file toward the beginning).
     let mut counter = 0;
-
-    for (block_idx, slice) in ReverseChunks::new(file).enumerate() {
+    let mut first_slice = true;
+    for slice in ReverseChunks::new(file) {
         // Iterate over each byte in the slice in reverse order.
-        let mut iter = slice.iter().enumerate().rev();
+        let mut iter = memrchr_iter(delimiter, &slice);
 
         // Ignore a trailing newline in the last block, if there is one.
-        if block_idx == 0 {
+        if first_slice {
             if let Some(c) = slice.last() {
                 if *c == delimiter {
                     iter.next();
                 }
             }
+            first_slice = false;
         }
 
         // For each byte, increment the count of the number of
         // delimiters found. If we have found more than the specified
         // number of delimiters, terminate the search and seek to the
         // appropriate location in the file.
-        for (i, ch) in iter {
-            if *ch == delimiter {
-                counter += 1;
-                if counter >= num_delimiters {
-                    // After each iteration of the outer loop, the
-                    // cursor in the file is at the *beginning* of the
-                    // block, so seeking forward by `i + 1` bytes puts
-                    // us right after the found delimiter.
-                    file.seek(SeekFrom::Current((i + 1) as i64)).unwrap();
-                    return;
-                }
+        for i in iter {
+            counter += 1;
+            if counter >= num_delimiters {
+                // We should never over-count - assert that.
+                assert_eq!(counter, num_delimiters);
+                // After each iteration of the outer loop, the
+                // cursor in the file is at the *beginning* of the
+                // block, so seeking forward by `i + 1` bytes puts
+                // us right after the found delimiter.
+                file.seek(SeekFrom::Current((i + 1) as i64)).unwrap();
+                return;
             }
         }
     }
@@ -363,6 +409,7 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
 /// being a nice performance win for very large files.
 fn bounded_tail(file: &mut File, settings: &Settings) {
     debug_assert!(!settings.presume_input_pipe);
+    let mut limit = None;
 
     // Find the position in the file to start printing from.
     match &settings.mode {
@@ -377,9 +424,8 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
             return;
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
-            let len = file.seek(SeekFrom::End(0)).unwrap();
-            file.seek(SeekFrom::End(-((*count).min(len) as i64)))
-                .unwrap();
+            file.seek(SeekFrom::End(-(*count as i64))).unwrap();
+            limit = Some(*count);
         }
         FilterMode::Bytes(Signum::Positive(count)) if count > &1 => {
             // GNU `tail` seems to index bytes and lines starting at 1, not
@@ -392,15 +438,11 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
         _ => {}
     }
 
-    // Print the target section of the file.
-    let stdout = stdout();
-    let mut stdout = stdout.lock();
-    std::io::copy(file, &mut stdout).unwrap();
+    print_target_section(file, limit);
 }
 
 fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
-    let stdout = stdout();
-    let mut writer = BufWriter::new(stdout.lock());
+    let mut writer = BufWriter::new(stdout().lock());
     match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), sep) => {
             let mut chunks = chunks::LinesChunkBuffer::new(*sep, *count);
@@ -459,7 +501,32 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         }
         _ => {}
     }
+    #[cfg(not(target_os = "windows"))]
+    writer.flush()?;
+
+    // SIGPIPE is not available on Windows.
+    #[cfg(target_os = "windows")]
+    writer.flush().inspect_err(|err| {
+        if err.kind() == ErrorKind::BrokenPipe {
+            std::process::exit(13);
+        }
+    })?;
     Ok(())
+}
+
+fn print_target_section<R>(file: &mut R, limit: Option<u64>)
+where
+    R: Read + ?Sized,
+{
+    // Print the target section of the file.
+    let stdout = stdout();
+    let mut stdout = stdout.lock();
+    if let Some(limit) = limit {
+        let mut reader = file.take(limit);
+        io::copy(&mut reader, &mut stdout).unwrap();
+    } else {
+        io::copy(file, &mut stdout).unwrap();
+    }
 }
 
 #[cfg(test)]

@@ -1,17 +1,18 @@
 [package]
 name = "uu_mv"
-version = "0.0.30"
-authors = ["uutils developers"]
-license = "MIT"
 description = "mv ~ (uutils) move (rename) SOURCE to DESTINATION"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/mv"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2024"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/mv.rs"
@@ -20,13 +21,15 @@ path = "src/mv.rs"
 clap = { workspace = true }
 fs_extra = { workspace = true }
 indicatif = { workspace = true }
+libc = { workspace = true }
+thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "backup-control",
   "fs",
   "fsxattr",
   "update-control",
 ] }
-thiserror = { workspace = true }
+fluent = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
@@ -37,6 +40,9 @@ windows-sys = { workspace = true, features = [
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
+
+[features]
+selinux = ["uucore/selinux"]
 
 [[bin]]
 name = "mv"

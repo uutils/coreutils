@@ -6,7 +6,7 @@
 // spell-checker:ignore funcs
 
 use array_init::array_init;
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
 fn table(c: &mut Criterion) {
     #[cfg(target_os = "linux")]
@@ -27,7 +27,7 @@ fn table(c: &mut Criterion) {
     let mut group = c.benchmark_group("table");
     group.throughput(Throughput::Elements(INPUT_SIZE as _));
     for a in inputs.take(10) {
-        let a_str = format!("{:?}", a);
+        let a_str = format!("{a:?}");
         group.bench_with_input(BenchmarkId::new("factor", &a_str), &a, |b, &a| {
             b.iter(|| {
                 for n in a {
@@ -46,17 +46,16 @@ fn check_personality() {
     const PERSONALITY_PATH: &str = "/proc/self/personality";
 
     let p_string = fs::read_to_string(PERSONALITY_PATH)
-        .unwrap_or_else(|_| panic!("Couldn't read '{}'", PERSONALITY_PATH))
+        .unwrap_or_else(|_| panic!("Couldn't read '{PERSONALITY_PATH}'"))
         .strip_suffix('\n')
         .unwrap()
         .to_owned();
 
     let personality = u64::from_str_radix(&p_string, 16)
-        .unwrap_or_else(|_| panic!("Expected a hex value for personality, got '{:?}'", p_string));
+        .unwrap_or_else(|_| panic!("Expected a hex value for personality, got '{p_string:?}'"));
     if personality & ADDR_NO_RANDOMIZE == 0 {
         eprintln!(
-            "WARNING: Benchmarking with ASLR enabled (personality is {:x}), results might not be reproducible.",
-            personality
+            "WARNING: Benchmarking with ASLR enabled (personality is {personality:x}), results might not be reproducible."
         );
     }
 }

@@ -1,17 +1,18 @@
 [package]
 name = "uu_mkfifo"
-version = "0.0.30"
-authors = ["uutils developers"]
-license = "MIT"
 description = "mkfifo ~ (uutils) create FIFOs (named pipes)"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/mkfifo"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2024"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/mkfifo.rs"
@@ -20,6 +21,10 @@ path = "src/mkfifo.rs"
 clap = { workspace = true }
 libc = { workspace = true }
 uucore = { workspace = true, features = ["fs", "mode"] }
+fluent = { workspace = true }
+
+[features]
+selinux = ["uucore/selinux"]
 
 [[bin]]
 name = "mkfifo"

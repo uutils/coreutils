@@ -6,9 +6,9 @@
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::process::geteuid;
-use uutests::new_ucmd;
 use uutests::util::{CmdResult, TestScenario, is_ci, run_ucmd_as_root};
 use uutests::util_name;
+use uutests::{at_and_ucmd, new_ucmd};
 // Apparently some CI environments have configuration issues, e.g. with 'whoami' and 'id'.
 // If we are running inside the CI and "needle" is in "stderr" skipping this test is
 // considered okay. If we are not inside the CI this calls assert!(result.success).
@@ -843,4 +843,18 @@ fn test_chown_no_change_to_user_group() {
                 "ownership of '{file}' retained as {user_name}:{group_name}\n"
             ));
     }
+}
+
+#[test]
+fn test_chown_reference_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+    ucmd.arg("--verbose")
+        .arg("--reference")
+        .arg("a")
+        .arg("b")
+        .succeeds()
+        .stderr_contains("ownership of 'b' retained as")
+        .no_stdout();
 }

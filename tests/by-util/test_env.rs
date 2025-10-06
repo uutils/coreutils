@@ -67,6 +67,61 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))]
+fn test_flags_after_command() {
+    new_ucmd!()
+        // This would cause an error if -u=v were processed because it's malformed
+        .args(&["echo", "-u=v"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is("-u=v\n");
+
+    new_ucmd!()
+        // Ensure the string isn't split
+        // cSpell:disable
+        .args(&["printf", "%s-%s", "-Sfoo bar"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is("-Sfoo bar-");
+    // cSpell:enable
+
+    new_ucmd!()
+        // Ensure -- is recognized
+        .args(&["-i", "--", "-u=v"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is("-u=v\n");
+
+    new_ucmd!()
+        // Recognize echo as the command after a flag that takes a value
+        .args(&["-C", "..", "echo", "-u=v"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is("-u=v\n");
+
+    new_ucmd!()
+        // Recognize echo as the command after a flag that takes an inline value
+        .args(&["-C..", "echo", "-u=v"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is("-u=v\n");
+
+    new_ucmd!()
+        // Recognize echo as the command after a flag that takes a value after another flag
+        .args(&["-iC", "..", "echo", "-u=v"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is("-u=v\n");
+
+    new_ucmd!()
+        // Similar to the last two combined
+        .args(&["-iC..", "echo", "-u=v"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is("-u=v\n");
+}
+
+#[test]
 fn test_env_help() {
     new_ucmd!()
         .arg("--help")
@@ -467,7 +522,7 @@ fn test_split_string_into_args_s_escaped_c_not_allowed() {
     let out = scene.ucmd().args(&[r#"-S"\c""#]).fails().stderr_move_str();
     assert_eq!(
         out,
-        "env: '\\c' must not appear in double-quoted -S string\n"
+        "env: '\\c' must not appear in double-quoted -S string at position 2\n"
     );
 }
 
@@ -525,14 +580,20 @@ fn test_gnu_e20() {
     let scene = TestScenario::new(util_name!());
 
     let env_bin = String::from(uutests::util::get_tests_binary()) + " " + util_name!();
+    let input = [
+        String::from("-i"),
+        String::from(r#"-SA="B\_C=D" "#) + env_bin.escape_default().to_string().as_str() + "",
+    ];
 
-    let (input, output) = (
-        [
-            String::from("-i"),
-            String::from(r#"-SA="B\_C=D" "#) + env_bin.escape_default().to_string().as_str() + "",
-        ],
-        "A=B C=D\n",
-    );
+    let mut output = "A=B C=D\n".to_string();
+
+    // Workaround for the test to pass when coverage is being run.
+    // If enabled, the binary called by env_bin will most probably be
+    // instrumented for coverage, and thus will set the
+    // __LLVM_PROFILE_RT_INIT_ONCE
+    if env::var("__LLVM_PROFILE_RT_INIT_ONCE").is_ok() {
+        output.push_str("__LLVM_PROFILE_RT_INIT_ONCE=__LLVM_PROFILE_RT_INIT_ONCE\n");
+    }
 
     let out = scene.ucmd().args(&input).succeeds();
     assert_eq!(out.stdout_str(), output);
@@ -547,91 +608,91 @@ fn test_env_parsing_errors() {
         .arg("-S\\|echo hallo") // no quotes, invalid escape sequence |
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\|' in -S\n");
+        .stderr_is("env: invalid sequence '\\|' in -S at position 1\n");
 
     ts.ucmd()
         .arg("-S\\a") // no quotes, invalid escape sequence a
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\a' in -S\n");
+        .stderr_is("env: invalid sequence '\\a' in -S at position 1\n");
 
     ts.ucmd()
         .arg("-S\"\\a\"") // double quotes, invalid escape sequence a
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\a' in -S\n");
+        .stderr_is("env: invalid sequence '\\a' in -S at position 2\n");
 
     ts.ucmd()
         .arg(r#"-S"\a""#) // same as before, just using r#""#
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\a' in -S\n");
+        .stderr_is("env: invalid sequence '\\a' in -S at position 2\n");
 
     ts.ucmd()
         .arg("-S'\\a'") // single quotes, invalid escape sequence a
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\a' in -S\n");
+        .stderr_is("env: invalid sequence '\\a' in -S at position 2\n");
 
     ts.ucmd()
         .arg(r"-S\|\&\;") // no quotes, invalid escape sequence |
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\|' in -S\n");
+        .stderr_is("env: invalid sequence '\\|' in -S at position 1\n");
 
     ts.ucmd()
         .arg(r"-S\<\&\;") // no quotes, invalid escape sequence <
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\<' in -S\n");
+        .stderr_is("env: invalid sequence '\\<' in -S at position 1\n");
 
     ts.ucmd()
         .arg(r"-S\>\&\;") // no quotes, invalid escape sequence >
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\>' in -S\n");
+        .stderr_is("env: invalid sequence '\\>' in -S at position 1\n");
 
     ts.ucmd()
         .arg(r"-S\`\&\;") // no quotes, invalid escape sequence `
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S\n");
+        .stderr_is("env: invalid sequence '\\`' in -S at position 1\n");
 
     ts.ucmd()
         .arg(r#"-S"\`\&\;""#) // double quotes, invalid escape sequence `
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S\n");
+        .stderr_is("env: invalid sequence '\\`' in -S at position 2\n");
 
     ts.ucmd()
         .arg(r"-S'\`\&\;'") // single quotes, invalid escape sequence `
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S\n");
+        .stderr_is("env: invalid sequence '\\`' in -S at position 2\n");
 
     ts.ucmd()
         .arg(r"-S\`") // ` escaped without quotes
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S\n");
+        .stderr_is("env: invalid sequence '\\`' in -S at position 1\n");
 
     ts.ucmd()
         .arg(r#"-S"\`""#) // ` escaped in double quotes
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S\n");
+        .stderr_is("env: invalid sequence '\\`' in -S at position 2\n");
 
     ts.ucmd()
         .arg(r"-S'\`'") // ` escaped in single quotes
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S\n");
+        .stderr_is("env: invalid sequence '\\`' in -S at position 2\n");
 
     ts.ucmd()
         .args(&[r"-S\🦉"]) // ` escaped in single quotes
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\\u{FFFD}' in -S\n"); // gnu doesn't show the owl. Instead a invalid unicode ?
+        .stderr_is("env: invalid sequence '\\\u{FFFD}' in -S at position 1\n"); // gnu doesn't show the owl. Instead a invalid unicode ?
 }
 
 #[test]
@@ -948,7 +1009,7 @@ mod tests_split_iterator {
     ///
     /// It tries to avoid introducing any unnecessary quotes or escape characters,
     /// but specifics regarding quoting style are left unspecified.
-    pub fn quote(s: &str) -> std::borrow::Cow<str> {
+    pub fn quote(s: &str) -> std::borrow::Cow<'_, str> {
         // We are going somewhat out of the way to provide
         // minimal amount of quoting in typical cases.
         match escape_style(s) {
@@ -1017,10 +1078,12 @@ mod tests_split_iterator {
 
     use std::ffi::OsString;
 
-    use env::native_int_str::{Convert, NCvt, from_native_int_representation_owned};
-    use env::parse_error::ParseError;
+    use env::{
+        EnvError,
+        native_int_str::{Convert, NCvt, from_native_int_representation_owned},
+    };
 
-    fn split(input: &str) -> Result<Vec<OsString>, ParseError> {
+    fn split(input: &str) -> Result<Vec<OsString>, EnvError> {
         ::env::split_iterator::split(&NCvt::convert(input)).map(|vec| {
             vec.into_iter()
                 .map(from_native_int_representation_owned)
@@ -1037,8 +1100,9 @@ mod tests_split_iterator {
                     );
                 }
                 Ok(actual) => {
-                    assert!(
-                        expected == actual.as_slice(),
+                    assert_eq!(
+                        expected,
+                        actual.as_slice(),
                         "[{i}] After split({input:?}).unwrap()\nexpected: {expected:?}\n  actual: {actual:?}\n"
                     );
                 }
@@ -1127,24 +1191,24 @@ mod tests_split_iterator {
     fn split_trailing_backslash() {
         assert_eq!(
             split("\\"),
-            Err(ParseError::InvalidBackslashAtEndOfStringInMinusS {
-                pos: 1,
-                quoting: "Delimiter".into()
-            })
+            Err(EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(
+                1,
+                "Delimiter".into()
+            ))
         );
         assert_eq!(
             split(" \\"),
-            Err(ParseError::InvalidBackslashAtEndOfStringInMinusS {
-                pos: 2,
-                quoting: "Delimiter".into()
-            })
+            Err(EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(
+                2,
+                "Delimiter".into()
+            ))
         );
         assert_eq!(
             split("a\\"),
-            Err(ParseError::InvalidBackslashAtEndOfStringInMinusS {
-                pos: 2,
-                quoting: "Unquoted".into()
-            })
+            Err(EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(
+                2,
+                "Unquoted".into()
+            ))
         );
     }
 
@@ -1152,26 +1216,14 @@ mod tests_split_iterator {
     fn split_errors() {
         assert_eq!(
             split("'abc"),
-            Err(ParseError::MissingClosingQuote { pos: 4, c: '\'' })
+            Err(EnvError::EnvMissingClosingQuote(4, '\''))
         );
-        assert_eq!(
-            split("\""),
-            Err(ParseError::MissingClosingQuote { pos: 1, c: '"' })
-        );
-        assert_eq!(
-            split("'\\"),
-            Err(ParseError::MissingClosingQuote { pos: 2, c: '\'' })
-        );
-        assert_eq!(
-            split("'\\"),
-            Err(ParseError::MissingClosingQuote { pos: 2, c: '\'' })
-        );
+        assert_eq!(split("\""), Err(EnvError::EnvMissingClosingQuote(1, '"')));
+        assert_eq!(split("'\\"), Err(EnvError::EnvMissingClosingQuote(2, '\'')));
+        assert_eq!(split("'\\"), Err(EnvError::EnvMissingClosingQuote(2, '\'')));
         assert_eq!(
             split(r#""$""#),
-            Err(ParseError::ParsingOfVariableNameFailed {
-                pos: 2,
-                msg: "Missing variable name".into()
-            }),
+            Err(EnvError::EnvParsingOfMissingVariable(2)),
         );
     }
 
@@ -1179,26 +1231,25 @@ mod tests_split_iterator {
     fn split_error_fail_with_unknown_escape_sequences() {
         assert_eq!(
             split("\\a"),
-            Err(ParseError::InvalidSequenceBackslashXInMinusS { pos: 1, c: 'a' })
+            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS(1, 'a'))
         );
         assert_eq!(
             split("\"\\a\""),
-            Err(ParseError::InvalidSequenceBackslashXInMinusS { pos: 2, c: 'a' })
+            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS(2, 'a'))
         );
         assert_eq!(
             split("'\\a'"),
-            Err(ParseError::InvalidSequenceBackslashXInMinusS { pos: 2, c: 'a' })
+            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS(2, 'a'))
         );
         assert_eq!(
             split(r#""\a""#),
-            Err(ParseError::InvalidSequenceBackslashXInMinusS { pos: 2, c: 'a' })
+            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS(2, 'a'))
         );
         assert_eq!(
             split(r"\🦉"),
-            Err(ParseError::InvalidSequenceBackslashXInMinusS {
-                pos: 1,
-                c: '\u{FFFD}'
-            })
+            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS(
+                1, '\u{FFFD}'
+            ))
         );
     }
 
@@ -1704,6 +1755,17 @@ fn test_simulation_of_terminal_pty_pipes_into_data_and_sends_eot_automatically()
     std::assert_eq!(String::from_utf8_lossy(out.stderr()), "");
 }
 
+#[test]
+#[cfg(not(windows))]
+fn test_emoji_env_vars() {
+    new_ucmd!()
+        .arg("🎯_VAR=Hello 🌍")
+        .arg("printenv")
+        .arg("🎯_VAR")
+        .succeeds()
+        .stdout_contains("Hello 🌍");
+}
+
 #[cfg(unix)]
 #[test]
 fn test_simulation_of_terminal_pty_write_in_data_and_sends_eot_automatically() {
@@ -1721,4 +1783,21 @@ fn test_simulation_of_terminal_pty_write_in_data_and_sends_eot_automatically() {
         "Hello stdin forwarding via write_in!\r\n"
     );
     std::assert_eq!(String::from_utf8_lossy(out.stderr()), "");
+}
+
+#[test]
+fn test_env_french() {
+    new_ucmd!()
+        .arg("--verbo")
+        .env("LANG", "fr_FR")
+        .fails()
+        .stderr_contains("erreur : argument inattendu");
+}
+
+#[test]
+fn test_shebang_error() {
+    new_ucmd!()
+        .arg("\'-v \'")
+        .fails()
+        .stderr_contains("use -[v]S to pass options in shebang lines");
 }

@@ -20,19 +20,21 @@ use uucore::error::UIoError;
 use uucore::fs::{
     FileInformation, MissingHandling, ResolveMode, canonicalize, path_ends_with_terminator,
 };
+use uucore::translate;
+
 use uucore::show;
 use uucore::show_error;
 use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{
-    CopyResult, Error, Options, aligned_ancestors, context_for, copy_attributes, copy_file,
+    CopyResult, CpError, Options, aligned_ancestors, context_for, copy_attributes, copy_file,
     copy_link,
 };
 
 /// Ensure a Windows path starts with a `\\?`.
 #[cfg(target_os = "windows")]
-fn adjust_canonicalization(p: &Path) -> Cow<Path> {
+fn adjust_canonicalization(p: &Path) -> Cow<'_, Path> {
     // In some cases, \\? can be missing on some Windows paths.  Add it at the
     // beginning unless the path is prefixed with a device namespace.
     const VERBATIM_PREFIX: &str = r"\\?";
@@ -42,8 +44,9 @@ fn adjust_canonicalization(p: &Path) -> Cow<Path> {
         .components()
         .next()
         .and_then(|comp| comp.as_os_str().to_str())
-        .map(|p_str| p_str.starts_with(VERBATIM_PREFIX) || p_str.starts_with(DEVICE_NS_PREFIX))
-        .unwrap_or_default();
+        .is_some_and(|p_str| {
+            p_str.starts_with(VERBATIM_PREFIX) || p_str.starts_with(DEVICE_NS_PREFIX)
+        });
 
     if has_prefix {
         p.into()
@@ -82,7 +85,7 @@ fn get_local_to_root_parent(
 /// Given an iterator, return all its items except the last.
 fn skip_last<T>(mut iter: impl Iterator<Item = T>) -> impl Iterator<Item = T> {
     let last = iter.next();
-    iter.scan(last, |state, item| std::mem::replace(state, Some(item)))
+    iter.scan(last, |state, item| state.replace(item))
 }
 
 /// Paths that are invariant throughout the traversal when copying a directory.
@@ -96,16 +99,26 @@ struct Context<'a> {
     /// The target path to which the directory will be copied.
     target: &'a Path,
 
+    /// Whether the target is an existing file. Cached to avoid repeated `stat` calls.
+    target_is_file: bool,
+
     /// The source path from which the directory will be copied.
     root: &'a Path,
 }
 
 impl<'a> Context<'a> {
-    fn new(root: &'a Path, target: &'a Path) -> std::io::Result<Self> {
+    fn new(root: &'a Path, target: &'a Path) -> io::Result<Self> {
         let current_dir = env::current_dir()?;
         let root_path = current_dir.join(root);
+        let target_is_file = target.is_file();
         let root_parent = if target.exists() && !root.to_str().unwrap().ends_with("/.") {
             root_path.parent().map(|p| p.to_path_buf())
+        } else if root == Path::new(".") && target.is_dir() {
+            // Special case: when copying current directory (.) to an existing directory,
+            // we don't want to use the parent path as root_parent because we want to
+            // copy the contents of the current directory directly into the target directory,
+            // not create a subdirectory with the current directory's name.
+            None
         } else {
             Some(root_path)
         };
@@ -113,6 +126,7 @@ impl<'a> Context<'a> {
             current_dir,
             root_parent,
             target,
+            target_is_file,
             root,
         })
     }
@@ -181,16 +195,30 @@ impl Entry {
         if no_target_dir {
             let source_is_dir = source.is_dir();
             if path_ends_with_terminator(context.target) && source_is_dir {
-                if let Err(e) = std::fs::create_dir_all(context.target) {
-                    eprintln!("Failed to create directory: {e}");
+                if let Err(e) = fs::create_dir_all(context.target) {
+                    eprintln!(
+                        "{}",
+                        translate!("cp-error-failed-to-create-directory", "error" => e)
+                    );
                 }
             } else {
                 descendant = descendant.strip_prefix(context.root)?.to_path_buf();
             }
+        } else if context.root == Path::new(".") && context.target.is_dir() {
+            // Special case: when copying current directory (.) to an existing directory,
+            // strip the current directory name from the descendant path to avoid creating
+            // an extra level of nesting. For example, if we're in /home/user/source_dir
+            // and copying . to /home/user/dest_dir, we want to copy source_dir/file.txt
+            // to dest_dir/file.txt, not dest_dir/source_dir/file.txt.
+            if let Some(current_dir_name) = context.current_dir.file_name() {
+                if let Ok(stripped) = descendant.strip_prefix(current_dir_name) {
+                    descendant = stripped.to_path_buf();
+                }
+            }
         }
 
         let local_to_target = context.target.join(descendant);
-        let target_is_file = context.target.is_file();
+        let target_is_file = context.target_is_file;
         Ok(Self {
             source_absolute,
             source_relative,
@@ -200,121 +228,102 @@ impl Entry {
     }
 }
 
-/// Decide whether the given path ends with `/.`.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// assert!(ends_with_slash_dot("/."));
-/// assert!(ends_with_slash_dot("./."));
-/// assert!(ends_with_slash_dot("a/."));
-///
-/// assert!(!ends_with_slash_dot("."));
-/// assert!(!ends_with_slash_dot("./"));
-/// assert!(!ends_with_slash_dot("a/.."));
-/// ```
-fn ends_with_slash_dot<P>(path: P) -> bool
-where
-    P: AsRef<Path>,
-{
-    // `path.ends_with(".")` does not seem to work
-    path.as_ref().display().to_string().ends_with("/.")
-}
-
 #[allow(clippy::too_many_arguments)]
 /// Copy a single entry during a directory traversal.
 fn copy_direntry(
-    progress_bar: &Option<ProgressBar>,
-    entry: Entry,
+    progress_bar: Option<&ProgressBar>,
+    entry: &Entry,
+    entry_is_symlink: bool,
+    entry_is_dir_no_follow: bool,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
     preserve_hard_links: bool,
     copied_destinations: &HashSet<PathBuf>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
+    created_parent_dirs: &mut HashSet<PathBuf>,
 ) -> CopyResult<()> {
-    let Entry {
-        source_absolute,
-        source_relative,
-        local_to_target,
-        target_is_file,
-    } = entry;
+    let source_is_symlink = entry_is_symlink;
+    let source_is_dir = if source_is_symlink && !options.dereference {
+        false
+    } else if source_is_symlink {
+        entry.source_absolute.is_dir()
+    } else {
+        entry_is_dir_no_follow
+    };
 
     // If the source is a symbolic link and the options tell us not to
     // dereference the link, then copy the link object itself.
-    if source_absolute.is_symlink() && !options.dereference {
-        return copy_link(&source_absolute, &local_to_target, symlinked_files);
+    if source_is_symlink && !options.dereference {
+        return copy_link(
+            &entry.source_absolute,
+            &entry.local_to_target,
+            symlinked_files,
+            options,
+        );
     }
 
     // If the source is a directory and the destination does not
     // exist, ...
-    if source_absolute.is_dir()
-        && !ends_with_slash_dot(&source_absolute)
-        && !local_to_target.exists()
-    {
-        if target_is_file {
-            return Err("cannot overwrite non-directory with directory".into());
+    if source_is_dir && !entry.local_to_target.exists() {
+        return if entry.target_is_file {
+            Err(translate!("cp-error-cannot-overwrite-non-directory-with-directory").into())
         } else {
-            build_dir(&local_to_target, false, options, Some(&source_absolute))?;
+            build_dir(
+                &entry.local_to_target,
+                false,
+                options,
+                Some(&entry.source_absolute),
+            )?;
             if options.verbose {
-                println!("{}", context_for(&source_relative, &local_to_target));
+                println!(
+                    "{}",
+                    context_for(&entry.source_relative, &entry.local_to_target)
+                );
             }
-            return Ok(());
-        }
+            Ok(())
+        };
     }
 
     // If the source is not a directory, then we need to copy the file.
-    if !source_absolute.is_dir() {
-        if preserve_hard_links {
-            match copy_file(
-                progress_bar,
-                &source_absolute,
-                local_to_target.as_path(),
-                options,
-                symlinked_files,
-                copied_destinations,
-                copied_files,
-                false,
-            ) {
-                Ok(_) => Ok(()),
-                Err(err) => {
-                    if source_absolute.is_symlink() {
-                        // silent the error with a symlink
-                        // In case we do --archive, we might copy the symlink
-                        // before the file itself
-                        Ok(())
-                    } else {
-                        Err(err)
+    if !source_is_dir {
+        if let Err(err) = copy_file(
+            progress_bar,
+            &entry.source_absolute,
+            entry.local_to_target.as_path(),
+            options,
+            symlinked_files,
+            copied_destinations,
+            copied_files,
+            created_parent_dirs,
+            false,
+        ) {
+            if preserve_hard_links {
+                if !source_is_symlink {
+                    return Err(err);
+                }
+                // silent the error with a symlink
+                // In case we do --archive, we might copy the symlink
+                // before the file itself
+            } else {
+                // At this point, `path` is just a plain old file.
+                // Terminate this function immediately if there is any
+                // kind of error *except* a "permission denied" error.
+                //
+                // TODO What other kinds of errors, if any, should
+                // cause us to continue walking the directory?
+                match err {
+                    CpError::IoErrContext(e, _) if e.kind() == io::ErrorKind::PermissionDenied => {
+                        show!(uio_error!(
+                            e,
+                            "{}",
+                            translate!(
+                                "cp-error-cannot-open-for-reading",
+                                "source" => entry.source_relative.quote()
+                            ),
+                        ));
                     }
+                    e => return Err(e),
                 }
-            }?;
-        } else {
-            // At this point, `path` is just a plain old file.
-            // Terminate this function immediately if there is any
-            // kind of error *except* a "permission denied" error.
-            //
-            // TODO What other kinds of errors, if any, should
-            // cause us to continue walking the directory?
-            match copy_file(
-                progress_bar,
-                &source_absolute,
-                local_to_target.as_path(),
-                options,
-                symlinked_files,
-                copied_destinations,
-                copied_files,
-                false,
-            ) {
-                Ok(_) => {}
-                Err(Error::IoErrContext(e, _))
-                    if e.kind() == std::io::ErrorKind::PermissionDenied =>
-                {
-                    show!(uio_error!(
-                        e,
-                        "cannot open {} for reading",
-                        source_relative.quote(),
-                    ));
-                }
-                Err(e) => return Err(e),
             }
         }
     }
@@ -331,13 +340,14 @@ fn copy_direntry(
 /// will not cause a short-circuit.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn copy_directory(
-    progress_bar: &Option<ProgressBar>,
+    progress_bar: Option<&ProgressBar>,
     root: &Path,
     target: &Path,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
     copied_destinations: &HashSet<PathBuf>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
+    created_parent_dirs: &mut HashSet<PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
     // if no-dereference is enabled and this is a symlink, copy it as a file
@@ -350,21 +360,19 @@ pub(crate) fn copy_directory(
             symlinked_files,
             copied_destinations,
             copied_files,
+            created_parent_dirs,
             source_in_command_line,
         );
     }
 
     if !options.recursive {
-        return Err(format!("-r not specified; omitting directory {}", root.quote()).into());
+        return Err(translate!("cp-error-omitting-directory", "dir" => root.quote()).into());
     }
 
     // check if root is a prefix of target
     if path_has_prefix(target, root)? {
-        return Err(format!(
-            "cannot copy a directory, {}, into itself, {}",
-            root.quote(),
-            target.join(root.file_name().unwrap()).quote()
-        )
+        let dest_name = root.file_name().unwrap_or(root.as_os_str());
+        return Err(translate!("cp-error-cannot-copy-directory-into-itself", "source" => root.quote(), "dest" => target.join(dest_name).quote())
         .into());
     }
 
@@ -408,11 +416,16 @@ pub(crate) fn copy_directory(
     // the target directory.
     let context = match Context::new(root, target) {
         Ok(c) => c,
-        Err(e) => return Err(format!("failed to get current directory {e}").into()),
+        Err(e) => {
+            return Err(translate!("cp-error-failed-get-current-dir", "error" => e).into());
+        }
     };
 
     // The directory we were in during the previous iteration
     let mut last_iter: Option<DirEntry> = None;
+
+    // Keep track of all directories we've created that need permission fixes
+    let mut dirs_needing_permissions: Vec<(PathBuf, PathBuf)> = Vec::new();
 
     // Traverse the contents of the directory, copying each one.
     for direntry_result in WalkDir::new(root)
@@ -421,16 +434,29 @@ pub(crate) fn copy_directory(
     {
         match direntry_result {
             Ok(direntry) => {
-                let entry = Entry::new(&context, direntry.path(), options.no_target_dir)?;
+                let direntry_type = direntry.file_type();
+                let direntry_path = direntry.path();
+                let (entry_is_symlink, entry_is_dir_no_follow) =
+                    match direntry_path.symlink_metadata() {
+                        Ok(metadata) => {
+                            let file_type = metadata.file_type();
+                            (file_type.is_symlink(), file_type.is_dir())
+                        }
+                        Err(_) => (direntry_type.is_symlink(), direntry_type.is_dir()),
+                    };
+                let entry = Entry::new(&context, direntry_path, options.no_target_dir)?;
 
                 copy_direntry(
                     progress_bar,
-                    entry,
+                    &entry,
+                    entry_is_symlink,
+                    entry_is_dir_no_follow,
                     options,
                     symlinked_files,
                     preserve_hard_links,
                     copied_destinations,
                     copied_files,
+                    created_parent_dirs,
                 )?;
 
                 // We omit certain permissions when creating directories
@@ -444,11 +470,17 @@ pub(crate) fn copy_directory(
                 // (Note that there can be more than one! We might step out of
                 // `./a/b/c` into `./a/`, in which case we'll need to fix the
                 // permissions of both `./a/b/c` and `./a/b`, in that order.)
-                if direntry.file_type().is_dir() {
+                let is_dir_for_permissions =
+                    entry_is_dir_no_follow || (options.dereference && direntry_path.is_dir());
+                if is_dir_for_permissions {
+                    // Add this directory to our list for permission fixing later
+                    dirs_needing_permissions
+                        .push((entry.source_absolute.clone(), entry.local_to_target.clone()));
+
                     // If true, last_iter is not a parent of this iter.
                     // The means we just exited a directory.
                     let went_up = if let Some(last_iter) = &last_iter {
-                        last_iter.path().strip_prefix(direntry.path()).is_ok()
+                        last_iter.path().strip_prefix(direntry_path).is_ok()
                     } else {
                         false
                     };
@@ -462,14 +494,14 @@ pub(crate) fn copy_directory(
                         //
                         // All the unwraps() here are unreachable.
                         let last_iter = last_iter.as_ref().unwrap();
-                        let diff = last_iter.path().strip_prefix(direntry.path()).unwrap();
+                        let diff = last_iter.path().strip_prefix(direntry_path).unwrap();
 
                         // Fix permissions for every entry in `diff`, inside-out.
                         // We skip the last directory (which will be `.`) because
                         // its permissions will be fixed when we walk _out_ of it.
                         // (at this point, we might not be done copying `.`!)
                         for p in skip_last(diff.ancestors()) {
-                            let src = direntry.path().join(p);
+                            let src = direntry_path.join(p);
                             let entry = Entry::new(&context, &src, options.no_target_dir)?;
 
                             copy_attributes(
@@ -485,29 +517,14 @@ pub(crate) fn copy_directory(
             }
 
             // Print an error message, but continue traversing the directory.
-            Err(e) => show_error!("{}", e),
+            Err(e) => show_error!("{e}"),
         }
     }
 
-    // Handle final directory permission fixes.
-    // This is almost the same as the permission-fixing code above,
-    // with minor differences (commented)
-    if let Some(last_iter) = last_iter {
-        let diff = last_iter.path().strip_prefix(root).unwrap();
-
-        // Do _not_ skip `.` this time, since we know we're done.
-        // This is where we fix the permissions of the top-level
-        // directory we just copied.
-        for p in diff.ancestors() {
-            let src = root.join(p);
-            let entry = Entry::new(&context, &src, options.no_target_dir)?;
-
-            copy_attributes(
-                &entry.source_absolute,
-                &entry.local_to_target,
-                &options.attributes,
-            )?;
-        }
+    // Fix permissions for all directories we created
+    // This ensures that even sibling directories get their permissions fixed
+    for (source_path, dest_path) in dirs_needing_permissions {
+        copy_attributes(&source_path, &dest_path, &options.attributes)?;
     }
 
     // Also fix permissions for parent directories,
@@ -555,7 +572,7 @@ pub fn path_has_prefix(p1: &Path, p2: &Path) -> io::Result<bool> {
 ///   copied from the provided file. Otherwise, the new directory will have the default
 ///   attributes for the current user.
 /// - This method excludes certain permissions if ownership or special mode bits could
-///   potentially change. (See `test_dir_perm_race_with_preserve_mode_and_ownership``)
+///   potentially change. (See `test_dir_perm_race_with_preserve_mode_and_ownership`)
 /// - The `recursive` flag determines whether parent directories should be created
 ///   if they do not already exist.
 // we need to allow unused_variable since `options` might be unused in non unix systems
@@ -580,14 +597,13 @@ fn build_dir(
         // we need to allow trivial casts here because some systems like linux have u32 constants in
         // in libc while others don't.
         #[allow(clippy::unnecessary_cast)]
-        let mut excluded_perms =
-            if matches!(options.attributes.ownership, crate::Preserve::Yes { .. }) {
-                libc::S_IRWXG | libc::S_IRWXO // exclude rwx for group and other
-            } else if matches!(options.attributes.mode, crate::Preserve::Yes { .. }) {
-                libc::S_IWGRP | libc::S_IWOTH //exclude w for group and other
-            } else {
-                0
-            } as u32;
+        let mut excluded_perms = if matches!(options.attributes.ownership, Preserve::Yes { .. }) {
+            libc::S_IRWXG | libc::S_IRWXO // exclude rwx for group and other
+        } else if matches!(options.attributes.mode, Preserve::Yes { .. }) {
+            libc::S_IWGRP | libc::S_IWOTH //exclude w for group and other
+        } else {
+            0
+        } as u32;
 
         let umask = if copy_attributes_from.is_some()
             && matches!(options.attributes.mode, Preserve::Yes { .. })
@@ -606,27 +622,4 @@ fn build_dir(
 
     builder.create(path)?;
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::ends_with_slash_dot;
-
-    #[test]
-    #[allow(clippy::cognitive_complexity)]
-    fn test_ends_with_slash_dot() {
-        assert!(ends_with_slash_dot("/."));
-        assert!(ends_with_slash_dot("./."));
-        assert!(ends_with_slash_dot("../."));
-        assert!(ends_with_slash_dot("a/."));
-        assert!(ends_with_slash_dot("/a/."));
-
-        assert!(!ends_with_slash_dot(""));
-        assert!(!ends_with_slash_dot("."));
-        assert!(!ends_with_slash_dot("./"));
-        assert!(!ends_with_slash_dot(".."));
-        assert!(!ends_with_slash_dot("/.."));
-        assert!(!ends_with_slash_dot("a/.."));
-        assert!(!ends_with_slash_dot("/a/.."));
-    }
 }

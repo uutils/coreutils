@@ -1,17 +1,24 @@
+# spell-checker:ignore logind
+
+
 [package]
 name = "uu_who"
-version = "0.0.30"
-authors = ["uutils developers"]
-license = "MIT"
 description = "who ~ (uutils) display information about currently logged-in users"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/who"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2024"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+feat_systemd_logind = ["uucore/feat_systemd_logind"]
 
 [lib]
 path = "src/who.rs"
@@ -19,6 +26,7 @@ path = "src/who.rs"
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["utmpx"] }
+fluent = { workspace = true }
 
 [[bin]]
 name = "who"

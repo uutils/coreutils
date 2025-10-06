@@ -4,33 +4,87 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) nonprint nonblank nonprinting ELOOP
+
+mod platform;
+
+use crate::platform::is_unsafe_overwrite;
+use clap::{Arg, ArgAction, Command};
+use memchr::memchr2;
+use std::ffi::OsString;
 use std::fs::{File, metadata};
-use std::io::{self, BufWriter, IsTerminal, Read, Write};
+use std::io::{self, BufWriter, ErrorKind, IsTerminal, Read, Write};
 /// Unix domain socket support
 #[cfg(unix)]
 use std::net::Shutdown;
 #[cfg(unix)]
-use std::os::fd::{AsFd, AsRawFd};
+use std::os::fd::AsFd;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
-
-use clap::{Arg, ArgAction, Command};
-#[cfg(unix)]
-use nix::fcntl::{FcntlArg, fcntl};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
-use uucore::fs::FileInformation;
-use uucore::{format_usage, help_about, help_usage};
+#[cfg(not(target_os = "windows"))]
+use uucore::libc;
+use uucore::translate;
+use uucore::{fast_inc::fast_inc_one, format_usage};
 
 /// Linux splice support
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod splice;
 
-const USAGE: &str = help_usage!("cat.md");
-const ABOUT: &str = help_about!("cat.md");
+// Allocate 32 digits for the line number.
+// An estimate is that we can print about 1e8 lines/seconds, so 32 digits
+// would be enough for billions of universe lifetimes.
+const LINE_NUMBER_BUF_SIZE: usize = 32;
+
+struct LineNumber {
+    buf: [u8; LINE_NUMBER_BUF_SIZE],
+    print_start: usize,
+    num_start: usize,
+    num_end: usize,
+}
+
+// Logic to store a string for the line number. Manually incrementing the value
+// represented in a buffer like this is significantly faster than storing
+// a `usize` and using the standard Rust formatting macros to format a `usize`
+// to a string each time it's needed.
+// Buffer is initialized to "     1\t" and incremented each time `increment` is
+// called, using uucore's fast_inc function that operates on strings.
+impl LineNumber {
+    fn new() -> Self {
+        let mut buf = [b'0'; LINE_NUMBER_BUF_SIZE];
+
+        let init_str = "     1\t";
+        let print_start = buf.len() - init_str.len();
+        let num_start = buf.len() - 2;
+        let num_end = buf.len() - 1;
+
+        buf[print_start..].copy_from_slice(init_str.as_bytes());
+
+        LineNumber {
+            buf,
+            print_start,
+            num_start,
+            num_end,
+        }
+    }
+
+    fn increment(&mut self) {
+        fast_inc_one(&mut self.buf, &mut self.num_start, self.num_end);
+        self.print_start = self.print_start.min(self.num_start);
+    }
+
+    #[inline]
+    fn to_str(&self) -> &[u8] {
+        &self.buf[self.print_start..]
+    }
+
+    fn write(&self, writer: &mut impl Write) -> io::Result<()> {
+        writer.write_all(self.to_str())
+    }
+}
 
 #[derive(Error, Debug)]
 enum CatError {
@@ -42,16 +96,16 @@ enum CatError {
     #[error("{0}")]
     Nix(#[from] nix::Error),
     /// Unknown file type; it's not a regular file, socket, etc.
-    #[error("unknown filetype: {}", ft_debug)]
+    #[error("{}", translate!("cat-error-unknown-filetype", "ft_debug" => .ft_debug))]
     UnknownFiletype {
         /// A debug print of the file type
         ft_debug: String,
     },
-    #[error("Is a directory")]
+    #[error("{}", translate!("cat-error-is-directory"))]
     IsDirectory,
-    #[error("input file is output file")]
+    #[error("{}", translate!("cat-error-input-file-is-output-file"))]
     OutputIsInput,
-    #[error("Too many levels of symbolic links")]
+    #[error("{}", translate!("cat-error-too-many-symbolic-links"))]
     TooManySymlinks,
 }
 
@@ -105,7 +159,7 @@ impl OutputOptions {
 /// when we can't write fast.
 struct OutputState {
     /// The current line number
-    line_number: usize,
+    line_number: LineNumber,
 
     /// Whether the output cursor is at the beginning of a new line
     at_line_start: bool,
@@ -118,12 +172,12 @@ struct OutputState {
 }
 
 #[cfg(unix)]
-trait FdReadable: Read + AsFd + AsRawFd {}
+trait FdReadable: Read + AsFd {}
 #[cfg(not(unix))]
 trait FdReadable: Read {}
 
 #[cfg(unix)]
-impl<T> FdReadable for T where T: Read + AsFd + AsRawFd {}
+impl<T> FdReadable for T where T: Read + AsFd {}
 #[cfg(not(unix))]
 impl<T> FdReadable for T where T: Read {}
 
@@ -136,7 +190,7 @@ struct InputHandle<R: FdReadable> {
 /// Concrete enum of recognized file types.
 ///
 /// *Note*: `cat`-ing a directory should result in an
-/// CatError::IsDirectory
+/// [`CatError::IsDirectory`]
 enum InputType {
     Directory,
     File,
@@ -168,7 +222,16 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    // When we receive a SIGPIPE signal, we want to terminate the process so
+    // that we don't print any error messages to stderr. Rust ignores SIGPIPE
+    // (see https://github.com/rust-lang/rust/issues/62569), so we restore it's
+    // default action here.
+    #[cfg(not(target_os = "windows"))]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let number_mode = if matches.get_flag(options::NUMBER_NONBLANK) {
         NumberingMode::NonEmpty
@@ -204,9 +267,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     .any(|v| matches.get_flag(v));
 
     let squeeze_blank = matches.get_flag(options::SQUEEZE_BLANK);
-    let files: Vec<String> = match matches.get_many::<String>(options::FILE) {
+    let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILE) {
         Some(v) => v.cloned().collect(),
-        None => vec!["-".to_owned()],
+        None => vec![OsString::from("-")],
     };
 
     let options = OutputOptions {
@@ -222,28 +285,30 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
+        .override_usage(format_usage(&translate!("cat-usage")))
+        .about(translate!("cat-about"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
-                .action(clap::ArgAction::Append)
+                .action(ArgAction::Append)
+                .value_parser(clap::value_parser!(OsString))
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::SHOW_ALL)
                 .short('A')
                 .long(options::SHOW_ALL)
-                .help("equivalent to -vET")
+                .help(translate!("cat-help-show-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NUMBER_NONBLANK)
                 .short('b')
                 .long(options::NUMBER_NONBLANK)
-                .help("number nonempty output lines, overrides -n")
+                .help(translate!("cat-help-number-nonblank"))
                 // Note: This MUST NOT .overrides_with(options::NUMBER)!
                 // In clap, overriding is symmetric, so "-b -n" counts as "-n", which is not what we want.
                 .action(ArgAction::SetTrue),
@@ -251,54 +316,54 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::SHOW_NONPRINTING_ENDS)
                 .short('e')
-                .help("equivalent to -vE")
+                .help(translate!("cat-help-show-nonprinting-ends"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHOW_ENDS)
                 .short('E')
                 .long(options::SHOW_ENDS)
-                .help("display $ at end of each line")
+                .help(translate!("cat-help-show-ends"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NUMBER)
                 .short('n')
                 .long(options::NUMBER)
-                .help("number all output lines")
+                .help(translate!("cat-help-number"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SQUEEZE_BLANK)
                 .short('s')
                 .long(options::SQUEEZE_BLANK)
-                .help("suppress repeated empty output lines")
+                .help(translate!("cat-help-squeeze-blank"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHOW_NONPRINTING_TABS)
                 .short('t')
-                .help("equivalent to -vT")
+                .help(translate!("cat-help-show-nonprinting-tabs"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHOW_TABS)
                 .short('T')
                 .long(options::SHOW_TABS)
-                .help("display TAB characters at ^I")
+                .help(translate!("cat-help-show-tabs"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHOW_NONPRINTING)
                 .short('v')
                 .long(options::SHOW_NONPRINTING)
-                .help("use ^ and M- notation, except for LF (\\n) and TAB (\\t)")
+                .help(translate!("cat-help-show-nonprinting"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::IGNORED_U)
                 .short('u')
-                .help("(ignored)")
+                .help(translate!("cat-help-ignored-u"))
                 .action(ArgAction::SetTrue),
         )
 }
@@ -315,43 +380,17 @@ fn cat_handle<R: FdReadable>(
     }
 }
 
-/// Whether this process is appending to stdout.
-#[cfg(unix)]
-fn is_appending() -> bool {
-    let stdout = std::io::stdout();
-    let flags = match fcntl(stdout.as_raw_fd(), FcntlArg::F_GETFL) {
-        Ok(flags) => flags,
-        Err(_) => return false,
-    };
-    // TODO Replace `1 << 10` with `nix::fcntl::Oflag::O_APPEND`.
-    let o_append = 1 << 10;
-    (flags & o_append) > 0
-}
-
-#[cfg(not(unix))]
-fn is_appending() -> bool {
-    false
-}
-
-fn cat_path(
-    path: &str,
-    options: &OutputOptions,
-    state: &mut OutputState,
-    out_info: Option<&FileInformation>,
-) -> CatResult<()> {
+fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -> CatResult<()> {
     match get_input_type(path)? {
         InputType::StdIn => {
             let stdin = io::stdin();
-            let in_info = FileInformation::from_file(&stdin)?;
+            if is_unsafe_overwrite(&stdin, &io::stdout()) {
+                return Err(CatError::OutputIsInput);
+            }
             let mut handle = InputHandle {
                 reader: stdin,
-                is_interactive: std::io::stdin().is_terminal(),
+                is_interactive: io::stdin().is_terminal(),
             };
-            if let Some(out_info) = out_info {
-                if in_info == *out_info && is_appending() {
-                    return Err(CatError::OutputIsInput);
-                }
-            }
             cat_handle(&mut handle, options, state)
         }
         InputType::Directory => Err(CatError::IsDirectory),
@@ -367,15 +406,9 @@ fn cat_path(
         }
         _ => {
             let file = File::open(path)?;
-
-            if let Some(out_info) = out_info {
-                if out_info.file_size() != 0
-                    && FileInformation::from_file(&file).ok().as_ref() == Some(out_info)
-                {
-                    return Err(CatError::OutputIsInput);
-                }
+            if is_unsafe_overwrite(&file, &io::stdout()) {
+                return Err(CatError::OutputIsInput);
             }
-
             let mut handle = InputHandle {
                 reader: file,
                 is_interactive: false,
@@ -385,11 +418,9 @@ fn cat_path(
     }
 }
 
-fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
-    let out_info = FileInformation::from_file(&std::io::stdout()).ok();
-
+fn cat_files(files: &[OsString], options: &OutputOptions) -> UResult<()> {
     let mut state = OutputState {
-        line_number: 1,
+        line_number: LineNumber::new(),
         at_line_start: true,
         skipped_carriage_return: false,
         one_blank_kept: false,
@@ -397,8 +428,8 @@ fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
     let mut error_messages: Vec<String> = Vec::new();
 
     for path in files {
-        if let Err(err) = cat_path(path, options, &mut state, out_info.as_ref()) {
-            error_messages.push(format!("{}: {}", path.maybe_quote(), err));
+        if let Err(err) = cat_path(path, options, &mut state) {
+            error_messages.push(format!("{}: {err}", path.maybe_quote()));
         }
     }
     if state.skipped_carriage_return {
@@ -422,7 +453,7 @@ fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
 /// # Arguments
 ///
 /// * `path` - Path on a file system to classify metadata
-fn get_input_type(path: &str) -> CatResult<InputType> {
+fn get_input_type(path: &OsString) -> CatResult<InputType> {
     if path == "-" {
         return Ok(InputType::StdIn);
     }
@@ -478,11 +509,18 @@ fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     // If we're not on Linux or Android, or the splice() call failed,
     // fall back on slower writing.
     let mut buf = [0; 1024 * 64];
-    while let Ok(n) = handle.reader.read(&mut buf) {
-        if n == 0 {
-            break;
+    loop {
+        match handle.reader.read(&mut buf) {
+            Ok(n) => {
+                if n == 0 {
+                    break;
+                }
+                stdout_lock
+                    .write_all(&buf[..n])
+                    .inspect_err(handle_broken_pipe)?;
+            }
+            Err(e) => return Err(e.into()),
         }
-        stdout_lock.write_all(&buf[..n])?;
     }
 
     // If the splice() call failed and there has been some data written to
@@ -490,7 +528,7 @@ fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     // that will succeed, data pushed through splice will be output before
     // the data buffered in stdout.lock. Therefore additional explicit flush
     // is required here.
-    stdout_lock.flush()?;
+    stdout_lock.flush().inspect_err(handle_broken_pipe)?;
     Ok(())
 }
 
@@ -528,8 +566,8 @@ fn write_lines<R: FdReadable>(
             }
             state.one_blank_kept = false;
             if state.at_line_start && options.number != NumberingMode::None {
-                write!(writer, "{0:6}\t", state.line_number)?;
-                state.line_number += 1;
+                state.line_number.write(&mut writer)?;
+                state.line_number.increment();
             }
 
             // print to end of line or end of buffer
@@ -561,13 +599,13 @@ fn write_lines<R: FdReadable>(
         // and not be buffered internally to the `cat` process.
         // Hence it's necessary to flush our buffer before every time we could potentially block
         // on a `std::io::Read::read` call.
-        writer.flush()?;
+        writer.flush().inspect_err(handle_broken_pipe)?;
     }
 
     Ok(())
 }
 
-// \r followed by \n is printed as ^M when show_ends is enabled, so that \r\n prints as ^M$
+/// `\r` followed by `\n` is printed as `^M` when `show_ends` is enabled, so that `\r\n` prints as `^M$`
 fn write_new_line<W: Write>(
     writer: &mut W,
     options: &OutputOptions,
@@ -588,8 +626,8 @@ fn write_new_line<W: Write>(
     if !state.at_line_start || !options.squeeze_blank || !state.one_blank_kept {
         state.one_blank_kept = true;
         if state.at_line_start && options.number == NumberingMode::All {
-            write!(writer, "{0:6}\t", state.line_number)?;
-            state.line_number += 1;
+            state.line_number.write(writer)?;
+            state.line_number.increment();
         }
         write_end_of_line(writer, options.end_of_line().as_bytes(), is_interactive)?;
     }
@@ -611,8 +649,10 @@ fn write_end<W: Write>(writer: &mut W, in_buf: &[u8], options: &OutputOptions) -
 // We need to stop at \r because it may be written as ^M depending on the byte after and settings;
 // however, write_nonprint_to_end doesn't need to stop at \r because it will always write \r as ^M.
 // Return the number of written symbols
+
 fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> usize {
-    match in_buf.iter().position(|c| *c == b'\n' || *c == b'\r') {
+    // using memchr2 significantly improves performances
+    match memchr2(b'\n', b'\r', in_buf) {
         Some(p) => {
             writer.write_all(&in_buf[..p]).unwrap();
             p
@@ -644,9 +684,9 @@ fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> usize {
             }
             None => {
                 writer.write_all(in_buf).unwrap();
-                return in_buf.len();
+                return in_buf.len() + count;
             }
-        };
+        }
     }
 }
 
@@ -679,14 +719,35 @@ fn write_end_of_line<W: Write>(
 ) -> CatResult<()> {
     writer.write_all(end_of_line)?;
     if is_interactive {
-        writer.flush()?;
+        writer.flush().inspect_err(handle_broken_pipe)?;
     }
     Ok(())
+}
+
+fn handle_broken_pipe(error: &io::Error) {
+    // SIGPIPE is not available on Windows.
+    if cfg!(target_os = "windows") && error.kind() == ErrorKind::BrokenPipe {
+        std::process::exit(13);
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::io::{BufWriter, stdout};
+
+    #[test]
+    fn test_write_tab_to_end_with_newline() {
+        let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
+        let in_buf = b"a\tb\tc\n";
+        assert_eq!(super::write_tab_to_end(in_buf, &mut writer), 5);
+    }
+
+    #[test]
+    fn test_write_tab_to_end_no_newline() {
+        let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
+        let in_buf = b"a\tb\tc";
+        assert_eq!(super::write_tab_to_end(in_buf, &mut writer), 5);
+    }
 
     #[test]
     fn test_write_nonprint_to_end_new_line() {
@@ -726,5 +787,26 @@ mod tests {
             super::write_nonprint_to_end(in_buf, &mut writer, tab);
             assert_eq!(writer.buffer(), [b'^', byte + 64]);
         }
+    }
+
+    #[test]
+    fn test_incrementing_string() {
+        let mut incrementing_string = super::LineNumber::new();
+        assert_eq!(b"     1\t", incrementing_string.to_str());
+        incrementing_string.increment();
+        assert_eq!(b"     2\t", incrementing_string.to_str());
+        // Run through to 100
+        for _ in 3..=100 {
+            incrementing_string.increment();
+        }
+        assert_eq!(b"   100\t", incrementing_string.to_str());
+        // Run through until we overflow the original size.
+        for _ in 101..=1_000_000 {
+            incrementing_string.increment();
+        }
+        // Confirm that the start position moves when we overflow the original size.
+        assert_eq!(b"1000000\t", incrementing_string.to_str());
+        incrementing_string.increment();
+        assert_eq!(b"1000001\t", incrementing_string.to_str());
     }
 }

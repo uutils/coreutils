@@ -4,8 +4,6 @@
 // file that was distributed with this source code.
 use uucore::display::Quotable;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 // spell-checker:ignore (ToDO) taaaa tbbbb tcccc
 
 #[test]
@@ -427,4 +425,20 @@ fn test_nonexisting_file() {
         .fails()
         .stderr_contains("expand: nonexistent: No such file or directory")
         .stdout_contains_line("// !note: file contains significant whitespace");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_expand_non_utf8_paths() {
+    use std::os::unix::ffi::OsStringExt;
+    use uutests::at_and_ucmd;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    std::fs::write(at.plus(&filename), b"hello\tworld\ntest\tline\n").unwrap();
+
+    ucmd.arg(&filename)
+        .succeeds()
+        .stdout_is("hello   world\ntest    line\n");
 }

@@ -1,17 +1,18 @@
 [package]
 name = "uu_env"
-version = "0.0.30"
-authors = ["uutils developers"]
-license = "MIT"
 description = "env ~ (uutils) set each NAME to VALUE in the environment and run COMMAND"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/env"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2024"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/env.rs"
@@ -19,7 +20,9 @@ path = "src/env.rs"
 [dependencies]
 clap = { workspace = true }
 rust-ini = { workspace = true }
+thiserror = { workspace = true }
 uucore = { workspace = true, features = ["signals"] }
+fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["signal"] }

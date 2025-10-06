@@ -7,10 +7,11 @@
 
 use crate::{OPT_BYTES, OPT_LINE_BYTES, OPT_LINES, OPT_NUMBER};
 use clap::{ArgMatches, parser::ValueSource};
-use std::fmt;
+use thiserror::Error;
 use uucore::{
     display::Quotable,
-    parse_size::{ParseSizeError, parse_size_u64, parse_size_u64_max},
+    parser::parse_size::{ParseSizeError, parse_size_u64, parse_size_u64_max},
+    translate,
 };
 
 /// Sub-strategy of the [`Strategy::Number`]
@@ -54,7 +55,7 @@ impl NumberType {
 }
 
 /// An error due to an invalid parameter to the `-n` command-line option.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Error)]
 pub enum NumberTypeError {
     /// The number of chunks was invalid.
     ///
@@ -69,6 +70,7 @@ pub enum NumberTypeError {
     /// -n r/N
     /// -n r/K/N
     /// ```
+    #[error("{}", translate!("split-error-invalid-number-of-chunks", "chunks" => .0.quote()))]
     NumberOfChunks(String),
 
     /// The chunk number was invalid.
@@ -83,6 +85,7 @@ pub enum NumberTypeError {
     /// -n l/K/N
     /// -n r/K/N
     /// ```
+    #[error("{}", translate!("split-error-invalid-chunk-number", "chunk" => .0.quote()))]
     ChunkNumber(String),
 }
 
@@ -106,7 +109,7 @@ impl NumberType {
     /// # Errors
     ///
     /// If the string is not one of the valid number types,
-    /// if `K` is not a nonnegative integer,
+    /// if `K` is not a non-negative integer,
     /// or if `K` is 0,
     /// or if `N` is not a positive integer,
     /// or if `K` is greater than `N`
@@ -115,9 +118,9 @@ impl NumberType {
         fn is_invalid_chunk(chunk_number: u64, num_chunks: u64) -> bool {
             chunk_number > num_chunks || chunk_number == 0
         }
-        let parts: Vec<&str> = s.split('/').collect();
-        match &parts[..] {
-            [n_str] => {
+        let mut parts = s.splitn(4, '/');
+        match (parts.next(), parts.next(), parts.next(), parts.next()) {
+            (Some(n_str), None, None, None) => {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 if num_chunks > 0 {
@@ -126,7 +129,9 @@ impl NumberType {
                     Err(NumberTypeError::NumberOfChunks(s.to_string()))
                 }
             }
-            [k_str, n_str] if !k_str.starts_with('l') && !k_str.starts_with('r') => {
+            (Some(k_str), Some(n_str), None, None)
+                if !k_str.starts_with('l') && !k_str.starts_with('r') =>
+            {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 let chunk_number = parse_size_u64(k_str)
@@ -136,12 +141,12 @@ impl NumberType {
                 }
                 Ok(Self::KthBytes(chunk_number, num_chunks))
             }
-            ["l", n_str] => {
+            (Some("l"), Some(n_str), None, None) => {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 Ok(Self::Lines(num_chunks))
             }
-            ["l", k_str, n_str] => {
+            (Some("l"), Some(k_str), Some(n_str), None) => {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 let chunk_number = parse_size_u64(k_str)
@@ -151,12 +156,12 @@ impl NumberType {
                 }
                 Ok(Self::KthLines(chunk_number, num_chunks))
             }
-            ["r", n_str] => {
+            (Some("r"), Some(n_str), None, None) => {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 Ok(Self::RoundRobin(num_chunks))
             }
-            ["r", k_str, n_str] => {
+            (Some("r"), Some(k_str), Some(n_str), None) => {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 let chunk_number = parse_size_u64(k_str)
@@ -191,39 +196,28 @@ pub enum Strategy {
 }
 
 /// An error when parsing a chunking strategy from command-line arguments.
+#[derive(Debug, Error)]
 pub enum StrategyError {
     /// Invalid number of lines.
+    #[error("{}", translate!("split-error-invalid-number-of-lines", "error" => .0))]
     Lines(ParseSizeError),
 
     /// Invalid number of bytes.
+    #[error("{}", translate!("split-error-invalid-number-of-bytes", "error" => .0))]
     Bytes(ParseSizeError),
 
     /// Invalid number type.
+    #[error("{0}")]
     NumberType(NumberTypeError),
 
     /// Multiple chunking strategies were specified (but only one should be).
+    #[error("{}", translate!("split-error-cannot-split-more-than-one-way"))]
     MultipleWays,
-}
-
-impl fmt::Display for StrategyError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Lines(e) => write!(f, "invalid number of lines: {e}"),
-            Self::Bytes(e) => write!(f, "invalid number of bytes: {e}"),
-            Self::NumberType(NumberTypeError::NumberOfChunks(s)) => {
-                write!(f, "invalid number of chunks: {}", s.quote())
-            }
-            Self::NumberType(NumberTypeError::ChunkNumber(s)) => {
-                write!(f, "invalid chunk number: {}", s.quote())
-            }
-            Self::MultipleWays => write!(f, "cannot split in more than one way"),
-        }
-    }
 }
 
 impl Strategy {
     /// Parse a strategy from the command-line arguments.
-    pub fn from(matches: &ArgMatches, obs_lines: &Option<String>) -> Result<Self, StrategyError> {
+    pub fn from(matches: &ArgMatches, obs_lines: Option<&str>) -> Result<Self, StrategyError> {
         fn get_and_parse(
             matches: &ArgMatches,
             option: &str,

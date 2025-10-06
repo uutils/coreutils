@@ -2,9 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore fffffffffffffffc
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[test]
 fn basic_literal() {
@@ -12,40 +12,6 @@ fn basic_literal() {
         .args(&["hello world"])
         .succeeds()
         .stdout_only("hello world");
-}
-
-#[test]
-fn escaped_tab() {
-    new_ucmd!()
-        .args(&["hello\\t world"])
-        .succeeds()
-        .stdout_only("hello\t world");
-}
-
-#[test]
-fn escaped_newline() {
-    new_ucmd!()
-        .args(&["hello\\n world"])
-        .succeeds()
-        .stdout_only("hello\n world");
-}
-
-#[test]
-fn escaped_slash() {
-    new_ucmd!()
-        .args(&["hello\\\\ world"])
-        .succeeds()
-        .stdout_only("hello\\ world");
-}
-
-#[test]
-fn unescaped_double_quote() {
-    new_ucmd!().args(&["\\\""]).succeeds().stdout_only("\"");
-}
-
-#[test]
-fn escaped_hex() {
-    new_ucmd!().args(&["\\x41"]).succeeds().stdout_only("A");
 }
 
 #[test]
@@ -57,16 +23,26 @@ fn test_missing_escaped_hex_value() {
 }
 
 #[test]
-fn escaped_octal() {
-    new_ucmd!().args(&["\\101"]).succeeds().stdout_only("A");
+fn escaped_octal_and_newline() {
+    new_ucmd!()
+        .args(&["\\101\\0377\\n"])
+        .succeeds()
+        .stdout_only("A\x1F7\n");
 }
 
 #[test]
-fn escaped_octal_and_newline() {
+fn variable_sized_octal() {
+    for x in ["|\\5|", "|\\05|", "|\\005|"] {
+        new_ucmd!()
+            .arg(x)
+            .succeeds()
+            .stdout_only_bytes([b'|', 5u8, b'|']);
+    }
+
     new_ucmd!()
-        .args(&["\\0377\\n"])
+        .arg("|\\0005|")
         .succeeds()
-        .stdout_only("\x1F7\n");
+        .stdout_only_bytes([b'|', 0, b'5', b'|']);
 }
 
 #[test]
@@ -83,6 +59,39 @@ fn escaped_unicode_eight_digit() {
 }
 
 #[test]
+fn escaped_unicode_null_byte() {
+    new_ucmd!()
+        .args(&["\\0001_"])
+        .succeeds()
+        .stdout_is_bytes([0u8, b'1', b'_']);
+
+    new_ucmd!()
+        .args(&["%b", "\\0001_"])
+        .succeeds()
+        .stdout_is_bytes([1u8, b'_']);
+}
+
+#[test]
+fn escaped_unicode_incomplete() {
+    for arg in ["\\u", "\\U", "\\uabc", "\\Uabcd"] {
+        new_ucmd!()
+            .arg(arg)
+            .fails_with_code(1)
+            .stderr_only("printf: missing hexadecimal number in escape\n");
+    }
+}
+
+#[test]
+fn escaped_unicode_invalid() {
+    for arg in ["\\ud9d0", "\\U0000D8F9"] {
+        new_ucmd!()
+            .arg(arg)
+            .fails_with_code(1)
+            .stderr_only(format!("printf: invalid universal character name {arg}\n"));
+    }
+}
+
+#[test]
 fn escaped_percent_sign() {
     new_ucmd!()
         .args(&["hello%% world"])
@@ -96,43 +105,26 @@ fn escaped_unrecognized() {
 }
 
 #[test]
-fn sub_string() {
-    new_ucmd!()
-        .args(&["hello %s", "world"])
-        .succeeds()
-        .stdout_only("hello world");
-}
-
-#[test]
-fn sub_multi_field() {
-    new_ucmd!()
-        .args(&["%s %s", "hello", "world"])
-        .succeeds()
-        .stdout_only("hello world");
-}
-
-#[test]
-fn sub_repeat_format_str() {
-    new_ucmd!()
-        .args(&["%s.", "hello", "world"])
-        .succeeds()
-        .stdout_only("hello.world.");
-}
-
-#[test]
-fn sub_string_ignore_escapes() {
-    new_ucmd!()
-        .args(&["hello %s", "\\tworld"])
-        .succeeds()
-        .stdout_only("hello \\tworld");
-}
-
-#[test]
 fn sub_b_string_handle_escapes() {
     new_ucmd!()
         .args(&["hello %b", "\\tworld"])
         .succeeds()
         .stdout_only("hello \tworld");
+}
+
+#[test]
+fn sub_b_string_variable_size_unicode() {
+    for x in ["\\5|", "\\05|", "\\005|", "\\0005|"] {
+        new_ucmd!()
+            .args(&["|%b", x])
+            .succeeds()
+            .stdout_only_bytes([b'|', 5u8, b'|']);
+    }
+
+    new_ucmd!()
+        .args(&["|%b", "\\00005|"])
+        .succeeds()
+        .stdout_only_bytes([b'|', 0, b'5', b'|']);
 }
 
 #[test]
@@ -175,6 +167,11 @@ fn sub_q_string_special_non_printable() {
         .args(&["non-printable: %q", "test~"])
         .succeeds()
         .stdout_only("non-printable: test~");
+}
+
+#[test]
+fn sub_q_string_empty() {
+    new_ucmd!().args(&["%q", ""]).succeeds().stdout_only("''");
 }
 
 #[test]
@@ -260,6 +257,26 @@ fn sub_num_int_char_const_in() {
         .args(&["emoji is %i", "'🙃"])
         .succeeds()
         .stdout_only("emoji is 128579");
+
+    new_ucmd!()
+        .args(&["ninety seven is %i", "\"a"])
+        .succeeds()
+        .stdout_only("ninety seven is 97");
+
+    new_ucmd!()
+        .args(&["emoji is %i", "\"🙃"])
+        .succeeds()
+        .stdout_only("emoji is 128579");
+}
+
+#[test]
+fn sub_num_thousands() {
+    // For "C" locale, the thousands separator is ignored but should
+    // not result in an error
+    new_ucmd!()
+        .args(&["%'i", "123456"])
+        .succeeds()
+        .stdout_only("123456");
 }
 
 #[test]
@@ -390,7 +407,6 @@ fn sub_num_sci_negative() {
         .stdout_only("-1234 is -1.234000e+03");
 }
 
-#[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]
 fn sub_num_hex_float_lower() {
     new_ucmd!()
@@ -399,7 +415,6 @@ fn sub_num_hex_float_lower() {
         .stdout_only("0xep-4");
 }
 
-#[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]
 fn sub_num_hex_float_upper() {
     new_ucmd!()
@@ -547,27 +562,81 @@ fn sub_any_asterisk_negative_first_param() {
 }
 
 #[test]
-fn sub_any_specifiers_no_params() {
+fn sub_any_asterisk_first_param_with_integer() {
     new_ucmd!()
-        .args(&["%ztlhLji", "3"]) //spell-checker:disable-line
+        .args(&["|%*d|", "3", "0"])
         .succeeds()
-        .stdout_only("3");
+        .stdout_only("|  0|");
+
+    new_ucmd!()
+        .args(&["|%*d|", "1", "0"])
+        .succeeds()
+        .stdout_only("|0|");
+
+    new_ucmd!()
+        .args(&["|%*d|", "0", "0"])
+        .succeeds()
+        .stdout_only("|0|");
+
+    new_ucmd!()
+        .args(&["|%*d|", "-1", "0"])
+        .succeeds()
+        .stdout_only("|0|");
+
+    // Negative widths are left-aligned
+    new_ucmd!()
+        .args(&["|%*d|", "-3", "0"])
+        .succeeds()
+        .stdout_only("|0  |");
 }
 
 #[test]
-fn sub_any_specifiers_after_first_param() {
+fn sub_any_asterisk_second_param_with_integer() {
     new_ucmd!()
-        .args(&["%0ztlhLji", "3"]) //spell-checker:disable-line
+        .args(&["|%.*d|", "3", "10"])
         .succeeds()
-        .stdout_only("3");
+        .stdout_only("|010|");
+
+    new_ucmd!()
+        .args(&["|%*.d|", "1", "10"])
+        .succeeds()
+        .stdout_only("|10|");
+
+    new_ucmd!()
+        .args(&["|%.*d|", "0", "10"])
+        .succeeds()
+        .stdout_only("|10|");
+
+    new_ucmd!()
+        .args(&["|%.*d|", "-1", "10"])
+        .succeeds()
+        .stdout_only("|10|");
+
+    new_ucmd!()
+        .args(&["|%.*d|", "-2", "10"])
+        .succeeds()
+        .stdout_only("|10|");
+
+    new_ucmd!()
+        .args(&["|%.*d|", &i64::MIN.to_string(), "10"])
+        .succeeds()
+        .stdout_only("|10|");
+
+    new_ucmd!()
+        .args(&["|%.*d|", &format!("-{}", u128::MAX), "10"])
+        .fails_with_code(1)
+        .stdout_is("|10|")
+        .stderr_is(
+            "printf: '-340282366920938463463374607431768211455': Numerical result out of range\n",
+        );
 }
 
 #[test]
-fn sub_any_specifiers_after_period() {
-    new_ucmd!()
-        .args(&["%0.ztlhLji", "3"]) //spell-checker:disable-line
-        .succeeds()
-        .stdout_only("3");
+fn sub_any_specifiers() {
+    // spell-checker:disable-next-line
+    for format in ["%ztlhLji", "%0ztlhLji", "%0.ztlhLji"] {
+        new_ucmd!().args(&[format, "3"]).succeeds().stdout_only("3");
+    }
 }
 
 #[test]
@@ -668,6 +737,47 @@ fn partial_integer() {
         .fails_with_code(1)
         .stdout_is("42 is a lot")
         .stderr_is("printf: '42x23': value not completely converted\n");
+
+    new_ucmd!()
+        .args(&["%d is not %s", "0xwa", "a lot"])
+        .fails_with_code(1)
+        .stdout_is("0 is not a lot")
+        .stderr_is("printf: '0xwa': value not completely converted\n");
+}
+
+#[test]
+fn unsigned_hex_negative_wraparound() {
+    new_ucmd!()
+        .args(&["%x", "-0b100"])
+        .succeeds()
+        .stdout_only("fffffffffffffffc");
+
+    new_ucmd!()
+        .args(&["%x", "-0100"])
+        .succeeds()
+        .stdout_only("ffffffffffffffc0");
+
+    new_ucmd!()
+        .args(&["%x", "-100"])
+        .succeeds()
+        .stdout_only("ffffffffffffff9c");
+
+    new_ucmd!()
+        .args(&["%x", "-0x100"])
+        .succeeds()
+        .stdout_only("ffffffffffffff00");
+
+    new_ucmd!()
+        .args(&["%x", "-92233720368547758150"])
+        .fails_with_code(1)
+        .stdout_is("ffffffffffffffff")
+        .stderr_is("printf: '-92233720368547758150': Numerical result out of range\n");
+
+    new_ucmd!()
+        .args(&["%u", "-1002233720368547758150"])
+        .fails_with_code(1)
+        .stdout_is("18446744073709551615")
+        .stderr_is("printf: '-1002233720368547758150': Numerical result out of range\n");
 }
 
 #[test]
@@ -675,6 +785,19 @@ fn test_overflow() {
     new_ucmd!()
         .args(&["%d", "36893488147419103232"])
         .fails_with_code(1)
+        .stdout_is("9223372036854775807")
+        .stderr_is("printf: '36893488147419103232': Numerical result out of range\n");
+
+    new_ucmd!()
+        .args(&["%d", "-36893488147419103232"])
+        .fails_with_code(1)
+        .stdout_is("-9223372036854775808")
+        .stderr_is("printf: '-36893488147419103232': Numerical result out of range\n");
+
+    new_ucmd!()
+        .args(&["%u", "36893488147419103232"])
+        .fails_with_code(1)
+        .stdout_is("18446744073709551615")
         .stderr_is("printf: '36893488147419103232': Numerical result out of range\n");
 }
 
@@ -682,7 +805,7 @@ fn test_overflow() {
 fn partial_char() {
     new_ucmd!()
         .args(&["%d", "'abc"])
-        .fails_with_code(1)
+        .succeeds()
         .stdout_is("97")
         .stderr_is(
             "printf: warning: bc: character(s) following character constant have been ignored\n",
@@ -781,6 +904,10 @@ fn pad_unsigned_three() {
         ("%#.3x", "0x003"),
         ("%#.3X", "0X003"),
         ("%#.3o", "003"),
+        ("%#05x", "0x003"),
+        ("%#05X", "0X003"),
+        ("%3x", "  3"),
+        ("%3X", "  3"),
     ] {
         new_ucmd!()
             .args(&[format, "3"])
@@ -815,33 +942,23 @@ fn pad_string() {
 }
 
 #[test]
-fn format_spec_zero_char_fails() {
-    // It is invalid to have the format spec '%0c'
-    new_ucmd!().args(&["%0c", "3"]).fails_with_code(1);
+fn format_spec_zero_fails() {
+    // It is invalid to have the format spec
+    for format in ["%0c", "%0s"] {
+        new_ucmd!().args(&[format, "3"]).fails_with_code(1);
+    }
 }
 
 #[test]
-fn format_spec_zero_string_fails() {
-    // It is invalid to have the format spec '%0s'
-    new_ucmd!().args(&["%0s", "3"]).fails_with_code(1);
-}
-
-#[test]
-fn invalid_precision_fails() {
+fn invalid_precision_tests() {
     // It is invalid to have length of output string greater than i32::MAX
-    new_ucmd!()
-        .args(&["%.*d", "2147483648", "0"])
-        .fails()
-        .stderr_is("printf: invalid precision: '2147483648'\n");
-}
-
-#[test]
-fn float_invalid_precision_fails() {
-    // It is invalid to have length of output string greater than i32::MAX
-    new_ucmd!()
-        .args(&["%.*f", "2147483648", "0"])
-        .fails()
-        .stderr_is("printf: invalid precision: '2147483648'\n");
+    for format in ["%.*d", "%.*f"] {
+        let expected_error = "printf: invalid precision: '2147483648'\n";
+        new_ucmd!()
+            .args(&[format, "2147483648", "0"])
+            .fails()
+            .stderr_is(expected_error);
+    }
 }
 
 // The following padding-tests test for the cases in which flags in ['0', ' '] are given.
@@ -886,6 +1003,14 @@ fn negative_zero_padding_with_space_test() {
         .args(&["% 03d", "-1"])
         .succeeds()
         .stdout_only("-01");
+}
+
+#[test]
+fn spaces_before_numbers_are_ignored() {
+    new_ucmd!()
+        .args(&["%*.*d", "   5", "  3", " 6"])
+        .succeeds()
+        .stdout_only("  006");
 }
 
 #[test]
@@ -993,6 +1118,16 @@ fn float_flag_position_space_padding() {
 }
 
 #[test]
+fn float_large_precision() {
+    // Note: This does not match GNU coreutils output (0.100000000000000000001355252716 on x86),
+    // as we parse and format using ExtendedBigDecimal, which provides arbitrary precision.
+    new_ucmd!()
+        .args(&["%.30f", "0.1"])
+        .succeeds()
+        .stdout_only("0.100000000000000000000000000000");
+}
+
+#[test]
 fn float_non_finite_space_padding() {
     new_ucmd!()
         .args(&["% 5.2f|% 5.2f|% 5.2f|% 5.2f", "inf", "-inf", "nan", "-nan"])
@@ -1057,6 +1192,80 @@ fn float_switch_switch_decimal_scientific() {
 }
 
 #[test]
+fn float_arg_zero() {
+    new_ucmd!()
+        .args(&["%f", "0."])
+        .succeeds()
+        .stdout_only("0.000000");
+
+    new_ucmd!()
+        .args(&["%f", ".0"])
+        .succeeds()
+        .stdout_only("0.000000");
+
+    new_ucmd!()
+        .args(&["%f", ".0e100000"])
+        .succeeds()
+        .stdout_only("0.000000");
+}
+
+#[test]
+fn float_arg_invalid() {
+    // Just a dot fails.
+    new_ucmd!()
+        .args(&["%f", "."])
+        .fails()
+        .stdout_is("0.000000")
+        .stderr_contains("expected a numeric value");
+
+    new_ucmd!()
+        .args(&["%f", "-."])
+        .fails()
+        .stdout_is("0.000000")
+        .stderr_contains("expected a numeric value");
+
+    // Just an exponent indicator fails.
+    new_ucmd!()
+        .args(&["%f", "e"])
+        .fails()
+        .stdout_is("0.000000")
+        .stderr_contains("expected a numeric value");
+
+    // No digit but only exponent fails
+    new_ucmd!()
+        .args(&["%f", ".e12"])
+        .fails()
+        .stdout_is("0.000000")
+        .stderr_contains("expected a numeric value");
+
+    // No exponent partially fails
+    new_ucmd!()
+        .args(&["%f", "123e"])
+        .fails()
+        .stdout_is("123.000000")
+        .stderr_contains("value not completely converted");
+
+    // Nothing past `0x` parses as zero
+    new_ucmd!()
+        .args(&["%f", "0x"])
+        .fails()
+        .stdout_is("0.000000")
+        .stderr_contains("value not completely converted");
+
+    new_ucmd!()
+        .args(&["%f", "0x."])
+        .fails()
+        .stdout_is("0.000000")
+        .stderr_contains("value not completely converted");
+
+    new_ucmd!()
+        .args(&["%f", "0xp12"])
+        .fails()
+        .stdout_is("0.000000")
+        .stderr_contains("value not completely converted");
+}
+
+#[test]
 fn float_arg_with_whitespace() {
     new_ucmd!()
         .args(&["%f", " \u{0020}\u{000d}\t\n0.000001"])
@@ -1074,10 +1283,181 @@ fn float_arg_with_whitespace() {
         .fails()
         .stderr_contains("expected a numeric value");
 
-    // A input string with a whitespace special character that has
+    // An input string with a whitespace special character that has
     // not already been expanded should fail.
     new_ucmd!()
         .args(&["%f", "\\t0.1"])
         .fails()
         .stderr_contains("expected a numeric value");
+}
+
+#[test]
+fn mb_input() {
+    let cases = vec![
+        ("%04x\n", "\"á", "00e1\n"),
+        ("%04x\n", "'á", "00e1\n"),
+        ("%04x\n", "'\u{e1}", "00e1\n"),
+        ("%i\n", "\"á", "225\n"),
+        ("%i\n", "'á", "225\n"),
+        ("%i\n", "'\u{e1}", "225\n"),
+        ("%f\n", "'á", "225.000000\n"),
+    ];
+    for (format, arg, stdout) in cases {
+        new_ucmd!()
+            .args(&[format, arg])
+            .succeeds()
+            .stdout_only(stdout);
+    }
+
+    let cases = vec![
+        ("%04x\n", "\"á=", "00e1\n", "="),
+        ("%04x\n", "'á-", "00e1\n", "-"),
+        ("%04x\n", "'á=-==", "00e1\n", "=-=="),
+        ("%04x\n", "'á'", "00e1\n", "'"),
+        ("%04x\n", "'\u{e1}++", "00e1\n", "++"),
+        ("%04x\n", "''á'", "0027\n", "á'"),
+        ("%i\n", "\"á=", "225\n", "="),
+    ];
+    for (format, arg, stdout, stderr) in cases {
+        new_ucmd!()
+            .args(&[format, arg])
+            .succeeds()
+            .stdout_is(stdout)
+            .stderr_is(format!("printf: warning: {stderr}: character(s) following character constant have been ignored\n"));
+    }
+
+    for arg in ["\"", "'"] {
+        new_ucmd!()
+            .args(&["%04x\n", arg])
+            .fails()
+            .stderr_contains("expected a numeric value");
+    }
+}
+
+#[test]
+#[cfg(target_family = "unix")]
+fn mb_invalid_unicode() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let cases = vec![
+        ("%04x\n", b"\"\xe1", "00e1\n"),
+        ("%04x\n", b"'\xe1", "00e1\n"),
+        ("%i\n", b"\"\xe1", "225\n"),
+        ("%i\n", b"'\xe1", "225\n"),
+        ("%f\n", b"'\xe1", "225.000000\n"),
+    ];
+    for (format, arg, stdout) in cases {
+        new_ucmd!()
+            .arg(format)
+            .arg(OsStr::from_bytes(arg))
+            .succeeds()
+            .stdout_only(stdout);
+    }
+
+    let cases = vec![
+        (b"\"\xe1=".as_slice(), "="),
+        (b"'\xe1-".as_slice(), "-"),
+        (b"'\xe1=-==".as_slice(), "=-=="),
+        (b"'\xe1'".as_slice(), "'"),
+        // unclear if original or replacement character is better in stderr
+        //(b"''\xe1'".as_slice(), "'�'"),
+    ];
+    for (arg, expected) in cases {
+        new_ucmd!()
+            .arg("%04x\n")
+            .arg(OsStr::from_bytes(arg))
+            .succeeds()
+            .stdout_is("00e1\n")
+            .stderr_is(format!("printf: warning: {expected}: character(s) following character constant have been ignored\n"));
+    }
+}
+
+#[test]
+fn positional_format_specifiers() {
+    new_ucmd!()
+        .args(&["%1$d%d-", "5", "10", "6", "20"])
+        .succeeds()
+        .stdout_only("55-1010-66-2020-");
+
+    new_ucmd!()
+        .args(&["%2$d%d-", "5", "10", "6", "20"])
+        .succeeds()
+        .stdout_only("105-206-");
+
+    new_ucmd!()
+        .args(&["%3$d%d-", "5", "10", "6", "20"])
+        .succeeds()
+        .stdout_only("65-020-");
+
+    new_ucmd!()
+        .args(&["%4$d%d-", "5", "10", "6", "20"])
+        .succeeds()
+        .stdout_only("205-");
+
+    new_ucmd!()
+        .args(&["%5$d%d-", "5", "10", "6", "20"])
+        .succeeds()
+        .stdout_only("05-");
+
+    new_ucmd!()
+        .args(&["%0$d%d-", "5", "10", "6", "20"])
+        .fails_with_code(1)
+        .stderr_only("printf: %0$: invalid conversion specification\n");
+
+    new_ucmd!()
+        .args(&[
+            "Octal: %6$o, Int: %1$d, Float: %4$f, String: %2$s, Hex: %7$x, Scientific: %5$e, Char: %9$c, Unsigned: %3$u, Integer: %8$i",
+            "42",          // 1$d - Int
+            "hello",       // 2$s - String
+            "100",         // 3$u - Unsigned
+            "3.14159",     // 4$f - Float
+            "0.00001",     // 5$e - Scientific
+            "77",          // 6$o - Octal
+            "255",         // 7$x - Hex
+            "123",         // 8$i - Integer
+            "A",           // 9$c - Char
+        ])
+        .succeeds()
+        .stdout_only("Octal: 115, Int: 42, Float: 3.141590, String: hello, Hex: ff, Scientific: 1.000000e-05, Char: A, Unsigned: 100, Integer: 123");
+}
+
+#[test]
+#[cfg(target_family = "unix")]
+fn non_utf_8_input() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    // ISO-8859-1 encoded text
+    // spell-checker:disable
+    const INPUT_AND_OUTPUT: &[u8] =
+        b"Swer an rehte g\xFCete wendet s\xEEn gem\xFCete, dem volget s\xE6lde und \xEAre.";
+    // spell-checker:enable
+
+    let os_str = OsStr::from_bytes(INPUT_AND_OUTPUT);
+
+    new_ucmd!()
+        .arg("%s")
+        .arg(os_str)
+        .succeeds()
+        .stdout_only_bytes(INPUT_AND_OUTPUT);
+
+    new_ucmd!()
+        .arg(os_str)
+        .succeeds()
+        .stdout_only_bytes(INPUT_AND_OUTPUT);
+
+    new_ucmd!()
+        .arg("%d")
+        .arg(os_str)
+        .fails()
+        .stderr_contains("expected a numeric value");
+}
+
+#[test]
+fn test_emoji_formatting() {
+    new_ucmd!()
+        .args(&["Status: %s 🎯 Count: %d\n", "Success 🚀", "42"])
+        .succeeds()
+        .stdout_only("Status: Success 🚀 🎯 Count: 42\n");
 }

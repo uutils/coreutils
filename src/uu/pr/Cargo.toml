@@ -1,28 +1,29 @@
 [package]
 name = "uu_pr"
-version = "0.0.30"
-authors = ["uutils developers"]
-license = "MIT"
 description = "pr ~ (uutils) convert text files for printing"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/pr"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2024"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/pr.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["entries"] }
-quick-error = { workspace = true }
+uucore = { workspace = true, features = ["entries", "time"] }
 itertools = { workspace = true }
 regex = { workspace = true }
-chrono = { workspace = true }
+thiserror = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "pr"

@@ -4,9 +4,9 @@
 // file that was distributed with this source code.
 // spell-checker:ignore bytestream
 use super::*;
-use std::error::Error;
-use std::fmt;
 use std::io::{self, BufRead};
+use thiserror::Error;
+use uucore::translate;
 
 /// Wraps a `std::io::BufRead` buffered byte stream and decode it as UTF-8.
 pub struct BufReadDecoder<B: BufRead> {
@@ -15,36 +15,18 @@ pub struct BufReadDecoder<B: BufRead> {
     incomplete: Incomplete,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum BufReadDecoderError<'a> {
     /// Represents one UTF-8 error in the byte stream.
     ///
     /// In lossy decoding, each such error should be replaced with U+FFFD.
     /// (See `BufReadDecoder::next_lossy` and `BufReadDecoderError::lossy`.)
+    #[error("{}", translate!("decoder-error-invalid-byte-sequence", "bytes" => format!("{:02x?}", .0)))]
     InvalidByteSequence(&'a [u8]),
 
     /// An I/O error from the underlying byte stream
-    Io(io::Error),
-}
-
-impl fmt::Display for BufReadDecoderError<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            BufReadDecoderError::InvalidByteSequence(bytes) => {
-                write!(f, "invalid byte sequence: {bytes:02x?}")
-            }
-            BufReadDecoderError::Io(ref err) => write!(f, "underlying bytestream error: {err}"),
-        }
-    }
-}
-
-impl Error for BufReadDecoderError<'_> {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match *self {
-            BufReadDecoderError::InvalidByteSequence(_) => None,
-            BufReadDecoderError::Io(ref err) => Some(err),
-        }
-    }
+    #[error("{}", translate!("decoder-error-io", "error" => .0))]
+    Io(#[source] io::Error),
 }
 
 impl<B: BufRead> BufReadDecoder<B> {
@@ -64,7 +46,7 @@ impl<B: BufRead> BufReadDecoder<B> {
     /// except that decoded chunks borrow the decoder (~iterator)
     /// so they need to be handled or copied before the next chunk can start decoding.
     #[allow(clippy::cognitive_complexity)]
-    pub fn next_strict(&mut self) -> Option<Result<&str, BufReadDecoderError>> {
+    pub fn next_strict(&mut self) -> Option<Result<&str, BufReadDecoderError<'_>>> {
         enum BytesSource {
             BufRead(usize),
             Incomplete,

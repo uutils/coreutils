@@ -3,49 +3,39 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, value_parser};
 use libc::mkfifo;
 use std::ffi::CString;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::translate;
 
-static USAGE: &str = help_usage!("mkfifo.md");
-static ABOUT: &str = help_about!("mkfifo.md");
+use uucore::{format_usage, show};
 
 mod options {
     pub static MODE: &str = "mode";
-    pub static SE_LINUX_SECURITY_CONTEXT: &str = "Z";
+    pub static SELINUX: &str = "Z";
     pub static CONTEXT: &str = "context";
     pub static FIFO: &str = "fifo";
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    if matches.contains_id(options::CONTEXT) {
-        return Err(USimpleError::new(1, "--context is not implemented"));
-    }
-    if matches.get_flag(options::SE_LINUX_SECURITY_CONTEXT) {
-        return Err(USimpleError::new(1, "-Z is not implemented"));
-    }
-
-    let mode = match matches.get_one::<String>(options::MODE) {
-        // if mode is passed, ignore umask
-        Some(m) => match usize::from_str_radix(m, 8) {
-            Ok(m) => m,
-            Err(e) => return Err(USimpleError::new(1, format!("invalid mode: {e}"))),
-        },
-        // Default value + umask if present
-        None => 0o666 & !(uucore::mode::get_umask() as usize),
-    };
+    let mode = calculate_mode(matches.get_one::<String>(options::MODE))
+        .map_err(|e| USimpleError::new(1, translate!("mkfifo-error-invalid-mode", "error" => e)))?;
 
     let fifos: Vec<String> = match matches.get_many::<String>(options::FIFO) {
         Some(v) => v.cloned().collect(),
-        None => return Err(USimpleError::new(1, "missing operand")),
+        None => {
+            return Err(USimpleError::new(
+                1,
+                translate!("mkfifo-error-missing-operand"),
+            ));
+        }
     };
 
     for f in fifos {
@@ -56,16 +46,34 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if err == -1 {
             show!(USimpleError::new(
                 1,
-                format!("cannot create fifo {}: File exists", f.quote()),
+                translate!("mkfifo-error-cannot-create-fifo", "path" => f.quote()),
             ));
         }
 
         // Explicitly set the permissions to ignore umask
-        if let Err(e) = fs::set_permissions(&f, fs::Permissions::from_mode(mode as u32)) {
+        if let Err(e) = fs::set_permissions(&f, fs::Permissions::from_mode(mode)) {
             return Err(USimpleError::new(
                 1,
-                format!("cannot set permissions on {}: {}", f.quote(), e),
+                translate!("mkfifo-error-cannot-set-permissions", "path" => f.quote(), "error" => e),
             ));
+        }
+
+        // Apply SELinux context if requested
+        #[cfg(feature = "selinux")]
+        {
+            // Extract the SELinux related flags and options
+            let set_selinux_context = matches.get_flag(options::SELINUX);
+            let context = matches.get_one::<String>(options::CONTEXT);
+
+            if set_selinux_context || context.is_some() {
+                use std::path::Path;
+                if let Err(e) =
+                    uucore::selinux::set_selinux_security_context(Path::new(&f), context)
+                {
+                    let _ = fs::remove_file(f);
+                    return Err(USimpleError::new(1, e.to_string()));
+                }
+            }
         }
     }
 
@@ -75,30 +83,31 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .override_usage(format_usage(&translate!("mkfifo-usage")))
+        .about(translate!("mkfifo-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::MODE)
                 .short('m')
                 .long(options::MODE)
-                .help("file permissions for the fifo")
+                .help(translate!("mkfifo-help-mode"))
                 .value_name("MODE"),
         )
         .arg(
-            Arg::new(options::SE_LINUX_SECURITY_CONTEXT)
+            Arg::new(options::SELINUX)
                 .short('Z')
-                .help("set the SELinux security context to default type")
+                .help(translate!("mkfifo-help-selinux"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CONTEXT)
                 .long(options::CONTEXT)
                 .value_name("CTX")
-                .help(
-                    "like -Z, or if CTX is specified then set the SELinux \
-                    or SMACK security context to CTX",
-                ),
+                .value_parser(value_parser!(String))
+                .num_args(0..=1)
+                .require_equals(true)
+                .help(translate!("mkfifo-help-context")),
         )
         .arg(
             Arg::new(options::FIFO)
@@ -106,4 +115,23 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath),
         )
+}
+
+fn calculate_mode(mode_option: Option<&String>) -> Result<u32, String> {
+    let umask = uucore::mode::get_umask();
+    let mut mode = 0o666; // Default mode for FIFOs
+
+    if let Some(m) = mode_option {
+        if m.chars().any(|c| c.is_ascii_digit()) {
+            mode = uucore::mode::parse_numeric(mode, m, false)?;
+        } else {
+            for item in m.split(',') {
+                mode = uucore::mode::parse_symbolic(mode, item, umask, false)?;
+            }
+        }
+    } else {
+        mode &= !umask; // Apply umask if no mode is specified
+    }
+
+    Ok(mode)
 }

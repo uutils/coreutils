@@ -32,6 +32,7 @@ TERM st
 TERM terminator
 TERM tmux*
 TERM vt100
+TERM wezterm*
 TERM xterm*
 # Below are the color init strings for the basic file types.
 # One can use codes for 256 or more colors supported by modern terminals.

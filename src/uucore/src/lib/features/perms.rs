@@ -5,22 +5,29 @@
 
 //! Common functions to manage permissions
 
-// spell-checker:ignore (jargon) TOCTOU
+// spell-checker:ignore (jargon) TOCTOU fchownat fchown
 
 use crate::display::Quotable;
 use crate::error::{UResult, USimpleError, strip_errno};
 pub use crate::features::entries;
 use crate::show_error;
+
 use clap::{Arg, ArgMatches, Command};
+
 use libc::{gid_t, uid_t};
 use options::traverse;
+use std::ffi::OsString;
+
+#[cfg(not(target_os = "linux"))]
 use walkdir::WalkDir;
 
-use std::io::Error as IOError;
-use std::io::Result as IOResult;
+#[cfg(target_os = "linux")]
+use crate::features::safe_traversal::DirFd;
 
 use std::ffi::CString;
 use std::fs::Metadata;
+use std::io::Error as IOError;
+use std::io::Result as IOResult;
 use std::os::unix::fs::MetadataExt;
 
 use std::os::unix::ffi::OsStrExt;
@@ -39,6 +46,15 @@ pub enum VerbosityLevel {
 pub struct Verbosity {
     pub groups_only: bool,
     pub level: VerbosityLevel,
+}
+
+impl Default for Verbosity {
+    fn default() -> Self {
+        Self {
+            groups_only: false,
+            level: VerbosityLevel::Normal,
+        }
+    }
 }
 
 /// Actually perform the change of owner on a path
@@ -80,21 +96,19 @@ pub fn wrap_chown<P: AsRef<Path>>(
             VerbosityLevel::Silent => (),
             level => {
                 out = format!(
-                    "changing {} of {}: {}",
+                    "changing {} of {}: {e}",
                     if verbosity.groups_only {
                         "group"
                     } else {
                         "ownership"
                     },
                     path.quote(),
-                    e
                 );
                 if level == VerbosityLevel::Verbose {
                     out = if verbosity.groups_only {
                         let gid = meta.gid();
                         format!(
-                            "{}\nfailed to change group of {} from {} to {}",
-                            out,
+                            "{out}\nfailed to change group of {} from {} to {}",
                             path.quote(),
                             entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
                             entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
@@ -103,8 +117,7 @@ pub fn wrap_chown<P: AsRef<Path>>(
                         let uid = meta.uid();
                         let gid = meta.gid();
                         format!(
-                            "{}\nfailed to change ownership of {} from {}:{} to {}:{}",
-                            out,
+                            "{out}\nfailed to change ownership of {} from {}:{} to {}:{}",
                             path.quote(),
                             entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
                             entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
@@ -116,51 +129,52 @@ pub fn wrap_chown<P: AsRef<Path>>(
             }
         }
         return Err(out);
-    } else {
-        let changed = dest_uid != meta.uid() || dest_gid != meta.gid();
-        if changed {
-            match verbosity.level {
-                VerbosityLevel::Changes | VerbosityLevel::Verbose => {
-                    let gid = meta.gid();
-                    out = if verbosity.groups_only {
-                        format!(
-                            "changed group of {} from {} to {}",
-                            path.quote(),
-                            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                            entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
-                        )
-                    } else {
-                        let gid = meta.gid();
-                        let uid = meta.uid();
-                        format!(
-                            "changed ownership of {} from {}:{} to {}:{}",
-                            path.quote(),
-                            entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
-                            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                            entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
-                            entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
-                        )
-                    };
-                }
-                _ => (),
-            };
-        } else if verbosity.level == VerbosityLevel::Verbose {
-            out = if verbosity.groups_only {
-                format!(
-                    "group of {} retained as {}",
-                    path.quote(),
-                    entries::gid2grp(dest_gid).unwrap_or_default()
-                )
-            } else {
-                format!(
-                    "ownership of {} retained as {}:{}",
-                    path.quote(),
-                    entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
-                    entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
-                )
-            };
-        }
     }
+
+    let changed = dest_uid != meta.uid() || dest_gid != meta.gid();
+    if changed {
+        match verbosity.level {
+            VerbosityLevel::Changes | VerbosityLevel::Verbose => {
+                let gid = meta.gid();
+                out = if verbosity.groups_only {
+                    format!(
+                        "changed group of {} from {} to {}",
+                        path.quote(),
+                        entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                        entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
+                    )
+                } else {
+                    let gid = meta.gid();
+                    let uid = meta.uid();
+                    format!(
+                        "changed ownership of {} from {}:{} to {}:{}",
+                        path.quote(),
+                        entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                        entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                        entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
+                        entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
+                    )
+                };
+            }
+            _ => (),
+        };
+    } else if verbosity.level == VerbosityLevel::Verbose {
+        out = if verbosity.groups_only {
+            format!(
+                "group of {} retained as {}",
+                path.quote(),
+                entries::gid2grp(dest_gid).unwrap_or_default()
+            )
+        } else {
+            format!(
+                "ownership of {} retained as {}:{}",
+                path.quote(),
+                entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
+                entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
+            )
+        };
+    }
+
     Ok(out)
 }
 
@@ -185,7 +199,7 @@ pub struct ChownExecutor {
     pub traverse_symlinks: TraverseSymlinks,
     pub verbosity: Verbosity,
     pub filter: IfFrom,
-    pub files: Vec<String>,
+    pub files: Vec<OsString>,
     pub recursive: bool,
     pub preserve_root: bool,
     pub dereference: bool,
@@ -293,23 +307,52 @@ impl ChownExecutor {
         }
 
         let ret = if self.matched(meta.uid(), meta.gid()) {
-            match wrap_chown(
+            // Use safe syscalls for root directory to prevent TOCTOU attacks on Linux
+            #[cfg(target_os = "linux")]
+            let chown_result = if path.is_dir() {
+                // For directories on Linux, use safe traversal from the start
+                match DirFd::open(path) {
+                    Ok(dir_fd) => self
+                        .safe_chown_dir(&dir_fd, path, &meta)
+                        .map(|_| String::new()),
+                    Err(_e) => {
+                        // Don't show error here - let safe_dive_into handle directory traversal errors
+                        // This prevents duplicate error messages
+                        Ok(String::new())
+                    }
+                }
+            } else {
+                // For non-directories (files, symlinks), use the regular wrap_chown method
+                wrap_chown(
+                    path,
+                    &meta,
+                    self.dest_uid,
+                    self.dest_gid,
+                    self.dereference,
+                    self.verbosity.clone(),
+                )
+            };
+
+            #[cfg(not(target_os = "linux"))]
+            let chown_result = wrap_chown(
                 path,
                 &meta,
                 self.dest_uid,
                 self.dest_gid,
                 self.dereference,
                 self.verbosity.clone(),
-            ) {
+            );
+
+            match chown_result {
                 Ok(n) => {
                     if !n.is_empty() {
-                        show_error!("{}", n);
+                        show_error!("{n}");
                     }
                     0
                 }
                 Err(e) => {
                     if self.verbosity.level != VerbosityLevel::Silent {
-                        show_error!("{}", e);
+                        show_error!("{e}");
                     }
                     1
                 }
@@ -324,12 +367,200 @@ impl ChownExecutor {
         };
 
         if self.recursive {
-            ret | self.dive_into(&root)
+            #[cfg(target_os = "linux")]
+            {
+                ret | self.safe_dive_into(&root)
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                ret | self.dive_into(&root)
+            }
         } else {
             ret
         }
     }
 
+    #[cfg(target_os = "linux")]
+    fn safe_chown_dir(&self, dir_fd: &DirFd, path: &Path, meta: &Metadata) -> Result<(), String> {
+        let dest_uid = self.dest_uid.unwrap_or_else(|| meta.uid());
+        let dest_gid = self.dest_gid.unwrap_or_else(|| meta.gid());
+
+        // Use fchown (safe) to change the directory's ownership
+        if let Err(e) = dir_fd.fchown(self.dest_uid, self.dest_gid) {
+            let mut error_msg = format!(
+                "changing {} of {}: {}",
+                if self.verbosity.groups_only {
+                    "group"
+                } else {
+                    "ownership"
+                },
+                path.quote(),
+                e
+            );
+
+            if self.verbosity.level == VerbosityLevel::Verbose {
+                error_msg = if self.verbosity.groups_only {
+                    let gid = meta.gid();
+                    format!(
+                        "{error_msg}\nfailed to change group of {} from {} to {}",
+                        path.quote(),
+                        entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                        entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
+                    )
+                } else {
+                    let uid = meta.uid();
+                    let gid = meta.gid();
+                    format!(
+                        "{error_msg}\nfailed to change ownership of {} from {}:{} to {}:{}",
+                        path.quote(),
+                        entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                        entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                        entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
+                        entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
+                    )
+                };
+            }
+
+            return Err(error_msg);
+        }
+
+        // Report the change if verbose (similar to wrap_chown)
+        self.report_ownership_change_success(path, meta.uid(), meta.gid());
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    fn safe_dive_into<P: AsRef<Path>>(&self, root: P) -> i32 {
+        let root = root.as_ref();
+
+        // Don't traverse into symlinks if configured not to
+        if self.traverse_symlinks == TraverseSymlinks::None && root.is_symlink() {
+            return 0;
+        }
+
+        // Only try to traverse if the root is actually a directory
+        // This matches WalkDir's behavior with min_depth(1) - if root is not a directory,
+        // there are no children to traverse, so we return early with success
+        if !root.is_dir() {
+            return 0;
+        }
+
+        // Open directory with safe traversal
+        let Some(dir_fd) = self.try_open_dir(root) else {
+            return 1;
+        };
+
+        let mut ret = 0;
+        self.safe_traverse_dir(&dir_fd, root, &mut ret);
+        ret
+    }
+
+    #[cfg(target_os = "linux")]
+    fn safe_traverse_dir(&self, dir_fd: &DirFd, dir_path: &Path, ret: &mut i32) {
+        // Read directory entries
+        let entries = match dir_fd.read_dir() {
+            Ok(entries) => entries,
+            Err(e) => {
+                *ret = 1;
+                if self.verbosity.level != VerbosityLevel::Silent {
+                    show_error!(
+                        "cannot read directory '{}': {}",
+                        dir_path.display(),
+                        strip_errno(&e)
+                    );
+                }
+                return;
+            }
+        };
+
+        for entry_name in entries {
+            let entry_path = dir_path.join(&entry_name);
+
+            // Get metadata for the entry
+            let follow = self.traverse_symlinks == TraverseSymlinks::All;
+
+            let meta = match dir_fd.metadata_at(&entry_name, follow) {
+                Ok(m) => m,
+                Err(e) => {
+                    *ret = 1;
+                    if self.verbosity.level != VerbosityLevel::Silent {
+                        show_error!(
+                            "cannot access '{}': {}",
+                            entry_path.display(),
+                            strip_errno(&e)
+                        );
+                    }
+                    continue;
+                }
+            };
+
+            if self.preserve_root
+                && is_root(&entry_path, self.traverse_symlinks == TraverseSymlinks::All)
+            {
+                *ret = 1;
+                return;
+            }
+
+            // Check if we should chown this entry
+            if self.matched(meta.uid(), meta.gid()) {
+                // Use fchownat for the actual ownership change
+                let follow_symlinks =
+                    self.dereference || self.traverse_symlinks == TraverseSymlinks::All;
+
+                // Only pass the IDs that should actually be changed
+                let chown_uid = self.dest_uid;
+                let chown_gid = self.dest_gid;
+
+                if let Err(e) = dir_fd.chown_at(&entry_name, chown_uid, chown_gid, follow_symlinks)
+                {
+                    *ret = 1;
+                    if self.verbosity.level != VerbosityLevel::Silent {
+                        let msg = format!(
+                            "changing {} of {}: {}",
+                            if self.verbosity.groups_only {
+                                "group"
+                            } else {
+                                "ownership"
+                            },
+                            entry_path.quote(),
+                            strip_errno(&e)
+                        );
+                        show_error!("{}", msg);
+                    }
+                } else {
+                    // Report the successful ownership change using the shared helper
+                    self.report_ownership_change_success(&entry_path, meta.uid(), meta.gid());
+                }
+            } else {
+                self.print_verbose_ownership_retained_as(
+                    &entry_path,
+                    meta.uid(),
+                    self.dest_gid.map(|_| meta.gid()),
+                );
+            }
+
+            // Recurse into subdirectories
+            if meta.is_dir() && (follow || !meta.file_type().is_symlink()) {
+                match dir_fd.open_subdir(&entry_name) {
+                    Ok(subdir_fd) => {
+                        self.safe_traverse_dir(&subdir_fd, &entry_path, ret);
+                    }
+                    Err(e) => {
+                        *ret = 1;
+                        if self.verbosity.level != VerbosityLevel::Silent {
+                            show_error!(
+                                "cannot access '{}': {}",
+                                entry_path.display(),
+                                strip_errno(&e)
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
     #[allow(clippy::cognitive_complexity)]
     fn dive_into<P: AsRef<Path>>(&self, root: P) -> i32 {
         let root = root.as_ref();
@@ -360,7 +591,7 @@ impl ChownExecutor {
                             }
                         );
                     } else {
-                        show_error!("{}", e);
+                        show_error!("{e}");
                     }
                     continue;
                 }
@@ -403,13 +634,13 @@ impl ChownExecutor {
             ) {
                 Ok(n) => {
                     if !n.is_empty() {
-                        show_error!("{}", n);
+                        show_error!("{n}");
                     }
                     0
                 }
                 Err(e) => {
                     if self.verbosity.level != VerbosityLevel::Silent {
-                        show_error!("{}", e);
+                        show_error!("{e}");
                     }
                     1
                 }
@@ -458,11 +689,83 @@ impl ChownExecutor {
                 _ => entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
             };
             if self.verbosity.groups_only {
-                println!("group of {} retained as {}", path.quote(), ownership);
+                println!("group of {} retained as {ownership}", path.quote());
             } else {
-                println!("ownership of {} retained as {}", path.quote(), ownership);
+                println!("ownership of {} retained as {ownership}", path.quote());
             }
         }
+    }
+
+    /// Try to open directory with error reporting
+    #[cfg(target_os = "linux")]
+    fn try_open_dir(&self, path: &Path) -> Option<DirFd> {
+        DirFd::open(path)
+            .map_err(|e| {
+                if self.verbosity.level != VerbosityLevel::Silent {
+                    show_error!("cannot access '{}': {}", path.display(), strip_errno(&e));
+                }
+            })
+            .ok()
+    }
+
+    /// Report ownership change with proper verbose output
+    /// Returns 0 on success
+    #[cfg(target_os = "linux")]
+    fn report_ownership_change_success(
+        &self,
+        path: &Path,
+        original_uid: u32,
+        original_gid: u32,
+    ) -> i32 {
+        let dest_uid = self.dest_uid.unwrap_or(original_uid);
+        let dest_gid = self.dest_gid.unwrap_or(original_gid);
+        let changed = dest_uid != original_uid || dest_gid != original_gid;
+
+        if changed {
+            match self.verbosity.level {
+                VerbosityLevel::Changes | VerbosityLevel::Verbose => {
+                    let output = if self.verbosity.groups_only {
+                        format!(
+                            "changed group of {} from {} to {}",
+                            path.quote(),
+                            entries::gid2grp(original_gid)
+                                .unwrap_or_else(|_| original_gid.to_string()),
+                            entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
+                        )
+                    } else {
+                        format!(
+                            "changed ownership of {} from {}:{} to {}:{}",
+                            path.quote(),
+                            entries::uid2usr(original_uid)
+                                .unwrap_or_else(|_| original_uid.to_string()),
+                            entries::gid2grp(original_gid)
+                                .unwrap_or_else(|_| original_gid.to_string()),
+                            entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
+                            entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
+                        )
+                    };
+                    show_error!("{output}");
+                }
+                _ => (),
+            }
+        } else if self.verbosity.level == VerbosityLevel::Verbose {
+            let output = if self.verbosity.groups_only {
+                format!(
+                    "group of {} retained as {}",
+                    path.quote(),
+                    entries::gid2grp(dest_gid).unwrap_or_default()
+                )
+            } else {
+                format!(
+                    "ownership of {} retained as {}:{}",
+                    path.quote(),
+                    entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
+                    entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
+                )
+            };
+            show_error!("{output}");
+        }
+        0
     }
 }
 
@@ -507,6 +810,7 @@ type GidUidFilterOwnerParser = fn(&ArgMatches) -> UResult<GidUidOwnerFilter>;
 /// Returns the updated `dereference` and `traverse_symlinks` values.
 pub fn configure_symlink_and_recursion(
     matches: &ArgMatches,
+    default_traverse_symlinks: TraverseSymlinks,
 ) -> Result<(bool, bool, TraverseSymlinks), Box<dyn crate::error::UError>> {
     let mut dereference = if matches.get_flag(options::dereference::DEREFERENCE) {
         Some(true) // Follow symlinks
@@ -520,8 +824,10 @@ pub fn configure_symlink_and_recursion(
         TraverseSymlinks::All
     } else if matches.get_flag("H") {
         TraverseSymlinks::First
-    } else {
+    } else if matches.get_flag("P") {
         TraverseSymlinks::None
+    } else {
+        default_traverse_symlinks
     };
 
     let recursive = matches.get_flag(options::RECURSIVE);
@@ -587,17 +893,19 @@ pub fn chown_base(
             .value_hint(clap::ValueHint::FilePath)
             .action(clap::ArgAction::Append)
             .required(true)
-            .num_args(1..),
+            .num_args(1..)
+            .value_parser(clap::value_parser!(std::ffi::OsString)),
     );
-    let matches = command.try_get_matches_from(args)?;
+    let matches = crate::clap_localization::handle_clap_result(command, args)?;
 
-    let files: Vec<String> = matches
-        .get_many::<String>(options::ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
+    let files: Vec<OsString> = matches
+        .get_many::<OsString>(options::ARG_FILES)
+        .map(|v| v.cloned().collect())
         .unwrap_or_default();
 
     let preserve_root = matches.get_flag(options::preserve_root::PRESERVE);
-    let (recursive, dereference, traverse_symlinks) = configure_symlink_and_recursion(&matches)?;
+    let (recursive, dereference, traverse_symlinks) =
+        configure_symlink_and_recursion(&matches, TraverseSymlinks::None)?;
 
     let verbosity_level = if matches.get_flag(options::verbosity::CHANGES) {
         VerbosityLevel::Changes

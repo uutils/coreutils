@@ -6,7 +6,6 @@
 // spell-checker:ignore (ToDO) chdir execvp progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction
 
 pub mod native_int_str;
-pub mod parse_error;
 pub mod split_iterator;
 pub mod string_expander;
 pub mod string_parser;
@@ -19,32 +18,75 @@ use native_int_str::{
     Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation_owned,
 };
 #[cfg(unix)]
-use nix::sys::signal::{
-    SaFlags, SigAction, SigHandler, SigHandler::SigIgn, SigSet, Signal, raise, sigaction, signal,
-};
+use nix::libc;
+#[cfg(unix)]
+use nix::sys::signal::{SigHandler::SigIgn, Signal, signal};
+#[cfg(unix)]
+use nix::unistd::execvp;
 use std::borrow::Cow;
 use std::env;
+#[cfg(unix)]
+use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Write};
-use std::ops::Deref;
-
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
-#[cfg(unix)]
-use std::os::unix::process::{CommandExt, ExitStatusExt};
-use std::process::{self};
+
 use uucore::display::Quotable;
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
 #[cfg(unix)]
 use uucore::signals::signal_by_name_or_value;
-use uucore::{format_usage, help_about, help_section, help_usage, show_warning};
+use uucore::translate;
+use uucore::{format_usage, show_warning};
 
-const ABOUT: &str = help_about!("env.md");
-const USAGE: &str = help_usage!("env.md");
-const AFTER_HELP: &str = help_section!("after help", "env.md");
+use thiserror::Error;
 
-const ERROR_MSG_S_SHEBANG: &str = "use -[v]S to pass options in shebang lines";
+#[derive(Debug, Error, PartialEq)]
+pub enum EnvError {
+    #[error("{}", translate!("env-error-missing-closing-quote", "position" => .0, "quote" => .1))]
+    EnvMissingClosingQuote(usize, char),
+    #[error("{}", translate!("env-error-invalid-backslash-at-end", "position" => .0, "context" => .1.clone()))]
+    EnvInvalidBackslashAtEndOfStringInMinusS(usize, String),
+    #[error("{}", translate!("env-error-backslash-c-not-allowed", "position" => .0))]
+    EnvBackslashCNotAllowedInDoubleQuotes(usize),
+    #[error("{}", translate!("env-error-invalid-sequence", "position" => .0, "char" => .1))]
+    EnvInvalidSequenceBackslashXInMinusS(usize, char),
+    #[error("{}", translate!("env-error-missing-closing-brace", "position" => .0))]
+    EnvParsingOfVariableMissingClosingBrace(usize),
+    #[error("{}", translate!("env-error-missing-variable", "position" => .0))]
+    EnvParsingOfMissingVariable(usize),
+    #[error("{}", translate!("env-error-missing-closing-brace-after-value", "position" => .0))]
+    EnvParsingOfVariableMissingClosingBraceAfterValue(usize),
+    #[error("{}", translate!("env-error-unexpected-number", "position" => .0, "char" => .1.clone()))]
+    EnvParsingOfVariableUnexpectedNumber(usize, String),
+    #[error("{}", translate!("env-error-expected-brace-or-colon", "position" => .0, "char" => .1.clone()))]
+    EnvParsingOfVariableExceptedBraceOrColon(usize, String),
+    #[error("")]
+    EnvReachedEnd,
+    #[error("")]
+    EnvContinueWithDelimiter,
+    #[error("{}{:?}",.0,.1)]
+    EnvInternalError(usize, string_parser::Error),
+}
+
+impl From<string_parser::Error> for EnvError {
+    fn from(value: string_parser::Error) -> Self {
+        EnvError::EnvInternalError(value.peek_position, value)
+    }
+}
+
+mod options {
+    pub const IGNORE_ENVIRONMENT: &str = "ignore-environment";
+    pub const CHDIR: &str = "chdir";
+    pub const NULL: &str = "null";
+    pub const FILE: &str = "file";
+    pub const UNSET: &str = "unset";
+    pub const DEBUG: &str = "debug";
+    pub const SPLIT_STRING: &str = "split-string";
+    pub const ARGV0: &str = "argv0";
+    pub const IGNORE_SIGNAL: &str = "ignore-signal";
+}
 
 struct Options<'a> {
     ignore_env: bool,
@@ -59,8 +101,8 @@ struct Options<'a> {
     ignore_signal: Vec<usize>,
 }
 
-// print name=value env pairs on screen
-// if null is true, separate pairs with a \0, \n otherwise
+/// print `name=value` env pairs on screen
+/// if null is true, separate pairs with a \0, \n otherwise
 fn print_env(line_ending: LineEnding) {
     let stdout_raw = io::stdout();
     let mut stdout = stdout_raw.lock();
@@ -87,7 +129,7 @@ fn parse_program_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> 
     if opts.line_ending == LineEnding::Nul {
         Err(UUsageError::new(
             125,
-            "cannot specify --null (-0) with command".to_string(),
+            translate!("env-error-cannot-specify-null-with-command"),
         ))
     } else {
         opts.program.push(opt);
@@ -99,7 +141,10 @@ fn parse_program_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> 
 fn parse_signal_value(signal_name: &str) -> UResult<usize> {
     let signal_name_upcase = signal_name.to_uppercase();
     let optional_signal_value = signal_by_name_or_value(&signal_name_upcase);
-    let error = USimpleError::new(125, format!("{}: invalid signal", signal_name.quote()));
+    let error = USimpleError::new(
+        125,
+        translate!("env-error-invalid-signal", "signal" => signal_name.quote()),
+    );
     match optional_signal_value {
         Some(sig_val) => {
             if sig_val == 0 {
@@ -124,16 +169,16 @@ fn parse_signal_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> {
         .collect();
 
     let mut sig_vec = Vec::with_capacity(signals.len());
-    signals.into_iter().for_each(|sig| {
-        if !(sig.is_empty()) {
+    for sig in signals {
+        if !sig.is_empty() {
             sig_vec.push(sig);
         }
-    });
+    }
     for sig in sig_vec {
         let Some(sig_str) = sig.to_str() else {
             return Err(USimpleError::new(
                 1,
-                format!("{}: invalid signal", sig.quote()),
+                translate!("env-error-invalid-signal", "signal" => sig.quote()),
             ));
         };
         let sig_val = parse_signal_value(sig_str)?;
@@ -157,8 +202,12 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
             Ini::load_from_file(file)
         };
 
-        let conf =
-            conf.map_err(|e| USimpleError::new(1, format!("{}: {}", file.maybe_quote(), e)))?;
+        let conf = conf.map_err(|e| {
+            USimpleError::new(
+                1,
+                translate!("env-error-config-file", "file" => file.maybe_quote(), "error" => e),
+            )
+        })?;
 
         for (_, prop) in &conf {
             // ignore all INI section lines (treat them as comments)
@@ -176,133 +225,144 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(crate_name!())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("env-about"))
+        .override_usage(format_usage(&translate!("env-usage")))
+        .after_help(translate!("env-after-help"))
         .infer_long_args(true)
         .trailing_var_arg(true)
         .arg(
-            Arg::new("ignore-environment")
+            Arg::new(options::IGNORE_ENVIRONMENT)
                 .short('i')
-                .long("ignore-environment")
-                .help("start with an empty environment")
+                .long(options::IGNORE_ENVIRONMENT)
+                .help(translate!("env-help-ignore-environment"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new("chdir")
+            Arg::new(options::CHDIR)
                 .short('C') // GNU env compatibility
-                .long("chdir")
+                .long(options::CHDIR)
                 .number_of_values(1)
                 .value_name("DIR")
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::DirPath)
-                .help("change working directory to DIR"),
+                .help(translate!("env-help-chdir")),
         )
         .arg(
-            Arg::new("null")
+            Arg::new(options::NULL)
                 .short('0')
-                .long("null")
-                .help(
-                    "end each output line with a 0 byte rather than a newline (only \
-                valid when printing the environment)",
-                )
+                .long(options::NULL)
+                .help(translate!("env-help-null"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new("file")
+            Arg::new(options::FILE)
                 .short('f')
-                .long("file")
+                .long(options::FILE)
                 .value_name("PATH")
                 .value_hint(clap::ValueHint::FilePath)
                 .value_parser(ValueParser::os_string())
                 .action(ArgAction::Append)
-                .help(
-                    "read and set variables from a \".env\"-style configuration file \
-                (prior to any unset and/or set)",
-                ),
+                .help(translate!("env-help-file")),
         )
         .arg(
-            Arg::new("unset")
+            Arg::new(options::UNSET)
                 .short('u')
-                .long("unset")
+                .long(options::UNSET)
                 .value_name("NAME")
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
-                .help("remove variable from the environment"),
+                .help(translate!("env-help-unset")),
         )
         .arg(
-            Arg::new("debug")
+            Arg::new(options::DEBUG)
                 .short('v')
-                .long("debug")
+                .long(options::DEBUG)
                 .action(ArgAction::Count)
-                .help("print verbose information for each processing step"),
+                .help(translate!("env-help-debug")),
         )
         .arg(
-            Arg::new("split-string") // split string handling is implemented directly, not using CLAP. But this entry here is needed for the help information output.
+            Arg::new(options::SPLIT_STRING) // split string handling is implemented directly, not using CLAP. But this entry here is needed for the help information output.
                 .short('S')
-                .long("split-string")
+                .long(options::SPLIT_STRING)
                 .value_name("S")
                 .action(ArgAction::Set)
                 .value_parser(ValueParser::os_string())
-                .help("process and split S into separate arguments; used to pass multiple arguments on shebang lines")
-        ).arg(
-            Arg::new("argv0")
-                .overrides_with("argv0")
+                .help(translate!("env-help-split-string")),
+        )
+        .arg(
+            Arg::new(options::ARGV0)
+                .overrides_with(options::ARGV0)
                 .short('a')
-                .long("argv0")
+                .long(options::ARGV0)
                 .value_name("a")
                 .action(ArgAction::Set)
                 .value_parser(ValueParser::os_string())
-                .help("Override the zeroth argument passed to the command being executed. \
-                       Without this option a default value of `command` is used.")
+                .help(translate!("env-help-argv0")),
         )
         .arg(
             Arg::new("vars")
                 .action(ArgAction::Append)
-                .value_parser(ValueParser::os_string())
+                .value_parser(ValueParser::os_string()),
         )
         .arg(
-            Arg::new("ignore-signal")
-                .long("ignore-signal")
+            Arg::new(options::IGNORE_SIGNAL)
+                .long(options::IGNORE_SIGNAL)
                 .value_name("SIG")
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
-                .help("set handling of SIG signal(s) to do nothing")
+                .help(translate!("env-help-ignore-signal")),
         )
 }
 
 pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>> {
     split_iterator::split(text).map_err(|e| match e {
-        parse_error::ParseError::BackslashCNotAllowedInDoubleQuotes { pos: _ } => {
-            USimpleError::new(125, "'\\c' must not appear in double-quoted -S string")
+        EnvError::EnvBackslashCNotAllowedInDoubleQuotes(_) => USimpleError::new(125, e.to_string()),
+        EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(_, _) => {
+            USimpleError::new(125, e.to_string())
         }
-        parse_error::ParseError::InvalidBackslashAtEndOfStringInMinusS { pos: _, quoting: _ } => {
-            USimpleError::new(125, "invalid backslash at end of string in -S")
+        EnvError::EnvInvalidSequenceBackslashXInMinusS(_, _) => {
+            USimpleError::new(125, e.to_string())
         }
-        parse_error::ParseError::InvalidSequenceBackslashXInMinusS { pos: _, c } => {
-            USimpleError::new(125, format!("invalid sequence '\\{c}' in -S"))
-        }
-        parse_error::ParseError::MissingClosingQuote { pos: _, c: _ } => {
-            USimpleError::new(125, "no terminating quote in -S string")
-        }
-        parse_error::ParseError::ParsingOfVariableNameFailed { pos, msg } => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {msg}",))
-        }
-        _ => USimpleError::new(125, format!("Error: {e:?}")),
+        EnvError::EnvMissingClosingQuote(_, _) => USimpleError::new(125, e.to_string()),
+        EnvError::EnvParsingOfVariableMissingClosingBrace(pos) => USimpleError::new(
+            125,
+            translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
+        ),
+        EnvError::EnvParsingOfMissingVariable(pos) => USimpleError::new(
+            125,
+            translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
+        ),
+        EnvError::EnvParsingOfVariableMissingClosingBraceAfterValue(pos) => USimpleError::new(
+            125,
+            translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
+        ),
+        EnvError::EnvParsingOfVariableUnexpectedNumber(pos, _) => USimpleError::new(
+            125,
+            translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
+        ),
+        EnvError::EnvParsingOfVariableExceptedBraceOrColon(pos, _) => USimpleError::new(
+            125,
+            translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
+        ),
+        _ => USimpleError::new(
+            125,
+            translate!("env-error-generic", "error" => format!("{e:?}")),
+        ),
     })
 }
 
 fn debug_print_args(args: &[OsString]) {
     eprintln!("input args:");
     for (i, arg) in args.iter().enumerate() {
-        eprintln!("arg[{}]: {}", i, arg.quote());
+        eprintln!("arg[{i}]: {}", arg.quote());
     }
 }
 
 fn check_and_handle_string_args(
     arg: &OsString,
     prefix_to_test: &str,
-    all_args: &mut Vec<std::ffi::OsString>,
+    all_args: &mut Vec<OsString>,
     do_debug_print_args: Option<&Vec<OsString>>,
 ) -> UResult<bool> {
     let native_arg = NCvt::convert(arg);
@@ -333,9 +393,12 @@ struct EnvAppData {
 
 impl EnvAppData {
     fn make_error_no_such_file_or_dir(&self, prog: &OsStr) -> Box<dyn UError> {
-        uucore::show_error!("{}: No such file or directory", prog.quote());
+        uucore::show_error!(
+            "{}",
+            translate!("env-error-no-such-file", "program" => prog.quote())
+        );
         if !self.had_string_argument {
-            uucore::show_error!("{}", ERROR_MSG_S_SHEBANG);
+            uucore::show_error!("{}", translate!("env-error-use-s-shebang"));
         }
         ExitCode::new(127)
     }
@@ -343,9 +406,33 @@ impl EnvAppData {
     fn process_all_string_arguments(
         &mut self,
         original_args: &Vec<OsString>,
-    ) -> UResult<Vec<std::ffi::OsString>> {
-        let mut all_args: Vec<std::ffi::OsString> = Vec::new();
-        for arg in original_args {
+    ) -> UResult<Vec<OsString>> {
+        let mut all_args: Vec<OsString> = Vec::new();
+        let mut process_flags = true;
+        let mut expecting_arg = false;
+        // Leave out split-string since it's a special case below
+        let flags_with_args = [
+            options::ARGV0,
+            options::CHDIR,
+            options::FILE,
+            options::IGNORE_SIGNAL,
+            options::UNSET,
+        ];
+        let short_flags_with_args = ['a', 'C', 'f', 'u'];
+        for (n, arg) in original_args.iter().enumerate() {
+            let arg_str = arg.to_string_lossy();
+            // Stop processing env flags once we reach the command or -- argument
+            if 0 < n
+                && !expecting_arg
+                && (arg == "--" || !(arg_str.starts_with('-') || arg_str.contains('=')))
+            {
+                process_flags = false;
+            }
+            if !process_flags {
+                all_args.push(arg.clone());
+                continue;
+            }
+            expecting_arg = false;
             match arg {
                 b if check_and_handle_string_args(b, "--split-string", &mut all_args, None)? => {
                     self.had_string_argument = true;
@@ -369,16 +456,24 @@ impl EnvAppData {
                     self.had_string_argument = true;
                 }
                 _ => {
-                    let arg_str = arg.to_string_lossy();
-
+                    if let Some(flag) = arg_str.strip_prefix("--") {
+                        if flags_with_args.contains(&flag) {
+                            expecting_arg = true;
+                        }
+                    } else if let Some(flag) = arg_str.strip_prefix("-") {
+                        for c in flag.chars() {
+                            expecting_arg = short_flags_with_args.contains(&c);
+                        }
+                    }
                     // Short unset option (-u) is not allowed to contain '='
                     if arg_str.contains('=')
                         && arg_str.starts_with("-u")
                         && !arg_str.starts_with("--")
                     {
+                        let name = &arg_str[arg_str.find('=').unwrap()..];
                         return Err(USimpleError::new(
                             125,
-                            format!("cannot unset '{}': Invalid argument", &arg_str[2..]),
+                            translate!("env-error-cannot-unset", "name" => name),
                         ));
                     }
 
@@ -397,24 +492,27 @@ impl EnvAppData {
         let original_args: Vec<OsString> = original_args.collect();
         let args = self.process_all_string_arguments(&original_args)?;
         let app = uu_app();
-        let matches = app
-            .try_get_matches_from(args)
-            .map_err(|e| -> Box<dyn UError> {
+        let matches = match app.try_get_matches_from(args) {
+            Ok(matches) => matches,
+            Err(e) => {
                 match e.kind() {
                     clap::error::ErrorKind::DisplayHelp
-                    | clap::error::ErrorKind::DisplayVersion => e.into(),
+                    | clap::error::ErrorKind::DisplayVersion => return Err(e.into()),
                     _ => {
-                        // extent any real issue with parameter parsing by the ERROR_MSG_S_SHEBANG
-                        let s = format!("{e}");
-                        if !s.is_empty() {
-                            let s = s.trim_end();
-                            uucore::show_error!("{}", s);
-                        }
-                        uucore::show_error!("{}", ERROR_MSG_S_SHEBANG);
-                        uucore::error::ExitCode::new(125)
+                        // Use ErrorFormatter directly to handle error with shebang message callback
+                        let formatter =
+                            uucore::clap_localization::ErrorFormatter::new(uucore::util_name());
+                        formatter.print_error_and_exit_with_callback(&e, 125, || {
+                            eprintln!(
+                                "{}: {}",
+                                uucore::util_name(),
+                                translate!("env-error-use-s-shebang")
+                            );
+                        });
                     }
                 }
-            })?;
+            }
+        };
         Ok((original_args, matches))
     }
 
@@ -461,6 +559,15 @@ impl EnvAppData {
         Ok(())
     }
 
+    /// Run the program specified by the options.
+    ///
+    /// Note that the env command must exec the program, not spawn it. See
+    /// <https://github.com/uutils/coreutils/issues/8361> for more information.
+    ///
+    /// Exit status:
+    /// - 125: if the env command itself fails
+    /// - 126: if the program is found but cannot be invoked
+    /// - 127: if the program cannot be found
     fn run_program(
         &mut self,
         opts: &Options<'_>,
@@ -473,19 +580,9 @@ impl EnvAppData {
         let arg0 = prog.clone();
         let args = &opts.program[1..];
 
-        /*
-         * On Unix-like systems Command::status either ends up calling either fork or posix_spawnp
-         * (which ends up calling clone). Keep using the current process would be ideal, but the
-         * standard library contains many checks and fail-safes to ensure the process ends up being
-         * created. This is much simpler than dealing with the hassles of calling execvp directly.
-         */
-        let mut cmd = process::Command::new(&*prog);
-        cmd.args(args);
-
         if let Some(_argv0) = opts.argv0 {
             #[cfg(unix)]
             {
-                cmd.arg0(_argv0);
                 arg0 = Cow::Borrowed(_argv0);
                 if do_debug_printing {
                     eprintln!("argv0:     {}", arg0.quote());
@@ -495,65 +592,104 @@ impl EnvAppData {
             #[cfg(not(unix))]
             return Err(USimpleError::new(
                 2,
-                "--argv0 is currently not supported on this platform",
+                translate!("env-error-argv0-not-supported"),
             ));
         }
 
         if do_debug_printing {
             eprintln!("executing: {}", prog.maybe_quote());
             let arg_prefix = "   arg";
-            eprintln!("{}[{}]= {}", arg_prefix, 0, arg0.quote());
+            eprintln!("{arg_prefix}[{}]= {}", 0, arg0.quote());
             for (i, arg) in args.iter().enumerate() {
-                eprintln!("{}[{}]= {}", arg_prefix, i + 1, arg.quote());
+                eprintln!("{arg_prefix}[{}]= {}", i + 1, arg.quote());
             }
         }
 
-        match cmd.status() {
-            Ok(exit) if !exit.success() => {
-                #[cfg(unix)]
-                if let Some(exit_code) = exit.code() {
-                    return Err(exit_code.into());
-                } else {
-                    // `exit.code()` returns `None` on Unix when the process is terminated by a signal.
-                    // See std::os::unix::process::ExitStatusExt for more information. This prints out
-                    // the interrupted process and the signal it received.
-                    let signal_code = exit.signal().unwrap();
-                    let signal = Signal::try_from(signal_code).unwrap();
+        #[cfg(unix)]
+        {
+            // Convert program name to CString.
+            let Ok(prog_cstring) = CString::new(prog.as_bytes()) else {
+                return Err(self.make_error_no_such_file_or_dir(&prog));
+            };
 
-                    // We have to disable any handler that's installed by default.
-                    // This ensures that we exit on this signal.
-                    // For example, `SIGSEGV` and `SIGBUS` have default handlers installed in Rust.
-                    // We ignore the errors because there is not much we can do if that fails anyway.
-                    // SAFETY: The function is unsafe because installing functions is unsafe, but we are
-                    // just defaulting to default behavior and not installing a function. Hence, the call
-                    // is safe.
-                    let _ = unsafe {
-                        sigaction(
-                            signal,
-                            &SigAction::new(SigHandler::SigDfl, SaFlags::empty(), SigSet::all()),
+            // Prepare arguments for execvp.
+            let mut argv = Vec::new();
+
+            // Convert arg0 to CString.
+            let Ok(arg0_cstring) = CString::new(arg0.as_bytes()) else {
+                return Err(self.make_error_no_such_file_or_dir(&prog));
+            };
+            argv.push(arg0_cstring);
+
+            // Convert remaining arguments to CString.
+            for arg in args {
+                let Ok(arg_cstring) = CString::new(arg.as_bytes()) else {
+                    return Err(self.make_error_no_such_file_or_dir(&prog));
+                };
+                argv.push(arg_cstring);
+            }
+
+            // Execute the program using execvp. this replaces the current
+            // process. The execvp function takes care of appending a NULL
+            // argument to the argument list so that we don't have to.
+            match execvp(&prog_cstring, &argv) {
+                Err(nix::errno::Errno::ENOENT) => Err(self.make_error_no_such_file_or_dir(&prog)),
+                Err(nix::errno::Errno::EACCES) => {
+                    uucore::show_error!(
+                        "{}",
+                        translate!(
+                            "env-error-permission-denied",
+                            "program" => prog.quote()
                         )
-                    };
-
-                    let _ = raise(signal);
+                    );
+                    Err(126.into())
                 }
-                return Err(exit.code().unwrap().into());
+                Err(_) => {
+                    uucore::show_error!(
+                        "{}",
+                        translate!(
+                            "env-error-unknown",
+                            "error" => "execvp failed"
+                        )
+                    );
+                    Err(126.into())
+                }
+                Ok(_) => {
+                    unreachable!("execvp should never return on success")
+                }
             }
-            Err(ref err) => match err.kind() {
-                io::ErrorKind::NotFound | io::ErrorKind::InvalidInput => {
-                    return Err(self.make_error_no_such_file_or_dir(prog.deref()));
-                }
-                io::ErrorKind::PermissionDenied => {
-                    uucore::show_error!("{}: Permission denied", prog.quote());
-                    return Err(126.into());
-                }
-                _ => {
-                    uucore::show_error!("unknown error: {:?}", err);
-                    return Err(126.into());
-                }
-            },
-            Ok(_) => (),
         }
-        Ok(())
+
+        #[cfg(not(unix))]
+        {
+            // Fallback to Command::status for non-Unix systems
+            let mut cmd = std::process::Command::new(&*prog);
+            cmd.args(args);
+
+            match cmd.status() {
+                Ok(exit) if !exit.success() => Err(exit.code().unwrap_or(1).into()),
+                Err(ref err) => match err.kind() {
+                    io::ErrorKind::NotFound | io::ErrorKind::InvalidInput => {
+                        Err(self.make_error_no_such_file_or_dir(&prog))
+                    }
+                    io::ErrorKind::PermissionDenied => {
+                        uucore::show_error!(
+                            "{}",
+                            translate!("env-error-permission-denied", "program" => prog.quote())
+                        );
+                        Err(126.into())
+                    }
+                    _ => {
+                        uucore::show_error!(
+                            "{}",
+                            translate!("env-error-unknown", "error" => format!("{err:?}"))
+                        );
+                        Err(126.into())
+                    }
+                },
+                Ok(_) => Ok(()),
+            }
+        }
     }
 }
 
@@ -635,7 +771,7 @@ fn apply_unset_env_vars(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
         {
             return Err(USimpleError::new(
                 125,
-                format!("cannot unset {}: Invalid argument", name.quote()),
+                translate!("env-error-cannot-unset-invalid", "name" => name.quote()),
             ));
         }
         unsafe {
@@ -650,7 +786,7 @@ fn apply_change_directory(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
     if opts.program.is_empty() && opts.running_directory.is_some() {
         return Err(UUsageError::new(
             125,
-            "must specify command with --chdir (-C)".to_string(),
+            translate!("env-error-must-specify-command-with-chdir"),
         ));
     }
 
@@ -660,7 +796,7 @@ fn apply_change_directory(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
             Err(error) => {
                 return Err(USimpleError::new(
                     125,
-                    format!("cannot change directory to {}: {error}", d.quote()),
+                    translate!("env-error-cannot-change-directory", "directory" => d.quote(), "error" => error),
                 ));
             }
         };
@@ -694,7 +830,10 @@ fn apply_specified_env_vars(opts: &Options<'_>) {
          */
 
         if name.is_empty() {
-            show_warning!("no name specified for value {}", val.quote());
+            show_warning!(
+                "{}",
+                translate!("env-warning-no-name-specified", "value" => val.quote())
+            );
             continue;
         }
         unsafe {
@@ -708,7 +847,7 @@ fn apply_ignore_signal(opts: &Options<'_>) -> UResult<()> {
     for &sig_value in &opts.ignore_signal {
         let sig: Signal = (sig_value as i32)
             .try_into()
-            .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
+            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
 
         ignore_signal(sig)?;
     }
@@ -722,11 +861,7 @@ fn ignore_signal(sig: Signal) -> UResult<()> {
     if let Err(err) = result {
         return Err(USimpleError::new(
             125,
-            format!(
-                "failed to set signal action for signal {}: {}",
-                sig as i32,
-                err.desc()
-            ),
+            translate!("env-error-failed-set-signal-action", "signal" => (sig as i32), "error" => err.desc()),
         ));
     }
     Ok(())
@@ -734,16 +869,23 @@ fn ignore_signal(sig: Signal) -> UResult<()> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // Rust ignores SIGPIPE (see https://github.com/rust-lang/rust/issues/62569).
+    // We restore its default action here.
+    #[cfg(unix)]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
     EnvAppData::default().run_env(args)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uucore::locale;
 
     #[test]
     fn test_split_string_environment_vars_test() {
-        unsafe { std::env::set_var("FOO", "BAR") };
+        unsafe { env::set_var("FOO", "BAR") };
         assert_eq!(
             NCvt::convert(vec!["FOO=bar", "sh", "-c", "echo xBARx =$FOO="]),
             parse_args_from_str(&NCvt::convert(r#"FOO=bar sh -c "echo x${FOO}x =\$FOO=""#))
@@ -759,16 +901,82 @@ mod tests {
         );
         assert_eq!(
             NCvt::convert(vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"]),
-            parse_args_from_str(&NCvt::convert(r#"A=B FOO=AR  sh -c 'echo $A$FOO'"#)).unwrap()
+            parse_args_from_str(&NCvt::convert(r"A=B FOO=AR  sh -c 'echo $A$FOO'")).unwrap()
         );
         assert_eq!(
             NCvt::convert(vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"]),
-            parse_args_from_str(&NCvt::convert(r#"A=B FOO=AR  sh -c 'echo $A$FOO'"#)).unwrap()
+            parse_args_from_str(&NCvt::convert(r"A=B FOO=AR  sh -c 'echo $A$FOO'")).unwrap()
         );
 
         assert_eq!(
             NCvt::convert(vec!["-i", "A=B ' C"]),
-            parse_args_from_str(&NCvt::convert(r#"-i A='B \' C'"#)).unwrap()
+            parse_args_from_str(&NCvt::convert(r"-i A='B \' C'")).unwrap()
         );
+    }
+
+    #[test]
+    fn test_error_cases() {
+        let _ = locale::setup_localization("env");
+
+        // Test EnvBackslashCNotAllowedInDoubleQuotes
+        let result = parse_args_from_str(&NCvt::convert(r#"sh -c "echo \c""#));
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "'\\c' must not appear in double-quoted -S string at position 13"
+        );
+
+        // Test EnvInvalidBackslashAtEndOfStringInMinusS
+        let result = parse_args_from_str(&NCvt::convert(r#"sh -c "echo \"#));
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "no terminating quote in -S string at position 13 for quote '\"'"
+        );
+
+        // Test EnvInvalidSequenceBackslashXInMinusS
+        let result = parse_args_from_str(&NCvt::convert(r#"sh -c "echo \x""#));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("invalid sequence '\\x' in -S")
+        );
+
+        // Test EnvMissingClosingQuote
+        let result = parse_args_from_str(&NCvt::convert(r#"sh -c "echo "#));
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "no terminating quote in -S string at position 12 for quote '\"'"
+        );
+
+        // Test variable-related errors
+        let result = parse_args_from_str(&NCvt::convert(r"echo ${FOO"));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("variable name issue (at 10): Missing closing brace")
+        );
+
+        let result = parse_args_from_str(&NCvt::convert(r"echo ${FOO:-value"));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("variable name issue (at 17): Missing closing brace after default value")
+        );
+
+        let result = parse_args_from_str(&NCvt::convert(r"echo ${1FOO}"));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("variable name issue (at 7): Unexpected character: '1', expected variable name must not start with 0..9"));
+
+        let result = parse_args_from_str(&NCvt::convert(r"echo ${FOO?}"));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("variable name issue (at 10): Unexpected character: '?', expected a closing brace ('}') or colon (':')"));
     }
 }

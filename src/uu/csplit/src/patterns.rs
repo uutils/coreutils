@@ -7,6 +7,7 @@
 use crate::csplit_error::CsplitError;
 use regex::Regex;
 use uucore::show_warning;
+use uucore::translate;
 
 /// The definition of a pattern to match on a line.
 #[derive(Debug)]
@@ -30,9 +31,9 @@ impl std::fmt::Display for Pattern {
         match self {
             Self::UpToLine(n, _) => write!(f, "{n}"),
             Self::UpToMatch(regex, 0, _) => write!(f, "/{}/", regex.as_str()),
-            Self::UpToMatch(regex, offset, _) => write!(f, "/{}/{:+}", regex.as_str(), offset),
+            Self::UpToMatch(regex, offset, _) => write!(f, "/{}/{offset:+}", regex.as_str()),
             Self::SkipToMatch(regex, 0, _) => write!(f, "%{}%", regex.as_str()),
-            Self::SkipToMatch(regex, offset, _) => write!(f, "%{}%{:+}", regex.as_str(), offset),
+            Self::SkipToMatch(regex, offset, _) => write!(f, "%{}%{offset:+}", regex.as_str()),
         }
     }
 }
@@ -106,8 +107,8 @@ pub fn get_patterns(args: &[String]) -> Result<Vec<Pattern>, CsplitError> {
 fn extract_patterns(args: &[String]) -> Result<Vec<Pattern>, CsplitError> {
     let mut patterns = Vec::with_capacity(args.len());
     let to_match_reg =
-        Regex::new(r"^(/(?P<UPTO>.+)/|%(?P<SKIPTO>.+)%)(?P<OFFSET>[\+-]?\d+)?$").unwrap();
-    let execute_ntimes_reg = Regex::new(r"^\{(?P<TIMES>\d+)|\*\}$").unwrap();
+        Regex::new(r"^(/(?P<UPTO>.+)/|%(?P<SKIPTO>.+)%)(?P<OFFSET>[\+-]?[0-9]+)?$").unwrap();
+    let execute_ntimes_reg = Regex::new(r"^\{(?P<TIMES>[0-9]+)|\*\}$").unwrap();
     let mut iter = args.iter().peekable();
 
     while let Some(arg) = iter.next() {
@@ -168,7 +169,10 @@ fn validate_line_numbers(patterns: &[Pattern]) -> Result<(), CsplitError> {
             (_, 0) => Err(CsplitError::LineNumberIsZero),
             // two consecutive numbers should not be equal
             (n, m) if n == m => {
-                show_warning!("line number '{}' is the same as preceding line number", n);
+                show_warning!(
+                    "{}",
+                    translate!("csplit-warning-line-number-same-as-previous", "line_number" => n)
+                );
                 Ok(n)
             }
             // a number cannot be greater than the one that follows
@@ -199,15 +203,15 @@ mod tests {
         match patterns.first() {
             Some(Pattern::UpToLine(24, ExecutePattern::Times(1))) => (),
             _ => panic!("expected UpToLine pattern"),
-        };
+        }
         match patterns.get(1) {
             Some(Pattern::UpToLine(42, ExecutePattern::Always)) => (),
             _ => panic!("expected UpToLine pattern"),
-        };
+        }
         match patterns.get(2) {
             Some(Pattern::UpToLine(50, ExecutePattern::Times(5))) => (),
             _ => panic!("expected UpToLine pattern"),
-        };
+        }
     }
 
     #[test]
@@ -234,42 +238,42 @@ mod tests {
                 assert_eq!(parsed_reg, "test1.*end$");
             }
             _ => panic!("expected UpToMatch pattern"),
-        };
+        }
         match patterns.get(1) {
             Some(Pattern::UpToMatch(reg, 0, ExecutePattern::Always)) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test2.*end$");
             }
             _ => panic!("expected UpToMatch pattern"),
-        };
+        }
         match patterns.get(2) {
             Some(Pattern::UpToMatch(reg, 0, ExecutePattern::Times(5))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test3.*end$");
             }
             _ => panic!("expected UpToMatch pattern"),
-        };
+        }
         match patterns.get(3) {
             Some(Pattern::UpToMatch(reg, 3, ExecutePattern::Times(1))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test4.*end$");
             }
             _ => panic!("expected UpToMatch pattern"),
-        };
+        }
         match patterns.get(4) {
             Some(Pattern::UpToMatch(reg, 3, ExecutePattern::Times(1))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test5.*end$");
             }
             _ => panic!("expected UpToMatch pattern"),
-        };
+        }
         match patterns.get(5) {
             Some(Pattern::UpToMatch(reg, -3, ExecutePattern::Times(1))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test6.*end$");
             }
             _ => panic!("expected UpToMatch pattern"),
-        };
+        }
     }
 
     #[test]
@@ -296,42 +300,42 @@ mod tests {
                 assert_eq!(parsed_reg, "test1.*end$");
             }
             _ => panic!("expected SkipToMatch pattern"),
-        };
+        }
         match patterns.get(1) {
             Some(Pattern::SkipToMatch(reg, 0, ExecutePattern::Always)) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test2.*end$");
             }
             _ => panic!("expected SkipToMatch pattern"),
-        };
+        }
         match patterns.get(2) {
             Some(Pattern::SkipToMatch(reg, 0, ExecutePattern::Times(5))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test3.*end$");
             }
             _ => panic!("expected SkipToMatch pattern"),
-        };
+        }
         match patterns.get(3) {
             Some(Pattern::SkipToMatch(reg, 3, ExecutePattern::Times(1))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test4.*end$");
             }
             _ => panic!("expected SkipToMatch pattern"),
-        };
+        }
         match patterns.get(4) {
             Some(Pattern::SkipToMatch(reg, 3, ExecutePattern::Times(1))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test5.*end$");
             }
             _ => panic!("expected SkipToMatch pattern"),
-        };
+        }
         match patterns.get(5) {
             Some(Pattern::SkipToMatch(reg, -3, ExecutePattern::Times(1))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test6.*end$");
             }
             _ => panic!("expected SkipToMatch pattern"),
-        };
+        }
     }
 
     #[test]

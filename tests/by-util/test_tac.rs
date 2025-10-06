@@ -3,9 +3,25 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore axxbxx bxxaxx axxx axxxx xxaxx xxax xxxxa axyz zyax zyxa
+#[cfg(target_os = "linux")]
+use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_tac_non_utf8_paths() {
+    use std::os::unix::ffi::OsStringExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    std::fs::write(at.plus(&filename), b"line1\nline2\nline3\n").unwrap();
+
+    ucmd.arg(&filename)
+        .succeeds()
+        .stdout_is("line3\nline2\nline1\n");
+}
 
 #[test]
 fn test_invalid_arg() {
@@ -308,4 +324,14 @@ fn test_regex_before() {
         //   line       2        1    0
         //          |--------||----||---|
         .stdout_is("+---+c+d-e+--++b+-+a+");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_failed_write_is_reported() {
+    new_ucmd!()
+        .pipe_in("hello")
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("tac: failed to write to stdout: No space left on device (os error 28)\n");
 }

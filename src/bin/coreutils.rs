@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore manpages mangen
+// spell-checker:ignore manpages mangen prefixcat testcat
 
 use clap::{Arg, Command};
 use clap_complete::Shell;
@@ -14,6 +14,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process;
 use uucore::display::Quotable;
+use uucore::locale;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -50,6 +51,48 @@ fn name(binary_path: &Path) -> Option<&str> {
     binary_path.file_stem()?.to_str()
 }
 
+fn get_canonical_util_name(util_name: &str) -> &str {
+    match util_name {
+        // uu_test aliases - '[' is an alias for test
+        "[" => "test",
+
+        // hashsum aliases - all these hash commands are aliases for hashsum
+        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum"
+        | "sha3sum" | "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum"
+        | "shake128sum" | "shake256sum" | "b2sum" | "b3sum" => "hashsum",
+
+        "dir" => "ls", // dir is an alias for ls
+
+        // Default case - return the util name as is
+        _ => util_name,
+    }
+}
+
+fn find_prefixed_util<'a>(
+    binary_name: &str,
+    mut util_keys: impl Iterator<Item = &'a str>,
+) -> Option<&'a str> {
+    util_keys.find(|util| {
+        binary_name.ends_with(*util)
+            && binary_name.len() > util.len() // Ensure there's actually a prefix
+            && !binary_name[..binary_name.len() - (*util).len()]
+                .ends_with(char::is_alphanumeric)
+    })
+}
+
+fn setup_localization_or_exit(util_name: &str) {
+    locale::setup_localization(get_canonical_util_name(util_name)).unwrap_or_else(|err| {
+        match err {
+            uucore::locale::LocalizationError::ParseResource {
+                error: err_msg,
+                snippet,
+            } => eprintln!("Localization parse error at {snippet}: {err_msg}"),
+            other => eprintln!("Could not init the localization system: {other}"),
+        }
+        process::exit(99)
+    });
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn main() {
     uucore::panic::mute_sigpipe_panic();
@@ -65,18 +108,16 @@ fn main() {
 
     // binary name equals util name?
     if let Some(&(uumain, _)) = utils.get(binary_as_util) {
-        process::exit(uumain((vec![binary.into()].into_iter()).chain(args)));
+        setup_localization_or_exit(binary_as_util);
+        process::exit(uumain(vec![binary.into()].into_iter().chain(args)));
     }
 
     // binary name equals prefixed util name?
     // * prefix/stem may be any string ending in a non-alphanumeric character
-    let util_name = if let Some(util) = utils.keys().find(|util| {
-        binary_as_util.ends_with(*util)
-            && !binary_as_util[..binary_as_util.len() - (*util).len()]
-                .ends_with(char::is_alphanumeric)
-    }) {
+    // For example, if the binary is named `uu_test`, it will match `test` as a utility.
+    let util_name = if let Some(util) = find_prefixed_util(binary_as_util, utils.keys().copied()) {
         // prefixed util => replace 0th (aka, executable name) argument
-        Some(OsString::from(*util))
+        Some(OsString::from(util))
     } else {
         // unmatched binary name => regard as multi-binary container and advance argument list
         uucore::set_utility_is_second_arg();
@@ -105,13 +146,23 @@ fn main() {
                 }
                 process::exit(0);
             }
+            "--version" | "-V" => {
+                println!("{binary_as_util} {VERSION} (multi-call binary)");
+                process::exit(0);
+            }
             // Not a special command: fallthrough to calling a util
             _ => {}
         }
 
         match utils.get(util) {
             Some(&(uumain, _)) => {
-                process::exit(uumain((vec![util_os].into_iter()).chain(args)));
+                // TODO: plug the deactivation of the translation
+                // and load the English strings directly at compilation time in the
+                // binary to avoid the load of the flt
+                // Could be something like:
+                // #[cfg(not(feature = "only_english"))]
+                setup_localization_or_exit(util);
+                process::exit(uumain(vec![util_os].into_iter().chain(args)));
             }
             None => {
                 if util == "--help" || util == "-h" {
@@ -124,7 +175,8 @@ fn main() {
                         match utils.get(util) {
                             Some(&(uumain, _)) => {
                                 let code = uumain(
-                                    (vec![util_os, OsString::from("--help")].into_iter())
+                                    vec![util_os, OsString::from("--help")]
+                                        .into_iter()
                                         .chain(args),
                                 );
                                 io::stdout().flush().expect("could not flush stdout");
@@ -212,6 +264,7 @@ fn gen_manpage<T: uucore::Args>(
     let command = if utility == "coreutils" {
         gen_coreutils_app(util_map)
     } else {
+        setup_localization_or_exit(utility);
         util_map.get(utility).unwrap().1()
     };
 
@@ -237,4 +290,71 @@ fn gen_coreutils_app<T: uucore::Args>(util_map: &UtilityMap<T>) -> Command {
         command = command.subcommand(sub_app);
     }
     command
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn test_get_canonical_util_name() {
+        // Test a few key aliases
+        assert_eq!(get_canonical_util_name("["), "test");
+        assert_eq!(get_canonical_util_name("md5sum"), "hashsum");
+        assert_eq!(get_canonical_util_name("dir"), "ls");
+
+        // Test passthrough case
+        assert_eq!(get_canonical_util_name("cat"), "cat");
+    }
+
+    #[test]
+    fn test_name() {
+        // Test normal executable name
+        assert_eq!(name(Path::new("/usr/bin/ls")), Some("ls"));
+        assert_eq!(name(Path::new("cat")), Some("cat"));
+        assert_eq!(
+            name(Path::new("./target/debug/coreutils")),
+            Some("coreutils")
+        );
+
+        // Test with extensions
+        assert_eq!(name(Path::new("program.exe")), Some("program"));
+        assert_eq!(name(Path::new("/path/to/utility.bin")), Some("utility"));
+
+        // Test edge cases
+        assert_eq!(name(Path::new("")), None);
+        assert_eq!(name(Path::new("/")), None);
+    }
+
+    #[test]
+    fn test_find_prefixed_util() {
+        let utils = ["test", "cat", "ls", "cp"];
+
+        // Test exact prefixed matches
+        assert_eq!(
+            find_prefixed_util("uu_test", utils.iter().copied()),
+            Some("test")
+        );
+        assert_eq!(
+            find_prefixed_util("my-cat", utils.iter().copied()),
+            Some("cat")
+        );
+        assert_eq!(
+            find_prefixed_util("prefix_ls", utils.iter().copied()),
+            Some("ls")
+        );
+
+        // Test non-alphanumeric separator requirement
+        assert_eq!(find_prefixed_util("prefixcat", utils.iter().copied()), None); // no separator
+        assert_eq!(find_prefixed_util("testcat", utils.iter().copied()), None); // no separator
+
+        // Test no match
+        assert_eq!(find_prefixed_util("unknown", utils.iter().copied()), None);
+        assert_eq!(find_prefixed_util("", utils.iter().copied()), None);
+
+        // Test exact util name (should not match as prefixed)
+        assert_eq!(find_prefixed_util("test", utils.iter().copied()), None);
+        assert_eq!(find_prefixed_util("cat", utils.iter().copied()), None);
+    }
 }

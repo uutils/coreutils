@@ -4,3 +4,10 @@ status-level = "all"
 final-status-level = "skip"
 failure-output = "immediate-final"
 fail-fast = false
+
+[profile.coverage]
+retries = 0
+status-level = "all"
+final-status-level = "skip"
+failure-output = "immediate-final"
+fail-fast = false

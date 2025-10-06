@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore powf
 use uucore::display::Quotable;
+use uucore::translate;
 
 use crate::options::{NumfmtOptions, RoundMethod, TransformOptions};
 use crate::units::{DisplayableSuffix, IEC_BASES, RawSuffix, Result, SI_BASES, Suffix, Unit};
@@ -63,7 +64,7 @@ impl<'a> Iterator for WhitespaceSplitter<'a> {
 
 fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
     if s.is_empty() {
-        return Err("invalid number: ''".to_string());
+        return Err(translate!("numfmt-error-invalid-number-empty"));
     }
 
     let with_i = s.ends_with('i');
@@ -81,7 +82,9 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
         Some('Z') => Some((RawSuffix::Z, with_i)),
         Some('Y') => Some((RawSuffix::Y, with_i)),
         Some('0'..='9') if !with_i => None,
-        _ => return Err(format!("invalid suffix in input: {}", s.quote())),
+        _ => {
+            return Err(translate!("numfmt-error-invalid-suffix", "input" => s.quote()));
+        }
     };
 
     let suffix_len = match suffix {
@@ -92,13 +95,13 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
 
     let number = s[..s.len() - suffix_len]
         .parse::<f64>()
-        .map_err(|_| format!("invalid number: {}", s.quote()))?;
+        .map_err(|_| translate!("numfmt-error-invalid-number", "input" => s.quote()))?;
 
     Ok((number, suffix))
 }
 
-// Returns the implicit precision of a number, which is the count of digits after the dot. For
-// example, 1.23 has an implicit precision of 2.
+/// Returns the implicit precision of a number, which is the count of digits after the dot. For
+/// example, 1.23 has an implicit precision of 2.
 fn parse_implicit_precision(s: &str) -> usize {
     match s.split_once('.') {
         Some((_, decimal_part)) => decimal_part
@@ -111,21 +114,18 @@ fn parse_implicit_precision(s: &str) -> usize {
 
 fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
     match (s, u) {
-        (Some((raw_suffix, false)), &Unit::Auto) | (Some((raw_suffix, false)), &Unit::Si) => {
-            match raw_suffix {
-                RawSuffix::K => Ok(i * 1e3),
-                RawSuffix::M => Ok(i * 1e6),
-                RawSuffix::G => Ok(i * 1e9),
-                RawSuffix::T => Ok(i * 1e12),
-                RawSuffix::P => Ok(i * 1e15),
-                RawSuffix::E => Ok(i * 1e18),
-                RawSuffix::Z => Ok(i * 1e21),
-                RawSuffix::Y => Ok(i * 1e24),
-            }
-        }
+        (Some((raw_suffix, false)), &Unit::Auto | &Unit::Si) => match raw_suffix {
+            RawSuffix::K => Ok(i * 1e3),
+            RawSuffix::M => Ok(i * 1e6),
+            RawSuffix::G => Ok(i * 1e9),
+            RawSuffix::T => Ok(i * 1e12),
+            RawSuffix::P => Ok(i * 1e15),
+            RawSuffix::E => Ok(i * 1e18),
+            RawSuffix::Z => Ok(i * 1e21),
+            RawSuffix::Y => Ok(i * 1e24),
+        },
         (Some((raw_suffix, false)), &Unit::Iec(false))
-        | (Some((raw_suffix, true)), &Unit::Auto)
-        | (Some((raw_suffix, true)), &Unit::Iec(true)) => match raw_suffix {
+        | (Some((raw_suffix, true)), &Unit::Auto | &Unit::Iec(true)) => match raw_suffix {
             RawSuffix::K => Ok(i * IEC_BASES[1]),
             RawSuffix::M => Ok(i * IEC_BASES[2]),
             RawSuffix::G => Ok(i * IEC_BASES[3]),
@@ -135,17 +135,14 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
             RawSuffix::Z => Ok(i * IEC_BASES[7]),
             RawSuffix::Y => Ok(i * IEC_BASES[8]),
         },
-        (Some((raw_suffix, false)), &Unit::Iec(true)) => Err(format!(
-            "missing 'i' suffix in input: '{i}{raw_suffix:?}' (e.g Ki/Mi/Gi)"
-        )),
-        (Some((raw_suffix, with_i)), &Unit::None) => Err(format!(
-            "rejecting suffix in input: '{}{:?}{}' (consider using --from)",
-            i,
-            raw_suffix,
-            if with_i { "i" } else { "" }
-        )),
+        (Some((raw_suffix, false)), &Unit::Iec(true)) => Err(
+            translate!("numfmt-error-missing-i-suffix", "number" => i, "suffix" => format!("{raw_suffix:?}")),
+        ),
+        (Some((raw_suffix, with_i)), &Unit::None) => Err(
+            translate!("numfmt-error-rejecting-suffix", "number" => i, "suffix" => format!("{raw_suffix:?}{}", if with_i { "i" } else { "" })),
+        ),
         (None, _) => Ok(i),
-        (_, _) => Err("This suffix is unsupported for specified unit".to_owned()),
+        (_, _) => Err(translate!("numfmt-error-suffix-unsupported-for-unit")),
     }
 }
 
@@ -202,7 +199,7 @@ pub fn div_round(n: f64, d: f64, method: RoundMethod) -> f64 {
     }
 }
 
-// Rounds to the specified number of decimal points.
+/// Rounds to the specified number of decimal points.
 fn round_with_precision(n: f64, method: RoundMethod, precision: usize) -> f64 {
     let p = 10.0_f64.powf(precision as f64);
 
@@ -215,7 +212,7 @@ fn consider_suffix(
     round_method: RoundMethod,
     precision: usize,
 ) -> Result<(f64, Option<Suffix>)> {
-    use crate::units::RawSuffix::*;
+    use crate::units::RawSuffix::{E, G, K, M, P, T, Y, Z};
 
     let abs_n = n.abs();
     let suffixes = [K, M, G, T, P, E, Z, Y];
@@ -223,7 +220,7 @@ fn consider_suffix(
     let (bases, with_i) = match *u {
         Unit::Si => (&SI_BASES, false),
         Unit::Iec(with_i) => (&IEC_BASES, with_i),
-        Unit::Auto => return Err("Unit 'auto' isn't supported with --to options".to_owned()),
+        Unit::Auto => return Err(translate!("numfmt-error-unit-auto-not-supported-with-to")),
         Unit::None => return Ok((n, None)),
     };
 
@@ -237,7 +234,7 @@ fn consider_suffix(
         _ if abs_n < bases[7] => 6,
         _ if abs_n < bases[8] => 7,
         _ if abs_n < bases[9] => 8,
-        _ => return Err("Number is too big and unsupported".to_string()),
+        _ => return Err(translate!("numfmt-error-number-too-big")),
     };
 
     let v = if precision > 0 {
@@ -267,19 +264,13 @@ fn transform_to(
             format!(
                 "{:.precision$}",
                 round_with_precision(i2, round_method, precision),
-                precision = precision
             )
         }
         Some(s) if precision > 0 => {
-            format!(
-                "{:.precision$}{}",
-                i2,
-                DisplayableSuffix(s, opts.to),
-                precision = precision
-            )
+            format!("{i2:.precision$}{}", DisplayableSuffix(s, opts.to),)
         }
-        Some(s) if i2.abs() < 10.0 => format!("{:.1}{}", i2, DisplayableSuffix(s, opts.to)),
-        Some(s) => format!("{:.0}{}", i2, DisplayableSuffix(s, opts.to)),
+        Some(s) if i2.abs() < 10.0 => format!("{i2:.1}{}", DisplayableSuffix(s, opts.to)),
+        Some(s) => format!("{i2:.0}{}", DisplayableSuffix(s, opts.to)),
     })
 }
 
@@ -323,25 +314,21 @@ fn format_string(
     let padded_number = match padding {
         0 => number_with_suffix,
         p if p > 0 && options.format.zero_padding => {
-            let zero_padded = format!("{:0>padding$}", number_with_suffix, padding = p as usize);
+            let zero_padded = format!("{number_with_suffix:0>padding$}", padding = p as usize);
 
             match implicit_padding.unwrap_or(options.padding) {
                 0 => zero_padded,
-                p if p > 0 => format!("{:>padding$}", zero_padded, padding = p as usize),
-                p => format!("{:<padding$}", zero_padded, padding = p.unsigned_abs()),
+                p if p > 0 => format!("{zero_padded:>padding$}", padding = p as usize),
+                p => format!("{zero_padded:<padding$}", padding = p.unsigned_abs()),
             }
         }
-        p if p > 0 => format!("{:>padding$}", number_with_suffix, padding = p as usize),
-        p => format!(
-            "{:<padding$}",
-            number_with_suffix,
-            padding = p.unsigned_abs()
-        ),
+        p if p > 0 => format!("{number_with_suffix:>padding$}", padding = p as usize),
+        p => format!("{number_with_suffix:<padding$}", padding = p.unsigned_abs()),
     };
 
     Ok(format!(
-        "{}{}{}",
-        options.format.prefix, padded_number, options.format.suffix
+        "{}{padded_number}{}",
+        options.format.prefix, options.format.suffix
     ))
 }
 
@@ -392,12 +379,20 @@ fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<()> {
 
             print!("{}", format_string(field, options, implicit_padding)?);
         } else {
+            // the -z option converts an initial \n into a space
+            let prefix = if options.zero_terminated && prefix.starts_with('\n') {
+                print!(" ");
+                &prefix[1..]
+            } else {
+                prefix
+            };
             // print unselected field without conversion
             print!("{prefix}{field}");
         }
     }
 
-    println!();
+    let eol = if options.zero_terminated { '\0' } else { '\n' };
+    print!("{eol}");
 
     Ok(())
 }

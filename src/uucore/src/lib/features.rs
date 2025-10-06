@@ -3,27 +3,37 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // features ~ feature-gated modules (core/bundler file)
+//
+// spell-checker:ignore (features) extendedbigdecimal logind
 
 #[cfg(feature = "backup-control")]
 pub mod backup_control;
+#[cfg(feature = "benchmark")]
+pub mod benchmark;
 #[cfg(feature = "buf-copy")]
 pub mod buf_copy;
 #[cfg(feature = "checksum")]
 pub mod checksum;
 #[cfg(feature = "colors")]
 pub mod colors;
-#[cfg(feature = "custom-tz-fmt")]
-pub mod custom_tz_fmt;
 #[cfg(feature = "encoding")]
 pub mod encoding;
+#[cfg(feature = "extendedbigdecimal")]
+pub mod extendedbigdecimal;
+#[cfg(feature = "fast-inc")]
+pub mod fast_inc;
 #[cfg(feature = "format")]
 pub mod format;
 #[cfg(feature = "fs")]
 pub mod fs;
 #[cfg(feature = "fsext")]
 pub mod fsext;
+#[cfg(feature = "i18n-common")]
+pub mod i18n;
 #[cfg(feature = "lines")]
 pub mod lines;
+#[cfg(feature = "parser")]
+pub mod parser;
 #[cfg(feature = "quoting-style")]
 pub mod quoting_style;
 #[cfg(feature = "ranges")]
@@ -32,6 +42,8 @@ pub mod ranges;
 pub mod ringbuffer;
 #[cfg(feature = "sum")]
 pub mod sum;
+#[cfg(feature = "time")]
+pub mod time;
 #[cfg(feature = "update-control")]
 pub mod update_control;
 #[cfg(feature = "uptime")]
@@ -55,20 +67,25 @@ pub mod pipes;
 pub mod proc_info;
 #[cfg(all(unix, feature = "process"))]
 pub mod process;
+#[cfg(target_os = "linux")]
+pub mod safe_traversal;
 #[cfg(all(target_os = "linux", feature = "tty"))]
 pub mod tty;
 
 #[cfg(all(unix, feature = "fsxattr"))]
 pub mod fsxattr;
+#[cfg(all(target_os = "linux", feature = "selinux"))]
+pub mod selinux;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
 pub mod signals;
+#[cfg(feature = "feat_systemd_logind")]
+pub mod systemd_logind;
 #[cfg(all(
     unix,
     not(target_os = "android"),
     not(target_os = "fuchsia"),
     not(target_os = "openbsd"),
     not(target_os = "redox"),
-    not(target_env = "musl"),
     feature = "utmpx"
 ))]
 pub mod utmpx;

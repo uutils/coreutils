@@ -248,10 +248,7 @@ fn test_timestamp_format() {
         assert_eq!(
             result,
             format!("{expected}\n"),
-            "Format '{}' failed.\nExpected: '{}'\nGot: '{}'",
-            format_str,
-            expected,
-            result,
+            "Format '{format_str}' failed.\nExpected: '{expected}'\nGot: '{result}'",
         );
     }
 }
@@ -331,10 +328,16 @@ fn test_pipe_fifo() {
         .stdout_contains("File: FIFO");
 }
 
+// TODO(#7583): Re-enable on Mac OS X (and possibly other Unix platforms)
 #[test]
 #[cfg(all(
     unix,
-    not(any(target_os = "android", target_os = "freebsd", target_os = "openbsd"))
+    not(any(
+        target_os = "android",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "macos"
+    ))
 ))]
 fn test_stdin_pipe_fifo1() {
     // $ echo | stat -
@@ -356,8 +359,9 @@ fn test_stdin_pipe_fifo1() {
         .stdout_contains("File: -");
 }
 
+// TODO(#7583): Re-enable on Mac OS X (and maybe Android)
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 fn test_stdin_pipe_fifo2() {
     // $ stat -
     // File: -
@@ -485,4 +489,74 @@ fn test_printf_invalid_directive() {
         .args(&["--printf=%9%", "."])
         .fails_with_code(1)
         .stderr_contains("'%9%': invalid directive");
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_stat_selinux() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("f");
+    ts.ucmd()
+        .arg("--printf='%C'")
+        .arg("f")
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("unconfined_u");
+    ts.ucmd()
+        .arg("--printf='%C'")
+        .arg("/bin/")
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("system_u");
+    // Count that we have 4 fields
+    let result = ts.ucmd().arg("--printf='%C'").arg("/bin/").succeeds();
+    let s: Vec<_> = result.stdout_str().split(':').collect();
+    assert!(s.len() == 4);
+}
+
+#[cfg(unix)]
+#[test]
+fn test_mount_point_basic() {
+    let ts = TestScenario::new(util_name!());
+    let result = ts.ucmd().args(&["-c", "%m", "/"]).succeeds();
+    let output = result.stdout_str().trim();
+    assert!(!output.is_empty(), "Mount point should not be empty");
+    assert_eq!(output, "/");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_mount_point_width_and_alignment() {
+    let ts = TestScenario::new(util_name!());
+
+    // Right-aligned, width 15
+    let result = ts.ucmd().args(&["-c", "%15m", "/"]).succeeds();
+    let output = result.stdout_str();
+    assert!(
+        output.trim().len() <= 15 && output.len() >= 15,
+        "Output should be padded to width 15"
+    );
+
+    // Left-aligned, width 15
+    let result = ts.ucmd().args(&["-c", "%-15m", "/"]).succeeds();
+    let output = result.stdout_str();
+
+    assert!(
+        output.trim().len() <= 15 && output.len() >= 15,
+        "Output should be padded to width 15 (left-aligned)"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn test_mount_point_combined_with_other_specifiers() {
+    let ts = TestScenario::new(util_name!());
+    let result = ts.ucmd().args(&["-c", "%m %n %s", "/bin/sh"]).succeeds();
+    let output = result.stdout_str();
+    let parts: Vec<&str> = output.split_whitespace().collect();
+    assert!(
+        parts.len() >= 3,
+        "Should print mount point, file name, and size"
+    );
 }
