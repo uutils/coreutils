@@ -132,6 +132,7 @@ impl ColorMode {
             || var_os("COLORTERM")
                 .is_some_and(|ref x| x == OsStr::new("truecolor") || x == OsStr::new("24bit"))
             || var_os("CI").is_some()
+            || var_os("WSL_DISTRO_NAME").is_some()
         {
             ColorMode::TrueColor
         } else if var_os("TERM").is_some_and(|ref x| x == OsStr::new("xterm-256color")) {
