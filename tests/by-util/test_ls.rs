@@ -6331,23 +6331,43 @@ fn test_f_flag_enables_all() {
 
 #[test]
 fn test_f_flag_disables_sorting() {
-    // Test that -f disables sorting (equivalent to -U)
+    // Test that -f disables sorting by comparing with -a (sorted) and -U (unsorted)
+    // We compare outputs instead of relying on filesystem directory order
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.touch("zebra");
     at.touch("apple");
     at.touch("banana");
 
-    // Without -f, files should be sorted alphabetically
-    let sorted = scene.ucmd().succeeds().stdout_move_str();
-    let sorted_lines: Vec<&str> = sorted.lines().collect();
-    assert!(sorted_lines[0].contains("apple"));
+    // Get outputs with different flags
+    let out_a = scene
+        .ucmd()
+        .arg("-a")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+    let out_f = scene
+        .ucmd()
+        .arg("-f")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+    let out_U = scene
+        .ucmd()
+        .arg("-U")
+        .arg("-a")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
 
-    // With -f, files should NOT be sorted
-    let unsorted = scene.ucmd().arg("-f").succeeds().stdout_move_str();
-    assert!(unsorted.contains("zebra"));
-    assert!(unsorted.contains("apple"));
-    assert!(unsorted.contains("banana"));
+    // -f output should differ from sorted -a output (proves sorting is disabled)
+    assert_ne!(
+        out_a, out_f,
+        "-f should produce different order than sorted -a"
+    );
+
+    // -f output should match -U output (both use directory order)
+    assert_eq!(out_f, out_U, "-f should match unsorted -U behavior");
 }
 
 #[test]
@@ -6400,53 +6420,95 @@ fn test_explicit_color_always_works_with_f() {
 }
 
 #[test]
-fn test_f_overrides_a_and_big_a() {
-    // Test last-flag-wins: -f after -a/-A
+fn test_f_overrides_big_a() {
+    // Test last-flag-wins between -f and -A using .. as discriminator
+    // -f shows .. (all files including . and ..)
+    // -A hides .. (almost all, excluding . and ..)
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.touch("visible");
     at.touch(".hidden");
 
-    // -A then -f: should show all files
-    scene
+    // -A then -f: -f wins, should show ..
+    let out_Af = scene
         .ucmd()
         .arg("-A")
         .arg("-f")
-        .succeeds()
-        .stdout_contains(".hidden");
-
-    // -f then -A: should honor -A (almost all)
-    let output = scene
-        .ucmd()
-        .arg("-f")
-        .arg("-A")
+        .arg("-1")
         .succeeds()
         .stdout_move_str();
-    assert!(output.contains(".hidden"));
+    assert!(
+        out_Af.lines().any(|l| l == ".."),
+        "-f should win and show .."
+    );
+
+    // -f then -A: -A wins, should NOT show ..
+    let out_fA = scene
+        .ucmd()
+        .arg("-f")
+        .arg("-A")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+    assert!(
+        !out_fA.lines().any(|l| l == ".."),
+        "-A should win and hide .."
+    );
 }
 
 #[test]
 fn test_f_overrides_sort_flags() {
-    // Test last-flag-wins: -f overrides -t, -S, -v, -X
+    // Test last-flag-wins using size-based sorting for determinism
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch("file1.txt");
-    at.touch("file2.txt");
-    at.touch("file3.txt");
 
-    // -t then -f: should disable sorting
-    let unsorted = scene
+    // Create files with different sizes for predictable sort order
+    at.write("small.txt", "a"); // 1 byte
+    at.write("medium.txt", "bb"); // 2 bytes  
+    at.write("large.txt", "ccc"); // 3 bytes
+
+    // Get baseline outputs (include -a to match -f behavior which shows all files)
+    let out_S = scene
         .ucmd()
-        .arg("-t")
-        .arg("-f")
+        .arg("-S")
+        .arg("-a")
+        .arg("-1")
         .succeeds()
         .stdout_move_str();
-    assert!(unsorted.contains("file1.txt"));
-    assert!(unsorted.contains("file2.txt"));
-    assert!(unsorted.contains("file3.txt"));
+    let out_U = scene
+        .ucmd()
+        .arg("-U")
+        .arg("-a")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
 
-    // -f then -t: should honor -t (sort by time)
-    scene.ucmd().arg("-f").arg("-t").succeeds();
+    // -f then -S: -S wins, should be sorted by size
+    let out_fS = scene
+        .ucmd()
+        .arg("-f")
+        .arg("-S")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(out_fS, out_S, "-S should win: output should be size-sorted");
+
+    // -S then -f: -f wins, should be unsorted
+    let out_Sf = scene
+        .ucmd()
+        .arg("-S")
+        .arg("-f")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(
+        out_Sf, out_U,
+        "-f should win: output should match unsorted -U"
+    );
+    assert_ne!(
+        out_Sf, out_S,
+        "-f should win: output should differ from sorted -S"
+    );
 }
 
 #[test]
@@ -6468,21 +6530,53 @@ fn test_a_overrides_f_files() {
 
 #[test]
 fn test_big_u_overrides_f_sort() {
-    // Test that -U after -f still disables sorting
+    // Test that -U participates in last-flag-wins with sorting flags
+    // -U disables sorting (like -f), but can be overridden by other sort flags
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch("zebra");
-    at.touch("apple");
 
-    let result = scene
+    // Create files with different sizes for predictable sort order
+    at.write("small.txt", "a"); // 1 byte
+    at.write("medium.txt", "bb"); // 2 bytes
+    at.write("large.txt", "ccc"); // 3 bytes
+
+    // Get baseline outputs
+    let out_S = scene
         .ucmd()
-        .arg("-f")
-        .arg("-U")
+        .arg("-S")
+        .arg("-1")
         .succeeds()
         .stdout_move_str();
-    // Both -f and -U disable sorting, so files appear in directory order
-    assert!(result.contains("zebra"));
-    assert!(result.contains("apple"));
+    let out_U = scene
+        .ucmd()
+        .arg("-U")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+
+    // -U then -S: -S wins, should be sorted by size
+    let out_US = scene
+        .ucmd()
+        .arg("-U")
+        .arg("-S")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(out_US, out_S, "-S should win: output should be size-sorted");
+
+    // -S then -U: -U wins, should be unsorted
+    let out_SU = scene
+        .ucmd()
+        .arg("-S")
+        .arg("-U")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(out_SU, out_U, "-U should win: output should be unsorted");
+    assert_ne!(
+        out_SU, out_S,
+        "-U should win: output should differ from sorted -S"
+    );
 }
 
 #[test]
