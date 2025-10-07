@@ -535,24 +535,28 @@ pub fn uu_app() -> Command {
 
 fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
     #[cfg(windows)]
-    let mut attempts = 0usize;
-    loop {
-        #[cfg(windows)]
-        {
+    {
+        let mut attempts = 0usize;
+        loop {
             if attempts >= WINDOWS_RESERVED_RETRY_LIMIT {
                 let fallback = Path::new(tmpdir).join(generate_candidate(prefix, rand, suffix));
                 return Err(MkTempError::PersistError(fallback).into());
             }
             attempts += 1;
-        }
 
+            let candidate = generate_candidate(prefix, rand, suffix);
+            if is_windows_reserved_device_name(&candidate) {
+                continue;
+            }
+
+            break Ok(Path::new(tmpdir).join(candidate));
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
         let candidate = generate_candidate(prefix, rand, suffix);
-        #[cfg(windows)]
-        if is_windows_reserved_device_name(&candidate) {
-            continue;
-        }
-
-        return Ok(Path::new(tmpdir).join(candidate));
+        Ok(Path::new(tmpdir).join(candidate))
     }
 }
 
