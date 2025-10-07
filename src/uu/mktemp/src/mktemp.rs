@@ -44,6 +44,67 @@ const TMPDIR_ENV_VAR: &str = "TMPDIR";
 #[cfg(windows)]
 const TMPDIR_ENV_VAR: &str = "TMP";
 
+#[cfg(windows)]
+const WINDOWS_RESERVED_RETRY_LIMIT: usize = 256;
+
+#[cfg(windows)]
+const WINDOWS_RESERVED_DEVICE_NAMES: &[&str] =
+    &["AUX", "CLOCK$", "CON", "CONIN$", "CONOUT$", "NUL", "PRN"];
+
+#[cfg(windows)]
+fn is_windows_reserved_device_name(candidate: &str) -> bool {
+    let trimmed = candidate.trim_end_matches(['.', ' ']);
+    if trimmed.is_empty() {
+        return false;
+    }
+    let upper = trimmed.to_ascii_uppercase();
+    let base = match upper.split_once('.') {
+        Some((prefix, _)) => prefix,
+        None => upper.as_str(),
+    };
+    if WINDOWS_RESERVED_DEVICE_NAMES.contains(&base) {
+        return true;
+    }
+    if let Some(port) = base.strip_prefix("COM") {
+        return matches!(
+            port,
+            "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+        );
+    }
+    if let Some(port) = base.strip_prefix("LPT") {
+        return matches!(port, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9");
+    }
+    false
+}
+
+#[cfg(windows)]
+fn path_has_reserved_windows_name(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|os| os.to_str())
+        .map_or(false, is_windows_reserved_device_name)
+}
+
+fn generate_candidate(prefix: &str, rand: usize, suffix: &str) -> String {
+    let len = prefix.len() + suffix.len() + rand;
+    let mut buf = Vec::with_capacity(len);
+    buf.extend(prefix.as_bytes());
+    buf.extend(iter::repeat_n(b'X', rand));
+    buf.extend(suffix.as_bytes());
+
+    let bytes = &mut buf[prefix.len()..prefix.len() + rand];
+    rand::rng().fill(bytes);
+    for byte in bytes {
+        *byte = match *byte % 62 {
+            v @ 0..=9 => v + b'0',
+            v @ 10..=35 => v - 10 + b'a',
+            v @ 36..=61 => v - 36 + b'A',
+            _ => unreachable!(),
+        };
+    }
+
+    String::from_utf8(buf).unwrap()
+}
+
 #[derive(Error, Debug)]
 enum MkTempError {
     #[error("{}", translate!("mktemp-error-persist-file", "path" => .0.quote()))]
@@ -473,27 +534,26 @@ pub fn uu_app() -> Command {
 }
 
 fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
-    let len = prefix.len() + suffix.len() + rand;
-    let mut buf = Vec::with_capacity(len);
-    buf.extend(prefix.as_bytes());
-    buf.extend(iter::repeat_n(b'X', rand));
-    buf.extend(suffix.as_bytes());
-
-    // Randomize.
-    let bytes = &mut buf[prefix.len()..prefix.len() + rand];
-    rand::rng().fill(bytes);
-    for byte in bytes {
-        *byte = match *byte % 62 {
-            v @ 0..=9 => v + b'0',
-            v @ 10..=35 => v - 10 + b'a',
-            v @ 36..=61 => v - 36 + b'A',
-            _ => unreachable!(),
+    #[cfg(windows)]
+    let mut attempts = 0usize;
+    loop {
+        #[cfg(windows)]
+        {
+            if attempts >= WINDOWS_RESERVED_RETRY_LIMIT {
+                let fallback = Path::new(tmpdir).join(generate_candidate(prefix, rand, suffix));
+                return Err(MkTempError::PersistError(fallback).into());
+            }
+            attempts += 1;
         }
+
+        let candidate = generate_candidate(prefix, rand, suffix);
+        #[cfg(windows)]
+        if is_windows_reserved_device_name(&candidate) {
+            continue;
+        }
+
+        return Ok(Path::new(tmpdir).join(candidate));
     }
-    // We guarantee utf8.
-    let buf = String::from_utf8(buf).unwrap();
-    let tmpdir = Path::new(tmpdir).join(buf);
-    Ok(tmpdir)
 }
 
 /// Create a temporary directory with the given parameters.
@@ -548,19 +608,58 @@ fn make_temp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult
 fn make_temp_file(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
-    match builder.tempfile_in(dir) {
-        // `keep` ensures that the file is not deleted
-        Ok(named_tempfile) => match named_tempfile.keep() {
-            Ok((_, pathbuf)) => Ok(pathbuf),
-            Err(e) => Err(MkTempError::PersistError(e.file.path().to_path_buf()).into()),
-        },
-        Err(e) if e.kind() == ErrorKind::NotFound => {
-            let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
-            let path = Path::new(dir).join(filename);
-            let s = path.display().to_string();
-            Err(MkTempError::NotFound(translate!("mktemp-template-type-file"), s).into())
+
+    #[cfg(windows)]
+    {
+        let mut attempts = 0usize;
+        loop {
+            if attempts >= WINDOWS_RESERVED_RETRY_LIMIT {
+                let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
+                let path = Path::new(dir).join(filename);
+                return Err(MkTempError::PersistError(path).into());
+            }
+            attempts += 1;
+
+            match builder.tempfile_in(dir) {
+                Ok(named_tempfile) => match named_tempfile.keep() {
+                    Ok((_, pathbuf)) => return Ok(pathbuf),
+                    Err(e) => {
+                        if path_has_reserved_windows_name(e.file.path()) {
+                            continue;
+                        }
+                        let path = e.file.path().to_path_buf();
+                        return Err(MkTempError::PersistError(path).into());
+                    }
+                },
+                Err(e) if e.kind() == ErrorKind::NotFound => {
+                    let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
+                    let path = Path::new(dir).join(filename);
+                    let s = path.display().to_string();
+                    return Err(
+                        MkTempError::NotFound(translate!("mktemp-template-type-file"), s).into(),
+                    );
+                }
+                Err(e) => return Err(e.into()),
+            }
         }
-        Err(e) => Err(e.into()),
+    }
+
+    #[cfg(not(windows))]
+    {
+        match builder.tempfile_in(dir) {
+            // `keep` ensures that the file is not deleted
+            Ok(named_tempfile) => match named_tempfile.keep() {
+                Ok((_, pathbuf)) => Ok(pathbuf),
+                Err(e) => Err(MkTempError::PersistError(e.file.path().to_path_buf()).into()),
+            },
+            Err(e) if e.kind() == ErrorKind::NotFound => {
+                let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
+                let path = Path::new(dir).join(filename);
+                let s = path.display().to_string();
+                Err(MkTempError::NotFound(translate!("mktemp-template-type-file"), s).into())
+            }
+            Err(e) => Err(e.into()),
+        }
     }
 }
 
