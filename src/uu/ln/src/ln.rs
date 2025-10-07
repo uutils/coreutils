@@ -23,8 +23,6 @@ use thiserror::Error;
 use std::ffi::{CString, OsStr};
 #[cfg(target_os = "android")]
 use std::os::unix::ffi::OsStrExt;
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
 #[cfg(any(unix, target_os = "redox"))]
 use std::os::unix::fs::symlink;
 #[cfg(windows)]
@@ -382,24 +380,6 @@ fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
 }
 
 fn refer_to_same_file(src: &Path, dst: &Path, dereference: bool) -> bool {
-    #[cfg(unix)]
-    {
-        let src_meta = if dereference {
-            fs::metadata(src)
-        } else {
-            fs::symlink_metadata(src)
-        };
-        let dst_meta = if dereference {
-            fs::metadata(dst)
-        } else {
-            fs::symlink_metadata(dst)
-        };
-
-        if let (Ok(src_meta), Ok(dst_meta)) = (src_meta, dst_meta) {
-            return src_meta.ino() == dst_meta.ino() && src_meta.dev() == dst_meta.dev();
-        }
-    }
-
     paths_refer_to_same_file(src, dst, dereference)
 }
 
