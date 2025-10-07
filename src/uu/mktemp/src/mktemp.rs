@@ -81,7 +81,7 @@ fn is_windows_reserved_device_name(candidate: &str) -> bool {
 fn path_has_reserved_windows_name(path: &Path) -> bool {
     path.file_name()
         .and_then(|os| os.to_str())
-        .map_or(false, is_windows_reserved_device_name)
+        .is_some_and(is_windows_reserved_device_name)
 }
 
 fn generate_candidate(prefix: &str, rand: usize, suffix: &str) -> String {
