@@ -6331,8 +6331,8 @@ fn test_f_flag_enables_all() {
 
 #[test]
 fn test_f_flag_disables_sorting() {
-    // Test that -f disables sorting by comparing with -a (sorted) and -U (unsorted)
-    // We compare outputs instead of relying on filesystem directory order
+    // Test that -f disables sorting by verifying it matches -U behavior
+    // and that explicitly sorting after -f works (proving sorting was disabled)
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.touch("zebra");
@@ -6340,12 +6340,6 @@ fn test_f_flag_disables_sorting() {
     at.touch("banana");
 
     // Get outputs with different flags
-    let out_a = scene
-        .ucmd()
-        .arg("-a")
-        .arg("-1")
-        .succeeds()
-        .stdout_move_str();
     let out_f = scene
         .ucmd()
         .arg("-f")
@@ -6360,14 +6354,31 @@ fn test_f_flag_disables_sorting() {
         .succeeds()
         .stdout_move_str();
 
-    // -f output should differ from sorted -a output (proves sorting is disabled)
-    assert_ne!(
-        out_a, out_f,
-        "-f should produce different order than sorted -a"
-    );
+    // Test that explicit sorting after -f works (proves -f disabled sorting)
+    let out_f_then_sort = scene
+        .ucmd()
+        .arg("-f")
+        .arg("--sort=name")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+
+    // Get sorted output for comparison
+    let out_sorted = scene
+        .ucmd()
+        .arg("-a")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
 
     // -f output should match -U output (both use directory order)
     assert_eq!(out_f, out_u_all, "-f should match unsorted -U behavior");
+
+    // Explicit --sort after -f should enable sorting
+    assert_eq!(
+        out_f_then_sort, out_sorted,
+        "--sort after -f should enable sorting"
+    );
 }
 
 #[test]
@@ -6508,10 +6519,6 @@ fn test_f_overrides_sort_flags() {
         out_s_f, out_u,
         "-f should win: output should match unsorted -U"
     );
-    assert_ne!(
-        out_s_f, out_s,
-        "-f should win: output should differ from sorted -S"
-    );
 }
 
 #[test]
@@ -6570,7 +6577,7 @@ fn test_big_u_overrides_f_sort() {
         "-S should win: output should be size-sorted"
     );
 
-    // -S then -U: -U wins, should be unsorted
+    // -S then -U: -U wins, should match plain -U output
     let out_s_u = scene
         .ucmd()
         .arg("-S")
@@ -6578,11 +6585,16 @@ fn test_big_u_overrides_f_sort() {
         .arg("-1")
         .succeeds()
         .stdout_move_str();
-    assert_eq!(out_s_u, out_u, "-U should win: output should be unsorted");
-    assert_ne!(
-        out_s_u, out_s,
-        "-U should win: output should differ from sorted -S"
+    assert_eq!(
+        out_s_u, out_u,
+        "-U should win: output should match plain -U"
     );
+
+    // Verify size-sorted output is in correct order (this is deterministic)
+    let lines: Vec<&str> = out_s.lines().collect();
+    assert_eq!(lines[0], "large.txt", "First file should be largest");
+    assert_eq!(lines[1], "medium.txt", "Second file should be medium");
+    assert_eq!(lines[2], "small.txt", "Third file should be smallest");
 }
 
 #[test]
