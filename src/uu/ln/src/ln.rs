@@ -503,9 +503,49 @@ fn android_hard_link(src: &Path, dst: &Path) -> io::Result<()> {
     }
 }
 
+#[cfg(target_os = "android")]
+fn try_force_swap_android(src: &Path, dst: &Path) -> io::Result<()> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let parent = dst
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    let mut attempt: u32 = 0;
+    loop {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let tmp_name = format!(
+            ".uu_ln_force_tmp_{}_{}_{attempt}",
+            std::process::id(),
+            suffix
+        );
+        let tmp_path = parent.join(&tmp_name);
+
+        match create_hard_link(src, &tmp_path) {
+            Ok(()) => match fs::rename(&tmp_path, dst) {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    let _ = fs::remove_file(&tmp_path);
+                    return Err(e);
+                }
+            },
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                attempt = attempt.wrapping_add(1);
+                continue;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     let mut backup_path = None;
+    let mut dst_removed = false;
     let source: Cow<'_, Path> = if settings.relative {
         relative_path(src, dst)
     } else {
@@ -528,6 +568,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         if let Some(ref p) = backup_path {
             fs::rename(dst, p)
                 .map_err_context(|| translate!("ln-cannot-backup", "file" => dst.quote()))?;
+            dst_removed = true;
         }
         match settings.overwrite {
             OverwriteMode::NoClobber => {}
@@ -536,7 +577,9 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
                     return Err(LnError::SomeLinksFailed.into());
                 }
 
-                if fs::remove_file(dst).is_ok() {}
+                if fs::remove_file(dst).is_ok() {
+                    dst_removed = true;
+                }
                 // In case of error, don't do anything
             }
             OverwriteMode::Force => {
@@ -556,7 +599,12 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
                         return Ok(());
                     }
                 }
-                if fs::remove_file(dst).is_ok() {}
+                #[cfg(not(target_os = "android"))]
+                {
+                    if fs::remove_file(dst).is_ok() {
+                        dst_removed = true;
+                    }
+                }
                 // In case of error, don't do anything
             }
         }
@@ -574,9 +622,36 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         } else {
             source.to_path_buf()
         };
-        create_hard_link(&p, dst).map_err_context(|| {
-            translate!("ln-failed-to-create-hard-link", "source" => source.quote(), "dest" => dst.quote())
-        })?;
+        #[cfg(target_os = "android")]
+        let mut created_via_swap = false;
+
+        #[cfg(target_os = "android")]
+        if matches!(settings.overwrite, OverwriteMode::Force) && !dst_removed {
+            if let Ok(()) = try_force_swap_android(&p, dst) {
+                dst_removed = true;
+                created_via_swap = true;
+            }
+        }
+
+        if matches!(settings.overwrite, OverwriteMode::Force) && !dst_removed {
+            let _ = fs::remove_file(dst);
+        }
+
+        #[cfg(target_os = "android")]
+        if created_via_swap {
+            // nothing more to do
+        } else {
+            create_hard_link(&p, dst).map_err_context(|| {
+                translate!("ln-failed-to-create-hard-link", "source" => source.quote(), "dest" => dst.quote())
+            })?;
+        }
+
+        #[cfg(not(target_os = "android"))]
+        {
+            create_hard_link(&p, dst).map_err_context(|| {
+                translate!("ln-failed-to-create-hard-link", "source" => source.quote(), "dest" => dst.quote())
+            })?;
+        }
     }
 
     if settings.verbose {
