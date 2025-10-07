@@ -6352,7 +6352,7 @@ fn test_f_flag_disables_sorting() {
         .arg("-1")
         .succeeds()
         .stdout_move_str();
-    let out_U = scene
+    let out_u_all = scene
         .ucmd()
         .arg("-U")
         .arg("-a")
@@ -6367,7 +6367,7 @@ fn test_f_flag_disables_sorting() {
     );
 
     // -f output should match -U output (both use directory order)
-    assert_eq!(out_f, out_U, "-f should match unsorted -U behavior");
+    assert_eq!(out_f, out_u_all, "-f should match unsorted -U behavior");
 }
 
 #[test]
@@ -6430,7 +6430,7 @@ fn test_f_overrides_big_a() {
     at.touch(".hidden");
 
     // -A then -f: -f wins, should show ..
-    let out_Af = scene
+    let out_a_f = scene
         .ucmd()
         .arg("-A")
         .arg("-f")
@@ -6438,12 +6438,12 @@ fn test_f_overrides_big_a() {
         .succeeds()
         .stdout_move_str();
     assert!(
-        out_Af.lines().any(|l| l == ".."),
+        out_a_f.lines().any(|l| l == ".."),
         "-f should win and show .."
     );
 
     // -f then -A: -A wins, should NOT show ..
-    let out_fA = scene
+    let out_f_a = scene
         .ucmd()
         .arg("-f")
         .arg("-A")
@@ -6451,7 +6451,7 @@ fn test_f_overrides_big_a() {
         .succeeds()
         .stdout_move_str();
     assert!(
-        !out_fA.lines().any(|l| l == ".."),
+        !out_f_a.lines().any(|l| l == ".."),
         "-A should win and hide .."
     );
 }
@@ -6468,14 +6468,14 @@ fn test_f_overrides_sort_flags() {
     at.write("large.txt", "ccc"); // 3 bytes
 
     // Get baseline outputs (include -a to match -f behavior which shows all files)
-    let out_S = scene
+    let out_s = scene
         .ucmd()
         .arg("-S")
         .arg("-a")
         .arg("-1")
         .succeeds()
         .stdout_move_str();
-    let out_U = scene
+    let out_u = scene
         .ucmd()
         .arg("-U")
         .arg("-a")
@@ -6484,17 +6484,20 @@ fn test_f_overrides_sort_flags() {
         .stdout_move_str();
 
     // -f then -S: -S wins, should be sorted by size
-    let out_fS = scene
+    let out_f_s = scene
         .ucmd()
         .arg("-f")
         .arg("-S")
         .arg("-1")
         .succeeds()
         .stdout_move_str();
-    assert_eq!(out_fS, out_S, "-S should win: output should be size-sorted");
+    assert_eq!(
+        out_f_s, out_s,
+        "-S should win: output should be size-sorted"
+    );
 
     // -S then -f: -f wins, should be unsorted
-    let out_Sf = scene
+    let out_s_f = scene
         .ucmd()
         .arg("-S")
         .arg("-f")
@@ -6502,11 +6505,11 @@ fn test_f_overrides_sort_flags() {
         .succeeds()
         .stdout_move_str();
     assert_eq!(
-        out_Sf, out_U,
+        out_s_f, out_u,
         "-f should win: output should match unsorted -U"
     );
     assert_ne!(
-        out_Sf, out_S,
+        out_s_f, out_s,
         "-f should win: output should differ from sorted -S"
     );
 }
@@ -6541,13 +6544,13 @@ fn test_big_u_overrides_f_sort() {
     at.write("large.txt", "ccc"); // 3 bytes
 
     // Get baseline outputs
-    let out_S = scene
+    let out_s = scene
         .ucmd()
         .arg("-S")
         .arg("-1")
         .succeeds()
         .stdout_move_str();
-    let out_U = scene
+    let out_u = scene
         .ucmd()
         .arg("-U")
         .arg("-1")
@@ -6555,26 +6558,29 @@ fn test_big_u_overrides_f_sort() {
         .stdout_move_str();
 
     // -U then -S: -S wins, should be sorted by size
-    let out_US = scene
+    let out_u_s = scene
         .ucmd()
         .arg("-U")
         .arg("-S")
         .arg("-1")
         .succeeds()
         .stdout_move_str();
-    assert_eq!(out_US, out_S, "-S should win: output should be size-sorted");
+    assert_eq!(
+        out_u_s, out_s,
+        "-S should win: output should be size-sorted"
+    );
 
     // -S then -U: -U wins, should be unsorted
-    let out_SU = scene
+    let out_s_u = scene
         .ucmd()
         .arg("-S")
         .arg("-U")
         .arg("-1")
         .succeeds()
         .stdout_move_str();
-    assert_eq!(out_SU, out_U, "-U should win: output should be unsorted");
+    assert_eq!(out_s_u, out_u, "-U should win: output should be unsorted");
     assert_ne!(
-        out_SU, out_S,
+        out_s_u, out_s,
         "-U should win: output should differ from sorted -S"
     );
 }
