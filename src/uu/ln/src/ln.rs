@@ -542,6 +542,45 @@ fn try_force_swap_android(src: &Path, dst: &Path) -> io::Result<()> {
     }
 }
 
+#[cfg(target_os = "android")]
+fn try_symlink_swap_android(src: &Path, dst: &Path) -> io::Result<()> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let parent = dst
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    let mut attempt: u32 = 0;
+    loop {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let tmp_name = format!(
+            ".uu_ln_symlink_tmp_{}_{}_{attempt}",
+            std::process::id(),
+            suffix
+        );
+        let tmp_path = parent.join(&tmp_name);
+
+        match symlink(src, &tmp_path) {
+            Ok(()) => match fs::rename(&tmp_path, dst) {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    let _ = fs::remove_file(&tmp_path);
+                    return Err(e);
+                }
+            },
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                attempt = attempt.wrapping_add(1);
+                continue;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     let mut backup_path = None;
@@ -583,7 +622,9 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
                 // In case of error, don't do anything
             }
             OverwriteMode::Force => {
-                if !dst.is_symlink() && refer_to_same_file(src, dst, true) {
+                if !dst.is_symlink()
+                    && (refer_to_same_file(src, dst, true) || refer_to_same_file(src, dst, false))
+                {
                     let same_entry = match (
                         canonicalize(src, MissingHandling::Missing, ResolveMode::Physical),
                         canonicalize(dst, MissingHandling::Missing, ResolveMode::Physical),
@@ -611,7 +652,26 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     }
 
     if settings.symbolic {
-        symlink(&source, dst)?;
+        #[cfg(target_os = "android")]
+        {
+            let mut created_via_symlink_swap = false;
+
+            if matches!(settings.overwrite, OverwriteMode::Force) && !dst_removed {
+                if dst.exists() || dst.is_symlink() {
+                    if let Ok(()) = try_symlink_swap_android(source.as_ref(), dst) {
+                        created_via_symlink_swap = true;
+                    }
+                }
+            }
+
+            if !created_via_symlink_swap {
+                symlink(&source, dst)?;
+            }
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            symlink(&source, dst)?;
+        }
     } else {
         let p = if settings.logical && source.is_symlink() {
             // if we want to have an hard link,
@@ -641,9 +701,23 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         if created_via_swap {
             // nothing more to do
         } else {
-            create_hard_link(&p, dst).map_err_context(|| {
-                translate!("ln-failed-to-create-hard-link", "source" => source.quote(), "dest" => dst.quote())
-            })?;
+            create_hard_link(&p, dst)
+                .or_else(|err| {
+                    if err.kind() == io::ErrorKind::PermissionDenied
+                        && (refer_to_same_file(&p, dst, true) || refer_to_same_file(&p, dst, false))
+                    {
+                        Ok(())
+                    } else {
+                        Err(err)
+                    }
+                })
+                .map_err_context(|| {
+                    translate!(
+                        "ln-failed-to-create-hard-link",
+                        "source" => source.quote(),
+                        "dest" => dst.quote()
+                    )
+                })?;
         }
 
         #[cfg(not(target_os = "android"))]
