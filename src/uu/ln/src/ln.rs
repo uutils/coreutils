@@ -440,13 +440,49 @@ fn android_hard_link(src: &Path, dst: &Path) -> io::Result<()> {
         os_str_to_cstring(path.as_os_str())
     }
 
-    fn open_directory(path_c: &CString) -> io::Result<libc::c_int> {
-        let fd = unsafe { libc::open(path_c.as_ptr(), O_RDONLY | O_DIRECTORY | O_CLOEXEC) };
+    fn open_with_flags(path_c: &CString, flags: libc::c_int) -> io::Result<libc::c_int> {
+        let fd = unsafe { libc::open(path_c.as_ptr(), flags) };
         if fd < 0 {
             Err(io::Error::last_os_error())
         } else {
             Ok(fd)
         }
+    }
+
+    fn open_directory(path: &Path) -> io::Result<libc::c_int> {
+        let mut candidates = vec![path.to_path_buf()];
+        if let Ok(canonical) = fs::canonicalize(path) {
+            if canonical != path {
+                candidates.push(canonical);
+            }
+        }
+
+        let mut last_err: Option<io::Error> = None;
+        for candidate in candidates {
+            let path_c = path_to_cstring(&candidate)?;
+            match open_with_flags(&path_c, O_RDONLY | O_DIRECTORY | O_CLOEXEC) {
+                Ok(fd) => return Ok(fd),
+                Err(err) => {
+                    let err_kind = err.kind();
+                    last_err = Some(err);
+                    if err_kind == io::ErrorKind::PermissionDenied {
+                        match open_with_flags(&path_c, libc::O_PATH | O_DIRECTORY | O_CLOEXEC) {
+                            Ok(fd) => return Ok(fd),
+                            Err(err2) => {
+                                last_err = Some(err2);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Err(last_err.unwrap_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                "failed to open directory for hard link",
+            )
+        }))
     }
 
     fn split_path(path: &Path) -> io::Result<(PathBuf, OsString)> {
@@ -467,13 +503,11 @@ fn android_hard_link(src: &Path, dst: &Path) -> io::Result<()> {
     let (src_dir_path, src_name) = split_path(src)?;
     let (dst_dir_path, dst_name) = split_path(dst)?;
 
-    let src_dir_c = path_to_cstring(&src_dir_path)?;
-    let dst_dir_c = path_to_cstring(&dst_dir_path)?;
     let src_name_c = os_str_to_cstring(src_name.as_os_str())?;
     let dst_name_c = os_str_to_cstring(dst_name.as_os_str())?;
 
-    let src_fd = open_directory(&src_dir_c)?;
-    let dst_fd = match open_directory(&dst_dir_c) {
+    let src_fd = open_directory(&src_dir_path)?;
+    let dst_fd = match open_directory(&dst_dir_path) {
         Ok(fd) => fd,
         Err(e) => {
             unsafe {
