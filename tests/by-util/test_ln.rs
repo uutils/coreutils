@@ -815,11 +815,7 @@ fn test_force_relinks_existing_hard_link_entry() {
     at.write("file", "hardlink\n");
     at.mkdir("dir");
 
-    scene
-        .ucmd()
-        .args(&["file", "dir"])
-        .succeeds()
-        .no_stderr();
+    scene.ucmd().args(&["file", "dir"]).succeeds().no_stderr();
     assert!(at.file_exists("dir/file"));
 
     scene

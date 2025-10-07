@@ -350,6 +350,7 @@ getcwd
 # * other
 weblate
 algs
+relinks
 
 # translation tests
 CLICOLOR
