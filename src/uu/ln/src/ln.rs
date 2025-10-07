@@ -420,6 +420,10 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
                     if same_entry {
                         return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
                     }
+                    if backup_path.is_none() {
+                        // Hard link already points to the same inode; nothing to do
+                        return Ok(());
+                    }
                 }
                 if fs::remove_file(dst).is_ok() {}
                 // In case of error, don't do anything
