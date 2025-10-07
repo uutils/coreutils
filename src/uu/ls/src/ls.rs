@@ -3198,12 +3198,9 @@ fn display_item_name(
                 if let Some(style_manager) = &mut state.style_manager {
                     // We get the absolute path to be able to construct PathData with valid Metadata.
                     // This is because relative symlinks will fail to get_metadata.
-                    let mut absolute_target = target_path.clone();
-                    if target_path.is_relative() {
-                        if let Some(parent) = path.path().parent() {
-                            absolute_target = parent.join(absolute_target);
-                        }
-                    }
+                    let absolute_target = target_path
+                        .canonicalize()
+                        .unwrap_or_else(|_err| target_path.clone());
 
                     let target_data = PathData::new(absolute_target, None, None, config, false);
 
