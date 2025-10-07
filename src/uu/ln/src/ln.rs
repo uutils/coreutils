@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) srcpath targetpath EEXIST
+// spell-checker:ignore (ToDO) srcpath targetpath EEXIST CLOEXEC RDONLY linkat
 
 use clap::{Arg, ArgAction, Command};
 use uucore::display::Quotable;
@@ -20,8 +20,6 @@ use std::io;
 use thiserror::Error;
 
 #[cfg(target_os = "android")]
-use libc::{self, O_CLOEXEC, O_DIRECTORY, O_RDONLY};
-#[cfg(target_os = "android")]
 use std::ffi::{CString, OsStr};
 #[cfg(target_os = "android")]
 use std::os::unix::ffi::OsStrExt;
@@ -34,6 +32,8 @@ use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
+#[cfg(target_os = "android")]
+use uucore::libc::{self, O_CLOEXEC, O_DIRECTORY, O_RDONLY};
 
 pub struct Settings {
     overwrite: OverwriteMode,
