@@ -66,7 +66,7 @@ pub enum SafeTraversalError {
 impl From<SafeTraversalError> for io::Error {
     fn from(err: SafeTraversalError) -> Self {
         match err {
-            SafeTraversalError::PathContainsNull => io::Error::new(
+            SafeTraversalError::PathContainsNull => Self::new(
                 io::ErrorKind::InvalidInput,
                 translate!("safe-traversal-error-path-contains-null"),
             ),
@@ -117,7 +117,7 @@ impl DirFd {
             }
         })?;
 
-        Ok(DirFd { fd })
+        Ok(Self { fd })
     }
 
     /// Open a subdirectory relative to this directory
@@ -133,7 +133,7 @@ impl DirFd {
             }
         })?;
 
-        Ok(DirFd { fd })
+        Ok(Self { fd })
     }
 
     /// Get raw stat data for a file relative to this directory
@@ -284,7 +284,7 @@ impl DirFd {
         }
         // SAFETY: We've verified fd >= 0, and the caller is transferring ownership
         let owned_fd = unsafe { OwnedFd::from_raw_fd(fd) };
-        Ok(DirFd { fd: owned_fd })
+        Ok(Self { fd: owned_fd })
     }
 }
 
@@ -345,23 +345,23 @@ pub enum FileType {
 impl FileType {
     pub fn from_mode(mode: libc::mode_t) -> Self {
         match mode & libc::S_IFMT {
-            libc::S_IFDIR => FileType::Directory,
-            libc::S_IFREG => FileType::RegularFile,
-            libc::S_IFLNK => FileType::Symlink,
-            _ => FileType::Other,
+            libc::S_IFDIR => Self::Directory,
+            libc::S_IFREG => Self::RegularFile,
+            libc::S_IFLNK => Self::Symlink,
+            _ => Self::Other,
         }
     }
 
     pub fn is_directory(&self) -> bool {
-        matches!(self, FileType::Directory)
+        matches!(self, Self::Directory)
     }
 
     pub fn is_regular_file(&self) -> bool {
-        matches!(self, FileType::RegularFile)
+        matches!(self, Self::RegularFile)
     }
 
     pub fn is_symlink(&self) -> bool {
-        matches!(self, FileType::Symlink)
+        matches!(self, Self::Symlink)
     }
 }
 
