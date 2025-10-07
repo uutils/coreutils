@@ -496,43 +496,41 @@ fn extract_sort(options: &clap::ArgMatches) -> Sort {
         .max(extension_index)
         .max(unsorted_all_index);
 
-    if max_sort_index == 0 {
-        if !options.get_flag(options::format::LONG)
-            && (options.get_flag(options::time::ACCESS)
-                || options.get_flag(options::time::CHANGE)
-                || options.get_one::<String>(options::TIME).is_some())
-        {
-            Sort::Time
-        } else {
-            Sort::Name
-        }
-    } else if max_sort_index == unsorted_all_index || max_sort_index == none_index {
-        Sort::None
-    } else if max_sort_index == sort_index {
-        if let Some(field) = options.get_one::<String>(options::SORT) {
-            match field.as_str() {
-                "none" => Sort::None,
-                "name" => Sort::Name,
-                "time" => Sort::Time,
-                "size" => Sort::Size,
-                "version" => Sort::Version,
-                "extension" => Sort::Extension,
-                "width" => Sort::Width,
-                _ => unreachable!("Invalid field for --sort"),
+    match max_sort_index {
+        0 => {
+            // No sort flags specified, use default behavior
+            if !options.get_flag(options::format::LONG)
+                && (options.get_flag(options::time::ACCESS)
+                    || options.get_flag(options::time::CHANGE)
+                    || options.get_one::<String>(options::TIME).is_some())
+            {
+                Sort::Time
+            } else {
+                Sort::Name
             }
-        } else {
-            Sort::Name
         }
-    } else if max_sort_index == time_index {
-        Sort::Time
-    } else if max_sort_index == size_index {
-        Sort::Size
-    } else if max_sort_index == version_index {
-        Sort::Version
-    } else if max_sort_index == extension_index {
-        Sort::Extension
-    } else {
-        Sort::Name
+        idx if idx == unsorted_all_index || idx == none_index => Sort::None,
+        idx if idx == sort_index => {
+            if let Some(field) = options.get_one::<String>(options::SORT) {
+                match field.as_str() {
+                    "none" => Sort::None,
+                    "name" => Sort::Name,
+                    "time" => Sort::Time,
+                    "size" => Sort::Size,
+                    "version" => Sort::Version,
+                    "extension" => Sort::Extension,
+                    "width" => Sort::Width,
+                    _ => unreachable!("Invalid field for --sort"),
+                }
+            } else {
+                Sort::Name
+            }
+        }
+        idx if idx == time_index => Sort::Time,
+        idx if idx == size_index => Sort::Size,
+        idx if idx == version_index => Sort::Version,
+        idx if idx == extension_index => Sort::Extension,
+        _ => Sort::Name,
     }
 }
 
