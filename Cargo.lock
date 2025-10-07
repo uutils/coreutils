@@ -3281,6 +3281,7 @@ name = "uu_cp"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "exacl",
  "filetime",
  "fluent",
@@ -3423,6 +3424,7 @@ name = "uu_expand"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "thiserror 2.0.17",
  "unicode-width 0.2.2",
@@ -3490,7 +3492,9 @@ name = "uu_fold"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
+ "tempfile",
  "uucore",
 ]
 
@@ -3722,8 +3726,10 @@ name = "uu_nl"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "regex",
+ "tempfile",
  "uucore",
 ]
 
@@ -4181,6 +4187,7 @@ name = "uu_unexpand"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "thiserror 2.0.17",
  "unicode-width 0.2.2",

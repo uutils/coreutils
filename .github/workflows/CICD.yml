@@ -364,29 +364,15 @@ jobs:
         test -h /tmp/usr/local/bin/sha512sum
         test -h /tmp/usr/local/bin/shake128sum
         test -h /tmp/usr/local/bin/shake256sum
-    - name: "`make install MULTICALL=y`"
+    - name: "`make install MULTICALL=y LN=ln -svf`"
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/ make PROFILE=release MULTICALL=y install
-        # Check that the utils are present
-        test -f /tmp/usr/local/bin/coreutils
-        # Check that hashsum symlinks are present
-        test -h /tmp/usr/local/bin/b2sum
-        test -h /tmp/usr/local/bin/b3sum
-        test -h /tmp/usr/local/bin/md5sum
-        test -h /tmp/usr/local/bin/sha1sum
-        test -h /tmp/usr/local/bin/sha224sum
-        test -h /tmp/usr/local/bin/sha256sum
-        test -h /tmp/usr/local/bin/sha3-224sum
-        test -h /tmp/usr/local/bin/sha3-256sum
-        test -h /tmp/usr/local/bin/sha3-384sum
-        test -h /tmp/usr/local/bin/sha3-512sum
-        test -h /tmp/usr/local/bin/sha384sum
-        test -h /tmp/usr/local/bin/sha3sum
-        test -h /tmp/usr/local/bin/sha512sum
-        test -h /tmp/usr/local/bin/shake128sum
-        test -h /tmp/usr/local/bin/shake256sum
+        DESTDIR=/tmp/ make PROFILE=release MULTICALL=y LN="ln -svf" install
+        # Check that relative symlinks of hashsum are present
+        [ $(readlink /tmp/usr/local/bin/b2sum) = coreutils ]
+        [ $(readlink /tmp/usr/local/bin/md5sum) = coreutils ]
+        [ $(readlink /tmp/usr/local/bin/sha512sum) = coreutils ]
     - name: "`make UTILS=XXX`"
       shell: bash
       run: |
@@ -483,9 +469,13 @@ jobs:
       run: |
         ## `make install`
         make install DESTDIR=target/size-release/
-        make install MULTICALL=y DESTDIR=target/size-multi-release/
+        make install MULTICALL=y LN="ln -vf" DESTDIR=target/size-multi-release/
         # strip the results
         strip target/size*/usr/local/bin/*
+    - name: Test for hardlinks
+      shell: bash
+      run: |
+        [ $(stat -c %i target/size-multi-release/usr/local/bin/cp) = $(stat -c %i target/size-multi-release/usr/local/bin/coreutils) ]
     - name: Compute uutil release sizes
       shell: bash
       run: |
@@ -1279,6 +1269,56 @@ jobs:
         lima bash -c "cd work && cargo test --features 'feat_selinux'"
     - name: Lint with SELinux
       run: lima bash -c "cd work && cargo clippy --all-targets --features 'feat_selinux' -- -D warnings"
+
+  test_selinux_stubs:
+    name: Build/SELinux-Stubs (Non-Linux)
+    needs: [ min_version, deps ]
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: macos-latest   , features: feat_os_macos }
+          - { os: windows-latest , features: feat_os_windows }
+
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    - name: Build SELinux utilities as stubs
+      run: cargo build -p uu_chcon -p uu_runcon
+    - name: Verify stub binaries exist
+      shell: bash
+      run: |
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          test -f target/debug/chcon.exe || exit 1
+          test -f target/debug/runcon.exe || exit 1
+        else
+          test -f target/debug/chcon || exit 1
+          test -f target/debug/runcon || exit 1
+        fi
+    - name: Verify workspace builds with stubs
+      run: cargo build --features ${{ matrix.job.features }}
+
+  test_safe_traversal:
+    name: Safe Traversal Security Check
+    runs-on: ubuntu-latest
+    needs: [ min_version, deps ]
+
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    - name: Install strace
+      run: sudo apt-get update && sudo apt-get install -y strace
+    - name: Build utilities with safe traversal
+      run: cargo build --release -p uu_rm -p uu_chmod -p uu_chown -p uu_chgrp -p uu_mv -p uu_du
+    - name: Run safe traversal verification
+      run: ./util/check-safe-traversal.sh
 
   benchmarks:
     name: Run benchmarks (CodSpeed)
