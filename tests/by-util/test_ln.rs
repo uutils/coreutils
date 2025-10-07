@@ -808,6 +808,10 @@ fn test_force_same_file_detected_after_canonicalization() {
 }
 
 #[test]
+#[cfg_attr(
+    target_os = "android",
+    ignore = "Android環境では通常ユーザによるハードリンク作成が禁止されているため"
+)]
 fn test_force_relinks_existing_hard_link_entry() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
