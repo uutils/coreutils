@@ -13,9 +13,9 @@ use crate::{
     extendedbigdecimal::ExtendedBigDecimal,
     parser::num_parser::{self, ExtendedParserError, ParseTarget},
 };
-use num_traits::Signed;
 use num_traits::ToPrimitive;
 use num_traits::Zero;
+use num_traits::{FromPrimitive, Signed};
 use std::time::Duration;
 
 /// Parse a duration from a string.
@@ -85,6 +85,10 @@ pub fn from_str(string: &str, allow_suffixes: bool) -> Result<Duration, String> 
                 // bd >= 10^20 > u64::MAX -- early return to avoid
                 // potentially expensive to-nanoseconds conversion
                 return Ok(Duration::MAX);
+            }
+            // early return if number is too small (< 1 ns)
+            if !bd.is_zero() && bd < bigdecimal::BigDecimal::from_f64(0.0000000001).unwrap() {
+                return Ok(NANOSECOND_DURATION);
             }
             bd
         }
@@ -163,6 +167,10 @@ mod tests {
         // ExtendedBigDecimal underflow
         assert_eq!(
             from_str("1e-92233720368547758080", false),
+            Ok(NANOSECOND_DURATION)
+        );
+        assert_eq!(
+            from_str("0x6p-4376646810043701", false),
             Ok(NANOSECOND_DURATION)
         );
         // nanoseconds underflow (in Duration, false)

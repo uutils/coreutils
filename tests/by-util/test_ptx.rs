@@ -10,7 +10,25 @@ use uutests::new_ucmd;
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
-
+#[test]
+fn test_reference_format_for_stdin() {
+    let input = "Rust is good language";
+    let expected_output = concat!(
+        r#".xx "" "" "Rust is good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Rust is" "good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Rust" "is good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Rust is good" "language" "" ":1""#,
+        "\n",
+    );
+    new_ucmd!()
+        .args(&["-G", "-A"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected_output);
+}
 #[test]
 fn test_tex_format_no_truncation_markers() {
     let input = "Hello world Rust is a fun language";
@@ -37,6 +55,30 @@ fn test_truncation_no_extra_space_in_after() {
         .pipe_in("Rust is funnnnnnnnnnnnnnnnn")
         .succeeds()
         .stdout_contains(".xx \"\" \"Rust\" \"is/\" \"\"");
+}
+
+#[test]
+fn gnu_ext_disabled_reference_calculation() {
+    let input = "Hello World Rust is good language";
+    let expected_output = concat!(
+        r#".xx "language" "" "Hello World Rust is good" "" ":1""#,
+        "\n",
+        r#".xx "" "Hello World" "Rust is good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Hello" "World Rust is good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Hello World Rust is" "good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Hello World Rust" "is good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Hello World Rust is good" "language" "" ":1""#,
+        "\n",
+    );
+    new_ucmd!()
+        .args(&["-G", "-A"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected_output);
 }
 
 #[test]

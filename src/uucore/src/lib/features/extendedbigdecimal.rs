@@ -83,20 +83,20 @@ impl From<f64> for ExtendedBigDecimal {
     fn from(val: f64) -> Self {
         if val.is_nan() {
             if val.is_sign_negative() {
-                ExtendedBigDecimal::MinusNan
+                Self::MinusNan
             } else {
-                ExtendedBigDecimal::Nan
+                Self::Nan
             }
         } else if val.is_infinite() {
             if val.is_sign_negative() {
-                ExtendedBigDecimal::MinusInfinity
+                Self::MinusInfinity
             } else {
-                ExtendedBigDecimal::Infinity
+                Self::Infinity
             }
         } else if val.is_zero() && val.is_sign_negative() {
-            ExtendedBigDecimal::MinusZero
+            Self::MinusZero
         } else {
-            ExtendedBigDecimal::BigDecimal(BigDecimal::from_f64(val).unwrap())
+            Self::BigDecimal(BigDecimal::from_f64(val).unwrap())
         }
     }
 }
@@ -124,7 +124,7 @@ impl ExtendedBigDecimal {
 
     pub fn to_biguint(&self) -> Option<BigUint> {
         match self {
-            ExtendedBigDecimal::BigDecimal(big_decimal) => {
+            Self::BigDecimal(big_decimal) => {
                 let (bi, scale) = big_decimal.as_bigint_and_scale();
                 if bi.is_negative() || scale > 0 || scale < -(u32::MAX as i64) {
                     return None;
