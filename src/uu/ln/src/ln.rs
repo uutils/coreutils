@@ -415,7 +415,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
                         canonicalize(src, MissingHandling::Missing, ResolveMode::Physical),
                         canonicalize(dst, MissingHandling::Missing, ResolveMode::Physical),
                     ) {
-                        (Ok(src_abs), Ok(dst_abs)) => src_abs == dst_abs,
+                        (Ok(src), Ok(dst)) => src == dst,
                         _ => true,
                     };
                     if same_entry {
