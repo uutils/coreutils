@@ -410,6 +410,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
             }
             OverwriteMode::Force => {
                 if !dst.is_symlink() && paths_refer_to_same_file(src, dst, true) {
+                    // Even in force overwrite mode, verify we are not targeting the same entry and return a SameFile error if so
                     let same_entry = match (
                         canonicalize(src, MissingHandling::Missing, ResolveMode::Physical),
                         canonicalize(dst, MissingHandling::Missing, ResolveMode::Physical),
