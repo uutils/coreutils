@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDO) nums aflag uflag scol prevtab amode ctype cwidth nbytes lastcol pctype Preprocess
 
 use clap::{Arg, ArgAction, Command};
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
@@ -76,7 +77,7 @@ mod options {
 }
 
 struct Options {
-    files: Vec<String>,
+    files: Vec<OsString>,
     tabstops: Vec<usize>,
     aflag: bool,
     uflag: bool,
@@ -93,9 +94,9 @@ impl Options {
             && !matches.get_flag(options::FIRST_ONLY);
         let uflag = !matches.get_flag(options::NO_UTF8);
 
-        let files = match matches.get_many::<String>(options::FILE) {
+        let files = match matches.get_many::<OsString>(options::FILE) {
             Some(v) => v.cloned().collect(),
-            None => vec!["-".to_owned()],
+            None => vec![OsString::from("-")],
         };
 
         Ok(Self {
@@ -115,24 +116,28 @@ fn is_digit_or_comma(c: char) -> bool {
 /// Preprocess command line arguments and expand shortcuts. For example, "-7" is expanded to
 /// "--tabs=7 --first-only" and "-1,3" to "--tabs=1 --tabs=3 --first-only". However, if "-a" or
 /// "--all" is provided, "--first-only" is omitted.
-fn expand_shortcuts(args: &[String]) -> Vec<String> {
+fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
     let mut processed_args = Vec::with_capacity(args.len());
     let mut is_all_arg_provided = false;
     let mut has_shortcuts = false;
 
     for arg in args {
-        if arg.starts_with('-') && arg[1..].chars().all(is_digit_or_comma) {
-            arg[1..]
-                .split(',')
-                .filter(|s| !s.is_empty())
-                .for_each(|s| processed_args.push(format!("--tabs={s}")));
-            has_shortcuts = true;
-        } else {
-            processed_args.push(arg.to_string());
+        if let Some(arg) = arg.to_str() {
+            if arg.starts_with('-') && arg[1..].chars().all(is_digit_or_comma) {
+                arg[1..]
+                    .split(',')
+                    .filter(|s| !s.is_empty())
+                    .for_each(|s| processed_args.push(OsString::from(format!("--tabs={s}"))));
+                has_shortcuts = true;
+            } else {
+                processed_args.push(arg.into());
 
-            if arg == "--all" || arg == "-a" {
-                is_all_arg_provided = true;
+                if arg == "--all" || arg == "-a" {
+                    is_all_arg_provided = true;
+                }
             }
+        } else {
+            processed_args.push(arg);
         }
     }
 
@@ -145,9 +150,8 @@ fn expand_shortcuts(args: &[String]) -> Vec<String> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
-
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), expand_shortcuts(&args))?;
+    let matches =
+        uucore::clap_localization::handle_clap_result(uu_app(), expand_shortcuts(args.collect()))?;
 
     unexpand(&Options::new(&matches)?)
 }
@@ -163,7 +167,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE)
                 .hide(true)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::ALL)
@@ -196,7 +201,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn open(path: &str) -> UResult<BufReader<Box<dyn Read + 'static>>> {
+fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     let file_buf;
     let filename = Path::new(path);
     if filename.is_dir() {
@@ -207,7 +212,7 @@ fn open(path: &str) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     } else if path == "-" {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
     } else {
-        file_buf = File::open(path).map_err_context(|| path.to_string())?;
+        file_buf = File::open(path).map_err_context(|| path.to_string_lossy().to_string())?;
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
 }
