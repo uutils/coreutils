@@ -809,7 +809,7 @@ fn test_force_same_file_detected_after_canonicalization() {
 
 #[test]
 #[cfg(not(target_os = "android"))]
-fn test_force_relinks_existing_hard_link_entry() {
+fn test_force_ln_existing_hard_link_entry() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
