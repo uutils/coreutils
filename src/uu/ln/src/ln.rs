@@ -18,6 +18,8 @@ use std::ffi::OsString;
 use std::fs;
 use thiserror::Error;
 
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 #[cfg(any(unix, target_os = "redox"))]
 use std::os::unix::fs::symlink;
 #[cfg(windows)]
@@ -372,6 +374,28 @@ fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
     src.into()
 }
 
+fn refer_to_same_file(src: &Path, dst: &Path, dereference: bool) -> bool {
+    #[cfg(unix)]
+    {
+        let src_meta = if dereference {
+            fs::metadata(src)
+        } else {
+            fs::symlink_metadata(src)
+        };
+        let dst_meta = if dereference {
+            fs::metadata(dst)
+        } else {
+            fs::symlink_metadata(dst)
+        };
+
+        if let (Ok(src_meta), Ok(dst_meta)) = (src_meta, dst_meta) {
+            return src_meta.ino() == dst_meta.ino() && src_meta.dev() == dst_meta.dev();
+        }
+    }
+
+    paths_refer_to_same_file(src, dst, dereference)
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     let mut backup_path = None;
@@ -390,7 +414,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         };
         if settings.backup == BackupMode::Existing && !settings.symbolic {
             // when ln --backup f f, it should detect that it is the same file
-            if paths_refer_to_same_file(src, dst, true) {
+            if refer_to_same_file(src, dst, true) {
                 return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
             }
         }
@@ -409,7 +433,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
                 // In case of error, don't do anything
             }
             OverwriteMode::Force => {
-                if !dst.is_symlink() && paths_refer_to_same_file(src, dst, true) {
+                if !dst.is_symlink() && refer_to_same_file(src, dst, true) {
                     let same_entry = match (
                         canonicalize(src, MissingHandling::Missing, ResolveMode::Physical),
                         canonicalize(dst, MissingHandling::Missing, ResolveMode::Physical),
