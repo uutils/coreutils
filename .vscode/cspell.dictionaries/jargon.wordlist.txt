@@ -17,6 +17,7 @@ codeready
 codegen
 colorizable
 colorize
+colorterm
 coprime
 consts
 conv
@@ -30,6 +31,7 @@ dequeue
 dev
 devs
 discoverability
+distro
 duplicative
 dsync
 endianness
@@ -132,6 +134,7 @@ syscall
 syscalls
 tokenize
 toolchain
+truecolor
 truthy
 ucase
 unbuffered
