@@ -16,8 +16,15 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs;
+use std::io;
 use thiserror::Error;
 
+#[cfg(target_os = "android")]
+use libc::{self, O_CLOEXEC, O_DIRECTORY, O_RDONLY};
+#[cfg(target_os = "android")]
+use std::ffi::{CString, OsStr};
+#[cfg(target_os = "android")]
+use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 #[cfg(any(unix, target_os = "redox"))]
@@ -396,6 +403,106 @@ fn refer_to_same_file(src: &Path, dst: &Path, dereference: bool) -> bool {
     paths_refer_to_same_file(src, dst, dereference)
 }
 
+fn create_hard_link(src: &Path, dst: &Path) -> io::Result<()> {
+    match fs::hard_link(src, dst) {
+        Ok(()) => Ok(()),
+        Err(err) => {
+            #[cfg(target_os = "android")]
+            {
+                if err.kind() == io::ErrorKind::PermissionDenied {
+                    match android_hard_link(src, dst) {
+                        Ok(()) => return Ok(()),
+                        Err(fallback_err) => {
+                            if fallback_err.kind() == io::ErrorKind::PermissionDenied {
+                                return Err(err);
+                            }
+                            return Err(fallback_err);
+                        }
+                    }
+                }
+            }
+            Err(err)
+        }
+    }
+}
+
+#[cfg(target_os = "android")]
+fn android_hard_link(src: &Path, dst: &Path) -> io::Result<()> {
+    use std::ffi::OsString;
+    use std::path::PathBuf;
+
+    fn os_str_to_cstring(value: &OsStr) -> io::Result<CString> {
+        CString::new(value.as_bytes())
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "path contains null byte"))
+    }
+
+    fn path_to_cstring(path: &Path) -> io::Result<CString> {
+        os_str_to_cstring(path.as_os_str())
+    }
+
+    fn open_directory(path_c: &CString) -> io::Result<libc::c_int> {
+        let fd = unsafe { libc::open(path_c.as_ptr(), O_RDONLY | O_DIRECTORY | O_CLOEXEC) };
+        if fd < 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(fd)
+        }
+    }
+
+    fn split_path(path: &Path) -> io::Result<(PathBuf, OsString)> {
+        let file_name = path
+            .file_name()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing file name"))?;
+        let parent = path.parent().map(|p| {
+            if p.as_os_str().is_empty() {
+                PathBuf::from(".")
+            } else {
+                p.to_path_buf()
+            }
+        });
+        let dir = parent.unwrap_or_else(|| PathBuf::from("."));
+        Ok((dir, file_name.to_os_string()))
+    }
+
+    let (src_dir_path, src_name) = split_path(src)?;
+    let (dst_dir_path, dst_name) = split_path(dst)?;
+
+    let src_dir_c = path_to_cstring(&src_dir_path)?;
+    let dst_dir_c = path_to_cstring(&dst_dir_path)?;
+    let src_name_c = os_str_to_cstring(src_name.as_os_str())?;
+    let dst_name_c = os_str_to_cstring(dst_name.as_os_str())?;
+
+    let src_fd = open_directory(&src_dir_c)?;
+    let dst_fd = match open_directory(&dst_dir_c) {
+        Ok(fd) => fd,
+        Err(e) => {
+            unsafe {
+                libc::close(src_fd);
+            }
+            return Err(e);
+        }
+    };
+
+    let link_result =
+        unsafe { libc::linkat(src_fd, src_name_c.as_ptr(), dst_fd, dst_name_c.as_ptr(), 0) };
+    let link_error = if link_result == 0 {
+        None
+    } else {
+        Some(io::Error::last_os_error())
+    };
+
+    unsafe {
+        libc::close(src_fd);
+        libc::close(dst_fd);
+    }
+
+    if let Some(err) = link_error {
+        Err(err)
+    } else {
+        Ok(())
+    }
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     let mut backup_path = None;
@@ -467,7 +574,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         } else {
             source.to_path_buf()
         };
-        fs::hard_link(p, dst).map_err_context(|| {
+        create_hard_link(&p, dst).map_err_context(|| {
             translate!("ln-failed-to-create-hard-link", "source" => source.quote(), "dest" => dst.quote())
         })?;
     }
