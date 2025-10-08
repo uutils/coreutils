@@ -17,6 +17,40 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  uufuzz-examples:
+    name: Build and test uufuzz examples
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: "uufuzz-cache-key"
+        cache-directories: "fuzz/target"
+    - name: Build uufuzz library
+      run: |
+        cd fuzz/uufuzz
+        cargo build --release
+    - name: Run uufuzz tests
+      run: |
+        cd fuzz/uufuzz
+        cargo test --lib
+    - name: Build and run uufuzz examples
+      run: |
+        cd fuzz/uufuzz
+        echo "Building all examples..."
+        cargo build --examples --release
+
+        # Run all examples except integration_testing (which has FD issues in CI)
+        for example in examples/*.rs; do
+          example_name=$(basename "$example" .rs)
+          if [ "$example_name" != "integration_testing" ]; then
+            cargo run --example "$example_name" --release
+          fi
+        done
+
   fuzz-build:
     name: Build the fuzzers
     runs-on: ubuntu-latest
@@ -62,6 +96,7 @@ jobs:
           - { name: fuzz_parse_size, should_pass: true }
           - { name: fuzz_parse_time, should_pass: true }
           - { name: fuzz_seq_parse_number, should_pass: true }
+          - { name: fuzz_non_utf8_paths, should_pass: true }
 
     steps:
     - uses: actions/checkout@v5

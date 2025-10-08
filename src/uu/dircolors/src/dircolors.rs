@@ -7,6 +7,7 @@
 
 use std::borrow::Borrow;
 use std::env;
+use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -18,7 +19,6 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::translate;
 
-use uucore::LocalizedCommand;
 use uucore::{format_usage, parser::parse_glob};
 
 mod options {
@@ -121,10 +121,10 @@ fn generate_ls_colors(fmt: &OutputFmt, sep: &str) -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let files = matches
-        .get_many::<String>(options::FILE)
+        .get_many::<OsString>(options::FILE)
         .map_or(vec![], |file_values| file_values.collect());
 
     // clap provides .conflicts_with / .conflicts_with_all, but we want to
@@ -149,7 +149,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if !files.is_empty() {
             return Err(UUsageError::new(
                 1,
-                translate!("dircolors-error-extra-operand-print-database", "operand" => files[0].quote()),
+                translate!("dircolors-error-extra-operand-print-database", "operand" => files[0].to_string_lossy().quote()),
             ));
         }
 
@@ -198,14 +198,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if files.len() > 1 {
         return Err(UUsageError::new(
             1,
-            translate!("dircolors-error-extra-operand", "operand" => files[1].quote()),
+            translate!("dircolors-error-extra-operand", "operand" => files[1].to_string_lossy().quote()),
         ));
-    } else if files[0].eq("-") {
+    } else if files[0] == "-" {
         let fin = BufReader::new(std::io::stdin());
         // For example, for echo "owt 40;33"|dircolors -b -
-        result = parse(fin.lines().map_while(Result::ok), &out_format, files[0]);
+        result = parse(
+            fin.lines().map_while(Result::ok),
+            &out_format,
+            &files[0].to_string_lossy(),
+        );
     } else {
-        let path = Path::new(files[0]);
+        let path = Path::new(&files[0]);
         if path.is_dir() {
             return Err(USimpleError::new(
                 2,
@@ -280,6 +284,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE)
                 .hide(true)
                 .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString))
                 .action(ArgAction::Append),
         )
 }

@@ -5,6 +5,8 @@
 // spell-checker:ignore tldr uuhelp
 
 use clap::Command;
+use fluent_syntax::ast::{Entry, Message, Pattern};
+use fluent_syntax::parser;
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::File;
@@ -140,7 +142,7 @@ fn main() -> io::Result<()> {
         }
         let p = format!("docs/src/utils/{name}.md");
 
-        let markdown = File::open(format!("src/uu/{name}/{name}.md"))
+        let fluent = File::open(format!("src/uu/{name}/locales/en-US.ftl"))
             .and_then(|mut f: File| {
                 let mut s = String::new();
                 f.read_to_string(&mut s)?;
@@ -155,7 +157,7 @@ fn main() -> io::Result<()> {
                 name,
                 tldr_zip: &mut tldr_zip,
                 utils_per_platform: &utils_per_platform,
-                markdown,
+                fluent,
             }
             .markdown()?;
             println!("Wrote to '{p}'");
@@ -173,7 +175,7 @@ struct MDWriter<'a, 'b> {
     name: &'a str,
     tldr_zip: &'b mut Option<ZipArchive<File>>,
     utils_per_platform: &'b HashMap<&'b str, Vec<String>>,
-    markdown: Option<String>,
+    fluent: Option<String>,
 }
 
 impl MDWriter<'_, '_> {
@@ -187,6 +189,33 @@ impl MDWriter<'_, '_> {
         self.options()?;
         self.after_help()?;
         self.examples()
+    }
+
+    /// Extract value for a Fluent key from the .ftl content
+    fn extract_fluent_value(&self, key: &str) -> Option<String> {
+        let content = self.fluent.as_ref()?;
+        let resource = parser::parse(content.clone()).ok()?;
+
+        for entry in resource.body {
+            if let Entry::Message(Message {
+                id,
+                value: Some(Pattern { elements }),
+                ..
+            }) = entry
+            {
+                if id.name == key {
+                    // Simple text extraction - just concatenate text elements
+                    let mut result = String::new();
+                    for element in elements {
+                        if let fluent_syntax::ast::PatternElement::TextElement { value } = element {
+                            result.push_str(&value);
+                        }
+                    }
+                    return Some(result);
+                }
+            }
+        }
+        None
     }
 
     /// # Errors
@@ -237,10 +266,7 @@ impl MDWriter<'_, '_> {
     /// # Errors
     /// Returns an error if the writer fails.
     fn usage(&mut self) -> io::Result<()> {
-        if let Some(markdown) = &self.markdown {
-            let usage = uuhelp_parser::parse_usage(markdown);
-            let usage = usage.replace("{}", self.name);
-
+        if let Some(usage) = self.extract_fluent_value(&format!("{}-usage", self.name)) {
             writeln!(self.w, "\n```")?;
             writeln!(self.w, "{usage}")?;
             writeln!(self.w, "```")
@@ -252,8 +278,8 @@ impl MDWriter<'_, '_> {
     /// # Errors
     /// Returns an error if the writer fails.
     fn about(&mut self) -> io::Result<()> {
-        if let Some(markdown) = &self.markdown {
-            writeln!(self.w, "{}", uuhelp_parser::parse_about(markdown))
+        if let Some(about) = self.extract_fluent_value(&format!("{}-about", self.name)) {
+            writeln!(self.w, "{about}")
         } else {
             Ok(())
         }
@@ -262,13 +288,11 @@ impl MDWriter<'_, '_> {
     /// # Errors
     /// Returns an error if the writer fails.
     fn after_help(&mut self) -> io::Result<()> {
-        if let Some(markdown) = &self.markdown {
-            if let Some(after_help) = uuhelp_parser::parse_section("after help", markdown) {
-                return writeln!(self.w, "\n\n{after_help}");
-            }
+        if let Some(after_help) = self.extract_fluent_value(&format!("{}-after-help", self.name)) {
+            writeln!(self.w, "\n\n{after_help}")
+        } else {
+            Ok(())
         }
-
-        Ok(())
     }
 
     /// # Errors
@@ -368,13 +392,17 @@ impl MDWriter<'_, '_> {
                 write!(self.w, "</code>")?;
             }
             writeln!(self.w, "</dt>")?;
+            let help_text = arg.get_help().unwrap_or_default().to_string();
+            // Try to resolve Fluent key if it looks like one, otherwise use as-is
+            let resolved_help = if help_text.starts_with(&format!("{}-help-", self.name)) {
+                self.extract_fluent_value(&help_text).unwrap_or(help_text)
+            } else {
+                help_text
+            };
             writeln!(
                 self.w,
                 "<dd>\n\n{}\n\n</dd>",
-                arg.get_help()
-                    .unwrap_or_default()
-                    .to_string()
-                    .replace('\n', "<br />")
+                resolved_help.replace('\n', "<br />")
             )?;
         }
         writeln!(self.w, "</dl>\n")

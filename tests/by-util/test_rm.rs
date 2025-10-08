@@ -838,27 +838,6 @@ fn test_fifo_removal() {
 }
 
 #[test]
-#[cfg(any(unix, target_os = "wasi"))]
-#[cfg(not(target_os = "macos"))]
-fn test_non_utf8() {
-    use std::ffi::OsStr;
-    #[cfg(unix)]
-    use std::os::unix::ffi::OsStrExt;
-    #[cfg(target_os = "wasi")]
-    use std::os::wasi::ffi::OsStrExt;
-
-    let file = OsStr::from_bytes(b"not\xffutf8"); // spell-checker:disable-line
-
-    let (at, mut ucmd) = at_and_ucmd!();
-
-    at.touch(file);
-    assert!(at.file_exists(file));
-
-    ucmd.arg(file).succeeds();
-    assert!(!at.file_exists(file));
-}
-
-#[test]
 fn test_uchild_when_run_no_wait_with_a_blocking_command() {
     let ts = TestScenario::new("rm");
     let at = &ts.fixtures;
@@ -1036,4 +1015,137 @@ fn test_inaccessible_dir_recursive() {
     ucmd.args(&["-r", "-f", "a"]).succeeds().no_output();
     assert!(!at.dir_exists("a/unreadable"));
     assert!(!at.dir_exists("a"));
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "wasi"))]
+fn test_non_utf8_paths() {
+    use std::ffi::OsStr;
+    #[cfg(target_os = "linux")]
+    use std::os::unix::ffi::OsStrExt;
+    #[cfg(target_os = "wasi")]
+    use std::os::wasi::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a test file with non-UTF-8 bytes in the name
+    let non_utf8_bytes = b"test_\xFF\xFE.txt";
+    let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
+
+    // Create the actual file
+    at.touch(non_utf8_name);
+    assert!(at.file_exists(non_utf8_name));
+
+    // Test that rm handles non-UTF-8 file names without crashing
+    scene.ucmd().arg(non_utf8_name).succeeds();
+
+    // The file should be removed
+    assert!(!at.file_exists(non_utf8_name));
+
+    // Test with directory
+    let non_utf8_dir_bytes = b"test_dir_\xFF\xFE";
+    let non_utf8_dir_name = OsStr::from_bytes(non_utf8_dir_bytes);
+
+    at.mkdir(non_utf8_dir_name);
+    assert!(at.dir_exists(non_utf8_dir_name));
+
+    scene.ucmd().args(&["-r"]).arg(non_utf8_dir_name).succeeds();
+
+    assert!(!at.dir_exists(non_utf8_dir_name));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_rm_recursive_long_path_safe_traversal() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let mut deep_path = String::from("rm_deep");
+    at.mkdir(&deep_path);
+
+    for i in 0..12 {
+        let long_dir_name = format!("{}{}", "z".repeat(80), i);
+        deep_path = format!("{deep_path}/{long_dir_name}");
+        at.mkdir_all(&deep_path);
+    }
+
+    at.write("rm_deep/test1.txt", "content1");
+    at.write(&format!("{deep_path}/test2.txt"), "content2");
+
+    ts.ucmd().arg("-rf").arg("rm_deep").succeeds();
+
+    // Verify the directory is completely removed
+    assert!(!at.dir_exists("rm_deep"));
+}
+
+#[cfg(all(not(windows), feature = "chmod"))]
+#[test]
+fn test_rm_directory_not_executable() {
+    // Test from GNU rm/rm2.sh
+    // Exercise code paths when directories have no execute permission
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create directory structure: a/0, a/1/2, a/2, a/3, b/3
+    at.mkdir_all("a/0");
+    at.mkdir_all("a/1/2");
+    at.mkdir("a/2");
+    at.mkdir("a/3");
+    at.mkdir_all("b/3");
+
+    // Remove execute permission from a/1 and b
+    scene.ccmd("chmod").arg("u-x").arg("a/1").succeeds();
+    scene.ccmd("chmod").arg("u-x").arg("b").succeeds();
+
+    // Try to remove both directories recursively - this should fail
+    let result = scene.ucmd().args(&["-rf", "a", "b"]).fails();
+
+    // Check for expected error messages
+    // When directories don't have execute permission, we get "Permission denied"
+    // when trying to access subdirectories
+    let stderr = result.stderr_str();
+    assert!(stderr.contains("rm: cannot remove 'a/1/2': Permission denied"));
+    assert!(stderr.contains("rm: cannot remove 'b/3': Permission denied"));
+
+    // Check which directories still exist
+    assert!(!at.dir_exists("a/0")); // Should be removed
+    assert!(at.dir_exists("a/1")); // Should still exist (no execute permission)
+    assert!(!at.dir_exists("a/2")); // Should be removed
+    assert!(!at.dir_exists("a/3")); // Should be removed
+
+    // Restore execute permission to check b/3
+    scene.ccmd("chmod").arg("u+x").arg("b").succeeds();
+    assert!(at.dir_exists("b/3")); // Should still exist
+}
+
+#[cfg(all(not(windows), feature = "chmod"))]
+#[test]
+fn test_rm_directory_not_writable() {
+    // Test from GNU rm/rm1.sh
+    // Exercise code paths when directories have no write permission
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create directory structure: b/a/p, b/c, b/d
+    at.mkdir_all("b/a/p");
+    at.mkdir("b/c");
+    at.mkdir("b/d");
+
+    // Remove write permission from b/a
+    scene.ccmd("chmod").arg("ug-w").arg("b/a").succeeds();
+
+    // Try to remove b recursively - this should fail
+    let result = scene.ucmd().args(&["-rf", "b"]).fails();
+
+    // Check for expected error message
+    // When the parent directory (b/a) doesn't have write permission,
+    // we get "Permission denied" when trying to remove the subdirectory
+    let stderr = result.stderr_str();
+    assert!(stderr.contains("rm: cannot remove 'b/a/p': Permission denied"));
+
+    // Check which directories still exist
+    assert!(at.dir_exists("b/a/p")); // Should still exist (parent not writable)
+    assert!(!at.dir_exists("b/c")); // Should be removed
+    assert!(!at.dir_exists("b/d")); // Should be removed
 }

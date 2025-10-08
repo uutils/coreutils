@@ -3,14 +3,16 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
+// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres
 
 use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime;
 use jiff::tz::TimeZone;
-use jiff::{SignedDuration, Timestamp, Zoned};
+use jiff::{Timestamp, Zoned};
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
-use libc::{CLOCK_REALTIME, clock_settime, timespec};
+use libc::clock_settime;
+#[cfg(all(unix, not(target_os = "redox")))]
+use libc::{CLOCK_REALTIME, clock_getres, timespec};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -21,7 +23,6 @@ use uucore::{format_usage, show};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
-use uucore::LocalizedCommand;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 
 // Options
@@ -36,7 +37,10 @@ const OPT_FORMAT: &str = "format";
 const OPT_FILE: &str = "file";
 const OPT_DEBUG: &str = "debug";
 const OPT_ISO_8601: &str = "iso-8601";
+const OPT_RESOLUTION: &str = "resolution";
 const OPT_RFC_EMAIL: &str = "rfc-email";
+const OPT_RFC_822: &str = "rfc-822";
+const OPT_RFC_2822: &str = "rfc-2822";
 const OPT_RFC_3339: &str = "rfc-3339";
 const OPT_SET: &str = "set";
 const OPT_REFERENCE: &str = "reference";
@@ -56,6 +60,7 @@ enum Format {
     Iso8601(Iso8601Format),
     Rfc5322,
     Rfc3339(Rfc3339Format),
+    Resolution,
     Custom(String),
     Default,
 }
@@ -63,10 +68,11 @@ enum Format {
 /// Various places that dates can come from
 enum DateSource {
     Now,
-    Custom(String),
     File(PathBuf),
+    FileMtime(PathBuf),
     Stdin,
-    Human(SignedDuration),
+    Human(String),
+    Resolution,
 }
 
 enum Iso8601Format {
@@ -112,7 +118,7 @@ impl From<&str> for Rfc3339Format {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let format = if let Some(form) = matches.get_one::<String>(OPT_FORMAT) {
         if !form.starts_with('+') {
@@ -135,21 +141,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|s| s.as_str().into())
     {
         Format::Rfc3339(fmt)
+    } else if matches.get_flag(OPT_RESOLUTION) {
+        Format::Resolution
     } else {
         Format::Default
     };
 
     let date_source = if let Some(date) = matches.get_one::<String>(OPT_DATE) {
-        if let Ok(duration) = parse_offset(date.as_str()) {
-            DateSource::Human(duration)
-        } else {
-            DateSource::Custom(date.into())
-        }
+        DateSource::Human(date.into())
     } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
         match file.as_ref() {
             "-" => DateSource::Stdin,
             _ => DateSource::File(file.into()),
         }
+    } else if let Some(file) = matches.get_one::<String>(OPT_REFERENCE) {
+        DateSource::FileMtime(file.into())
+    } else if matches.get_flag(OPT_RESOLUTION) {
+        DateSource::Resolution
     } else {
         DateSource::Now
     };
@@ -175,7 +183,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if let Some(date) = settings.set_to {
         // All set time functions expect UTC datetimes.
         let date = if settings.utc {
-            date.with_time_zone(TimeZone::UTC)
+            date.datetime().to_zoned(TimeZone::UTC).map_err(|e| {
+                USimpleError::new(1, translate!("date-error-invalid-date", "error" => e))
+            })?
         } else {
             date
         };
@@ -192,26 +202,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Iterate over all dates - whether it's a single date or a file.
     let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
-        DateSource::Custom(ref input) => {
+        DateSource::Human(ref input) => {
             let date = parse_date(input);
             let iter = std::iter::once(date);
             Box::new(iter)
-        }
-        DateSource::Human(relative_time) => {
-            // Double check the result is overflow or not of the current_time + relative_time
-            // it may cause a panic of chrono::datetime::DateTime add
-            match now.checked_add(relative_time) {
-                Ok(date) => {
-                    let iter = std::iter::once(Ok(date));
-                    Box::new(iter)
-                }
-                Err(_) => {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("date-error-date-overflow", "date" => relative_time),
-                    ));
-                }
-            }
         }
         DateSource::Stdin => {
             let lines = BufReader::new(std::io::stdin()).lines();
@@ -229,6 +223,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
             let lines = BufReader::new(file).lines();
             let iter = lines.map_while(Result::ok).map(parse_date);
+            Box::new(iter)
+        }
+        DateSource::FileMtime(ref path) => {
+            let metadata = std::fs::metadata(path)
+                .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
+            let mtime = metadata.modified()?;
+            let ts = Timestamp::try_from(mtime).map_err(|e| {
+                USimpleError::new(
+                    1,
+                    translate!("date-error-cannot-set-date", "path" => path.to_string_lossy(), "error" => e),
+                )
+            })?;
+            let date = ts.to_zoned(TimeZone::try_system().unwrap_or(TimeZone::UTC));
+            let iter = std::iter::once(Ok(date));
+            Box::new(iter)
+        }
+        DateSource::Resolution => {
+            let resolution = get_clock_resolution();
+            let date = resolution.to_zoned(TimeZone::system());
+            let iter = std::iter::once(Ok(date));
             Box::new(iter)
         }
         DateSource::Now => {
@@ -275,6 +289,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_DATE)
                 .value_name("STRING")
                 .allow_hyphen_values(true)
+                .overrides_with(OPT_DATE)
                 .help(translate!("date-help-date")),
         )
         .arg(
@@ -283,6 +298,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_FILE)
                 .value_name("DATEFILE")
                 .value_hint(clap::ValueHint::FilePath)
+                .conflicts_with(OPT_DATE)
                 .help(translate!("date-help-file")),
         )
         .arg(
@@ -298,9 +314,19 @@ pub fn uu_app() -> Command {
                 .help(translate!("date-help-iso-8601")),
         )
         .arg(
+            Arg::new(OPT_RESOLUTION)
+                .long(OPT_RESOLUTION)
+                .conflicts_with_all([OPT_DATE, OPT_FILE])
+                .overrides_with(OPT_RESOLUTION)
+                .help(translate!("date-help-resolution"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new(OPT_RFC_EMAIL)
                 .short('R')
                 .long(OPT_RFC_EMAIL)
+                .alias(OPT_RFC_2822)
+                .alias(OPT_RFC_822)
                 .help(translate!("date-help-rfc-email"))
                 .action(ArgAction::SetTrue),
         )
@@ -323,6 +349,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_REFERENCE)
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::AnyPath)
+                .conflicts_with_all([OPT_DATE, OPT_FILE, OPT_RESOLUTION])
                 .help(translate!("date-help-reference")),
         )
         .arg(
@@ -372,6 +399,7 @@ fn make_format_string(settings: &Settings) -> &str {
             Rfc3339Format::Seconds => "%F %T%:z",
             Rfc3339Format::Ns => "%F %T.%N%:z",
         },
+        Format::Resolution => "%s.%N",
         Format::Custom(ref fmt) => fmt,
         Format::Default => "%a %b %e %X %Z %Y",
     }
@@ -387,26 +415,57 @@ fn parse_date<S: AsRef<str> + Clone>(
         Ok(date) => {
             let timestamp =
                 Timestamp::new(date.timestamp(), date.timestamp_subsec_nanos() as i32).unwrap();
-            Ok(Zoned::new(timestamp, TimeZone::UTC))
+            Ok(Zoned::new(
+                timestamp,
+                TimeZone::try_system().unwrap_or(TimeZone::UTC),
+            ))
         }
         Err(e) => Err((s.as_ref().into(), e)),
     }
 }
 
-// TODO: Convert `parse_datetime` to jiff and remove wrapper from chrono to jiff structures.
-// Also, consider whether parse_datetime::parse_datetime_at_date can be renamed to something
-// like parse_datetime::parse_offset, instead of doing some addition/subtraction.
-fn parse_offset(date: &str) -> Result<SignedDuration, ()> {
-    let ref_time = chrono::Local::now();
-    if let Ok(new_time) = parse_datetime::parse_datetime_at_date(ref_time, date) {
-        let duration = new_time.signed_duration_since(ref_time);
-        Ok(SignedDuration::new(
-            duration.num_seconds(),
-            duration.subsec_nanos(),
-        ))
-    } else {
-        Err(())
+#[cfg(not(any(unix, windows)))]
+fn get_clock_resolution() -> Timestamp {
+    unimplemented!("getting clock resolution not implemented (unsupported target)");
+}
+
+#[cfg(all(unix, not(target_os = "redox")))]
+fn get_clock_resolution() -> Timestamp {
+    let mut timespec = timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    unsafe {
+        // SAFETY: the timespec struct lives for the full duration of this function call.
+        //
+        // The clock_getres function can only fail if the passed clock_id is not
+        // a known clock. All compliant posix implementors must support
+        // CLOCK_REALTIME, therefore this function call cannot fail on any
+        // compliant posix implementation.
+        //
+        // See more here:
+        // https://pubs.opengroup.org/onlinepubs/9799919799/functions/clock_getres.html
+        clock_getres(CLOCK_REALTIME, &raw mut timespec);
     }
+    #[allow(clippy::unnecessary_cast)] // Cast required on 32-bit platforms
+    Timestamp::constant(timespec.tv_sec as i64, timespec.tv_nsec as i32)
+}
+
+#[cfg(all(unix, target_os = "redox"))]
+fn get_clock_resolution() -> Timestamp {
+    // Redox OS does not support the posix clock_getres function, however
+    // internally it uses a resolution of 1ns to represent timestamps.
+    // https://gitlab.redox-os.org/redox-os/kernel/-/blob/master/src/time.rs
+    Timestamp::constant(0, 1)
+}
+
+#[cfg(windows)]
+fn get_clock_resolution() -> Timestamp {
+    // Windows does not expose a system call for getting the resolution of the
+    // clock, however the FILETIME struct returned by GetSystemTimeAsFileTime,
+    // and GetSystemTimePreciseAsFileTime has a resolution of 100ns.
+    // https://learn.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-filetime
+    Timestamp::constant(0, 100)
 }
 
 #[cfg(not(any(unix, windows)))]

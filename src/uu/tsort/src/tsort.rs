@@ -5,13 +5,13 @@
 //spell-checker:ignore TAOCP indegree
 use clap::{Arg, Command};
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::ffi::OsString;
 use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult};
 use uucore::{format_usage, show};
 
-use uucore::LocalizedCommand;
 use uucore::translate;
 
 mod options {
@@ -44,30 +44,42 @@ impl UError for TsortError {}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let input = matches
-        .get_one::<String>(options::FILE)
+        .get_one::<OsString>(options::FILE)
         .expect("Value is required by clap");
 
     let data = if input == "-" {
         let stdin = std::io::stdin();
         std::io::read_to_string(stdin)?
     } else {
-        let path = Path::new(&input);
+        let path = Path::new(input);
         if path.is_dir() {
-            return Err(TsortError::IsDir(input.to_string()).into());
+            return Err(TsortError::IsDir(input.to_string_lossy().to_string()).into());
         }
         std::fs::read_to_string(path)?
     };
 
     // Create the directed graph from pairs of tokens in the input data.
-    let mut g = Graph::new(input.clone());
-    for ab in data.split_whitespace().collect::<Vec<&str>>().chunks(2) {
-        match ab {
-            [a, b] => g.add_edge(a, b),
-            _ => return Err(TsortError::NumTokensOdd(input.to_string()).into()),
-        }
+    let mut g = Graph::new(input.to_string_lossy().to_string());
+    // Input is considered to be in the format
+    // From1 To1 From2 To2 ...
+    // with tokens separated by whitespaces
+    let mut edge_tokens = data.split_whitespace();
+    // Note: this is equivalent to iterating over edge_tokens.chunks(2)
+    // but chunks() exists only for slices and would require unnecessary Vec allocation.
+    // Itertools::chunks() is not used due to unnecessary overhead for internal RefCells
+    loop {
+        // Try take next pair of tokens
+        let Some(from) = edge_tokens.next() else {
+            // no more tokens -> end of input. Graph constructed
+            break;
+        };
+        let Some(to) = edge_tokens.next() else {
+            return Err(TsortError::NumTokensOdd(input.to_string_lossy().to_string()).into());
+        };
+        g.add_edge(from, to);
     }
 
     g.run_tsort();
@@ -85,6 +97,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE)
                 .default_value("-")
                 .hide(true)
+                .value_parser(clap::value_parser!(OsString))
                 .value_hint(clap::ValueHint::FilePath),
         )
 }
@@ -119,26 +132,18 @@ struct Graph<'input> {
 }
 
 impl<'input> Graph<'input> {
-    fn new(name: String) -> Graph<'input> {
+    fn new(name: String) -> Self {
         Self {
             name,
             nodes: HashMap::default(),
         }
     }
 
-    fn add_node(&mut self, name: &'input str) {
-        self.nodes.entry(name).or_default();
-    }
-
     fn add_edge(&mut self, from: &'input str, to: &'input str) {
-        self.add_node(from);
+        let from_node = self.nodes.entry(from).or_default();
         if from != to {
-            self.add_node(to);
-
-            let from_node = self.nodes.get_mut(from).unwrap();
             from_node.add_successor(to);
-
-            let to_node = self.nodes.get_mut(to).unwrap();
+            let to_node = self.nodes.entry(to).or_default();
             to_node.predecessor_count += 1;
         }
     }
@@ -232,10 +237,7 @@ impl<'input> Graph<'input> {
 
     fn detect_cycle(&self) -> Vec<&'input str> {
         // Sort the nodes just to make this function deterministic.
-        let mut nodes = Vec::new();
-        for node in self.nodes.keys() {
-            nodes.push(node);
-        }
+        let mut nodes: Vec<_> = self.nodes.keys().collect();
         nodes.sort_unstable();
 
         let mut visited = HashSet::new();

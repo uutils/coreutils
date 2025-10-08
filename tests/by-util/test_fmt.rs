@@ -4,7 +4,8 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore plass samp
-
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStringExt;
 use uutests::new_ucmd;
 
 #[test]
@@ -373,4 +374,26 @@ fn test_fmt_knuth_plass_line_breaking() {
         .pipe_in(input)
         .succeeds()
         .stdout_is(expected);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_fmt_non_utf8_paths() {
+    use uutests::at_and_ucmd;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+
+    std::fs::write(at.plus(&filename), b"hello world this is a test").unwrap();
+
+    ucmd.arg(&filename).succeeds();
+}
+
+#[test]
+fn fmt_reflow_unicode() {
+    new_ucmd!()
+        .args(&["-w", "4"])
+        .pipe_in("漢字漢字 💐 日本語の文字\n")
+        .succeeds()
+        .stdout_is("漢字漢字\n💐\n日本語の文字\n");
 }

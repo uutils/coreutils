@@ -84,8 +84,8 @@ impl From<std::io::Error> for FormatError {
 }
 
 impl From<NonUtf8OsStrError> for FormatError {
-    fn from(value: NonUtf8OsStrError) -> FormatError {
-        FormatError::InvalidEncoding(value)
+    fn from(value: NonUtf8OsStrError) -> Self {
+        Self::InvalidEncoding(value)
     }
 }
 

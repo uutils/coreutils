@@ -9,12 +9,11 @@ use clap::Command;
 use libc::{c_long, gethostid};
 use uucore::{error::UResult, format_usage};
 
-use uucore::LocalizedCommand;
 use uucore::translate;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    uu_app().get_matches_from_localized(args);
+    uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     hostid();
     Ok(())
 }

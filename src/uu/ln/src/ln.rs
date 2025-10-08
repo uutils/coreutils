@@ -23,18 +23,17 @@ use std::os::unix::fs::symlink;
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
-use uucore::LocalizedCommand;
 use uucore::backup_control::{self, BackupMode};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 
 pub struct Settings {
     overwrite: OverwriteMode,
     backup: BackupMode,
-    suffix: String,
+    suffix: OsString,
     symbolic: bool,
     relative: bool,
     logical: bool,
-    target_dir: Option<String>,
+    target_dir: Option<PathBuf>,
     no_target_dir: bool,
     no_dereference: bool,
     verbose: bool,
@@ -61,7 +60,7 @@ enum LnError {
     #[error("{}", translate!("ln-error-missing-destination", "operand" => _0.quote()))]
     MissingDestination(PathBuf),
 
-    #[error("{}", translate!("ln-error-extra-operand", "operand" => format!("{_0:?}").trim_matches('"'), "program" => _1.clone()))]
+    #[error("{}", translate!("ln-error-extra-operand", "operand" => _0.to_string_lossy(), "program" => _1.clone()))]
     ExtraOperand(OsString, String),
 }
 
@@ -89,20 +88,12 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let after_help = format!(
-        "{}\n\n{}",
-        translate!("ln-after-help"),
-        backup_control::BACKUP_CONTROL_LONG_HELP
-    );
-
-    let matches = uu_app()
-        .after_help(after_help)
-        .get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     /* the list of files */
 
     let paths: Vec<PathBuf> = matches
-        .get_many::<String>(ARG_FILES)
+        .get_many::<OsString>(ARG_FILES)
         .unwrap()
         .map(PathBuf::from)
         .collect();
@@ -126,13 +117,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let settings = Settings {
         overwrite: overwrite_mode,
         backup: backup_mode,
-        suffix: backup_suffix,
+        suffix: OsString::from(backup_suffix),
         symbolic,
         logical,
         relative: matches.get_flag(options::RELATIVE),
         target_dir: matches
-            .get_one::<String>(options::TARGET_DIRECTORY)
-            .map(String::from),
+            .get_one::<OsString>(options::TARGET_DIRECTORY)
+            .map(PathBuf::from),
         no_target_dir: matches.get_flag(options::NO_TARGET_DIRECTORY),
         no_dereference: matches.get_flag(options::NO_DEREFERENCE),
         verbose: matches.get_flag(options::VERBOSE),
@@ -142,12 +133,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
+    let after_help = format!(
+        "{}\n\n{}",
+        translate!("ln-after-help"),
+        backup_control::BACKUP_CONTROL_LONG_HELP
+    );
+
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("ln-about"))
         .override_usage(format_usage(&translate!("ln-usage")))
         .infer_long_args(true)
+        .after_help(after_help)
         .arg(backup_control::arguments::backup())
         .arg(backup_control::arguments::backup_no_args())
         /*.arg(
@@ -210,6 +208,7 @@ pub fn uu_app() -> Command {
                 .help(translate!("ln-help-target-directory"))
                 .value_name("DIRECTORY")
                 .value_hint(clap::ValueHint::DirPath)
+                .value_parser(clap::value_parser!(OsString))
                 .conflicts_with(options::NO_TARGET_DIRECTORY),
         )
         .arg(
@@ -238,6 +237,7 @@ pub fn uu_app() -> Command {
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath)
+                .value_parser(clap::value_parser!(OsString))
                 .required(true)
                 .num_args(1..),
         )
@@ -245,9 +245,9 @@ pub fn uu_app() -> Command {
 
 fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
     // Handle cases where we create links in a directory first.
-    if let Some(ref name) = settings.target_dir {
+    if let Some(ref target_path) = settings.target_dir {
         // 4th form: a directory is specified by -t.
-        return link_files_in_dir(files, &PathBuf::from(name), settings);
+        return link_files_in_dir(files, target_path, settings);
     }
     if !settings.no_target_dir {
         if files.len() == 1 {
@@ -445,16 +445,16 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     Ok(())
 }
 
-fn simple_backup_path(path: &Path, suffix: &str) -> PathBuf {
-    let mut p = path.as_os_str().to_str().unwrap().to_owned();
-    p.push_str(suffix);
-    PathBuf::from(p)
+fn simple_backup_path(path: &Path, suffix: &OsString) -> PathBuf {
+    let mut file_name = path.file_name().unwrap_or_default().to_os_string();
+    file_name.push(suffix);
+    path.with_file_name(file_name)
 }
 
 fn numbered_backup_path(path: &Path) -> PathBuf {
     let mut i: u64 = 1;
     loop {
-        let new_path = simple_backup_path(path, &format!(".~{i}~"));
+        let new_path = simple_backup_path(path, &OsString::from(format!(".~{i}~")));
         if !new_path.exists() {
             return new_path;
         }
@@ -462,8 +462,8 @@ fn numbered_backup_path(path: &Path) -> PathBuf {
     }
 }
 
-fn existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
-    let test_path = simple_backup_path(path, ".~1~");
+fn existing_backup_path(path: &Path, suffix: &OsString) -> PathBuf {
+    let test_path = simple_backup_path(path, &OsString::from(".~1~"));
     if test_path.exists() {
         return numbered_backup_path(path);
     }

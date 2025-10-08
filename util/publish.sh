@@ -1,5 +1,4 @@
 #!/bin/sh
-# spell-checker:ignore uuhelp
 ARG=""
 if test "$1" != "--do-it"; then
     ARG="--dry-run --allow-dirty"
@@ -54,7 +53,7 @@ TOTAL_ORDER=${TOTAL_ORDER#ROOT}
 CRATE_VERSION=$(grep '^version =' Cargo.toml | head -n1 | cut -d '"' -f2)
 
 set -e
-for dir in src/uuhelp_parser/ src/uucore_procs/ src/uucore/ src/uu/stdbuf/src/libstdbuf/ tests/uutests/; do
+for dir in src/uucore_procs/ src/uucore/ src/uu/stdbuf/src/libstdbuf/ tests/uutests/ fuzz/uufuzz/; do
     (
         cd "$dir"
         CRATE_NAME=$(grep '^name =' "Cargo.toml" | head -n1 | cut -d '"' -f2)

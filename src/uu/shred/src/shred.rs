@@ -9,12 +9,12 @@ use clap::{Arg, ArgAction, Command};
 #[cfg(unix)]
 use libc::S_IWUSR;
 use rand::{Rng, SeedableRng, rngs::StdRng, seq::SliceRandom};
+use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, Write};
 #[cfg(unix)]
 use std::os::unix::prelude::PermissionsExt;
 use std::path::{Path, PathBuf};
-use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parser::parse_size::parse_size_u64;
@@ -239,7 +239,7 @@ impl<'a> BytesWriter<'a> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     if !matches.contains_id(options::FILE) {
         return Err(UUsageError::new(
@@ -297,7 +297,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let zero = matches.get_flag(options::ZERO);
     let verbose = matches.get_flag(options::VERBOSE);
 
-    for path_str in matches.get_many::<String>(options::FILE).unwrap() {
+    for path_str in matches.get_many::<OsString>(options::FILE).unwrap() {
         show_if_err!(wipe_file(
             path_str,
             iterations,
@@ -396,7 +396,8 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FILE)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
 }
 
@@ -428,7 +429,7 @@ fn pass_name(pass_type: &PassType) -> String {
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::cognitive_complexity)]
 fn wipe_file(
-    path_str: &str,
+    path_str: &OsString,
     n_passes: usize,
     remove_method: RemoveMethod,
     size: Option<u64>,
@@ -605,7 +606,7 @@ fn do_pass(
 /// Repeatedly renames the file with strings of decreasing length (most likely all 0s)
 /// Return the path of the file after its last renaming or None in case of an error
 fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Option<PathBuf> {
-    let file_name_len = orig_path.file_name().unwrap().to_str().unwrap().len();
+    let file_name_len = orig_path.file_name().unwrap().len();
 
     let mut last_path = PathBuf::from(orig_path);
 
@@ -657,7 +658,7 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Op
 
 fn do_remove(
     path: &Path,
-    orig_filename: &str,
+    orig_filename: &OsString,
     verbose: bool,
     remove_method: RemoveMethod,
 ) -> Result<(), io::Error> {

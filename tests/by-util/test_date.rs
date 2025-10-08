@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata
+// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds
 
 use chrono::{DateTime, Datelike, Duration, NaiveTime, Utc}; // spell-checker:disable-line
 use regex::Regex;
@@ -19,7 +19,7 @@ fn test_invalid_arg() {
 
 #[test]
 fn test_date_email() {
-    for param in ["--rfc-email", "--rfc-e", "-R"] {
+    for param in ["--rfc-email", "--rfc-e", "-R", "--rfc-2822", "--rfc-822"] {
         new_ucmd!().arg(param).succeeds();
     }
 }
@@ -353,6 +353,22 @@ fn test_date_for_file() {
 }
 
 #[test]
+fn test_date_for_file_mtime() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "reference_file";
+    at.touch(file);
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    let result = ucmd.arg("--reference").arg(file).arg("+%s%N").succeeds();
+    let mtime = at.metadata(file).modified().unwrap();
+    let mtime_nanos = mtime
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
+        .to_string();
+    assert_eq!(result.stdout_str().trim(), &mtime_nanos[..]);
+}
+
+#[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 /// TODO: expected to fail currently; change to `succeeds()` when required.
 fn test_date_set_valid_3() {
@@ -502,6 +518,19 @@ fn test_invalid_date_string() {
         .fails()
         .no_stdout()
         .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_multiple_dates() {
+    new_ucmd!()
+        .arg("-d")
+        .arg("invalid")
+        .arg("-d")
+        .arg("2000-02-02")
+        .arg("+%Y")
+        .succeeds()
+        .stdout_is("2000\n")
+        .no_stderr();
 }
 
 #[test]
@@ -715,4 +744,37 @@ fn test_date_empty_tz_time() {
         .arg("@0")
         .succeeds()
         .stdout_only("Thu Jan  1 00:00:00 UTC 1970\n");
+}
+
+#[test]
+fn test_date_resolution() {
+    // Test that --resolution flag returns a floating point number by default
+    new_ucmd!()
+        .arg("--resolution")
+        .succeeds()
+        .stdout_str_check(|s| s.trim().parse::<f64>().is_ok());
+
+    // Test that --resolution flag can be passed twice to match gnu
+    new_ucmd!()
+        .arg("--resolution")
+        .arg("--resolution")
+        .succeeds()
+        .stdout_str_check(|s| s.trim().parse::<f64>().is_ok());
+
+    // Test that can --resolution output can be formatted as a date
+    new_ucmd!()
+        .arg("--resolution")
+        .arg("-Iseconds")
+        .succeeds()
+        .stdout_only("1970-01-01T00:00:00+00:00\n");
+}
+
+#[test]
+fn test_date_resolution_no_combine() {
+    // Test that date fails when --resolution flag is passed with date flag
+    new_ucmd!()
+        .arg("--resolution")
+        .arg("-d")
+        .arg("2025-01-01")
+        .fails();
 }

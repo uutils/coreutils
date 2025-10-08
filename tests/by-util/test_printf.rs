@@ -1453,3 +1453,11 @@ fn non_utf_8_input() {
         .fails()
         .stderr_contains("expected a numeric value");
 }
+
+#[test]
+fn test_emoji_formatting() {
+    new_ucmd!()
+        .args(&["Status: %s 🎯 Count: %d\n", "Success 🚀", "42"])
+        .succeeds()
+        .stdout_only("Status: Success 🚀 🎯 Count: 42\n");
+}

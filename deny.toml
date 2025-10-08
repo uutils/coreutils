@@ -27,6 +27,7 @@ allow = [
   "CC0-1.0",
   "Unicode-3.0",
   "Zlib",
+  "MPL-2.0",
 ]
 confidence-threshold = 0.8
 
@@ -54,10 +55,14 @@ highlight = "all"
 # introduces it.
 # spell-checker: disable
 skip = [
-  # mio, nu-ansi-term, socket2
+  # nu-ansi-term
   { name = "windows-sys", version = "0.52.0" },
-  # anstyle-query
+  # various crates
   { name = "windows-sys", version = "0.59.0" },
+  # various crates
+  { name = "windows-sys", version = "0.60.2" },
+  # various crates
+  { name = "windows-link", version = "0.1.3" },
   # parking_lot_core
   { name = "windows-targets", version = "0.52.6" },
   # windows-targets
@@ -102,8 +107,8 @@ skip = [
   { name = "rand_core", version = "0.6.4" },
   # utmp-classic
   { name = "zerocopy", version = "0.7.35" },
-  # rustix
-  { name = "linux-raw-sys", version = "0.9.4" },
+  # divans/codspeed tooling
+  { name = "nix", version = "0.29.0" },
 ]
 # spell-checker: enable
 

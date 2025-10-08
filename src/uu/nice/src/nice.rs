@@ -13,7 +13,7 @@ use std::ptr;
 
 use uucore::translate;
 use uucore::{
-    error::{UClapError, UResult, USimpleError, UUsageError, set_exit_code},
+    error::{UResult, USimpleError, UUsageError, set_exit_code},
     format_usage, show_error,
 };
 
@@ -103,7 +103,8 @@ fn standardize_nice_args(mut args: impl uucore::Args) -> impl uucore::Args {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = standardize_nice_args(args);
 
-    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
+    let matches =
+        uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
     nix::errno::Errno::clear();
     let mut niceness = unsafe { libc::getpriority(PRIO_PROCESS, 0) };

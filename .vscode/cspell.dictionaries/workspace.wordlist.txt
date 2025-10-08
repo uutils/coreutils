@@ -128,6 +128,7 @@ ENOSYS
 ENOTEMPTY
 EOPNOTSUPP
 EPERM
+EPIPE
 EROFS
 
 # * vars/fcntl
@@ -347,4 +348,14 @@ uutils
 getcwd
 
 # * other
+weblate
 algs
+
+# translation tests
+CLICOLOR
+erreur
+Utilisation
+merror
+merreur
+verbo
+inattendu

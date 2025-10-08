@@ -11,7 +11,6 @@ mod table;
 use blocks::HumanReadable;
 use clap::builder::ValueParser;
 use table::HeaderMode;
-use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError, get_exit_code};
 use uucore::fsext::{MountInfo, read_fs_list};
@@ -307,13 +306,24 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
     }
 
     let mut mounts = vec![];
-    for mi in read_fs_list()? {
+    for mut mi in read_fs_list()? {
         // TODO The running time of the `is_best()` function is linear
         // in the length of `result`. That makes the running time of
         // this loop quadratic in the length of `vmi`. This could be
         // improved by a more efficient implementation of `is_best()`,
         // but `vmi` is probably not very long in practice.
         if is_included(&mi, opt) && is_best(&mounts, &mi) {
+            let dev_path: &Path = Path::new(&mi.dev_name);
+            if dev_path.is_symlink() {
+                if let Ok(canonicalized_symlink) = uucore::fs::canonicalize(
+                    dev_path,
+                    uucore::fs::MissingHandling::Existing,
+                    uucore::fs::ResolveMode::Logical,
+                ) {
+                    mi.dev_name = canonicalized_symlink.to_string_lossy().to_string();
+                }
+            }
+
             mounts.push(mi);
         }
     }
@@ -407,7 +417,7 @@ impl UError for DfError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     #[cfg(windows)]
     {

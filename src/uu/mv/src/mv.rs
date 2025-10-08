@@ -52,7 +52,6 @@ use uucore::update_control;
 
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
 // requires these enums
-use uucore::LocalizedCommand;
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{format_usage, prompt_yes, show};
 
@@ -153,7 +152,7 @@ static OPT_SELINUX: &str = "selinux";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let files: Vec<OsString> = matches
         .get_many::<OsString>(ARG_FILES)
@@ -166,7 +165,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             ErrorKind::TooFewValues,
             translate!("mv-error-insufficient-arguments", "arg_files" => ARG_FILES),
         );
-        uucore::clap_localization::handle_clap_error_with_exit_code(err, uucore::util_name(), 1);
+        uucore::clap_localization::handle_clap_error_with_exit_code(err, 1);
     }
 
     let overwrite_mode = determine_overwrite_mode(&matches);
@@ -375,8 +374,12 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         });
     }
 
-    let target_is_dir = target.is_dir();
-    let source_is_dir = source.is_dir();
+    let source_is_dir = source.is_dir() && !source.is_symlink();
+    let target_is_dir = if target.is_symlink() {
+        fs::canonicalize(target).is_ok_and(|p| p.is_dir())
+    } else {
+        target.is_dir()
+    };
 
     if path_ends_with_terminator(target)
         && (!target_is_dir && !source_is_dir)
@@ -415,7 +418,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         } else {
             move_files_into_dir(&[source.to_path_buf()], target, opts)
         }
-    } else if target.exists() && source.is_dir() {
+    } else if target.exists() && source_is_dir {
         match opts.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => {
@@ -747,7 +750,7 @@ fn rename(
     }
 
     // "to" may no longer exist if it was backed up
-    if to.exists() && to.is_dir() {
+    if to.exists() && to.is_dir() && !to.is_symlink() {
         // normalize behavior between *nix and windows
         if from.is_dir() {
             if is_empty_dir(to) {

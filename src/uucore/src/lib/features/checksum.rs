@@ -249,34 +249,32 @@ impl UError for ChecksumError {
 ///
 /// # Returns
 ///
-/// Returns a UResult of a tuple containing the algorithm name, the hasher instance, and
-/// the output length in bits or an Err if an unsupported output size is provided, or if
-/// the `--bits` flag is missing.
-pub fn create_sha3(bits: Option<usize>) -> UResult<HashAlgorithm> {
+/// Returns a `UResult` with an `HashAlgorithm` or an `Err` if an unsupported
+/// output size is provided.
+pub fn create_sha3(bits: usize) -> UResult<HashAlgorithm> {
     match bits {
-        Some(224) => Ok(HashAlgorithm {
+        224 => Ok(HashAlgorithm {
             name: "SHA3_224",
             create_fn: Box::new(|| Box::new(Sha3_224::new())),
             bits: 224,
         }),
-        Some(256) => Ok(HashAlgorithm {
+        256 => Ok(HashAlgorithm {
             name: "SHA3_256",
             create_fn: Box::new(|| Box::new(Sha3_256::new())),
             bits: 256,
         }),
-        Some(384) => Ok(HashAlgorithm {
+        384 => Ok(HashAlgorithm {
             name: "SHA3_384",
             create_fn: Box::new(|| Box::new(Sha3_384::new())),
             bits: 384,
         }),
-        Some(512) => Ok(HashAlgorithm {
+        512 => Ok(HashAlgorithm {
             name: "SHA3_512",
             create_fn: Box::new(|| Box::new(Sha3_512::new())),
             bits: 512,
         }),
 
-        Some(_) => Err(ChecksumError::InvalidOutputSizeForSha3.into()),
-        None => Err(ChecksumError::BitsRequiredForSha3.into()),
+        _ => Err(ChecksumError::InvalidOutputSizeForSha3.into()),
     }
 }
 
@@ -321,9 +319,9 @@ impl FileChecksumResult {
     /// either succeeded or failed.
     fn from_bool(checksum_correct: bool) -> Self {
         if checksum_correct {
-            FileChecksumResult::Ok
+            Self::Ok
         } else {
-            FileChecksumResult::Failed
+            Self::Failed
         }
     }
 
@@ -331,9 +329,9 @@ impl FileChecksumResult {
     /// comparison on STDOUT.
     fn can_display(&self, verbose: ChecksumVerbose) -> bool {
         match self {
-            FileChecksumResult::Ok => verbose.over_quiet(),
-            FileChecksumResult::Failed => verbose.over_status(),
-            FileChecksumResult::CantOpen => true,
+            Self::Ok => verbose.over_quiet(),
+            Self::Failed => verbose.over_status(),
+            Self::CantOpen => true,
         }
     }
 }
@@ -341,9 +339,9 @@ impl FileChecksumResult {
 impl Display for FileChecksumResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FileChecksumResult::Ok => write!(f, "OK"),
-            FileChecksumResult::Failed => write!(f, "FAILED"),
-            FileChecksumResult::CantOpen => write!(f, "FAILED open or read"),
+            Self::Ok => write!(f, "OK"),
+            Self::Failed => write!(f, "FAILED"),
+            Self::CantOpen => write!(f, "FAILED open or read"),
         }
     }
 }
@@ -444,8 +442,7 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
             bits: 512,
         }),
         ALGORITHM_OPTIONS_SHAKE128 | "shake128sum" => {
-            let bits =
-                length.ok_or_else(|| USimpleError::new(1, "--bits required for SHAKE128"))?;
+            let bits = length.ok_or(ChecksumError::BitsRequiredForShake128)?;
             Ok(HashAlgorithm {
                 name: ALGORITHM_OPTIONS_SHAKE128,
                 create_fn: Box::new(|| Box::new(Shake128::new())),
@@ -453,16 +450,17 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
             })
         }
         ALGORITHM_OPTIONS_SHAKE256 | "shake256sum" => {
-            let bits =
-                length.ok_or_else(|| USimpleError::new(1, "--bits required for SHAKE256"))?;
+            let bits = length.ok_or(ChecksumError::BitsRequiredForShake256)?;
             Ok(HashAlgorithm {
                 name: ALGORITHM_OPTIONS_SHAKE256,
                 create_fn: Box::new(|| Box::new(Shake256::new())),
                 bits,
             })
         }
-        //ALGORITHM_OPTIONS_SHA3 | "sha3" => (
-        _ if algo.starts_with("sha3") => create_sha3(length),
+        _ if algo.starts_with("sha3") => {
+            let bits = length.ok_or(ChecksumError::BitsRequiredForSha3)?;
+            create_sha3(bits)
+        }
 
         _ => Err(ChecksumError::UnknownAlgorithm.into()),
     }
@@ -485,7 +483,7 @@ impl LineFormat {
         //   r"\MD5 (a\\ b) = abc123",
         //   BLAKE2b(44)= a45a4c4883cce4b50d844fab460414cc2080ca83690e74d850a9253e757384366382625b218c8585daee80f34dc9eb2f2fde5fb959db81cd48837f9216e7b0fa
         let trimmed = line.trim_ascii_start();
-        let algo_start = if trimmed.starts_with(b"\\") { 1 } else { 0 };
+        let algo_start = usize::from(trimmed.starts_with(b"\\"));
         let rest = &trimmed[algo_start..];
 
         enum SubCase {
@@ -559,7 +557,7 @@ impl LineFormat {
             algo_bit_len: algo_bits,
             checksum: checksum_utf8,
             filename: filename.to_vec(),
-            format: LineFormat::AlgoBased,
+            format: Self::AlgoBased,
         })
     }
 
@@ -589,7 +587,7 @@ impl LineFormat {
             algo_bit_len: None,
             checksum: checksum_utf8,
             filename: filename.to_vec(),
-            format: LineFormat::Untagged,
+            format: Self::Untagged,
         })
     }
 
@@ -621,7 +619,7 @@ impl LineFormat {
             algo_bit_len: None,
             checksum: checksum_utf8,
             filename: filename.to_vec(),
-            format: LineFormat::SingleSpace,
+            format: Self::SingleSpace,
         })
     }
 }
@@ -1155,7 +1153,7 @@ where
 
 pub fn digest_reader<T: Read>(
     digest: &mut Box<dyn Digest>,
-    reader: &mut BufReader<T>,
+    reader: &mut T,
     binary: bool,
     output_bits: usize,
 ) -> io::Result<(String, usize)> {
@@ -1647,7 +1645,7 @@ mod tests {
         for (filename, result, prefix, expected) in cases {
             let mut buffer: Vec<u8> = vec![];
             print_file_report(&mut buffer, filename, *result, prefix, opts.verbose);
-            assert_eq!(&buffer, expected)
+            assert_eq!(&buffer, expected);
         }
     }
 }

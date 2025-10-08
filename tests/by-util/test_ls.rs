@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
 // spell-checker:ignore (words) fakeroot setcap drwxr bcdlps
 #![allow(
     clippy::similar_names,
@@ -6146,4 +6146,168 @@ fn test_acl_display_symlink() {
         .arg(link_name)
         .succeeds()
         .stdout_matches(&re_with_acl);
+}
+
+#[test]
+fn ls_emoji_alignment() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("a");
+    at.touch("💐");
+    at.touch("漢");
+    scene
+        .ucmd()
+        .succeeds()
+        .stdout_contains("a")
+        .stdout_contains("💐")
+        .stdout_contains("漢");
+}
+
+// Additional tests for TIME_STYLE and time sorting compatibility with GNU
+#[test]
+fn test_ls_time_style_env_full_iso() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("t1");
+
+    let out = scene
+        .ucmd()
+        .env("TZ", "UTC")
+        .env("TIME_STYLE", "full-iso")
+        .arg("-l")
+        .arg("t1")
+        .succeeds();
+
+    // Expect an ISO-like timestamp in output (YYYY-MM-DD HH:MM)
+    let re = Regex::new(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}").unwrap();
+    assert!(
+        re.is_match(out.stdout_str()),
+        "unexpected timestamp: {}",
+        out.stdout_str()
+    );
+}
+
+#[test]
+fn test_ls_time_style_iso_recent_and_older() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    // Recent file (now)
+    at.touch("recent");
+
+    // Recent format for --time-style=iso is %m-%d %H:%M
+    let recent = scene
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("-l")
+        .arg("--time-style=iso")
+        .arg("recent")
+        .succeeds();
+    let re_recent = Regex::new(r"(^|\n).*\d{2}-\d{2} \d{2}:\d{2} ").unwrap();
+    assert!(
+        re_recent.is_match(recent.stdout_str()),
+        "recent not matched: {}",
+        recent.stdout_str()
+    );
+
+    // Older format appends a full ISO date padded (year present)
+    let f = at.make_file("older");
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
+
+    let older = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=iso")
+        .arg("older")
+        .succeeds();
+    let re_older = Regex::new(r"(^|\n).*\d{4}-\d{2}-\d{2}  +").unwrap();
+    assert!(
+        re_older.is_match(older.stdout_str()),
+        "older not matched: {}",
+        older.stdout_str()
+    );
+}
+
+#[test]
+fn test_ls_time_style_posix_locale_override() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("p1");
+
+    // With LC_ALL=POSIX and TIME_STYLE=posix-full-iso, GNU falls back to locale format like "%b %e %H:%M"
+    let out = scene
+        .ucmd()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "POSIX")
+        .env("TIME_STYLE", "posix-full-iso")
+        .arg("-l")
+        .arg("p1")
+        .succeeds();
+    // Expect month name rather than ISO dashes
+    let re_locale = Regex::new(r" [A-Z][a-z]{2} +\d{1,2} +\d{2}:\d{2} ").unwrap();
+    assert!(
+        re_locale.is_match(out.stdout_str()),
+        "locale format not matched: {}",
+        out.stdout_str()
+    );
+}
+
+#[test]
+fn test_ls_time_style_precedence_last_wins() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("timefile");
+
+    // time-style first, full-time last -> expect full-iso-like (seconds)
+    let out1 = scene
+        .ucmd()
+        .arg("--time-style=long-iso")
+        .arg("--full-time")
+        .arg("-l")
+        .arg("timefile")
+        .succeeds();
+    let has_seconds = Regex::new(r"\d{2}:\d{2}:\d{2}")
+        .unwrap()
+        .is_match(out1.stdout_str());
+    assert!(
+        has_seconds,
+        "expected seconds in full-time: {}",
+        out1.stdout_str()
+    );
+
+    // full-time first, time-style last -> expect style override (no seconds for long-iso)
+    let out2 = scene
+        .ucmd()
+        .arg("--full-time")
+        .arg("--time-style=long-iso")
+        .arg("-l")
+        .arg("timefile")
+        .succeeds();
+    let no_seconds = !Regex::new(r"\d{2}:\d{2}:\d{2}")
+        .unwrap()
+        .is_match(out2.stdout_str());
+    assert!(
+        no_seconds,
+        "expected no seconds in long-iso: {}",
+        out2.stdout_str()
+    );
+}
+
+#[test]
+fn test_ls_time_sort_without_long() {
+    let scene = TestScenario::new(util_name!());
+
+    // Create two files with deterministic, distinct modification times
+    let at = &scene.fixtures;
+    let f = at.make_file("a");
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
+    at.touch("b");
+
+    // Compare default (name order) vs time-sorted (-t) order; they should differ
+    let default_out = scene.ucmd().succeeds();
+    let t_out = scene.ucmd().arg("-t").succeeds();
+
+    let def = default_out.stdout_str();
+    let t = t_out.stdout_str();
+    assert_ne!(def, t);
 }

@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (ToDO) coreutil euid rgid
 
+use std::process::{Command, Stdio};
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
 use uutests::util::{TestScenario, check_coreutil_version, expected_result, is_ci, whoami};
@@ -18,6 +19,11 @@ const VERSION_MIN_MULTIPLE_USERS: &str = "8.31"; // this feature was introduced 
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[test]
+fn test_id_ignore() {
+    new_ucmd!().arg("-a").succeeds();
 }
 
 #[test]
@@ -521,4 +527,28 @@ fn create_root_owned_suid_coreutils_binary() -> Option<TempPath> {
     run_ucmd_as_root(&TestScenario::new("chmod"), &["+xs", temp_path_str]).ok()?;
 
     Some(temp_path)
+}
+
+/// This test requires user with username 200 on system
+#[test]
+#[cfg(unix)]
+fn test_id_digital_username() {
+    match Command::new("id")
+        .arg("200")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+    {
+        Ok(ret) if ret.success() => {}
+        Ok(_) => {
+            println!("Test skipped; requires user with username 200 on system");
+            return;
+        }
+        Err(e) => {
+            println!("failed to run id command: {e}");
+            return;
+        }
+    }
+
+    new_ucmd!().arg("200").succeeds();
 }

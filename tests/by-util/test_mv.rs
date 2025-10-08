@@ -399,6 +399,96 @@ fn test_mv_replace_file() {
 }
 
 #[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_replace_symlink_with_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("a");
+    at.mkdir("b");
+    at.touch("a/empty_file_a");
+    at.touch("b/empty_file_b");
+
+    at.symlink_dir("a", "symlink_a");
+    at.symlink_dir("b", "symlink_b");
+
+    assert_eq!(at.read("symlink_a/empty_file_a"), "");
+
+    ucmd.arg("-T")
+        .arg("symlink_b")
+        .arg("symlink_a")
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists("symlink_a/empty_file_b"));
+    assert!(!at.file_exists("symlink_a/empty_file_a"));
+    assert!(!at.symlink_exists("symlink_b"));
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_replace_symlink_with_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.mkdir("b");
+    at.touch("b/empty_file_b");
+
+    at.symlink_file("a", "symlink");
+
+    ucmd.arg("-T")
+        .arg("b")
+        .arg("symlink")
+        .fails()
+        .stderr_contains("cannot overwrite non-directory")
+        .stderr_contains("with directory");
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_replace_symlink_with_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.touch("b");
+
+    at.symlink_file("a", "symlink");
+
+    ucmd.arg("-T")
+        .arg("b")
+        .arg("symlink")
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists("symlink"));
+    assert!(!at.is_symlink("symlink"));
+    assert!(!at.file_exists("b"));
+    assert!(at.file_exists("a"));
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_file_to_symlink_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("a");
+    at.touch("a/empty_file_a");
+    at.touch("b");
+
+    at.symlink_dir("a", "symlink");
+
+    assert!(at.file_exists("symlink/empty_file_a"));
+
+    ucmd.arg("b").arg("symlink").succeeds().no_stderr();
+
+    assert!(at.dir_exists("symlink"));
+    assert!(at.is_symlink("symlink"));
+    assert!(at.file_exists("symlink/b"));
+    assert!(!at.file_exists("b"));
+    assert!(at.dir_exists("a"));
+    assert!(at.file_exists("a/b"));
+}
+
+#[test]
 fn test_mv_force_replace_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_force_replace_file_a";

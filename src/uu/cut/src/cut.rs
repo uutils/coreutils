@@ -18,7 +18,6 @@ use uucore::os_str_as_bytes;
 
 use self::searcher::Searcher;
 use matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
-use uucore::LocalizedCommand;
 use uucore::ranges::Range;
 use uucore::translate;
 use uucore::{format_usage, show_error, show_if_err};
@@ -343,11 +342,11 @@ fn cut_fields<R: Read, W: Write>(
     }
 }
 
-fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
+fn cut_files(mut filenames: Vec<OsString>, mode: &Mode) {
     let mut stdin_read = false;
 
     if filenames.is_empty() {
-        filenames.push("-".to_owned());
+        filenames.push(OsString::from("-"));
     }
 
     let mut out: Box<dyn Write> = if stdout().is_terminal() {
@@ -370,12 +369,12 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
 
             stdin_read = true;
         } else {
-            let path = Path::new(&filename[..]);
+            let path = Path::new(filename);
 
             if path.is_dir() {
                 show_error!(
                     "{}: {}",
-                    filename.maybe_quote(),
+                    filename.to_string_lossy().maybe_quote(),
                     translate!("cut-error-is-directory")
                 );
                 set_exit_code(1);
@@ -384,7 +383,7 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
 
             show_if_err!(
                 File::open(path)
-                    .map_err_context(|| filename.maybe_quote().to_string())
+                    .map_err_context(|| filename.to_string_lossy().to_string())
                     .and_then(|file| {
                         match &mode {
                             Mode::Bytes(ranges, opts) | Mode::Characters(ranges, opts) => {
@@ -483,7 +482,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         })
         .collect();
 
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let complement = matches.get_flag(options::COMPLEMENT);
     let only_delimited = matches.get_flag(options::ONLY_DELIMITED);
@@ -577,8 +576,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
     };
 
-    let files: Vec<String> = matches
-        .get_many::<String>(options::FILE)
+    let files: Vec<OsString> = matches
+        .get_many::<OsString>(options::FILE)
         .unwrap_or_default()
         .cloned()
         .collect();
@@ -681,6 +680,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE)
                 .hide(true)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
 }

@@ -170,7 +170,7 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
 }
 
 struct Options {
-    files: Vec<String>,
+    files: Vec<OsString>,
     tabstops: Vec<usize>,
     tspaces: String,
     iflag: bool,
@@ -204,9 +204,9 @@ impl Options {
             .unwrap(); // length of tabstops is guaranteed >= 1
         let tspaces = " ".repeat(nspaces);
 
-        let files: Vec<String> = match matches.get_many::<String>(options::FILES) {
-            Some(s) => s.map(|v| v.to_string()).collect(),
-            None => vec!["-".to_owned()],
+        let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILES) {
+            Some(s) => s.cloned().collect(),
+            None => vec![OsString::from("-")],
         };
 
         Ok(Self {
@@ -243,56 +243,60 @@ fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(expand_shortcuts(args.collect()))?;
+    let matches =
+        uucore::clap_localization::handle_clap_result(uu_app(), expand_shortcuts(args.collect()))?;
 
     expand(&Options::new(&matches)?)
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
-        .about(translate!("expand-about"))
-        .after_help(LONG_HELP)
-        .override_usage(format_usage(&translate!("expand-usage")))
-        .infer_long_args(true)
-        .args_override_self(true)
-        .arg(
-            Arg::new(options::INITIAL)
-                .long(options::INITIAL)
-                .short('i')
-                .help(translate!("expand-help-initial"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::TABS)
-                .long(options::TABS)
-                .short('t')
-                .value_name("N, LIST")
-                .action(ArgAction::Append)
-                .help(translate!("expand-help-tabs")),
-        )
-        .arg(
-            Arg::new(options::NO_UTF8)
-                .long(options::NO_UTF8)
-                .short('U')
-                .help(translate!("expand-help-no-utf8"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FILES)
-                .action(ArgAction::Append)
-                .hide(true)
-                .value_hint(clap::ValueHint::FilePath),
-        )
+    uucore::clap_localization::configure_localized_command(
+        Command::new(uucore::util_name())
+            .version(uucore::crate_version!())
+            .about(translate!("expand-about"))
+            .after_help(LONG_HELP)
+            .override_usage(format_usage(&translate!("expand-usage"))),
+    )
+    .infer_long_args(true)
+    .args_override_self(true)
+    .arg(
+        Arg::new(options::INITIAL)
+            .long(options::INITIAL)
+            .short('i')
+            .help(translate!("expand-help-initial"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::TABS)
+            .long(options::TABS)
+            .short('t')
+            .value_name("N, LIST")
+            .action(ArgAction::Append)
+            .help(translate!("expand-help-tabs")),
+    )
+    .arg(
+        Arg::new(options::NO_UTF8)
+            .long(options::NO_UTF8)
+            .short('U')
+            .help(translate!("expand-help-no-utf8"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::FILES)
+            .action(ArgAction::Append)
+            .hide(true)
+            .value_hint(clap::ValueHint::FilePath)
+            .value_parser(clap::value_parser!(OsString)),
+    )
 }
 
-fn open(path: &str) -> UResult<BufReader<Box<dyn Read + 'static>>> {
+fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     let file_buf;
     if path == "-" {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
     } else {
-        file_buf = File::open(path).map_err_context(|| path.to_string())?;
+        let path_ref = Path::new(path);
+        file_buf = File::open(path_ref).map_err_context(|| path.to_string_lossy().to_string())?;
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
 }
@@ -353,6 +357,15 @@ fn expand_line(
     options: &Options,
 ) -> std::io::Result<()> {
     use self::CharType::{Backspace, Other, Tab};
+
+    // Fast path: if there are no tabs, backspaces, and (in UTF-8 mode or no carriage returns),
+    // we can write the buffer directly without character-by-character processing
+    if !buf.contains(&b'\t') && !buf.contains(&b'\x08') && (options.uflag || !buf.contains(&b'\r'))
+    {
+        output.write_all(buf)?;
+        buf.truncate(0);
+        return Ok(());
+    }
 
     let mut col = 0;
     let mut byte = 0;
@@ -431,7 +444,6 @@ fn expand_line(
         byte += nbytes; // advance the pointer
     }
 
-    output.flush()?;
     buf.truncate(0); // clear the buffer
 
     Ok(())
@@ -446,7 +458,7 @@ fn expand(options: &Options) -> UResult<()> {
         if Path::new(file).is_dir() {
             show_error!(
                 "{}",
-                translate!("expand-error-is-directory", "file" => file)
+                translate!("expand-error-is-directory", "file" => file.to_string_lossy())
             );
             set_exit_code(1);
             continue;
@@ -467,6 +479,10 @@ fn expand(options: &Options) -> UResult<()> {
             }
         }
     }
+    // Flush once at the end
+    output
+        .flush()
+        .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
     Ok(())
 }
 

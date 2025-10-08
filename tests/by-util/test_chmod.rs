@@ -232,14 +232,21 @@ fn test_chmod_ugoa() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-// TODO fix android, it has 0777
-// We should force for the umask on startup
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
+#[allow(clippy::cast_lossless)]
 fn test_chmod_umask_expected() {
+    // Get the actual system umask using libc
+    let system_umask = unsafe {
+        let mask = libc::umask(0);
+        libc::umask(mask);
+        mask
+    };
+
+    // Now verify that get_umask() returns the same value
     let current_umask = uucore::mode::get_umask();
     assert_eq!(
-        current_umask, 0o022,
-        "Unexpected umask value: expected 022 (octal), but got {current_umask:03o}. Please adjust the test environment.",
+        current_umask, system_umask as u32,
+        "get_umask() returned {current_umask:03o}, but system umask is {system_umask:03o}",
     );
 }
 
@@ -384,6 +391,10 @@ fn test_chmod_recursive() {
     make_file(&at.plus_as_string("a/b/b"), 0o100444);
     make_file(&at.plus_as_string("a/b/c/c"), 0o100444);
     make_file(&at.plus_as_string("z/y"), 0o100444);
+    #[cfg(not(target_os = "linux"))]
+    let err_msg = "chmod: Permission denied\n";
+    #[cfg(target_os = "linux")]
+    let err_msg = "chmod: 'z': Permission denied\n";
 
     // only the permissions of folder `a` and `z` are changed
     // folder can't be read after read permission is removed
@@ -394,7 +405,7 @@ fn test_chmod_recursive() {
         .arg("z")
         .umask(0)
         .fails()
-        .stderr_is("chmod: Permission denied\n");
+        .stderr_is(err_msg);
 
     assert_eq!(at.metadata("z/y").permissions().mode(), 0o100444);
     assert_eq!(at.metadata("a/a").permissions().mode(), 0o100444);
@@ -1182,4 +1193,121 @@ fn test_chmod_recursive_symlink_combinations() {
             .mode(),
         0o100_600
     );
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_chmod_non_utf8_paths() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a file with non-UTF-8 name
+    // Using bytes that form an invalid UTF-8 sequence
+    let non_utf8_bytes = b"test_\xFF\xFE.txt";
+    let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
+
+    // Create the file using OpenOptions with the non-UTF-8 name
+    OpenOptions::new()
+        .mode(0o644)
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(at.plus(non_utf8_name))
+        .unwrap();
+
+    // Verify initial permissions
+    let initial_perms = metadata(at.plus(non_utf8_name))
+        .unwrap()
+        .permissions()
+        .mode();
+    assert_eq!(initial_perms & 0o777, 0o644);
+
+    // Test chmod with the non-UTF-8 filename
+    scene
+        .ucmd()
+        .arg("755")
+        .arg(non_utf8_name)
+        .succeeds()
+        .no_stderr();
+
+    // Verify permissions were changed
+    let new_perms = metadata(at.plus(non_utf8_name))
+        .unwrap()
+        .permissions()
+        .mode();
+    assert_eq!(new_perms & 0o777, 0o755);
+
+    // Test with multiple non-UTF-8 files
+    let non_utf8_bytes2 = b"file_\xC0\x80.dat";
+    let non_utf8_name2 = OsStr::from_bytes(non_utf8_bytes2);
+
+    OpenOptions::new()
+        .mode(0o666)
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(at.plus(non_utf8_name2))
+        .unwrap();
+
+    // Change permissions on both files at once
+    scene
+        .ucmd()
+        .arg("644")
+        .arg(non_utf8_name)
+        .arg(non_utf8_name2)
+        .succeeds()
+        .no_stderr();
+
+    // Verify both files have the new permissions
+    assert_eq!(
+        metadata(at.plus(non_utf8_name))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o644
+    );
+    assert_eq!(
+        metadata(at.plus(non_utf8_name2))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o644
+    );
+}
+
+#[test]
+fn test_chmod_colored_output() {
+    // Test colored help message
+    new_ucmd!()
+        .arg("--help")
+        .env("CLICOLOR_FORCE", "1")
+        .env("LANG", "en_US.UTF-8")
+        .succeeds()
+        .stdout_contains("\x1b[1m\x1b[4mUsage:\x1b[0m") // Bold+underline "Usage:"
+        .stdout_contains("\x1b[1m\x1b[4mArguments:\x1b[0m"); // Bold+underline "Arguments:"
+
+    // Test colored error message for invalid option
+    new_ucmd!()
+        .arg("--invalid-option")
+        .env("CLICOLOR_FORCE", "1")
+        .env("LANG", "en_US.UTF-8")
+        .fails()
+        .code_is(1)
+        .stderr_contains("\x1b[31merror\x1b[0m") // Red "error"
+        .stderr_contains("\x1b[33m--invalid-option\x1b[0m"); // Yellow invalid option
+
+    // Test French localized colored error message
+    new_ucmd!()
+        .arg("--invalid-option")
+        .env("CLICOLOR_FORCE", "1")
+        .env("LANG", "fr_FR.UTF-8")
+        .fails()
+        .code_is(1)
+        .stderr_contains("\x1b[31merreur\x1b[0m") // Red "erreur" in French
+        .stderr_contains("\x1b[33m--invalid-option\x1b[0m"); // Yellow invalid option
 }

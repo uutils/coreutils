@@ -29,7 +29,6 @@ use std::num::IntErrorKind;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, RawFd};
-use uucore::LocalizedCommand;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::translate;
@@ -243,7 +242,7 @@ ioctl_write_ptr_bad!(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let opts = Options::from(&matches)?;
 
@@ -405,7 +404,7 @@ fn stty(opts: &Options) -> UResult<()> {
         }
 
         // TODO: Figure out the right error message for when tcgetattr fails
-        let mut termios = tcgetattr(opts.file.as_fd()).expect("Could not get terminal attributes");
+        let mut termios = tcgetattr(opts.file.as_fd())?;
 
         // iterate over valid_args, match on the arg type, do the matching apply function
         for arg in &valid_args {
@@ -420,12 +419,11 @@ fn stty(opts: &Options) -> UResult<()> {
                 }
             }
         }
-        tcsetattr(opts.file.as_fd(), set_arg, &termios)
-            .expect("Could not write terminal attributes");
+        tcsetattr(opts.file.as_fd(), set_arg, &termios)?;
     } else {
         // TODO: Figure out the right error message for when tcgetattr fails
-        let termios = tcgetattr(opts.file.as_fd()).expect("Could not get terminal attributes");
-        print_settings(&termios, opts).expect("TODO: make proper error here from nix error");
+        let termios = tcgetattr(opts.file.as_fd())?;
+        print_settings(&termios, opts)?;
     }
     Ok(())
 }

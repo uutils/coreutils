@@ -6,6 +6,7 @@
 #![allow(rustdoc::private_intra_doc_links)]
 
 use std::cmp::Ordering;
+use std::ffi::OsString;
 use std::io::{self, BufReader, ErrorKind};
 use std::{
     fs::{File, remove_file},
@@ -25,7 +26,6 @@ mod split_name;
 use crate::csplit_error::CsplitError;
 use crate::split_name::SplitName;
 
-use uucore::LocalizedCommand;
 use uucore::translate;
 
 mod options {
@@ -120,18 +120,27 @@ where
         .enumerate();
     let mut input_iter = InputSplitter::new(enumerated_input_lines);
     let mut split_writer = SplitWriter::new(options);
-    let patterns: Vec<patterns::Pattern> = patterns::get_patterns(patterns)?;
-    let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+    let patterns_vec: Vec<patterns::Pattern> = patterns::get_patterns(patterns)?;
+    let all_up_to_line = patterns_vec
+        .iter()
+        .all(|p| matches!(p, patterns::Pattern::UpToLine(_, _)));
+    let ret = do_csplit(&mut split_writer, patterns_vec, &mut input_iter);
 
     // consume the rest, unless there was an error
     if ret.is_ok() {
         input_iter.rewind_buffer();
         if let Some((_, line)) = input_iter.next() {
+            // There is remaining input: create a final split and copy remainder
             split_writer.new_writer()?;
             split_writer.writeln(&line?)?;
             for (_, line) in input_iter {
                 split_writer.writeln(&line?)?;
             }
+            split_writer.finish_split();
+        } else if all_up_to_line && options.suppress_matched {
+            // GNU semantics for integer patterns with --suppress-matched:
+            // even if no remaining input, create a final (possibly empty) split
+            split_writer.new_writer()?;
             split_writer.finish_split();
         }
     }
@@ -605,10 +614,10 @@ where
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     // get the file to split
-    let file_name = matches.get_one::<String>(options::FILE).unwrap();
+    let file_name = matches.get_one::<OsString>(options::FILE).unwrap();
 
     // get the patterns to split on
     let patterns: Vec<String> = matches
@@ -689,7 +698,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE)
                 .hide(true)
                 .required(true)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::PATTERN)

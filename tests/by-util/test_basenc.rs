@@ -5,7 +5,7 @@
 
 // spell-checker: ignore (encodings) lsbf msbf
 
-use uutests::new_ucmd;
+use uutests::{at_and_ucmd, new_ucmd};
 
 #[test]
 fn test_z85_not_padded_decode() {
@@ -185,21 +185,55 @@ fn test_base2lsbf_decode() {
 }
 
 #[test]
-fn test_choose_last_encoding_z85() {
+fn test_z85_decode() {
     new_ucmd!()
-        .args(&[
-            "--base2lsbf",
-            "--base2msbf",
-            "--base16",
-            "--base32hex",
-            "--base64url",
-            "--base32",
-            "--base64",
-            "--z85",
-        ])
-        .pipe_in("Hello, World")
+        .args(&["--z85", "-d"])
+        .pipe_in("nm=QNz.92jz/PV8")
         .succeeds()
-        .stdout_only("nm=QNz.92jz/PV8\n");
+        .stdout_only("Hello, World");
+}
+
+#[test]
+fn test_base58() {
+    new_ucmd!()
+        .arg("--base58")
+        .pipe_in("Hello, World!")
+        .succeeds()
+        .stdout_only("72k1xXWG59fYdzSNoA\n");
+}
+
+#[test]
+fn test_base58_decode() {
+    new_ucmd!()
+        .args(&["--base58", "-d"])
+        .pipe_in("72k1xXWG59fYdzSNoA")
+        .succeeds()
+        .stdout_only("Hello, World!");
+}
+
+#[test]
+fn test_base58_large_file_no_chunking() {
+    // Regression test: base58 must process entire input as one big integer,
+    // not in 1024-byte chunks. This test ensures files >1024 bytes work correctly.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let filename = "large_file.txt";
+
+    // spell-checker:disable
+    let input = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(50);
+    // spell-checker:enable
+    at.write(filename, &input);
+
+    let result = ucmd.arg("--base58").arg(filename).succeeds();
+    let encoded = result.stdout_str();
+
+    // Verify the output ends with the expected suffix (matches GNU basenc output)
+    // spell-checker:disable
+    assert!(
+        encoded
+            .trim_end()
+            .ends_with("ZNRRacEnhrY83ZEYkpwWVZNFK5DFRasr\nw693NsNGtiQ9fYAj")
+    );
+    // spell-checker:enable
 }
 
 #[test]
@@ -239,6 +273,15 @@ fn test_choose_last_encoding_base2lsbf() {
 }
 
 #[test]
+fn test_choose_last_encoding_base58() {
+    new_ucmd!()
+        .args(&["--base64", "--base32", "--base16", "--z85", "--base58"])
+        .pipe_in("Hello!")
+        .succeeds()
+        .stdout_only("d3yC1LKr\n");
+}
+
+#[test]
 fn test_base32_decode_repeated() {
     new_ucmd!()
         .args(&[
@@ -269,4 +312,32 @@ fn test_z85_length_check() {
         .pipe_in("f!$Kwh8WxM")
         .succeeds()
         .stdout_only("12345678");
+}
+
+#[test]
+fn test_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let filename = "file";
+
+    at.write(filename, "foo");
+
+    ucmd.arg(filename)
+        .arg("--base64")
+        .succeeds()
+        .stdout_is("Zm9v\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_file_with_non_utf8_name() {
+    use std::os::unix::ffi::OsStringExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    std::fs::write(at.plus(&filename), b"foo").unwrap();
+
+    ucmd.arg(filename)
+        .arg("--base64")
+        .succeeds()
+        .stdout_is("Zm9v\n");
 }

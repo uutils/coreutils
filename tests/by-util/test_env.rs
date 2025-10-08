@@ -1755,6 +1755,17 @@ fn test_simulation_of_terminal_pty_pipes_into_data_and_sends_eot_automatically()
     std::assert_eq!(String::from_utf8_lossy(out.stderr()), "");
 }
 
+#[test]
+#[cfg(not(windows))]
+fn test_emoji_env_vars() {
+    new_ucmd!()
+        .arg("🎯_VAR=Hello 🌍")
+        .arg("printenv")
+        .arg("🎯_VAR")
+        .succeeds()
+        .stdout_contains("Hello 🌍");
+}
+
 #[cfg(unix)]
 #[test]
 fn test_simulation_of_terminal_pty_write_in_data_and_sends_eot_automatically() {
@@ -1772,4 +1783,21 @@ fn test_simulation_of_terminal_pty_write_in_data_and_sends_eot_automatically() {
         "Hello stdin forwarding via write_in!\r\n"
     );
     std::assert_eq!(String::from_utf8_lossy(out.stderr()), "");
+}
+
+#[test]
+fn test_env_french() {
+    new_ucmd!()
+        .arg("--verbo")
+        .env("LANG", "fr_FR")
+        .fails()
+        .stderr_contains("erreur : argument inattendu");
+}
+
+#[test]
+fn test_shebang_error() {
+    new_ucmd!()
+        .arg("\'-v \'")
+        .fails()
+        .stderr_contains("use -[v]S to pass options in shebang lines");
 }

@@ -25,7 +25,7 @@ $ ls -w=80
 ## `env`
 
 GNU `env` allows the empty string to be used as an environment variable name.
-This is unsupported by uutils, and it will show a warning on any such
+This is unsupported by uutils, which will show a warning for any such
 assignment.
 
  `env` has an additional `-f`/`--file` flag that can
@@ -51,8 +51,8 @@ etc.).
 
 This utility does not exist in GNU coreutils. The behavior is modeled after both
 the `b2sum` utility of GNU and the
-[`b3sum`](https://github.com/BLAKE3-team/BLAKE3) utility by the BLAKE3 team and
-supports the `--no-names` option that does not appear in the GNU util.
+[`b3sum`](https://github.com/BLAKE3-team/BLAKE3) utility by the BLAKE3 team. It also 
+supports the `--no-names` option, that does not appear in the GNU utility.
 
 ## `more`
 
@@ -82,7 +82,7 @@ numbers. GNU coreutils uses `long double`, whose actual size may be [double prec
 (x86(-64)), or
 [quadruple precision 128-bit float](https://en.wikipedia.org/wiki/Quadruple-precision_floating-point_format) (e.g. arm64).
 
-Practically, this means that printing a number with a large precision will stay exact:
+Practically, this means that printing a number with high precision will remain exact:
 ```
 printf "%.48f\n" 0.1
 0.100000000000000000000000000000000000000000000000 << uutils on all platforms
@@ -199,7 +199,7 @@ The number of random passes is deterministic in both GNU and uutils. However, uu
 GNU `unexpand` provides `--first-only` to convert only leading sequences of blanks. We support a
 second way: `-f` like busybox.
 
-Using `-U`/`--no-utf8`, you can interpret input files as 8-bit ASCII rather than UTF-8.
+With `-U`/`--no-utf8`, you can interpret input files as 8-bit ASCII rather than UTF-8.
 
 ## `expand`
 

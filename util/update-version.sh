@@ -17,8 +17,8 @@
 # 10) Create the release on github https://github.com/uutils/coreutils/releases/new
 # 11) Make sure we have good release notes
 
-FROM="0.0.30"
-TO="0.1.0"
+FROM="0.2.0"
+TO="0.2.2"
 
 PROGS=$(ls -1d src/uu/*/Cargo.toml src/uu/stdbuf/src/libstdbuf/Cargo.toml src/uucore/Cargo.toml Cargo.toml fuzz/uufuzz/Cargo.toml)
 
@@ -29,8 +29,6 @@ sed -i -e "s|version = \"$FROM\"|version = \"$TO\"|" $PROGS
 # Update uucore_procs
 sed -i -e "s|version = \"$FROM\"|version = \"$TO\"|" src/uucore_procs/Cargo.toml
 
-# Update uuhelp_parser
-sed -i -e "s|version = \"$FROM\"|version = \"$TO\"|" src/uuhelp_parser/Cargo.toml
 
 # Update the stdbuf stuff
 sed -i -e "s|libstdbuf = { version=\"$FROM\"|libstdbuf = { version=\"$TO\"|" src/uu/stdbuf/Cargo.toml

@@ -80,7 +80,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Setup Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: '3.x'
     - name: Install Mozilla Fluent Linter
@@ -91,43 +91,38 @@ jobs:
     - name: Find and validate Fluent files
       shell: bash
       run: |
-        ## Find and validate Fluent files with Mozilla Fluent Linter
 
-        # Check if any .ftl files exist
-        fluent_files=$(find . -name "*.ftl" -type f 2>/dev/null || true)
+        fluent_dirs=$(find . -name "*.ftl" -type f -exec dirname {} \; | sort | uniq 2>/dev/null || true)
 
-        if [ -n "$fluent_files" ]; then
-          echo "Found Fluent files:"
-          echo "$fluent_files"
+        if [ -n "$fluent_dirs" ]; then
+          echo "Found Fluent directories:"
+          echo "$fluent_dirs"
+
+          # Count total files for informational purposes
+          total_files=$(find . -name "*.ftl" -type f | wc -l)
+          echo "Total Fluent files: $total_files"
         else
           echo "::notice::No Fluent (.ftl) files found in the repository"
           exit 0
         fi
 
-        # Use Mozilla Fluent Linter for comprehensive validation
-        echo "Running Mozilla Fluent Linter..."
+        echo "Running Fluent Linter on directories..."
 
         has_errors=false
 
-        while IFS= read -r file; do
-          echo "Checking $file with Mozilla Fluent Linter..."
+        while IFS= read -r dir; do
+          echo "Checking directory $dir with Fluent Linter..."
 
-          # Run fluent-linter on each file
-          if ! moz-fluent-lint "$file"; then
-            echo "::error file=$file::Fluent syntax errors found in $file"
-            has_errors=true
+          if ! moz-fluent-lint --config .github/fluent_linter_config.yml "$dir"; then
+            echo "::error::Fluent syntax errors found in $dir"
+            exit 1
           else
-            echo "✓ Fluent syntax check passed for $file"
+            echo "✓ Fluent syntax check passed for directory $dir"
           fi
 
-        done <<< "$fluent_files"
+        done <<< "$fluent_dirs"
 
-        if [ "$has_errors" = true ]; then
-          echo "::error::Fluent linting failed - please fix syntax errors"
-          exit 1
-        fi
-
-        echo "::notice::All Fluent files passed Mozilla Fluent Linter validation"
+        echo "::notice::All Fluent directories passed Fluent Linter validation"
 
   l10n_clap_error_localization:
     name: L10n/Clap Error Localization Test
@@ -507,7 +502,13 @@ jobs:
 
         # Find where coreutils was actually installed
         echo "Searching for coreutils binary in installation directory..."
-        COREUTILS_BIN=$(find "$INSTALL_DIR" -name "coreutils" -type f 2>/dev/null | head -1)
+        # First try the expected location
+        if [ -x "$INSTALL_DIR/usr/bin/coreutils" ]; then
+          COREUTILS_BIN="$INSTALL_DIR/usr/bin/coreutils"
+        else
+          # Fallback: search for executable files named coreutils (excluding completion files)
+          COREUTILS_BIN=$(find "$INSTALL_DIR" -path "*/bin/*" -name "coreutils" -type f 2>/dev/null | head -1)
+        fi
         if [ -n "$COREUTILS_BIN" ]; then
           echo "Found coreutils at: $COREUTILS_BIN"
           export COREUTILS_BIN
@@ -1123,8 +1124,8 @@ jobs:
       env:
         RUST_BACKTRACE: "1"
 
-  l10n_locale_embedding_regression_test:
-    name: L10n/Locale Embedding Regression Test
+  l10n_embedded_locale_regression_test:
+    name: L10n/Embedded Locale Regression Test
     runs-on: ubuntu-latest
     env:
       SCCACHE_GHA_ENABLED: "true"
@@ -1140,129 +1141,114 @@ jobs:
     - name: Install/setup prerequisites
       shell: bash
       run: |
-        ## Install/setup prerequisites
-        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev build-essential
-    - name: Build binaries for locale embedding test
+        sudo apt-get -y update && sudo apt-get -y install libselinux1-dev
+    - name: Test embedded locale functionality for individual utilities
       shell: bash
       run: |
-        ## Build individual utilities and multicall binary for locale embedding test
-        echo "Building binaries with different locale embedding configurations..."
-        mkdir -p target
+        bash util/test_locale_regression.sh
 
-        # Build cat utility with targeted locale embedding
-        echo "Building cat utility with targeted locale embedding..."
-        echo "cat" > target/uucore_target_util.txt
-        cargo build -p uu_cat --release
-
-        # Build ls utility with targeted locale embedding
-        echo "Building ls utility with targeted locale embedding..."
-        echo "ls" > target/uucore_target_util.txt
-        cargo build -p uu_ls --release
-
-        # Build multicall binary (should have all locales)
-        echo "Building multicall binary (should have all locales)..."
-        echo "multicall" > target/uucore_target_util.txt
-        cargo build --release
-
-        echo "✓ All binaries built successfully"
-      env:
-        RUST_BACKTRACE: "1"
-
-    - name: Analyze embedded locale files
-      shell: bash
+  l10n_locale_embedding_cat:
+    name: L10n/Locale Embedding - Cat Utility
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+      with:
+        # Use different cache key for each build to avoid conflicts
+        key: cat-locale-embedding
+    - name: Install prerequisites
+      run: sudo apt-get -y update && sudo apt-get -y install libselinux1-dev build-essential
+    - name: Build cat with targeted locale embedding
+      run: UUCORE_TARGET_UTIL=cat cargo build -p uu_cat --release
+    - name: Verify cat locale count
       run: |
-        ## Extract and analyze .ftl files embedded in each binary
-        echo "=== Embedded Locale File Analysis ==="
-
-        # Analyze cat binary
-        echo "--- cat binary embedded .ftl files ---"
-        cat_ftl_files=$(strings target/release/cat | grep -o "[a-z_][a-z_]*/en-US\.ftl" | sort | uniq)
-        cat_locales=$(echo "$cat_ftl_files" | wc -l)
-        if [ -n "$cat_ftl_files" ]; then
-          echo "$cat_ftl_files"
-        else
-          echo "(no locale keys found)"
+        locale_file=$(find target/release/build -name "embedded_locales.rs" | head -1)
+        if [ -z "$locale_file" ]; then
+          echo "ERROR: Could not find embedded_locales.rs"
+          exit 1
         fi
-        echo "Total: $cat_locales files"
-        echo
-
-        # Analyze ls binary
-        echo "--- ls binary embedded .ftl files ---"
-        ls_ftl_files=$(strings target/release/ls | grep -o "[a-z_][a-z_]*/en-US\.ftl" | sort | uniq)
-        ls_locales=$(echo "$ls_ftl_files" | wc -l)
-        if [ -n "$ls_ftl_files" ]; then
-          echo "$ls_ftl_files"
+        locale_count=$(grep -c '/en-US\.ftl' "$locale_file")
+        echo "Cat binary has $locale_count embedded locales"
+        if [ "$locale_count" -le 5 ]; then
+          echo "✓ SUCCESS: Cat uses targeted locale embedding ($locale_count files)"
         else
-          echo "(no locale keys found)"
-        fi
-        echo "Total: $ls_locales files"
-        echo
-
-        # Analyze multicall binary
-        echo "--- multicall binary embedded .ftl files (first 10) ---"
-        multi_ftl_files=$(strings target/release/coreutils | grep -o "[a-z_][a-z_]*/en-US\.ftl" | sort | uniq)
-        multi_locales=$(echo "$multi_ftl_files" | wc -l)
-        if [ -n "$multi_ftl_files" ]; then
-          echo "$multi_ftl_files" | head -10
-          echo "... (showing first 10 of $multi_locales total files)"
-        else
-          echo "(no locale keys found)"
-        fi
-        echo
-
-        # Store counts for validation step
-        echo "cat_locales=$cat_locales" >> $GITHUB_ENV
-        echo "ls_locales=$ls_locales" >> $GITHUB_ENV
-        echo "multi_locales=$multi_locales" >> $GITHUB_ENV
-
-    - name: Validate cat binary locale embedding
-      shell: bash
-      run: |
-        ## Validate that cat binary only embeds its own locale files
-        echo "Validating cat binary locale embedding..."
-        if [ "$cat_locales" -le 5 ]; then
-          echo "✓ SUCCESS: cat binary uses targeted locale embedding ($cat_locales files)"
-        else
-          echo "✗ FAILURE: cat binary has too many embedded locale files ($cat_locales). Expected ≤ 5."
-          echo "This indicates LOCALE EMBEDDING REGRESSION - all locales are being embedded instead of just the target utility's locale."
-          echo "The optimization is not working correctly!"
+          echo "✗ FAILURE: Cat has too many locale files ($locale_count). Expected ≤ 5"
           exit 1
         fi
 
-    - name: Validate ls binary locale embedding
-      shell: bash
+  l10n_locale_embedding_ls:
+    name: L10n/Locale Embedding - Ls Utility
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+      with:
+        # Use different cache key for each build to avoid conflicts
+        key: ls-locale-embedding
+    - name: Install prerequisites
+      run: sudo apt-get -y update && sudo apt-get -y install libselinux1-dev build-essential
+    - name: Build ls with targeted locale embedding
+      run: UUCORE_TARGET_UTIL=ls cargo build -p uu_ls --release
+    - name: Verify ls locale count
       run: |
-        ## Validate that ls binary only embeds its own locale files
-        echo "Validating ls binary locale embedding..."
-        if [ "$ls_locales" -le 5 ]; then
-          echo "✓ SUCCESS: ls binary uses targeted locale embedding ($ls_locales files)"
+        locale_file=$(find target/release/build -name "embedded_locales.rs" | head -1)
+        if [ -z "$locale_file" ]; then
+          echo "ERROR: Could not find embedded_locales.rs"
+          exit 1
+        fi
+        locale_count=$(grep -c '/en-US\.ftl' "$locale_file")
+        echo "Ls binary has $locale_count embedded locales"
+        if [ "$locale_count" -le 5 ]; then
+          echo "✓ SUCCESS: Ls uses targeted locale embedding ($locale_count files)"
         else
-          echo "✗ FAILURE: ls binary has too many embedded locale files ($ls_locales). Expected ≤ 5."
-          echo "This indicates LOCALE EMBEDDING REGRESSION - all locales are being embedded instead of just the target utility's locale."
-          echo "The optimization is not working correctly!"
+          echo "✗ FAILURE: Ls has too many locale files ($locale_count). Expected ≤ 5"
           exit 1
         fi
 
-    - name: Validate multicall binary locale embedding
-      shell: bash
+  l10n_locale_embedding_multicall:
+    name: L10n/Locale Embedding - Multicall Binary
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+      with:
+        # Use different cache key for each build to avoid conflicts
+        key: multicall-locale-embedding
+    - name: Install prerequisites
+      run: sudo apt-get -y update && sudo apt-get -y install libselinux1-dev build-essential
+    - name: Build multicall binary with all locales
+      run: cargo build --release
+    - name: Verify multicall locale count
       run: |
-        ## Validate that multicall binary embeds all utility locale files
-        echo "Validating multicall binary locale embedding..."
-        if [ "$multi_locales" -ge 80 ]; then
-          echo "✓ SUCCESS: multicall binary has all locales ($multi_locales files)"
+        locale_file=$(find target/release/build -name "embedded_locales.rs" | head -1)
+        if [ -z "$locale_file" ]; then
+          echo "ERROR: Could not find embedded_locales.rs"
+          exit 1
+        fi
+        locale_count=$(grep -c '/en-US\.ftl' "$locale_file")
+        echo "Multicall binary has $locale_count embedded locales"
+        echo "First 10 locales:"
+        grep -o '[a-z_][a-z_0-9]*/en-US\.ftl' "$locale_file" | head -10
+        if [ "$locale_count" -ge 80 ]; then
+          echo "✓ SUCCESS: Multicall has all locales ($locale_count files)"
         else
-          echo "✗ FAILURE: multicall binary has too few embedded locale files ($multi_locales). Expected ≥ 80."
-          echo "This indicates the multicall binary is not getting all required locales."
+          echo "✗ FAILURE: Multicall has too few locale files ($locale_count). Expected ≥ 80"
           exit 1
         fi
 
-    - name: Finalize locale embedding tests
-      shell: bash
-      run: |
-        ## Clean up and report overall test results
-        rm -f test.txt target/uucore_target_util.txt
-        echo "✓ All locale embedding regression tests passed"
-        echo "Summary:"
-        echo "  - cat binary: $cat_locales locale files (targeted embedding)"
-        echo "  - ls binary: $ls_locales locale files (targeted embedding)"
-        echo "  - multicall binary: $multi_locales locale files (full embedding)"
+  l10n_locale_embedding_regression_test:
+    name: L10n/Locale Embedding Regression Test
+    runs-on: ubuntu-latest
+    needs: [l10n_locale_embedding_cat, l10n_locale_embedding_ls, l10n_locale_embedding_multicall]
+    steps:
+    - name: All locale embedding tests passed
+      run: echo "✓ All locale embedding tests passed successfully"

@@ -16,7 +16,6 @@ use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use thiserror::Error;
-use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::format_usage;
@@ -413,7 +412,7 @@ impl Line {
 
 struct State<'a> {
     key: usize,
-    file_name: &'a str,
+    file_name: &'a OsString,
     file_num: FileNum,
     print_unpaired: bool,
     lines: Split<Box<dyn BufRead + 'a>>,
@@ -427,7 +426,7 @@ struct State<'a> {
 impl<'a> State<'a> {
     fn new(
         file_num: FileNum,
-        name: &'a str,
+        name: &'a OsString,
         stdin: &'a Stdin,
         key: usize,
         line_ending: LineEnding,
@@ -436,7 +435,8 @@ impl<'a> State<'a> {
         let file_buf = if name == "-" {
             Box::new(stdin.lock()) as Box<dyn BufRead>
         } else {
-            let file = File::open(name).map_err_context(|| format!("{}", name.maybe_quote()))?;
+            let file = File::open(name)
+                .map_err_context(|| format!("{}", name.to_string_lossy().maybe_quote()))?;
             Box::new(BufReader::new(file)) as Box<dyn BufRead>
         };
 
@@ -639,7 +639,7 @@ impl<'a> State<'a> {
                 && (input.check_order == CheckOrder::Enabled
                     || (self.has_unpaired && !self.has_failed))
             {
-                let err_msg = translate!("join-error-not-sorted", "file" => self.file_name.maybe_quote(), "line_num" => self.line_num, "content" => String::from_utf8_lossy(&line.string));
+                let err_msg = translate!("join-error-not-sorted", "file" => self.file_name.to_string_lossy().maybe_quote(), "line_num" => self.line_num, "content" => String::from_utf8_lossy(&line.string));
                 // This is fatal if the check is enabled.
                 if input.check_order == CheckOrder::Enabled {
                     return Err(JoinError::UnorderedInput(err_msg));
@@ -822,12 +822,12 @@ fn parse_settings(matches: &clap::ArgMatches) -> UResult<Settings> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let settings = parse_settings(&matches)?;
 
-    let file1 = matches.get_one::<String>("file1").unwrap();
-    let file2 = matches.get_one::<String>("file2").unwrap();
+    let file1 = matches.get_one::<OsString>("file1").unwrap();
+    let file2 = matches.get_one::<OsString>("file2").unwrap();
 
     if file1 == "-" && file2 == "-" {
         return Err(USimpleError::new(
@@ -951,6 +951,7 @@ pub fn uu_app() -> Command {
                 .required(true)
                 .value_name("FILE1")
                 .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString))
                 .hide(true),
         )
         .arg(
@@ -958,11 +959,17 @@ pub fn uu_app() -> Command {
                 .required(true)
                 .value_name("FILE2")
                 .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString))
                 .hide(true),
         )
 }
 
-fn exec<Sep: Separator>(file1: &str, file2: &str, settings: Settings, sep: Sep) -> UResult<()> {
+fn exec<Sep: Separator>(
+    file1: &OsString,
+    file2: &OsString,
+    settings: Settings,
+    sep: Sep,
+) -> UResult<()> {
     let stdin = stdin();
 
     let mut state1 = State::new(

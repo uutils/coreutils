@@ -5,8 +5,12 @@
 
 // spell-checker:ignore (ToDO) retcode
 
-use clap::{Arg, ArgAction, ArgMatches, Command, builder::NonEmptyStringValueParser};
+use clap::{
+    Arg, ArgAction, ArgMatches, Command,
+    builder::{TypedValueParser, ValueParserFactory},
+};
 use std::{
+    ffi::{OsStr, OsString},
     io::{Write, stdout},
     path::{Path, PathBuf},
 };
@@ -14,7 +18,7 @@ use uucore::fs::make_path_relative_to;
 use uucore::translate;
 use uucore::{
     display::{Quotable, print_verbatim},
-    error::{FromIo, UClapError, UResult},
+    error::{FromIo, UResult},
     format_usage,
     fs::{MissingHandling, ResolveMode, canonicalize},
     line_ending::LineEnding,
@@ -27,20 +31,54 @@ const OPT_ZERO: &str = "zero";
 const OPT_PHYSICAL: &str = "physical";
 const OPT_LOGICAL: &str = "logical";
 const OPT_CANONICALIZE_MISSING: &str = "canonicalize-missing";
+const OPT_CANONICALIZE: &str = "canonicalize";
 const OPT_CANONICALIZE_EXISTING: &str = "canonicalize-existing";
 const OPT_RELATIVE_TO: &str = "relative-to";
 const OPT_RELATIVE_BASE: &str = "relative-base";
 
 const ARG_FILES: &str = "files";
 
+/// Custom parser that validates `OsString` is not empty
+#[derive(Clone, Debug)]
+struct NonEmptyOsStringParser;
+
+impl TypedValueParser for NonEmptyOsStringParser {
+    type Value = OsString;
+
+    fn parse_ref(
+        &self,
+        _cmd: &Command,
+        _arg: Option<&Arg>,
+        value: &OsStr,
+    ) -> Result<Self::Value, clap::Error> {
+        if value.is_empty() {
+            let mut err = clap::Error::new(clap::error::ErrorKind::ValueValidation);
+            err.insert(
+                clap::error::ContextKind::Custom,
+                clap::error::ContextValue::String(translate!("realpath-invalid-empty-operand")),
+            );
+            return Err(err);
+        }
+        Ok(value.to_os_string())
+    }
+}
+
+impl ValueParserFactory for NonEmptyOsStringParser {
+    type Parser = Self;
+
+    fn value_parser() -> Self::Parser {
+        Self
+    }
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args).with_exit_code(1)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     /*  the list of files */
 
     let paths: Vec<PathBuf> = matches
-        .get_many::<String>(ARG_FILES)
+        .get_many::<OsString>(ARG_FILES)
         .unwrap()
         .map(PathBuf::from)
         .collect();
@@ -49,11 +87,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(OPT_ZERO));
     let quiet = matches.get_flag(OPT_QUIET);
     let logical = matches.get_flag(OPT_LOGICAL);
-    let can_mode = if matches.get_flag(OPT_CANONICALIZE_EXISTING) {
-        MissingHandling::Existing
-    } else if matches.get_flag(OPT_CANONICALIZE_MISSING) {
+    let can_mode = if matches.get_flag(OPT_CANONICALIZE_MISSING) {
         MissingHandling::Missing
+    } else if matches.get_flag(OPT_CANONICALIZE_EXISTING) {
+        // -e: all components must exist
+        // Despite the name, MissingHandling::Existing requires all components to exist
+        MissingHandling::Existing
     } else {
+        // Default behavior (same as -E): all but last component must exist
+        // MissingHandling::Normal allows the final component to not exist
         MissingHandling::Normal
     };
     let resolve_mode = if strip {
@@ -128,9 +170,18 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new(OPT_CANONICALIZE)
+                .short('E')
+                .long(OPT_CANONICALIZE)
+                .overrides_with_all([OPT_CANONICALIZE_EXISTING, OPT_CANONICALIZE_MISSING])
+                .help(translate!("realpath-help-canonicalize"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new(OPT_CANONICALIZE_EXISTING)
                 .short('e')
                 .long(OPT_CANONICALIZE_EXISTING)
+                .overrides_with_all([OPT_CANONICALIZE, OPT_CANONICALIZE_MISSING])
                 .help(translate!("realpath-help-canonicalize-existing"))
                 .action(ArgAction::SetTrue),
         )
@@ -138,6 +189,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_CANONICALIZE_MISSING)
                 .short('m')
                 .long(OPT_CANONICALIZE_MISSING)
+                .overrides_with_all([OPT_CANONICALIZE, OPT_CANONICALIZE_EXISTING])
                 .help(translate!("realpath-help-canonicalize-missing"))
                 .action(ArgAction::SetTrue),
         )
@@ -145,21 +197,21 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_RELATIVE_TO)
                 .long(OPT_RELATIVE_TO)
                 .value_name("DIR")
-                .value_parser(NonEmptyStringValueParser::new())
+                .value_parser(NonEmptyOsStringParser)
                 .help(translate!("realpath-help-relative-to")),
         )
         .arg(
             Arg::new(OPT_RELATIVE_BASE)
                 .long(OPT_RELATIVE_BASE)
                 .value_name("DIR")
-                .value_parser(NonEmptyStringValueParser::new())
+                .value_parser(NonEmptyOsStringParser)
                 .help(translate!("realpath-help-relative-base")),
         )
         .arg(
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .required(true)
-                .value_parser(NonEmptyStringValueParser::new())
+                .value_parser(NonEmptyOsStringParser)
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }
@@ -174,10 +226,10 @@ fn prepare_relative_options(
     resolve_mode: ResolveMode,
 ) -> UResult<(Option<PathBuf>, Option<PathBuf>)> {
     let relative_to = matches
-        .get_one::<String>(OPT_RELATIVE_TO)
+        .get_one::<OsString>(OPT_RELATIVE_TO)
         .map(PathBuf::from);
     let relative_base = matches
-        .get_one::<String>(OPT_RELATIVE_BASE)
+        .get_one::<OsString>(OPT_RELATIVE_BASE)
         .map(PathBuf::from);
     let relative_to = canonicalize_relative_option(relative_to, can_mode, resolve_mode)?;
     let relative_base = canonicalize_relative_option(relative_base, can_mode, resolve_mode)?;

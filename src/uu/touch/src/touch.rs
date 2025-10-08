@@ -20,7 +20,6 @@ use std::ffi::OsString;
 use std::fs::{self, File};
 use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
-use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
@@ -157,20 +156,20 @@ fn is_first_filename_timestamp(
     reference: Option<&OsString>,
     date: Option<&str>,
     timestamp: Option<&str>,
-    files: &[&String],
+    files: &[&OsString],
 ) -> bool {
-    if timestamp.is_none()
+    timestamp.is_none()
         && reference.is_none()
         && date.is_none()
         && files.len() >= 2
         // env check is last as the slowest op
         && matches!(std::env::var("_POSIX2_VERSION").as_deref(), Ok("199209"))
-    {
-        let s = files[0];
-        all_digits(s) && (s.len() == 8 || (s.len() == 10 && (69..=99).contains(&get_year(s))))
-    } else {
-        false
-    }
+        && files[0].to_str().is_some_and(is_timestamp)
+}
+
+// Check if string is a valid POSIX timestamp (8 digits or 10 digits with valid year range)
+fn is_timestamp(s: &str) -> bool {
+    all_digits(s) && (s.len() == 8 || (s.len() == 10 && (69..=99).contains(&get_year(s))))
 }
 
 /// Cycle the last two characters to the beginning of the string.
@@ -187,10 +186,10 @@ fn shr2(s: &str) -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let mut filenames: Vec<&String> = matches
-        .get_many::<String>(ARG_FILES)
+    let mut filenames: Vec<&OsString> = matches
+        .get_many::<OsString>(ARG_FILES)
         .ok_or_else(|| {
             USimpleError::new(
                 1,
@@ -211,10 +210,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|t| t.to_owned());
 
     if is_first_filename_timestamp(reference, date.as_deref(), timestamp.as_deref(), &filenames) {
-        timestamp = if filenames[0].len() == 10 {
-            Some(shr2(filenames[0]))
+        let first_file = filenames[0].to_str().unwrap();
+        timestamp = if first_file.len() == 10 {
+            Some(shr2(first_file))
         } else {
-            Some(filenames[0].to_string())
+            Some(first_file.to_string())
         };
         filenames = filenames[1..].to_vec();
     }
@@ -338,6 +338,7 @@ pub fn uu_app() -> Command {
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .num_args(1..)
+                .value_parser(clap::value_parser!(OsString))
                 .value_hint(clap::ValueHint::AnyPath),
         )
         .group(
