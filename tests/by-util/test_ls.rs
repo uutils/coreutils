@@ -3729,29 +3729,23 @@ fn test_ls_quoting_style_locale() {
     let at = &scene.fixtures;
     at.touch("file with spaces.txt");
 
-    // Test different locale-specific quote characters
-    // Each locale should use appropriate quotation marks for that language
+    // Test locale-specific quote characters available in CI environment
+    // CI only generates: en_US.UTF-8, fr_FR.UTF-8, es_ES.UTF-8, sv_SE.UTF-8
     let test_cases = vec![
         // English - ASCII double quotes
         ("en_US.UTF-8", "\"file with spaces.txt\""),
         // French - Guillemets (U+00AB, U+00BB)
         ("fr_FR.UTF-8", "«file with spaces.txt»"),
-        // German - Low-9 and high quotes (U+201E, U+201C)
-        ("de_DE.UTF-8", "„file with spaces.txt“"),
-        // Japanese - Corner brackets (U+300C, U+300D)
-        ("ja_JP.UTF-8", "「file with spaces.txt」"),
-        // Chinese - CJK curly quotes (U+201C, U+201D)
-        ("zh_CN.UTF-8", "“file with spaces.txt”"),
-        // Russian - Guillemets (U+00AB, U+00BB)
-        ("ru_RU.UTF-8", "«file with spaces.txt»"),
         // Spanish - Guillemets (U+00AB, U+00BB)
         ("es_ES.UTF-8", "«file with spaces.txt»"),
-        // Polish - Low-9 double quotes (U+201E, U+201D)
-        ("pl_PL.UTF-8", "„file with spaces.txt”"),
-        // Default/unset locale - ASCII double quotes
+        // Swedish - ASCII double quotes (for Nordic languages)
+        ("sv_SE.UTF-8", "\"file with spaces.txt\""),
+        // C/POSIX locales - ASCII double quotes
         ("C", "\"file with spaces.txt\""),
         ("POSIX", "\"file with spaces.txt\""),
     ];
+    // Note: Additional locales (de_DE, ja_JP, zh_CN, pl_PL, ru_RU) are tested
+    // in the locale_quotes unit tests but not here to avoid CI locale availability issues
 
     for (locale, expected_output) in test_cases {
         scene
