@@ -1189,11 +1189,14 @@ jobs:
 
   test_separately:
     name: Separate Builds
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        job:
+          - { os: ubuntu-latest  , features: feat_os_unix }
+          - { os: macos-latest   , features: feat_os_macos }
+          - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v5
       with:
@@ -1203,7 +1206,8 @@ jobs:
     - name: build and test all programs individually
       shell: bash
       run: |
-        for f in $(util/show-utils.sh)
+        CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ;
+        for f in $(util/show-utils.sh ${CARGO_FEATURES_OPTION})
         do
           echo "Building and testing $f"
           cargo test -p "uu_$f" || exit 1
@@ -1212,12 +1216,14 @@ jobs:
   test_all_features:
     name: Test all features separately
     needs: [ min_version, deps ]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        # windows-latest - https://github.com/uutils/coreutils/issues/7044
+        job:
+          - { os: ubuntu-latest  , features: feat_os_unix }
+          - { os: macos-latest   , features: feat_os_macos }
+          # - { os: windows-latest , features: feat_os_windows } https://github.com/uutils/coreutils/issues/7044
     steps:
     - uses: actions/checkout@v5
       with:
@@ -1227,7 +1233,8 @@ jobs:
     - name: build and test all features individually
       shell: bash
       run: |
-        for f in $(util/show-utils.sh)
+        CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ;
+        for f in $(util/show-utils.sh ${CARGO_FEATURES_OPTION})
         do
           echo "Running tests with --features=$f and --no-default-features"
           cargo test --features=$f --no-default-features
