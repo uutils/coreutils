@@ -588,7 +588,7 @@ fn stat(path: &Path, follow: bool) -> std::io::Result<(FileTime, FileTime)> {
     ))
 }
 
-fn parse_date(ref_time: DateTime<Local>, s: &str) -> Result<FileTime, TouchError> {
+fn parse_date(_ref_time: DateTime<Local>, s: &str) -> Result<FileTime, TouchError> {
     // This isn't actually compatible with GNU touch, but there doesn't seem to
     // be any simple specification for what format this parameter allows and I'm
     // not about to implement GNU parse_datetime.
@@ -637,7 +637,20 @@ fn parse_date(ref_time: DateTime<Local>, s: &str) -> Result<FileTime, TouchError
         }
     }
 
-    if let Ok(dt) = parse_datetime::parse_datetime_at_date(ref_time, s) {
+    // **parse_datetime 0.13 API change:**
+    // Previously (0.11): parse_datetime_at_date(chrono) → chrono::DateTime
+    // Now (0.13):        parse_datetime() → jiff::Zoned
+    //
+    // Since touch still uses chrono types internally, we convert:
+    // jiff::Zoned → Unix timestamp → chrono::DateTime
+    //
+    // TODO: Consider migrating touch to jiff to eliminate this conversion
+    if let Ok(zoned) = parse_datetime::parse_datetime(s) {
+        let timestamp = zoned.timestamp();
+        let dt =
+            DateTime::from_timestamp(timestamp.as_second(), timestamp.subsec_nanosecond() as u32)
+                .map(|dt| dt.with_timezone(&Local))
+                .ok_or_else(|| TouchError::InvalidDateFormat(s.to_owned()))?;
         return Ok(datetime_to_filetime(&dt));
     }
 
