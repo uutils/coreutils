@@ -26,7 +26,7 @@ mod prn_int;
 
 use std::cmp;
 use std::fmt::Write;
-use std::io::BufReader;
+use std::io::{BufReader, Read};
 
 use crate::byteorder_io::ByteOrder;
 use crate::formatter_item_info::FormatWriter;
@@ -76,6 +76,7 @@ struct OdOptions {
     line_bytes: usize,
     output_duplicates: bool,
     radix: Radix,
+    string_min_length: Option<usize>,
 }
 
 impl OdOptions {
@@ -169,6 +170,16 @@ impl OdOptions {
             },
         };
 
+        let string_min_length = match parse_bytes_option(matches, options::STRINGS)? {
+            None => None,
+            Some(n) => Some(usize::try_from(n).map_err(|_| {
+                USimpleError::new(
+                    1,
+                    translate!("od-error-argument-too-large", "option" => "-S", "value" => n.to_string()),
+                )
+            })?),
+        };
+
         let radix = match matches.get_one::<String>(options::ADDRESS_RADIX) {
             None => Radix::Octal,
             Some(s) => {
@@ -208,6 +219,7 @@ impl OdOptions {
             line_bytes,
             output_duplicates,
             radix,
+            string_min_length,
         })
     }
 }
@@ -224,28 +236,39 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let od_options = OdOptions::new(&clap_matches, &args)?;
 
-    let mut input_offset =
-        InputOffset::new(od_options.radix, od_options.skip_bytes, od_options.label);
+    // Check if we're in strings mode
+    if let Some(min_length) = od_options.string_min_length {
+        extract_strings_from_input(
+            &od_options.input_strings,
+            od_options.skip_bytes,
+            od_options.read_bytes,
+            min_length,
+            od_options.radix,
+        )
+    } else {
+        let mut input_offset =
+            InputOffset::new(od_options.radix, od_options.skip_bytes, od_options.label);
 
-    let mut input = open_input_peek_reader(
-        &od_options.input_strings,
-        od_options.skip_bytes,
-        od_options.read_bytes,
-    );
-    let mut input_decoder = InputDecoder::new(
-        &mut input,
-        od_options.line_bytes,
-        PEEK_BUFFER_SIZE,
-        od_options.byte_order,
-    );
+        let mut input = open_input_peek_reader(
+            &od_options.input_strings,
+            od_options.skip_bytes,
+            od_options.read_bytes,
+        );
+        let mut input_decoder = InputDecoder::new(
+            &mut input,
+            od_options.line_bytes,
+            PEEK_BUFFER_SIZE,
+            od_options.byte_order,
+        );
 
-    let output_info = OutputInfo::new(
-        od_options.line_bytes,
-        &od_options.formats[..],
-        od_options.output_duplicates,
-    );
+        let output_info = OutputInfo::new(
+            od_options.line_bytes,
+            &od_options.formats[..],
+            od_options.output_duplicates,
+        );
 
-    odfunc(&mut input_offset, &mut input_decoder, &output_info)
+        odfunc(&mut input_offset, &mut input_decoder, &output_info)
+    }
 }
 
 pub fn uu_app() -> Command {
@@ -263,7 +286,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::HELP)
                 .long(options::HELP)
                 .help(translate!("od-help-help"))
-                .action(ArgAction::Help)
+                .action(ArgAction::Help),
         )
         .arg(
             Arg::new(options::ADDRESS_RADIX)
@@ -297,10 +320,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::STRINGS)
                 .short('S')
                 .long(options::STRINGS)
-                .help(
-                    "NotImplemented: output strings of at least BYTES graphic chars. 3 is assumed when \
-                     BYTES is not specified.",
-                )
+                .help(translate!("od-help-strings"))
+                .num_args(0..=1)
                 .default_missing_value("3")
                 .value_name("BYTES"),
         )
@@ -379,8 +400,8 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new("O")
                 .short('O')
-                .help("octal 4-byte units")
-                .action(ArgAction::SetTrue)
+                .help(translate!("od-help-capital-o"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("s")
@@ -526,6 +547,112 @@ where
     }
 
     if input_decoder.has_error() {
+        Err(1.into())
+    } else {
+        Ok(())
+    }
+}
+
+/// Extract and display printable strings from input (od -S option)
+fn extract_strings_from_input(
+    input_strings: &[String],
+    skip_bytes: u64,
+    read_bytes: Option<u64>,
+    min_length: usize,
+    radix: Radix,
+) -> UResult<()> {
+    let inputs = input_strings
+        .iter()
+        .map(|w| match w as &str {
+            "-" => InputSource::Stdin,
+            x => InputSource::FileName(x),
+        })
+        .collect::<Vec<_>>();
+
+    let mut mf = MultifileReader::new(inputs);
+
+    // Apply skip_bytes by reading and discarding
+    let mut skipped = 0u64;
+    while skipped < skip_bytes {
+        let to_skip = std::cmp::min(8192, skip_bytes - skipped);
+        let mut skip_buf = vec![0u8; to_skip as usize];
+        match mf.read(&mut skip_buf) {
+            Ok(0) => break, // EOF reached
+            Ok(n) => skipped += n as u64,
+            Err(_) => break,
+        }
+    }
+
+    // Helper function to format and print a string
+    let print_string = |offset: u64, string: &[u8]| {
+        let string_content = String::from_utf8_lossy(string);
+        match radix {
+            Radix::NoPrefix => println!("{string_content}"),
+            Radix::Decimal => println!("{offset:07} {string_content}"),
+            Radix::Hexadecimal => println!("{offset:07x} {string_content}"),
+            Radix::Octal => println!("{offset:07o} {string_content}"),
+        }
+    };
+
+    let mut current_string = Vec::new();
+    let mut string_start_offset = 0u64;
+    let mut current_offset = skip_bytes;
+    let mut bytes_read = 0u64;
+    let mut buf = [0u8; 1];
+
+    loop {
+        // Check if we've reached the read_bytes limit
+        if let Some(limit) = read_bytes {
+            if bytes_read >= limit {
+                // Special case: when -N limit is reached with a pending string
+                // that meets min_length, output it even without null terminator
+                if current_string.len() >= min_length {
+                    print_string(string_start_offset, &current_string);
+                }
+                break;
+            }
+        }
+
+        // Read one byte at a time
+        match mf.read(&mut buf) {
+            Ok(0) => break, // EOF
+            Ok(_) => {
+                bytes_read += 1;
+                let byte = buf[0];
+
+                // Check if it's a printable character (including space)
+                if (0x20..=0x7E).contains(&byte) {
+                    if current_string.is_empty() {
+                        string_start_offset = current_offset;
+                    }
+                    current_string.push(byte);
+                } else {
+                    // Either null terminator or non-printable character
+                    if byte == 0 && current_string.len() >= min_length {
+                        // Null terminator found with valid string
+                        print_string(string_start_offset, &current_string);
+                    }
+                    current_string.clear();
+                }
+
+                current_offset += 1;
+            }
+            Err(e) => {
+                // Note: GNU od does not output unterminated strings at EOF
+                // Strings must be null-terminated to be output
+                if mf.has_error() {
+                    show_error!("{}", e);
+                    return Err(1.into());
+                }
+                break;
+            }
+        }
+    }
+
+    // GNU od doesn't output an offset when strings mode finds no valid strings
+    // This includes cases with only unterminated or too-short strings
+
+    if mf.has_error() {
         Err(1.into())
     } else {
         Ok(())
