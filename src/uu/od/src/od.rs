@@ -79,6 +79,20 @@ struct OdOptions {
     string_min_length: Option<usize>,
 }
 
+/// Helper function to parse bytes with error handling
+fn parse_bytes_option(matches: &ArgMatches, option_name: &str) -> UResult<Option<u64>> {
+    match matches.get_one::<String>(option_name) {
+        None => Ok(None),
+        Some(s) => match parse_number_of_bytes(s) {
+            Ok(n) => Ok(Some(n)),
+            Err(e) => Err(USimpleError::new(
+                1,
+                format_error_message(&e, s, option_name),
+            )),
+        },
+    }
+}
+
 impl OdOptions {
     fn new(matches: &ArgMatches, args: &[String]) -> UResult<Self> {
         let byte_order = if let Some(s) = matches.get_one::<String>(options::ENDIAN) {
@@ -96,18 +110,7 @@ impl OdOptions {
             ByteOrder::Native
         };
 
-        let mut skip_bytes = match matches.get_one::<String>(options::SKIP_BYTES) {
-            None => 0,
-            Some(s) => match parse_number_of_bytes(s) {
-                Ok(n) => n,
-                Err(e) => {
-                    return Err(USimpleError::new(
-                        1,
-                        format_error_message(&e, s, options::SKIP_BYTES),
-                    ));
-                }
-            },
-        };
+        let mut skip_bytes = parse_bytes_option(matches, options::SKIP_BYTES)?.unwrap_or(0);
 
         let mut label: Option<u64> = None;
 
@@ -157,18 +160,7 @@ impl OdOptions {
 
         let output_duplicates = matches.get_flag(options::OUTPUT_DUPLICATES);
 
-        let read_bytes = match matches.get_one::<String>(options::READ_BYTES) {
-            None => None,
-            Some(s) => match parse_number_of_bytes(s) {
-                Ok(n) => Some(n),
-                Err(e) => {
-                    return Err(USimpleError::new(
-                        1,
-                        format_error_message(&e, s, options::READ_BYTES),
-                    ));
-                }
-            },
-        };
+        let read_bytes = parse_bytes_option(matches, options::READ_BYTES)?;
 
         let string_min_length = match parse_bytes_option(matches, options::STRINGS)? {
             None => None,
@@ -561,14 +553,7 @@ fn extract_strings_from_input(
     min_length: usize,
     radix: Radix,
 ) -> UResult<()> {
-    let inputs = input_strings
-        .iter()
-        .map(|w| match w as &str {
-            "-" => InputSource::Stdin,
-            x => InputSource::FileName(x),
-        })
-        .collect::<Vec<_>>();
-
+    let inputs = map_input_strings(input_strings);
     let mut mf = MultifileReader::new(inputs);
 
     // Apply skip_bytes by reading and discarding
@@ -722,6 +707,17 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
     }
 }
 
+/// Helper function to convert input strings to InputSource
+fn map_input_strings(input_strings: &[String]) -> Vec<InputSource<'_>> {
+    input_strings
+        .iter()
+        .map(|w| match w as &str {
+            "-" => InputSource::Stdin,
+            x => InputSource::FileName(x),
+        })
+        .collect()
+}
+
 /// returns a reader implementing `PeekRead + Read + HasError` providing the combined input
 ///
 /// `skip_bytes` is the number of bytes skipped from the input
@@ -732,14 +728,7 @@ fn open_input_peek_reader(
     read_bytes: Option<u64>,
 ) -> PeekReader<BufReader<PartialReader<MultifileReader<'_>>>> {
     // should return  "impl PeekRead + Read + HasError" when supported in (stable) rust
-    let inputs = input_strings
-        .iter()
-        .map(|w| match w as &str {
-            "-" => InputSource::Stdin,
-            x => InputSource::FileName(x),
-        })
-        .collect::<Vec<_>>();
-
+    let inputs = map_input_strings(input_strings);
     let mf = MultifileReader::new(inputs);
     let pr = PartialReader::new(mf, skip_bytes, read_bytes);
     // Add a BufReader over the top of the PartialReader. This will have the
