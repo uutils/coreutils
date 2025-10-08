@@ -6,7 +6,6 @@ MULTICALL       ?= n
 COMPLETIONS     ?= y
 MANPAGES        ?= y
 LOCALES         ?= y
-INSTALL         ?= install
 ifneq (,$(filter install, $(MAKECMDGOALS)))
 override PROFILE:=release
 endif
@@ -52,6 +51,21 @@ BUILDDIR      := $(BASEDIR)/target/${PROFILE}
 endif
 PKG_BUILDDIR  := $(BUILDDIR)/deps
 DOCSDIR       := $(BASEDIR)/docs
+
+# Bootstrap protection: When uutils is installed as system coreutils (e.g., on
+# Gentoo), the system 'install' may be broken or missing, causing build failures.
+# Use the just-built 'install' binary to avoid this chicken-and-egg problem.
+# Falls back to system 'install' for first-time builds.
+ifneq ($(wildcard $(BUILDDIR)/coreutils),)
+  # Use multicall binary's install command if it exists
+  INSTALL ?= $(BUILDDIR)/coreutils install
+else ifneq ($(wildcard $(BUILDDIR)/install),)
+  # Use standalone install binary if built without multicall
+  INSTALL ?= $(BUILDDIR)/install
+else
+  # Fall back to system install command for first build
+  INSTALL ?= install
+endif
 
 BUSYBOX_ROOT := $(BASEDIR)/tmp
 BUSYBOX_VER  := 1.36.1
