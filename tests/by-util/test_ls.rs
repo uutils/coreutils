@@ -3724,6 +3724,57 @@ fn test_ls_quoting_style_arg_overrides_env_var() {
 }
 
 #[test]
+fn test_ls_quoting_style_locale() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file with spaces.txt");
+
+    // Test different locale-specific quote characters
+    // Each locale should use appropriate quotation marks for that language
+    let test_cases = vec![
+        // English - ASCII double quotes
+        ("en_US.UTF-8", "\"file with spaces.txt\""),
+        // French - Guillemets (U+00AB, U+00BB)
+        ("fr_FR.UTF-8", "«file with spaces.txt»"),
+        // German - Low-9 and high quotes (U+201E, U+201C)
+        ("de_DE.UTF-8", "„file with spaces.txt“"),
+        // Japanese - Corner brackets (U+300C, U+300D)
+        ("ja_JP.UTF-8", "「file with spaces.txt」"),
+        // Chinese - CJK curly quotes (U+201C, U+201D)
+        ("zh_CN.UTF-8", "“file with spaces.txt”"),
+        // Russian - Guillemets (U+00AB, U+00BB)
+        ("ru_RU.UTF-8", "«file with spaces.txt»"),
+        // Spanish - Guillemets (U+00AB, U+00BB)
+        ("es_ES.UTF-8", "«file with spaces.txt»"),
+        // Polish - Low-9 double quotes (U+201E, U+201D)
+        ("pl_PL.UTF-8", "„file with spaces.txt”"),
+        // Default/unset locale - ASCII double quotes
+        ("C", "\"file with spaces.txt\""),
+        ("POSIX", "\"file with spaces.txt\""),
+    ];
+
+    for (locale, expected_output) in test_cases {
+        scene
+            .ucmd()
+            .env("LC_ALL", locale)
+            .arg("--quoting-style=locale")
+            .arg("file with spaces.txt")
+            .succeeds()
+            .stdout_only(format!("{expected_output}\n"));
+    }
+
+    // Test escape sequences work with locale quoting
+    at.touch("newline\nfile");
+    scene
+        .ucmd()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("--quoting-style=locale")
+        .arg("newline\nfile")
+        .succeeds()
+        .stdout_only("«newline\\nfile»\n");
+}
+
+#[test]
 fn test_ls_quoting_and_color() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
