@@ -266,36 +266,50 @@ impl SupportsFastDecodeAndEncode for Base58Wrapper {
             return Ok(());
         }
 
-        // Convert bytes to big integer
-        let mut num: Vec<u32> = Vec::new();
+        // Convert bytes to big integer (Vec<u32> in little-endian format)
+        let mut num = Vec::with_capacity(input_trimmed.len().div_ceil(4) + 1);
         for &byte in input_trimmed {
-            let mut carry = byte as u32;
+            let mut carry = byte as u64;
             for n in &mut num {
-                let tmp = (*n as u64) * 256 + carry as u64;
+                let tmp = (*n as u64) * 256 + carry;
                 *n = tmp as u32;
-                carry = (tmp >> 32) as u32;
+                carry = tmp >> 32;
             }
             if carry > 0 {
-                num.push(carry);
+                num.push(carry as u32);
             }
         }
 
         // Convert to base58
-        let mut result = Vec::new();
+        let mut result = Vec::with_capacity((input_trimmed.len() * 138 / 100) + 1);
         let alphabet = self.alphabet();
 
-        while !num.is_empty() && num.iter().any(|&n| n != 0) {
+        // Optimized check: stop when all elements are zero
+        while !num.is_empty() {
+            // Check if we're done (all zeros)
+            let mut all_zero = true;
             let mut carry = 0u64;
+
             for n in num.iter_mut().rev() {
                 let tmp = carry * (1u64 << 32) + *n as u64;
                 *n = (tmp / 58) as u32;
                 carry = tmp % 58;
+                if *n != 0 {
+                    all_zero = false;
+                }
             }
+
             result.push(alphabet[carry as usize]);
 
-            // Remove leading zeros
-            while num.last() == Some(&0) && num.len() > 1 {
-                num.pop();
+            if all_zero {
+                break;
+            }
+
+            // Trim trailing zeros less frequently
+            if num.len() > 1 && result.len() % 8 == 0 {
+                while num.last() == Some(&0) && num.len() > 1 {
+                    num.pop();
+                }
             }
         }
 
@@ -305,7 +319,7 @@ impl SupportsFastDecodeAndEncode for Base58Wrapper {
         }
 
         // Add result (reversed because we built it backwards)
-        for byte in result.into_iter().rev() {
+        for &byte in result.iter().rev() {
             output.push_back(byte);
         }
 
@@ -313,7 +327,10 @@ impl SupportsFastDecodeAndEncode for Base58Wrapper {
     }
 
     fn unpadded_multiple(&self) -> usize {
-        1 // Base58 doesn't use padding
+        // Base58 must encode the entire input as one big integer, not in chunks
+        // Use a very large value to effectively disable chunking, but avoid overflow
+        // when multiplied by ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE (1024) in base_common
+        usize::MAX / 2048
     }
 
     fn valid_decoding_multiple(&self) -> usize {

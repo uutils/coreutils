@@ -92,7 +92,7 @@ pub use crate::features::perms;
 pub use crate::features::pipes;
 #[cfg(all(unix, feature = "process"))]
 pub use crate::features::process;
-#[cfg(all(target_os = "linux", feature = "safe-traversal"))]
+#[cfg(target_os = "linux")]
 pub use crate::features::safe_traversal;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
 pub use crate::features::signals;
@@ -559,19 +559,19 @@ pub enum CharByte {
 
 impl From<char> for CharByte {
     fn from(value: char) -> Self {
-        CharByte::Char(value)
+        Self::Char(value)
     }
 }
 
 impl From<u8> for CharByte {
     fn from(value: u8) -> Self {
-        CharByte::Byte(value)
+        Self::Byte(value)
     }
 }
 
 impl From<&u8> for CharByte {
     fn from(value: &u8) -> Self {
-        CharByte::Byte(*value)
+        Self::Byte(*value)
     }
 }
 
@@ -588,7 +588,7 @@ impl Iterator for Utf8ChunkIterator<'_> {
 }
 
 impl<'a> From<Utf8Chunk<'a>> for Utf8ChunkIterator<'a> {
-    fn from(chk: Utf8Chunk<'a>) -> Utf8ChunkIterator<'a> {
+    fn from(chk: Utf8Chunk<'a>) -> Self {
         Self {
             iter: Box::new(
                 chk.valid()
@@ -609,7 +609,7 @@ pub struct CharByteIterator<'a> {
 impl<'a> CharByteIterator<'a> {
     /// Make a `CharByteIterator` from a byte slice.
     /// [`CharByteIterator`]
-    pub fn new(input: &'a [u8]) -> CharByteIterator<'a> {
+    pub fn new(input: &'a [u8]) -> Self {
         Self {
             iter: Box::new(input.utf8_chunks().flat_map(Utf8ChunkIterator::from)),
         }

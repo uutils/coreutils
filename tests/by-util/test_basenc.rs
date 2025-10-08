@@ -212,6 +212,31 @@ fn test_base58_decode() {
 }
 
 #[test]
+fn test_base58_large_file_no_chunking() {
+    // Regression test: base58 must process entire input as one big integer,
+    // not in 1024-byte chunks. This test ensures files >1024 bytes work correctly.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let filename = "large_file.txt";
+
+    // spell-checker:disable
+    let input = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(50);
+    // spell-checker:enable
+    at.write(filename, &input);
+
+    let result = ucmd.arg("--base58").arg(filename).succeeds();
+    let encoded = result.stdout_str();
+
+    // Verify the output ends with the expected suffix (matches GNU basenc output)
+    // spell-checker:disable
+    assert!(
+        encoded
+            .trim_end()
+            .ends_with("ZNRRacEnhrY83ZEYkpwWVZNFK5DFRasr\nw693NsNGtiQ9fYAj")
+    );
+    // spell-checker:enable
+}
+
+#[test]
 fn test_choose_last_encoding_base64() {
     new_ucmd!()
         .args(&[

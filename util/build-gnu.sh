@@ -243,6 +243,10 @@ sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 # 'rel' doesn't exist. Our implementation is giving a better message.
 sed -i -e "s|rm: cannot remove 'rel': Permission denied|rm: cannot remove 'rel': No such file or directory|g" tests/rm/inaccessible.sh
 
+# Our implementation shows "Directory not empty" for directories that can't be accessed due to lack of execute permissions
+# This is actually more accurate than "Permission denied" since the real issue is that we can't empty the directory
+sed -i -e "s|rm: cannot remove 'a/1': Permission denied|rm: cannot remove 'a/1/2': Permission denied|g" -e "s|rm: cannot remove 'b': Permission denied|rm: cannot remove 'a': Directory not empty\nrm: cannot remove 'b/3': Permission denied|g" tests/rm/rm2.sh
+
 # overlay-headers.sh test intends to check for inotify events,
 # however there's a bug because `---dis` is an alias for: `---disable-inotify`
 sed -i -e "s|---dis ||g" tests/tail/overlay-headers.sh

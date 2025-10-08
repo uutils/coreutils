@@ -130,10 +130,10 @@ impl From<&str> for MetadataTimeField {
     /// not supported), and the default branch should not be reached.
     fn from(value: &str) -> Self {
         match value {
-            "ctime" | "status" => MetadataTimeField::Change,
-            "access" | "atime" | "use" => MetadataTimeField::Access,
-            "mtime" | "modification" => MetadataTimeField::Modification,
-            "birth" | "creation" => MetadataTimeField::Birth,
+            "ctime" | "status" => Self::Change,
+            "access" | "atime" | "use" => Self::Access,
+            "mtime" | "modification" => Self::Modification,
+            "birth" | "creation" => Self::Birth,
             // below should never happen as clap already restricts the values.
             _ => unreachable!("Invalid metadata time field."),
         }

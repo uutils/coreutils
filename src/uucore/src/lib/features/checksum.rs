@@ -319,9 +319,9 @@ impl FileChecksumResult {
     /// either succeeded or failed.
     fn from_bool(checksum_correct: bool) -> Self {
         if checksum_correct {
-            FileChecksumResult::Ok
+            Self::Ok
         } else {
-            FileChecksumResult::Failed
+            Self::Failed
         }
     }
 
@@ -329,9 +329,9 @@ impl FileChecksumResult {
     /// comparison on STDOUT.
     fn can_display(&self, verbose: ChecksumVerbose) -> bool {
         match self {
-            FileChecksumResult::Ok => verbose.over_quiet(),
-            FileChecksumResult::Failed => verbose.over_status(),
-            FileChecksumResult::CantOpen => true,
+            Self::Ok => verbose.over_quiet(),
+            Self::Failed => verbose.over_status(),
+            Self::CantOpen => true,
         }
     }
 }
@@ -339,9 +339,9 @@ impl FileChecksumResult {
 impl Display for FileChecksumResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FileChecksumResult::Ok => write!(f, "OK"),
-            FileChecksumResult::Failed => write!(f, "FAILED"),
-            FileChecksumResult::CantOpen => write!(f, "FAILED open or read"),
+            Self::Ok => write!(f, "OK"),
+            Self::Failed => write!(f, "FAILED"),
+            Self::CantOpen => write!(f, "FAILED open or read"),
         }
     }
 }
@@ -557,7 +557,7 @@ impl LineFormat {
             algo_bit_len: algo_bits,
             checksum: checksum_utf8,
             filename: filename.to_vec(),
-            format: LineFormat::AlgoBased,
+            format: Self::AlgoBased,
         })
     }
 
@@ -587,7 +587,7 @@ impl LineFormat {
             algo_bit_len: None,
             checksum: checksum_utf8,
             filename: filename.to_vec(),
-            format: LineFormat::Untagged,
+            format: Self::Untagged,
         })
     }
 
@@ -619,7 +619,7 @@ impl LineFormat {
             algo_bit_len: None,
             checksum: checksum_utf8,
             filename: filename.to_vec(),
-            format: LineFormat::SingleSpace,
+            format: Self::SingleSpace,
         })
     }
 }

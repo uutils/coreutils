@@ -132,7 +132,7 @@ struct Graph<'input> {
 }
 
 impl<'input> Graph<'input> {
-    fn new(name: String) -> Graph<'input> {
+    fn new(name: String) -> Self {
         Self {
             name,
             nodes: HashMap::default(),

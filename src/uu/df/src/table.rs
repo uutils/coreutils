@@ -202,9 +202,9 @@ struct Cell {
 
 impl Cell {
     /// Create a cell, knowing that s contains only 1-length chars
-    fn from_ascii_string<T: AsRef<str>>(s: T) -> Cell {
+    fn from_ascii_string<T: AsRef<str>>(s: T) -> Self {
         let s = s.as_ref();
-        Cell {
+        Self {
             bytes: s.as_bytes().into(),
             width: s.len(),
         }
@@ -212,17 +212,17 @@ impl Cell {
 
     /// Create a cell from an unknown origin string that may contain
     /// wide characters.
-    fn from_string<T: AsRef<str>>(s: T) -> Cell {
+    fn from_string<T: AsRef<str>>(s: T) -> Self {
         let s = s.as_ref();
-        Cell {
+        Self {
             bytes: s.as_bytes().into(),
             width: UnicodeWidthStr::width(s),
         }
     }
 
     /// Create a cell from an `OsString`
-    fn from_os_string(os: &OsString) -> Cell {
-        Cell {
+    fn from_os_string(os: &OsString) -> Self {
+        Self {
             bytes: uucore::os_str_as_bytes(os).unwrap().to_vec(),
             width: UnicodeWidthStr::width(os.to_string_lossy().as_ref()),
         }

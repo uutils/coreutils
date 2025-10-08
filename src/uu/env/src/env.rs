@@ -72,7 +72,7 @@ pub enum EnvError {
 
 impl From<string_parser::Error> for EnvError {
     fn from(value: string_parser::Error) -> Self {
-        EnvError::EnvInternalError(value.peek_position, value)
+        Self::EnvInternalError(value.peek_position, value)
     }
 }
 

@@ -2,9 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+//
 // spell-checker:ignore contenta
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
+
+use uutests::{at_and_ucmd, new_ucmd};
 
 #[test]
 fn test_invalid_arg() {
@@ -280,4 +281,17 @@ fn test_one_nonexisting_file() {
         .arg("asdf.txt")
         .fails()
         .stderr_contains("asdf.txt: No such file or directory");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_non_utf8_filename() {
+    use std::os::unix::ffi::OsStringExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    std::fs::write(at.plus(&filename), b"        a\n").unwrap();
+
+    ucmd.arg(&filename).succeeds().stdout_is("\ta\n");
 }

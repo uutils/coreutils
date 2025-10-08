@@ -58,6 +58,30 @@ fn test_truncation_no_extra_space_in_after() {
 }
 
 #[test]
+fn gnu_ext_disabled_reference_calculation() {
+    let input = "Hello World Rust is good language";
+    let expected_output = concat!(
+        r#".xx "language" "" "Hello World Rust is good" "" ":1""#,
+        "\n",
+        r#".xx "" "Hello World" "Rust is good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Hello" "World Rust is good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Hello World Rust is" "good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Hello World Rust" "is good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Hello World Rust is good" "language" "" ":1""#,
+        "\n",
+    );
+    new_ucmd!()
+        .args(&["-G", "-A"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected_output);
+}
+
+#[test]
 fn gnu_ext_disabled_rightward_no_ref() {
     new_ucmd!()
         .args(&["-G", "-R", "input"])
