@@ -7090,3 +7090,49 @@ fn test_cp_recursive_files_ending_in_backslash() {
     ts.ucmd().args(&["-r", "a", "b"]).succeeds();
     assert!(at.file_exists("b/foo\\"));
 }
+
+#[test]
+fn test_cp_no_preserve_target_directory() {
+    /* Expected result:
+    ├── a
+    │   └── b
+    │       └── c
+    │           └── d
+    │               └── f1
+    ├── d
+    │   └── f1
+    └── e
+        ├── b
+        │   └── c
+        │       └── d
+        │           ├── c
+        │           │   └── d
+        │           │       └── f1
+        │           └── f1
+        ├── d
+        │   └── f1
+        ├── f2
+        └── f3
+     */
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir_all("a/b/c/d");
+    at.touch("a/b/c/d/f1");
+    ts.ucmd().args(&["-rT", "a", "e"]).succeeds();
+    at.touch("e/f2");
+    ts.ucmd().args(&["-rT", "a/", "e/"]).succeeds();
+    at.touch("e/f3");
+    ts.ucmd().args(&["-rvT", "a/b/c", "e/"]).succeeds();
+    ts.ucmd().args(&["-rvT", "a/b/", "e/b/c/d/"]).succeeds();
+    ts.ucmd().args(&["-rT", "a/b/c", "."]).succeeds();
+    assert!(!at.dir_exists("e/a"));
+    assert!(at.file_exists("e/b/c/d/f1"));
+    assert!(at.file_exists("e/b/c/d/c/d/f1"));
+    assert!(!at.dir_exists("e/c"));
+    assert!(!at.dir_exists("e/c/d/b"));
+    assert!(at.file_exists("e/d/f1"));
+    assert!(at.file_exists("./d/f1"));
+    assert!(at.file_exists("e/f2"));
+    assert!(at.file_exists("e/f3"));
+}
