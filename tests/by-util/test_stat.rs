@@ -435,6 +435,13 @@ fn test_quoting_style_locale() {
         .args(&["-c", "%N", "'"])
         .succeeds()
         .stdout_only("\"'\"\n");
+
+    // testing file having "
+    at.touch("\"");
+    ts.ucmd()
+        .args(&["-c", "%N", "\""])
+        .succeeds()
+        .stdout_only("\'\"\'\n");
 }
 
 #[test]
