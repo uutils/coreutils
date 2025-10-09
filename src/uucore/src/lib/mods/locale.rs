@@ -42,7 +42,7 @@ pub enum LocalizationError {
 
 impl From<std::io::Error> for LocalizationError {
     fn from(error: std::io::Error) -> Self {
-        LocalizationError::Io {
+        Self::Io {
             source: error,
             path: PathBuf::from("<unknown>"),
         }

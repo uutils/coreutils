@@ -175,11 +175,11 @@ impl Default for ReflinkMode {
     fn default() -> Self {
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
         {
-            ReflinkMode::Auto
+            Self::Auto
         }
         #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
         {
-            ReflinkMode::Never
+            Self::Never
         }
     }
 }
