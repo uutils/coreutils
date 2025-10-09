@@ -9,8 +9,9 @@
 #[cfg(windows)]
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::convert::identity;
 use std::env;
-use std::fs;
+use std::fs::{self, exists};
 use std::io;
 use std::path::{Path, PathBuf, StripPrefixError};
 
@@ -20,10 +21,9 @@ use uucore::error::UIoError;
 use uucore::fs::{
     FileInformation, MissingHandling, ResolveMode, canonicalize, path_ends_with_terminator,
 };
-use uucore::translate;
-
 use uucore::show;
 use uucore::show_error;
+use uucore::translate;
 use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
@@ -194,15 +194,22 @@ impl Entry {
             get_local_to_root_parent(&source_absolute, context.root_parent.as_deref())?;
         if no_target_dir {
             let source_is_dir = source.is_dir();
-            if path_ends_with_terminator(context.target) && source_is_dir {
+            if path_ends_with_terminator(context.target)
+                && source_is_dir
+                && !exists(context.target).is_ok_and(identity)
+            {
                 if let Err(e) = fs::create_dir_all(context.target) {
                     eprintln!(
                         "{}",
                         translate!("cp-error-failed-to-create-directory", "error" => e)
                     );
                 }
-            } else {
-                descendant = descendant.strip_prefix(context.root)?.to_path_buf();
+            } else if let Ok(stripped) =
+                // The following unwrap is unreachable because context.root is always *something*.
+                descendant
+                    .strip_prefix(context.root.components().next_back().unwrap())
+            {
+                descendant = stripped.to_path_buf();
             }
         } else if context.root == Path::new(".") && context.target.is_dir() {
             // Special case: when copying current directory (.) to an existing directory,
