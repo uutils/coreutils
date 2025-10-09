@@ -1090,5 +1090,6 @@ mod tests {
         assert_eq!(format!("{}", Quotes::None), "None");
         assert_eq!(format!("{}", Quotes::Single), "Single");
         assert_eq!(format!("{}", Quotes::Double), "Double");
+        assert_eq!(format!("{}", Quotes::Locale), "Locale");
     }
 }
