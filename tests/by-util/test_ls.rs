@@ -6539,7 +6539,7 @@ fn test_a_overrides_f_files() {
 }
 
 #[test]
-fn test_big_u_overrides_f_sort() {
+fn test_big_u_participates_in_sort_flag_wins() {
     // Test that -U participates in last-flag-wins with sorting flags
     // -U disables sorting (like -f), but can be overridden by other sort flags
     let scene = TestScenario::new(util_name!());
