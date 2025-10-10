@@ -183,9 +183,9 @@ impl std::str::FromStr for QuotingStyle {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "locale" => Ok(QuotingStyle::Locale),
-            "shell" => Ok(QuotingStyle::Shell),
-            "shell-escape-always" => Ok(QuotingStyle::ShellEscapeAlways),
+            "locale" => Ok(Self::Locale),
+            "shell" => Ok(Self::Shell),
+            "shell-escape-always" => Ok(Self::ShellEscapeAlways),
             // The others aren't exposed to the user
             _ => Err(StatError::InvalidQuotingStyle {
                 style: s.to_string(),

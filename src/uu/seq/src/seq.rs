@@ -106,10 +106,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let options = SeqOptions {
         separator: matches
             .get_one::<OsString>(OPT_SEPARATOR)
-            .map_or(OsString::from("\n"), |s| s.to_os_string()),
+            .cloned()
+            .unwrap_or_else(|| OsString::from("\n")),
         terminator: matches
             .get_one::<OsString>(OPT_TERMINATOR)
-            .map_or(OsString::from("\n"), |s| s.to_os_string()),
+            .cloned()
+            .unwrap_or_else(|| OsString::from("\n")),
         equal_width: matches.get_flag(OPT_EQUAL_WIDTH),
         format: matches.get_one::<String>(OPT_FORMAT).map(|s| s.as_str()),
     };
