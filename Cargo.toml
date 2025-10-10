@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime serde bincode gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind
+# spell-checker:ignore (libs) bigdecimal datetime serde bincode gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs
 
 [package]
 name = "coreutils"
@@ -638,6 +638,9 @@ pedantic = { level = "deny", priority = -1 }
 # Eventually the clippy settings from the `[lints]` section should be moved here.
 # In order to use these, all crates have `[lints] workspace = true` section.
 [workspace.lints.rust]
+# Allow "fuzzing" as a "cfg" condition name
+# https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
 #unused_qualifications = "warn" // TODO: fix warnings in uucore, then re-enable this lint
 
 [workspace.lints.clippy]
