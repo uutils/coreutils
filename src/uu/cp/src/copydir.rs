@@ -204,10 +204,11 @@ impl Entry {
                         translate!("cp-error-failed-to-create-directory", "error" => e)
                     );
                 }
-            } else if let Ok(stripped) =
-                // The following unwrap is unreachable because context.root is always *something*.
-                descendant
-                    .strip_prefix(context.root.components().next_back().unwrap())
+            } else if let Some(stripped) = context
+                .root
+                .components()
+                .next_back()
+                .and_then(|stripped| descendant.strip_prefix(stripped).ok())
             {
                 descendant = stripped.to_path_buf();
             }
