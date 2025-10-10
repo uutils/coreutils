@@ -31,6 +31,7 @@ use uucore::sum::{Digest, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shak
 use uucore::translate;
 
 const NAME: &str = "hashsum";
+const READ_BUFFER_SIZE: usize = 32 * 1024;
 
 struct Options<'a> {
     algoname: &'static str,
@@ -541,23 +542,26 @@ where
     for filename in files {
         let filename = Path::new(filename);
 
-        let mut file = BufReader::new(if filename == OsStr::new("-") {
-            Box::new(stdin()) as Box<dyn Read>
-        } else {
-            let file_buf = match File::open(filename) {
-                Ok(f) => f,
-                Err(e) => {
-                    eprintln!(
-                        "{}: {}: {e}",
-                        options.binary_name,
-                        filename.to_string_lossy()
-                    );
-                    err_found = Some(ChecksumError::Io(e));
-                    continue;
-                }
-            };
-            Box::new(file_buf) as Box<dyn Read>
-        });
+        let mut file = BufReader::with_capacity(
+            READ_BUFFER_SIZE,
+            if filename == OsStr::new("-") {
+                Box::new(stdin()) as Box<dyn Read>
+            } else {
+                let file_buf = match File::open(filename) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        eprintln!(
+                            "{}: {}: {e}",
+                            options.binary_name,
+                            filename.to_string_lossy()
+                        );
+                        err_found = Some(ChecksumError::Io(e));
+                        continue;
+                    }
+                };
+                Box::new(file_buf) as Box<dyn Read>
+            },
+        );
 
         let (sum, _) = digest_reader(
             &mut options.digest,
