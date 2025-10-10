@@ -69,12 +69,9 @@ TOYBOX_SRC  := $(TOYBOX_ROOT)/toybox-$(TOYBOX_VER)
 #------------------------------------------------------------------------
 OS ?= $(shell uname -s)
 
-# Windows does not allow symlink by default.
-# Allow to override LN for AppArmor.
-ifeq ($(OS),Windows_NT)
-	LN ?= ln -f
-endif
-LN ?= ln -sf
+# Windows does not allow symlink by default while hardlink is allowed.
+# AppArmor needs proper argv[0].
+LN ?= ln -f
 
 ifdef SELINUX_ENABLED
 	override SELINUX_ENABLED := 0
