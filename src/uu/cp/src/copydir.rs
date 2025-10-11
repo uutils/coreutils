@@ -296,7 +296,7 @@ fn copy_direntry(
     if !source_is_dir {
         if let Err(err) = copy_file(
             progress_bar,
-            &entry.source_absolute,
+            &entry.source_relative,
             entry.local_to_target.as_path(),
             options,
             symlinked_files,

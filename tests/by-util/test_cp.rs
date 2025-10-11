@@ -7136,3 +7136,25 @@ fn test_cp_no_preserve_target_directory() {
     assert!(at.file_exists("e/f2"));
     assert!(at.file_exists("e/f3"));
 }
+
+#[test]
+fn test_cp_recurse_verbose_output() {
+    let source_dir = "source_dir";
+    let target_dir = "target_dir";
+    let file = "file";
+    let output = format!(
+        "'{source_dir}' -> '{target_dir}/'\n'{source_dir}/{file}' -> '{target_dir}/{file}'\n"
+    );
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir(source_dir);
+    at.touch(format!("{source_dir}/{file}"));
+
+    ucmd.arg(source_dir)
+        .arg(target_dir)
+        .arg("-r")
+        .arg("--verbose")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(output);
+}
