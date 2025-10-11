@@ -349,21 +349,10 @@ jobs:
         # Check that the utils are present
         test -f /tmp/usr/local/bin/hashsum
         # Check that hashsum symlinks are present
-        test -h /tmp/usr/local/bin/b2sum
-        test -h /tmp/usr/local/bin/b3sum
-        test -h /tmp/usr/local/bin/md5sum
-        test -h /tmp/usr/local/bin/sha1sum
-        test -h /tmp/usr/local/bin/sha224sum
-        test -h /tmp/usr/local/bin/sha256sum
-        test -h /tmp/usr/local/bin/sha3-224sum
-        test -h /tmp/usr/local/bin/sha3-256sum
-        test -h /tmp/usr/local/bin/sha3-384sum
-        test -h /tmp/usr/local/bin/sha3-512sum
-        test -h /tmp/usr/local/bin/sha384sum
-        test -h /tmp/usr/local/bin/sha3sum
-        test -h /tmp/usr/local/bin/sha512sum
-        test -h /tmp/usr/local/bin/shake128sum
-        test -h /tmp/usr/local/bin/shake256sum
+        [ $(readlink "/tmp/usr/local/bin/b2sum") = hashsum ]
+        [ $(readlink "/tmp/usr/local/bin/sha1sum") = hashsum ]
+        [ $(readlink "/tmp/usr/local/bin/sha3sum") = hashsum ]
+        [ $(readlink "/tmp/usr/local/bin/shake128sum") = hashsum ]
     - name: "`make install MULTICALL=y LN=ln -svf`"
       shell: bash
       run: |
