@@ -31,6 +31,7 @@ use uucore::sum::{Digest, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shak
 use uucore::translate;
 
 const NAME: &str = "hashsum";
+// Using the same read buffer size as GNU
 const READ_BUFFER_SIZE: usize = 32 * 1024;
 
 struct Options<'a> {
