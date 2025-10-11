@@ -1331,6 +1331,28 @@ jobs:
     name: Run benchmarks (CodSpeed)
     runs-on: ubuntu-latest
     needs: min_version
+    strategy:
+      matrix:
+        benchmark-target:
+          - { package: uu_base64 }
+          - { package: uu_cp }
+          - { package: uu_cut }
+          - { package: uu_du }
+          - { package: uu_expand }
+          - { package: uu_fold }
+          - { package: uu_hashsum }
+          - { package: uu_ls }
+          - { package: uu_mv }
+          - { package: uu_nl }
+          - { package: uu_numfmt }
+          - { package: uu_rm }
+          - { package: uu_seq }
+          - { package: uu_sort }
+          - { package: uu_split }
+          - { package: uu_tsort }
+          - { package: uu_unexpand }
+          - { package: uu_uniq }
+          - { package: uu_wc }
     steps:
       - uses: actions/checkout@v5
         with:
@@ -1353,40 +1375,19 @@ jobs:
         shell: bash
         run: cargo install cargo-codspeed --locked
 
-      - name: Get benchmark list
-        id: benchmark_list
+      - name: Build benchmarks for ${{ matrix.benchmark-target.package }}
         shell: bash
         run: |
-          echo "Finding all utilities with benchmarks..."
-          benchmark_packages=""
-          for bench_dir in $(ls -d src/uu/*/benches 2>/dev/null); do
-            prog_dir=$(dirname "$bench_dir")
-            prog_name=$(basename "$prog_dir")
-            echo "Found benchmarks for uu_$prog_name"
-            benchmark_packages="$benchmark_packages uu_$prog_name"
-          done
-          echo "benchmark_packages=${benchmark_packages}" >> $GITHUB_OUTPUT
-          echo "Found benchmark packages:${benchmark_packages}"
+          echo "Building benchmarks for ${{ matrix.benchmark-target.package }}"
+          cargo codspeed build -p ${{ matrix.benchmark-target.package }}
 
-      - name: Build benchmarks
-        shell: bash
-        run: |
-          echo "Building benchmarks for packages: ${{ steps.benchmark_list.outputs.benchmark_packages }}"
-          for package in ${{ steps.benchmark_list.outputs.benchmark_packages }}; do
-            echo "Building benchmarks for $package"
-            cargo codspeed build -p $package
-          done
-
-      - name: Run benchmarks
+      - name: Run benchmarks for ${{ matrix.benchmark-target.package }}
         uses: CodSpeedHQ/action@v4
         env:
           CODSPEED_LOG: debug
         with:
           mode: instrumentation
           run: |
-            echo "Running benchmarks for packages: ${{ steps.benchmark_list.outputs.benchmark_packages }}"
-            for package in ${{ steps.benchmark_list.outputs.benchmark_packages }}; do
-              echo "Running benchmarks for $package"
-              cargo codspeed run -p $package > /dev/null
-            done
+            echo "Running benchmarks for ${{ matrix.benchmark-target.package }}"
+            cargo codspeed run -p ${{ matrix.benchmark-target.package }} > /dev/null
           token: ${{ secrets.CODSPEED_TOKEN }}
