@@ -132,6 +132,7 @@ use std::io::{BufRead, BufReader};
 use std::iter;
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::path::Path;
 use std::str;
 use std::str::Utf8Chunk;
 use std::sync::{LazyLock, atomic::Ordering};
@@ -213,11 +214,11 @@ macro_rules! bin {
 /// Generate the version string for clap.
 ///
 /// The generated string has the format `(<project name>) <version>`, for
-/// example: "(uutils coreutils) 0.30.0". clap will then prefix it with the util name.
+/// example: "(GNU coreutils) 0.30.0". clap will then prefix it with the util name.
 #[macro_export]
 macro_rules! crate_version {
     () => {
-        concat!("(uutils coreutils) ", env!("CARGO_PKG_VERSION"))
+        concat!("(GNU coreutils) ", env!("CARGO_PKG_VERSION"))
     };
 }
 
@@ -328,7 +329,12 @@ static UTIL_NAME: LazyLock<String> = LazyLock::new(|| {
     let is_man = usize::from(ARGV[base_index].eq("manpage"));
     let argv_index = base_index + is_man;
 
-    ARGV[argv_index].to_string_lossy().into_owned()
+    // Normalize to the invoked program basename to match GNU coreutils output
+    let os = ARGV[argv_index].clone();
+    Path::new(&os)
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| os.to_string_lossy().into_owned())
 });
 
 /// Derive the utility name.

@@ -20,6 +20,16 @@ use uutests::util::TestScenario;
 use uutests::util_name;
 
 #[test]
+fn test_version_format_autoconf_compatibility() {
+    // Test that --version output contains "(GNU coreutils)" for autoconf compatibility
+    // See: https://github.com/uutils/coreutils/issues/8880
+    new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .stdout_contains("(GNU coreutils)");
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
