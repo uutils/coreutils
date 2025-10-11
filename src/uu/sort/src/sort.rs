@@ -24,8 +24,6 @@ use clap::{Arg, ArgAction, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use libc::{_SC_PAGESIZE, _SC_PHYS_PAGES};
 #[cfg(target_os = "linux")]
 use libc::{RLIMIT_NOFILE, rlimit};
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
@@ -1206,8 +1204,8 @@ fn available_memory_bytes() -> Option<u128> {
 fn physical_memory_bytes() -> Option<u128> {
     #[cfg(target_family = "unix")]
     {
-        let pages = unsafe { libc::sysconf(_SC_PHYS_PAGES) };
-        let page_size = unsafe { libc::sysconf(_SC_PAGESIZE) };
+        let pages = unsafe { libc::sysconf(libc::_SC_PHYS_PAGES) };
+        let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
         if pages <= 0 || page_size <= 0 {
             return None;
         }
