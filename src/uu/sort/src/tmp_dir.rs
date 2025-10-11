@@ -44,6 +44,7 @@ fn handler_state() -> Arc<Mutex<HandlerRegistration>> {
 }
 
 fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) -> UResult<()> {
+    // Guard to ensure the SIGINT handler is registered once per process and reused.
     static HANDLER_INSTALLED: AtomicBool = AtomicBool::new(false);
 
     if HANDLER_INSTALLED
@@ -55,6 +56,7 @@ fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) -> UR
 
     let handler_state = state.clone();
     if let Err(e) = ctrlc::set_handler(move || {
+        // Load the latest lock/path snapshot so the handler cleans the active temp dir.
         let (lock, path) = {
             let state = handler_state.lock().unwrap();
             (state.lock.clone(), state.path.clone())
