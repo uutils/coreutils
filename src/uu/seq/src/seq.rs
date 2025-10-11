@@ -150,6 +150,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
+    if let ExtendedBigDecimal::BigDecimal(n) = &first.number {
+        if n.exp() > 4932 || n.exp() < 4932 {
+            // 4932 is the exponent for f128 (which is the widest data type to which `long double` maps)
+        }
+    }
+
     // If a format was passed on the command line, use that.
     // If not, use some default format based on parameters precision.
     let (format, padding, fast_allowed) = match options.format {
