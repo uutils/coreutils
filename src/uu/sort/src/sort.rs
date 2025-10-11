@@ -1202,7 +1202,7 @@ fn available_memory_bytes() -> Option<u128> {
 }
 
 fn physical_memory_bytes() -> Option<u128> {
-    #[cfg(target_family = "unix")]
+    #[cfg(all(target_family = "unix", not(target_os = "redox")))]
     {
         let pages = unsafe { libc::sysconf(libc::_SC_PHYS_PAGES) };
         let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
@@ -1214,7 +1214,7 @@ fn physical_memory_bytes() -> Option<u128> {
         Some(pages.saturating_mul(page_size))
     }
 
-    #[cfg(not(target_family = "unix"))]
+    #[cfg(any(not(target_family = "unix"), target_os = "redox"))]
     {
         None
     }
