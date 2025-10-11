@@ -7142,8 +7142,13 @@ fn test_cp_recurse_verbose_output() {
     let source_dir = "source_dir";
     let target_dir = "target_dir";
     let file = "file";
+    #[cfg(not(windows))]
     let output = format!(
         "'{source_dir}' -> '{target_dir}/'\n'{source_dir}/{file}' -> '{target_dir}/{file}'\n"
+    );
+    #[cfg(windows)]
+    let output = format!(
+        "'{source_dir}' -> '{target_dir}\\'\n'{source_dir}\\{file}' -> '{target_dir}\\{file}'\n"
     );
     let (at, mut ucmd) = at_and_ucmd!();
 
