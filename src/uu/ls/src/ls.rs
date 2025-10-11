@@ -1085,11 +1085,11 @@ impl Config {
             time_format_older,
             context,
             selinux_supported: {
-                #[cfg(feature = "selinux")]
+                #[cfg(all(feature = "selinux", target_os = "linux"))]
                 {
                     uucore::selinux::is_selinux_enabled()
                 }
-                #[cfg(not(feature = "selinux"))]
+                #[cfg(not(all(feature = "selinux", target_os = "linux")))]
                 {
                     false
                 }
@@ -3309,7 +3309,7 @@ fn get_security_context<'a>(
     }
 
     if config.selinux_supported {
-        #[cfg(feature = "selinux")]
+        #[cfg(all(feature = "selinux", target_os = "linux"))]
         {
             match selinux::SecurityContext::of_path(path, must_dereference, false) {
                 Err(_r) => {

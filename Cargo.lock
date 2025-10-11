@@ -876,9 +876,9 @@ dependencies = [
 
 [[package]]
 name = "ctor"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67773048316103656a637612c4a62477603b777d91d9c62ff2290f9cde178fdb"
+checksum = "59c9b8bdf64ee849747c1b12eb861d21aa47fa161564f48332f1afe2373bf899"
 dependencies = [
  "ctor-proc-macro",
  "dtor",
@@ -886,9 +886,9 @@ dependencies = [
 
 [[package]]
 name = "ctor-proc-macro"
-version = "0.0.6"
+version = "0.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2931af7e13dc045d8e9d26afccc6fa115d64e115c9c84b1166288b46f6782c2"
+checksum = "52560adf09603e58c9a7ee1fe1dcb95a16927b17c127f0ac02d6e768a0e25bc1"
 
 [[package]]
 name = "ctrlc"
@@ -3299,8 +3299,10 @@ version = "0.2.2"
 dependencies = [
  "bstr",
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "memchr",
+ "tempfile",
  "uucore",
 ]
 
@@ -3501,7 +3503,9 @@ name = "uu_hashsum"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
+ "tempfile",
  "uucore",
 ]
 
@@ -3688,10 +3692,12 @@ name = "uu_mv"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "fs_extra",
  "indicatif",
  "libc",
+ "tempfile",
  "thiserror 2.0.16",
  "uucore",
  "windows-sys 0.61.0",
@@ -3865,8 +3871,10 @@ name = "uu_rm"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "libc",
+ "tempfile",
  "thiserror 2.0.16",
  "uucore",
  "windows-sys 0.61.0",
@@ -3900,9 +3908,11 @@ version = "0.2.2"
 dependencies = [
  "bigdecimal",
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "num-bigint",
  "num-traits",
+ "tempfile",
  "thiserror 2.0.16",
  "uucore",
 ]
@@ -3967,8 +3977,10 @@ name = "uu_split"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "memchr",
+ "tempfile",
  "thiserror 2.0.16",
  "uucore",
 ]
@@ -4174,7 +4186,9 @@ name = "uu_unexpand"
 version = "0.2.2"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
+ "tempfile",
  "thiserror 2.0.16",
  "unicode-width 0.2.1",
  "uucore",
@@ -4943,9 +4957,9 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "5.1.1"
+version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f852905151ac8d4d06fdca66520a661c09730a74c6d4e2b0f27b436b382e532"
+checksum = "eb2a05c7c36fde6c09b08576c9f7fb4cda705990f73b58fe011abf7dfb24168b"
 dependencies = [
  "arbitrary",
  "crc32fast",

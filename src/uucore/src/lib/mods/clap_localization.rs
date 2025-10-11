@@ -31,9 +31,9 @@ pub enum Color {
 impl Color {
     fn code(self) -> &'static str {
         match self {
-            Color::Red => "31",
-            Color::Yellow => "33",
-            Color::Green => "32",
+            Self::Red => "31",
+            Self::Yellow => "33",
+            Self::Green => "32",
         }
     }
 }

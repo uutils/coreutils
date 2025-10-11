@@ -31,7 +31,7 @@ pub enum SeLinuxError {
 }
 
 impl From<SeLinuxError> for i32 {
-    fn from(error: SeLinuxError) -> i32 {
+    fn from(error: SeLinuxError) -> Self {
         match error {
             SeLinuxError::SELinuxNotEnabled => 1,
             SeLinuxError::FileOpenFailure(_) => 2,
