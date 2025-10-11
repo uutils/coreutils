@@ -4,6 +4,8 @@ pwd-usage = pwd [OPTION]...
 # Help messages
 pwd-help-logical = use PWD from environment, even if it contains symlinks
 pwd-help-physical = avoid all symlinks
+pwd-help-text = Print help information
+pwd-version-text = Print version information
 
 # Error messages
 pwd-error-failed-to-get-current-directory = failed to get current directory

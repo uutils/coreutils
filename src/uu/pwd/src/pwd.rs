@@ -145,6 +145,22 @@ pub fn uu_app() -> Command {
         .about(translate!("pwd-about"))
         .override_usage(format_usage(&translate!("pwd-usage")))
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
+        .arg(
+            Arg::new("help")
+                .short('h')
+                .long("help")
+                .help(translate!("pwd-help-text"))
+                .action(ArgAction::Help),
+        )
+        .arg(
+            Arg::new("version")
+                .short('V')
+                .long("version")
+                .help(translate!("pwd-version-text"))
+                .action(ArgAction::Version),
+        )
         .arg(
             Arg::new(OPT_LOGICAL)
                 .short('L')
