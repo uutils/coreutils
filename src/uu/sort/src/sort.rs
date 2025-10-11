@@ -1178,29 +1178,29 @@ fn desired_file_buffer_bytes(total_bytes: u128) -> u128 {
 
 #[cfg(target_os = "linux")]
 fn available_memory_bytes() -> Option<u128> {
-    let meminfo = std::fs::read_to_string("/proc/meminfo").ok()?;
-    let mut mem_available = None;
-    let mut mem_total = None;
+    use std::mem::MaybeUninit;
 
-    for line in meminfo.lines() {
-        if let Some(value) = line.strip_prefix("MemAvailable:") {
-            mem_available = parse_meminfo_value(value);
-        } else if let Some(value) = line.strip_prefix("MemTotal:") {
-            mem_total = parse_meminfo_value(value);
-        }
-
-        if mem_available.is_some() && mem_total.is_some() {
-            break;
-        }
+    let mut info = MaybeUninit::<libc::sysinfo>::uninit();
+    let result = unsafe { libc::sysinfo(info.as_mut_ptr()) };
+    if result != 0 {
+        return None;
     }
 
-    mem_available.or(mem_total)
-}
+    let info = unsafe { info.assume_init() };
+    let mem_unit = if info.mem_unit == 0 { 1 } else { info.mem_unit };
+    let unit = u128::from(mem_unit);
+    let available = u128::from(info.freeram)
+        .saturating_add(u128::from(info.bufferram))
+        .saturating_mul(unit);
+    let total = u128::from(info.totalram).saturating_mul(unit);
 
-#[cfg(target_os = "linux")]
-fn parse_meminfo_value(value: &str) -> Option<u128> {
-    let amount_kib = value.split_whitespace().next()?.parse::<u128>().ok()?;
-    Some(amount_kib * 1024)
+    if available > 0 {
+        Some(available)
+    } else if total > 0 {
+        Some(total)
+    } else {
+        None
+    }
 }
 
 fn physical_memory_bytes() -> Option<u128> {
