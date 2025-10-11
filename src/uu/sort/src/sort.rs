@@ -344,7 +344,13 @@ impl GlobalSettings {
             .filter(|s| matches!(s.settings.mode, SortMode::GeneralNumeric))
             .count();
 
-        self.precomputed.fast_lexicographic = self.mode == SortMode::Default
+        self.precomputed.fast_lexicographic = self.can_use_fast_lexicographic();
+        self.precomputed.fast_ascii_insensitive = self.can_use_fast_ascii_insensitive();
+    }
+
+    /// Returns true when the fast lexicographic path can be used safely.
+    fn can_use_fast_lexicographic(&self) -> bool {
+        self.mode == SortMode::Default
             && !self.ignore_case
             && !self.dictionary_order
             && !self.ignore_non_printing
@@ -358,9 +364,12 @@ impl GlobalSettings {
                     && !selector.settings.dictionary_order
                     && !selector.settings.ignore_non_printing
                     && !selector.settings.ignore_blanks
-            };
+            }
+    }
 
-        self.precomputed.fast_ascii_insensitive = self.mode == SortMode::Default
+    /// Returns true when the ASCII case-insensitive fast path is valid.
+    fn can_use_fast_ascii_insensitive(&self) -> bool {
+        self.mode == SortMode::Default
             && self.ignore_case
             && !self.dictionary_order
             && !self.ignore_non_printing
@@ -374,7 +383,7 @@ impl GlobalSettings {
                     && !selector.settings.dictionary_order
                     && !selector.settings.ignore_non_printing
                     && !selector.settings.ignore_blanks
-            };
+            }
     }
 }
 
