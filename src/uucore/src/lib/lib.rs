@@ -217,9 +217,13 @@ macro_rules! bin {
 /// example: "(GNU coreutils) 0.30.0". clap will then prefix it with the util name.
 #[macro_export]
 macro_rules! crate_version {
-    () => {
-        concat!("(GNU coreutils) ", env!("CARGO_PKG_VERSION"))
-    };
+    () => {{
+        const BRAND: &str = match option_env!("UUTILS_VERSION_BRAND") {
+            Some(v) => v,
+            None => "uutils coreutils",
+        };
+        $crate::brand_version_static(BRAND, env!("CARGO_PKG_VERSION"))
+    }};
 }
 
 /// Generate the usage string for clap.
@@ -229,6 +233,11 @@ macro_rules! crate_version {
 /// all occurrences of `{}` with the execution phrase and returns the resulting
 /// `String`. It does **not** support more advanced formatting features such
 /// as `{0}`.
+pub fn brand_version_static(brand: &'static str, version: &'static str) -> &'static str {
+    let s = format!("({}) {}", brand, version);
+    Box::leak(s.into_boxed_str())
+}
+
 pub fn format_usage(s: &str) -> String {
     let s = s.replace('\n', &format!("\n{}", " ".repeat(7)));
     s.replace("{}", crate::execution_phrase())
