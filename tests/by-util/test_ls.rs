@@ -3758,14 +3758,18 @@ fn test_ls_quoting_style_locale() {
     }
 
     // Test escape sequences work with locale quoting
-    at.touch("newline\nfile");
-    scene
-        .ucmd()
-        .env("LC_ALL", "fr_FR.UTF-8")
-        .arg("--quoting-style=locale")
-        .arg("newline\nfile")
-        .succeeds()
-        .stdout_only("«newline\\nfile»\n");
+    // Note: Windows doesn't allow newlines in filenames, so skip this test on Windows
+    #[cfg(not(target_os = "windows"))]
+    {
+        at.touch("newline\nfile");
+        scene
+            .ucmd()
+            .env("LC_ALL", "fr_FR.UTF-8")
+            .arg("--quoting-style=locale")
+            .arg("newline\nfile")
+            .succeeds()
+            .stdout_only("«newline\\nfile»\n");
+    }
 }
 
 #[test]
