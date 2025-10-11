@@ -24,7 +24,7 @@ use clap::{Arg, ArgAction, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
-#[cfg(target_family = "unix")]
+#[cfg(target_family = "linux")]
 use libc::{_SC_PAGESIZE, _SC_PHYS_PAGES};
 #[cfg(target_os = "linux")]
 use libc::{RLIMIT_NOFILE, rlimit};
