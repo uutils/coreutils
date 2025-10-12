@@ -3764,6 +3764,7 @@ dependencies = [
 name = "uu_od"
 version = "0.2.2"
 dependencies = [
+ "bigdecimal",
  "byteorder",
  "clap",
  "fluent",
