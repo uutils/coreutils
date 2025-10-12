@@ -55,8 +55,6 @@ highlight = "all"
 # introduces it.
 # spell-checker: disable
 skip = [
-  # nu-ansi-term
-  { name = "windows-sys", version = "0.52.0" },
   # various crates
   { name = "windows-sys", version = "0.59.0" },
   # various crates

@@ -188,6 +188,34 @@ fn sort_unique_locale(bencher: Bencher, num_lines: usize) {
     });
 }
 
+/// Benchmark sorting with very long lines exceeding START_BUFFER_SIZE (8000 bytes)
+#[divan::bench(args = [16_0000])]
+fn sort_long_line(bencher: Bencher, line_size: usize) {
+    // Create files with very long lines (16KB) to test buffer handling
+    let mut data_a = vec![b'b'; line_size];
+    data_a.push(b'\n');
+
+    let mut data_b = vec![b'a'; line_size];
+    data_b.push(b'\n');
+
+    let file_a = setup_test_file(&data_a);
+    let file_b = setup_test_file(&data_b);
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap();
+
+    bencher.bench(|| {
+        black_box(run_util_function(
+            uumain,
+            &[
+                file_a.to_str().unwrap(),
+                file_b.to_str().unwrap(),
+                "-o",
+                output_path,
+            ],
+        ));
+    });
+}
+
 fn main() {
     divan::main();
 }
