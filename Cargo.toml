@@ -628,7 +628,6 @@ semicolon_if_nothing_returned = "warn"
 single_char_pattern = "warn"
 explicit_iter_loop = "warn"
 if_not_else = "warn"
-manual_let_else = "warn"
 
 all = { level = "deny", priority = -1 }
 cargo = { level = "warn", priority = -1 }
@@ -695,7 +694,6 @@ enum_glob_use = "allow"
 ptr_cast_constness = "allow"
 borrow_as_ptr = "allow"
 ptr_as_ptr = "allow"
-manual_let_else = "allow"
 unnecessary_semicolon = "allow"
 needless_raw_string_hashes = "allow"
 unreadable_literal = "allow"
