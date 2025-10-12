@@ -350,9 +350,8 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
     // Iterate through all sessions
     for session_id in sessions {
         // Get session UID using safe wrapper
-        let uid = match login::get_session_uid(&session_id) {
-            Ok(uid) => uid,
-            Err(_) => continue,
+        let Ok(uid) = login::get_session_uid(&session_id) else {
+            continue;
         };
 
         // Get username from UID
