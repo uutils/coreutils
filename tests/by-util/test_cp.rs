@@ -2374,7 +2374,11 @@ fn test_cp_no_preserve_timestamps() {
     println!("creation {creation:?} / {creation2:?}");
 
     assert_ne!(creation, creation2);
-    let res = creation.elapsed().unwrap() - creation2.elapsed().unwrap();
+    let res = creation
+        .elapsed()
+        .unwrap()
+        .checked_sub(creation2.elapsed().unwrap())
+        .unwrap();
     // Some margins with time check
     assert!(res.as_secs() > 3595);
     assert!(res.as_secs() < 3605);

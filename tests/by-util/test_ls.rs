@@ -1353,15 +1353,15 @@ fn test_ls_long_symlink_color() {
         expected_target: &str,
     ) {
         // Names are always compared.
-        assert_eq!(&name, &expected_name);
-        assert_eq!(&target, &expected_target);
+        assert_eq!(name, expected_name);
+        assert_eq!(target, expected_target);
 
         // Colors are only compared when we have inferred what color we are looking for.
-        if expected_name_color.is_some() {
-            assert_eq!(&name_color, &expected_name_color.unwrap());
+        if let Some(name) = expected_name_color {
+            assert_eq!(name_color, name);
         }
-        if expected_target_color.is_some() {
-            assert_eq!(&target_color, &expected_target_color.unwrap());
+        if let Some(name) = expected_target_color {
+            assert_eq!(target_color, name);
         }
     }
 

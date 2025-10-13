@@ -1519,6 +1519,7 @@ fn copy_source(
 // This fix adds yet another metadata read.
 // Should this metadata be read once and then reused throughout the execution?
 // https://github.com/uutils/coreutils/issues/6658
+#[allow(clippy::if_not_else)]
 fn file_mode_for_interactive_overwrite(
     #[cfg_attr(not(unix), allow(unused_variables))] path: &Path,
 ) -> Option<(String, String)> {
