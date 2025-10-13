@@ -32,16 +32,6 @@ fn test_version_format_autoconf_compatibility() {
 }
 
 #[test]
-fn test_runtime_autoconf_detection_with_env_var() {
-    // Test explicit environment variable override
-    let mut cmd = new_ucmd!();
-    cmd.env("UUTILS_VERSION_BRAND", "GNU coreutils")
-        .arg("--version")
-        .succeeds()
-        .stdout_contains("(GNU coreutils)");
-}
-
-#[test]
 fn test_runtime_autoconf_detection_with_configure_env() {
     // Test autoconf environment variable detection
     let mut cmd = new_ucmd!();

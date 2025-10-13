@@ -343,11 +343,6 @@ fn get_runtime_brand() -> String {
         return brand.to_string();
     }
 
-    // Check for runtime environment variable override
-    if let Ok(brand) = env::var("UUTILS_VERSION_BRAND") {
-        return brand;
-    }
-
     // If likely under autoconf probe for mkdir, use GNU branding for compatibility
     if should_emit_gnu_brand() {
         return "GNU coreutils".to_string();
@@ -364,7 +359,7 @@ pub fn brand_version_static(brand: &'static str, version: &'static str) -> &'sta
 
 /// Generate version string with runtime autoconf detection
 pub fn runtime_version_string(_version: &'static str) -> &'static str {
-static VERSION_CACHE: LazyLock<String> = LazyLock::new(|| {
+    static VERSION_CACHE: LazyLock<String> = LazyLock::new(|| {
         let brand = get_runtime_brand();
         format!("({brand}) {}", env!("CARGO_PKG_VERSION"))
     });
