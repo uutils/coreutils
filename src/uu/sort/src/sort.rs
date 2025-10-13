@@ -25,7 +25,7 @@ use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
 #[cfg(target_os = "linux")]
-use libc::{RLIMIT_NOFILE, rlimit};
+use nix::libc::{RLIMIT_NOFILE, getrlimit, rlimit};
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{Rng, rng};
 use rayon::prelude::*;
@@ -1076,7 +1076,7 @@ fn get_rlimit() -> UResult<usize> {
         rlim_cur: 0,
         rlim_max: 0,
     };
-    match unsafe { libc::getrlimit(RLIMIT_NOFILE, &raw mut limit) } {
+    match unsafe { nix::libc::getrlimit(RLIMIT_NOFILE, &raw mut limit) } {
         0 => Ok(limit.rlim_cur as usize),
         _ => Err(UUsageError::new(2, translate!("sort-failed-fetch-rlimit"))),
     }
