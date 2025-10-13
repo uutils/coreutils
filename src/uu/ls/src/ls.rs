@@ -99,6 +99,7 @@ pub mod options {
     pub mod files {
         pub static ALL: &str = "all";
         pub static ALMOST_ALL: &str = "almost-all";
+        pub static UNSORTED_ALL: &str = "f";
     }
 
     pub mod sort {
@@ -437,12 +438,27 @@ fn extract_format(options: &clap::ArgMatches) -> (Format, Option<&'static str>) 
 ///
 /// A Files variant representing the type of files to display.
 fn extract_files(options: &clap::ArgMatches) -> Files {
-    if options.get_flag(options::files::ALL) {
-        Files::All
-    } else if options.get_flag(options::files::ALMOST_ALL) {
+    let get_last_index = |flag: &str| -> usize {
+        if options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine) {
+            options.index_of(flag).unwrap_or(0)
+        } else {
+            0
+        }
+    };
+
+    let all_index = get_last_index(options::files::ALL);
+    let almost_all_index = get_last_index(options::files::ALMOST_ALL);
+    let unsorted_all_index = get_last_index(options::files::UNSORTED_ALL);
+
+    let max_index = all_index.max(almost_all_index).max(unsorted_all_index);
+
+    if max_index == 0 {
+        Files::Normal
+    } else if max_index == almost_all_index {
         Files::AlmostAll
     } else {
-        Files::Normal
+        // Either -a or -f wins, both show all files
+        Files::All
     }
 }
 
@@ -452,37 +468,69 @@ fn extract_files(options: &clap::ArgMatches) -> Files {
 ///
 /// A Sort variant representing the sorting method to use.
 fn extract_sort(options: &clap::ArgMatches) -> Sort {
-    if let Some(field) = options.get_one::<String>(options::SORT) {
-        match field.as_str() {
-            "none" => Sort::None,
-            "name" => Sort::Name,
-            "time" => Sort::Time,
-            "size" => Sort::Size,
-            "version" => Sort::Version,
-            "extension" => Sort::Extension,
-            "width" => Sort::Width,
-            // below should never happen as clap already restricts the values.
-            _ => unreachable!("Invalid field for --sort"),
+    let get_last_index = |flag: &str| -> usize {
+        if options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine) {
+            options.index_of(flag).unwrap_or(0)
+        } else {
+            0
         }
-    } else if options.get_flag(options::sort::TIME) {
-        Sort::Time
-    } else if options.get_flag(options::sort::SIZE) {
-        Sort::Size
-    } else if options.get_flag(options::sort::NONE) {
-        Sort::None
-    } else if options.get_flag(options::sort::VERSION) {
-        Sort::Version
-    } else if options.get_flag(options::sort::EXTENSION) {
-        Sort::Extension
-    } else if !options.get_flag(options::format::LONG)
-        && (options.get_flag(options::time::ACCESS)
-            || options.get_flag(options::time::CHANGE)
-            || options.get_one::<String>(options::TIME).is_some())
-    {
-        // If -l is not specified, -u/-c/--time controls sorting.
-        Sort::Time
-    } else {
-        Sort::Name
+    };
+
+    let sort_index = options
+        .get_one::<String>(options::SORT)
+        .and_then(|_| options.indices_of(options::SORT))
+        .map(|mut indices| indices.next_back().unwrap_or(0))
+        .unwrap_or(0);
+    let time_index = get_last_index(options::sort::TIME);
+    let size_index = get_last_index(options::sort::SIZE);
+    let none_index = get_last_index(options::sort::NONE);
+    let version_index = get_last_index(options::sort::VERSION);
+    let extension_index = get_last_index(options::sort::EXTENSION);
+    let unsorted_all_index = get_last_index(options::files::UNSORTED_ALL);
+
+    let max_sort_index = sort_index
+        .max(time_index)
+        .max(size_index)
+        .max(none_index)
+        .max(version_index)
+        .max(extension_index)
+        .max(unsorted_all_index);
+
+    match max_sort_index {
+        0 => {
+            // No sort flags specified, use default behavior
+            if !options.get_flag(options::format::LONG)
+                && (options.get_flag(options::time::ACCESS)
+                    || options.get_flag(options::time::CHANGE)
+                    || options.get_one::<String>(options::TIME).is_some())
+            {
+                Sort::Time
+            } else {
+                Sort::Name
+            }
+        }
+        idx if idx == unsorted_all_index || idx == none_index => Sort::None,
+        idx if idx == sort_index => {
+            if let Some(field) = options.get_one::<String>(options::SORT) {
+                match field.as_str() {
+                    "none" => Sort::None,
+                    "name" => Sort::Name,
+                    "time" => Sort::Time,
+                    "size" => Sort::Size,
+                    "version" => Sort::Version,
+                    "extension" => Sort::Extension,
+                    "width" => Sort::Width,
+                    _ => unreachable!("Invalid field for --sort"),
+                }
+            } else {
+                Sort::Name
+            }
+        }
+        idx if idx == time_index => Sort::Time,
+        idx if idx == size_index => Sort::Size,
+        idx if idx == version_index => Sort::Version,
+        idx if idx == extension_index => Sort::Extension,
+        _ => Sort::Name,
     }
 }
 
@@ -540,13 +588,40 @@ fn extract_color(options: &clap::ArgMatches) -> bool {
         return false;
     }
 
-    match options.get_one::<String>(options::COLOR) {
+    let get_last_index = |flag: &str| -> usize {
+        if options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine) {
+            options.index_of(flag).unwrap_or(0)
+        } else {
+            0
+        }
+    };
+
+    let color_index = options
+        .get_one::<String>(options::COLOR)
+        .and_then(|_| options.indices_of(options::COLOR))
+        .map(|mut indices| indices.next_back().unwrap_or(0))
+        .unwrap_or(0);
+    let unsorted_all_index = get_last_index(options::files::UNSORTED_ALL);
+
+    let color_enabled = match options.get_one::<String>(options::COLOR) {
         None => options.contains_id(options::COLOR),
         Some(val) => match val.as_str() {
             "" | "always" | "yes" | "force" => true,
             "auto" | "tty" | "if-tty" => stdout().is_terminal(),
             /* "never" | "no" | "none" | */ _ => false,
         },
+    };
+
+    // If --color was explicitly specified, always honor it regardless of -f
+    // Otherwise, if -f is present without explicit color, disable color
+    if color_index > 0 {
+        // Color was explicitly specified
+        color_enabled
+    } else if unsorted_all_index > 0 {
+        // -f present without explicit color, disable implicit color
+        false
+    } else {
+        color_enabled
     }
 }
 
@@ -1573,6 +1648,12 @@ pub fn uu_app() -> Command {
             // Overrides -a (as the order matters)
             .overrides_with_all([options::files::ALL, options::files::ALMOST_ALL])
             .help(translate!("ls-help-almost-all"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::files::UNSORTED_ALL)
+            .short('f')
+            .help(translate!("ls-help-unsorted-all"))
             .action(ArgAction::SetTrue),
     )
     .arg(
