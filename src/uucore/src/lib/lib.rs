@@ -234,6 +234,21 @@ macro_rules! crate_version {
 /// all occurrences of `{}` with the execution phrase and returns the resulting
 /// `String`. It does **not** support more advanced formatting features such
 /// as `{0}`.
+// TODO(#8880): Autoconf compatibility workaround - consider removal
+//
+// This code implements runtime branding detection to work around autoconf < 2.72
+// not recognizing uutils mkdir as race-free. Modern autoconf (>= 2.72) always
+// uses mkdir -p regardless of branding, making this workaround unnecessary for:
+// - Ubuntu 25.10+ (ships with autoconf 2.72)
+// - Any distro with autoconf >= 2.72
+//
+// DECISION POINT: If the project decides to only support modern autoconf versions,
+// this entire branding detection mechanism (functions below through line ~367)
+// can be removed and replaced with a simple static "uutils coreutils" branding.
+//
+// See: https://github.com/uutils/coreutils/issues/8880
+// See: https://github.com/autotools-mirror/autoconf/commit/d081ac3
+
 /// Return true if the current directory (or parents) looks like a configure tree
 fn looks_like_configure_dir() -> bool {
     let mut current_dir = env::current_dir().ok();
@@ -318,6 +333,17 @@ fn looks_like_mkdir_version_probe() -> bool {
 }
 
 /// Decide if we should emit GNU branding for compatibility
+///
+/// Returns true only when:
+/// 1. Utility is "mkdir"
+/// 2. Called as `mkdir --version` non-interactively (likely autoconf probe)
+/// 3. Autoconf environment detected (env vars, configure files, or parent process)
+///
+/// This ensures honest "uutils coreutils" branding for normal users while
+/// providing "GNU coreutils" branding only when autoconf is actively probing.
+///
+/// NOTE: This entire mechanism exists only for autoconf < 2.72 compatibility.
+/// See TODO(#8880) comment above for removal consideration.
 fn should_emit_gnu_brand() -> bool {
     // Only for mkdir
     if util_name() != "mkdir" {
