@@ -401,7 +401,7 @@ mod test_unlink;
 mod test_uptime;
 
 #[cfg(feature = "uudoc")]
-#[path = "by-util/test_uudoc.rs"]
+#[path = "uudoc/mod.rs"]
 mod test_uudoc;
 
 #[cfg(feature = "users")]
