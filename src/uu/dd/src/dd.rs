@@ -873,8 +873,7 @@ impl<'a> Output<'a> {
             match self.dst.write(&chunk[base_idx..]) {
                 Ok(wlen) => {
                     base_idx += wlen;
-                    // take iflags.fullblock as oflags shall not have this option
-                    if (base_idx >= full_len) || !self.settings.iflags.fullblock {
+                    if base_idx >= full_len {
                         return Ok(base_idx);
                     }
                 }
