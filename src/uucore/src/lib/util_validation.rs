@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore prefixcat testcat
+
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process;

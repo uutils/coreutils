@@ -13,8 +13,7 @@ fn uudoc_bin() -> &'static str {
     UUDOC_BINARY_PATH
         .get_or_init(|| {
             let coreutils_binary = PathBuf::from(env!("CARGO_BIN_EXE_coreutils"));
-            let uudoc_binary = coreutils_binary.parent().unwrap().join("uudoc");
-            uudoc_binary
+            coreutils_binary.parent().unwrap().join("uudoc")
         })
         .to_str()
         .unwrap()
