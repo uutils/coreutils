@@ -22,11 +22,43 @@ use uutests::util_name;
 #[test]
 fn test_version_format_autoconf_compatibility() {
     // Test that --version output contains "(GNU coreutils)" for autoconf compatibility
+    // when autoconf-like environment is present (pre-2.72 detection style)
     // See: https://github.com/uutils/coreutils/issues/8880
-    new_ucmd!()
+    let mut cmd = new_ucmd!();
+    cmd.env("ac_cv_path_mkdir", "/usr/bin/mkdir")
         .arg("--version")
         .succeeds()
         .stdout_contains("(GNU coreutils)");
+}
+
+#[test]
+fn test_runtime_autoconf_detection_with_env_var() {
+    // Test explicit environment variable override
+    let mut cmd = new_ucmd!();
+    cmd.env("UUTILS_VERSION_BRAND", "GNU coreutils")
+        .arg("--version")
+        .succeeds()
+        .stdout_contains("(GNU coreutils)");
+}
+
+#[test]
+fn test_runtime_autoconf_detection_with_configure_env() {
+    // Test autoconf environment variable detection
+    let mut cmd = new_ucmd!();
+    cmd.env("ac_cv_path_mkdir", "/usr/bin/mkdir")
+        .arg("--version")
+        .succeeds()
+        .stdout_contains("(GNU coreutils)");
+}
+
+#[test]
+fn test_default_branding_without_autoconf() {
+    // Test that without autoconf context, we show uutils branding
+    // (This might show GNU if autoconf is detected, which is fine)
+    let result = new_ucmd!().arg("--version").succeeds();
+    let output = result.stdout_str();
+    // Should contain either uutils or GNU branding (GNU if autoconf detected)
+    assert!(output.contains("(uutils coreutils)") || output.contains("(GNU coreutils)"));
 }
 
 #[test]

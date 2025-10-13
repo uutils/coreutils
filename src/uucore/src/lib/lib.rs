@@ -127,7 +127,11 @@ use nix::sys::signal::{
     SaFlags, SigAction, SigHandler::SigDfl, SigSet, Signal::SIGBUS, Signal::SIGSEGV, sigaction,
 };
 use std::borrow::Cow;
+use std::env;
 use std::ffi::{OsStr, OsString};
+#[cfg(target_os = "linux")]
+use std::fs::{read_link, read_to_string};
+use std::io::IsTerminal;
 use std::io::{BufRead, BufReader};
 use std::iter;
 #[cfg(unix)]
@@ -211,19 +215,16 @@ macro_rules! bin {
     };
 }
 
-/// Generate the version string for clap.
+/// Generate the version string for clap with runtime autoconf detection.
 ///
 /// The generated string has the format `(<project name>) <version>`, for
-/// example: "(GNU coreutils) 0.30.0". clap will then prefix it with the util name.
+/// example: "(GNU coreutils) 0.30.0" when running under autoconf or
+/// "(uutils coreutils) 0.30.0" normally. clap will then prefix it with the util name.
 #[macro_export]
 macro_rules! crate_version {
-    () => {{
-        const BRAND: &str = match option_env!("UUTILS_VERSION_BRAND") {
-            Some(v) => v,
-            None => "uutils coreutils",
-        };
-        $crate::brand_version_static(BRAND, env!("CARGO_PKG_VERSION"))
-    }};
+    () => {
+        $crate::runtime_version_string(env!("CARGO_PKG_VERSION"))
+    };
 }
 
 /// Generate the usage string for clap.
@@ -233,9 +234,141 @@ macro_rules! crate_version {
 /// all occurrences of `{}` with the execution phrase and returns the resulting
 /// `String`. It does **not** support more advanced formatting features such
 /// as `{0}`.
+/// Return true if the current directory (or parents) looks like a configure tree
+fn looks_like_configure_dir() -> bool {
+    let mut current_dir = env::current_dir().ok();
+    while let Some(dir) = current_dir {
+        if dir.join("configure").exists()
+            || dir.join("configure.ac").exists()
+            || dir.join("configure.in").exists()
+            || dir.join("aclocal.m4").exists()
+            || dir.join("Makefile.in").exists()
+            || dir.join("config.log").exists()
+        {
+            return true;
+        }
+        current_dir = dir.parent().map(|p| p.to_path_buf());
+    }
+    false
+}
+
+/// Return true if environment variables suggest an autoconf/automake context
+fn looks_like_autoconf_env() -> bool {
+    // Common autoconf/automake indicators
+    const VARS: [&str; 8] = [
+        "ac_cv_path_mkdir",
+        "ac_cv_prog_mkdir",
+        "AUTOCONF",
+        "AUTOMAKE",
+        "CONFIG_SHELL",
+        "ACLOCAL_PATH",
+        "ac_configure_args",
+        "ac_srcdir",
+    ];
+    if VARS.iter().any(|v| env::var(v).is_ok()) {
+        return true;
+    }
+    if let Ok(makeflags) = env::var("MAKEFLAGS") {
+        if makeflags.contains("am__api_version") {
+            return true;
+        }
+    }
+    false
+}
+
+/// Best-effort Linux-only detection via /proc of a configure parent
+#[cfg(target_os = "linux")]
+fn looks_like_linux_configure_parent() -> bool {
+    if let Ok(ppid) = env::var("PPID").or_else(|_| {
+        read_to_string("/proc/self/stat")
+            .ok()
+            .and_then(|content| content.split_whitespace().nth(3).map(|s| s.to_string()))
+            .ok_or("no ppid")
+    }) {
+        if let Ok(ppid_num) = ppid.parse::<u32>() {
+            if let Ok(cmdline) = read_to_string(format!("/proc/{}/cmdline", ppid_num)) {
+                let cmdline = cmdline.replace('\0', " ");
+                if cmdline.contains("configure") || cmdline.contains("autoconf") {
+                    return true;
+                }
+            }
+            if let Ok(exe) = read_link(format!("/proc/{}/exe", ppid_num)) {
+                if let Some(name) = exe.file_name().and_then(|n| n.to_str()) {
+                    if name == "configure" || name.contains("autoconf") {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Return true if the call pattern likely matches an autoconf mkdir probe
+fn looks_like_mkdir_version_probe() -> bool {
+    // Determine where util args start, mirroring UTIL_NAME logic
+    let base_index = usize::from(get_utility_is_second_arg());
+    let is_man = usize::from(ARGV[base_index].eq("manpage"));
+    let argv_index = base_index + is_man; // index of util in ARGV
+    let after = ARGV.iter().skip(argv_index + 1).collect::<Vec<_>>();
+    // Version-only flags and non-interactive stdout
+    let is_version_only = after.len() == 1 && (after[0] == "--version" || after[0] == "-V");
+    let stdout_is_tty = IsTerminal::is_terminal(&std::io::stdout());
+    is_version_only && !stdout_is_tty
+}
+
+/// Decide if we should emit GNU branding for compatibility
+fn should_emit_gnu_brand() -> bool {
+    // Only for mkdir
+    if util_name() != "mkdir" {
+        return false;
+    }
+    if !looks_like_mkdir_version_probe() {
+        return false;
+    }
+    if looks_like_autoconf_env() || looks_like_configure_dir() {
+        return true;
+    }
+    #[cfg(target_os = "linux")]
+    if looks_like_linux_configure_parent() {
+        return true;
+    }
+    false
+}
+
+/// Get the appropriate brand based on context
+fn get_runtime_brand() -> String {
+    // First check for explicit environment variable override (compile-time)
+    if let Some(brand) = option_env!("UUTILS_VERSION_BRAND") {
+        return brand.to_string();
+    }
+
+    // Check for runtime environment variable override
+    if let Ok(brand) = env::var("UUTILS_VERSION_BRAND") {
+        return brand;
+    }
+
+    // If likely under autoconf probe for mkdir, use GNU branding for compatibility
+    if should_emit_gnu_brand() {
+        return "GNU coreutils".to_string();
+    }
+
+    // Default to honest uutils branding
+    "uutils coreutils".to_string()
+}
+
 pub fn brand_version_static(brand: &'static str, version: &'static str) -> &'static str {
-    let s = format!("({}) {}", brand, version);
+    let s = format!("({brand}) {version}");
     Box::leak(s.into_boxed_str())
+}
+
+/// Generate version string with runtime autoconf detection
+pub fn runtime_version_string(_version: &'static str) -> &'static str {
+static VERSION_CACHE: LazyLock<String> = LazyLock::new(|| {
+        let brand = get_runtime_brand();
+        format!("({brand}) {}", env!("CARGO_PKG_VERSION"))
+    });
+    VERSION_CACHE.as_str()
 }
 
 pub fn format_usage(s: &str) -> String {
