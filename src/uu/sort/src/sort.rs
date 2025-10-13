@@ -1103,6 +1103,7 @@ fn automatic_buffer_size(files: &[OsString]) -> usize {
     let file_hint = file_size_hint(files);
     let mem_hint = available_memory_hint();
 
+    // Prefer the tighter bound when both hints exist, otherwise fall back to whichever hint is available.
     match (file_hint, mem_hint) {
         (Some(file), Some(mem)) => file.min(mem),
         (Some(file), None) => file,
