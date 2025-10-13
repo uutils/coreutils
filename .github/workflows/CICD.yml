@@ -777,6 +777,45 @@ jobs:
             echo 200:x:2000: | sudo tee -a /etc/group
             ;;
         esac
+    - name: Apply CodSpeed gnu11 compatibility patch
+      shell: bash
+      run: |
+        ## CodSpeed gnu11 compatibility patch (addresses CodSpeedHQ/codspeed-rust#139)
+        set -euo pipefail
+        CODSPEED_VERSION="v4.0.4"
+        CODSPEED_REPO="https://github.com/CodSpeedHQ/codspeed-rust"
+        CODSPEED_TMP="${RUNNER_TEMP:-/tmp}/codspeed-rust"
+        BUILD_RS="$CODSPEED_TMP/crates/codspeed/build.rs"
+        # clone with retry
+        for attempt in 1 2 3; do
+          git clone --depth 1 --branch "$CODSPEED_VERSION" "$CODSPEED_REPO" "$CODSPEED_TMP" 2>/dev/null && break
+          [ $attempt -eq 3 ] && { echo "::error::Failed to clone codspeed-rust"; exit 1; }
+          sleep 2
+        done
+        # validate and patch build.rs
+        [ ! -f "$BUILD_RS" ] && { echo "::error::build.rs not found"; exit 1; }
+        if grep -q '\-std=gnu17' "$BUILD_RS"; then
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' 's/-std=gnu17/-std=gnu11/g' "$BUILD_RS"
+          else
+            sed -i 's/-std=gnu17/-std=gnu11/g' "$BUILD_RS"
+          fi
+          grep -q '\-std=gnu11' "$BUILD_RS" && ! grep -q '\-std=gnu17' "$BUILD_RS" || { echo "::error::Patch failed"; exit 1; }
+        fi
+        # inject cargo patch
+        PATCH_ENTRY="codspeed = { path = \"$CODSPEED_TMP/crates/codspeed\" }"
+        if grep -q '^\[patch\.crates-io\]' Cargo.toml; then
+          if grep -q '^codspeed\s*=' Cargo.toml; then
+            [[ "$OSTYPE" == "darwin"* ]] && sed -i '' "s|^codspeed\s*=.*|$PATCH_ENTRY|" Cargo.toml || sed -i "s|^codspeed\s*=.*|$PATCH_ENTRY|" Cargo.toml
+          else
+            awk -v entry="$PATCH_ENTRY" '/^\[patch\.crates-io\]/ { print; print entry; next } { print }' Cargo.toml > Cargo.toml.tmp && mv Cargo.toml.tmp Cargo.toml
+          fi
+        else
+          printf "\n[patch.crates-io]\n%s\n" "$PATCH_ENTRY" >> Cargo.toml
+        fi
+        grep -q "codspeed.*=.*path.*$CODSPEED_TMP" Cargo.toml || { echo "::error::Failed to add patch"; exit 1; }
+        # update lockfile
+        cargo update -p codspeed 2>/dev/null || cargo update -p codspeed-divan-compat 2>/dev/null || true
     - uses: taiki-e/install-action@v2
       if: steps.vars.outputs.CARGO_CMD == 'redoxer'
       with:
