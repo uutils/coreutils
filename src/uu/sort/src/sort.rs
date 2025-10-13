@@ -25,7 +25,7 @@ use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
 #[cfg(target_os = "linux")]
-use nix::libc::{RLIMIT_NOFILE, rlimit};
+use nix::libc::{RLIMIT_NOFILE, getrlimit, rlimit};
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{Rng, rng};
 use rayon::prelude::*;
