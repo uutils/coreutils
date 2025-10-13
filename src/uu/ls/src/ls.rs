@@ -254,13 +254,22 @@ enum Files {
     Normal,
 }
 
-fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String>), LsError> {
-    // TODO: Using correct locale string is not implemented.
-    const LOCALE_FORMAT: (&str, Option<&str>) = ("%b %e %H:%M", Some("%b %e  %Y"));
+#[derive(PartialEq, Eq)]
+enum TimeStyle {
+    Locale, // Use ICU4X locale-aware formatting
+    Format {
+        recent: String,
+        older: Option<String>,
+    }, // Use jiff format strings
+}
 
-    // Convert time_styles references to owned String/option.
-    fn ok((recent, older): (&str, Option<&str>)) -> Result<(String, Option<String>), LsError> {
-        Ok((recent.to_string(), older.map(String::from)))
+fn parse_time_style(options: &clap::ArgMatches) -> Result<TimeStyle, LsError> {
+    // Helper to create Format variant
+    fn fmt((recent, older): (&str, Option<&str>)) -> Result<TimeStyle, LsError> {
+        Ok(TimeStyle::Format {
+            recent: recent.to_string(),
+            older: older.map(String::from),
+        })
     }
 
     if let Some(field) = options
@@ -274,17 +283,16 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
             && options.indices_of(options::FULL_TIME).unwrap().next_back()
                 > options.indices_of(options::TIME_STYLE).unwrap().next_back()
         {
-            ok((format::FULL_ISO, None))
+            fmt((format::FULL_ISO, None))
         } else {
             let field = if let Some(field) = field.strip_prefix("posix-") {
                 // See GNU documentation, set format to "locale" if LC_TIME="POSIX",
                 // else just strip the prefix and continue (even "posix+FORMAT" is
                 // supported).
-                // TODO: This needs to be moved to uucore and handled by icu?
                 if std::env::var("LC_TIME").unwrap_or_default() == "POSIX"
                     || std::env::var("LC_ALL").unwrap_or_default() == "POSIX"
                 {
-                    return ok(LOCALE_FORMAT);
+                    return Ok(TimeStyle::Locale);
                 }
                 field
             } else {
@@ -292,14 +300,11 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
             };
 
             match field {
-                "full-iso" => ok((format::FULL_ISO, None)),
-                "long-iso" => ok((format::LONG_ISO, None)),
+                "full-iso" => fmt((format::FULL_ISO, None)),
+                "long-iso" => fmt((format::LONG_ISO, None)),
                 // ISO older format needs extra padding.
-                "iso" => Ok((
-                    "%m-%d %H:%M".to_string(),
-                    Some(format::ISO.to_string() + " "),
-                )),
-                "locale" => ok(LOCALE_FORMAT),
+                "iso" => fmt(("%m-%d %H:%M", Some(&(format::ISO.to_string() + " ")))),
+                "locale" => Ok(TimeStyle::Locale),
                 _ => match field.chars().next().unwrap() {
                     '+' => {
                         // recent/older formats are (optionally) separated by a newline
@@ -307,7 +312,7 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                         let recent = it.next().unwrap_or_default();
                         let older = it.next();
                         match it.next() {
-                            None => ok((recent, older)),
+                            None => fmt((recent, older)),
                             Some(_) => Err(LsError::TimeStyleParseError(String::from(field))),
                         }
                     }
@@ -316,9 +321,9 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
             }
         }
     } else if options.get_flag(options::FULL_TIME) {
-        ok((format::FULL_ISO, None))
+        fmt((format::FULL_ISO, None))
     } else {
-        ok(LOCALE_FORMAT)
+        Ok(TimeStyle::Locale)
     }
 }
 
@@ -361,8 +366,7 @@ pub struct Config {
     // Dir and vdir needs access to this field
     pub quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
-    time_format_recent: String,        // Time format for recent dates
-    time_format_older: Option<String>, // Time format for older dates (optional, if not present, time_format_recent is used)
+    time_style: TimeStyle, // How to format timestamps
     context: bool,
     selinux_supported: bool,
     group_directories_first: bool,
@@ -898,10 +902,10 @@ impl Config {
         let indicator_style = extract_indicator_style(options);
         // Only parse the value to "--time-style" if it will become relevant.
         let dired = options.get_flag(options::DIRED);
-        let (time_format_recent, time_format_older) = if format == Format::Long || dired {
+        let time_style = if format == Format::Long || dired {
             parse_time_style(options)?
         } else {
-            Default::default()
+            TimeStyle::Locale // Default to locale-aware
         };
 
         let mut ignore_patterns: Vec<Pattern> = Vec::new();
@@ -1081,8 +1085,7 @@ impl Config {
             width,
             quoting_style,
             indicator_style,
-            time_format_recent,
-            time_format_older,
+            time_style,
             context,
             selinux_supported: {
                 #[cfg(all(feature = "selinux", target_os = "linux"))]
@@ -2998,14 +3001,24 @@ fn display_date(
         return Ok(());
     };
 
-    // Use "recent" format if the given date is considered recent (i.e., in the last 6 months),
-    // or if no "older" format is available.
-    let fmt = match &config.time_format_older {
-        Some(time_format_older) if !state.recent_time_range.contains(&time) => time_format_older,
-        _ => &config.time_format_recent,
-    };
-
-    format_system_time(out, time, fmt, FormatSystemTimeFallback::Integer)
+    match &config.time_style {
+        TimeStyle::Locale => {
+            // Use ICU4X locale-aware formatting
+            let is_recent = state.recent_time_range.contains(&time);
+            // Reserve a small amount to reduce reallocations in hot paths.
+            out.reserve(32);
+            uucore::i18n::datetime::write_ls_time(out, time, is_recent);
+            Ok(())
+        }
+        TimeStyle::Format { recent, older } => {
+            // Use jiff format strings
+            let fmt = match older {
+                Some(older_fmt) if !state.recent_time_range.contains(&time) => older_fmt,
+                _ => recent,
+            };
+            format_system_time(out, time, fmt, FormatSystemTimeFallback::Integer)
+        }
+    }
 }
 
 #[allow(dead_code)]

@@ -36,6 +36,7 @@ uucore = { workspace = true, features = [
   "fs",
   "fsext",
   "fsxattr",
+  "i18n-datetime",
   "parser",
   "quoting-style",
   "time",
