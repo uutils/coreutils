@@ -9,7 +9,7 @@
 use std::error::Error;
 use std::fmt;
 #[cfg(target_os = "linux")]
-use std::io::BufRead;
+use std::io::{BufRead, BufReader};
 use std::num::{IntErrorKind, ParseIntError};
 
 use crate::display::Quotable;
@@ -33,6 +33,21 @@ impl From<ParseIntError> for SystemError {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn parse_meminfo_line(line: &str, key: &str) -> Option<u128> {
+    if !line.starts_with(key) {
+        return None;
+    }
+
+    let mut parts = line[key.len()..].split_ascii_whitespace();
+    let value = parts.next()?.parse::<u128>().ok()?;
+
+    match parts.next() {
+        Some("kB") | None => Some(value.saturating_mul(1024)),
+        _ => None,
+    }
+}
+
 /// Get the total number of bytes of physical memory.
 ///
 /// The information is read from the `/proc/meminfo` file.
@@ -52,16 +67,83 @@ fn total_physical_memory() -> Result<u128, SystemError> {
     //     ...
     //
     // We just need to extract the number of `MemTotal`
-    let table = std::fs::read("/proc/meminfo")?;
-    for line in table.lines() {
+    let file = std::fs::File::open("/proc/meminfo")?;
+    let reader = BufReader::new(file);
+
+    for line in reader.lines() {
         let line = line?;
-        if line.starts_with("MemTotal:") && line.ends_with("kB") {
-            let num_kilobytes: u128 = line[9..line.len() - 2].trim().parse()?;
-            let num_bytes = 1024 * num_kilobytes;
-            return Ok(num_bytes);
+        if let Some(bytes) = parse_meminfo_line(&line, "MemTotal:") {
+            return Ok(bytes);
         }
     }
     Err(SystemError::NotFound)
+}
+
+/// Return the number of bytes of memory that appear to be currently available.
+#[cfg(target_os = "linux")]
+pub fn available_memory_bytes() -> Option<u128> {
+    let file = std::fs::File::open("/proc/meminfo").ok()?;
+    let reader = BufReader::new(file);
+
+    let mut mem_available = None;
+    let mut mem_free = None;
+    let mut buffers = None;
+    let mut cached = None;
+
+    for line in reader.lines() {
+        let line = line.ok()?;
+
+        if mem_available.is_none() {
+            if let Some(bytes) = parse_meminfo_line(&line, "MemAvailable:") {
+                mem_available = Some(bytes);
+            }
+        }
+
+        if mem_free.is_none() {
+            if let Some(bytes) = parse_meminfo_line(&line, "MemFree:") {
+                mem_free = Some(bytes);
+            }
+        }
+
+        if buffers.is_none() {
+            if let Some(bytes) = parse_meminfo_line(&line, "Buffers:") {
+                buffers = Some(bytes);
+            }
+        }
+
+        if cached.is_none() {
+            if let Some(bytes) = parse_meminfo_line(&line, "Cached:") {
+                cached = Some(bytes);
+            }
+        }
+
+        if mem_available.is_some() && mem_free.is_some() && buffers.is_some() && cached.is_some() {
+            break;
+        }
+    }
+
+    if let Some(bytes) = mem_available {
+        if bytes > 0 {
+            return Some(bytes);
+        }
+    }
+
+    let fallback = mem_free
+        .unwrap_or(0)
+        .saturating_add(buffers.unwrap_or(0))
+        .saturating_add(cached.unwrap_or(0));
+
+    if fallback > 0 {
+        Some(fallback)
+    } else {
+        total_physical_memory().ok()
+    }
+}
+
+/// Return `None` when the platform does not expose Linux-like `/proc/meminfo`.
+#[cfg(not(target_os = "linux"))]
+pub fn available_memory_bytes() -> Option<u128> {
+    None
 }
 
 /// Get the total number of bytes of physical memory.

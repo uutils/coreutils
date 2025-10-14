@@ -1145,7 +1145,7 @@ fn file_size_hint(files: &[OsString]) -> Option<usize> {
 
 fn available_memory_hint() -> Option<usize> {
     #[cfg(target_os = "linux")]
-    if let Some(bytes) = available_memory_bytes() {
+    if let Some(bytes) = uucore::parser::parse_size::available_memory_bytes() {
         return Some(clamp_hint(bytes / 4));
     }
 
@@ -1173,33 +1173,6 @@ fn desired_file_buffer_bytes(total_bytes: u128) -> u128 {
 
     let quarter = total_bytes / 4;
     quarter.max(max)
-}
-
-#[cfg(target_os = "linux")]
-fn available_memory_bytes() -> Option<u128> {
-    use std::mem::MaybeUninit;
-
-    let mut info = MaybeUninit::<libc::sysinfo>::uninit();
-    let result = unsafe { libc::sysinfo(info.as_mut_ptr()) };
-    if result != 0 {
-        return None;
-    }
-
-    let info = unsafe { info.assume_init() };
-    let mem_unit = if info.mem_unit == 0 { 1 } else { info.mem_unit };
-    let unit = u128::from(mem_unit);
-    let available = u128::from(info.freeram)
-        .saturating_add(u128::from(info.bufferram))
-        .saturating_mul(unit);
-    let total = u128::from(info.totalram).saturating_mul(unit);
-
-    if available > 0 {
-        Some(available)
-    } else if total > 0 {
-        Some(total)
-    } else {
-        None
-    }
 }
 
 fn physical_memory_bytes() -> Option<u128> {
