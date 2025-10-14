@@ -2,6 +2,7 @@
 clonefile
 
 # * POSIX
+OSTYPE
 TMPDIR
 adduser
 csh
