@@ -784,7 +784,7 @@ jobs:
         set -euo pipefail
         CODSPEED_VERSION="v4.0.4"
         CODSPEED_REPO="https://github.com/CodSpeedHQ/codspeed-rust"
-        CODSPEED_TMP="${RUNNER_TEMP:-/tmp}/codspeed-rust"
+        CODSPEED_TMP="$PWD/.codspeed-patch"
         BUILD_RS="$CODSPEED_TMP/crates/codspeed/build.rs"
         # clone with retry
         for attempt in 1 2 3; do
@@ -816,6 +816,8 @@ jobs:
         grep -q "codspeed.*=.*path.*$CODSPEED_TMP" Cargo.toml || { echo "::error::Failed to add patch"; exit 1; }
         # update lockfile
         cargo update -p codspeed 2>/dev/null || cargo update -p codspeed-divan-compat 2>/dev/null || true
+        # cleanup temp directory
+        rm -rf "$CODSPEED_TMP"
     - uses: taiki-e/install-action@v2
       if: steps.vars.outputs.CARGO_CMD == 'redoxer'
       with:
