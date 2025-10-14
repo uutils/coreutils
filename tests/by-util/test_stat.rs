@@ -194,14 +194,14 @@ fn test_char() {
 
 #[cfg(target_os = "linux")]
 #[test]
-fn test_printf_mtime_precision() {
+fn test_printf_atime_ctime_mtime_precision() {
     // TODO Higher precision numbers (`%.3Y`, `%.4Y`, etc.) are
     // formatted correctly, but we are not precise enough when we do
     // some `mtime` computations, so we get `.7640` instead of
     // `.7639`. This can be fixed by being more careful when
     // transforming the number from `Metadata::mtime_nsec()` to the form
     // used in rendering.
-    let args = ["-c", "%.0Y %.1Y %.2Y", "/dev/pts/ptmx"];
+    let args = ["-c", "%.0Y %.1Y %.2X %.2Y %.2Z", "/dev/pts/ptmx"];
     let ts = TestScenario::new(util_name!());
     let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
     eprintln!("{expected_stdout}");

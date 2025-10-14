@@ -1115,7 +1115,11 @@ impl Stater {
                     // time of last access, human-readable
                     'x' => OutputType::Str(pretty_time(meta, MetadataTimeField::Access)),
                     // time of last access, seconds since Epoch
-                    'X' => OutputType::Integer(meta.atime()),
+                    'X' => {
+                        let (sec, nsec) = metadata_get_time(meta, MetadataTimeField::Access)
+                            .map_or((0, 0), system_time_to_sec);
+                        OutputType::Float(sec as f64 + nsec as f64 / 1_000_000_000.0)
+                    }
                     // time of last data modification, human-readable
                     'y' => OutputType::Str(pretty_time(meta, MetadataTimeField::Modification)),
                     // time of last data modification, seconds since Epoch
@@ -1127,7 +1131,11 @@ impl Stater {
                     // time of last status change, human-readable
                     'z' => OutputType::Str(pretty_time(meta, MetadataTimeField::Change)),
                     // time of last status change, seconds since Epoch
-                    'Z' => OutputType::Integer(meta.ctime()),
+                    'Z' => {
+                        let (sec, nsec) = metadata_get_time(meta, MetadataTimeField::Change)
+                            .map_or((0, 0), system_time_to_sec);
+                        OutputType::Float(sec as f64 + nsec as f64 / 1_000_000_000.0)
+                    }
                     'R' => {
                         let major = meta.rdev() >> 8;
                         let minor = meta.rdev() & 0xff;
