@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore gettime BOOTTIME clockid boottime nusers loadavg getloadavg
+// spell-checker:ignore gettime BOOTTIME clockid boottime nusers loadavg getloadavg timeval
 
 //! Provides functions to get system uptime, number of users and load average.
 
@@ -108,7 +108,8 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
         return Ok(uptime);
     }
 
-    let boot_time = boot_time.or_else(|| {
+    // Try provided boot_time or derive from utmpx
+    let derived_boot_time = boot_time.or_else(|| {
         let records = Utmpx::iter_all_records();
         for line in records {
             match line.record_type() {
@@ -124,7 +125,40 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
         None
     });
 
-    if let Some(t) = boot_time {
+    // macOS-specific fallback: use sysctl kern.boottime when utmpx did not provide BOOT_TIME
+    #[cfg(target_os = "macos")]
+    let derived_boot_time = {
+        use libc::{c_int, c_void, size_t, sysctl, timeval};
+        use std::mem::size_of;
+        use std::ptr;
+
+        let mut t = derived_boot_time;
+        if t.is_none() {
+            // MIB for kern.boottime
+            let mut mib: [c_int; 2] = [libc::CTL_KERN, libc::KERN_BOOTTIME];
+            let mut tv: timeval = timeval {
+                tv_sec: 0,
+                tv_usec: 0,
+            };
+            let mut tv_len: size_t = size_of::<timeval>() as size_t;
+            let ret = unsafe {
+                sysctl(
+                    mib.as_mut_ptr(),
+                    2u32, // namelen
+                    std::ptr::from_mut::<timeval>(&mut tv) as *mut c_void,
+                    std::ptr::from_mut::<size_t>(&mut tv_len),
+                    ptr::null_mut(),
+                    0,
+                )
+            };
+            if ret == 0 && tv.tv_sec > 0 {
+                t = Some(tv.tv_sec as time_t);
+            }
+        }
+        t
+    };
+
+    if let Some(t) = derived_boot_time {
         let now = Local::now().timestamp();
         #[cfg(target_pointer_width = "64")]
         let boottime: i64 = t;
