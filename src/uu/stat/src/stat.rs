@@ -1178,12 +1178,12 @@ impl Stater {
                         process_token_filesystem(t, &meta, &display_name);
                     }
                 }
-                Err(e) => {
+                Err(error) => {
                     show_error!(
                         "{}",
                         StatError::CannotReadFilesystemInfo {
                             file: display_name.quote().to_string(),
-                            error: e.to_string()
+                            error
                         }
                     );
                     return 1;

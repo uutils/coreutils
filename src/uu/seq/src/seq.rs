@@ -123,7 +123,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let first = if numbers.len() > 1 {
         match numbers[0].parse() {
             Ok(num) => num,
-            Err(e) => return Err(SeqError::ParseError(numbers[0].to_string(), e).into()),
+            Err(e) => return Err(SeqError::ParseError(numbers[0].to_owned(), e).into()),
         }
     } else {
         PreciseNumber::one()
@@ -131,13 +131,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let increment = if numbers.len() > 2 {
         match numbers[1].parse() {
             Ok(num) => num,
-            Err(e) => return Err(SeqError::ParseError(numbers[1].to_string(), e).into()),
+            Err(e) => return Err(SeqError::ParseError(numbers[1].to_owned(), e).into()),
         }
     } else {
         PreciseNumber::one()
     };
     if increment.is_zero() {
-        return Err(SeqError::ZeroIncrement(numbers[1].to_string()).into());
+        return Err(SeqError::ZeroIncrement(numbers[1].to_owned()).into());
     }
     let last: PreciseNumber = {
         // We are guaranteed that `numbers.len()` is greater than zero
@@ -146,7 +146,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let n: usize = numbers.len();
         match numbers[n - 1].parse() {
             Ok(num) => num,
-            Err(e) => return Err(SeqError::ParseError(numbers[n - 1].to_string(), e).into()),
+            Err(e) => return Err(SeqError::ParseError(numbers[n - 1].to_owned(), e).into()),
         }
     };
 

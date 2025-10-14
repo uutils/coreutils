@@ -343,7 +343,9 @@ impl<'a> RowFormatter<'a> {
 }
 
 /// A `HeaderMode` defines what header labels should be shown.
+#[derive(Default)]
 pub(crate) enum HeaderMode {
+    #[default]
     Default,
     // the user used -h or -H
     HumanReadable,
@@ -351,12 +353,6 @@ pub(crate) enum HeaderMode {
     PosixPortability,
     // the user used --output
     Output,
-}
-
-impl Default for HeaderMode {
-    fn default() -> Self {
-        Self::Default
-    }
 }
 
 /// The data of the header row.

@@ -613,12 +613,10 @@ fn build_dir(
             0
         } as u32;
 
-        let umask = if copy_attributes_from.is_some()
-            && matches!(options.attributes.mode, Preserve::Yes { .. })
+        let umask = if let (Some(from), Preserve::Yes { .. }) =
+            (copy_attributes_from, options.attributes.mode)
         {
-            !fs::symlink_metadata(copy_attributes_from.unwrap())?
-                .permissions()
-                .mode()
+            !fs::symlink_metadata(from)?.permissions().mode()
         } else {
             uucore::mode::get_umask()
         };
