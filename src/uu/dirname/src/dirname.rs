@@ -23,8 +23,8 @@ mod options {
 /// This matches GNU/POSIX behavior where `dirname("/home/dos/.")` returns "/home/dos"
 /// rather than "/home" (which would be the result of `Path::parent()` due to normalization).
 /// Per POSIX.1-2017 dirname specification and GNU coreutils manual:
-/// - POSIX: https://pubs.opengroup.org/onlinepubs/9699919799/utilities/dirname.html
-/// - GNU: https://www.gnu.org/software/coreutils/manual/html_node/dirname-invocation.html
+/// - POSIX: <https://pubs.opengroup.org/onlinepubs/9699919799/utilities/dirname.html>
+/// - GNU: <https://www.gnu.org/software/coreutils/manual/html_node/dirname-invocation.html>
 ///
 /// dirname should do simple string manipulation without path normalization.
 /// See issue #8910 and similar fix in basename (#8373, commit c5268a897).
