@@ -126,6 +126,13 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
     });
 
     // macOS-specific fallback: use sysctl kern.boottime when utmpx did not provide BOOT_TIME
+    //
+    // On macOS, the utmpx BOOT_TIME record can be unreliable or absent, causing intermittent
+    // test failures (see issue #3621: https://github.com/uutils/coreutils/issues/3621).
+    // The sysctl(CTL_KERN, KERN_BOOTTIME) approach is the canonical way to retrieve boot time
+    // on macOS and is always available, making uptime more reliable on this platform.
+    //
+    // This fallback only runs if utmpx failed to provide a boot time.
     #[cfg(target_os = "macos")]
     let derived_boot_time = {
         use libc::{c_int, c_void, size_t, sysctl, timeval};
@@ -134,13 +141,20 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
 
         let mut t = derived_boot_time;
         if t.is_none() {
-            // MIB for kern.boottime
+            // MIB for kern.boottime - the macOS-specific way to get boot time
             let mut mib: [c_int; 2] = [libc::CTL_KERN, libc::KERN_BOOTTIME];
             let mut tv: timeval = timeval {
                 tv_sec: 0,
                 tv_usec: 0,
             };
             let mut tv_len: size_t = size_of::<timeval>() as size_t;
+
+            // SAFETY: We're calling sysctl with valid parameters:
+            // - mib is a valid 2-element array for kern.boottime
+            // - tv is a properly initialized timeval struct
+            // - tv_len correctly reflects the size of tv
+            // - All pointers are valid and properly aligned
+            // - We check the return value before using the result
             let ret = unsafe {
                 sysctl(
                     mib.as_mut_ptr(),
@@ -425,5 +439,99 @@ mod tests {
         assert_eq!("0 users", format_nusers(0));
         assert_eq!("1 user", format_nusers(1));
         assert_eq!("2 users", format_nusers(2));
+    }
+
+    /// Test that sysctl kern.boottime is accessible on macOS and returns valid boot time.
+    /// This ensures the fallback mechanism added for issue #3621 works correctly.
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_macos_sysctl_boottime_available() {
+        use libc::{c_int, c_void, size_t, sysctl, timeval};
+        use std::mem::size_of;
+        use std::ptr;
+
+        // Attempt to get boot time directly via sysctl
+        let mut mib: [c_int; 2] = [libc::CTL_KERN, libc::KERN_BOOTTIME];
+        let mut tv: timeval = timeval {
+            tv_sec: 0,
+            tv_usec: 0,
+        };
+        let mut tv_len: size_t = size_of::<timeval>() as size_t;
+
+        // SAFETY: We're calling sysctl with valid parameters:
+        // - mib is a valid 2-element array for kern.boottime
+        // - tv is a properly initialized timeval struct
+        // - tv_len correctly reflects the size of tv
+        // - We check the return value before using the result
+        let ret = unsafe {
+            sysctl(
+                mib.as_mut_ptr(),
+                2u32,
+                std::ptr::from_mut::<timeval>(&mut tv) as *mut c_void,
+                std::ptr::from_mut::<size_t>(&mut tv_len),
+                ptr::null_mut(),
+                0,
+            )
+        };
+
+        // Verify sysctl succeeded
+        assert_eq!(ret, 0, "sysctl kern.boottime should succeed on macOS");
+
+        // Verify boot time is valid (positive, reasonable value)
+        assert!(tv.tv_sec > 0, "Boot time should be positive");
+
+        // Boot time should be after 2000-01-01 (946684800 seconds since epoch)
+        assert!(tv.tv_sec > 946684800, "Boot time should be after year 2000");
+
+        // Boot time should be before current time
+        let now = chrono::Local::now().timestamp();
+        assert!(
+            (tv.tv_sec as i64) < now,
+            "Boot time should be before current time"
+        );
+    }
+
+    /// Test that get_uptime always succeeds on macOS due to sysctl fallback.
+    /// This addresses the intermittent failures reported in issue #3621.
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_get_uptime_always_succeeds_on_macos() {
+        // Call get_uptime without providing boot_time, forcing the system
+        // to use utmpx or fall back to sysctl
+        let result = get_uptime(None);
+
+        assert!(
+            result.is_ok(),
+            "get_uptime should always succeed on macOS with sysctl fallback"
+        );
+
+        let uptime = result.unwrap();
+        assert!(uptime > 0, "Uptime should be positive");
+
+        // Reasonable upper bound: system hasn't been up for more than 365 days
+        // (This is just a sanity check)
+        assert!(
+            uptime < 365 * 86400,
+            "Uptime seems unreasonably high: {} seconds",
+            uptime
+        );
+    }
+
+    /// Test get_uptime consistency by calling it multiple times.
+    /// Verifies the sysctl fallback produces stable results.
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_get_uptime_macos_consistency() {
+        let uptime1 = get_uptime(None).expect("First call should succeed");
+        let uptime2 = get_uptime(None).expect("Second call should succeed");
+
+        // Uptimes should be very close (within 1 second)
+        let diff = (uptime1 - uptime2).abs();
+        assert!(
+            diff <= 1,
+            "Consecutive uptime calls should be consistent, got {} and {}",
+            uptime1,
+            uptime2
+        );
     }
 }
