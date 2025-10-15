@@ -11,6 +11,28 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 #[test]
+fn gnu_ext_disabled_input_ref() {
+    new_ucmd!()
+        .args(&["-G", "-r", "sonnet"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_input_ref.expected");
+}
+#[test]
+fn gnu_ext_disabled_test_reference_flag_interaction_r_and_a() {
+    new_ucmd!()
+        .args(&["-G", "-A", "-r", "sonnet"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_test_reference_flag_interaction_r_and_a.expected");
+}
+
+#[test]
+fn gnu_ext_disabled_stream_mode_multi_file() {
+    new_ucmd!()
+        .args(&["-G", "-A", "-r", "-S", "'", "sonnet", "input"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_stream_mode_multi_file.expected");
+}
+#[test]
 fn test_reference_format_for_stdin() {
     let input = "Rust is good language";
     let expected_output = concat!(
@@ -30,6 +52,13 @@ fn test_reference_format_for_stdin() {
         .stdout_only(expected_output);
 }
 #[test]
+fn gnu_ext_disabled_auto_reg_head_truncate() {
+    new_ucmd!()
+        .args(&["-G", "-A", "sonnet"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_auto_reg_head_truncate.expected");
+}
+#[test]
 fn test_tex_format_no_truncation_markers() {
     let input = "Hello world Rust is a fun language";
     new_ucmd!()
@@ -37,6 +66,28 @@ fn test_tex_format_no_truncation_markers() {
         .pipe_in(input)
         .succeeds()
         .stdout_only_fixture("test_tex_format_no_truncation_markers.expected");
+}
+
+#[test]
+fn gnu_ext_disabled_context_regex_tex() {
+    new_ucmd!()
+        .args(&["-G", "-T", "-S", ":", "sonnet"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_context_regex_tex.expected");
+}
+#[test]
+fn gnu_ext_disabled_context_regex_auto_input_ref() {
+    new_ucmd!()
+        .args(&["-G", "-A", "-r", "-S", ",", "sonnet"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_context_regex_auto_input_ref.expected");
+}
+#[test]
+fn gnu_ext_disabled_context_regex_input_ref() {
+    new_ucmd!()
+        .args(&["-G", "-r", "-S", ":", "sonnet"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_context_regex_input_ref.expected");
 }
 #[test]
 fn gnu_ext_disabled_chunk_no_over_reading() {

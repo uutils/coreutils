@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDOs) corasick memchr Roff trunc oset iset CHARCLASS
-
+// spell-checker:ignore rposition
 use std::cmp;
 use std::cmp::PartialEq;
 use std::collections::{BTreeSet, HashMap, HashSet};
