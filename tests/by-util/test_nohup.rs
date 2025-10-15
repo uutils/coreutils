@@ -172,14 +172,13 @@ fn test_nohup_fallback_to_home() {
 
     // Should mention HOME/nohup.out in stderr if it fell back
     let stderr_str = String::from_utf8_lossy(result.stderr());
-    let home_nohup = format!("{}/nohup.out", home_dir);
+    let home_nohup = format!("{home_dir}/nohup.out");
 
     // Check either stderr mentions the HOME path or the file was created in HOME
     sleep(std::time::Duration::from_millis(50));
     assert!(
         stderr_str.contains(&home_nohup) || std::path::Path::new(&home_nohup).exists(),
-        "nohup should fall back to HOME when cwd is not writable. stderr: {}",
-        stderr_str
+        "nohup should fall back to HOME when cwd is not writable. stderr: {stderr_str}"
     );
 }
 
@@ -195,8 +194,7 @@ fn test_nohup_command_not_found() {
     let code = result.try_exit_status().and_then(|s| s.code());
     assert!(
         code == Some(126) || code == Some(127),
-        "Expected exit code 126 or 127, got: {:?}",
-        code
+        "Expected exit code 126 or 127, got: {code:?}"
     );
 }
 
@@ -230,45 +228,4 @@ fn test_nohup_stderr_to_stdout() {
     let content = std::fs::read_to_string(at.plus_as_string("nohup.out")).unwrap();
     assert!(content.contains("stdout message"));
     assert!(content.contains("stderr message"));
-    // Test POSIXLY_CORRECT affects exit code when nohup.out cannot be created
-    // This is a more complex scenario to test properly, so we simplify it
-    // We primarily test that nohup fails appropriately when it cannot create output files
-    #[test]
-    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
-    fn test_nohup_posixly_correct_exit_code() {
-        use std::fs;
-        use std::os::unix::fs::PermissionsExt;
-
-        let ts = TestScenario::new(util_name!());
-        let at = &ts.fixtures;
-
-        // Create a directory without write permissions
-        at.mkdir("nowrite");
-        let nowrite_path = at.plus("nowrite");
-        let mut perms = fs::metadata(&nowrite_path).unwrap().permissions();
-        perms.set_mode(0o555);
-        fs::set_permissions(&nowrite_path, perms).unwrap();
-
-        // Test with POSIXLY_CORRECT set - should use exit code 127
-        let result_posix = ts
-            .ucmd()
-            .env("POSIXLY_CORRECT", "1")
-            .env("HOME", at.plus_as_string("nowrite"))
-            .current_dir(&nowrite_path)
-            .terminal_simulation(true)
-            .arg("echo")
-            .arg("test")
-            .run();
-
-        // Restore permissions
-        let mut perms = fs::metadata(&nowrite_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&nowrite_path, perms).unwrap();
-
-        // Check that it failed (we're testing the error path, not the specific code)
-        assert!(
-            !result_posix.succeeded(),
-            "nohup should fail when it cannot create output file"
-        );
-    }
 }
