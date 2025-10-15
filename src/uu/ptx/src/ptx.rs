@@ -627,6 +627,7 @@ fn get_output_chunks(
     all_before: &[char],
     keyword: &str,
     all_after: &[char],
+    head_has_truncated: bool,
     config: &Config,
 ) -> (String, String, String, String) {
     // Chunk size logics are mostly copied from the GNU ptx source.
@@ -652,16 +653,25 @@ fn get_output_chunks(
     // trim whitespace away from all_before to get the index where the before chunk should end.
     let (_, before_end) = trim_idx(all_before, 0, all_before.len());
 
-    // the minimum possible begin index of the before_chunk is the end index minus the length.
-    let before_beg = cmp::max(before_end as isize - max_before_size as isize, 0) as usize;
-    // in case that falls in the middle of a word, trim away the word.
-    let before_beg = trim_broken_word_left(all_before, before_beg, before_end);
+    // First calculate a theoretical starting point
+    let initial_before_beg = cmp::max(before_end as isize - max_before_size as isize, 0) as usize;
+
+    let before_is_truncated = initial_before_beg > 0
+        && all_before[..initial_before_beg]
+            .iter()
+            .any(|c| !c.is_whitespace());
+
+    let before_beg = trim_broken_word_left(all_before, initial_before_beg, before_end);
 
     // trim away white space.
     let (before_beg, before_end) = trim_idx(all_before, before_beg, before_end);
 
     // and get the string.
-    let before_str: String = all_before[before_beg..before_end].iter().collect();
+    // Replace all whitespace with a single space.
+    let before_str: String = all_before[before_beg..before_end]
+        .iter()
+        .map(|&c| if c.is_whitespace() { ' ' } else { c })
+        .collect();
     before.push_str(&before_str);
     assert!(max_before_size >= before.len());
 
@@ -671,47 +681,66 @@ fn get_output_chunks(
     let after_end = cmp::min(max_after_size, all_after.len());
     // in case that falls in the middle of a word, trim away the word.
     let after_end = trim_broken_word_right(all_after, 0, after_end);
-
+    let after_is_truncated = after_end != all_after.len();
     // trim away white space.
     let (_, after_end) = trim_idx(all_after, 0, after_end);
 
     // and get the string
-    let after_str: String = all_after[0..after_end].iter().collect();
+    let after_str: String = all_after[0..after_end]
+        .iter()
+        .map(|&c| if c.is_whitespace() { ' ' } else { c })
+        .collect();
     after.push_str(&after_str);
     assert!(max_after_size >= after.len());
 
     // the tail chunk
 
-    // max size of the tail chunk = max size of left half - space taken by before chunk - gap size.
+    let before_len_for_calc = if before.is_empty() {
+        // If the `before` chunk is empty, its effective length for the formula
+        // depends on whether the character that was originally just before the keyword was whitespace.
+        // all_before ends just before the keyword. If it's not empty and its last char is space,
+        // then the C code quirk would result in a -1 length.
+        if !all_before.is_empty() && all_before[all_before.len() - 1].is_whitespace() {
+            -1
+        } else {
+            0
+        }
+    } else {
+        before.len() as isize
+    };
+
     let max_tail_size = cmp::max(
-        max_before_size as isize - before.len() as isize - config.gap_size as isize,
+        max_before_size as isize - before_len_for_calc - config.gap_size as isize,
         0,
     ) as usize;
 
-    // the tail chunk takes text starting from where the after chunk ends (with whitespace trimmed).
-    let (tail_beg, _) = trim_idx(all_after, after_end, all_after.len());
+    let (tail_beg_untrimmed, _) = trim_idx(all_after, after_end, all_after.len());
+    let available_tail_slice = &all_after[tail_beg_untrimmed..];
 
-    // end = begin + max length
-    let tail_end = cmp::min(all_after.len(), tail_beg + max_tail_size);
-    // in case that falls in the middle of a word, trim away the word.
-    let tail_end = trim_broken_word_right(all_after, tail_beg, tail_end);
+    let final_tail_end = if max_tail_size > available_tail_slice.len() {
+        all_after.len()
+    } else {
+        // Within the available space, search backward from the end to find the boundary (whitespace character) of the last word.
+        let fitting_slice = &available_tail_slice[..max_tail_size];
+
+        match fitting_slice.iter().rposition(|&c| c.is_whitespace()) {
+            // If a whitespace is found, it indicates that the last word is complete, and the boundary is here.
+            Some(last_space_idx) => tail_beg_untrimmed + last_space_idx,
+            // If no whitespace is found (e.g., it is an excessively long word), then not a single word can be kept.
+            None => tail_beg_untrimmed,
+        }
+    };
+
+    let tail_is_truncated = final_tail_end != all_after.len();
 
     // trim away whitespace again.
-    let (tail_beg, mut tail_end) = trim_idx(all_after, tail_beg, tail_end);
-    // Fix: Manually trim trailing char (like "a") that are preceded by a space.
-    // This handles cases like "is a" which are not correctly trimmed by the
-    // preceding functions.
-    if tail_end >= 2
-        && (tail_end - 2) > tail_beg
-        && all_after[tail_end - 2].is_whitespace()
-        && !all_after[tail_end - 1].is_whitespace()
-    {
-        tail_end -= 1;
-        (_, tail_end) = trim_idx(all_after, tail_beg, tail_end);
-    }
+    let (tail_beg, tail_end) = trim_idx(all_after, tail_beg_untrimmed, final_tail_end);
 
     // and get the string
-    let tail_str: String = all_after[tail_beg..tail_end].iter().collect();
+    let tail_str: String = all_after[tail_beg..tail_end]
+        .iter()
+        .map(|&c| if c.is_whitespace() { ' ' } else { c })
+        .collect();
     tail.push_str(&tail_str);
 
     // the head chunk
@@ -725,30 +754,42 @@ fn get_output_chunks(
     // the head chunk takes text from before the before chunk
     let (_, head_end) = trim_idx(all_before, 0, before_beg);
 
-    // begin = end - max length
-    let head_beg = cmp::max(head_end as isize - max_head_size as isize, 0) as usize;
-    // in case that falls in the middle of a word, trim away the word.
-    let head_beg = trim_broken_word_left(all_before, head_beg, head_end);
+    // Calculate the theoretical start point for the head.
+    let initial_head_beg = cmp::max(head_end as isize - max_head_size as isize, 0) as usize;
+
+    // Determine if actual content was truncated from the very beginning of `all_before`.
+    let head_is_truncated = (initial_head_beg > 0
+        && all_before[..initial_head_beg]
+            .iter()
+            .any(|c| !c.is_whitespace()))
+        || head_has_truncated;
+
+    // Adjust for broken words based on the theoretical start point.
+    let head_beg = trim_broken_word_left(all_before, initial_head_beg, head_end);
 
     // trim away white space again.
     let (head_beg, head_end) = trim_idx(all_before, head_beg, head_end);
 
     // and get the string.
-    let head_str: String = all_before[head_beg..head_end].iter().collect();
+    let head_str: String = all_before[head_beg..head_end]
+        .iter()
+        .map(|&c| if c.is_whitespace() { ' ' } else { c })
+        .collect();
     head.push_str(&head_str);
     //The TeX mode does not output truncation characters.
     if config.format != OutFormat::Tex {
         // put right context truncation string if needed
-        if after_end != all_after.len() && tail_beg == tail_end {
+        if after_is_truncated && tail_beg == tail_end {
             after.push_str(&config.trunc_str);
-        } else if after_end != all_after.len() && tail_end != all_after.len() {
+        } else if after_is_truncated && tail_is_truncated {
             tail.push_str(&config.trunc_str);
         }
 
         // put left context truncation string if needed
-        if before_beg != 0 && head_beg == head_end {
+        if before_is_truncated && head_beg == head_end {
             before = format!("{}{before}", config.trunc_str);
-        } else if before_beg != 0 && head_beg != 0 {
+        // } else if head_is_truncated && head_beg != 0 {
+        } else if head_is_truncated {
             head = format!("{}{head}", config.trunc_str);
         }
     }
@@ -855,25 +896,26 @@ fn prepare_line_chunks(
 
     // This is the calculated start position for `all_before`, as a BYTE index into `line`.
     //Optimize the logic: if the left context is too long, skip a part to be compatible with the GNU version.
-    let left_field_start_rel_bytes = if left_context_len > half_line_width + max_word_len {
-        // Optimization triggered: Jump back from the keyword.
-        let mut jump_back_pos = word_ref
-            .position
-            .saturating_sub(half_line_width + max_word_len);
+    let (left_field_start_rel_bytes, head_has_truncated) =
+        if left_context_len > half_line_width + max_word_len {
+            // Optimization triggered: Jump back from the keyword.
+            let mut jump_back_pos = word_ref
+                .position
+                .saturating_sub(half_line_width + max_word_len);
 
-        //handle utf-8 boundary
-        while !line.is_char_boundary(jump_back_pos) {
-            jump_back_pos -= 1;
-        }
-        let slice_after_jump = &line[jump_back_pos..];
-        // From the jump-back position, skip one "chunk" (word or whitespace) forward
-        let chunk_len =
-            find_first_chunk_end(slice_after_jump, config.word_regex.as_ref(), config.gnu_ext);
-        jump_back_pos + chunk_len
-    } else {
-        // Optimization not triggered: Start from the beginning of the pure context.
-        pure_context_start_pos
-    };
+            //handle utf-8 boundary
+            while !line.is_char_boundary(jump_back_pos) {
+                jump_back_pos -= 1;
+            }
+            let slice_after_jump = &line[jump_back_pos..];
+            // From the jump-back position, skip one "chunk" (word or whitespace) forward
+            let chunk_len =
+                find_first_chunk_end(slice_after_jump, config.word_regex.as_ref(), config.gnu_ext);
+            (jump_back_pos + chunk_len, true)
+        } else {
+            // Optimization not triggered: Start from the beginning of the pure context.
+            (pure_context_start_pos, false)
+        };
 
     // We need the character count for the keyword's start position (end of `all_before`).
     let ref_char_position = line[..word_ref.position].chars().count();
@@ -890,7 +932,8 @@ fn prepare_line_chunks(
 
     let keyword = line[word_ref.position..word_ref.position_end].to_string();
     let all_after = &chars_line[char_position_end..];
-    let (tail, before, after, head) = get_output_chunks(all_before, &keyword, all_after, config);
+    let (tail, before, after, head) =
+        get_output_chunks(all_before, &keyword, all_after, head_has_truncated, config);
 
     (tail, before, keyword, after, head)
 }
@@ -956,23 +999,24 @@ fn prepare_stream_chunks(
     let half_line_width = config.line_width / 2;
     let left_context_len = word_ref.absolute_position - word_ref.context_start;
 
-    let left_field_start_abs = if left_context_len > half_line_width + max_word_len {
-        // Jump back from the keyword.
-        let jump_back_pos = word_ref
-            .absolute_position
-            .saturating_sub(half_line_width + max_word_len);
+    let (left_field_start_abs, head_has_truncated) =
+        if left_context_len > half_line_width + max_word_len {
+            // Jump back from the keyword.
+            let jump_back_pos = word_ref
+                .absolute_position
+                .saturating_sub(half_line_width + max_word_len);
 
-        //  From the jump-back position, skip one "chunk" (word or whitespace) forward
-        //  to ensure we don't start in the middle of a word.
-        let slice_after_jump = &full_content[jump_back_pos..];
-        let chunk_len =
-            find_first_chunk_end(slice_after_jump, config.word_regex.as_ref(), config.gnu_ext);
+            //  From the jump-back position, skip one "chunk" (word or whitespace) forward
+            //  to ensure we don't start in the middle of a word.
+            let slice_after_jump = &full_content[jump_back_pos..];
+            let chunk_len =
+                find_first_chunk_end(slice_after_jump, config.word_regex.as_ref(), config.gnu_ext);
 
-        jump_back_pos + chunk_len
-    } else {
-        // If the left context is not long, we start from the beginning of the context.
-        word_ref.context_start
-    };
+            (jump_back_pos + chunk_len, true)
+        } else {
+            // If the left context is not long, we start from the beginning of the context.
+            (word_ref.context_start, false)
+        };
 
     let keyword = &full_content[word_ref.absolute_position..word_ref.absolute_position_end];
 
@@ -983,8 +1027,13 @@ fn prepare_stream_chunks(
 
     let all_before_chars: Vec<char> = all_before_str.chars().collect();
     let all_after_chars: Vec<char> = all_after_str.chars().collect();
-    let (tail, before, after, head) =
-        get_output_chunks(&all_before_chars, keyword, &all_after_chars, config);
+    let (tail, before, after, head) = get_output_chunks(
+        &all_before_chars,
+        keyword,
+        &all_after_chars,
+        head_has_truncated,
+        config,
+    );
 
     (tail, before, keyword.to_string(), after, head)
 }
