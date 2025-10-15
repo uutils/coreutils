@@ -44,11 +44,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // dirname should do simple string manipulation without path normalization.
         // See issue #8910 and similar fix in basename (#8373, commit c5268a897).
         let path_bytes = uucore::os_str_as_bytes(path.as_os_str()).unwrap_or(&[]);
-        if path_bytes.ends_with(b"/.") {
+        let handled_trailing_dot = if path_bytes.ends_with(b"/.") {
             // Strip the "/." suffix and print the result
             if path_bytes.len() == 2 {
                 // Special case: "/." -> "/"
                 print!("/");
+                true
             } else {
                 // General case: "/home/dos/." -> "/home/dos"
                 let stripped = &path_bytes[..path_bytes.len() - 2];
@@ -57,19 +58,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     use std::os::unix::ffi::OsStrExt;
                     let result = std::ffi::OsStr::from_bytes(stripped);
                     print_verbatim(result).unwrap();
+                    true
                 }
                 #[cfg(not(unix))]
                 {
                     // On non-Unix, fall back to lossy conversion
                     if let Ok(s) = std::str::from_utf8(stripped) {
                         print!("{s}");
+                        true
                     } else {
-                        // Fallback for invalid UTF-8
-                        print_verbatim(Path::new(path)).unwrap();
+                        // Can't handle non-UTF-8 on non-Unix, fall through to normal logic
+                        false
                     }
                 }
             }
         } else {
+            false
+        };
+
+        if !handled_trailing_dot {
             // Normal path handling using Path::parent()
             let p = Path::new(path);
             match p.parent() {
