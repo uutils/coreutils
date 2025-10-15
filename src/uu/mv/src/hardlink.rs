@@ -53,11 +53,11 @@ pub enum HardlinkError {
 impl std::fmt::Display for HardlinkError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            HardlinkError::Io(e) => write!(f, "I/O error during hardlink operation: {e}"),
-            HardlinkError::Scan(msg) => {
+            Self::Io(e) => write!(f, "I/O error during hardlink operation: {e}"),
+            Self::Scan(msg) => {
                 write!(f, "Failed to scan files for hardlinks: {msg}")
             }
-            HardlinkError::Preservation { source, target } => {
+            Self::Preservation { source, target } => {
                 write!(
                     f,
                     "Failed to preserve hardlink: {} -> {}",
@@ -65,7 +65,7 @@ impl std::fmt::Display for HardlinkError {
                     target.display()
                 )
             }
-            HardlinkError::Metadata { path, error } => {
+            Self::Metadata { path, error } => {
                 write!(f, "Metadata access error for {}: {}", path.display(), error)
             }
         }
@@ -75,8 +75,8 @@ impl std::fmt::Display for HardlinkError {
 impl std::error::Error for HardlinkError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            HardlinkError::Io(e) => Some(e),
-            HardlinkError::Metadata { error, .. } => Some(error),
+            Self::Io(e) => Some(e),
+            Self::Metadata { error, .. } => Some(error),
             _ => None,
         }
     }
@@ -84,7 +84,7 @@ impl std::error::Error for HardlinkError {
 
 impl From<io::Error> for HardlinkError {
     fn from(error: io::Error) -> Self {
-        HardlinkError::Io(error)
+        Self::Io(error)
     }
 }
 
@@ -92,14 +92,14 @@ impl From<HardlinkError> for io::Error {
     fn from(error: HardlinkError) -> Self {
         match error {
             HardlinkError::Io(e) => e,
-            HardlinkError::Scan(msg) => io::Error::other(msg),
-            HardlinkError::Preservation { source, target } => io::Error::other(format!(
+            HardlinkError::Scan(msg) => Self::other(msg),
+            HardlinkError::Preservation { source, target } => Self::other(format!(
                 "Failed to preserve hardlink: {} -> {}",
                 source.display(),
                 target.display()
             )),
 
-            HardlinkError::Metadata { path, error } => io::Error::other(format!(
+            HardlinkError::Metadata { path, error } => Self::other(format!(
                 "Metadata access error for {}: {}",
                 path.display(),
                 error

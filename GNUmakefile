@@ -69,6 +69,13 @@ TOYBOX_SRC  := $(TOYBOX_ROOT)/toybox-$(TOYBOX_VER)
 #------------------------------------------------------------------------
 OS ?= $(shell uname -s)
 
+# Windows does not allow symlink by default.
+# Allow to override LN for AppArmor.
+ifeq ($(OS),Windows_NT)
+	LN ?= ln -f
+endif
+LN ?= ln -sf
+
 ifdef SELINUX_ENABLED
 	override SELINUX_ENABLED := 0
 # Now check if we should enable it (only on non-Windows)
@@ -480,18 +487,18 @@ endif
 ifeq (${MULTICALL}, y)
 	$(INSTALL) -m 755 $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
 	$(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
-		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
+		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
 	)
 	$(foreach prog, $(HASHSUM_PROGS), \
-		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
+		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
 	)
-	$(if $(findstring test,$(INSTALLEES)), cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
+	$(if $(findstring test,$(INSTALLEES)), cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
 else
 	$(foreach prog, $(INSTALLEES), \
 		$(INSTALL) -m 755 $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog) $(newline) \
 	)
 	$(foreach prog, $(HASHSUM_PROGS), \
-		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)hashsum $(PROG_PREFIX)$(prog) $(newline) \
+		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)hashsum $(PROG_PREFIX)$(prog) $(newline) \
 	)
 	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) -m 755 $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
 endif

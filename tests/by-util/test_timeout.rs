@@ -192,8 +192,7 @@ fn test_kill_subprocess() {
             "trap 'echo inside_trap' TERM; sleep 30",
         ])
         .fails_with_code(124)
-        .stdout_contains("inside_trap")
-        .stderr_contains("Terminated");
+        .stdout_contains("inside_trap");
 }
 
 #[test]

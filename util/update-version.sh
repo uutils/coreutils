@@ -17,10 +17,10 @@
 # 10) Create the release on github https://github.com/uutils/coreutils/releases/new
 # 11) Make sure we have good release notes
 
-FROM="0.2.0"
-TO="0.2.2"
+FROM="0.2.2"
+TO="0.3.0"
 
-PROGS=$(ls -1d src/uu/*/Cargo.toml src/uu/stdbuf/src/libstdbuf/Cargo.toml src/uucore/Cargo.toml Cargo.toml fuzz/uufuzz/Cargo.toml)
+PROGS=$(ls -1d src/uu/*/Cargo.toml src/uu/stdbuf/src/libstdbuf/Cargo.toml src/uucore/Cargo.toml Cargo.toml fuzz/uufuzz/Cargo.toml src/uu/stdbuf/Cargo.toml)
 
 # update the version of all programs
 #shellcheck disable=SC2086

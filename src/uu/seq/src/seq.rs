@@ -106,10 +106,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let options = SeqOptions {
         separator: matches
             .get_one::<OsString>(OPT_SEPARATOR)
-            .map_or(OsString::from("\n"), |s| s.to_os_string()),
+            .cloned()
+            .unwrap_or_else(|| OsString::from("\n")),
         terminator: matches
             .get_one::<OsString>(OPT_TERMINATOR)
-            .map_or(OsString::from("\n"), |s| s.to_os_string()),
+            .cloned()
+            .unwrap_or_else(|| OsString::from("\n")),
         equal_width: matches.get_flag(OPT_EQUAL_WIDTH),
         format: matches.get_one::<String>(OPT_FORMAT).map(|s| s.as_str()),
     };
@@ -121,7 +123,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let first = if numbers.len() > 1 {
         match numbers[0].parse() {
             Ok(num) => num,
-            Err(e) => return Err(SeqError::ParseError(numbers[0].to_string(), e).into()),
+            Err(e) => return Err(SeqError::ParseError(numbers[0].to_owned(), e).into()),
         }
     } else {
         PreciseNumber::one()
@@ -129,13 +131,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let increment = if numbers.len() > 2 {
         match numbers[1].parse() {
             Ok(num) => num,
-            Err(e) => return Err(SeqError::ParseError(numbers[1].to_string(), e).into()),
+            Err(e) => return Err(SeqError::ParseError(numbers[1].to_owned(), e).into()),
         }
     } else {
         PreciseNumber::one()
     };
     if increment.is_zero() {
-        return Err(SeqError::ZeroIncrement(numbers[1].to_string()).into());
+        return Err(SeqError::ZeroIncrement(numbers[1].to_owned()).into());
     }
     let last: PreciseNumber = {
         // We are guaranteed that `numbers.len()` is greater than zero
@@ -144,7 +146,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let n: usize = numbers.len();
         match numbers[n - 1].parse() {
             Ok(num) => num,
-            Err(e) => return Err(SeqError::ParseError(numbers[n - 1].to_string(), e).into()),
+            Err(e) => return Err(SeqError::ParseError(numbers[n - 1].to_owned(), e).into()),
         }
     };
 

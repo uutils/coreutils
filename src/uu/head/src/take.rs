@@ -16,7 +16,7 @@ struct TakeAllBuffer {
 
 impl TakeAllBuffer {
     fn new() -> Self {
-        TakeAllBuffer {
+        Self {
             buffer: vec![],
             start_index: 0,
         }
@@ -151,7 +151,7 @@ struct BytesAndLines {
 
 impl TakeAllLinesBuffer {
     fn new() -> Self {
-        TakeAllLinesBuffer {
+        Self {
             inner: TakeAllBuffer::new(),
             terminated_lines: 0,
             partial_line: false,
