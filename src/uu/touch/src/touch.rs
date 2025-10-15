@@ -15,6 +15,7 @@ use chrono::{
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
 use filetime::{FileTime, set_file_times, set_symlink_file_times};
+use jiff::{Timestamp, Zoned};
 use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fs::{self, File};
@@ -588,7 +589,7 @@ fn stat(path: &Path, follow: bool) -> std::io::Result<(FileTime, FileTime)> {
     ))
 }
 
-fn parse_date(_ref_time: DateTime<Local>, s: &str) -> Result<FileTime, TouchError> {
+fn parse_date(ref_time: DateTime<Local>, s: &str) -> Result<FileTime, TouchError> {
     // This isn't actually compatible with GNU touch, but there doesn't seem to
     // be any simple specification for what format this parameter allows and I'm
     // not about to implement GNU parse_datetime.
@@ -638,14 +639,35 @@ fn parse_date(_ref_time: DateTime<Local>, s: &str) -> Result<FileTime, TouchErro
     }
 
     // **parse_datetime 0.13 API change:**
-    // Previously (0.11): parse_datetime_at_date(chrono) → chrono::DateTime
-    // Now (0.13):        parse_datetime() → jiff::Zoned
+    // The parse_datetime crate was updated from 0.11 to 0.13 in commit 2a69918ca to fix
+    // issue #8754 (large second values like "12345.123456789 seconds ago" failing).
+    // This introduced a breaking API change in parse_datetime_at_date:
     //
-    // Since touch still uses chrono types internally, we convert:
-    // jiff::Zoned → Unix timestamp → chrono::DateTime
+    // Previously (0.11): parse_datetime_at_date(chrono::DateTime) → chrono::DateTime
+    // Now (0.13):        parse_datetime_at_date(jiff::Zoned) → jiff::Zoned
     //
-    // TODO: Consider migrating touch to jiff to eliminate this conversion
-    if let Ok(zoned) = parse_datetime::parse_datetime(s) {
+    // Commit 4340913c4 initially adapted to this by switching from parse_datetime_at_date
+    // to parse_datetime, which broke deterministic relative date parsing (the ref_time
+    // parameter was no longer used, causing tests/touch/relative to fail in CI).
+    //
+    // This implementation restores parse_datetime_at_date usage with proper conversions:
+    // chrono::DateTime → jiff::Zoned → parse_datetime_at_date → jiff::Zoned → chrono::DateTime
+    //
+    // The use of parse_datetime_at_date (not parse_datetime) is critical for deterministic
+    // behavior with relative dates like "yesterday" or "2 days ago", which must be
+    // calculated relative to ref_time, not the current system time.
+
+    // Convert chrono DateTime to jiff Zoned for parse_datetime_at_date
+    let ref_zoned = {
+        let ts = Timestamp::new(
+            ref_time.timestamp(),
+            ref_time.timestamp_subsec_nanos() as i32,
+        )
+        .map_err(|_| TouchError::InvalidDateFormat(s.to_owned()))?;
+        Zoned::new(ts, jiff::tz::TimeZone::system())
+    };
+
+    if let Ok(zoned) = parse_datetime::parse_datetime_at_date(ref_zoned, s) {
         let timestamp = zoned.timestamp();
         let dt =
             DateTime::from_timestamp(timestamp.as_second(), timestamp.subsec_nanosecond() as u32)
