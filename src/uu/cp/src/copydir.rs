@@ -29,7 +29,6 @@ use walkdir::{DirEntry, WalkDir};
 
 use crate::{
     CopyResult, CpError, Options, aligned_ancestors, context_for, copy_attributes, copy_file,
-    copy_link,
 };
 
 /// Ensure a Windows path starts with a `\\?`.
@@ -258,17 +257,6 @@ fn copy_direntry(
     } else {
         entry_is_dir_no_follow
     };
-
-    // If the source is a symbolic link and the options tell us not to
-    // dereference the link, then copy the link object itself.
-    if source_is_symlink && !options.dereference {
-        return copy_link(
-            &entry.source_absolute,
-            &entry.local_to_target,
-            symlinked_files,
-            options,
-        );
-    }
 
     // If the source is a directory and the destination does not
     // exist, ...
