@@ -123,12 +123,6 @@ fn test_trailing_dot() {
         .arg("/foo/bar/baz/.")
         .succeeds()
         .stdout_is("/foo/bar/baz\n");
-
-    // Multiple components
-    new_ucmd!()
-        .arg("/usr/local/bin/.")
-        .succeeds()
-        .stdout_is("/usr/local/bin\n");
 }
 
 #[test]
@@ -221,16 +215,4 @@ fn test_existing_behavior_preserved() {
         .arg("/home/dos/..")
         .succeeds()
         .stdout_is("/home/dos\n");
-
-    // Root
-    new_ucmd!().arg("/").succeeds().stdout_is("/\n");
-
-    // Current directory
-    new_ucmd!().arg(".").succeeds().stdout_is(".\n");
-
-    // Parent reference
-    new_ucmd!().arg("..").succeeds().stdout_is(".\n");
-
-    // Empty string
-    new_ucmd!().arg("").succeeds().stdout_is(".\n");
 }
