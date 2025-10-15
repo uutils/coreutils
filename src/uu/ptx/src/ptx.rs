@@ -23,6 +23,11 @@ use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::format_usage;
 use uucore::translate;
 
+struct PtxResult {
+    words: BTreeSet<WordRef>,
+    max_word_len: usize,
+}
+
 #[derive(Debug, PartialEq)]
 enum OutFormat {
     Dumb,
@@ -41,6 +46,7 @@ struct Config {
     macro_name: String,
     trunc_str: String,
     context_regex: String,
+    word_regex: Option<String>,
     line_width: usize,
     gap_size: usize,
 }
@@ -56,7 +62,8 @@ impl Default for Config {
             ignore_case: false,
             macro_name: "xx".to_owned(),
             trunc_str: "/".to_owned(),
-            context_regex: "\\w+".to_owned(),
+            context_regex: r#"[.?!][])"'}]*(?:\t|  |$)[ \t\n]*"#.to_owned(),
+            word_regex: None,
             line_width: 72,
             gap_size: 3,
         }
@@ -185,8 +192,9 @@ impl WordFilter {
     }
 }
 
+/// Original, lightweight WordRef for line mode (fast path)
 #[derive(Debug, PartialOrd, PartialEq, Eq, Ord)]
-struct WordRef {
+struct LineWordRef {
     word: String,
     global_line_nr: usize,
     local_line_nr: usize,
@@ -195,6 +203,76 @@ struct WordRef {
     filename: OsString,
 }
 
+#[derive(Debug, PartialOrd, PartialEq, Eq, Ord)]
+struct StreamWordRef {
+    word: String,
+    absolute_position: usize, // The absolute start position of the word in full_content
+    absolute_position_end: usize,
+    context_start: usize, // The absolute start position of the context to which this word belongs
+    context_end: usize,
+
+    // Mainly used for the -A option and obtaining original lines
+    filename: OsString,
+    global_line_nr: usize,
+    local_line_nr: usize,
+}
+
+#[derive(Debug, Eq)]
+enum WordRef {
+    Line(LineWordRef),
+    Stream(StreamWordRef),
+}
+
+impl WordRef {
+    fn filename(&self) -> &OsString {
+        match self {
+            Self::Line(r) => &r.filename,
+            Self::Stream(r) => &r.filename,
+        }
+    }
+    fn local_line_nr(&self) -> usize {
+        match self {
+            Self::Line(r) => r.local_line_nr,
+            Self::Stream(r) => r.local_line_nr,
+        }
+    }
+    fn word(&self) -> &String {
+        match self {
+            Self::Line(r) => &r.word,
+            Self::Stream(r) => &r.word,
+        }
+    }
+
+    fn unique_position(&self) -> (usize, usize) {
+        match self {
+            Self::Line(r) => (r.global_line_nr, r.position),
+            Self::Stream(r) => (r.global_line_nr, r.absolute_position),
+        }
+    }
+}
+
+impl PartialEq for WordRef {
+    fn eq(&self, other: &Self) -> bool {
+        // We consider two elements to be identical only when both their words and positions are the same
+        self.word() == other.word() && self.unique_position() == other.unique_position()
+    }
+}
+
+impl Ord for WordRef {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        match self.word().cmp(other.word()) {
+            // If the words are the same, sort them by their order of appearance
+            cmp::Ordering::Equal => self.unique_position().cmp(&other.unique_position()),
+            other_ordering => other_ordering,
+        }
+    }
+}
+
+impl PartialOrd for WordRef {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
 #[derive(Debug, Error)]
 enum PtxError {
     #[error("{}", translate!("ptx-error-dumb-format"))]
@@ -212,18 +290,28 @@ impl UError for PtxError {}
 fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
     let mut config = Config::default();
     let err_msg = "parsing options failed";
+
+    config.input_ref = matches.get_flag(options::REFERENCES);
+
     if matches.get_flag(options::TRADITIONAL) {
         config.gnu_ext = false;
         config.format = OutFormat::Roff;
-        "[^ \t\n]+".clone_into(&mut config.context_regex);
+        "\n".clone_into(&mut config.context_regex);
     } else {
+        if config.input_ref {
+            "\n".clone_into(&mut config.context_regex);
+        }
         return Err(PtxError::NotImplemented("GNU extensions").into());
     }
-    if matches.contains_id(options::SENTENCE_REGEXP) {
-        return Err(PtxError::NotImplemented("-S").into());
-    }
+
     config.auto_ref = matches.get_flag(options::AUTO_REFERENCE);
-    config.input_ref = matches.get_flag(options::REFERENCES);
+    if matches.contains_id(options::SENTENCE_REGEXP) {
+        matches
+            .get_one::<String>(options::SENTENCE_REGEXP)
+            .expect(err_msg)
+            .clone_into(&mut config.context_regex);
+    }
+    config.word_regex = matches.get_one::<String>(options::WORD_REGEXP).cloned();
     config.right_ref = matches.get_flag(options::RIGHT_SIDE_REFS);
     config.ignore_case = matches.get_flag(options::IGNORE_CASE);
     if matches.contains_id(options::MACRO_NAME) {
@@ -272,6 +360,7 @@ struct FileContent {
     lines: Vec<String>,
     chars_lines: Vec<Vec<char>>,
     offset: usize,
+    full_content: String,
 }
 
 type FileMap = HashMap<OsString, FileContent>;
@@ -280,14 +369,16 @@ fn read_input(input_files: &[OsString]) -> std::io::Result<FileMap> {
     let mut file_map: FileMap = HashMap::new();
     let mut offset: usize = 0;
     for filename in input_files {
-        let reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
+        let mut reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
             Box::new(stdin())
         } else {
             let file = File::open(Path::new(filename))?;
             Box::new(file)
         });
-        let lines: Vec<String> = reader.lines().collect::<std::io::Result<Vec<String>>>()?;
+        let mut full_content = String::new();
+        reader.read_to_string(&mut full_content)?;
 
+        let lines: Vec<String> = full_content.lines().map(String::from).collect();
         // Indexing UTF-8 string requires walking from the beginning, which can hurts performance badly when the line is long.
         // Since we will be jumping around the line a lot, we dump the content into a Vec<char>, which can be indexed in constant time.
         let chars_lines: Vec<Vec<char>> = lines.iter().map(|x| x.chars().collect()).collect();
@@ -298,6 +389,7 @@ fn read_input(input_files: &[OsString]) -> std::io::Result<FileMap> {
                 lines,
                 chars_lines,
                 offset,
+                full_content,
             },
         );
         offset += size;
@@ -305,68 +397,185 @@ fn read_input(input_files: &[OsString]) -> std::io::Result<FileMap> {
     Ok(file_map)
 }
 
-/// Go through every lines in the input files and record each match occurrence as a `WordRef`.
-fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> BTreeSet<WordRef> {
-    let reg = Regex::new(&filter.word_regex).unwrap();
-    let ref_reg = Regex::new(&config.context_regex).unwrap();
+/// Scans input files to find and record every keyword occurrence as a `WordRef`.
+///
+/// Depending on the configuration, this function operates in one of two modes:
+/// 1.  **Line Mode**: Processes each physical line of the input individually.
+/// 2.  **Stream Mode**: Treats the entire file as a single stream and chunks it by context boundaries (e.g., sentences).
+///     Processes input files to identify and record every keyword occurrence as a `WordRef`.
+///
+/// This function is the core of the keyword indexing logic and operates in one of two modes,
+/// determined by the active `context_regex`:
+///
+/// * **Line Mode** (when `context_regex` is `\n`): The function iterates through each physical
+///   line of the input, finding all keywords within that line. It uses a lightweight `LineWordRef`.
+///
+/// * **Stream Mode** (when `context_regex` is not `\n`): The function treats the entire file
+///   content as a single stream, splitting it into logical contexts (e.g., sentences).
+///   It uses a more detailed `StreamWordRef`.
+fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> PtxResult {
+    let word_reg = Regex::new(&filter.word_regex).unwrap();
     let mut word_set: BTreeSet<WordRef> = BTreeSet::new();
-    for (file, lines) in file_map {
-        let mut count: usize = 0;
-        let offs = lines.offset;
-        for line in &lines.lines {
-            // if -r, exclude reference from word set
-            let (ref_beg, ref_end) = match ref_reg.find(line) {
-                Some(x) => (x.start(), x.end()),
-                None => (0, 0),
+    let mut max_word_len = 0;
+
+    let is_stream_mode = config.context_regex != "\n";
+
+    if is_stream_mode {
+        let context_reg = Regex::new(&config.context_regex).unwrap();
+        let mut global_line_offset = 0;
+
+        for (file, file_content) in file_map {
+            let full_content_str = &file_content.full_content;
+            // Precompute the starting index of each row to facilitate quick location of line numbers later.
+            let line_starts: Vec<usize> = {
+                let mut starts = vec![0];
+                starts.extend(full_content_str.match_indices('\n').map(|(i, _)| i + 1));
+                starts
             };
-            // match words with given regex
-            for mat in reg.find_iter(line) {
-                let (beg, end) = (mat.start(), mat.end());
-                if config.input_ref && ((beg, end) == (ref_beg, ref_end)) {
-                    continue;
+
+            let mut current_pos = 0;
+
+            while current_pos < full_content_str.len() {
+                let search_slice = &full_content_str[current_pos..];
+                let next_boundary = context_reg.find(search_slice);
+                let context_end =
+                    next_boundary.map_or(full_content_str.len(), |m| current_pos + m.end());
+
+                let mut context_start_offset = current_pos;
+                let mut context_slice = &full_content_str[current_pos..context_end];
+
+                //Context contraction
+                let is_start_of_line = line_starts.binary_search(&context_start_offset).is_ok();
+                if config.input_ref && is_start_of_line {
+                    if let Some(ref_end_relative) = context_slice.find(char::is_whitespace) {
+                        let content_start_relative = context_slice[ref_end_relative..]
+                            .find(|c: char| !c.is_whitespace())
+                            .map_or(context_slice.len(), |i| ref_end_relative + i);
+                        context_slice = &context_slice[content_start_relative..];
+                        context_start_offset += content_start_relative;
+                    } else {
+                        context_slice = "";
+                    }
                 }
-                let mut word = line[beg..end].to_owned();
-                if filter.only_specified && !filter.only_set.contains(&word) {
-                    continue;
+
+                for word_match in word_reg.find_iter(context_slice) {
+                    let word_str = word_match.as_str();
+                    max_word_len = cmp::max(max_word_len, word_str.len());
+                    if filter.only_specified && !filter.only_set.contains(word_str) {
+                        continue;
+                    }
+                    if filter.ignore_specified && filter.ignore_set.contains(word_str) {
+                        continue;
+                    }
+                    let final_word = if config.ignore_case {
+                        word_str.to_uppercase()
+                    } else {
+                        word_str.to_owned()
+                    };
+
+                    let absolute_word_pos = context_start_offset + word_match.start();
+
+                    // Keyword filtering: if the keyword is within the reference area, skip it
+                    // Must be used in conjunction with the context contraction above; omitting either of the two processing logics will cause an error
+                    if config.input_ref {
+                        let line_nr = line_starts
+                            .binary_search(&absolute_word_pos)
+                            .unwrap_or_else(|i| i - 1);
+
+                        let physical_line = file_content.lines[line_nr].as_str();
+                        let ref_end = physical_line
+                            .find(char::is_whitespace)
+                            .unwrap_or(physical_line.len());
+                        // Calculate the relative position of the word within the physical line.
+                        let word_pos_in_line = absolute_word_pos - line_starts[line_nr];
+                        if word_pos_in_line < ref_end {
+                            // Skip keywords within the reference area
+                            continue;
+                        }
+                    }
+
+                    let local_line_nr = line_starts
+                        .binary_search(&absolute_word_pos)
+                        .unwrap_or_else(|i| i - 1);
+
+                    word_set.insert(WordRef::Stream(StreamWordRef {
+                        word: final_word,
+                        absolute_position: absolute_word_pos,
+                        absolute_position_end: context_start_offset + word_match.end(),
+                        context_start: context_start_offset,
+                        context_end,
+                        filename: file.clone(),
+                        global_line_nr: global_line_offset + local_line_nr,
+                        local_line_nr,
+                    }));
                 }
-                if filter.ignore_specified && filter.ignore_set.contains(&word) {
-                    continue;
-                }
-                if config.ignore_case {
-                    word = word.to_uppercase();
-                }
-                word_set.insert(WordRef {
-                    word,
-                    filename: file.clone(),
-                    global_line_nr: offs + count,
-                    local_line_nr: count,
-                    position: beg,
-                    position_end: end,
-                });
+                current_pos = context_end;
             }
-            count += 1;
+            global_line_offset += file_content.lines.len();
+        }
+    } else {
+        for (file, file_content) in file_map {
+            for (count, line) in file_content.lines.iter().enumerate() {
+                let (ref_beg, ref_end) = if config.input_ref {
+                    let end = line.find(char::is_whitespace).unwrap_or(line.len());
+                    (0, end)
+                } else {
+                    (0, 0)
+                };
+
+                for mat in word_reg.find_iter(line) {
+                    let (beg, end) = (mat.start(), mat.end());
+                    if config.input_ref && (beg, end) == (ref_beg, ref_end) {
+                        continue;
+                    }
+
+                    let word_str = &line[beg..end];
+                    max_word_len = cmp::max(max_word_len, word_str.len());
+                    if filter.only_specified && !filter.only_set.contains(word_str) {
+                        continue;
+                    }
+                    if filter.ignore_specified && filter.ignore_set.contains(word_str) {
+                        continue;
+                    }
+                    let final_word = if config.ignore_case {
+                        word_str.to_uppercase()
+                    } else {
+                        word_str.to_owned()
+                    };
+
+                    word_set.insert(WordRef::Line(LineWordRef {
+                        word: final_word,
+                        filename: file.clone(),
+                        global_line_nr: file_content.offset + count,
+                        local_line_nr: count,
+                        position: beg,
+                        position_end: end,
+                    }));
+                }
+            }
         }
     }
-    word_set
+
+    PtxResult {
+        words: word_set,
+        max_word_len,
+    }
 }
 
-fn get_reference(config: &Config, word_ref: &WordRef, line: &str, context_reg: &Regex) -> String {
+fn get_reference(config: &Config, word_ref: &WordRef, line: &str) -> String {
     if config.auto_ref {
-        if word_ref.filename == "-" {
-            format!(":{}", word_ref.local_line_nr + 1)
+        if word_ref.filename() == "-" {
+            format!(":{}", word_ref.local_line_nr() + 1)
         } else {
             format!(
                 "{}:{}",
-                word_ref.filename.maybe_quote(),
-                word_ref.local_line_nr + 1
+                word_ref.filename().maybe_quote(),
+                word_ref.local_line_nr() + 1
             )
         }
     } else if config.input_ref {
-        let (beg, end) = match context_reg.find(line) {
-            Some(x) => (x.start(), x.end()),
-            None => (0, 0),
-        };
-        line[beg..end].to_string()
+        let end = line.find(char::is_whitespace).unwrap_or(line.len());
+        line[..end].to_string()
     } else {
         String::new()
     }
@@ -564,23 +773,23 @@ fn format_tex_field(s: &str) -> String {
 
 fn format_tex_line(
     config: &Config,
-    word_ref: &WordRef,
-    line: &str,
-    chars_line: &[char],
+    tail: &str,
+    before: &str,
+    keyword: &str,
+    after: &str,
+    head: &str,
     reference: &str,
 ) -> String {
     let mut output = String::new();
     write!(output, "\\{} ", config.macro_name).unwrap();
-    let (tail, before, keyword, after, head) =
-        prepare_line_chunks(config, word_ref, line, chars_line, reference);
     write!(
         output,
         "{{{0}}}{{{1}}}{{{2}}}{{{3}}}{{{4}}}",
-        format_tex_field(&tail),
-        format_tex_field(&before),
-        format_tex_field(&keyword),
-        format_tex_field(&after),
-        format_tex_field(&head),
+        format_tex_field(tail),
+        format_tex_field(before),
+        format_tex_field(keyword),
+        format_tex_field(after),
+        format_tex_field(head),
     )
     .unwrap();
     if config.auto_ref || config.input_ref {
@@ -595,23 +804,23 @@ fn format_roff_field(s: &str) -> String {
 
 fn format_roff_line(
     config: &Config,
-    word_ref: &WordRef,
-    line: &str,
-    chars_line: &[char],
+    tail: &str,
+    before: &str,
+    keyword: &str,
+    after: &str,
+    head: &str,
     reference: &str,
 ) -> String {
     let mut output = String::new();
     write!(output, ".{}", config.macro_name).unwrap();
-    let (tail, before, keyword, after, head) =
-        prepare_line_chunks(config, word_ref, line, chars_line, reference);
     write!(
         output,
         " \"{}\" \"{}\" \"{}{}\" \"{}\"",
-        format_roff_field(&tail),
-        format_roff_field(&before),
-        format_roff_field(&keyword),
-        format_roff_field(&after),
-        format_roff_field(&head)
+        format_roff_field(tail),
+        format_roff_field(before),
+        format_roff_field(keyword),
+        format_roff_field(after),
+        format_roff_field(head)
     )
     .unwrap();
     if config.auto_ref || config.input_ref {
@@ -623,47 +832,167 @@ fn format_roff_line(
 /// Extract and prepare text chunks for formatting in both TeX and roff output
 fn prepare_line_chunks(
     config: &Config,
-    word_ref: &WordRef,
+    word_ref: &LineWordRef,
     line: &str,
     chars_line: &[char],
-    reference: &str,
+    max_word_len: usize,
 ) -> (String, String, String, String, String) {
-    // Convert byte positions to character positions
+    let half_line_width = config.line_width / 2;
+
+    // First, determine the start of the "pure" context by skipping the reference in -r mode.
+    // This position is relative to the start of the `line`.
+    let pure_context_start_pos = if config.input_ref {
+        let ref_end = line.find(char::is_whitespace).unwrap_or(line.len());
+        line[ref_end..]
+            .find(|c: char| !c.is_whitespace())
+            .map_or(line.len(), |i| ref_end + i)
+    } else {
+        0
+    };
+
+    // The length of the left context is the distance from the keyword back to the start of the pure context.
+    let left_context_len = word_ref.position.saturating_sub(pure_context_start_pos);
+
+    // This is the calculated start position for `all_before`, as a BYTE index into `line`.
+    //Optimize the logic: if the left context is too long, skip a part to be compatible with the GNU version.
+    let left_field_start_rel_bytes = if left_context_len > half_line_width + max_word_len {
+        // Optimization triggered: Jump back from the keyword.
+        let mut jump_back_pos = word_ref
+            .position
+            .saturating_sub(half_line_width + max_word_len);
+
+        //handle utf-8 boundary
+        while !line.is_char_boundary(jump_back_pos) {
+            jump_back_pos -= 1;
+        }
+        let slice_after_jump = &line[jump_back_pos..];
+        // From the jump-back position, skip one "chunk" (word or whitespace) forward
+        let chunk_len =
+            find_first_chunk_end(slice_after_jump, config.word_regex.as_ref(), config.gnu_ext);
+        jump_back_pos + chunk_len
+    } else {
+        // Optimization not triggered: Start from the beginning of the pure context.
+        pure_context_start_pos
+    };
+
+    // We need the character count for the keyword's start position (end of `all_before`).
     let ref_char_position = line[..word_ref.position].chars().count();
+
+    //Convert our calculated BYTE start position to a CHARACTER start position for slicing `chars_line`.
+    let all_before_start_char = line[..left_field_start_rel_bytes].chars().count();
+
+    let all_before = &chars_line[all_before_start_char..ref_char_position];
+
     let char_position_end = ref_char_position
         + line[word_ref.position..word_ref.position_end]
             .chars()
             .count();
 
-    // Extract the text before the keyword
-    let all_before = if config.input_ref {
-        let before = &line[..word_ref.position];
-        let before_char_count = before.chars().count();
-        let trimmed_char_count = before
-            .trim_start_matches(reference)
-            .trim_start()
-            .chars()
-            .count();
-        let trim_offset = before_char_count - trimmed_char_count;
-        &chars_line[trim_offset..before_char_count]
-    } else {
-        &chars_line[..ref_char_position]
-    };
-
-    // Extract the keyword and text after it
     let keyword = line[word_ref.position..word_ref.position_end].to_string();
     let all_after = &chars_line[char_position_end..];
-
-    // Get formatted output chunks
     let (tail, before, after, head) = get_output_chunks(all_before, &keyword, all_after, config);
 
     (tail, before, keyword, after, head)
 }
 
+/// Calculates the byte length of the first logical "chunk" at the beginning of the slice.
+/// The/// gic follows three paths:
+/// 1. If a `-W` regex is provided, it returns the length of a match at the start of the slice,
+///    or the length of the first character if no match occurs.
+/// 2. If at a default "word character", it returns the length of the entire contiguous word.
+/// 3. If at a non-word character (e.g., space), it returns the length of that single character.
+fn find_first_chunk_end(slice: &str, word_reg: Option<&String>, gnu_ext: bool) -> usize {
+    if slice.is_empty() {
+        return 0;
+    }
+
+    if let Some(reg_str) = word_reg {
+        let reg = Regex::new(reg_str).unwrap();
+        return match reg.find(slice) {
+            Some(mat) if mat.start() == 0 => {
+                // The regex matched at the very beginning of the slice.
+                // The chunk is the entire match.
+                mat.end()
+            }
+            _ => {
+                // The regex did not match at the beginning, or did not match at all.
+                // In this case, advance by one char.
+                slice.chars().next().map_or(0, |c| c.len_utf8())
+            }
+        };
+    }
+
+    // No `-W` option, use default behavior.
+    let first_char = slice.chars().next().unwrap();
+
+    // Determine if the first character is part of a "default word".
+    let is_word_char = if gnu_ext {
+        first_char.is_alphabetic()
+    } else {
+        !first_char.is_whitespace()
+    };
+
+    if is_word_char {
+        // We are at the start of a default word. Consume the whole word.
+        if gnu_ext {
+            slice
+                .find(|c: char| !c.is_alphabetic())
+                .unwrap_or(slice.len())
+        } else {
+            slice.find(char::is_whitespace).unwrap_or(slice.len())
+        }
+    } else {
+        // We are at a non-word character (e.g., space, punctuation in GNU mode).
+        //So we advance by one UTF-8 char.
+        first_char.len_utf8()
+    }
+}
+fn prepare_stream_chunks(
+    config: &Config,
+    word_ref: &StreamWordRef,
+    full_content: &str,
+    max_word_len: usize,
+) -> (String, String, String, String, String) {
+    let half_line_width = config.line_width / 2;
+    let left_context_len = word_ref.absolute_position - word_ref.context_start;
+
+    let left_field_start_abs = if left_context_len > half_line_width + max_word_len {
+        // Jump back from the keyword.
+        let jump_back_pos = word_ref
+            .absolute_position
+            .saturating_sub(half_line_width + max_word_len);
+
+        //  From the jump-back position, skip one "chunk" (word or whitespace) forward
+        //  to ensure we don't start in the middle of a word.
+        let slice_after_jump = &full_content[jump_back_pos..];
+        let chunk_len =
+            find_first_chunk_end(slice_after_jump, config.word_regex.as_ref(), config.gnu_ext);
+
+        jump_back_pos + chunk_len
+    } else {
+        // If the left context is not long, we start from the beginning of the context.
+        word_ref.context_start
+    };
+
+    let keyword = &full_content[word_ref.absolute_position..word_ref.absolute_position_end];
+
+    // `all_before` now correctly starts from the calculated `left_field_start_abs`.
+    let all_before_str = &full_content[left_field_start_abs..word_ref.absolute_position];
+    // `all_after` is calculated based on the original context end.
+    let all_after_str = &full_content[word_ref.absolute_position_end..word_ref.context_end];
+
+    let all_before_chars: Vec<char> = all_before_str.chars().collect();
+    let all_after_chars: Vec<char> = all_after_str.chars().collect();
+    let (tail, before, after, head) =
+        get_output_chunks(&all_before_chars, keyword, &all_after_chars, config);
+
+    (tail, before, keyword.to_string(), after, head)
+}
+
 fn write_traditional_output(
     config: &mut Config,
     file_map: &FileMap,
-    words: &BTreeSet<WordRef>,
+    ptx_result: &PtxResult,
     output_filename: &OsStr,
 ) -> UResult<()> {
     let mut writer: BufWriter<Box<dyn Write>> =
@@ -675,47 +1004,46 @@ fn write_traditional_output(
             Box::new(file)
         });
 
-    let context_reg = Regex::new(&config.context_regex).unwrap();
-
     if !config.right_ref {
         let max_ref_len = if config.auto_ref {
-            get_auto_max_reference_len(words)
+            get_auto_max_reference_len(&ptx_result.words) + config.gap_size
+        } else if config.input_ref {
+            get_input_max_reference_len(file_map) + config.gap_size
         } else {
             0
         };
         config.line_width -= max_ref_len;
     }
 
-    for word_ref in words {
-        let file_map_value: &FileContent = file_map
-            .get(&word_ref.filename)
+    for word_ref_enum in &ptx_result.words {
+        let file_content: &FileContent = file_map
+            .get(word_ref_enum.filename())
             .expect("Missing file in file map");
-        let FileContent {
-            ref lines,
-            ref chars_lines,
-            offset: _,
-        } = *(file_map_value);
-        let reference = get_reference(
-            config,
-            word_ref,
-            &lines[word_ref.local_line_nr],
-            &context_reg,
-        );
+
+        let physical_line = &file_content.lines[word_ref_enum.local_line_nr()];
+        let reference = get_reference(config, word_ref_enum, physical_line);
+
+        let (tail, before, keyword, after, head) = match word_ref_enum {
+            WordRef::Stream(word_ref) => prepare_stream_chunks(
+                config,
+                word_ref,
+                &file_content.full_content,
+                ptx_result.max_word_len,
+            ),
+            WordRef::Line(word_ref) => {
+                let line = &file_content.lines[word_ref.local_line_nr];
+                let chars_line = &file_content.chars_lines[word_ref.local_line_nr];
+                prepare_line_chunks(config, word_ref, line, chars_line, ptx_result.max_word_len)
+            }
+        };
+
         let output_line: String = match config.format {
-            OutFormat::Tex => format_tex_line(
-                config,
-                word_ref,
-                &lines[word_ref.local_line_nr],
-                &chars_lines[word_ref.local_line_nr],
-                &reference,
-            ),
-            OutFormat::Roff => format_roff_line(
-                config,
-                word_ref,
-                &lines[word_ref.local_line_nr],
-                &chars_lines[word_ref.local_line_nr],
-                &reference,
-            ),
+            OutFormat::Tex => {
+                format_tex_line(config, &tail, &before, &keyword, &after, &head, &reference)
+            }
+            OutFormat::Roff => {
+                format_roff_line(config, &tail, &before, &keyword, &after, &head, &reference)
+            }
             OutFormat::Dumb => {
                 return Err(PtxError::DumbFormat.into());
             }
@@ -731,15 +1059,28 @@ fn write_traditional_output(
     Ok(())
 }
 
+fn get_input_max_reference_len(file_map: &FileMap) -> usize {
+    let mut input_max_reference_len = 0;
+    for file_content in file_map.values() {
+        for line in &file_content.lines {
+            let ref_len = line.find(char::is_whitespace).unwrap_or(line.len());
+
+            // 更新我们目前找到的最大长度
+            input_max_reference_len = cmp::max(input_max_reference_len, ref_len);
+        }
+    }
+    input_max_reference_len
+}
+
 fn get_auto_max_reference_len(words: &BTreeSet<WordRef>) -> usize {
     //Get the maximum length of the reference field
     let line_num = words
         .iter()
         .map(|w| {
-            if w.local_line_nr == 0 {
+            if w.local_line_nr() == 0 {
                 1
             } else {
-                (w.local_line_nr as f64).log10() as usize + 1
+                (w.local_line_nr() as f64).log10() as usize + 1
             }
         })
         .max()
@@ -747,8 +1088,8 @@ fn get_auto_max_reference_len(words: &BTreeSet<WordRef>) -> usize {
 
     let filename_len = words
         .iter()
-        .filter(|w| w.filename != "-")
-        .map(|w| w.filename.maybe_quote().to_string().len())
+        .filter(|w| w.filename() != "-")
+        .map(|w| w.filename().maybe_quote().to_string().len())
         .max()
         .unwrap_or(0);
 
@@ -816,8 +1157,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let word_filter = WordFilter::new(&matches, &config)?;
     let file_map = read_input(&input_files).map_err_context(String::new)?;
-    let word_set = create_word_set(&config, &word_filter, &file_map);
-    write_traditional_output(&mut config, &file_map, &word_set, &output_file)
+    let ptx_result = create_word_set(&config, &word_filter, &file_map);
+    write_traditional_output(&mut config, &file_map, &ptx_result, &output_file)
 }
 
 pub fn uu_app() -> Command {
