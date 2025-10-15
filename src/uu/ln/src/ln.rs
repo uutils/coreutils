@@ -410,7 +410,17 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
             }
             OverwriteMode::Force => {
                 if !dst.is_symlink() && paths_refer_to_same_file(src, dst, true) {
-                    return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
+                    // Even in force overwrite mode, verify we are not targeting the same entry and return a SameFile error if so
+                    let same_entry = match (
+                        canonicalize(src, MissingHandling::Missing, ResolveMode::Physical),
+                        canonicalize(dst, MissingHandling::Missing, ResolveMode::Physical),
+                    ) {
+                        (Ok(src), Ok(dst)) => src == dst,
+                        _ => true,
+                    };
+                    if same_entry {
+                        return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
+                    }
                 }
                 if fs::remove_file(dst).is_ok() {}
                 // In case of error, don't do anything

@@ -31,9 +31,9 @@ pub enum Color {
 impl Color {
     fn code(self) -> &'static str {
         match self {
-            Color::Red => "31",
-            Color::Yellow => "33",
-            Color::Green => "32",
+            Self::Red => "31",
+            Self::Yellow => "33",
+            Self::Green => "32",
         }
     }
 }
@@ -705,7 +705,7 @@ mod tests {
 
         for key in &required_keys {
             let message = get_message(key);
-            assert_ne!(message, *key, "Translation missing for key: {}", key);
+            assert_ne!(message, *key, "Translation missing for key: {key}");
         }
     }
 

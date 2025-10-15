@@ -16,7 +16,7 @@ wc-help-words = print the word counts
 # Error messages
 wc-error-files-disabled = extra operand '{ $extra }'
   file operands cannot be combined with --files0-from
-wc-error-stdin-repr-not-allowed = when reading file names from stdin, no file name of '-' allowed
+wc-error-stdin-repr-not-allowed = when reading file names from standard input, no file name of '-' allowed
 wc-error-zero-length-filename = invalid zero-length file name
 wc-error-zero-length-filename-ctx = { $path }:{ $idx }: invalid zero-length file name
 wc-error-cannot-open-for-reading = cannot open { $path } for reading

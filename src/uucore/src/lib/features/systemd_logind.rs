@@ -56,7 +56,7 @@ mod login {
         let result = unsafe { ffi::sd_get_sessions(&mut sessions_ptr) };
 
         if result < 0 {
-            return Err(format!("sd_get_sessions failed: {}", result).into());
+            return Err(format!("sd_get_sessions failed: {result}").into());
         }
 
         let mut sessions = Vec::new();
@@ -89,11 +89,9 @@ mod login {
         let result = unsafe { ffi::sd_session_get_uid(session_cstring.as_ptr(), &mut uid) };
 
         if result < 0 {
-            return Err(format!(
-                "sd_session_get_uid failed for session '{}': {}",
-                session_id, result
-            )
-            .into());
+            return Err(
+                format!("sd_session_get_uid failed for session '{session_id}': {result}",).into(),
+            );
         }
 
         Ok(uid)
@@ -108,8 +106,7 @@ mod login {
 
         if result < 0 {
             return Err(format!(
-                "sd_session_get_start_time failed for session '{}': {}",
-                session_id, result
+                "sd_session_get_start_time failed for session '{session_id}': {result}",
             )
             .into());
         }
@@ -125,11 +122,9 @@ mod login {
         let result = unsafe { ffi::sd_session_get_tty(session_cstring.as_ptr(), &mut tty_ptr) };
 
         if result < 0 {
-            return Err(format!(
-                "sd_session_get_tty failed for session '{}': {}",
-                session_id, result
-            )
-            .into());
+            return Err(
+                format!("sd_session_get_tty failed for session '{session_id}': {result}",).into(),
+            );
         }
 
         if tty_ptr.is_null() {
@@ -156,8 +151,7 @@ mod login {
 
         if result < 0 {
             return Err(format!(
-                "sd_session_get_remote_host failed for session '{}': {}",
-                session_id, result
+                "sd_session_get_remote_host failed for session '{session_id}': {result}",
             )
             .into());
         }
@@ -186,8 +180,7 @@ mod login {
 
         if result < 0 {
             return Err(format!(
-                "sd_session_get_display failed for session '{}': {}",
-                session_id, result
+                "sd_session_get_display failed for session '{session_id}': {result}",
             )
             .into());
         }
@@ -214,11 +207,9 @@ mod login {
         let result = unsafe { ffi::sd_session_get_type(session_cstring.as_ptr(), &mut type_ptr) };
 
         if result < 0 {
-            return Err(format!(
-                "sd_session_get_type failed for session '{}': {}",
-                session_id, result
-            )
-            .into());
+            return Err(
+                format!("sd_session_get_type failed for session '{session_id}': {result}",).into(),
+            );
         }
 
         if type_ptr.is_null() {
@@ -243,11 +234,9 @@ mod login {
         let result = unsafe { ffi::sd_session_get_seat(session_cstring.as_ptr(), &mut seat_ptr) };
 
         if result < 0 {
-            return Err(format!(
-                "sd_session_get_seat failed for session '{}': {}",
-                session_id, result
-            )
-            .into());
+            return Err(
+                format!("sd_session_get_seat failed for session '{session_id}': {result}",).into(),
+            );
         }
 
         if seat_ptr.is_null() {
@@ -276,11 +265,11 @@ mod login {
         use std::fs;
 
         let metadata = fs::metadata("/var/lib/systemd/random-seed")
-            .map_err(|e| format!("Failed to read /var/lib/systemd/random-seed: {}", e))?;
+            .map_err(|e| format!("Failed to read /var/lib/systemd/random-seed: {e}"))?;
 
         metadata
             .modified()
-            .map_err(|e| format!("Failed to get modification time: {}", e).into())
+            .map_err(|e| format!("Failed to get modification time: {e}").into())
     }
 }
 
@@ -361,9 +350,8 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
     // Iterate through all sessions
     for session_id in sessions {
         // Get session UID using safe wrapper
-        let uid = match login::get_session_uid(&session_id) {
-            Ok(uid) => uid,
-            Err(_) => continue,
+        let Ok(uid) = login::get_session_uid(&session_id) else {
+            continue;
         };
 
         // Get username from UID
@@ -396,7 +384,7 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
                     .to_string_lossy()
                     .into_owned()
             } else {
-                format!("{}", uid) // fallback to UID if username not found
+                format!("{uid}") // fallback to UID if username not found
             }
         };
 
@@ -444,8 +432,9 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
             .unwrap_or_default();
 
         // Determine host (use remote_host if available)
+        // If host is local (non-remote) we use display,
         let host = if remote_host.is_empty() {
-            String::new()
+            display.clone()
         } else {
             remote_host
         };
@@ -483,7 +472,7 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
         if !seat.is_empty() && !tty.is_empty() {
             // Both seat and tty - need 2 records, clone for first.
             // The seat is prefixed with '?' to match GNU's output.
-            let seat_formatted = format!("?{}", seat);
+            let seat_formatted = format!("?{seat}");
             records.push(create_record(
                 seat_formatted,
                 seat,
@@ -493,19 +482,19 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
             ));
 
             let tty_formatted = if tty.starts_with("tty") {
-                format!("*{}", tty)
+                format!("*{tty}")
             } else {
                 tty.clone()
             };
             records.push(create_record(tty_formatted, tty, user, session_id, host)); // Move for second (and last) record
         } else if !seat.is_empty() {
             // Only seat
-            let seat_formatted = format!("?{}", seat);
+            let seat_formatted = format!("?{seat}");
             records.push(create_record(seat_formatted, seat, user, session_id, host));
         } else if !tty.is_empty() {
             // Only tty
             let tty_formatted = if tty.starts_with("tty") {
-                format!("*{}", tty)
+                format!("*{tty}")
             } else {
                 tty.clone()
             };
@@ -534,7 +523,7 @@ pub struct SystemdUtmpxCompat {
 impl SystemdUtmpxCompat {
     /// Create new instance from a SystemdLoginRecord
     pub fn new(record: SystemdLoginRecord) -> Self {
-        SystemdUtmpxCompat { record }
+        Self { record }
     }
 
     /// A.K.A. ut.ut_type
@@ -566,10 +555,10 @@ impl SystemdUtmpxCompat {
     /// A.K.A. ut.ut_line
     pub fn tty_device(&self) -> String {
         // Return raw device name for device access if available, otherwise formatted seat_or_tty
-        if !self.record.raw_device.is_empty() {
-            self.record.raw_device.clone()
-        } else {
+        if self.record.raw_device.is_empty() {
             self.record.seat_or_tty.clone()
+        } else {
+            self.record.raw_device.clone()
         }
     }
 
@@ -606,7 +595,7 @@ impl SystemdUtmpxIter {
     /// Create new instance and read records from systemd-logind
     pub fn new() -> UResult<Self> {
         let records = read_login_records()?;
-        Ok(SystemdUtmpxIter {
+        Ok(Self {
             records,
             current_index: 0,
         })
@@ -614,7 +603,7 @@ impl SystemdUtmpxIter {
 
     /// Create empty iterator (for when systemd initialization fails)
     pub fn empty() -> Self {
-        SystemdUtmpxIter {
+        Self {
             records: Vec::new(),
             current_index: 0,
         }

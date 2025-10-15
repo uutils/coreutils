@@ -544,7 +544,7 @@ fn test_files0_from_with_stdin_in_file() {
 
 #[test]
 fn test_files0_from_with_stdin_try_read_from_stdin() {
-    const MSG: &str = "when reading file names from stdin, no file name of '-' allowed";
+    const MSG: &str = "when reading file names from standard input, no file name of '-' allowed";
     new_ucmd!()
         .args(&["--files0-from=-"])
         .pipe_in("-")

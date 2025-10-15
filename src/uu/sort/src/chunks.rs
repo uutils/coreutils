@@ -259,7 +259,9 @@ fn read_to_buffer<T: Read>(
     separator: u8,
 ) -> UResult<(usize, bool)> {
     let mut read_target = &mut buffer[start_offset..];
-    let mut last_file_target_size = read_target.len();
+    let mut last_file_empty = true;
+    let mut newline_search_offset = 0;
+    let mut found_newline = false;
     loop {
         match file.read(read_target) {
             Ok(0) => {
@@ -278,13 +280,17 @@ fn read_to_buffer<T: Read>(
                             continue;
                         }
                     }
-                    let mut sep_iter = memchr_iter(separator, buffer).rev();
-                    let last_line_end = sep_iter.next();
-                    if sep_iter.next().is_some() {
-                        // We read enough lines.
-                        let end = last_line_end.unwrap();
-                        // We want to include the separator here, because it shouldn't be carried over.
-                        return Ok((end + 1, true));
+
+                    let mut sep_iter =
+                        memchr_iter(separator, &buffer[newline_search_offset..buffer.len()]).rev();
+                    newline_search_offset = buffer.len();
+                    if let Some(last_line_end) = sep_iter.next() {
+                        if found_newline || sep_iter.next().is_some() {
+                            // We read enough lines.
+                            // We want to include the separator here, because it shouldn't be carried over.
+                            return Ok((last_line_end + 1, true));
+                        }
+                        found_newline = true;
                     }
 
                     // We need to read more lines
@@ -295,7 +301,7 @@ fn read_to_buffer<T: Read>(
                 } else {
                     // This file has been fully read.
                     let mut leftover_len = read_target.len();
-                    if last_file_target_size != leftover_len {
+                    if !last_file_empty {
                         // The file was not empty.
                         let read_len = buffer.len() - leftover_len;
                         if buffer[read_len - 1] != separator {
@@ -308,7 +314,7 @@ fn read_to_buffer<T: Read>(
                     }
                     if let Some(next_file) = next_files.next() {
                         // There is another file.
-                        last_file_target_size = leftover_len;
+                        last_file_empty = true;
                         *file = next_file?;
                     } else {
                         // This was the last file.
@@ -319,6 +325,7 @@ fn read_to_buffer<T: Read>(
             }
             Ok(n) => {
                 read_target = &mut read_target[n..];
+                last_file_empty = false;
             }
             Err(e) if e.kind() == ErrorKind::Interrupted => {
                 // retry

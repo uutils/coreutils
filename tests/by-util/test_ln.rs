@@ -794,6 +794,52 @@ fn test_symlink_remove_existing_same_src_and_dest() {
 }
 
 #[test]
+fn test_force_same_file_detected_after_canonicalization() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("file", "hello");
+
+    ucmd.args(&["-f", "file", "./file"])
+        .fails_with_code(1)
+        .stderr_contains("are the same file");
+
+    assert!(at.file_exists("file"));
+    assert_eq!(at.read("file"), "hello");
+}
+
+#[test]
+#[cfg(not(target_os = "android"))]
+fn test_force_ln_existing_hard_link_entry() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("file", "hardlink\n");
+    at.mkdir("dir");
+
+    scene.ucmd().args(&["file", "dir"]).succeeds().no_stderr();
+    assert!(at.file_exists("dir/file"));
+
+    scene
+        .ucmd()
+        .args(&["-f", "file", "dir"])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists("file"));
+    assert!(at.file_exists("dir/file"));
+    assert_eq!(at.read("file"), "hardlink\n");
+    assert_eq!(at.read("dir/file"), "hardlink\n");
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let source_inode = at.metadata("file").ino();
+        let target_inode = at.metadata("dir/file").ino();
+        assert_eq!(source_inode, target_inode);
+    }
+}
+
+#[test]
 #[cfg(not(target_os = "android"))]
 fn test_ln_seen_file() {
     let ts = TestScenario::new(util_name!());

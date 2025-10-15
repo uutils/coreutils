@@ -31,6 +31,7 @@ const OPT_ZERO: &str = "zero";
 const OPT_PHYSICAL: &str = "physical";
 const OPT_LOGICAL: &str = "logical";
 const OPT_CANONICALIZE_MISSING: &str = "canonicalize-missing";
+const OPT_CANONICALIZE: &str = "canonicalize";
 const OPT_CANONICALIZE_EXISTING: &str = "canonicalize-existing";
 const OPT_RELATIVE_TO: &str = "relative-to";
 const OPT_RELATIVE_BASE: &str = "relative-base";
@@ -86,11 +87,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(OPT_ZERO));
     let quiet = matches.get_flag(OPT_QUIET);
     let logical = matches.get_flag(OPT_LOGICAL);
-    let can_mode = if matches.get_flag(OPT_CANONICALIZE_EXISTING) {
-        MissingHandling::Existing
-    } else if matches.get_flag(OPT_CANONICALIZE_MISSING) {
+    let can_mode = if matches.get_flag(OPT_CANONICALIZE_MISSING) {
         MissingHandling::Missing
+    } else if matches.get_flag(OPT_CANONICALIZE_EXISTING) {
+        // -e: all components must exist
+        // Despite the name, MissingHandling::Existing requires all components to exist
+        MissingHandling::Existing
     } else {
+        // Default behavior (same as -E): all but last component must exist
+        // MissingHandling::Normal allows the final component to not exist
         MissingHandling::Normal
     };
     let resolve_mode = if strip {
@@ -165,9 +170,18 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new(OPT_CANONICALIZE)
+                .short('E')
+                .long(OPT_CANONICALIZE)
+                .overrides_with_all([OPT_CANONICALIZE_EXISTING, OPT_CANONICALIZE_MISSING])
+                .help(translate!("realpath-help-canonicalize"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new(OPT_CANONICALIZE_EXISTING)
                 .short('e')
                 .long(OPT_CANONICALIZE_EXISTING)
+                .overrides_with_all([OPT_CANONICALIZE, OPT_CANONICALIZE_MISSING])
                 .help(translate!("realpath-help-canonicalize-existing"))
                 .action(ArgAction::SetTrue),
         )
@@ -175,6 +189,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_CANONICALIZE_MISSING)
                 .short('m')
                 .long(OPT_CANONICALIZE_MISSING)
+                .overrides_with_all([OPT_CANONICALIZE, OPT_CANONICALIZE_EXISTING])
                 .help(translate!("realpath-help-canonicalize-missing"))
                 .action(ArgAction::SetTrue),
         )

@@ -505,3 +505,65 @@ fn test_realpath_empty_string() {
         .fails()
         .code_is(1);
 }
+
+#[test]
+fn test_realpath_canonicalize_options() {
+    // Test that default, -E, and --canonicalize all allow nonexistent final component
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("existing_dir");
+
+    let test_cases = [
+        vec![],                 // default behavior
+        vec!["-E"],             // explicit -E flag
+        vec!["--canonicalize"], // --canonicalize long form
+    ];
+
+    #[cfg(windows)]
+    let expected_path = "existing_dir\\nonexistent";
+    #[cfg(not(windows))]
+    let expected_path = "existing_dir/nonexistent";
+
+    for args in test_cases {
+        let mut ucmd = scene.ucmd();
+        for arg in args {
+            ucmd.arg(arg);
+        }
+        ucmd.arg("existing_dir/nonexistent")
+            .succeeds()
+            .stdout_contains(expected_path);
+    }
+}
+
+#[test]
+fn test_realpath_canonicalize_vs_existing() {
+    // Test difference between -E and -e, and option overrides
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("existing_dir");
+
+    let test_cases = [
+        (vec!["-E"], true),       // -E should succeed with nonexistent final component
+        (vec!["-e"], false),      // -e should fail with nonexistent final component
+        (vec!["-e", "-E"], true), // -E should override -e
+    ];
+
+    #[cfg(windows)]
+    let expected_path = "existing_dir\\nonexistent";
+    #[cfg(not(windows))]
+    let expected_path = "existing_dir/nonexistent";
+
+    for (args, should_succeed) in test_cases {
+        let mut ucmd = scene.ucmd();
+        for arg in args {
+            ucmd.arg(arg);
+        }
+        ucmd.arg("existing_dir/nonexistent");
+
+        if should_succeed {
+            ucmd.succeeds().stdout_contains(expected_path);
+        } else {
+            ucmd.fails();
+        }
+    }
+}

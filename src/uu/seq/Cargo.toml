@@ -1,4 +1,4 @@
-# spell-checker:ignore bigdecimal cfgs extendedbigdecimal
+# spell-checker:ignore bigdecimal extendedbigdecimal
 [package]
 name = "uu_seq"
 description = "seq ~ (uutils) display a sequence of numbers"
@@ -11,6 +11,9 @@ keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/seq.rs"
@@ -34,12 +37,11 @@ fluent = { workspace = true }
 name = "seq"
 path = "src/main.rs"
 
-# FIXME: this is the only crate that has a separate lints configuration,
-#        which for now means a full copy of all clippy and rust lints here.
-[lints.clippy]
-all = { level = "deny", priority = -1 }
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
 
-# Allow "fuzzing" as a "cfg" condition name
-# https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+[[bench]]
+name = "seq_bench"
+harness = false

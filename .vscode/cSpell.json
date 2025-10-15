@@ -32,6 +32,9 @@
     ".devcontainer/**",
     "util/gnu-patches/**",
     "docs/src/release-notes/**",
+    "src/uu/*/benches/*.rs",
+    "src/uucore/src/lib/features/benchmark.rs",
+    "util/check-safe-traversal.sh",
   ],
 
   "enableGlobDot": true,

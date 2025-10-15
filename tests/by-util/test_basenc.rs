@@ -185,21 +185,55 @@ fn test_base2lsbf_decode() {
 }
 
 #[test]
-fn test_choose_last_encoding_z85() {
+fn test_z85_decode() {
     new_ucmd!()
-        .args(&[
-            "--base2lsbf",
-            "--base2msbf",
-            "--base16",
-            "--base32hex",
-            "--base64url",
-            "--base32",
-            "--base64",
-            "--z85",
-        ])
-        .pipe_in("Hello, World")
+        .args(&["--z85", "-d"])
+        .pipe_in("nm=QNz.92jz/PV8")
         .succeeds()
-        .stdout_only("nm=QNz.92jz/PV8\n");
+        .stdout_only("Hello, World");
+}
+
+#[test]
+fn test_base58() {
+    new_ucmd!()
+        .arg("--base58")
+        .pipe_in("Hello, World!")
+        .succeeds()
+        .stdout_only("72k1xXWG59fYdzSNoA\n");
+}
+
+#[test]
+fn test_base58_decode() {
+    new_ucmd!()
+        .args(&["--base58", "-d"])
+        .pipe_in("72k1xXWG59fYdzSNoA")
+        .succeeds()
+        .stdout_only("Hello, World!");
+}
+
+#[test]
+fn test_base58_large_file_no_chunking() {
+    // Regression test: base58 must process entire input as one big integer,
+    // not in 1024-byte chunks. This test ensures files >1024 bytes work correctly.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let filename = "large_file.txt";
+
+    // spell-checker:disable
+    let input = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(50);
+    // spell-checker:enable
+    at.write(filename, &input);
+
+    let result = ucmd.arg("--base58").arg(filename).succeeds();
+    let encoded = result.stdout_str();
+
+    // Verify the output ends with the expected suffix (matches GNU basenc output)
+    // spell-checker:disable
+    assert!(
+        encoded
+            .trim_end()
+            .ends_with("ZNRRacEnhrY83ZEYkpwWVZNFK5DFRasr\nw693NsNGtiQ9fYAj")
+    );
+    // spell-checker:enable
 }
 
 #[test]
@@ -236,6 +270,15 @@ fn test_choose_last_encoding_base2lsbf() {
         .pipe_in("lsbf")
         .succeeds()
         .stdout_only("00110110110011100100011001100110\n");
+}
+
+#[test]
+fn test_choose_last_encoding_base58() {
+    new_ucmd!()
+        .args(&["--base64", "--base32", "--base16", "--z85", "--base58"])
+        .pipe_in("Hello!")
+        .succeeds()
+        .stdout_only("d3yC1LKr\n");
 }
 
 #[test]

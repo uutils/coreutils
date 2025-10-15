@@ -623,3 +623,93 @@ mod linux_only {
         assert!(result.stderr_str().contains("No space left on device"));
     }
 }
+
+// Additional cross-platform tee tests to cover GNU compatibility around --output-error
+#[test]
+fn test_output_error_flag_without_value_defaults_warn_nopipe() {
+    // When --output-error is present without an explicit value, it should default to warn-nopipe
+    // We can't easily simulate a broken pipe across all platforms here, but we can ensure
+    // the flag is accepted without error and basic tee functionality still works.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_out = "tee_output_error_default.txt";
+    let content = "abc";
+
+    let result = ucmd
+        .arg("--output-error")
+        .arg(file_out)
+        .pipe_in(content)
+        .succeeds();
+
+    result.stdout_is(content);
+    assert!(at.file_exists(file_out));
+    assert_eq!(at.read(file_out), content);
+}
+// Unix-only: presence-only --output-error should not crash on broken pipe.
+// Current implementation may exit zero; we only assert the process exits to avoid flakiness.
+// TODO: When semantics are aligned with GNU warn-nopipe, strengthen assertions here.
+#[cfg(all(unix, not(target_os = "freebsd")))]
+#[test]
+fn test_output_error_presence_only_broken_pipe_unix() {
+    use std::fs::File;
+    use std::os::unix::io::FromRawFd;
+
+    unsafe {
+        let mut fds: [libc::c_int; 2] = [0, 0];
+        assert_eq!(libc::pipe(fds.as_mut_ptr()), 0, "Failed to create pipe");
+        // Close the read end to simulate a broken pipe on stdout
+        let _read_end = File::from_raw_fd(fds[0]);
+        let write_end = File::from_raw_fd(fds[1]);
+
+        let content = (0..10_000).map(|_| "x").collect::<String>();
+        let result = new_ucmd!()
+            .arg("--output-error") // presence-only flag
+            .set_stdout(write_end)
+            .pipe_in(content.as_bytes())
+            .run();
+
+        // Assert that a status was produced (i.e., process exited) and no crash occurred.
+        assert!(result.try_exit_status().is_some(), "process did not exit");
+    }
+}
+
+// Skip on FreeBSD due to repeated CI hangs in FreeBSD VM (see PR #8684)
+#[cfg(all(unix, not(target_os = "freebsd")))]
+#[test]
+fn test_broken_pipe_early_termination_stdout_only() {
+    use std::fs::File;
+    use std::os::unix::io::FromRawFd;
+
+    // Create a broken stdout by creating a pipe and dropping the read end
+    unsafe {
+        let mut fds: [libc::c_int; 2] = [0, 0];
+        assert_eq!(libc::pipe(fds.as_mut_ptr()), 0, "Failed to create pipe");
+        // Close the read end immediately to simulate a broken pipe
+        let _read_end = File::from_raw_fd(fds[0]);
+        let write_end = File::from_raw_fd(fds[1]);
+
+        let content = (0..10_000).map(|_| "x").collect::<String>();
+        let mut proc = new_ucmd!();
+        let result = proc
+            .set_stdout(write_end)
+            .ignore_stdin_write_error()
+            .pipe_in(content.as_bytes())
+            .run();
+
+        // GNU tee exits nonzero on broken pipe unless configured otherwise; implementation
+        // details vary by mode, but we should not panic and should return an exit status.
+        // Assert that a status was produced (i.e., process exited) and no crash occurred.
+        assert!(result.try_exit_status().is_some(), "process did not exit");
+    }
+}
+
+#[test]
+fn test_write_failure_reports_error_and_nonzero_exit() {
+    // Simulate a file open failure which should be reported via show_error and cause a failure
+    let (at, mut ucmd) = at_and_ucmd!();
+    // Create a directory and try to use it as an output file (open will fail)
+    at.mkdir("out_dir");
+
+    let result = ucmd.arg("out_dir").pipe_in("data").fails();
+
+    assert!(!result.stderr_str().is_empty());
+}

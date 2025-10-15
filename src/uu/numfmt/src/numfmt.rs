@@ -214,7 +214,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 
     let delimiter = args.get_one::<String>(DELIMITER).map_or(Ok(None), |arg| {
         if arg.len() == 1 {
-            Ok(Some(arg.to_string()))
+            Ok(Some(arg.to_owned()))
         } else {
             Err(translate!(
                 "numfmt-error-delimiter-must-be-single-character"

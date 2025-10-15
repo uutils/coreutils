@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore taskset -->
+<!-- spell-checker:ignore taskset usize -->
 
 # Performance Profiling Tutorial
 
@@ -55,6 +55,47 @@ Hyperfine provides summary statistics including:
 - Relative performance comparison
 
 Look for consistent patterns rather than focusing on individual runs, and be aware of system noise that might affect results.
+
+## Integrated Benchmarking
+
+Utilities include integrated benchmarks in `src/uu/*/benches/*` using [CodSpeed](https://codspeed.io/) and [Divan](https://github.com/nvzqz/divan).
+
+**Important**: Before starting performance optimization work, you should add a benchmark for the utility. This provides a baseline for measuring improvements and ensures changes have measurable impact.
+
+### Running Benchmarks
+
+```bash
+# Build and run benchmarks for a specific utility
+cargo codspeed build -p uu_expand
+cargo codspeed run -p uu_expand
+```
+
+### Writing Benchmarks
+
+Use common functions from `src/uucore/src/lib/features/benchmark.rs`:
+
+```rust
+use divan::{Bencher, black_box};
+use uu_expand::uumain;
+use uucore::benchmark::{create_test_file, run_util_function, text_data};
+
+#[divan::bench(args = [10_000, 100_000])]
+fn bench_expand(bencher: Bencher, num_lines: usize) {
+    let data = text_data::generate_ascii_data(num_lines);
+    let temp_dir = tempfile::tempdir().unwrap();
+    let file_path = create_test_file(&data, temp_dir.path());
+
+    bencher.bench(|| {
+        black_box(run_util_function(uumain, &[file_path.to_str().unwrap()]));
+    });
+}
+
+fn main() {
+    divan::main();
+}
+```
+
+Common helpers include `text_data::generate_*()` for test data and `fs_tree::create_*()` for directory structures.
 
 ## Using Samply for Profiling
 

@@ -69,6 +69,7 @@ fn get_context_help_text() -> String {
 }
 
 mod options {
+    pub const OPT_IGNORE: &str = "ignore";
     pub const OPT_AUDIT: &str = "audit"; // GNU's id does not have this
     pub const OPT_CONTEXT: &str = "context";
     pub const OPT_EFFECTIVE_USER: &str = "user";
@@ -353,6 +354,13 @@ pub fn uu_app() -> Command {
         .infer_long_args(true)
         .args_override_self(true)
         .after_help(translate!("id-after-help"))
+        .arg(
+            Arg::new(options::OPT_IGNORE)
+                .short('a')
+                .long(options::OPT_IGNORE)
+                .help(translate!("id-help-ignore"))
+                .action(ArgAction::SetTrue),
+        )
         .arg(
             Arg::new(options::OPT_AUDIT)
                 .short('A')

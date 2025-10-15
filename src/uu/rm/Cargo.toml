@@ -32,3 +32,12 @@ windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
 [[bin]]
 name = "rm"
 path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "rm_bench"
+harness = false

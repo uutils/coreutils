@@ -63,7 +63,7 @@ impl LineNumber {
 
         buf[print_start..].copy_from_slice(init_str.as_bytes());
 
-        LineNumber {
+        Self {
             buf,
             print_start,
             num_start,

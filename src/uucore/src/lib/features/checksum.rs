@@ -150,10 +150,11 @@ impl From<ChecksumError> for FileCheckError {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Copy, Default)]
 pub enum ChecksumVerbose {
     Status,
     Quiet,
+    #[default]
     Normal,
     Warning,
 }
@@ -185,12 +186,6 @@ impl ChecksumVerbose {
     #[inline]
     pub fn at_least_warning(self) -> bool {
         self >= Self::Warning
-    }
-}
-
-impl Default for ChecksumVerbose {
-    fn default() -> Self {
-        Self::Normal
     }
 }
 
@@ -319,9 +314,9 @@ impl FileChecksumResult {
     /// either succeeded or failed.
     fn from_bool(checksum_correct: bool) -> Self {
         if checksum_correct {
-            FileChecksumResult::Ok
+            Self::Ok
         } else {
-            FileChecksumResult::Failed
+            Self::Failed
         }
     }
 
@@ -329,9 +324,9 @@ impl FileChecksumResult {
     /// comparison on STDOUT.
     fn can_display(&self, verbose: ChecksumVerbose) -> bool {
         match self {
-            FileChecksumResult::Ok => verbose.over_quiet(),
-            FileChecksumResult::Failed => verbose.over_status(),
-            FileChecksumResult::CantOpen => true,
+            Self::Ok => verbose.over_quiet(),
+            Self::Failed => verbose.over_status(),
+            Self::CantOpen => true,
         }
     }
 }
@@ -339,9 +334,9 @@ impl FileChecksumResult {
 impl Display for FileChecksumResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FileChecksumResult::Ok => write!(f, "OK"),
-            FileChecksumResult::Failed => write!(f, "FAILED"),
-            FileChecksumResult::CantOpen => write!(f, "FAILED open or read"),
+            Self::Ok => write!(f, "OK"),
+            Self::Failed => write!(f, "FAILED"),
+            Self::CantOpen => write!(f, "FAILED open or read"),
         }
     }
 }
@@ -483,7 +478,7 @@ impl LineFormat {
         //   r"\MD5 (a\\ b) = abc123",
         //   BLAKE2b(44)= a45a4c4883cce4b50d844fab460414cc2080ca83690e74d850a9253e757384366382625b218c8585daee80f34dc9eb2f2fde5fb959db81cd48837f9216e7b0fa
         let trimmed = line.trim_ascii_start();
-        let algo_start = if trimmed.starts_with(b"\\") { 1 } else { 0 };
+        let algo_start = usize::from(trimmed.starts_with(b"\\"));
         let rest = &trimmed[algo_start..];
 
         enum SubCase {
@@ -557,7 +552,7 @@ impl LineFormat {
             algo_bit_len: algo_bits,
             checksum: checksum_utf8,
             filename: filename.to_vec(),
-            format: LineFormat::AlgoBased,
+            format: Self::AlgoBased,
         })
     }
 
@@ -587,7 +582,7 @@ impl LineFormat {
             algo_bit_len: None,
             checksum: checksum_utf8,
             filename: filename.to_vec(),
-            format: LineFormat::Untagged,
+            format: Self::Untagged,
         })
     }
 
@@ -619,7 +614,7 @@ impl LineFormat {
             algo_bit_len: None,
             checksum: checksum_utf8,
             filename: filename.to_vec(),
-            format: LineFormat::SingleSpace,
+            format: Self::SingleSpace,
         })
     }
 }
@@ -1645,7 +1640,7 @@ mod tests {
         for (filename, result, prefix, expected) in cases {
             let mut buffer: Vec<u8> = vec![];
             print_file_report(&mut buffer, filename, *result, prefix, opts.verbose);
-            assert_eq!(&buffer, expected)
+            assert_eq!(&buffer, expected);
         }
     }
 }

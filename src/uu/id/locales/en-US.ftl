@@ -25,6 +25,7 @@ id-error-cannot-find-user-name = cannot find name for user ID { $uid }
 id-error-audit-retrieve = couldn't retrieve information
 
 # Help text for command-line arguments
+id-help-ignore = ignore, for compatibility with other versions
 id-help-audit = Display the process audit user ID and other process audit properties,
   which requires privilege (not available on Linux).
 id-help-user = Display only the effective user ID as a number.

@@ -22,6 +22,15 @@ clap = { workspace = true }
 uucore = { workspace = true, features = ["parser"] }
 fluent = { workspace = true }
 
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark", "parser"] }
+
 [[bin]]
 name = "uniq"
 path = "src/main.rs"
+
+[[bench]]
+name = "uniq_bench"
+harness = false

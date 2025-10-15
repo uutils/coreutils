@@ -75,13 +75,13 @@ release_tag_GNU="v9.8"
 # check if the GNU coreutils has been cloned, if not print instructions
 # note: the ${path_GNU} might already exist, so we check for the .git directory
 if test ! -d "${path_GNU}/.git"; then
-    echo "Could not find GNU coreutils (expected at '${path_GNU}')"
-    echo "Run the following to download into the expected path:"
-    echo "git clone --recurse-submodules https://github.com/coreutils/coreutils.git \"${path_GNU}\""
-    echo "After downloading GNU coreutils to \"${path_GNU}\" run the following commands to checkout latest release tag"
-    echo "cd \"${path_GNU}\""
-    echo "git fetch --all --tags"
-    echo "git checkout tags/${release_tag_GNU}"
+    echo "Could not find the GNU coreutils (expected at '${path_GNU}')"
+    echo "Download them to the expected path:"
+    echo "  git clone --recurse-submodules https://github.com/coreutils/coreutils.git \"${path_GNU}\""
+    echo "Afterwards, checkout the latest release tag:"
+    echo "  cd \"${path_GNU}\""
+    echo "  git fetch --all --tags"
+    echo "  git checkout tags/${release_tag_GNU}"
     exit 1
 fi
 
@@ -242,6 +242,10 @@ sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
 # 'rel' doesn't exist. Our implementation is giving a better message.
 sed -i -e "s|rm: cannot remove 'rel': Permission denied|rm: cannot remove 'rel': No such file or directory|g" tests/rm/inaccessible.sh
+
+# Our implementation shows "Directory not empty" for directories that can't be accessed due to lack of execute permissions
+# This is actually more accurate than "Permission denied" since the real issue is that we can't empty the directory
+sed -i -e "s|rm: cannot remove 'a/1': Permission denied|rm: cannot remove 'a/1/2': Permission denied|g" -e "s|rm: cannot remove 'b': Permission denied|rm: cannot remove 'a': Directory not empty\nrm: cannot remove 'b/3': Permission denied|g" tests/rm/rm2.sh
 
 # overlay-headers.sh test intends to check for inotify events,
 # however there's a bug because `---dis` is an alias for: `---disable-inotify`

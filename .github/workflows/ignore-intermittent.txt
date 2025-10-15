@@ -1,4 +1,5 @@
 tests/tail/inotify-dir-recreate
+tests/tail/overlay-headers
 tests/timeout/timeout
 tests/rm/rm1
 tests/misc/stdbuf

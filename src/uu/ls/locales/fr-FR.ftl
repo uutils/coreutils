@@ -82,6 +82,7 @@ ls-help-author = Afficher l'auteur en format long. Sur les plateformes supporté
 ls-help-all-files = Ne pas ignorer les fichiers cachés (fichiers dont les noms commencent par '.').
 ls-help-almost-all = Dans un répertoire, ne pas ignorer tous les noms de fichiers qui commencent par '.',
   ignorer seulement '.' et '..'.
+ls-help-unsorted-all = Liste tous les fichiers dans l'ordre du répertoire, non triés. Équivalent à -aU. Désactive --color sauf si spécifié explicitement.
 ls-help-directory = Lister seulement les noms des répertoires, plutôt que le contenu des répertoires.
   Ceci ne suivra pas les liens symboliques à moins qu'une des options
   `--dereference-command-line (-H)`, `--dereference (-L)`, ou
