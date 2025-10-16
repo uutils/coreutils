@@ -11,8 +11,7 @@ use std::fmt;
 use std::num::{IntErrorKind, ParseIntError};
 
 #[cfg(target_os = "linux")]
-use procfs::Meminfo;
-
+use procfs::meminfo;
 use crate::display::Quotable;
 
 /// Error arising from trying to compute system memory.
@@ -44,25 +43,25 @@ impl From<ParseIntError> for SystemError {
 /// entry in the file.
 #[cfg(target_os = "linux")]
 fn total_physical_memory() -> Result<u128, SystemError> {
-    let meminfo = Meminfo::new().map_err(|_| SystemError::IOError)?;
-    Ok((meminfo.mem_total as u128).saturating_mul(1024))
+    let info = meminfo().map_err(|_| SystemError::IOError)?;
+    Ok((info.mem_total as u128).saturating_mul(1024))
 }
 
 /// Return the number of bytes of memory that appear to be currently available.
 #[cfg(target_os = "linux")]
 pub fn available_memory_bytes() -> Option<u128> {
-    let meminfo = Meminfo::new().ok()?;
+    let info = meminfo().ok()?;
 
-    if let Some(available_kib) = meminfo.mem_available {
+    if let Some(available_kib) = info.mem_available {
         let available_bytes = (available_kib as u128).saturating_mul(1024);
         if available_bytes > 0 {
             return Some(available_bytes);
         }
     }
 
-    let fallback_kib = (meminfo.mem_free as u128)
-        .saturating_add(meminfo.buffers as u128)
-        .saturating_add(meminfo.cached as u128);
+    let fallback_kib = (info.mem_free as u128)
+        .saturating_add(info.buffers as u128)
+        .saturating_add(info.cached as u128);
 
     if fallback_kib > 0 {
         Some(fallback_kib.saturating_mul(1024))
