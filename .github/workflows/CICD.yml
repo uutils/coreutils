@@ -379,6 +379,11 @@ jobs:
         set -x
         # Regression-test for https://github.com/uutils/coreutils/issues/8701
         make UTILS="rm chmod chown chgrp mv du"
+        # Verifies that
+        # 1. there is no "error: none of the selected packages contains this
+        # feature: feat_external_libstdbuf"
+        # 2. the makefile doesn't try to install libstdbuf even though stdbuf is skipped
+        DESTDIR=/tmp/ make SKIP_UTILS="stdbuf" install
 
   build_rust_stable:
     name: Build/stable
