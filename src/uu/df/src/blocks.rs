@@ -77,7 +77,13 @@ impl SuffixType {
 /// Convert a number into a magnitude and a multi-byte unit suffix.
 ///
 /// The returned string has a maximum length of 5 chars, for example: "1.1kB", "999kB", "1MB".
-pub(crate) fn to_magnitude_and_suffix(n: u128, suffix_type: SuffixType) -> String {
+/// `add_tracing_zero` allows to add tracing zero for values in 0 < x <= 9
+///
+pub(crate) fn to_magnitude_and_suffix(
+    n: u128,
+    suffix_type: SuffixType,
+    add_tracing_zero: bool,
+) -> String {
     let bases = suffix_type.bases();
     let suffixes = suffix_type.suffixes();
     let mut i = 0;
@@ -91,14 +97,25 @@ pub(crate) fn to_magnitude_and_suffix(n: u128, suffix_type: SuffixType) -> Strin
     let suffix = suffixes[i];
 
     if rem == 0 {
-        format!("{quot}{suffix}")
+        if add_tracing_zero && !suffix.is_empty() && quot != 0 && quot <= 9 {
+            format!("{quot}.0{suffix}")
+        } else {
+            format!("{quot}{suffix}")
+        }
     } else {
         let tenths_place = rem / (bases[i] / 10);
 
-        if rem % (bases[i] / 10) == 0 {
+        if quot >= 100 && rem > 0 {
+            format!("{}{suffix}", quot + 1)
+        } else if rem % (bases[i] / 10) == 0 {
             format!("{quot}.{tenths_place}{suffix}")
         } else if tenths_place + 1 == 10 || quot >= 10 {
-            format!("{}{suffix}", quot + 1)
+            let quot = quot + 1;
+            if add_tracing_zero && !suffix.is_empty() && quot <= 9 {
+                format!("{quot}.0{suffix}")
+            } else {
+                format!("{quot}{suffix}")
+            }
         } else {
             format!("{quot}.{}{suffix}", tenths_place + 1)
         }
@@ -150,6 +167,18 @@ impl BlockSize {
             Self::Bytes(n) => n,
         }
     }
+
+    pub(crate) fn to_header(&self) -> String {
+        match self {
+            Self::Bytes(n) => {
+                if n % 1024 == 0 && n % 1000 != 0 {
+                    to_magnitude_and_suffix(*n as u128, SuffixType::Iec, false)
+                } else {
+                    to_magnitude_and_suffix(*n as u128, SuffixType::Si, false)
+                }
+            }
+        }
+    }
 }
 
 impl Default for BlockSize {
@@ -196,9 +225,9 @@ impl fmt::Display for BlockSize {
         match self {
             Self::Bytes(n) => {
                 let s = if n % 1024 == 0 && n % 1000 != 0 {
-                    to_magnitude_and_suffix(*n as u128, SuffixType::Iec)
+                    to_magnitude_and_suffix(*n as u128, SuffixType::Iec, true)
                 } else {
-                    to_magnitude_and_suffix(*n as u128, SuffixType::Si)
+                    to_magnitude_and_suffix(*n as u128, SuffixType::Si, true)
                 };
 
                 write!(f, "{s}")
@@ -215,21 +244,73 @@ mod tests {
     use crate::blocks::{BlockSize, SuffixType, to_magnitude_and_suffix};
 
     #[test]
-    fn test_to_magnitude_and_suffix_powers_of_1024() {
-        assert_eq!(to_magnitude_and_suffix(1024, SuffixType::Iec), "1K");
-        assert_eq!(to_magnitude_and_suffix(2048, SuffixType::Iec), "2K");
-        assert_eq!(to_magnitude_and_suffix(4096, SuffixType::Iec), "4K");
-        assert_eq!(to_magnitude_and_suffix(1024 * 1024, SuffixType::Iec), "1M");
+    fn test_to_magnitude_and_suffix_rounding() {
         assert_eq!(
-            to_magnitude_and_suffix(2 * 1024 * 1024, SuffixType::Iec),
+            to_magnitude_and_suffix(999_440, SuffixType::Si, true),
+            "1.0MB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(819_200, SuffixType::Si, true),
+            "820kB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(819_936, SuffixType::Si, true),
+            "820kB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(818_400, SuffixType::Si, true),
+            "819kB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(817_600, SuffixType::Si, true),
+            "818kB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(817_200, SuffixType::Si, true),
+            "818kB"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_add_tracing_zero() {
+        assert_eq!(to_magnitude_and_suffix(1024, SuffixType::Iec, true), "1.0K");
+        assert_eq!(to_magnitude_and_suffix(2048, SuffixType::Iec, true), "2.0K");
+        assert_eq!(to_magnitude_and_suffix(10240, SuffixType::Iec, true), "10K");
+
+        assert_eq!(to_magnitude_and_suffix(1024, SuffixType::Iec, false), "1K");
+        assert_eq!(to_magnitude_and_suffix(2048, SuffixType::Iec, false), "2K");
+        assert_eq!(
+            to_magnitude_and_suffix(10240, SuffixType::Iec, false),
+            "10K"
+        );
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_powers_of_1024() {
+        assert_eq!(to_magnitude_and_suffix(1024, SuffixType::Iec, false), "1K");
+        assert_eq!(
+            to_magnitude_and_suffix(10240, SuffixType::Iec, false),
+            "10K"
+        );
+        assert_eq!(to_magnitude_and_suffix(2048, SuffixType::Iec, false), "2K");
+        assert_eq!(
+            to_magnitude_and_suffix(1024 * 40, SuffixType::Iec, false),
+            "40K"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(1024 * 1024, SuffixType::Iec, false),
+            "1M"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(2 * 1024 * 1024, SuffixType::Iec, false),
             "2M"
         );
         assert_eq!(
-            to_magnitude_and_suffix(1024 * 1024 * 1024, SuffixType::Iec),
+            to_magnitude_and_suffix(1024 * 1024 * 1024, SuffixType::Iec, false),
             "1G"
         );
         assert_eq!(
-            to_magnitude_and_suffix(34 * 1024 * 1024 * 1024, SuffixType::Iec),
+            to_magnitude_and_suffix(34 * 1024 * 1024 * 1024, SuffixType::Iec, false),
             "34G"
         );
     }
@@ -237,54 +318,93 @@ mod tests {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_to_magnitude_and_suffix_not_powers_of_1024() {
-        assert_eq!(to_magnitude_and_suffix(1, SuffixType::Si), "1B");
-        assert_eq!(to_magnitude_and_suffix(999, SuffixType::Si), "999B");
+        assert_eq!(to_magnitude_and_suffix(1, SuffixType::Si, true), "1.0B");
+        assert_eq!(to_magnitude_and_suffix(999, SuffixType::Si, true), "999B");
 
-        assert_eq!(to_magnitude_and_suffix(1000, SuffixType::Si), "1kB");
-        assert_eq!(to_magnitude_and_suffix(1001, SuffixType::Si), "1.1kB");
-        assert_eq!(to_magnitude_and_suffix(1023, SuffixType::Si), "1.1kB");
-        assert_eq!(to_magnitude_and_suffix(1025, SuffixType::Si), "1.1kB");
-        assert_eq!(to_magnitude_and_suffix(10_001, SuffixType::Si), "11kB");
-        assert_eq!(to_magnitude_and_suffix(999_000, SuffixType::Si), "999kB");
-
-        assert_eq!(to_magnitude_and_suffix(999_001, SuffixType::Si), "1MB");
-        assert_eq!(to_magnitude_and_suffix(999_999, SuffixType::Si), "1MB");
-        assert_eq!(to_magnitude_and_suffix(1_000_000, SuffixType::Si), "1MB");
-        assert_eq!(to_magnitude_and_suffix(1_000_001, SuffixType::Si), "1.1MB");
-        assert_eq!(to_magnitude_and_suffix(1_100_000, SuffixType::Si), "1.1MB");
-        assert_eq!(to_magnitude_and_suffix(1_100_001, SuffixType::Si), "1.2MB");
-        assert_eq!(to_magnitude_and_suffix(1_900_000, SuffixType::Si), "1.9MB");
-        assert_eq!(to_magnitude_and_suffix(1_900_001, SuffixType::Si), "2MB");
-        assert_eq!(to_magnitude_and_suffix(9_900_000, SuffixType::Si), "9.9MB");
-        assert_eq!(to_magnitude_and_suffix(9_900_001, SuffixType::Si), "10MB");
+        assert_eq!(to_magnitude_and_suffix(1000, SuffixType::Si, true), "1.0kB");
+        assert_eq!(to_magnitude_and_suffix(1001, SuffixType::Si, true), "1.1kB");
+        assert_eq!(to_magnitude_and_suffix(1023, SuffixType::Si, true), "1.1kB");
+        assert_eq!(to_magnitude_and_suffix(1025, SuffixType::Si, true), "1.1kB");
         assert_eq!(
-            to_magnitude_and_suffix(999_000_000, SuffixType::Si),
+            to_magnitude_and_suffix(10_001, SuffixType::Si, true),
+            "11kB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(999_000, SuffixType::Si, true),
+            "999kB"
+        );
+
+        assert_eq!(
+            to_magnitude_and_suffix(999_001, SuffixType::Si, true),
+            "1.0MB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(999_999, SuffixType::Si, true),
+            "1.0MB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(1_000_000, SuffixType::Si, true),
+            "1.0MB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(1_000_001, SuffixType::Si, true),
+            "1.1MB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(1_100_000, SuffixType::Si, true),
+            "1.1MB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(1_100_001, SuffixType::Si, true),
+            "1.2MB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(1_900_000, SuffixType::Si, true),
+            "1.9MB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(1_900_001, SuffixType::Si, true),
+            "2.0MB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(9_900_000, SuffixType::Si, true),
+            "9.9MB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(9_900_001, SuffixType::Si, true),
+            "10MB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(999_000_000, SuffixType::Si, true),
             "999MB"
         );
 
-        assert_eq!(to_magnitude_and_suffix(999_000_001, SuffixType::Si), "1GB");
         assert_eq!(
-            to_magnitude_and_suffix(1_000_000_000, SuffixType::Si),
-            "1GB"
+            to_magnitude_and_suffix(999_000_001, SuffixType::Si, true),
+            "1.0GB"
         );
         assert_eq!(
-            to_magnitude_and_suffix(1_000_000_001, SuffixType::Si),
+            to_magnitude_and_suffix(1_000_000_000, SuffixType::Si, true),
+            "1.0GB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(1_000_000_001, SuffixType::Si, true),
             "1.1GB"
         );
     }
 
     #[test]
     fn test_block_size_display() {
-        assert_eq!(format!("{}", BlockSize::Bytes(1024)), "1K");
-        assert_eq!(format!("{}", BlockSize::Bytes(2 * 1024)), "2K");
-        assert_eq!(format!("{}", BlockSize::Bytes(3 * 1024 * 1024)), "3M");
+        assert_eq!(format!("{}", BlockSize::Bytes(1024)), "1.0K");
+        assert_eq!(format!("{}", BlockSize::Bytes(2 * 1024)), "2.0K");
+        assert_eq!(format!("{}", BlockSize::Bytes(3 * 1024 * 1024)), "3.0M");
     }
 
     #[test]
     fn test_block_size_display_multiples_of_1000_and_1024() {
         assert_eq!(format!("{}", BlockSize::Bytes(128_000)), "128kB");
         assert_eq!(format!("{}", BlockSize::Bytes(1000 * 1024)), "1.1MB");
-        assert_eq!(format!("{}", BlockSize::Bytes(1_000_000_000_000)), "1TB");
+        assert_eq!(format!("{}", BlockSize::Bytes(1_000_000_000_000)), "1.0TB");
     }
 
     #[test]
