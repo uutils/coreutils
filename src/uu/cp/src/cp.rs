@@ -1937,7 +1937,6 @@ fn delete_dest_if_needed_and_allowed(
     let delete_dest = match options.overwrite {
         OverwriteMode::Clobber(cl) | OverwriteMode::Interactive(cl) => {
             match cl {
-                // FIXME: print that the file was removed if --verbose is enabled
                 ClobberMode::Force => {
                     // TODO
                     // Using `readonly` here to check if `dest` needs to be deleted is not correct:
@@ -1976,13 +1975,26 @@ fn delete_dest_if_needed_and_allowed(
     };
 
     if delete_dest {
-        match fs::remove_file(dest) {
-            Ok(()) => {}
-            Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                // target could have been deleted earlier (e.g. same-file with --remove-destination)
+        delete_path(dest, options)
+    } else {
+        Ok(())
+    }
+}
+
+fn delete_path(path: &Path, options: &Options) -> CopyResult<()> {
+    match fs::remove_file(path) {
+        Ok(()) => {
+            if options.verbose {
+                println!(
+                    "{}",
+                    translate!("cp-verbose-removed", "path" => path.quote())
+                );
             }
-            Err(err) => return Err(err.into()),
         }
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            // target could have been deleted earlier (e.g. same-file with --remove-destination)
+        }
+        Err(err) => return Err(err.into()),
     }
 
     Ok(())
@@ -2666,7 +2678,7 @@ fn copy_link(
     // we always need to remove the file to be able to create a symlink,
     // even if it is writeable.
     if dest.is_symlink() || dest.is_file() {
-        fs::remove_file(dest)?;
+        delete_path(dest, options)?;
     }
     symlink_file(&link, dest, symlinked_files)?;
     copy_attributes(source, dest, &options.attributes)

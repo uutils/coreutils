@@ -94,6 +94,7 @@ nonportable
 nonprinting
 nonseekable
 notrunc
+nowrite
 noxfer
 ofile
 oflag
