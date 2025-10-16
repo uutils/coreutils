@@ -350,43 +350,43 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new("o")
                 .short('o')
-                .help("octal 2-byte units")
+                .help(translate!("od-help-o"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("I")
                 .short('I')
-                .help("decimal 8-byte units")
+                .help(translate!("od-help-capital-i"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("L")
                 .short('L')
-                .help("decimal 8-byte units")
+                .help(translate!("od-help-capital-l"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("i")
                 .short('i')
-                .help("decimal 4-byte units")
+                .help(translate!("od-help-i"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("l")
                 .short('l')
-                .help("decimal 8-byte units")
+                .help(translate!("od-help-l"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("x")
                 .short('x')
-                .help("hexadecimal 2-byte units")
+                .help(translate!("od-help-x"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("h")
                 .short('h')
-                .help("hexadecimal 2-byte units")
+                .help(translate!("od-help-h"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -398,37 +398,37 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new("s")
                 .short('s')
-                .help("decimal 2-byte units")
+                .help(translate!("od-help-s"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("X")
                 .short('X')
-                .help("hexadecimal 4-byte units")
+                .help(translate!("od-help-capital-x"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("H")
                 .short('H')
-                .help("hexadecimal 4-byte units")
+                .help(translate!("od-help-capital-h"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("e")
                 .short('e')
-                .help("floating point double precision (64-bit) units")
+                .help(translate!("od-help-e"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("f")
                 .short('f')
-                .help("floating point double precision (32-bit) units")
+                .help(translate!("od-help-f"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("F")
                 .short('F')
-                .help("floating point double precision (64-bit) units")
+                .help(translate!("od-help-capital-f"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
