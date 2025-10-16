@@ -18,6 +18,7 @@ use procfs::{Current, Meminfo};
 enum SystemError {
     IOError,
     ParseError,
+    #[cfg(not(target_os = "linux"))]
     NotFound,
 }
 
