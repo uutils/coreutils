@@ -8,9 +8,10 @@
 
 use std::error::Error;
 use std::fmt;
-#[cfg(target_os = "linux")]
-use std::io::{BufRead, BufReader};
 use std::num::{IntErrorKind, ParseIntError};
+
+#[cfg(target_os = "linux")]
+use procfs::Meminfo;
 
 use crate::display::Quotable;
 
@@ -33,21 +34,6 @@ impl From<ParseIntError> for SystemError {
     }
 }
 
-#[cfg(target_os = "linux")]
-fn parse_meminfo_line(line: &str, key: &str) -> Option<u128> {
-    if !line.starts_with(key) {
-        return None;
-    }
-
-    let mut parts = line[key.len()..].split_ascii_whitespace();
-    let value = parts.next()?.parse::<u128>().ok()?;
-
-    match parts.next() {
-        Some("kB") | None => Some(value.saturating_mul(1024)),
-        _ => None,
-    }
-}
-
 /// Get the total number of bytes of physical memory.
 ///
 /// The information is read from the `/proc/meminfo` file.
@@ -58,83 +44,28 @@ fn parse_meminfo_line(line: &str, key: &str) -> Option<u128> {
 /// entry in the file.
 #[cfg(target_os = "linux")]
 fn total_physical_memory() -> Result<u128, SystemError> {
-    // On Linux, the `/proc/meminfo` file has a table with information
-    // about memory usage. For example,
-    //
-    //     MemTotal:        7811500 kB
-    //     MemFree:         1487876 kB
-    //     MemAvailable:    3857232 kB
-    //     ...
-    //
-    // We just need to extract the number of `MemTotal`
-    let file = std::fs::File::open("/proc/meminfo")?;
-    let reader = BufReader::new(file);
-
-    for line in reader.lines() {
-        let line = line?;
-        if let Some(bytes) = parse_meminfo_line(&line, "MemTotal:") {
-            return Ok(bytes);
-        }
-    }
-    Err(SystemError::NotFound)
+    let meminfo = Meminfo::new().map_err(|_| SystemError::IOError)?;
+    Ok((meminfo.mem_total as u128).saturating_mul(1024))
 }
 
 /// Return the number of bytes of memory that appear to be currently available.
 #[cfg(target_os = "linux")]
 pub fn available_memory_bytes() -> Option<u128> {
-    let file = std::fs::File::open("/proc/meminfo").ok()?;
-    let reader = BufReader::new(file);
+    let meminfo = Meminfo::new().ok()?;
 
-    let mut mem_available = None;
-    let mut mem_free = None;
-    let mut buffers = None;
-    let mut cached = None;
-
-    for line in reader.lines() {
-        let line = line.ok()?;
-
-        if mem_available.is_none() {
-            if let Some(bytes) = parse_meminfo_line(&line, "MemAvailable:") {
-                mem_available = Some(bytes);
-            }
-        }
-
-        if mem_free.is_none() {
-            if let Some(bytes) = parse_meminfo_line(&line, "MemFree:") {
-                mem_free = Some(bytes);
-            }
-        }
-
-        if buffers.is_none() {
-            if let Some(bytes) = parse_meminfo_line(&line, "Buffers:") {
-                buffers = Some(bytes);
-            }
-        }
-
-        if cached.is_none() {
-            if let Some(bytes) = parse_meminfo_line(&line, "Cached:") {
-                cached = Some(bytes);
-            }
-        }
-
-        if mem_available.is_some() && mem_free.is_some() && buffers.is_some() && cached.is_some() {
-            break;
+    if let Some(available_kib) = meminfo.mem_available {
+        let available_bytes = (available_kib as u128).saturating_mul(1024);
+        if available_bytes > 0 {
+            return Some(available_bytes);
         }
     }
 
-    if let Some(bytes) = mem_available {
-        if bytes > 0 {
-            return Some(bytes);
-        }
-    }
+    let fallback_kib = (meminfo.mem_free as u128)
+        .saturating_add(meminfo.buffers as u128)
+        .saturating_add(meminfo.cached as u128);
 
-    let fallback = mem_free
-        .unwrap_or(0)
-        .saturating_add(buffers.unwrap_or(0))
-        .saturating_add(cached.unwrap_or(0));
-
-    if fallback > 0 {
-        Some(fallback)
+    if fallback_kib > 0 {
+        Some(fallback_kib.saturating_mul(1024))
     } else {
         total_physical_memory().ok()
     }
