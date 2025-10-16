@@ -10,6 +10,13 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_missing_operand() {
+    // Test calling dirname with no arguments - should fail
+    // This covers the error path at line 80-82 in dirname.rs
+    new_ucmd!().fails_with_code(1);
+}
+
+#[test]
 fn test_path_with_trailing_slashes() {
     new_ucmd!()
         .arg("/root/alpha/beta/gamma/delta/epsilon/omega//")
@@ -215,4 +222,22 @@ fn test_existing_behavior_preserved() {
         .arg("/home/dos/..")
         .succeeds()
         .stdout_is("/home/dos\n");
+}
+
+#[test]
+fn test_multiple_paths_comprehensive() {
+    // Comprehensive test for multiple paths in single invocation
+    // Tests the loop at line 84 with various edge cases mixed
+    new_ucmd!()
+        .args(&[
+            "/home/dos/.",     // trailing dot case
+            "/var/log",        // normal path
+            ".",               // current directory
+            "/tmp/.",          // another trailing dot
+            "",                // empty string
+            "/",               // root
+            "relative/path",   // relative path
+        ])
+        .succeeds()
+        .stdout_is("/home/dos\n/var\n.\n/tmp\n.\n/\nrelative\n");
 }
