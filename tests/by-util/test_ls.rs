@@ -6654,7 +6654,7 @@ fn test_f_with_long_format() {
     // Long format should still work (contains permissions, etc.)
     assert!(result.contains("-rw"));
 }
-/* spell-checker: disable */
+// spell-checker: disable
 
 // ================ LOCALE-AWARE SORTING TESTS ================
 
@@ -7108,4 +7108,4 @@ mod locale_tests {
         }
     }
 }
-/* spell-checker: enable */
+// spell-checker: enable

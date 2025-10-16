@@ -108,9 +108,11 @@ fn ls_recursive_long_all_mixed_tree(bencher: Bencher) {
 // ================ LOCALE-AWARE SORTING BENCHMARKS ================
 
 /// Benchmark ls sorting with C locale (byte comparison) vs UTF-8 locale
-#[divan::bench(args = [("ascii", 1000), ("mixed", 1000), ("ascii", 5000), ("mixed", 5000)])]
-fn ls_locale_sorting(bencher: Bencher, (dataset_type, file_count): (&str, usize)) {
+#[divan::bench]
+fn ls_locale_sorting(bencher: Bencher) {
     let temp_dir = TempDir::new().unwrap();
+    let file_count = 1000;
+    let dataset_type = "mixed";
 
     // Generate appropriate dataset
     let names: Vec<String> = match dataset_type {
@@ -167,8 +169,9 @@ fn ls_locale_sorting(bencher: Bencher, (dataset_type, file_count): (&str, usize)
 }
 
 /// Benchmark ls with C locale explicitly set (tests byte comparison fallback)
-#[divan::bench(args = [500, 2000])]
-fn ls_c_locale_explicit(bencher: Bencher, file_count: usize) {
+#[divan::bench]
+fn ls_c_locale_explicit(bencher: Bencher) {
+    let file_count = 1000;
     let temp_dir = TempDir::new().unwrap();
 
     // Create files with mixed ASCII and Unicode names
@@ -203,8 +206,9 @@ fn ls_c_locale_explicit(bencher: Bencher, file_count: usize) {
 }
 
 /// Benchmark ls with German locale for umlauts sorting
-#[divan::bench(args = [500, 2000])]
-fn ls_german_locale(bencher: Bencher, file_count: usize) {
+#[divan::bench]
+fn ls_german_locale(bencher: Bencher) {
+    let file_count = 1000;
     let temp_dir = TempDir::new().unwrap();
 
     // Create files with German umlauts
@@ -242,8 +246,9 @@ fn ls_german_locale(bencher: Bencher, file_count: usize) {
 }
 
 /// Benchmark impact of locale on ls -l (long listing)
-#[divan::bench(args = [100, 500])]
-fn ls_long_locale_comparison(bencher: Bencher, file_count: usize) {
+#[divan::bench]
+fn ls_long_locale_comparison(bencher: Bencher) {
+    let file_count = 500;
     let temp_dir = TempDir::new().unwrap();
 
     // Mix of ASCII and accented characters
