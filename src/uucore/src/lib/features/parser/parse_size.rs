@@ -11,7 +11,7 @@ use std::fmt;
 use std::num::{IntErrorKind, ParseIntError};
 
 #[cfg(target_os = "linux")]
-use procfs::Meminfo;
+use procfs::{Current, Meminfo};
 use crate::display::Quotable;
 
 /// Error arising from trying to compute system memory.
