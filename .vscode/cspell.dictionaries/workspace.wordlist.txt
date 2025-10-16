@@ -359,3 +359,26 @@ merror
 merreur
 verbo
 inattendu
+
+# locale sorting test words (German)
+apfel
+äpfel
+bär
+öffnung
+über
+
+# locale sorting test words (French)
+ecole
+éclair
+école
+etude
+étude
+
+# locale sorting test words (Spanish)
+nino
+niño
+
+# locale sorting test words (German eszett)
+masse
+maße
+mast

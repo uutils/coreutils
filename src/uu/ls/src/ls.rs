@@ -65,7 +65,7 @@ use uucore::{
     fs::FileInformation,
     fs::display_permissions,
     fsext::{MetadataTimeField, metadata_get_time},
-    i18n::collator::{CollatorOptions, init_collator, locale_cmp},
+    i18n::collator::{CollatorOptions, Strength, init_collator, locale_cmp},
     line_ending::LineEnding,
     os_str_as_bytes_lossy,
     parser::parse_glob,
@@ -1184,7 +1184,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
 
     // Initialize collator for locale-aware sorting
-    init_collator(CollatorOptions::default());
+    // GNU ls uses case-insensitive sorting by default, so use Strength::Secondary
+    // which ignores case differences but considers accents/diacritics
+    let mut collator_opts = CollatorOptions::default();
+    collator_opts.strength = Some(Strength::Secondary);
+    init_collator(collator_opts);
 
     let config = Config::from(&matches)?;
 
