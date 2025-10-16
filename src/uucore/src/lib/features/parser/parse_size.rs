@@ -10,9 +10,9 @@ use std::error::Error;
 use std::fmt;
 use std::num::{IntErrorKind, ParseIntError};
 
+use crate::display::Quotable;
 #[cfg(target_os = "linux")]
 use procfs::{Current, Meminfo};
-use crate::display::Quotable;
 
 /// Error arising from trying to compute system memory.
 enum SystemError {
