@@ -37,6 +37,8 @@ struct HandlerRegistration {
 }
 
 fn handler_state() -> Arc<Mutex<HandlerRegistration>> {
+    // Lazily create the global HandlerRegistration so all TmpDirWrapper instances and the
+    // SIGINT handler operate on the same lock/path snapshot.
     static HANDLER_STATE: OnceLock<Arc<Mutex<HandlerRegistration>>> = OnceLock::new();
     HANDLER_STATE
         .get_or_init(|| Arc::new(Mutex::new(HandlerRegistration::default())))
@@ -44,6 +46,8 @@ fn handler_state() -> Arc<Mutex<HandlerRegistration>> {
 }
 
 fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) -> UResult<()> {
+    // This shared state must originate from `handler_state()` so the handler always sees
+    // the current lock/path pair and can clean up the active temp directory on SIGINT.
     // Install a shared SIGINT handler so the active temp directory is deleted when the user aborts.
     // Guard to ensure the SIGINT handler is registered once per process and reused.
     static HANDLER_INSTALLED: AtomicBool = AtomicBool::new(false);
