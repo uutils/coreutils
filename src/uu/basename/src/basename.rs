@@ -7,10 +7,8 @@
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
-use std::ffi::OsString;
-use std::io::{Write, stdout};
-use std::path::PathBuf;
-use uucore::display::Quotable;
+use std::ffi::{OsStr, OsString};
+use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{UResult, UUsageError};
 use uucore::format_usage;
 use uucore::line_ending::LineEnding;
@@ -71,7 +69,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     //
 
     for path in name_args {
-        stdout().write_all(&basename(path, &suffix)?)?;
+        print_verbatim(basename(path, &suffix))?;
         print!("{line_ending}");
     }
 
@@ -120,30 +118,30 @@ pub fn uu_app() -> Command {
         )
 }
 
-// We return a Vec<u8>. Returning a seemingly more proper `OsString` would
-// require back and forth conversions as we need a &[u8] for printing anyway.
-fn basename(fullname: &OsString, suffix: &OsString) -> UResult<Vec<u8>> {
-    let fullname_bytes = uucore::os_str_as_bytes(fullname)?;
-
-    // Handle special case where path ends with /.
-    if fullname_bytes.ends_with(b"/.") {
-        return Ok(b".".into());
+fn basename_bytes<'a>(path: &'a [u8], suffix: &'_ [u8]) -> &'a [u8] {
+    // Skip any trailing slashes
+    let Some(i) = path.iter().rposition(|&b| b != b'/') else {
+        return if path.is_empty() { b"" } else { b"/" }; // path was all slashes
+    };
+    // Extract final component
+    let j = path[..i].iter().rposition(|&b| b == b'/');
+    let base = &path[j.map_or(0, |j| j + 1)..=i];
+    // Remove suffix if it's not the entire basename
+    if let Some(stripped @ [_, ..]) = base.strip_suffix(suffix) {
+        stripped
+    } else {
+        base
     }
+}
 
-    // Convert to path buffer and get last path component
-    let pb = PathBuf::from(fullname);
-
-    pb.components().next_back().map_or(Ok([].into()), |c| {
-        let name = c.as_os_str();
-        let name_bytes = uucore::os_str_as_bytes(name)?;
-        if name == suffix {
-            Ok(name_bytes.into())
-        } else {
-            let suffix_bytes = uucore::os_str_as_bytes(suffix)?;
-            Ok(name_bytes
-                .strip_suffix(suffix_bytes)
-                .unwrap_or(name_bytes)
-                .into())
-        }
-    })
+fn basename<'a>(path: &'a OsStr, suffix: &OsStr) -> &'a OsStr {
+    let path_bytes = path.as_encoded_bytes();
+    let suffix_bytes = suffix.as_encoded_bytes();
+    let base_bytes = basename_bytes(path_bytes, suffix_bytes);
+    // SAFETY: The internal encoding of OsStr is documented to be a
+    // self-synchronizing superset of UTF-8. Since base_bytes was computed as a
+    // subslice of path_bytes adjacent only to b'/' and suffix_bytes, it is also
+    // valid as an OsStr. (The experimental os_str_slice feature may allow this
+    // to be rewritten without unsafe in the future.)
+    unsafe { OsStr::from_encoded_bytes_unchecked(base_bytes) }
 }
