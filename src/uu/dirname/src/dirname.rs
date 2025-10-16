@@ -5,7 +5,6 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
-use std::path::Path;
 use uucore::display::print_verbatim;
 use uucore::error::{UResult, UUsageError};
 use uucore::format_usage;
@@ -13,56 +12,96 @@ use uucore::line_ending::LineEnding;
 
 use uucore::translate;
 
+#[cfg(not(unix))]
+use std::path::Path;
+
 mod options {
     pub const ZERO: &str = "zero";
     pub const DIR: &str = "dir";
 }
 
-/// Handle the special case where a path ends with "/."
+/// Compute dirname following POSIX/GNU behavior
 ///
-/// This matches GNU/POSIX behavior where `dirname("/home/dos/.")` returns "/home/dos"
-/// rather than "/home" (which would be the result of `Path::parent()` due to normalization).
+/// This implements the POSIX dirname algorithm without path normalization.
 /// Per POSIX.1-2017 dirname specification and GNU coreutils manual:
 /// - POSIX: <https://pubs.opengroup.org/onlinepubs/9699919799/utilities/dirname.html>
 /// - GNU: <https://www.gnu.org/software/coreutils/manual/html_node/dirname-invocation.html>
 ///
-/// dirname should do simple string manipulation without path normalization.
-/// See issue #8910 and similar fix in basename (#8373, commit c5268a897).
+/// The algorithm:
+/// 1. Remove trailing '/' characters
+/// 2. If the path ends with "/.", remove it (handles foo/., foo//., foo///., etc.)
+/// 3. Remove any remaining trailing '/' characters
+/// 4. Apply standard dirname logic (find last '/', return everything before it)
 ///
-/// Returns `Some(())` if the special case was handled (output already printed),
-/// or `None` if normal `Path::parent()` logic should be used.
-fn handle_trailing_dot(path_bytes: &[u8]) -> Option<()> {
-    if !path_bytes.ends_with(b"/.") {
-        return None;
+/// See issues #8910 and #8924, and similar fix in basename (#8373, commit c5268a897).
+fn compute_dirname(path_bytes: &[u8]) -> Vec<u8> {
+    // Handle empty path
+    if path_bytes.is_empty() {
+        return b".".to_vec();
     }
 
-    // Strip the "/." suffix and print the result
-    if path_bytes.len() == 2 {
-        // Special case: "/." -> "/"
-        print!("/");
-        Some(())
-    } else {
-        // General case: "/home/dos/." -> "/home/dos"
-        let stripped = &path_bytes[..path_bytes.len() - 2];
-        #[cfg(unix)]
-        {
-            use std::os::unix::ffi::OsStrExt;
-            let result = std::ffi::OsStr::from_bytes(stripped);
-            print_verbatim(result).unwrap();
-            Some(())
-        }
-        #[cfg(not(unix))]
-        {
-            // On non-Unix, fall back to lossy conversion
-            if let Ok(s) = std::str::from_utf8(stripped) {
-                print!("{s}");
-                Some(())
-            } else {
-                // Can't handle non-UTF-8 on non-Unix, fall through to normal logic
-                None
-            }
-        }
+    // Special case: "//" stays as "/" per POSIX
+    if path_bytes == b"//" {
+        return b"/".to_vec();
     }
+
+    let mut path = path_bytes.to_vec();
+
+    // If path consists entirely of slashes, return single slash
+    if path.iter().all(|&b| b == b'/') {
+        return b"/".to_vec();
+    }
+
+    // Step 1: Remove trailing slashes (but keep at least one character)
+    while path.len() > 1 && path.last() == Some(&b'/') {
+        path.pop();
+    }
+
+    // Step 2: Check if path ends with "/." and handle specially
+    // This handles foo/., foo//., foo///., and foo/./ (after step 1) etc.
+    if path.len() >= 2 && path[path.len() - 1] == b'.' && path[path.len() - 2] == b'/' {
+        // Remember if the original path was absolute (for handling "/." -> "/")
+        let was_absolute = path[0] == b'/';
+
+        // Remove the "/." suffix
+        path.truncate(path.len() - 2);
+
+        // Remove any additional trailing slashes that might remain (e.g., foo//. -> foo/)
+        while path.len() > 1 && path.last() == Some(&b'/') {
+            path.pop();
+        }
+
+        // Handle edge cases: if we're left with nothing or just slashes
+        if path.is_empty() {
+            // If it was an absolute path like "/.", return "/"
+            // Otherwise, return "."
+            return if was_absolute {
+                b"/".to_vec()
+            } else {
+                b".".to_vec()
+            };
+        }
+        if path.iter().all(|&b| b == b'/') {
+            return b"/".to_vec();
+        }
+
+        // What remains IS the dirname for paths ending with "/.".
+        // Example: "foo/bar/." -> "foo/bar", "foo//." -> "foo"
+        return path;
+    }
+
+    // Step 3: Standard dirname logic - find last '/' and return everything before it
+    if let Some(pos) = path.iter().rposition(|&b| b == b'/') {
+        if pos == 0 {
+            // The slash is at the beginning, dirname is "/"
+            return b"/".to_vec();
+        }
+        path.truncate(pos);
+        return path;
+    }
+
+    // No slash found, dirname is "."
+    b".".to_vec()
 }
 
 #[uucore::main]
@@ -84,26 +123,43 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     for path in &dirnames {
         let path_bytes = uucore::os_str_as_bytes(path.as_os_str()).unwrap_or(&[]);
 
-        if handle_trailing_dot(path_bytes).is_none() {
-            // Normal path handling using Path::parent()
-            let p = Path::new(path);
-            match p.parent() {
-                Some(d) => {
-                    if d.components().next().is_none() {
-                        print!(".");
-                    } else {
-                        print_verbatim(d).unwrap();
+        // Compute dirname using POSIX-compliant algorithm
+        let dirname_bytes = compute_dirname(path_bytes);
+
+        // Print the result
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStrExt;
+            let result = std::ffi::OsStr::from_bytes(&dirname_bytes);
+            print_verbatim(result).unwrap();
+        }
+        #[cfg(not(unix))]
+        {
+            // On non-Unix, fall back to lossy conversion
+            if let Ok(s) = std::str::from_utf8(&dirname_bytes) {
+                print!("{s}");
+            } else {
+                // Fallback for non-UTF-8 on non-Unix: use Path::parent() as before
+                let p = Path::new(path);
+                match p.parent() {
+                    Some(d) => {
+                        if d.components().next().is_none() {
+                            print!(".");
+                        } else {
+                            print_verbatim(d).unwrap();
+                        }
                     }
-                }
-                None => {
-                    if p.is_absolute() || path.as_os_str() == "/" {
-                        print!("/");
-                    } else {
-                        print!(".");
+                    None => {
+                        if p.is_absolute() || path.as_os_str() == "/" {
+                            print!("/");
+                        } else {
+                            print!(".");
+                        }
                     }
                 }
             }
         }
+
         print!("{line_ending}");
     }
 

@@ -152,11 +152,11 @@ fn test_trailing_dot_multiple_paths() {
 
 #[test]
 fn test_trailing_dot_edge_cases() {
-    // Double slash before dot (should still work)
+    // Double slash before dot - should strip both the slashes and dot (issue #8924)
     new_ucmd!()
         .arg("/home/dos//.")
         .succeeds()
-        .stdout_is("/home/dos/\n");
+        .stdout_is("/home/dos\n");
 
     // Path with . in middle (should use normal logic)
     new_ucmd!()
@@ -215,4 +215,75 @@ fn test_existing_behavior_preserved() {
         .arg("/home/dos/..")
         .succeeds()
         .stdout_is("/home/dos\n");
+}
+
+#[test]
+fn test_issue_8924() {
+    new_ucmd!().arg("foo//.").succeeds().stdout_is("foo\n");
+    new_ucmd!().arg("foo///.").succeeds().stdout_is("foo\n");
+    new_ucmd!().arg("foo/./").succeeds().stdout_is("foo\n");
+    new_ucmd!()
+        .arg("foo/bar/./")
+        .succeeds()
+        .stdout_is("foo/bar\n");
+    new_ucmd!().arg("foo/./bar").succeeds().stdout_is("foo/.\n");
+
+    new_ucmd!()
+        .arg("/home/foo//.")
+        .succeeds()
+        .stdout_is("/home/foo\n");
+    new_ucmd!()
+        .arg("/home/foo///.")
+        .succeeds()
+        .stdout_is("/home/foo\n");
+    new_ucmd!()
+        .arg("/home/foo/./")
+        .succeeds()
+        .stdout_is("/home/foo\n");
+    new_ucmd!()
+        .arg("/home/foo/bar/./")
+        .succeeds()
+        .stdout_is("/home/foo/bar\n");
+    new_ucmd!()
+        .arg("/home/foo/./bar")
+        .succeeds()
+        .stdout_is("/home/foo/.\n");
+
+    new_ucmd!().arg("foo////.").succeeds().stdout_is("foo\n");
+    new_ucmd!().arg("foo/////.").succeeds().stdout_is("foo\n");
+    new_ucmd!().arg("foo/./////").succeeds().stdout_is("foo\n");
+
+    new_ucmd!().arg("//.").succeeds().stdout_is("/\n");
+    new_ucmd!().arg("/./").succeeds().stdout_is("/\n");
+    new_ucmd!().arg(".//.").succeeds().stdout_is(".\n");
+    new_ucmd!().arg("foo/..").succeeds().stdout_is("foo\n");
+
+    new_ucmd!()
+        .arg("-z")
+        .arg("foo//.")
+        .succeeds()
+        .stdout_is("foo\u{0}");
+    new_ucmd!()
+        .arg("-z")
+        .arg("foo/./")
+        .succeeds()
+        .stdout_is("foo\u{0}");
+    new_ucmd!()
+        .arg("-z")
+        .arg("foo/./bar")
+        .succeeds()
+        .stdout_is("foo/.\u{0}");
+
+    new_ucmd!()
+        .arg("/usr/local/bin//.")
+        .succeeds()
+        .stdout_is("/usr/local/bin\n");
+    new_ucmd!()
+        .arg("/var/lib/./foo")
+        .succeeds()
+        .stdout_is("/var/lib/.\n");
+    new_ucmd!()
+        .arg("src/main/./test.rs")
+        .succeeds()
+        .stdout_is("src/main/.\n");
 }
