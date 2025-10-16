@@ -6654,6 +6654,8 @@ fn test_f_with_long_format() {
     // Long format should still work (contains permissions, etc.)
     assert!(result.contains("-rw"));
 }
+/* spell-checker: disable */
+
 // ================ LOCALE-AWARE SORTING TESTS ================
 
 #[cfg(unix)]
@@ -6689,20 +6691,16 @@ mod locale_tests {
             .collect();
 
         for (i, item) in items.iter().enumerate() {
-            assert!(
-                positions[i].is_some(),
-                "Item '{}' not found in output",
-                item
-            );
+            assert!(positions[i].is_some(), "Item '{item}' not found in output");
         }
 
         for i in 1..positions.len() {
             if let (Some(prev), Some(curr)) = (positions[i - 1], positions[i]) {
+                let item_prev = items[i - 1];
+                let item_curr = items[i];
                 assert!(
                     prev < curr,
-                    "'{}' should come before '{}' in the output",
-                    items[i - 1],
-                    items[i]
+                    "'{item_prev}' should come before '{item_curr}' in the output"
                 );
             }
         }
@@ -6752,7 +6750,7 @@ mod locale_tests {
     fn test_ls_locale_german_umlauts() {
         let locale = "de_DE.UTF-8";
         if !have_locale(locale) {
-            eprintln!("Skipping test: locale {} not available", locale);
+            eprintln!("Skipping test: locale {locale} not available");
             return;
         }
 
@@ -6807,7 +6805,7 @@ mod locale_tests {
     fn test_ls_locale_french_accents() {
         let locale = "fr_FR.UTF-8";
         if !have_locale(locale) {
-            eprintln!("Skipping test: locale {} not available", locale);
+            eprintln!("Skipping test: locale {locale} not available");
             return;
         }
 
@@ -6858,7 +6856,7 @@ mod locale_tests {
     fn test_ls_locale_spanish_tildes() {
         let locale = "es_ES.UTF-8";
         if !have_locale(locale) {
-            eprintln!("Skipping test: locale {} not available", locale);
+            eprintln!("Skipping test: locale {locale} not available");
             return;
         }
 
@@ -6981,7 +6979,7 @@ mod locale_tests {
         // Test that German eszett (ß) sorts as 'ss' in German locale
         let locale = "de_DE.UTF-8";
         if !have_locale(locale) {
-            eprintln!("Skipping test: locale {} not available", locale);
+            eprintln!("Skipping test: locale {locale} not available");
             return;
         }
 
@@ -7006,44 +7004,108 @@ mod locale_tests {
 
     #[test]
     fn test_ls_locale_case_insensitive() {
-        // Test that sorting is case-insensitive (GNU ls default)
+        // Test that locale-aware sorting is case-insensitive (GNU ls default behavior)
+        // by comparing UTF-8 locale output with C locale which uses strict byte-order
+        // (uppercase < lowercase in ASCII).
+        //
+        // ## Case-Insensitive Filesystem Handling
+        //
+        // macOS defaults to case-insensitive APFS volumes (man newfs_apfs(8)):
+        //   "-i    Creates a case-insensitive volume. This is the default on macOS."
+        //
+        // Verification:
+        //   $ diskutil apfs list | grep "Macintosh HD"
+        //   Name:    Macintosh HD (Case-insensitive)
+        //
+        // On such filesystems, creating both "Aaa" and "aaa" results in a single file
+        // because filenames collide (case-insensitive match). For example:
+        //   $ touch TestFile && touch testfile && ls
+        //   TestFile    # Only one file - "testfile" overwrote "TestFile"
+        //
+        // This test creates 5 files with different cases. On case-insensitive filesystems,
+        // some will collide, resulting in < 5 actual files. We detect this and skip
+        // detailed assertions, falling back to basic sorting validation.
+        //
+        // On case-sensitive filesystems (Linux, case-sensitive APFS), all 5 files are
+        // created distinctly, and we verify:
+        //   1. UTF-8 locale output ≠ C locale output (proves locale-aware sorting active)
+        //   2. "aaa" < "Zzz" in UTF-8 locale (case-insensitive alphabetical order)
+        //   3. "Zzz" < "aaa" in C locale (byte-order: uppercase first)
         let (at, mut ucmd) = at_and_ucmd!();
 
-        // Create files with different cases
-        at.touch("Apple");
-        at.touch("apple");
-        at.touch("Banana");
-        at.touch("banana");
-        at.touch("Cherry");
+        // Create files with mixed case - these will collide on case-insensitive filesystems
+        at.touch("Aaa");
+        at.touch("aaa");
+        at.touch("Bbb");
+        at.touch("bbb");
+        at.touch("Zzz");
 
-        let result = ucmd.arg("-1").arg("--color=never").succeeds();
+        // Test with UTF-8 locale (case-insensitive collation via ICU)
+        // Note: Must explicitly set LC_ALL; unset env defaults to C locale behavior
+        let result = ucmd
+            .env("LC_ALL", "en_US.UTF-8")
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+        let utf8_output = result.stdout_str();
 
-        let output = result.stdout_str();
-        let lines: Vec<&str> = output.lines().collect();
+        // Test with C locale (byte-order comparison: uppercase < lowercase in ASCII)
+        let (at2, mut ucmd2) = at_and_ucmd!();
+        at2.touch("Aaa");
+        at2.touch("aaa");
+        at2.touch("Bbb");
+        at2.touch("bbb");
+        at2.touch("Zzz");
 
-        // With case-insensitive sorting, uppercase and lowercase versions
-        // should be adjacent and Apple/apple should come before Banana/banana
-        let apple_idx = lines.iter().position(|&l| l == "apple");
-        let apple_cap_idx = lines.iter().position(|&l| l == "Apple");
-        let banana_idx = lines.iter().position(|&l| l == "banana");
+        let c_result = ucmd2
+            .env("LC_ALL", "C")
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+        let c_output = c_result.stdout_str();
 
-        if let (Some(apple), Some(apple_cap), Some(banana)) = (apple_idx, apple_cap_idx, banana_idx)
-        {
-            // Both apple variants should come before banana
-            assert!(apple < banana, "apple should come before banana");
-            assert!(apple_cap < banana, "Apple should come before banana");
+        // Detect case-insensitive filesystem: check if we got fewer than 5 files
+        // (See documentation above for why files collide on macOS default APFS)
+        let default_lines: Vec<&str> = utf8_output.lines().collect();
+        let c_lines: Vec<&str> = c_output.lines().collect();
 
-            // Apple and apple should be adjacent (differ by at most 1)
-            let diff = if apple > apple_cap {
-                apple - apple_cap
-            } else {
-                apple_cap - apple
-            };
+        if default_lines.len() < 5 || c_lines.len() < 5 {
+            // Case-insensitive filesystem detected - filenames collided during creation
+            // Skip detailed locale comparison, but ensure basic output is valid
+            eprintln!(
+                "Skipping detailed test: case-insensitive filesystem detected ({} files)",
+                default_lines.len()
+            );
+            assert!(!default_lines.is_empty(), "Should have some files");
+            return;
+        }
+
+        // Case-sensitive filesystem - all 5 files created successfully
+        // Verify locale-aware sorting works by comparing outputs
+        //
+        // Expected behavior:
+        //   C locale (byte-order):     Aaa, Bbb, Zzz, aaa, bbb
+        //   UTF-8 locale (collation):  aaa, Aaa, bbb, Bbb, Zzz  (or similar case-insensitive)
+        assert_ne!(
+            utf8_output, c_output,
+            "UTF-8 locale sorting should differ from C locale byte-order sorting"
+        );
+
+        // Verify case-insensitive collation: 'aaa' < 'Zzz' regardless of case
+        // This proves alphabetical ordering (a < z) takes precedence over case
+        //
+        // Compare with C locale behavior where uppercase comes first:
+        //   C locale:    'Zzz' < 'aaa'  (0x5A < 0x61 in ASCII)
+        //   UTF-8 locale: 'aaa' < 'Zzz'  (case-insensitive 'a' < 'z')
+        let aaa_idx = default_lines.iter().position(|&l| l == "aaa");
+        let zzz_idx = default_lines.iter().position(|&l| l == "Zzz");
+
+        if let (Some(aaa), Some(zzz)) = (aaa_idx, zzz_idx) {
             assert!(
-                diff <= 1,
-                "Apple and apple should be adjacent, but diff is {}",
-                diff
+                aaa < zzz,
+                "Case-insensitive locale: 'aaa' should come before 'Zzz' (got: {default_lines:?})"
             );
         }
     }
 }
+/* spell-checker: enable */

@@ -379,6 +379,7 @@ nino
 niño
 
 # locale sorting test words (German eszett)
+eszett
 masse
 maße
 mast
