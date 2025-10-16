@@ -4,8 +4,7 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command};
-use std::ffi::OsString;
-use std::path::Path;
+use std::ffi::{OsStr, OsString};
 use uucore::display::print_verbatim;
 use uucore::error::{UResult, UUsageError};
 use uucore::format_usage;
@@ -18,8 +17,6 @@ mod options {
     pub const DIR: &str = "dir";
 }
 
-/// Handle the special case where a path ends with "/."
-///
 /// This matches GNU/POSIX behavior where `dirname("/home/dos/.")` returns "/home/dos"
 /// rather than "/home" (which would be the result of `Path::parent()` due to normalization).
 /// Per POSIX.1-2017 dirname specification and GNU coreutils manual:
@@ -28,41 +25,31 @@ mod options {
 ///
 /// dirname should do simple string manipulation without path normalization.
 /// See issue #8910 and similar fix in basename (#8373, commit c5268a897).
-///
-/// Returns `Some(())` if the special case was handled (output already printed),
-/// or `None` if normal `Path::parent()` logic should be used.
-fn handle_trailing_dot(path_bytes: &[u8]) -> Option<()> {
-    if !path_bytes.ends_with(b"/.") {
-        return None;
-    }
+fn dirname_bytes(path: &[u8]) -> &[u8] {
+    // Skip any trailing slashes
+    let Some(i) = path.iter().rposition(|&b| b != b'/') else {
+        return if path.is_empty() { b"." } else { b"/" }; // path was all slashes
+    };
+    // Skip final component
+    let Some(i) = path[..i].iter().rposition(|&b| b == b'/') else {
+        return b"."; // path had one relative component
+    };
+    // Skip any remaining trailing slashes
+    let Some(i) = path[..i].iter().rposition(|&b| b != b'/') else {
+        return b"/"; // path had one absolute component
+    };
+    &path[..=i]
+}
 
-    // Strip the "/." suffix and print the result
-    if path_bytes.len() == 2 {
-        // Special case: "/." -> "/"
-        print!("/");
-        Some(())
-    } else {
-        // General case: "/home/dos/." -> "/home/dos"
-        let stripped = &path_bytes[..path_bytes.len() - 2];
-        #[cfg(unix)]
-        {
-            use std::os::unix::ffi::OsStrExt;
-            let result = std::ffi::OsStr::from_bytes(stripped);
-            print_verbatim(result).unwrap();
-            Some(())
-        }
-        #[cfg(not(unix))]
-        {
-            // On non-Unix, fall back to lossy conversion
-            if let Ok(s) = std::str::from_utf8(stripped) {
-                print!("{s}");
-                Some(())
-            } else {
-                // Can't handle non-UTF-8 on non-Unix, fall through to normal logic
-                None
-            }
-        }
-    }
+fn dirname(path: &OsStr) -> &OsStr {
+    let path_bytes = path.as_encoded_bytes();
+    let dir_bytes = dirname_bytes(path_bytes);
+    // SAFETY: The internal encoding of OsStr is documented to be a
+    // self-synchronizing superset of UTF-8. Since dir_bytes was computed as a
+    // subslice of path_bytes adjacent only to b'/', it is also valid as an
+    // OsStr. (The experimental os_str_slice feature may allow this to be
+    // rewritten without unsafe in the future.)
+    unsafe { OsStr::from_encoded_bytes_unchecked(dir_bytes) }
 }
 
 #[uucore::main]
@@ -82,28 +69,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     for path in &dirnames {
-        let path_bytes = uucore::os_str_as_bytes(path.as_os_str()).unwrap_or(&[]);
-
-        if handle_trailing_dot(path_bytes).is_none() {
-            // Normal path handling using Path::parent()
-            let p = Path::new(path);
-            match p.parent() {
-                Some(d) => {
-                    if d.components().next().is_none() {
-                        print!(".");
-                    } else {
-                        print_verbatim(d).unwrap();
-                    }
-                }
-                None => {
-                    if p.is_absolute() || path.as_os_str() == "/" {
-                        print!("/");
-                    } else {
-                        print!(".");
-                    }
-                }
-            }
-        }
+        print_verbatim(dirname(path.as_os_str()))?;
         print!("{line_ending}");
     }
 
