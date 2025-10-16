@@ -145,7 +145,6 @@ PROGS       := \
 	sleep \
 	sort \
 	split \
-	stty \
 	sum \
 	sync \
 	tac \
@@ -185,6 +184,7 @@ UNIX_PROGS := \
 	pinky \
 	stat \
 	stdbuf \
+	stty \
 	timeout \
 	touch \
 	tty \
