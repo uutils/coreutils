@@ -11,7 +11,7 @@ use std::fmt;
 use std::num::{IntErrorKind, ParseIntError};
 
 #[cfg(target_os = "linux")]
-use procfs::meminfo;
+use procfs::Procfs;
 use crate::display::Quotable;
 
 /// Error arising from trying to compute system memory.
@@ -43,14 +43,16 @@ impl From<ParseIntError> for SystemError {
 /// entry in the file.
 #[cfg(target_os = "linux")]
 fn total_physical_memory() -> Result<u128, SystemError> {
-    let info = meminfo().map_err(|_| SystemError::IOError)?;
+    let procfs = Procfs::new().map_err(|_| SystemError::IOError)?;
+    let info = procfs.meminfo().map_err(|_| SystemError::IOError)?;
     Ok((info.mem_total as u128).saturating_mul(1024))
 }
 
 /// Return the number of bytes of memory that appear to be currently available.
 #[cfg(target_os = "linux")]
 pub fn available_memory_bytes() -> Option<u128> {
-    let info = meminfo().ok()?;
+    let procfs = Procfs::new().ok()?;
+    let info = procfs.meminfo().ok()?;
 
     if let Some(available_kib) = info.mem_available {
         let available_bytes = (available_kib as u128).saturating_mul(1024);
