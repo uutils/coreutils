@@ -200,8 +200,8 @@ jobs:
             cargo nextest run --hide-progress-bar --profile ci --features "\$UUCORE_FEATURES" -p uucore || FAULT=1
           fi
           # Test building with make
-          # skip stdbuf until https://github.com/uutils/coreutils/pull/8684#discussion_r2383492924 was fixed
-          if (test -z "\$FAULT"); then make nextest PROFILE=ci SKIP_UTILS=stdbuf || FAULT=1 ; fi
+          # skip libstdbuf test (https://github.com/uutils/coreutils/pull/8684#discussion_r2383492924)
+          if (test -z "\$FAULT"); then make nextest PROFILE=ci SKIP_UTILS=stdbuf TEST_NO_FAIL_FAST=--test_stdbuf::test_libstdbuf_preload || FAULT=1 ; fi
           # Clean to avoid to rsync back the files
           cargo clean
           if (test -n "\$FAULT"); then exit 1 ; fi
