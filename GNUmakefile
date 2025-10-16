@@ -107,6 +107,7 @@ PROGS       := \
 	dir \
 	dircolors \
 	dirname \
+	du \
 	echo \
 	env \
 	expand \
@@ -151,6 +152,7 @@ PROGS       := \
 	tail \
 	tee \
 	test \
+	touch \
 	tr \
 	true \
 	truncate \
@@ -168,7 +170,6 @@ UNIX_PROGS := \
 	chmod \
 	chown \
 	chroot \
-	du \
 	groups \
 	hostid \
 	hostname \
@@ -186,7 +187,6 @@ UNIX_PROGS := \
 	stdbuf \
 	stty \
 	timeout \
-	touch \
 	tty \
 	uname \
 	unlink \
