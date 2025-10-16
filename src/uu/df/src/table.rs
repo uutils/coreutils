@@ -264,7 +264,7 @@ impl<'a> RowFormatter<'a> {
     /// The scaling factor is defined in the `options` field.
     fn scaled_bytes(&self, size: u64) -> Cell {
         let s = if let Some(h) = self.options.human_readable {
-            to_magnitude_and_suffix(size.into(), SuffixType::HumanReadable(h))
+            to_magnitude_and_suffix(size.into(), SuffixType::HumanReadable(h), true)
         } else {
             let BlockSize::Bytes(d) = self.options.block_size;
             (size as f64 / d as f64).ceil().to_string()
@@ -277,7 +277,7 @@ impl<'a> RowFormatter<'a> {
     /// The scaling factor is defined in the `options` field.
     fn scaled_inodes(&self, size: u128) -> Cell {
         let s = if let Some(h) = self.options.human_readable {
-            to_magnitude_and_suffix(size, SuffixType::HumanReadable(h))
+            to_magnitude_and_suffix(size, SuffixType::HumanReadable(h), true)
         } else {
             size.to_string()
         };
@@ -377,7 +377,11 @@ impl Header {
                             translate!("df-blocks-suffix")
                         )
                     }
-                    _ => format!("{}{}", options.block_size, translate!("df-blocks-suffix")),
+                    _ => format!(
+                        "{}{}",
+                        options.block_size.to_header(),
+                        translate!("df-blocks-suffix")
+                    ),
                 },
                 Column::Used => translate!("df-header-used"),
                 Column::Avail => match options.header_mode {
@@ -822,17 +826,25 @@ mod tests {
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".into(),
 
-            bytes: 4000,
+            bytes: 40000,
             bytes_used: 1000,
-            bytes_avail: 3000,
-            bytes_usage: Some(0.25),
+            bytes_avail: 39000,
+            bytes_usage: Some(0.025),
 
             ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options, false);
         assert!(compare_cell_content(
             fmt.get_cells(),
-            vec!("my_device", "my_type", "4k", "1k", "3k", "25%", "my_mount")
+            vec!(
+                "my_device",
+                "my_type",
+                "40k",
+                "1.0k",
+                "39k",
+                "3%",
+                "my_mount"
+            )
         ));
     }
 
@@ -859,7 +871,15 @@ mod tests {
         let fmt = RowFormatter::new(&row, &options, false);
         assert!(compare_cell_content(
             fmt.get_cells(),
-            vec!("my_device", "my_type", "4K", "1K", "3K", "25%", "my_mount")
+            vec!(
+                "my_device",
+                "my_type",
+                "4.0K",
+                "1.0K",
+                "3.0K",
+                "25%",
+                "my_mount"
+            )
         ));
     }
 
