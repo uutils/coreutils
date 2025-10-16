@@ -140,17 +140,17 @@ fn extract_patterns(args: &[String]) -> Result<Vec<Pattern>, CsplitError> {
             };
             if let Some(up_to_match) = captures.name("UPTO") {
                 let pattern = Regex::new(up_to_match.as_str())
-                    .map_err(|_| CsplitError::InvalidPattern(arg.to_string()))?;
+                    .map_err(|_| CsplitError::InvalidPattern(arg.to_owned()))?;
                 patterns.push(Pattern::UpToMatch(pattern, offset, execute_ntimes));
             } else if let Some(skip_to_match) = captures.name("SKIPTO") {
                 let pattern = Regex::new(skip_to_match.as_str())
-                    .map_err(|_| CsplitError::InvalidPattern(arg.to_string()))?;
+                    .map_err(|_| CsplitError::InvalidPattern(arg.to_owned()))?;
                 patterns.push(Pattern::SkipToMatch(pattern, offset, execute_ntimes));
             }
         } else if let Ok(line_number) = arg.parse::<usize>() {
             patterns.push(Pattern::UpToLine(line_number, execute_ntimes));
         } else {
-            return Err(CsplitError::InvalidPattern(arg.to_string()));
+            return Err(CsplitError::InvalidPattern(arg.to_owned()));
         }
     }
     Ok(patterns)

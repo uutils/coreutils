@@ -140,6 +140,30 @@ fn test_df_follows_symlinks() {
 }
 
 #[test]
+fn test_df_trailing_zeros() {
+    use regex::Regex;
+
+    new_ucmd!()
+        .arg("-h")
+        .arg("--output=size,used")
+        .arg("--total")
+        .succeeds()
+        .stdout_does_not_match(&Regex::new("\\s[1-9][A-Z]").unwrap());
+}
+
+#[test]
+fn test_df_rounding() {
+    use regex::Regex;
+
+    new_ucmd!()
+        .arg("-H")
+        .arg("--output=size,used")
+        .arg("--total")
+        .succeeds()
+        .stdout_does_not_match(&Regex::new("\\s\\d{3}\\.\\d[A-Z]").unwrap());
+}
+
+#[test]
 fn test_df_output_overridden() {
     let expected = if cfg!(target_os = "macos") {
         vec![

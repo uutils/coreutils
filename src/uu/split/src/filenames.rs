@@ -153,7 +153,7 @@ impl Suffix {
                 if let Some(opt) = matches.get_one::<String>(OPT_NUMERIC_SUFFIXES) {
                     start = opt
                         .parse::<usize>()
-                        .map_err(|_| SuffixError::NotParsable(opt.to_string()))?;
+                        .map_err(|_| SuffixError::NotParsable(opt.to_owned()))?;
                     auto_widening = false;
                 }
             }
@@ -162,7 +162,7 @@ impl Suffix {
                 // if option was specified, but without value - this will return None as there is no default value
                 if let Some(opt) = matches.get_one::<String>(OPT_HEX_SUFFIXES) {
                     start = usize::from_str_radix(opt, 16)
-                        .map_err(|_| SuffixError::NotParsable(opt.to_string()))?;
+                        .map_err(|_| SuffixError::NotParsable(opt.to_owned()))?;
                     auto_widening = false;
                 }
             }
@@ -177,7 +177,7 @@ impl Suffix {
                 // suffix length was specified in command line
                 (
                     v.parse::<usize>()
-                        .map_err(|_| SuffixError::NotParsable(v.to_string()))?,
+                        .map_err(|_| SuffixError::NotParsable(v.to_owned()))?,
                     true,
                 )
             } else {
