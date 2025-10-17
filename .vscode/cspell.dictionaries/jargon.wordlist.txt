@@ -176,3 +176,8 @@ nofield
 # * clippy
 uninlined
 nonminimal
+
+# * locale and typography
+CTYPE
+Guillemets
+guillemets
