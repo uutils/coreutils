@@ -7,7 +7,6 @@
 
 use clap::ArgAction;
 use clap::builder::ValueParser;
-use clap::value_parser;
 use clap::{Arg, ArgMatches, Command};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
@@ -19,12 +18,12 @@ use uucore::checksum::ChecksumError;
 use uucore::checksum::ChecksumOptions;
 use uucore::checksum::ChecksumVerbose;
 use uucore::checksum::HashAlgorithm;
-use uucore::checksum::calculate_blake2b_length;
 use uucore::checksum::create_sha3;
 use uucore::checksum::detect_algo;
 use uucore::checksum::digest_reader;
 use uucore::checksum::escape_filename;
 use uucore::checksum::perform_checksum_validation;
+use uucore::checksum::validate_blake2b_length;
 use uucore::error::{FromIo, UResult};
 use uucore::format_usage;
 use uucore::sum::{Digest, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
@@ -185,14 +184,14 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     //        least somewhat better from a user's perspective.
     let matches = uucore::clap_localization::handle_clap_result(command, args)?;
 
-    let input_length: Option<&usize> = if binary_name == "b2sum" {
-        matches.get_one::<usize>(options::LENGTH)
+    let input_length: Option<&String> = if binary_name == "b2sum" {
+        matches.get_one::<String>(options::LENGTH)
     } else {
         None
     };
 
     let length = match input_length {
-        Some(length) => calculate_blake2b_length(*length)?,
+        Some(length_str) => validate_blake2b_length(length_str, "hashsum")?,
         None => None,
     };
 
@@ -427,7 +426,7 @@ fn uu_app_opt_length(command: Command) -> Command {
     command.arg(
         Arg::new(options::LENGTH)
             .long(options::LENGTH)
-            .value_parser(value_parser!(usize))
+            .value_parser(ValueParser::string())
             .short('l')
             .help(translate!("hashsum-help-length"))
             .overrides_with(options::LENGTH)

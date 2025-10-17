@@ -37,3 +37,5 @@ hashsum-help-b3sum = travailler avec BLAKE3
 
 # Messages d'erreur
 hashsum-error-failed-to-read-input = échec de la lecture de l'entrée
+hashsum-error-invalid-length = longueur invalide : { $length }
+hashsum-error-max-digest-length = longueur maximale de condensé pour '{ $algorithm }' est { $max_bits } bits

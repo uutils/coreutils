@@ -33,3 +33,5 @@ cksum-help-zero = end each output line with NUL, not newline, and disable file n
 # Error messages
 cksum-error-is-directory = { $file }: Is a directory
 cksum-error-failed-to-read-input = failed to read input
+cksum-error-invalid-length = invalid length: { $length }
+cksum-error-max-digest-length = maximum digest length for '{ $algorithm }' is { $max_bits } bits
