@@ -108,48 +108,30 @@ pub fn locale_cmp(left: &[u8], right: &[u8]) -> Ordering {
         .compare_utf8(left, right)
 }
 
-/// Fast case-insensitive ASCII comparison when strength is Secondary or lower
-/// (which ignores case differences). For Primary or Tertiary, use case-sensitive.
+/// Fast ASCII comparison respecting collator strength settings.
 ///
-/// # Optimization Strategy
+/// For case-insensitive mode (Strength::Secondary/Primary), performs
+/// byte-by-byte comparison with conditional lowercasing. Modern CPUs
+/// handle the branching efficiently via conditional moves.
 ///
-/// The key insight: ~90% of filenames are all lowercase. Checking for uppercase
-/// presence first is cheaper than byte-by-byte lowercasing.
-///
-/// Fast paths (in order):
-/// 1. Not case-insensitive → byte comparison
-/// 2. No uppercase letters → byte comparison (FAST PATH for 90% of cases!)
-/// 3. Has uppercase → case-insensitive comparison
-///
-/// This approach is 93% faster than naive case-insensitive comparison.
+/// For case-sensitive mode, uses direct byte comparison.
 #[inline]
 fn cmp_ascii_with_strength(left: &[u8], right: &[u8]) -> Ordering {
-    // Use cached case-insensitivity flag for zero-cost check
     let case_insensitive = CASE_INSENSITIVE.get().copied().unwrap_or(false);
 
-    if !case_insensitive {
-        // Case-sensitive byte comparison
-        return left.cmp(right);
-    }
-
-    // Smart check: detect if uppercase exists in either string
-    // This single scan is much cheaper than per-byte lowercasing
-    let has_upper = left.iter().any(|&b| b.is_ascii_uppercase())
-        || right.iter().any(|&b| b.is_ascii_uppercase());
-
-    if !has_upper {
-        // Fast path: No uppercase letters (90% of filenames)
-        // Use direct byte comparison - no lowercasing overhead
-        return left.cmp(right);
-    }
-
-    // Slow path: Has uppercase letters (10% of filenames)
-    // Perform case-insensitive comparison
     let min_len = left.len().min(right.len());
     for i in 0..min_len {
-        let l_lower = left[i].to_ascii_lowercase();
-        let r_lower = right[i].to_ascii_lowercase();
-        match l_lower.cmp(&r_lower) {
+        let l = if case_insensitive {
+            left[i].to_ascii_lowercase()
+        } else {
+            left[i]
+        };
+        let r = if case_insensitive {
+            right[i].to_ascii_lowercase()
+        } else {
+            right[i]
+        };
+        match l.cmp(&r) {
             Ordering::Equal => continue,
             other => return other,
         }
