@@ -135,8 +135,18 @@ pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
     let mut buffer2 = [0; 8192];
 
     loop {
-        let bytes1 = reader1.read(&mut buffer1)?;
-        let bytes2 = reader2.read(&mut buffer2)?;
+        let bytes1 = loop {
+            match reader1.read(&mut buffer1) {
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                result => break result?,
+            }
+        };
+        let bytes2 = loop {
+            match reader2.read(&mut buffer2) {
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                result => break result?,
+            }
+        };
 
         if bytes1 != bytes2 {
             return Ok(false);
