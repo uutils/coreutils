@@ -163,7 +163,7 @@ fn test_trailing_dot_edge_cases() {
     new_ucmd!()
         .arg("/home/dos//.")
         .succeeds()
-        .stdout_is("/home/dos/\n");
+        .stdout_is("/home/dos\n");
 
     // Path with . in middle (should use normal logic)
     new_ucmd!()
@@ -230,14 +230,61 @@ fn test_multiple_paths_comprehensive() {
     // Tests the loop at line 84 with various edge cases mixed
     new_ucmd!()
         .args(&[
-            "/home/dos/.",     // trailing dot case
-            "/var/log",        // normal path
-            ".",               // current directory
-            "/tmp/.",          // another trailing dot
-            "",                // empty string
-            "/",               // root
-            "relative/path",   // relative path
+            "/home/dos/.",   // trailing dot case
+            "/var/log",      // normal path
+            ".",             // current directory
+            "/tmp/.",        // another trailing dot
+            "",              // empty string
+            "/",             // root
+            "relative/path", // relative path
         ])
         .succeeds()
         .stdout_is("/home/dos\n/var\n.\n/tmp\n.\n/\nrelative\n");
+}
+
+#[test]
+fn test_all_dot_slash_variations() {
+    // Tests for all the cases mentioned in issue #8910 comment
+    // https://github.com/uutils/coreutils/issues/8910#issuecomment-3408735720
+
+    // foo//. -> foo
+    new_ucmd!().arg("foo//.").succeeds().stdout_is("foo\n");
+
+    // foo///. -> foo
+    new_ucmd!().arg("foo///.").succeeds().stdout_is("foo\n");
+
+    // foo/./ -> foo
+    new_ucmd!().arg("foo/./").succeeds().stdout_is("foo\n");
+
+    // foo/bar/./ -> foo/bar
+    new_ucmd!()
+        .arg("foo/bar/./")
+        .succeeds()
+        .stdout_is("foo/bar\n");
+
+    // foo/./bar -> foo/.
+    new_ucmd!().arg("foo/./bar").succeeds().stdout_is("foo/.\n");
+}
+
+#[test]
+fn test_dot_slash_component_preservation() {
+    // Ensure that /. components in the middle are preserved
+    // These should NOT be normalized away
+
+    new_ucmd!().arg("a/./b").succeeds().stdout_is("a/.\n");
+
+    new_ucmd!()
+        .arg("a/./b/./c")
+        .succeeds()
+        .stdout_is("a/./b/.\n");
+
+    new_ucmd!()
+        .arg("foo/./bar/baz")
+        .succeeds()
+        .stdout_is("foo/./bar\n");
+
+    new_ucmd!()
+        .arg("/path/./to/file")
+        .succeeds()
+        .stdout_is("/path/./to\n");
 }
