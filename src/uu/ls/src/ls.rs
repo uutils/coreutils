@@ -68,7 +68,7 @@ use uucore::{
     line_ending::LineEnding,
     os_str_as_bytes_lossy,
     parser::parse_glob,
-    parser::parse_size::parse_size_u64,
+    parser::parse_size::parse_size_non_zero_u64,
     parser::shortcut_value_parser::ShortcutValueParser,
     quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
     show, show_error, show_warning,
@@ -902,7 +902,7 @@ impl Config {
 
         let (file_size_block_size, block_size) = if !opt_si && !opt_hr && !raw_block_size.is_empty()
         {
-            match parse_size_u64(&raw_block_size.to_string_lossy()) {
+            match parse_size_non_zero_u64(&raw_block_size.to_string_lossy()) {
                 Ok(size) => match (is_env_var_blocksize, opt_kb) {
                     (true, true) => (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE),
                     (true, false) => (DEFAULT_FILE_SIZE_BLOCK_SIZE, size),
