@@ -992,3 +992,68 @@ fn test_od_options_after_filename() {
         .no_stderr()
         .stdout_is(" 1c68 fdbb\n");
 }
+
+#[test]
+fn test_od_strings_option() {
+    // Test -S option: output strings of at least N graphic chars
+
+    // Test -S0: output all null-terminated strings regardless of length
+    new_ucmd!()
+        .arg("-S0")
+        .pipe_in(b"hello\x00world\x00")
+        .succeeds()
+        .stdout_is("0000000 hello\n0000006 world\n");
+
+    // Test -S0 with single character strings
+    new_ucmd!()
+        .arg("-S0")
+        .pipe_in(b"a\x00b\x00cd\x00")
+        .succeeds()
+        .stdout_is("0000000 a\n0000002 b\n0000004 cd\n");
+
+    // Test with null-terminated strings
+    new_ucmd!()
+        .arg("-S3")
+        .pipe_in(b"\x01hello\x00world\x00ab\x00")
+        .succeeds()
+        .stdout_is("0000001 hello\n0000007 world\n");
+
+    // Test with -S10 to show only strings with minimum length
+    new_ucmd!()
+        .arg("-S10")
+        .pipe_in(b"\x01          \x00          \x00")
+        .succeeds()
+        .stdout_is("0000001           \n0000014           \n");
+
+    // Test with unterminated string at EOF (should not output)
+    new_ucmd!()
+        .arg("-S10")
+        .pipe_in(b"          ")
+        .succeeds()
+        .stdout_is("");
+
+    // Test with -N limit and pending string (should output even without null)
+    let expected = "0000000   \n";
+    new_ucmd!()
+        .arg("-N2")
+        .arg("-S1")
+        .pipe_in("  ")
+        .succeeds()
+        .stdout_is(expected);
+
+    // Test with -N limit and string too short
+    new_ucmd!()
+        .arg("-N11")
+        .arg("-S11")
+        .pipe_in(b"          \x00")
+        .succeeds()
+        .stdout_is("");
+
+    // Test with no address prefix (-An)
+    new_ucmd!()
+        .arg("-S3")
+        .arg("-An")
+        .pipe_in(b"hello\x00world\x00")
+        .succeeds()
+        .stdout_is("hello\nworld\n");
+}
