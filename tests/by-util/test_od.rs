@@ -53,13 +53,16 @@ fn test_file() {
         .succeeds()
         .no_stderr()
         .stdout_is(unindent(ALPHA_OUT));
+
     // Ensure that default format matches `-t o2`, and that `-t` does not absorb file argument
     scene
         .ucmd()
         .arg("--endian=little")
         .arg("-t")
         .arg("o2")
-        .arg("test");
+        .arg("test")
+        .succeeds()
+        .stdout_only(unindent(ALPHA_OUT));
 }
 
 // Test that od can read 2 files and concatenate the contents
