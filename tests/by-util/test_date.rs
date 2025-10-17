@@ -288,15 +288,14 @@ fn test_date_set_mac_unavailable() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
-/// TODO: expected to fail currently; change to `succeeds()` when required.
 fn test_date_set_valid_2() {
     if geteuid() == 0 {
-        let result = new_ucmd!()
+        new_ucmd!()
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01 AWST") // spell-checker:disable-line
-            .fails();
-        result.no_stdout();
-        assert!(result.stderr_str().starts_with("date: invalid date "));
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
     }
 }
 
@@ -370,29 +369,27 @@ fn test_date_for_file_mtime() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
-/// TODO: expected to fail currently; change to `succeeds()` when required.
 fn test_date_set_valid_3() {
     if geteuid() == 0 {
-        let result = new_ucmd!()
+        new_ucmd!()
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01") // Local timezone
-            .fails();
-        result.no_stdout();
-        assert!(result.stderr_str().starts_with("date: invalid date "));
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
     }
 }
 
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
-/// TODO: expected to fail currently; change to `succeeds()` when required.
 fn test_date_set_valid_4() {
     if geteuid() == 0 {
-        let result = new_ucmd!()
+        new_ucmd!()
             .arg("--set")
             .arg("2020-03-11 21:45:00") // Local timezone
-            .fails();
-        result.no_stdout();
-        assert!(result.stderr_str().starts_with("date: invalid date "));
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
     }
 }
 
@@ -832,6 +829,118 @@ fn test_date_numeric_d_invalid_numbers() {
         .arg("-d")
         .arg("2360")
         .arg("+%F %T %Z")
+        .fails()
+        .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_date_tz_abbreviation_utc_gmt() {
+    // Test UTC and GMT timezone abbreviations
+    new_ucmd!()
+        .arg("-d")
+        .arg("2021-03-20 14:53:01 UTC")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds();
+
+    new_ucmd!()
+        .arg("-d")
+        .arg("2021-03-20 14:53:01 GMT")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds();
+}
+
+#[test]
+fn test_date_tz_abbreviation_us_timezones() {
+    // Test US timezone abbreviations (uutils supports, GNU also supports these)
+    let us_zones = vec![
+        ("PST", "2021-03-20 14:53:01 PST"),
+        ("PDT", "2021-03-20 14:53:01 PDT"),
+        ("MST", "2021-03-20 14:53:01 MST"),
+        ("MDT", "2021-03-20 14:53:01 MDT"),
+        ("CST", "2021-03-20 14:53:01 CST"),
+        ("CDT", "2021-03-20 14:53:01 CDT"),
+        ("EST", "2021-03-20 14:53:01 EST"),
+        ("EDT", "2021-03-20 14:53:01 EDT"),
+    ];
+
+    for (_tz_name, date_str) in us_zones {
+        new_ucmd!()
+            .arg("-d")
+            .arg(date_str)
+            .arg("+%Y-%m-%d %H:%M:%S")
+            .succeeds()
+            .no_stderr();
+    }
+}
+
+#[test]
+fn test_date_tz_abbreviation_australian_timezones() {
+    // Test Australian timezone abbreviations (uutils supports, GNU does NOT)
+    // This demonstrates uutils date going beyond GNU capabilities
+    let au_zones = vec![
+        ("AWST", "2021-03-20 14:53:01 AWST"), // Western Australia
+        ("ACST", "2021-03-20 14:53:01 ACST"), // Central Australia (Standard)
+        ("ACDT", "2021-03-20 14:53:01 ACDT"), // Central Australia (Daylight)
+        ("AEST", "2021-03-20 14:53:01 AEST"), // Eastern Australia (Standard)
+        ("AEDT", "2021-03-20 14:53:01 AEDT"), // Eastern Australia (Daylight)
+    ];
+
+    for (_tz_name, date_str) in au_zones {
+        new_ucmd!()
+            .arg("-d")
+            .arg(date_str)
+            .arg("+%Y-%m-%d %H:%M:%S")
+            .succeeds()
+            .no_stderr();
+    }
+}
+
+#[test]
+fn test_date_tz_abbreviation_dst_handling() {
+    // Test that timezone abbreviations correctly handle DST
+    // PST is UTC-8, PDT is UTC-7
+    // March 20, 2021 was during PDT period in Pacific timezone
+
+    new_ucmd!()
+        .arg("-d")
+        .arg("2021-03-20 14:53:01 PST")
+        .arg("+%z")
+        .succeeds()
+        .no_stderr();
+
+    new_ucmd!()
+        .arg("-d")
+        .arg("2021-03-20 14:53:01 PDT")
+        .arg("+%z")
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
+fn test_date_tz_abbreviation_with_day_of_week() {
+    // Test timezone abbreviations with full date format including day of week
+    new_ucmd!()
+        .arg("-d")
+        .arg("Sat 20 Mar 2021 14:53:01 AWST")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds()
+        .no_stderr();
+
+    new_ucmd!()
+        .arg("-d")
+        .arg("Sat 20 Mar 2021 14:53:01 EST")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
+fn test_date_tz_abbreviation_unknown() {
+    // Test that unknown timezone abbreviations fall back gracefully
+    // XYZ is not a valid timezone abbreviation
+    new_ucmd!()
+        .arg("-d")
+        .arg("2021-03-20 14:53:01 XYZ")
         .fails()
         .stderr_contains("invalid date");
 }
