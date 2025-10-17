@@ -11,20 +11,21 @@
 
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::{
-    io::Read,
-    sync::mpsc::{Receiver, SyncSender},
+    sync::mpsc::{Receiver, SyncSender, TryRecvError},
     thread,
 };
 
 use itertools::Itertools;
-use uucore::error::UResult;
+use memchr::memchr;
+use uucore::error::{UResult, USimpleError};
 
 use crate::Output;
-use crate::chunks::RecycledChunk;
+use crate::chunks::{ReadProgress, RecycledChunk};
 use crate::merge::ClosedTmpFile;
+use crate::merge::MergeInput;
 use crate::merge::WriteableCompressedTmpFile;
 use crate::merge::WriteablePlainTmpFile;
 use crate::merge::WriteableTmpFile;
@@ -46,8 +47,10 @@ pub fn ext_sort(
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
-    let (sorted_sender, sorted_receiver) = std::sync::mpsc::sync_channel(1);
-    let (recycled_sender, recycled_receiver) = std::sync::mpsc::sync_channel(1);
+    // Allow up to two in-flight chunks in each direction to avoid deadlock
+    // when pre-filling reads while the sorter is ready to send back.
+    let (sorted_sender, sorted_receiver) = std::sync::mpsc::sync_channel(2);
+    let (recycled_sender, recycled_receiver) = std::sync::mpsc::sync_channel(2);
     thread::spawn({
         let settings = settings.clone();
         move || sorter(&recycled_receiver, &sorted_sender, &settings)
@@ -100,12 +103,23 @@ fn reader_writer<
     )?;
     match read_result {
         ReadResult::WroteChunksToFile { tmp_files } => {
-            merge::merge_with_file_limit::<_, _, Tmp>(
-                tmp_files.into_iter().map(|c| c.reopen()),
-                settings,
-                output,
-                tmp_dir,
-            )?;
+            // Optimization: if there is only one temporary run (plain file) and no dedup needed,
+            // stream it directly to output to avoid re-reading huge records into memory.
+            if tmp_files.len() == 1 && settings.compress_prog.is_none() && !settings.unique {
+                let mut reopened = tmp_files.into_iter().next().unwrap().reopen()?;
+                let mut out = output.into_write();
+                std::io::copy(reopened.as_read(), &mut out)
+                    .map_err(|e| USimpleError::new(2, e.to_string()))?;
+                out.flush()
+                    .map_err(|e| USimpleError::new(2, e.to_string()))?;
+            } else {
+                merge::merge_with_file_limit::<_, _, Tmp>(
+                    tmp_files.into_iter().map(|c| c.reopen()),
+                    settings,
+                    output,
+                    tmp_dir,
+                )?;
+            }
         }
         ReadResult::SortedSingleChunk(chunk) => {
             if settings.unique {
@@ -187,75 +201,233 @@ fn read_write_loop<I: WriteableTmpFile>(
     sender: SyncSender<Chunk>,
 ) -> UResult<ReadResult<I>> {
     let mut file = files.next().unwrap()?;
-
     let mut carry_over = vec![];
-    // kick things off with two reads
-    for _ in 0..2 {
-        let should_continue = chunks::read(
-            &sender,
-            RecycledChunk::new(if START_BUFFER_SIZE < buffer_size {
-                START_BUFFER_SIZE
-            } else {
-                buffer_size
-            }),
-            Some(buffer_size),
-            &mut carry_over,
-            &mut file,
-            &mut files,
-            separator,
-            settings,
-        )?;
 
-        if !should_continue {
-            drop(sender);
-            // We have already read the whole input. Since we are in our first two reads,
-            // this means that we can fit the whole input into memory. Bypass writing below and
-            // handle this case in a more straightforward way.
-            return Ok(if let Ok(first_chunk) = receiver.recv() {
-                if let Ok(second_chunk) = receiver.recv() {
-                    ReadResult::SortedTwoChunks([first_chunk, second_chunk])
-                } else {
-                    ReadResult::SortedSingleChunk(first_chunk)
-                }
-            } else {
-                ReadResult::EmptyInput
-            });
-        }
-    }
-
+    // Maintain up to two in-flight reads to keep the sorter busy
+    let mut recycled_pool: Vec<RecycledChunk> =
+        std::iter::repeat_with(|| RecycledChunk::new(START_BUFFER_SIZE.min(buffer_size)))
+            .take(2)
+            .collect();
+    let mut in_flight = 0usize;
     let mut sender_option = Some(sender);
-    let mut tmp_files = vec![];
+    let mut tmp_files: Vec<I::Closed> = vec![];
+    let mut mem_chunks: Vec<Chunk> = vec![];
+
+    // Helper to try reading and sending more chunks or spilling long records
+    let try_read_more = |recycled_pool: &mut Vec<RecycledChunk>,
+                         in_flight: &mut usize,
+                         sender_option: &mut Option<SyncSender<Chunk>>,
+                         tmp_files: &mut Vec<I::Closed>,
+                         carry_over: &mut Vec<u8>,
+                         file: &mut Box<dyn Read + Send>,
+                         files: &mut dyn Iterator<Item = UResult<Box<dyn Read + Send>>>,
+                         tmp_dir: &mut TmpDirWrapper|
+     -> UResult<()> {
+        while sender_option.is_some() && *in_flight < 2 {
+            let recycled = if let Some(rc) = recycled_pool.pop() {
+                rc
+            } else {
+                RecycledChunk::new(if START_BUFFER_SIZE < buffer_size {
+                    START_BUFFER_SIZE
+                } else {
+                    buffer_size
+                })
+            };
+            match chunks::read(
+                sender_option.as_ref().unwrap(),
+                recycled,
+                Some(buffer_size),
+                carry_over,
+                file,
+                files,
+                separator,
+                settings,
+            )? {
+                ReadProgress::SentChunk => {
+                    *in_flight += 1;
+                }
+                ReadProgress::NeedSpill => {
+                    // Spill this oversized record into its own run file
+                    let tmp = spill_long_record::<I>(
+                        tmp_dir,
+                        carry_over,
+                        file.as_mut(),
+                        separator,
+                        settings.compress_prog.as_deref(),
+                    )?;
+                    tmp_files.push(tmp);
+                    // Try to read again (do not change in_flight)
+                }
+                ReadProgress::NoChunk => {
+                    // Nothing to send yet; try reading again (continue loop)
+                }
+                ReadProgress::Finished => {
+                    *sender_option = None;
+                    break;
+                }
+            }
+        }
+        Ok(())
+    };
+
+    // Initial fill
+    try_read_more(
+        &mut recycled_pool,
+        &mut in_flight,
+        &mut sender_option,
+        &mut tmp_files,
+        &mut carry_over,
+        &mut file,
+        &mut files,
+        tmp_dir,
+    )?;
+
     loop {
-        let Ok(chunk) = receiver.recv() else {
-            return Ok(ReadResult::WroteChunksToFile { tmp_files });
-        };
+        if in_flight > 0 {
+            let Ok(chunk) = receiver.recv() else {
+                // Sender dropped; finish by merging whatever we have
+                break;
+            };
 
-        let tmp_file = write::<I>(
-            &chunk,
-            tmp_dir.next_file()?,
-            settings.compress_prog.as_deref(),
-            separator,
-        )?;
-        tmp_files.push(tmp_file);
+            in_flight -= 1;
+            if tmp_files.is_empty() && sender_option.is_none() && mem_chunks.len() < 2 {
+                // Potential small input: keep in memory for fast path
+                mem_chunks.push(chunk);
+            } else {
+                // General path: write to tmp file
+                let tmp_file = write::<I>(
+                    &chunk,
+                    tmp_dir.next_file()?,
+                    settings.compress_prog.as_deref(),
+                    separator,
+                )?;
+                tmp_files.push(tmp_file);
+                // Recycle buffer for next reads
+                recycled_pool.push(chunk.recycle());
+            }
 
-        let recycled_chunk = chunk.recycle();
-
-        if let Some(sender) = &sender_option {
-            let should_continue = chunks::read(
-                sender,
-                recycled_chunk,
-                None,
+            // Attempt to fill again
+            try_read_more(
+                &mut recycled_pool,
+                &mut in_flight,
+                &mut sender_option,
+                &mut tmp_files,
                 &mut carry_over,
                 &mut file,
                 &mut files,
-                separator,
-                settings,
+                tmp_dir,
             )?;
-            if !should_continue {
-                sender_option = None;
+        } else {
+            if sender_option.is_none() {
+                // No more reads possible and no in-flight chunks
+                if tmp_files.is_empty() {
+                    return Ok(match mem_chunks.len() {
+                        0 => ReadResult::EmptyInput,
+                        1 => ReadResult::SortedSingleChunk(mem_chunks.pop().unwrap()),
+                        2 => ReadResult::SortedTwoChunks([
+                            mem_chunks.remove(0),
+                            mem_chunks.remove(0),
+                        ]),
+                        _ => unreachable!(),
+                    });
+                }
+                // Flush any in-memory chunks to tmp and finish with merge
+                for ch in mem_chunks.drain(..) {
+                    let tmp_file = write::<I>(
+                        &ch,
+                        tmp_dir.next_file()?,
+                        settings.compress_prog.as_deref(),
+                        separator,
+                    )?;
+                    tmp_files.push(tmp_file);
+                }
+                return Ok(ReadResult::WroteChunksToFile { tmp_files });
+            }
+
+            // Try reading more if possible
+            try_read_more(
+                &mut recycled_pool,
+                &mut in_flight,
+                &mut sender_option,
+                &mut tmp_files,
+                &mut carry_over,
+                &mut file,
+                &mut files,
+                tmp_dir,
+            )?;
+
+            if in_flight == 0 {
+                // No chunk to receive yet; loop continues until either we can read or finish
+                // To avoid busy-looping, try a non-blocking receive in case a chunk just arrived
+                match receiver.try_recv() {
+                    Ok(chunk) => {
+                        // Process as above
+                        if tmp_files.is_empty() && sender_option.is_none() && mem_chunks.len() < 2 {
+                            mem_chunks.push(chunk);
+                        } else {
+                            let tmp_file = write::<I>(
+                                &chunk,
+                                tmp_dir.next_file()?,
+                                settings.compress_prog.as_deref(),
+                                separator,
+                            )?;
+                            tmp_files.push(tmp_file);
+                            recycled_pool.push(chunk.recycle());
+                        }
+                    }
+                    Err(TryRecvError::Empty) => {
+                        // nothing to do right now
+                    }
+                    Err(TryRecvError::Disconnected) => break,
+                }
             }
         }
     }
+
+    Ok(ReadResult::WroteChunksToFile { tmp_files })
+}
+
+/// Spill a single oversized record into its own temporary run file.
+fn spill_long_record<I: WriteableTmpFile>(
+    tmp_dir: &mut TmpDirWrapper,
+    carry_over: &mut Vec<u8>,
+    file: &mut dyn Read,
+    separator: u8,
+    compress_prog: Option<&str>,
+) -> UResult<I::Closed> {
+    let mut tmp_file = I::create(tmp_dir.next_file()?, compress_prog)?;
+    if !carry_over.is_empty() {
+        tmp_file.as_write().write_all(carry_over).unwrap();
+        carry_over.clear();
+    }
+    let mut buf = vec![0u8; 128 * 1024];
+    let mut _current_file_had_data = false;
+    let mut _last_byte: Option<u8> = None;
+    loop {
+        match file.read(&mut buf) {
+            Ok(0) => {
+                // EOF: end current record here
+                break;
+            }
+            Ok(n) => {
+                _current_file_had_data = true;
+                if let Some(pos) = memchr(separator, &buf[..n]) {
+                    // End of record found within this chunk
+                    tmp_file.as_write().write_all(&buf[..pos]).unwrap();
+                    // Save remainder after separator for next reads
+                    carry_over.extend_from_slice(&buf[pos + 1..n]);
+                    _last_byte = Some(buf[n - 1]);
+                    break;
+                }
+                tmp_file.as_write().write_all(&buf[..n]).unwrap();
+                _last_byte = Some(buf[n - 1]);
+            }
+            Err(e) => return Err(e.into()),
+        }
+    }
+    // Append a separator to the run to match write_lines semantics
+    tmp_file.as_write().write_all(&[separator]).unwrap();
+    tmp_file.finished_writing()
 }
 
 /// Write the lines in `chunk` to `file`, separated by `separator`.
