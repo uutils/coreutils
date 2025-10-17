@@ -208,7 +208,13 @@ mod tests {
         // Initialize with case-insensitive collator (Strength::Secondary)
         let mut opts = CollatorOptions::default();
         opts.strength = Some(Strength::Secondary);
-        let _ = try_init_collator(opts);
+        let initialized = try_init_collator(opts);
+
+        // Skip test if collator was already initialized with different settings
+        if !initialized && !CASE_INSENSITIVE.get().copied().unwrap_or(false) {
+            eprintln!("Skipping test: collator already initialized with case-sensitive settings");
+            return;
+        }
 
         // Test case-insensitive comparison
         let lower = b"apple";
@@ -230,7 +236,13 @@ mod tests {
         // Test that case-insensitive sorting produces expected order
         let mut opts = CollatorOptions::default();
         opts.strength = Some(Strength::Secondary);
-        let _ = try_init_collator(opts);
+        let initialized = try_init_collator(opts);
+
+        // Skip test if collator was already initialized with different settings
+        if !initialized && !CASE_INSENSITIVE.get().copied().unwrap_or(false) {
+            eprintln!("Skipping test: collator already initialized with case-sensitive settings");
+            return;
+        }
 
         let mut names = vec![b"Zoo".as_slice(), b"apple", b"BANANA", b"cherry"];
         names.sort_by(|a, b| locale_cmp(a, b));
