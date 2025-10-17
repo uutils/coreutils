@@ -76,17 +76,9 @@ ifeq ($(OS),Windows_NT)
 endif
 LN ?= ln -sf
 
-ifdef SELINUX_ENABLED
-	override SELINUX_ENABLED := 0
-# Now check if we should enable it (only on non-Windows)
-	ifneq ($(OS),Windows_NT)
-		ifeq ($(shell if [ -x /sbin/selinuxenabled ] && /sbin/selinuxenabled 2>/dev/null; then echo 0; else echo 1; fi),0)
-			override SELINUX_ENABLED := 1
-$(info /sbin/selinuxenabled successful)
-	    else
-$(info SELINUX_ENABLED=1 but /sbin/selinuxenabled failed)
-		endif
-	endif
+ifeq ($(SELINUX_ENABLED),1)
+# Allow to enable SELinux if libselinux is installed even /sbin/selinuxenabled fails
+	SELINUX_ENABLED := $(shell pkg-config --exists libselinux && echo 1)
 endif
 
 # Possible programs
@@ -217,14 +209,10 @@ HASHSUM_PROGS := \
 
 $(info Detected OS = $(OS))
 
-# Don't build the SELinux programs on macOS (Darwin) and FreeBSD
-ifeq ($(filter $(OS),Darwin FreeBSD),$(OS))
-	SELINUX_PROGS :=
-endif
-
 ifneq ($(OS),Windows_NT)
 	PROGS := $(PROGS) $(UNIX_PROGS)
-# Build the selinux command even if not on the system
+endif
+ifeq ($(SELINUX_ENABLED),1)
 	PROGS := $(PROGS) $(SELINUX_PROGS)
 endif
 
