@@ -660,7 +660,7 @@ fn test_date_tz_various_formats() {
         "-0800 -08:00 -08:00:00 -08 PST\n",
     );
     // Half-hour timezone
-    test_tz("Asia/Kolkata", JAN2, "+0530 +05:30 +05:30:00 +05:30 IST\n");
+    test_tz("Asia/Kolkata", JAN2, "+0530 +05:30 +05:30:00 +05:30 IST\n"); // spell-checker:disable-line
     test_tz("Europe/Berlin", JAN2, "+0100 +01:00 +01:00:00 +01 CET\n");
     test_tz(
         "Australia/Sydney",
@@ -878,9 +878,9 @@ fn test_date_tz_abbreviation_australian_timezones() {
     // Test Australian timezone abbreviations (uutils supports, GNU does NOT)
     // This demonstrates uutils date going beyond GNU capabilities
     let au_zones = vec![
-        ("AWST", "2021-03-20 14:53:01 AWST"), // Western Australia
-        ("ACST", "2021-03-20 14:53:01 ACST"), // Central Australia (Standard)
-        ("ACDT", "2021-03-20 14:53:01 ACDT"), // Central Australia (Daylight)
+        ("AWST", "2021-03-20 14:53:01 AWST"), // Western Australia // spell-checker:disable-line
+        ("ACST", "2021-03-20 14:53:01 ACST"), // Central Australia (Standard) // spell-checker:disable-line
+        ("ACDT", "2021-03-20 14:53:01 ACDT"), // Central Australia (Daylight) // spell-checker:disable-line
         ("AEST", "2021-03-20 14:53:01 AEST"), // Eastern Australia (Standard)
         ("AEDT", "2021-03-20 14:53:01 AEDT"), // Eastern Australia (Daylight)
     ];
@@ -921,7 +921,7 @@ fn test_date_tz_abbreviation_with_day_of_week() {
     // Test timezone abbreviations with full date format including day of week
     new_ucmd!()
         .arg("-d")
-        .arg("Sat 20 Mar 2021 14:53:01 AWST")
+        .arg("Sat 20 Mar 2021 14:53:01 AWST") // spell-checker:disable-line
         .arg("+%Y-%m-%d %H:%M:%S")
         .succeeds()
         .no_stderr();

@@ -454,13 +454,13 @@ fn make_format_string(settings: &Settings) -> &str {
 ///
 /// Disambiguation rationale (GNU compatible):
 /// - CST: Central Standard Time (US) preferred over China/Cuba Standard Time
-/// - EST: Eastern Standard Time (US) preferred over Australian Eastern Standard Time  
+/// - EST: Eastern Standard Time (US) preferred over Australian Eastern Standard Time
 /// - IST: India Standard Time preferred over Israel/Irish Standard Time
 /// - MST: Mountain Standard Time (US) preferred over Malaysia Standard Time
 /// - PST: Pacific Standard Time (US) - widely used abbreviation
 /// - GMT: Alias for UTC (universal)
 ///
-/// All other timezones (AWST, JST, CET, etc.) are dynamically resolved from IANA database.
+/// All other timezones (AWST, JST, CET, etc.) are dynamically resolved from IANA database. // spell-checker:disable-line
 static PREFERRED_TZ_MAPPINGS: &[(&str, &str)] = &[
     // Universal (no ambiguity, but commonly used)
     ("UTC", "UTC"),
@@ -475,7 +475,7 @@ static PREFERRED_TZ_MAPPINGS: &[(&str, &str)] = &[
     ("EST", "America/New_York"), // Ambiguous: US vs Australia
     ("EDT", "America/New_York"),
     // Other highly ambiguous cases
-    ("IST", "Asia/Kolkata"), // Ambiguous: India vs Israel vs Ireland
+    ("IST", "Asia/Kolkata"), // Ambiguous: India vs Israel vs Ireland // spell-checker:disable-line
 ];
 
 /// Lazy-loaded timezone abbreviation lookup map built from IANA database.
@@ -493,7 +493,8 @@ fn build_tz_abbrev_map() -> HashMap<String, String> {
 
     // Then, try to find additional abbreviations from IANA database
     // This gives us broader coverage while respecting disambiguation preferences
-    let tzdb = TimeZoneDatabase::from_env();
+    let tzdb = TimeZoneDatabase::from_env(); // spell-checker:disable-line
+    // spell-checker:disable-next-line
     for tz_name in tzdb.available() {
         let tz_str = tz_name.as_str();
         // Skip if we already have a preferred mapping for this zone
