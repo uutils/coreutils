@@ -448,19 +448,18 @@ fn make_format_string(settings: &Settings) -> &str {
 
 /// Parse a `String` into a `DateTime`.
 /// If it fails, return a tuple of the `String` along with its `ParseError`.
-// TODO: Convert `parse_datetime` to jiff and remove wrapper from chrono to jiff structures.
+///
+/// **Update for parse_datetime 0.13:**
+/// - parse_datetime 0.11: returned `chrono::DateTime` → required conversion to `jiff::Zoned`
+/// - parse_datetime 0.13: returns `jiff::Zoned` directly → no conversion needed
+///
+/// This change was necessary to fix issue #8754 (parsing large second values like
+/// "12345.123456789 seconds ago" which failed in 0.11 but works in 0.13).
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
 ) -> Result<Zoned, (String, parse_datetime::ParseDateTimeError)> {
     match parse_datetime::parse_datetime(s.as_ref()) {
-        Ok(date) => {
-            let timestamp =
-                Timestamp::new(date.timestamp(), date.timestamp_subsec_nanos() as i32).unwrap();
-            Ok(Zoned::new(
-                timestamp,
-                TimeZone::try_system().unwrap_or(TimeZone::UTC),
-            ))
-        }
+        Ok(date) => Ok(date),
         Err(e) => Err((s.as_ref().into(), e)),
     }
 }
