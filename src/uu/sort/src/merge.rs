@@ -218,6 +218,8 @@ fn reader(
     settings: &GlobalSettings,
     separator: u8,
 ) -> UResult<()> {
+    // Use a bounded buffer similar to ext_sort
+    let buffer_size = settings.buffer_size / 10;
     for (file_idx, recycled_chunk) in recycled_receiver {
         if let Some(ReaderFile {
             file,
@@ -225,17 +227,30 @@ fn reader(
             carry_over,
         }) = &mut files[file_idx]
         {
-            let should_continue = chunks::read(
+            let progress = chunks::read(
                 sender,
                 recycled_chunk,
-                None,
+                Some(buffer_size),
                 carry_over,
                 file.as_read(),
                 &mut iter::empty(),
                 separator,
                 settings,
             )?;
-            if !should_continue {
+            if matches!(progress, chunks::ReadProgress::NeedSpill) {
+                // Fallback: allow a one-off unbounded read for this oversized record
+                let _ = chunks::read(
+                    sender,
+                    RecycledChunk::new(buffer_size),
+                    None,
+                    carry_over,
+                    file.as_read(),
+                    &mut iter::empty(),
+                    separator,
+                    settings,
+                )?;
+            }
+            if matches!(progress, chunks::ReadProgress::Finished) {
                 // Remove the file from the list by replacing it with `None`.
                 let ReaderFile { file, .. } = files[file_idx].take().unwrap();
                 // Depending on the kind of the `MergeInput`, this may delete the file:
