@@ -2129,6 +2129,7 @@ fn test_ls_time_styles() {
 
     scene
         .ucmd()
+        .arg("--time-style=iso")
         .arg("--full-time")
         .arg("--time-style=iso")
         .arg("--full-time")
@@ -2166,6 +2167,230 @@ fn test_ls_time_styles() {
         .arg("--time-style=long-iso")
         .succeeds()
         .stdout_matches(&re_long_recent);
+}
+
+// Locale-aware time formatting tests for --time-style=locale
+// These verify environment precedence and locale-specific patterns using ICU4X-backed formatting.
+#[test]
+fn test_ls_time_style_locale_de_recent_and_old() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Recent file
+    at.touch("loc-recent");
+    // Old file (> 6 months)
+    let f_old = at.make_file("loc-old");
+    f_old
+        .set_modified(SystemTime::now() - Duration::from_secs(3600 * 24 * 200))
+        .unwrap();
+
+    // German locale typically uses dd.mm.yyyy (or yy) and 24h time; be lenient in year width and optional comma.
+    let re_de_recent = Regex::new(
+        r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{1,2}\.\d{2}\.\d{2,4}(,?\s\d{2}:\d{2}(:\d{2})?) loc-recent\n",
+    )
+    .unwrap();
+    let re_de_old =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{1,2}\.\d{2}\.\d{2,4} loc-old\n").unwrap();
+
+    scene
+        .ucmd()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "de_DE.UTF-8")
+        .arg("-l")
+        .arg("--time-style=locale")
+        .succeeds()
+        .stdout_matches(&re_de_recent)
+        .stdout_matches(&re_de_old);
+}
+
+#[test]
+fn test_ls_time_style_locale_precedence_lc_all_over_lc_time_lang() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("precedence.txt");
+
+    // LC_ALL should take precedence over LC_TIME and LANG.
+    // We just check that the output matches a de-DE-like pattern rather than en-US.
+    let re_de = Regex::new(
+        r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{1,2}\.\d{2}\.\d{2,4}(,?\s\d{2}:\d{2}(:\d{2})?) precedence.txt\n",
+    )
+    .unwrap();
+
+    scene
+        .ucmd()
+        .env("TZ", "UTC")
+        .env("LANG", "en_US.UTF-8")
+        .env("LC_TIME", "fr_FR.UTF-8")
+        .env("LC_ALL", "de_DE.UTF-8")
+        .arg("-l")
+        .arg("--time-style=locale")
+        .succeeds()
+        .stdout_matches(&re_de);
+}
+
+#[test]
+fn test_ls_time_style_env_locale_default() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("env-locale.txt");
+
+    let re_generic_locale =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* .+ env-locale.txt\n").unwrap();
+
+    scene
+        .ucmd()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "de_DE.UTF-8")
+        .env("TIME_STYLE", "locale")
+        .arg("-l")
+        .succeeds()
+        .stdout_matches(&re_generic_locale);
+}
+
+#[test]
+fn test_ls_time_style_full_time_precedence_over_time_style() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("precedence2.txt");
+
+    // FULL_TIME should force ISO-like full timestamp; check for YYYY-MM-DD HH:MM:SS.
+    let re_full = Regex::new(
+        r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}.* precedence2.txt\n",
+    )
+    .unwrap();
+
+    scene
+        .ucmd()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "de_DE.UTF-8")
+        .arg("-l")
+        .arg("--time-style=locale")
+        .arg("--full-time")
+        .succeeds()
+        .stdout_matches(&re_full);
+}
+
+// Tests for local timezone behavior (without TZ=UTC)
+// These verify that locale-aware formatting works correctly with the system's local timezone
+#[test]
+fn test_ls_time_style_locale_local_timezone() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("local-tz.txt");
+
+    // Without TZ=UTC, the system will use its local timezone.
+    // We can't predict exact output, but we can verify the format is reasonable:
+    // - Should contain date components (digits)
+    // - Should contain time components (HH:MM or similar)
+    // - Should contain the filename
+    let re_has_date_time = Regex::new(r"\d.*\d+:\d+.*local-tz\.txt").unwrap();
+
+    scene
+        .ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-l")
+        .arg("--time-style=locale")
+        .succeeds()
+        .stdout_matches(&re_has_date_time);
+}
+
+#[test]
+fn test_ls_time_style_locale_local_timezone_vs_utc() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("tz-test.txt");
+
+    // Get output with local timezone
+    let local_output = scene
+        .ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-l")
+        .arg("--time-style=locale")
+        .succeeds()
+        .stdout_move_str();
+
+    // Get output with UTC
+    let utc_output = scene
+        .ucmd()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-l")
+        .arg("--time-style=locale")
+        .succeeds()
+        .stdout_move_str();
+
+    // Both outputs should contain the filename
+    assert!(local_output.contains("tz-test.txt"));
+    assert!(utc_output.contains("tz-test.txt"));
+
+    // Both should have valid date/time formatting
+    let re_has_time = Regex::new(r"\d+:\d+").unwrap();
+    assert!(re_has_time.is_match(&local_output));
+    assert!(re_has_time.is_match(&utc_output));
+}
+
+#[test]
+fn test_ls_time_style_locale_posix_local_timezone() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Recent file
+    at.touch("posix-local.txt");
+    // Old file
+    let f_old = at.make_file("posix-old.txt");
+    f_old
+        .set_modified(SystemTime::now() - Duration::from_secs(3600 * 24 * 200))
+        .unwrap();
+
+    // C/POSIX locale should always use English month names regardless of timezone
+    let re_posix_recent = Regex::new(
+        r"[a-z-]* \d* [\w.]* [\w.]* \d* [A-Z][a-z]{2} \d{1,2} \d{2}:\d{2} posix-local.txt\n",
+    )
+    .unwrap();
+    let re_posix_old =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* [A-Z][a-z]{2} \d{1,2}  \d{4} posix-old.txt\n")
+            .unwrap();
+
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .arg("-l")
+        .arg("--time-style=locale")
+        .succeeds()
+        .stdout_matches(&re_posix_recent)
+        .stdout_matches(&re_posix_old);
+}
+
+#[test]
+fn test_ls_time_style_locale_different_timezones() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("tz-compare.txt");
+
+    // Test with different explicit timezones
+    let timezones = vec!["UTC", "America/New_York", "Europe/Berlin", "Asia/Tokyo"];
+    let re_has_time = Regex::new(r"\d+:\d+").unwrap();
+
+    for tz in timezones {
+        let output = scene
+            .ucmd()
+            .env("TZ", tz)
+            .env("LC_ALL", "en_US.UTF-8")
+            .arg("-l")
+            .arg("--time-style=locale")
+            .succeeds()
+            .stdout_move_str();
+
+        // Each timezone should produce valid output with time formatting
+        assert!(
+            output.contains("tz-compare.txt"),
+            "TZ={tz} failed: missing filename"
+        );
+        assert!(
+            re_has_time.is_match(&output),
+            "TZ={tz} failed: missing time component"
+        );
+    }
 }
 
 #[test]

@@ -9,6 +9,8 @@ use icu_locale::{Locale, locale};
 
 #[cfg(feature = "i18n-collator")]
 pub mod collator;
+#[cfg(feature = "i18n-datetime")]
+pub mod datetime;
 #[cfg(feature = "i18n-decimal")]
 pub mod decimal;
 
@@ -20,7 +22,7 @@ pub enum UEncoding {
     Utf8,
 }
 
-const DEFAULT_LOCALE: Locale = locale!("en-US-posix");
+pub const DEFAULT_LOCALE: Locale = locale!("en-US-posix");
 
 /// Look at 3 environment variables in the following order
 ///
@@ -68,6 +70,13 @@ fn get_collating_locale() -> &'static (Locale, UEncoding) {
     static COLLATING_LOCALE: OnceLock<(Locale, UEncoding)> = OnceLock::new();
 
     COLLATING_LOCALE.get_or_init(|| get_locale_from_env("LC_COLLATE"))
+}
+
+/// Get the time locale from the environment
+pub fn get_time_locale() -> &'static (Locale, UEncoding) {
+    static TIME_LOCALE: OnceLock<(Locale, UEncoding)> = OnceLock::new();
+
+    TIME_LOCALE.get_or_init(|| get_locale_from_env("LC_TIME"))
 }
 
 /// Get the numeric locale from the environment
