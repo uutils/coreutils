@@ -28,7 +28,25 @@ fn test_uname_name() {
 #[test]
 fn test_uname_processor() {
     let result = new_ucmd!().arg("-p").succeeds();
-    assert_eq!(result.stdout_str().trim_end(), "unknown");
+    let output = result.stdout_str().trim();
+
+    // Should not return "unknown"
+    assert_ne!(output, "unknown");
+
+    // Verify it's non-empty and valid
+    assert!(!output.is_empty());
+
+    // On macOS arm64, verify correct mapping
+    #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+    assert_eq!(output, "arm");
+
+    // On Linux aarch64, should return aarch64
+    #[cfg(all(target_arch = "aarch64", target_os = "linux"))]
+    assert_eq!(output, "aarch64");
+
+    // On x86_64 platforms
+    #[cfg(target_arch = "x86_64")]
+    assert_eq!(output, "x86_64");
 }
 
 #[test]
