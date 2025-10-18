@@ -194,8 +194,8 @@ fn cmp_byte_case_insensitive(l: u8, r: u8) -> Ordering {
     
     // Convert to lowercase using branchless bit manipulation
     // A-Z (65-90) -> a-z (97-122) by setting bit 5
-    let is_l_upper = (l >= b'A') & (l <= b'Z');
-    let is_r_upper = (r >= b'A') & (r <= b'Z');
+    let is_l_upper = l.is_ascii_uppercase();
+    let is_r_upper = r.is_ascii_uppercase();
     let l_lower = l | ((is_l_upper as u8) << 5);
     let r_lower = r | ((is_r_upper as u8) << 5);
     
