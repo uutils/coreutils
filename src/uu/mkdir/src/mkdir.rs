@@ -247,9 +247,12 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
             // Only check exists() for paths without ".." to avoid false positives
             // ("test_dir/.." may return true even when the logical parent doesn't exist)
             // Use as_os_str() to avoid string allocation which can use stack space
-            let has_dotdot = parent.as_os_str().as_encoded_bytes().windows(2)
+            let has_dotdot = parent
+                .as_os_str()
+                .as_encoded_bytes()
+                .windows(2)
                 .any(|w| w == b"..");
-            
+
             if !has_dotdot && parent.exists() {
                 break;
             }
@@ -324,13 +327,14 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
 
         Err(_) if path.is_dir() => {
             // Directory already exists - still need to print verbose message if requested
-            // in recursive mode, but only for logical directory names, not parent references  
+            // in recursive mode, but only for logical directory names, not parent references
             // (i.e., paths ending in ".." like "test_dir/.." shouldn't print)
-            let ends_with_dotdot = path.components()
-                .last()
+            let ends_with_dotdot = path
+                .components()
+                .next_back()
                 .map(|c| matches!(c, std::path::Component::ParentDir))
                 .unwrap_or(false);
-            
+
             if config.verbose && is_parent && config.recursive && !ends_with_dotdot {
                 println!(
                     "{}",
