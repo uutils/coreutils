@@ -18,6 +18,11 @@ license = "MIT"
 [package.metadata]
 cargo-fuzz = true
 
+# Enable debug symbols in release builds for readable backtraces
+# when fuzzing discovers crashes. This addresses issue #5343.
+[profile.release]
+debug = true
+
 [dependencies]
 libfuzzer-sys = "0.4.7"
 rand = { version = "0.9.0", features = ["small_rng"] }

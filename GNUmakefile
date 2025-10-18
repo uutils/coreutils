@@ -107,6 +107,7 @@ PROGS       := \
 	dir \
 	dircolors \
 	dirname \
+	du \
 	echo \
 	env \
 	expand \
@@ -117,6 +118,7 @@ PROGS       := \
 	fold \
 	hashsum \
 	head \
+	hostname \
 	join \
 	link \
 	ln \
@@ -145,17 +147,18 @@ PROGS       := \
 	sleep \
 	sort \
 	split \
-	stty \
 	sum \
 	sync \
 	tac \
 	tail \
 	tee \
 	test \
+	touch \
 	tr \
 	true \
 	truncate \
 	tsort \
+	uname \
 	unexpand \
 	uniq \
 	vdir \
@@ -169,10 +172,8 @@ UNIX_PROGS := \
 	chmod \
 	chown \
 	chroot \
-	du \
 	groups \
 	hostid \
-	hostname \
 	id \
 	install \
 	kill \
@@ -185,10 +186,9 @@ UNIX_PROGS := \
 	pinky \
 	stat \
 	stdbuf \
+	stty \
 	timeout \
-	touch \
 	tty \
-	uname \
 	unlink \
 	uptime \
 	users \
