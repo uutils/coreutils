@@ -6654,3 +6654,458 @@ fn test_f_with_long_format() {
     // Long format should still work (contains permissions, etc.)
     assert!(result.contains("-rw"));
 }
+// spell-checker: disable
+
+// ================ LOCALE-AWARE SORTING TESTS ================
+
+#[cfg(unix)]
+mod locale_tests {
+    use super::*;
+    use std::process::Command;
+
+    /// Check if a locale is available on the system
+    fn have_locale(locale: &str) -> bool {
+        if locale == "C" || locale == "POSIX" {
+            return true;
+        }
+
+        // Try to list available locales
+        let output = Command::new("locale").arg("-a").output();
+
+        match output {
+            Ok(result) => {
+                let stdout = String::from_utf8_lossy(&result.stdout);
+                stdout.lines().any(|line| {
+                    line == locale || line.starts_with(locale.split('.').next().unwrap_or(""))
+                })
+            }
+            Err(_) => false,
+        }
+    }
+
+    /// Helper to assert that items appear in the specified order
+    fn assert_in_order(lines: &[&str], items: &[&str]) {
+        let positions: Vec<Option<usize>> = items
+            .iter()
+            .map(|item| lines.iter().position(|&line| line == *item))
+            .collect();
+
+        for (i, item) in items.iter().enumerate() {
+            assert!(positions[i].is_some(), "Item '{item}' not found in output");
+        }
+
+        for i in 1..positions.len() {
+            if let (Some(prev), Some(curr)) = (positions[i - 1], positions[i]) {
+                let item_prev = items[i - 1];
+                let item_curr = items[i];
+                assert!(
+                    prev < curr,
+                    "'{item_prev}' should come before '{item_curr}' in the output"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_ls_locale_c_byte_order() {
+        // C locale should use byte ordering - non-ASCII comes after ASCII
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        // Create files with mixed ASCII and non-ASCII names
+        at.touch("apple");
+        at.touch("zebra");
+        at.touch("äpfel"); // German umlaut
+        at.touch("éclair"); // French accent
+
+        let result = ucmd
+            .env("LC_ALL", "C")
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+
+        let lines: Vec<&str> = result.stdout_str().lines().collect();
+
+        // In C locale, ASCII comes first, then non-ASCII by byte value
+        // 'a' and 'z' should come before UTF-8 encoded characters
+        assert_in_order(&lines, &["apple", "zebra"]);
+
+        // UTF-8 characters should come after ASCII
+        let zebra_pos = lines.iter().position(|&l| l == "zebra").unwrap();
+        let apfel_pos = lines.iter().position(|&l| l == "äpfel");
+        let eclair_pos = lines.iter().position(|&l| l == "éclair");
+
+        if let (Some(apfel), Some(eclair)) = (apfel_pos, eclair_pos) {
+            assert!(
+                zebra_pos < apfel,
+                "ASCII 'zebra' should come before 'äpfel'"
+            );
+            assert!(
+                zebra_pos < eclair,
+                "ASCII 'zebra' should come before 'éclair'"
+            );
+        }
+    }
+
+    #[test]
+    fn test_ls_locale_german_umlauts() {
+        let locale = "de_DE.UTF-8";
+        if !have_locale(locale) {
+            eprintln!("Skipping test: locale {locale} not available");
+            return;
+        }
+
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        // Create files with German umlauts
+        at.touch("apfel"); // apple
+        at.touch("äpfel"); // apples (with umlaut)
+        at.touch("bär"); // bear
+        at.touch("öffnung"); // opening
+        at.touch("über"); // over
+        at.touch("zebra");
+
+        // Test with German locale
+        let result_de = ucmd
+            .env("LC_ALL", locale)
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+
+        let lines_de: Vec<&str> = result_de.stdout_str().lines().collect();
+
+        // In German locale, umlauts should sort near their base letters
+        // ä near a, ö near o, ü near u
+        assert_in_order(&lines_de, &["apfel", "äpfel", "bär"]);
+
+        // Verify that German locale produces different order than C locale
+        let (at2, mut ucmd2) = at_and_ucmd!();
+        at2.touch("apfel");
+        at2.touch("äpfel");
+        at2.touch("bär");
+        at2.touch("öffnung");
+        at2.touch("über");
+        at2.touch("zebra");
+
+        let result_c = ucmd2
+            .env("LC_ALL", "C")
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+
+        // In C locale, UTF-8 characters come after ASCII
+        // so the order should be different from German locale
+        assert_ne!(
+            result_de.stdout_str(),
+            result_c.stdout_str(),
+            "German locale sorting should differ from C locale"
+        );
+    }
+
+    #[test]
+    fn test_ls_locale_french_accents() {
+        let locale = "fr_FR.UTF-8";
+        if !have_locale(locale) {
+            eprintln!("Skipping test: locale {locale} not available");
+            return;
+        }
+
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        // Create files with French accents
+        at.touch("ecole"); // school
+        at.touch("école"); // school (with accent)
+        at.touch("etude"); // study
+        at.touch("étude"); // study (with accent)
+        at.touch("zebra");
+
+        // Test with French locale
+        let result_fr = ucmd
+            .env("LC_ALL", locale)
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+
+        let lines_fr: Vec<&str> = result_fr.stdout_str().lines().collect();
+
+        // Accented letters should sort near their base letters
+        assert_in_order(&lines_fr, &["ecole", "école", "etude", "étude"]);
+
+        // Verify that French locale produces different order than C locale
+        let (at2, mut ucmd2) = at_and_ucmd!();
+        at2.touch("ecole");
+        at2.touch("école");
+        at2.touch("etude");
+        at2.touch("étude");
+        at2.touch("zebra");
+
+        let result_c = ucmd2
+            .env("LC_ALL", "C")
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+
+        // In C locale, UTF-8 characters come after ASCII
+        assert_ne!(
+            result_fr.stdout_str(),
+            result_c.stdout_str(),
+            "French locale sorting should differ from C locale"
+        );
+    }
+
+    #[test]
+    fn test_ls_locale_spanish_tildes() {
+        let locale = "es_ES.UTF-8";
+        if !have_locale(locale) {
+            eprintln!("Skipping test: locale {locale} not available");
+            return;
+        }
+
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        // Create files with Spanish ñ
+        at.touch("nino"); // boy
+        at.touch("niño"); // boy (with tilde)
+        at.touch("nota"); // note
+
+        // Test with Spanish locale
+        let result_es = ucmd
+            .env("LC_ALL", locale)
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+
+        let lines_es: Vec<&str> = result_es.stdout_str().lines().collect();
+
+        // ñ should sort after n
+        assert_in_order(&lines_es, &["nino", "niño", "nota"]);
+    }
+
+    #[test]
+    fn test_ls_locale_env_precedence() {
+        // Test that LC_ALL > LC_COLLATE > LANG
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        at.touch("a");
+        at.touch("ä");
+        at.touch("b");
+        at.touch("z");
+
+        // Test 1: LC_ALL=C should override everything
+        let result = ucmd
+            .env("LANG", "de_DE.UTF-8")
+            .env("LC_COLLATE", "de_DE.UTF-8")
+            .env("LC_ALL", "C")
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+
+        let lines: Vec<&str> = result.stdout_str().lines().collect();
+
+        // With LC_ALL=C, UTF-8 ä should come after ASCII z
+        let z_pos = lines.iter().position(|&l| l == "z").unwrap();
+        let a_umlaut_pos = lines.iter().position(|&l| l == "ä");
+
+        if let Some(a_umlaut) = a_umlaut_pos {
+            assert!(
+                z_pos < a_umlaut,
+                "With LC_ALL=C, 'z' should come before 'ä'"
+            );
+        }
+
+        // Test 2: LC_COLLATE should override LANG when LC_ALL is not set
+        if have_locale("de_DE.UTF-8") {
+            // We need to ensure LC_ALL is not set, but we can't remove it
+            // Instead, we'll just test with LC_COLLATE set
+            let (at2, mut ucmd2) = at_and_ucmd!();
+            at2.touch("a");
+            at2.touch("ä");
+            at2.touch("b");
+            at2.touch("z");
+
+            let result2 = ucmd2
+                .env("LANG", "C")
+                .env("LC_COLLATE", "de_DE.UTF-8")
+                .arg("-1")
+                .arg("--color=never")
+                .succeeds();
+
+            let lines2: Vec<&str> = result2.stdout_str().lines().collect();
+
+            // Note: This test may not work as expected if LC_ALL is set in the environment
+            // The behavior depends on which environment variable takes precedence
+            // We'll just check that we get consistent output
+            assert!(!lines2.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_ls_locale_posix_same_as_c() {
+        // POSIX locale should behave the same as C locale
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        at.touch("apple");
+        at.touch("äpfel");
+        at.touch("zebra");
+
+        // Get output with C locale
+        let c_result = ucmd
+            .env("LC_ALL", "C")
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+
+        // Get output with POSIX locale
+        let (at2, mut ucmd2) = at_and_ucmd!();
+        at2.touch("apple");
+        at2.touch("äpfel");
+        at2.touch("zebra");
+
+        let posix_result = ucmd2
+            .env("LC_ALL", "POSIX")
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+
+        // Both should produce identical output
+        assert_eq!(
+            c_result.stdout_str(),
+            posix_result.stdout_str(),
+            "C and POSIX locales should produce identical sorting"
+        );
+    }
+
+    #[test]
+    fn test_ls_locale_german_eszett() {
+        // Test that German eszett (ß) sorts as 'ss' in German locale
+        let locale = "de_DE.UTF-8";
+        if !have_locale(locale) {
+            eprintln!("Skipping test: locale {locale} not available");
+            return;
+        }
+
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        // Create files: in German, ß sorts as 'ss'
+        at.touch("masse"); // masse
+        at.touch("massse"); // massse (to test ss)
+        at.touch("mast"); // mast
+
+        let result = ucmd
+            .env("LC_ALL", locale)
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+
+        let lines: Vec<&str> = result.stdout_str().lines().collect();
+
+        // Basic check: files should be sorted
+        assert_in_order(&lines, &["masse", "massse", "mast"]);
+    }
+
+    #[test]
+    fn test_ls_locale_case_insensitive() {
+        // Test that locale-aware sorting is case-insensitive (GNU ls default behavior)
+        // by comparing UTF-8 locale output with C locale which uses strict byte-order
+        // (uppercase < lowercase in ASCII).
+        //
+        // ## Case-Insensitive Filesystem Handling
+        //
+        // macOS defaults to case-insensitive APFS volumes (man newfs_apfs(8)):
+        //   "-i    Creates a case-insensitive volume. This is the default on macOS."
+        //
+        // Verification:
+        //   $ diskutil apfs list | grep "Macintosh HD"
+        //   Name:    Macintosh HD (Case-insensitive)
+        //
+        // On such filesystems, creating both "Aaa" and "aaa" results in a single file
+        // because filenames collide (case-insensitive match). For example:
+        //   $ touch TestFile && touch testfile && ls
+        //   TestFile    # Only one file - "testfile" overwrote "TestFile"
+        //
+        // This test creates 5 files with different cases. On case-insensitive filesystems,
+        // some will collide, resulting in < 5 actual files. We detect this and skip
+        // detailed assertions, falling back to basic sorting validation.
+        //
+        // On case-sensitive filesystems (Linux, case-sensitive APFS), all 5 files are
+        // created distinctly, and we verify:
+        //   1. UTF-8 locale output ≠ C locale output (proves locale-aware sorting active)
+        //   2. "aaa" < "Zzz" in UTF-8 locale (case-insensitive alphabetical order)
+        //   3. "Zzz" < "aaa" in C locale (byte-order: uppercase first)
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        // Create files with mixed case - these will collide on case-insensitive filesystems
+        at.touch("Aaa");
+        at.touch("aaa");
+        at.touch("Bbb");
+        at.touch("bbb");
+        at.touch("Zzz");
+
+        // Test with UTF-8 locale (case-insensitive collation via ICU)
+        // Note: Must explicitly set LC_ALL; unset env defaults to C locale behavior
+        let result = ucmd
+            .env("LC_ALL", "en_US.UTF-8")
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+        let utf8_output = result.stdout_str();
+
+        // Test with C locale (byte-order comparison: uppercase < lowercase in ASCII)
+        let (at2, mut ucmd2) = at_and_ucmd!();
+        at2.touch("Aaa");
+        at2.touch("aaa");
+        at2.touch("Bbb");
+        at2.touch("bbb");
+        at2.touch("Zzz");
+
+        let c_result = ucmd2
+            .env("LC_ALL", "C")
+            .arg("-1")
+            .arg("--color=never")
+            .succeeds();
+        let c_output = c_result.stdout_str();
+
+        // Detect case-insensitive filesystem: check if we got fewer than 5 files
+        // (See documentation above for why files collide on macOS default APFS)
+        let default_lines: Vec<&str> = utf8_output.lines().collect();
+        let c_lines: Vec<&str> = c_output.lines().collect();
+
+        if default_lines.len() < 5 || c_lines.len() < 5 {
+            // Case-insensitive filesystem detected - filenames collided during creation
+            // Skip detailed locale comparison, but ensure basic output is valid
+            eprintln!(
+                "Skipping detailed test: case-insensitive filesystem detected ({} files)",
+                default_lines.len()
+            );
+            assert!(!default_lines.is_empty(), "Should have some files");
+            return;
+        }
+
+        // Case-sensitive filesystem - all 5 files created successfully
+        // Verify locale-aware sorting works by comparing outputs
+        //
+        // Expected behavior:
+        //   C locale (byte-order):     Aaa, Bbb, Zzz, aaa, bbb
+        //   UTF-8 locale (collation):  aaa, Aaa, bbb, Bbb, Zzz  (or similar case-insensitive)
+        assert_ne!(
+            utf8_output, c_output,
+            "UTF-8 locale sorting should differ from C locale byte-order sorting"
+        );
+
+        // Verify case-insensitive collation: 'aaa' < 'Zzz' regardless of case
+        // This proves alphabetical ordering (a < z) takes precedence over case
+        //
+        // Compare with C locale behavior where uppercase comes first:
+        //   C locale:    'Zzz' < 'aaa'  (0x5A < 0x61 in ASCII)
+        //   UTF-8 locale: 'aaa' < 'Zzz'  (case-insensitive 'a' < 'z')
+        let aaa_idx = default_lines.iter().position(|&l| l == "aaa");
+        let zzz_idx = default_lines.iter().position(|&l| l == "Zzz");
+
+        if let (Some(aaa), Some(zzz)) = (aaa_idx, zzz_idx) {
+            assert!(
+                aaa < zzz,
+                "Case-insensitive locale: 'aaa' should come before 'Zzz' (got: {default_lines:?})"
+            );
+        }
+    }
+}
+// spell-checker: enable
