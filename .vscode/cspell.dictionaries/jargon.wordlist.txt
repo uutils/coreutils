@@ -30,6 +30,7 @@ dequeue
 dev
 devs
 discoverability
+dotdot
 duplicative
 dsync
 endianness
