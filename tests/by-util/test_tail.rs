@@ -14,14 +14,12 @@
 )]
 
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd")
 ))]
 use nix::sys::signal::{Signal, kill};
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd")
@@ -36,7 +34,6 @@ use std::io::Write;
 #[cfg(not(target_vendor = "apple"))]
 use std::io::{Seek, SeekFrom};
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "windows"),
     not(target_os = "freebsd"),
@@ -46,7 +43,6 @@ use std::path::Path;
 use std::process::Stdio;
 use tail::chunks::BUFFER_SIZE as CHUNK_BUFFER_SIZE;
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "windows"),
     not(target_os = "freebsd"),
@@ -295,7 +291,6 @@ fn test_follow_redirect_stdin_name_retry() {
 
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
@@ -692,7 +687,6 @@ fn test_follow_invalid_pid() {
 //        Fails intermittently in the CI, but couldn't reproduce the failure locally.
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd")
@@ -1248,7 +1242,6 @@ fn test_retry2() {
 
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
@@ -1293,7 +1286,6 @@ fn test_retry3() {
 
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
@@ -1351,7 +1343,6 @@ fn test_retry4() {
 
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
@@ -1438,7 +1429,6 @@ fn test_retry6() {
 
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
@@ -1513,7 +1503,6 @@ fn test_retry7() {
 
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
@@ -1582,7 +1571,6 @@ fn test_retry8() {
 
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "windows"),
     not(target_os = "freebsd"),
@@ -1664,7 +1652,6 @@ fn test_retry9() {
 
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "windows"),
     not(target_os = "freebsd"),
@@ -1728,7 +1715,6 @@ fn test_follow_descriptor_vs_rename1() {
 
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "windows"),
     not(target_os = "freebsd"),
@@ -1781,7 +1767,6 @@ fn test_follow_descriptor_vs_rename2() {
 
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
@@ -2033,7 +2018,6 @@ fn test_follow_name_truncate3() {
 
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(feature = "feat_selinux") // flaky
 ))] // FIXME: for currently not working platforms
@@ -2120,7 +2104,6 @@ fn test_follow_truncate_fast() {
 
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
@@ -2146,15 +2129,19 @@ fn test_follow_name_move_create1() {
     );
 
     // NOTE: We are less strict if not on Linux (inotify backend).
+    // On macOS/BSD with kqueue and parent directory watching, no error is printed.
 
     #[cfg(not(target_os = "linux"))]
     let expected_stdout = at.read(FOLLOW_NAME_SHORT_EXP);
 
     #[cfg(not(target_os = "linux"))]
-    let expected_stderr = format!("{}: {source}: No such file or directory\n", ts.util_name);
+    let expected_stderr = String::new(); // No error message with kqueue parent watching
 
     let delay = 500;
     let args = ["--follow=name", source];
+
+    // Fixture files are automatically available in the test temp directory
+    // No explicit copy needed - just use the fixture name directly
 
     let mut p = ts.ucmd().args(&args).run_no_wait();
 
@@ -2176,7 +2163,6 @@ fn test_follow_name_move_create1() {
 
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "windows"),
     not(target_os = "freebsd"),
@@ -2256,7 +2242,6 @@ fn test_follow_name_move_create2() {
 
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
@@ -2274,6 +2259,9 @@ fn test_follow_name_move1() {
     let backup = "backup";
 
     let expected_stdout = at.read(FOLLOW_NAME_SHORT_EXP);
+
+    // On macOS/BSD with kqueue, no error is printed with parent watching
+    #[cfg(target_os = "linux")]
     let expected_stderr = [
         format!("{}: {source}: No such file or directory\n", ts.util_name),
         format!(
@@ -2282,11 +2270,23 @@ fn test_follow_name_move1() {
         ),
     ];
 
+    #[cfg(not(target_os = "linux"))]
+    let expected_stderr = [
+        String::new(), // kqueue with parent watching: no error on first iteration
+        format!(
+            "{}: {source}: No such file or directory\n{0}: no files remaining\n",
+            ts.util_name
+        ), // polling exits with error
+    ];
+
     let mut args = vec!["--follow=name", source];
 
     let mut delay = 500;
     #[allow(clippy::needless_range_loop)]
     for i in 0..2 {
+        // Fixture is already restored from previous iteration (line 2330)
+        // On first iteration, fixture is automatically available
+
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
         p.make_assertion_with_delay(delay).is_alive();
@@ -2318,7 +2318,6 @@ fn test_follow_name_move1() {
 
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
@@ -2406,7 +2405,6 @@ fn test_follow_name_move2() {
 
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
@@ -2466,7 +2464,6 @@ fn test_follow_name_move_retry1() {
 
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
@@ -4446,7 +4443,6 @@ fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
 // <
 #[test]
 #[cfg(all(
-    not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),

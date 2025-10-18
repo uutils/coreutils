@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile uufs xattrs
-// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx
+// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx (libs) kqueue
 use uucore::display::Quotable;
 #[cfg(feature = "feat_selinux")]
 use uucore::selinux::get_getfattr_output;
@@ -3007,9 +3007,20 @@ fn test_cp_dangling_symlink_inside_directory() {
 }
 
 /// Test for copying a dangling symbolic link and its permissions.
-#[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))] // FIXME: fix this test for FreeBSD/OpenBSD
+#[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))] // See issue #3778
 #[test]
 fn test_copy_through_dangling_symlink_no_dereference_permissions() {
+    // Tests: cp -P -p <dangling_symlink> <dest>
+    //   Should copy the symlink itself with permissions preserved
+    //
+    // Works on: Linux, macOS
+    // Failed on: FreeBSD, OpenBSD (2022)
+    //   - Original error: "cp: No such file or directory (os error 2)"
+    //   - Likely due to BSD symlink permission handling differences
+    //   - May have been fixed in newer uutils or FreeBSD versions
+    //
+    // Test passes on macOS, so not a kqueue issue
+
     let (at, mut ucmd) = at_and_ucmd!();
     //               target name    link name
     at.symlink_file("no-such-file", "dangle");

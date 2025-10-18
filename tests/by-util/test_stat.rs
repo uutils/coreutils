@@ -328,38 +328,29 @@ fn test_pipe_fifo() {
         .stdout_contains("File: FIFO");
 }
 
-// TODO(#7583): Re-enable on Mac OS X (and possibly other Unix platforms)
 #[test]
-#[cfg(all(
-    unix,
-    not(any(
-        target_os = "android",
-        target_os = "freebsd",
-        target_os = "openbsd",
-        target_os = "macos"
-    ))
-))]
+#[cfg(all(unix, not(target_os = "android")))] // Works on all Unix including BSD
 fn test_stdin_pipe_fifo1() {
     // $ echo | stat -
     // File: -
     // Size: 0               Blocks: 0          IO Block: 4096   fifo
+    // Reports as "fifo" on Linux, macOS, FreeBSD when stdin is piped
     new_ucmd!()
         .arg("-")
         .set_stdin(std::process::Stdio::piped())
         .succeeds()
         .no_stderr()
-        .stdout_contains("fifo")
-        .stdout_contains("File: -");
+        .stdout_contains("File: -")
+        .stdout_contains("fifo");
     new_ucmd!()
         .args(&["-L", "-"])
         .set_stdin(std::process::Stdio::piped())
         .succeeds()
         .no_stderr()
-        .stdout_contains("fifo")
-        .stdout_contains("File: -");
+        .stdout_contains("File: -")
+        .stdout_contains("fifo");
 }
 
-// TODO(#7583): Re-enable on Mac OS X (and maybe Android)
 #[test]
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 fn test_stdin_pipe_fifo2() {
@@ -388,19 +379,12 @@ fn test_stdin_with_fs_option() {
 }
 
 #[test]
-#[cfg(all(
-    unix,
-    not(any(
-        target_os = "android",
-        target_os = "macos",
-        target_os = "freebsd",
-        target_os = "openbsd"
-    ))
-))]
+#[cfg(target_os = "linux")] // Only works on Linux - BSD stat doesn't handle redirected stdin
 fn test_stdin_redirect() {
     // $ touch f && stat - < f
-    // File: -
-    // Size: 0               Blocks: 0          IO Block: 4096   regular empty file
+    // Linux: File: - ... regular empty file (follows stdin redirection)
+    // BSD: stat: cannot stat '-': No such file or directory
+    //      This is expected - BSD's /dev/stdin behaves differently
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.touch("f");
@@ -409,8 +393,8 @@ fn test_stdin_redirect() {
         .set_stdin(std::fs::File::open(at.plus("f")).unwrap())
         .succeeds()
         .no_stderr()
-        .stdout_contains("regular empty file")
-        .stdout_contains("File: -");
+        .stdout_contains("File: -")
+        .stdout_contains("regular empty file");
 }
 
 #[test]

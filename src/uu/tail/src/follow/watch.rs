@@ -35,7 +35,16 @@ impl WatcherRx {
     /// Wrapper for `notify::Watcher::watch` to also add the parent directory of `path` if necessary.
     fn watch_with_parent(&mut self, path: &Path) -> UResult<()> {
         let mut path = path.to_owned();
-        #[cfg(target_os = "linux")]
+        // Apply parent directory workaround for inotify (Linux) AND kqueue (BSD/macOS)
+        // This prevents issues when files are renamed/deleted while being watched.
+        #[cfg(any(
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "netbsd",
+            target_os = "dragonfly"
+        ))]
         if path.is_file() {
             /*
             NOTE: Using the parent directory instead of the file is a workaround.
@@ -44,7 +53,14 @@ impl WatcherRx {
             > be unexpected. See discussions in [#165] and [#166]. If less surprising behavior is wanted
             > one may non-recursively watch the _parent_ directory as well and manage related events.
             NOTE: Adding both: file and parent results in duplicate/wrong events.
-            Tested for notify::InotifyWatcher and for notify::PollWatcher.
+            Tested for notify::InotifyWatcher, notify::PollWatcher, and kqueue.
+
+            This fix applies to:
+            - Linux: inotify backend
+            - macOS/FreeBSD/OpenBSD/NetBSD/DragonFly: kqueue backend
+
+            Without this, kqueue doesn't properly detect when files are deleted/renamed,
+            causing --follow=name to exit prematurely instead of waiting for files to reappear.
             */
             if let Some(parent) = path.parent() {
                 // clippy::assigning_clones added with Rust 1.78
@@ -280,10 +296,7 @@ impl Observer {
                 match input.kind() {
                     InputKind::Stdin => (),
                     InputKind::File(path) => {
-                        #[cfg(all(unix, not(target_os = "linux")))]
-                        if !path.is_file() {
-                            continue;
-                        }
+                        // Removed kqueue-specific file check - parent directory watching handles this
                         let mut path = path.clone();
                         if path.is_relative() {
                             path = std::env::current_dir()?.join(path);

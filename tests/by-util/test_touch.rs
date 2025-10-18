@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms datetime mktime
+// spell-checker:ignore (libs) kqueue
 
 use filetime::FileTime;
 #[cfg(not(target_os = "freebsd"))]
@@ -783,10 +784,18 @@ fn test_touch_no_such_file_error_msg() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))]
+#[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))] // See issue #3778
 fn test_touch_changes_time_of_file_in_stdout() {
-    // command like: `touch - 1< ./c`
-    // should change the timestamp of c
+    // Tests: `touch - 1> ./file` should update timestamp of file
+    //
+    // Works on: Linux, macOS
+    // Fails on: FreeBSD, OpenBSD with "Permission denied"
+    //   - BSD /dev/stdout permissions model differs
+    //   - Original error (2022): "setting times of '/dev/stdout': Permission denied"
+    //   - This appears to be a legitimate BSD behavior difference
+    //
+    // Note: Test passes on macOS (also uses kqueue), so this may be
+    // specific to FreeBSD/OpenBSD's permission model, not kqueue itself
 
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_changes_time_of_file_in_stdout";
