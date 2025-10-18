@@ -5355,6 +5355,12 @@ fn test_ls_invalid_block_size() {
         .fails_with_code(2)
         .no_stdout()
         .stderr_is("ls: invalid --block-size argument 'invalid'\n");
+
+    new_ucmd!()
+        .arg("--block-size=0")
+        .fails_with_code(2)
+        .no_stdout()
+        .stderr_is("ls: invalid --block-size argument '0'\n");
 }
 
 #[cfg(all(unix, feature = "dd"))]
@@ -5391,6 +5397,14 @@ fn test_ls_invalid_block_size_in_env_var() {
         .ucmd()
         .arg("-og")
         .env("BLOCKSIZE", "invalid")
+        .succeeds()
+        .stdout_contains_line("total 4")
+        .stdout_contains(" 1024 ");
+
+    scene
+        .ucmd()
+        .arg("-og")
+        .env("BLOCKSIZE", "0")
         .succeeds()
         .stdout_contains_line("total 4")
         .stdout_contains(" 1024 ");

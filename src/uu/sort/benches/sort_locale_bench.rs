@@ -14,16 +14,17 @@ use uucore::benchmark::{run_util_function, setup_test_file, text_data};
 fn sort_ascii_c_locale(bencher: Bencher) {
     let data = text_data::generate_ascii_data_simple(100_000);
     let file_path = setup_test_file(&data);
+    // Reuse the same output file across iterations to reduce filesystem variance
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap().to_string();
 
     bencher.bench(|| {
         unsafe {
             env::set_var("LC_ALL", "C");
         }
-        let output_file = NamedTempFile::new().unwrap();
-        let output_path = output_file.path().to_str().unwrap();
         black_box(run_util_function(
             uumain,
-            &["-o", output_path, file_path.to_str().unwrap()],
+            &["-o", &output_path, file_path.to_str().unwrap()],
         ));
     });
 }
@@ -33,16 +34,17 @@ fn sort_ascii_c_locale(bencher: Bencher) {
 fn sort_ascii_utf8_locale(bencher: Bencher) {
     let data = text_data::generate_ascii_data_simple(200_000);
     let file_path = setup_test_file(&data);
+    // Reuse the same output file across iterations to reduce filesystem variance
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap().to_string();
 
     bencher.bench(|| {
         unsafe {
             env::set_var("LC_ALL", "en_US.UTF-8");
         }
-        let output_file = NamedTempFile::new().unwrap();
-        let output_path = output_file.path().to_str().unwrap();
         black_box(run_util_function(
             uumain,
-            &["-o", output_path, file_path.to_str().unwrap()],
+            &["-o", &output_path, file_path.to_str().unwrap()],
         ));
     });
 }
@@ -52,16 +54,17 @@ fn sort_ascii_utf8_locale(bencher: Bencher) {
 fn sort_mixed_c_locale(bencher: Bencher) {
     let data = text_data::generate_mixed_locale_data(50_000);
     let file_path = setup_test_file(&data);
+    // Reuse the same output file across iterations to reduce filesystem variance
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap().to_string();
 
     bencher.bench(|| {
         unsafe {
             env::set_var("LC_ALL", "C");
         }
-        let output_file = NamedTempFile::new().unwrap();
-        let output_path = output_file.path().to_str().unwrap();
         black_box(run_util_function(
             uumain,
-            &["-o", output_path, file_path.to_str().unwrap()],
+            &["-o", &output_path, file_path.to_str().unwrap()],
         ));
     });
 }
@@ -71,16 +74,17 @@ fn sort_mixed_c_locale(bencher: Bencher) {
 fn sort_mixed_utf8_locale(bencher: Bencher) {
     let data = text_data::generate_mixed_locale_data(50_000);
     let file_path = setup_test_file(&data);
+    // Reuse the same output file across iterations to reduce filesystem variance
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap().to_string();
 
     bencher.bench(|| {
         unsafe {
             env::set_var("LC_ALL", "en_US.UTF-8");
         }
-        let output_file = NamedTempFile::new().unwrap();
-        let output_path = output_file.path().to_str().unwrap();
         black_box(run_util_function(
             uumain,
-            &["-o", output_path, file_path.to_str().unwrap()],
+            &["-o", &output_path, file_path.to_str().unwrap()],
         ));
     });
 }
@@ -90,16 +94,17 @@ fn sort_mixed_utf8_locale(bencher: Bencher) {
 fn sort_german_c_locale(bencher: Bencher) {
     let data = text_data::generate_german_locale_data(50_000);
     let file_path = setup_test_file(&data);
+    // Reuse the same output file across iterations to reduce filesystem variance
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap().to_string();
 
     bencher.bench(|| {
         unsafe {
             env::set_var("LC_ALL", "C");
         }
-        let output_file = NamedTempFile::new().unwrap();
-        let output_path = output_file.path().to_str().unwrap();
         black_box(run_util_function(
             uumain,
-            &["-o", output_path, file_path.to_str().unwrap()],
+            &["-o", &output_path, file_path.to_str().unwrap()],
         ));
     });
 }
@@ -109,16 +114,17 @@ fn sort_german_c_locale(bencher: Bencher) {
 fn sort_german_locale(bencher: Bencher) {
     let data = text_data::generate_german_locale_data(50_000);
     let file_path = setup_test_file(&data);
+    // Reuse the same output file across iterations to reduce filesystem variance
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap().to_string();
 
     bencher.bench(|| {
         unsafe {
             env::set_var("LC_ALL", "de_DE.UTF-8");
         }
-        let output_file = NamedTempFile::new().unwrap();
-        let output_path = output_file.path().to_str().unwrap();
         black_box(run_util_function(
             uumain,
-            &["-o", output_path, file_path.to_str().unwrap()],
+            &["-o", &output_path, file_path.to_str().unwrap()],
         ));
     });
 }
@@ -128,16 +134,17 @@ fn sort_german_locale(bencher: Bencher) {
 fn sort_random_strings(bencher: Bencher) {
     let data = text_data::generate_random_strings(50_000, 50);
     let file_path = setup_test_file(&data);
+    // Reuse the same output file across iterations to reduce filesystem variance
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap().to_string();
 
     bencher.bench(|| {
         unsafe {
             env::set_var("LC_ALL", "en_US.UTF-8");
         }
-        let output_file = NamedTempFile::new().unwrap();
-        let output_path = output_file.path().to_str().unwrap();
         black_box(run_util_function(
             uumain,
-            &["-o", output_path, file_path.to_str().unwrap()],
+            &["-o", &output_path, file_path.to_str().unwrap()],
         ));
     });
 }
