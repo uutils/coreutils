@@ -110,27 +110,39 @@ pub fn locale_cmp(left: &[u8], right: &[u8]) -> Ordering {
 
 /// Fast ASCII comparison respecting collator strength settings.
 ///
-/// For case-insensitive mode (Strength::Secondary/Primary), performs
-/// byte-by-byte comparison with conditional lowercasing. Modern CPUs
-/// handle the branching efficiently via conditional moves.
-///
-/// For case-sensitive mode, uses direct byte comparison.
+/// Eliminates branch-per-byte overhead by splitting case-sensitive and
+/// case-insensitive paths. For case-insensitive mode, includes fast path
+/// for equal bytes to avoid unnecessary lowercase operations.
 #[inline]
 fn cmp_ascii_with_strength(left: &[u8], right: &[u8]) -> Ordering {
     let case_insensitive = CASE_INSENSITIVE.get().copied().unwrap_or(false);
 
+    if case_insensitive {
+        cmp_ascii_case_insensitive(left, right)
+    } else {
+        left.cmp(right)
+    }
+}
+
+/// Case-insensitive ASCII comparison with optimized hot path.
+///
+/// # Performance
+///
+/// - Fast path: When bytes are equal, skip lowercase conversion entirely
+/// - No branch per byte for lowercase logic (compared to conditional lowercasing)
+/// - Typical filenames share common prefixes (e.g., "file001", "file002"),
+///   so equal-byte fast path is hit frequently
+#[inline]
+fn cmp_ascii_case_insensitive(left: &[u8], right: &[u8]) -> Ordering {
     let min_len = left.len().min(right.len());
     for i in 0..min_len {
-        let l = if case_insensitive {
-            left[i].to_ascii_lowercase()
-        } else {
-            left[i]
-        };
-        let r = if case_insensitive {
-            right[i].to_ascii_lowercase()
-        } else {
-            right[i]
-        };
+        // Fast path: if bytes are already equal, no need to lowercase
+        if left[i] == right[i] {
+            continue;
+        }
+        // Only lowercase when bytes differ
+        let l = left[i].to_ascii_lowercase();
+        let r = right[i].to_ascii_lowercase();
         match l.cmp(&r) {
             Ordering::Equal => continue,
             other => return other,
