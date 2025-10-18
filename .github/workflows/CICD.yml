@@ -295,14 +295,16 @@ jobs:
         mv -t target/ target.cache/release 2>/dev/null || true
     - name: "`make nextest`"
       shell: bash
-      run: make nextest CARGOFLAGS="--profile ci --hide-progress-bar"
+      run: make nextest PROFILE=ci CARGOFLAGS="--hide-progress-bar"
       env:
         RUST_BACKTRACE: "1"
-    - name: "`make install COMPLETIONS=n MANPAGES=n`"
+    - name: "`make install PROFILE=release-fast COMPLETIONS=n MANPAGES=n`"
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/ make PROFILE=release COMPLETIONS=n MANPAGES=n install
+        DESTDIR=/tmp/ make PROFILE=release-fast COMPLETIONS=n MANPAGES=n install
+        # Check that utils are built with given profile
+        test -f target/release-fast/ln
         # Check that the utils are present
         test -f /tmp/usr/local/bin/tty
         # Check that the manpage is not present

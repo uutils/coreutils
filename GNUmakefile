@@ -1,15 +1,15 @@
 # spell-checker:ignore (misc) testsuite runtest findstring (targets) busytest toybox distclean pkgs nextest ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MULTICALL DATAROOTDIR TESTDIR manpages
 
 # Config options
+ifneq (,$(filter install, $(MAKECMDGOALS)))
+ PROFILE?=release
+endif
 PROFILE         ?= debug
 MULTICALL       ?= n
 COMPLETIONS     ?= y
 MANPAGES        ?= y
 LOCALES         ?= y
 INSTALL         ?= install
-ifneq (,$(filter install, $(MAKECMDGOALS)))
-override PROFILE:=release
-endif
 
 # Needed for the foreach loops to split each loop into a separate command
 define newline
@@ -17,9 +17,9 @@ define newline
 
 endef
 
-PROFILE_CMD :=
-ifeq ($(PROFILE),release)
-	PROFILE_CMD = --release
+PROFILE_CMD := --profile=${PROFILE}
+ifeq ($(PROFILE),debug)
+	PROFILE_CMD =
 endif
 
 RM := rm -rf
