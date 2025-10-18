@@ -2239,7 +2239,9 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             // Adaptive strategy to reduce overhead in recursive small directories:
             // - For small directories, avoid building caches and sort in-place.
             // - For larger sets, cache byte slices once and sort indices, then permute.
-            const SMALL_DIR_THRESHOLD: usize = 64;
+            // Threshold tuned for recursive workloads: directories with 20-30 files benefit
+            // significantly from caching to avoid repeated os_str_as_bytes_lossy() calls.
+            const SMALL_DIR_THRESHOLD: usize = 24;
             let n = entries.len();
 
             if n <= SMALL_DIR_THRESHOLD {
