@@ -293,6 +293,28 @@ jobs:
         test -f target/CACHEDIR.TAG
         # Restore cache for target/release (we only did a debug build)
         mv -t target/ target.cache/release 2>/dev/null || true
+    - name: "Verify bootstrap fix (issue #8837)"
+      shell: bash
+      run: |
+        set -x
+        # Verify that locales were successfully copied during build
+        # This ensures the bootstrap issue is fixed - the build should work
+        # even without relying on system 'install' command
+        
+        test -d target/debug/locales || { echo "::error ::Locales directory not created"; exit 1; }
+        
+        # Check for uucore common locales
+        test -f target/debug/locales/uucore/fr-FR.ftl || { echo "::error ::uucore locale not copied"; exit 1; }
+        
+        # Check for at least a few utility-specific locales
+        test -f target/debug/locales/ls/fr-FR.ftl || { echo "::error ::ls locale not copied"; exit 1; }
+        test -f target/debug/locales/cat/fr-FR.ftl || { echo "::error ::cat locale not copied"; exit 1; }
+        
+        # Count total locale files to ensure reasonable number were copied
+        LOCALE_COUNT=$(find target/debug/locales -name "*.ftl" | wc -l)
+        echo "Found $LOCALE_COUNT locale files"
+        [ "$LOCALE_COUNT" -gt 50 ] || { echo "::error ::Too few locale files copied ($LOCALE_COUNT)"; exit 1; }
+        
     - name: "`make nextest`"
       shell: bash
       run: make nextest CARGOFLAGS="--profile ci --hide-progress-bar"

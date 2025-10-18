@@ -6,7 +6,6 @@ MULTICALL       ?= n
 COMPLETIONS     ?= y
 MANPAGES        ?= y
 LOCALES         ?= y
-INSTALL         ?= install
 ifneq (,$(filter install, $(MAKECMDGOALS)))
 override PROFILE:=release
 endif
@@ -52,6 +51,21 @@ BUILDDIR      := $(BASEDIR)/target/${PROFILE}
 endif
 PKG_BUILDDIR  := $(BUILDDIR)/deps
 DOCSDIR       := $(BASEDIR)/docs
+
+# Bootstrap protection: When uutils is installed as system coreutils (e.g., on
+# Gentoo), the system 'install' may be broken or missing, causing build failures.
+# Use the just-built 'install' binary to avoid this chicken-and-egg problem.
+# Falls back to system 'install' for first-time builds.
+ifneq ($(wildcard $(BUILDDIR)/coreutils),)
+  # Use multicall binary's install command if it exists
+  INSTALL ?= $(BUILDDIR)/coreutils install
+else ifneq ($(wildcard $(BUILDDIR)/install),)
+  # Use standalone install binary if built without multicall
+  INSTALL ?= $(BUILDDIR)/install
+else
+  # Fall back to system install command for first build
+  INSTALL ?= install
+endif
 
 BUSYBOX_ROOT := $(BASEDIR)/tmp
 BUSYBOX_VER  := 1.36.1
@@ -449,7 +463,7 @@ locales:
 	@if [ -d "$(BASEDIR)/src/uucore/locales" ]; then \
 		mkdir -p "$(BUILDDIR)/locales/uucore"; \
 		for locale_file in "$(BASEDIR)"/src/uucore/locales/*.ftl; do \
-			$(INSTALL) -m 644 -v "$$locale_file" "$(BUILDDIR)/locales/uucore/"; \
+			cp -v "$$locale_file" "$(BUILDDIR)/locales/uucore/"; \
 		done; \
 	fi; \
 	# Copy utility-specific locales
@@ -458,7 +472,7 @@ locales:
 			mkdir -p "$(BUILDDIR)/locales/$$prog"; \
 			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
 				if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
-					$(INSTALL) -m 644 -v "$$locale_file" "$(BUILDDIR)/locales/$$prog/"; \
+					cp -v "$$locale_file" "$(BUILDDIR)/locales/$$prog/"; \
 				fi; \
 			done; \
 		fi; \
