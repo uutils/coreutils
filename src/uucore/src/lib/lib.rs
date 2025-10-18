@@ -19,7 +19,6 @@ mod features; // feature-gated code modules
 mod macros; // crate macros (macro_rules-type; exported to `crate::...`)
 mod mods; // core cross-platform modules
 
-pub mod util_validation; // shared utility validation functionality
 pub use uucore_procs::*;
 
 // * cross-platform modules

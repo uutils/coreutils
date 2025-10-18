@@ -10,7 +10,7 @@ use std::process;
 
 use clap::Command;
 
-use uucore::util_validation;
+use coreutils::validation;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -41,36 +41,35 @@ fn main() {
     let utils = util_map();
     let mut args = uucore::args_os();
 
-    let binary = util_validation::binary_path(&mut args);
-    let binary_as_util = util_validation::name(&binary).unwrap_or_else(|| {
+    let binary = validation::binary_path(&mut args);
+    let binary_as_util = validation::name(&binary).unwrap_or_else(|| {
         usage(&utils, "<unknown binary name>");
         process::exit(0);
     });
 
     // binary name equals util name?
     if let Some(&(uumain, _)) = utils.get(binary_as_util) {
-        util_validation::setup_localization_or_exit(binary_as_util);
+        validation::setup_localization_or_exit(binary_as_util);
         process::exit(uumain(vec![binary.into()].into_iter().chain(args)));
     }
 
     // binary name equals prefixed util name?
     // * prefix/stem may be any string ending in a non-alphanumeric character
     // For example, if the binary is named `uu_test`, it will match `test` as a utility.
-    let util_name = if let Some(util) =
-        util_validation::find_prefixed_util(binary_as_util, utils.keys().copied())
-    {
-        // prefixed util => replace 0th (aka, executable name) argument
-        Some(OsString::from(util))
-    } else {
-        // unmatched binary name => regard as multi-binary container and advance argument list
-        uucore::set_utility_is_second_arg();
-        args.next()
-    };
+    let util_name =
+        if let Some(util) = validation::find_prefixed_util(binary_as_util, utils.keys().copied()) {
+            // prefixed util => replace 0th (aka, executable name) argument
+            Some(OsString::from(util))
+        } else {
+            // unmatched binary name => regard as multi-binary container and advance argument list
+            uucore::set_utility_is_second_arg();
+            args.next()
+        };
 
     // 0th argument equals util name?
     if let Some(util_os) = util_name {
         let Some(util) = util_os.to_str() else {
-            util_validation::not_found(&util_os)
+            validation::not_found(&util_os)
         };
 
         match util {
@@ -97,7 +96,7 @@ fn main() {
                 // binary to avoid the load of the flt
                 // Could be something like:
                 // #[cfg(not(feature = "only_english"))]
-                util_validation::setup_localization_or_exit(util);
+                validation::setup_localization_or_exit(util);
                 process::exit(uumain(vec![util_os].into_iter().chain(args)));
             }
             None => {
@@ -105,7 +104,7 @@ fn main() {
                     // see if they want help on a specific util
                     if let Some(util_os) = args.next() {
                         let Some(util) = util_os.to_str() else {
-                            util_validation::not_found(&util_os)
+                            validation::not_found(&util_os)
                         };
 
                         match utils.get(util) {
@@ -118,13 +117,13 @@ fn main() {
                                 io::stdout().flush().expect("could not flush stdout");
                                 process::exit(code);
                             }
-                            None => util_validation::not_found(&util_os),
+                            None => validation::not_found(&util_os),
                         }
                     }
                     usage(&utils, binary_as_util);
                     process::exit(0);
                 } else {
-                    util_validation::not_found(&util_os);
+                    validation::not_found(&util_os);
                 }
             }
         }

@@ -9,9 +9,9 @@ use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process;
 
-use crate::Args;
-use crate::display::Quotable;
-use crate::locale;
+use uucore::Args;
+use uucore::display::Quotable;
+use uucore::locale;
 
 /// Gets all available utilities including "coreutils"
 #[allow(clippy::type_complexity)]
