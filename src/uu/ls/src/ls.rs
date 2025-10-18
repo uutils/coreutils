@@ -2236,30 +2236,32 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
         }
         // The default sort in GNU ls respects locale collation (LC_COLLATE)
         Sort::Name => {
-            // Performance optimization: Cache byte conversions to avoid repeated expensive
-            // os_str_as_bytes_lossy() calls during sorting.
-            //
-            // Without caching: Each comparison calls os_str_as_bytes_lossy() twice.
-            // For 10k files: ~130k conversions (O(n log n) comparisons × 2)
-            // With caching: ~10k conversions (one per file)
-            //
-            // This addresses the 18.51% performance regression in ls_recursive_wide_tree.
-            
-            // Pre-compute byte conversions for all entries (O(n) cost, done once)
-            let bytes_cache: Vec<Cow<'_, [u8]>> = entries
-                .iter()
-                .map(|e| os_str_as_bytes_lossy(e.p_buf.as_os_str()))
-                .collect();
-            
-            // Sort entries by comparing their cached byte representations
-            // We use enumerate to carry indices through the sort, then sort by those indices
-            let mut indices: Vec<usize> = (0..entries.len()).collect();
-            indices.sort_unstable_by(|&i, &j| locale_cmp(&bytes_cache[i], &bytes_cache[j]));
-            
-            // Reorder entries according to sorted indices
-            // Since we can't efficiently reorder a slice in-place without unsafe code,
-            // we use the Schwartzian transform pattern: decorate-sort-undecorate
-            apply_permutation(entries, &indices);
+            // Adaptive strategy to reduce overhead in recursive small directories:
+            // - For small directories, avoid building caches and sort in-place.
+            // - For larger sets, cache byte slices once and sort indices, then permute.
+            const SMALL_DIR_THRESHOLD: usize = 64;
+            let n = entries.len();
+
+            if n <= SMALL_DIR_THRESHOLD {
+                entries.sort_unstable_by(|a, b| {
+                    let ab = os_str_as_bytes_lossy(a.display_name());
+                    let bb = os_str_as_bytes_lossy(b.display_name());
+                    locale_cmp(&ab, &bb)
+                });
+            } else {
+                // Pre-compute byte conversions for all entries (O(n) cost, done once)
+                let bytes_cache: Vec<Cow<'_, [u8]>> = entries
+                    .iter()
+                    .map(|e| os_str_as_bytes_lossy(e.display_name()))
+                    .collect();
+
+                // Sort entries by comparing their cached byte representations using locale_cmp
+                let mut indices: Vec<usize> = (0..n).collect();
+                indices.sort_unstable_by(|&i, &j| locale_cmp(&bytes_cache[i], &bytes_cache[j]));
+
+                // Reorder entries according to sorted indices using in-place permutation
+                apply_permutation(entries, &indices);
+            }
         }
         Sort::Version => entries.sort_by(|a, b| {
             version_cmp(
@@ -2288,26 +2290,29 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
     }
 
     if config.group_directories_first && config.sort != Sort::None {
-        entries.sort_by_key(|p| {
-            let ft = {
-                // We will always try to deref symlinks to group directories, so PathData.md
-                // is not always useful.
+        // Stable partition: keep relative order within directories and within files
+        let mut dir_indices = Vec::with_capacity(entries.len());
+        let mut file_indices = Vec::with_capacity(entries.len());
+        for (i, p) in entries.iter().enumerate() {
+            let is_dir = {
                 if p.must_dereference {
-                    p.file_type()
+                    p.file_type().is_some_and(|ft| ft.is_dir())
                 } else {
-                    None
+                    get_metadata_with_deref_opt(p.p_buf.as_path(), true)
+                        .is_ok_and(|m| m.is_dir())
                 }
             };
-
-            !match ft {
-                None => {
-                    // If it metadata cannot be determined, treat as a file.
-                    get_metadata_with_deref_opt(p.p_buf.as_path(), true)
-                        .map_or_else(|_| false, |m| m.is_dir())
-                }
-                Some(ft) => ft.is_dir(),
+            if is_dir {
+                dir_indices.push(i);
+            } else {
+                file_indices.push(i);
             }
-        });
+        }
+        if !(dir_indices.is_empty() || file_indices.is_empty()) {
+            let mut new_order = dir_indices;
+            new_order.extend(file_indices);
+            apply_permutation(entries, &new_order);
+        }
     }
 }
 
