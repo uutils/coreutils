@@ -115,6 +115,12 @@ pub fn locale_cmp(left: &[u8], right: &[u8]) -> Ordering {
 /// for equal bytes to avoid unnecessary lowercase operations.
 #[inline]
 fn cmp_ascii_with_strength(left: &[u8], right: &[u8]) -> Ordering {
+    // Ultra-fast path: if slices are exactly equal, skip everything
+    // This handles the common case of comparing the same string
+    if left == right {
+        return Ordering::Equal;
+    }
+    
     let case_insensitive = CASE_INSENSITIVE.get().copied().unwrap_or(false);
 
     if case_insensitive {
@@ -128,13 +134,37 @@ fn cmp_ascii_with_strength(left: &[u8], right: &[u8]) -> Ordering {
 ///
 /// # Performance Strategy
 ///
-/// 1. **Skip equal bytes**: When bytes match, avoid any lowercasing
-/// 2. **Branchless lowercase**: Use bit manipulation (no function calls)
-/// 3. **Optimized for typical filenames**: Most comparisons resolve in first 1-4 bytes
+/// 1. **Fast path for 1-4 byte strings**: Inline comparison for common case
+/// 2. **Skip equal bytes**: When bytes match, avoid any lowercasing
+/// 3. **Branchless lowercase**: Use bit manipulation (no function calls)
 ///
 /// Typical benchmark filenames: `f0` vs `f1`, `d0` vs `d1` (2-5 bytes)
 #[inline]
 fn cmp_ascii_case_insensitive(left: &[u8], right: &[u8]) -> Ordering {
+    // Specialized fast path for very short strings (1-4 bytes)
+    // This is common in benchmarks and many real directories
+    match (left.len(), right.len()) {
+        (1, 1) => return cmp_byte_case_insensitive(left[0], right[0]),
+        (2, 2) => {
+            match cmp_byte_case_insensitive(left[0], right[0]) {
+                Ordering::Equal => return cmp_byte_case_insensitive(left[1], right[1]),
+                other => return other,
+            }
+        }
+        (3, 3) => {
+            match cmp_byte_case_insensitive(left[0], right[0]) {
+                Ordering::Equal => {}
+                other => return other,
+            }
+            match cmp_byte_case_insensitive(left[1], right[1]) {
+                Ordering::Equal => return cmp_byte_case_insensitive(left[2], right[2]),
+                other => return other,
+            }
+        }
+        _ => {}
+    }
+    
+    // General case for longer strings or different lengths
     let min_len = left.len().min(right.len());
     
     for i in 0..min_len {
@@ -146,21 +176,30 @@ fn cmp_ascii_case_insensitive(left: &[u8], right: &[u8]) -> Ordering {
             continue;
         }
         
-        // Convert to lowercase using branchless bit manipulation
-        // A-Z (65-90) -> a-z (97-122) by setting bit 5
-        // For non-letters, this is a no-op since bit 5 is already set
-        let is_l_upper = (l >= b'A') & (l <= b'Z');
-        let is_r_upper = (r >= b'A') & (r <= b'Z');
-        let l_lower = l | ((is_l_upper as u8) << 5);
-        let r_lower = r | ((is_r_upper as u8) << 5);
-        
-        match l_lower.cmp(&r_lower) {
+        match cmp_byte_case_insensitive(l, r) {
             Ordering::Equal => continue,
             other => return other,
         }
     }
     
     left.len().cmp(&right.len())
+}
+
+/// Compare two bytes case-insensitively using branchless bit manipulation.
+#[inline(always)]
+fn cmp_byte_case_insensitive(l: u8, r: u8) -> Ordering {
+    if l == r {
+        return Ordering::Equal;
+    }
+    
+    // Convert to lowercase using branchless bit manipulation
+    // A-Z (65-90) -> a-z (97-122) by setting bit 5
+    let is_l_upper = (l >= b'A') & (l <= b'Z');
+    let is_r_upper = (r >= b'A') & (r <= b'Z');
+    let l_lower = l | ((is_l_upper as u8) << 5);
+    let r_lower = r | ((is_r_upper as u8) << 5);
+    
+    l_lower.cmp(&r_lower)
 }
 
 #[cfg(test)]

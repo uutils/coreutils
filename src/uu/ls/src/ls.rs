@@ -2198,6 +2198,30 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     Ok(())
 }
 
+/// Apply a permutation to a slice in-place using swaps.
+///
+/// This implements the standard selection-based permutation algorithm:
+/// For each position, swap elements until the correct element is in place.
+///
+/// # Arguments
+/// * `slice` - The slice to reorder
+/// * `perm` - Permutation where `perm[i]` indicates which element should be at position `i`
+///
+/// # Time Complexity
+/// O(n) swaps in the worst case, where n is the slice length.
+fn apply_permutation<T>(slice: &mut [T], perm: &[usize]) {
+    let mut perm = perm.to_vec(); // Make mutable copy of permutation
+    
+    for i in 0..slice.len() {
+        // Keep swapping until the correct element is at position i
+        while perm[i] != i {
+            let j = perm[i];
+            slice.swap(i, j);
+            perm.swap(i, j);
+        }
+    }
+}
+
 fn sort_entries(entries: &mut [PathData], config: &Config) {
     match config.sort {
         Sort::Time => entries.sort_by_key(|k| {
@@ -2211,11 +2235,32 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             entries.sort_by_key(|k| Reverse(k.metadata().map_or(0, |md| md.len())));
         }
         // The default sort in GNU ls respects locale collation (LC_COLLATE)
-        Sort::Name => entries.sort_by(|a, b| {
-            let a_bytes = os_str_as_bytes_lossy(a.p_buf.as_os_str());
-            let b_bytes = os_str_as_bytes_lossy(b.p_buf.as_os_str());
-            locale_cmp(&a_bytes, &b_bytes)
-        }),
+        Sort::Name => {
+            // Performance optimization: Cache byte conversions to avoid repeated expensive
+            // os_str_as_bytes_lossy() calls during sorting.
+            //
+            // Without caching: Each comparison calls os_str_as_bytes_lossy() twice.
+            // For 10k files: ~130k conversions (O(n log n) comparisons × 2)
+            // With caching: ~10k conversions (one per file)
+            //
+            // This addresses the 18.51% performance regression in ls_recursive_wide_tree.
+            
+            // Pre-compute byte conversions for all entries (O(n) cost, done once)
+            let bytes_cache: Vec<Cow<'_, [u8]>> = entries
+                .iter()
+                .map(|e| os_str_as_bytes_lossy(e.p_buf.as_os_str()))
+                .collect();
+            
+            // Sort entries by comparing their cached byte representations
+            // We use enumerate to carry indices through the sort, then sort by those indices
+            let mut indices: Vec<usize> = (0..entries.len()).collect();
+            indices.sort_unstable_by(|&i, &j| locale_cmp(&bytes_cache[i], &bytes_cache[j]));
+            
+            // Reorder entries according to sorted indices
+            // Since we can't efficiently reorder a slice in-place without unsafe code,
+            // we use the Schwartzian transform pattern: decorate-sort-undecorate
+            apply_permutation(entries, &indices);
+        }
         Sort::Version => entries.sort_by(|a, b| {
             version_cmp(
                 os_str_as_bytes_lossy(a.path().as_os_str()).as_ref(),
