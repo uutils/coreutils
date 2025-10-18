@@ -117,6 +117,7 @@ PROGS       := \
 	fold \
 	hashsum \
 	head \
+	hostname \
 	join \
 	link \
 	ln \
@@ -155,6 +156,7 @@ PROGS       := \
 	true \
 	truncate \
 	tsort \
+	uname \
 	unexpand \
 	uniq \
 	vdir \
@@ -171,7 +173,6 @@ UNIX_PROGS := \
 	du \
 	groups \
 	hostid \
-	hostname \
 	id \
 	install \
 	kill \
@@ -188,7 +189,6 @@ UNIX_PROGS := \
 	timeout \
 	touch \
 	tty \
-	uname \
 	unlink \
 	uptime \
 	users \
