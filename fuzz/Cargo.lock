@@ -1744,7 +1744,6 @@ version = "0.3.0"
 dependencies = [
  "console",
  "libc",
- "phf",
  "rand",
  "similar",
  "tempfile",
