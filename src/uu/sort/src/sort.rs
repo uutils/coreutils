@@ -1900,6 +1900,9 @@ fn compare_by<'a>(
     }
 }
 
+/// Compare two byte slices in ASCII case-insensitive order without allocating.
+/// We lower each byte on the fly so that binary input (including `NUL`) stays
+/// untouched and we avoid locale-sensitive routines such as `strcasecmp`.
 fn ascii_case_insensitive_cmp(a: &[u8], b: &[u8]) -> Ordering {
     #[inline]
     fn lower(byte: u8) -> u8 {
