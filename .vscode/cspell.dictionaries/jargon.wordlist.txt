@@ -112,6 +112,7 @@ pseudoprimes
 quantiles
 readonly
 reparse
+rposition
 seedable
 semver
 semiprime

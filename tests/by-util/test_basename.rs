@@ -191,6 +191,13 @@ fn test_trailing_dot() {
     new_ucmd!().arg("/.").succeeds().stdout_is(".\n");
     new_ucmd!().arg("hello/.").succeeds().stdout_is(".\n");
     new_ucmd!().arg("/foo/bar/.").succeeds().stdout_is(".\n");
+    new_ucmd!().arg("///").succeeds().stdout_is("/\n");
+    new_ucmd!().arg("///.///").succeeds().stdout_is(".\n");
+    new_ucmd!().arg("hello///.///").succeeds().stdout_is(".\n");
+    new_ucmd!()
+        .arg("///foo///.///.///")
+        .succeeds()
+        .stdout_is(".\n");
 }
 
 #[test]
