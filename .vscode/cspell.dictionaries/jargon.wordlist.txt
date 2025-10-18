@@ -125,6 +125,7 @@ shortcode
 shortcodes
 siginfo
 sigusr
+strcasecmp
 subcommand
 subexpression
 submodule
