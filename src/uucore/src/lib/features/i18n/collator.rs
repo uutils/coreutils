@@ -124,30 +124,42 @@ fn cmp_ascii_with_strength(left: &[u8], right: &[u8]) -> Ordering {
     }
 }
 
-/// Case-insensitive ASCII comparison with optimized hot path.
+/// Case-insensitive ASCII comparison optimized for short filenames.
 ///
-/// # Performance
+/// # Performance Strategy
 ///
-/// - Fast path: When bytes are equal, skip lowercase conversion entirely
-/// - No branch per byte for lowercase logic (compared to conditional lowercasing)
-/// - Typical filenames share common prefixes (e.g., "file001", "file002"),
-///   so equal-byte fast path is hit frequently
+/// 1. **Skip equal bytes**: When bytes match, avoid any lowercasing
+/// 2. **Branchless lowercase**: Use bit manipulation (no function calls)
+/// 3. **Optimized for typical filenames**: Most comparisons resolve in first 1-4 bytes
+///
+/// Typical benchmark filenames: `f0` vs `f1`, `d0` vs `d1` (2-5 bytes)
 #[inline]
 fn cmp_ascii_case_insensitive(left: &[u8], right: &[u8]) -> Ordering {
     let min_len = left.len().min(right.len());
+    
     for i in 0..min_len {
-        // Fast path: if bytes are already equal, no need to lowercase
-        if left[i] == right[i] {
+        let l = left[i];
+        let r = right[i];
+        
+        // Fast path: bytes already equal (common for filename prefixes)
+        if l == r {
             continue;
         }
-        // Only lowercase when bytes differ
-        let l = left[i].to_ascii_lowercase();
-        let r = right[i].to_ascii_lowercase();
-        match l.cmp(&r) {
+        
+        // Convert to lowercase using branchless bit manipulation
+        // A-Z (65-90) -> a-z (97-122) by setting bit 5
+        // For non-letters, this is a no-op since bit 5 is already set
+        let is_l_upper = (l >= b'A') & (l <= b'Z');
+        let is_r_upper = (r >= b'A') & (r <= b'Z');
+        let l_lower = l | ((is_l_upper as u8) << 5);
+        let r_lower = r | ((is_r_upper as u8) << 5);
+        
+        match l_lower.cmp(&r_lower) {
             Ordering::Equal => continue,
             other => return other,
         }
     }
+    
     left.len().cmp(&right.len())
 }
 
