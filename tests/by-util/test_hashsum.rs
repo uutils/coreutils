@@ -873,6 +873,32 @@ fn test_check_directory_error() {
 }
 
 #[test]
+fn test_continue_after_directory_error() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("d");
+    at.touch("file");
+    #[cfg(not(windows))]
+    let (out, err_msg) = (
+        "d41d8cd98f00b204e9800998ecf8427e  file\n",
+        "md5sum: d: Is a directory (os error 21)\n",
+    );
+    #[cfg(windows)]
+    let (out, err_msg) = (
+        "d41d8cd98f00b204e9800998ecf8427e *file\n",
+        "md5sum: d: Permission denied]\n",
+    );
+    scene
+        .ccmd("md5sum")
+        .arg("d")
+        .arg("file")
+        .fails()
+        .stdout_is(out)
+        .stderr_is(err_msg);
+}
+
+#[test]
 fn test_check_quiet() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

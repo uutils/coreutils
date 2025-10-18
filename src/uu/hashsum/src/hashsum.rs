@@ -11,7 +11,7 @@ use clap::value_parser;
 use clap::{Arg, ArgMatches, Command};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{BufReader, Read, stdin};
+use std::io::{BufReader, ErrorKind, Read, stdin};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
@@ -559,13 +559,31 @@ where
             Box::new(file_buf) as Box<dyn Read>
         });
 
-        let (sum, _) = digest_reader(
+        let sum = match digest_reader(
             &mut options.digest,
             &mut file,
             options.binary,
             options.output_bits,
-        )
-        .map_err_context(|| translate!("hashsum-error-failed-to-read-input"))?;
+        ) {
+            Ok((sum, _)) => sum,
+            Err(e) => match e.kind() {
+                ErrorKind::IsADirectory => {
+                    eprintln!(
+                        "{}: {}: {e}",
+                        options.binary_name,
+                        filename.to_string_lossy()
+                    );
+                    err_found = Some(ChecksumError::Io(e));
+                    continue;
+                }
+                _ => {
+                    return Err(
+                        e.map_err_context(|| translate!("hashsum-error-failed-to-read-input"))
+                    );
+                }
+            },
+        };
+
         let (escaped_filename, prefix) = escape_filename(filename);
         if options.tag {
             if options.algoname == "blake2b" {
