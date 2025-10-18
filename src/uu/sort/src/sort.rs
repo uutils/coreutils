@@ -115,10 +115,12 @@ const DECIMAL_PT: u8 = b'.';
 const NEGATIVE: &u8 = &b'-';
 const POSITIVE: &u8 = &b'+';
 
-// Choosing a higher buffer size does not result in performance improvements
-// (at least not on my machine). TODO: In the future, we should also take the amount of
-// available memory into consideration, instead of relying on this constant only.
-const DEFAULT_BUF_SIZE: usize = 1_000_000_000; // 1 GB
+// The automatic buffer heuristics clamp to this range to avoid
+// over-committing memory on constrained systems while still keeping
+// reasonably large chunks for typical workloads.
+const MIN_AUTOMATIC_BUF_SIZE: usize = 512 * 1024; // 512 KiB
+const FALLBACK_AUTOMATIC_BUF_SIZE: usize = 32 * 1024 * 1024; // 32 MiB
+const MAX_AUTOMATIC_BUF_SIZE: usize = 1024 * 1024 * 1024; // 1 GiB
 
 #[derive(Debug, Error)]
 pub enum SortError {
@@ -283,6 +285,7 @@ pub struct GlobalSettings {
     threads: String,
     line_ending: LineEnding,
     buffer_size: usize,
+    buffer_size_is_explicit: bool,
     compress_prog: Option<String>,
     merge_batch_size: usize,
     precomputed: Precomputed,
@@ -296,6 +299,8 @@ struct Precomputed {
     num_infos_per_line: usize,
     floats_per_line: usize,
     selections_per_line: usize,
+    fast_lexicographic: bool,
+    fast_ascii_insensitive: bool,
 }
 
 impl GlobalSettings {
@@ -336,6 +341,47 @@ impl GlobalSettings {
             .iter()
             .filter(|s| matches!(s.settings.mode, SortMode::GeneralNumeric))
             .count();
+
+        self.precomputed.fast_lexicographic = self.can_use_fast_lexicographic();
+        self.precomputed.fast_ascii_insensitive = self.can_use_fast_ascii_insensitive();
+    }
+
+    /// Returns true when the fast lexicographic path can be used safely.
+    fn can_use_fast_lexicographic(&self) -> bool {
+        self.mode == SortMode::Default
+            && !self.ignore_case
+            && !self.dictionary_order
+            && !self.ignore_non_printing
+            && !self.ignore_leading_blanks
+            && self.selectors.len() == 1
+            && {
+                let selector = &self.selectors[0];
+                !selector.needs_selection
+                    && matches!(selector.settings.mode, SortMode::Default)
+                    && !selector.settings.ignore_case
+                    && !selector.settings.dictionary_order
+                    && !selector.settings.ignore_non_printing
+                    && !selector.settings.ignore_blanks
+            }
+    }
+
+    /// Returns true when the ASCII case-insensitive fast path is valid.
+    fn can_use_fast_ascii_insensitive(&self) -> bool {
+        self.mode == SortMode::Default
+            && self.ignore_case
+            && !self.dictionary_order
+            && !self.ignore_non_printing
+            && !self.ignore_leading_blanks
+            && self.selectors.len() == 1
+            && {
+                let selector = &self.selectors[0];
+                !selector.needs_selection
+                    && matches!(selector.settings.mode, SortMode::Default)
+                    && selector.settings.ignore_case
+                    && !selector.settings.dictionary_order
+                    && !selector.settings.ignore_non_printing
+                    && !selector.settings.ignore_blanks
+            }
     }
 }
 
@@ -359,9 +405,10 @@ impl Default for GlobalSettings {
             separator: None,
             threads: String::new(),
             line_ending: LineEnding::Newline,
-            buffer_size: DEFAULT_BUF_SIZE,
+            buffer_size: FALLBACK_AUTOMATIC_BUF_SIZE,
+            buffer_size_is_explicit: false,
             compress_prog: None,
-            merge_batch_size: 32,
+            merge_batch_size: default_merge_batch_size(),
             precomputed: Precomputed::default(),
         }
     }
@@ -1037,6 +1084,116 @@ fn get_rlimit() -> UResult<usize> {
 
 const STDIN_FILE: &str = "-";
 
+fn default_merge_batch_size() -> usize {
+    #[cfg(target_os = "linux")]
+    {
+        match get_rlimit() {
+            Ok(limit) => limit.saturating_div(4).clamp(32, 256),
+            Err(_) => 64,
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        64
+    }
+}
+
+fn automatic_buffer_size(files: &[OsString]) -> usize {
+    let file_hint = file_size_hint(files);
+    let mem_hint = available_memory_hint();
+
+    // Prefer the tighter bound when both hints exist, otherwise fall back to whichever hint is available.
+    match (file_hint, mem_hint) {
+        (Some(file), Some(mem)) => file.min(mem),
+        (Some(file), None) => file,
+        (None, Some(mem)) => mem,
+        (None, None) => FALLBACK_AUTOMATIC_BUF_SIZE,
+    }
+}
+
+fn file_size_hint(files: &[OsString]) -> Option<usize> {
+    let mut total_bytes: u128 = 0;
+
+    for file in files {
+        if file == STDIN_FILE {
+            continue;
+        }
+
+        let Ok(metadata) = std::fs::metadata(file) else {
+            continue;
+        };
+
+        if !metadata.is_file() {
+            continue;
+        }
+
+        total_bytes = total_bytes.saturating_add(metadata.len() as u128);
+
+        if total_bytes >= (MAX_AUTOMATIC_BUF_SIZE as u128) * 8 {
+            break;
+        }
+    }
+
+    if total_bytes == 0 {
+        return None;
+    }
+
+    let desired_bytes = desired_file_buffer_bytes(total_bytes);
+    Some(clamp_hint(desired_bytes))
+}
+
+fn available_memory_hint() -> Option<usize> {
+    #[cfg(target_os = "linux")]
+    if let Some(bytes) = uucore::parser::parse_size::available_memory_bytes() {
+        return Some(clamp_hint(bytes / 4));
+    }
+
+    physical_memory_bytes().map(|bytes| clamp_hint(bytes / 4))
+}
+
+fn clamp_hint(bytes: u128) -> usize {
+    let min = MIN_AUTOMATIC_BUF_SIZE as u128;
+    let max = MAX_AUTOMATIC_BUF_SIZE as u128;
+    let clamped = bytes.clamp(min, max);
+    clamped.min(usize::MAX as u128) as usize
+}
+
+fn desired_file_buffer_bytes(total_bytes: u128) -> u128 {
+    if total_bytes == 0 {
+        return 0;
+    }
+
+    let max = MAX_AUTOMATIC_BUF_SIZE as u128;
+
+    if total_bytes <= max {
+        let expanded = total_bytes.saturating_mul(12).clamp(total_bytes, max);
+        return expanded;
+    }
+
+    let quarter = total_bytes / 4;
+    quarter.max(max)
+}
+
+fn physical_memory_bytes() -> Option<u128> {
+    #[cfg(all(target_family = "unix", not(target_os = "redox")))]
+    {
+        let pages = unsafe { libc::sysconf(libc::_SC_PHYS_PAGES) };
+        let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+        if pages <= 0 || page_size <= 0 {
+            return None;
+        }
+        let pages = u128::try_from(pages).ok()?;
+        let page_size = u128::try_from(page_size).ok()?;
+        Some(pages.saturating_mul(page_size))
+    }
+
+    #[cfg(any(not(target_family = "unix"), target_os = "redox"))]
+    {
+        None
+    }
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -1157,14 +1314,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    settings.buffer_size =
-        matches
-            .get_one::<String>(options::BUF_SIZE)
-            .map_or(Ok(DEFAULT_BUF_SIZE), |s| {
-                GlobalSettings::parse_byte_count(s).map_err(|e| {
-                    USimpleError::new(2, format_error_message(&e, s, options::BUF_SIZE))
-                })
-            })?;
+    if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
+        settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|e| {
+            USimpleError::new(2, format_error_message(&e, size_str, options::BUF_SIZE))
+        })?;
+        settings.buffer_size_is_explicit = true;
+    } else {
+        settings.buffer_size = automatic_buffer_size(&files);
+        settings.buffer_size_is_explicit = false;
+    }
 
     let mut tmp_dir = TmpDirWrapper::new(
         matches
@@ -1611,6 +1769,26 @@ fn compare_by<'a>(
     a_line_data: &LineData<'a>,
     b_line_data: &LineData<'a>,
 ) -> Ordering {
+    if global_settings.precomputed.fast_lexicographic {
+        let cmp = a.line.cmp(b.line);
+        return if global_settings.reverse {
+            cmp.reverse()
+        } else {
+            cmp
+        };
+    }
+
+    if global_settings.precomputed.fast_ascii_insensitive {
+        let cmp = ascii_case_insensitive_cmp(a.line, b.line);
+        if cmp != Ordering::Equal || a.line == b.line {
+            return if global_settings.reverse {
+                cmp.reverse()
+            } else {
+                cmp
+            };
+        }
+    }
+
     let mut selection_index = 0;
     let mut num_info_index = 0;
     let mut parsed_float_index = 0;
@@ -1720,6 +1898,26 @@ fn compare_by<'a>(
     } else {
         cmp
     }
+}
+
+/// Compare two byte slices in ASCII case-insensitive order without allocating.
+/// We lower each byte on the fly so that binary input (including `NUL`) stays
+/// untouched and we avoid locale-sensitive routines such as `strcasecmp`.
+fn ascii_case_insensitive_cmp(a: &[u8], b: &[u8]) -> Ordering {
+    #[inline]
+    fn lower(byte: u8) -> u8 {
+        byte.to_ascii_lowercase()
+    }
+
+    for (lhs, rhs) in a.iter().copied().zip(b.iter().copied()) {
+        let l = lower(lhs);
+        let r = lower(rhs);
+        if l != r {
+            return l.cmp(&r);
+        }
+    }
+
+    a.len().cmp(&b.len())
 }
 
 // This function cleans up the initial comparison done by leading_num_common for a general numeric compare.
@@ -1982,6 +2180,23 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
 mod tests {
 
     use super::*;
+
+    #[test]
+    fn desired_buffer_matches_total_when_small() {
+        let six_mebibytes = 6 * 1024 * 1024;
+        let expected = ((six_mebibytes as u128) * 12)
+            .clamp(six_mebibytes as u128, MAX_AUTOMATIC_BUF_SIZE as u128);
+        assert_eq!(desired_file_buffer_bytes(six_mebibytes as u128), expected);
+    }
+
+    #[test]
+    fn desired_buffer_caps_at_max_for_large_inputs() {
+        let large = 256 * 1024 * 1024; // 256 MiB
+        assert_eq!(
+            desired_file_buffer_bytes(large as u128),
+            MAX_AUTOMATIC_BUF_SIZE as u128
+        );
+    }
 
     fn tokenize_helper(line: &[u8], separator: Option<u8>) -> Vec<Field> {
         let mut buffer = vec![];

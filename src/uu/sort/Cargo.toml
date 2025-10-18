@@ -36,6 +36,7 @@ thiserror = { workspace = true }
 unicode-width = { workspace = true }
 uucore = { workspace = true, features = ["fs", "parser", "version-cmp"] }
 fluent = { workspace = true }
+libc = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 nix = { workspace = true }
