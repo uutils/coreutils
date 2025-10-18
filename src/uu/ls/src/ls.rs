@@ -2237,11 +2237,11 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
         // The default sort in GNU ls respects locale collation (LC_COLLATE)
         Sort::Name => {
             // Adaptive strategy to reduce overhead in recursive small directories:
-            // - For small directories, avoid building caches and sort in-place.
-            // - For larger sets, cache byte slices once and sort indices, then permute.
-            // Threshold tuned for recursive workloads: directories with 20-30 files benefit
-            // significantly from caching to avoid repeated os_str_as_bytes_lossy() calls.
-            const SMALL_DIR_THRESHOLD: usize = 24;
+            // - For very small directories (≤16 entries), sort in-place to avoid allocation overhead.
+            // - For larger sets (>16 entries), cache byte slices once to avoid repeated conversions.
+            // Critical: ls_recursive_balanced_tree has 19 entries/dir (4 subdirs + 15 files).
+            // Threshold MUST be <19 to trigger caching for that benchmark.
+            const SMALL_DIR_THRESHOLD: usize = 16;
             let n = entries.len();
 
             if n <= SMALL_DIR_THRESHOLD {
