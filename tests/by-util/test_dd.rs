@@ -1780,3 +1780,55 @@ fn test_wrong_number_err_msg() {
         .fails()
         .stderr_contains("dd: invalid number: '1kBb555'\n");
 }
+
+#[test]
+fn test_buffer_flush_on_input_exhaustion() {
+    // Test that ensures buffered data is flushed when input is exhausted
+    // Uses a small input that will be read completely, then verifies
+    // that the break condition triggers but data is still flushed
+    let input_data = "buffer flush test data";
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("input.txt", input_data);
+
+    // Use a large buffer size to ensure the entire input fits in one read
+    ucmd.args(&["if=input.txt", "of=output.txt", "bs=1024"])
+        .succeeds();
+
+    let output_data = at.read("output.txt");
+    assert_eq!(output_data, input_data);
+}
+
+#[test]
+fn test_single_byte_input_buffer_flush() {
+    // Test with single byte to ensure minimal read triggers break
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("single.txt", "x");
+
+    ucmd.args(&["if=single.txt", "of=output.txt", "bs=1024"])
+        .succeeds();
+
+    let output_data = at.read("output.txt");
+    assert_eq!(output_data, "x");
+}
+
+#[test]
+fn test_break_condition_triggered() {
+    // Test that specifically triggers the input exhaustion break condition
+    // Empty input forces immediate loop termination via empty read detection
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("empty.txt", "");
+
+    // This will definitely trigger the break condition
+    ucmd.args(&["if=empty.txt", "of=output.txt", "bs=1024"])
+        .succeeds();
+
+    // Verify the break was triggered by checking the operation completed successfully
+    // even with empty input, confirming the break condition was handled correctly
+
+    let output_data = at.read("output.txt");
+    assert_eq!(output_data, "");
+    assert!(at.file_exists("output.txt"));
+}
