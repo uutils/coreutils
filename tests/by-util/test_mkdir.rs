@@ -25,6 +25,17 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_version_no_path() {
+    let result = new_ucmd!().arg("--version").succeeds();
+    let stdout = result.stdout_str();
+
+    assert!(stdout.starts_with("mkdir (uutils coreutils)"));
+
+    let first_line = stdout.lines().next().unwrap();
+    assert!(!first_line.starts_with("./") && !first_line.starts_with('/'));
+}
+
+#[test]
 fn test_no_arg() {
     new_ucmd!()
         .fails_with_code(1)

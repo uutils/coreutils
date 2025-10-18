@@ -328,7 +328,14 @@ static UTIL_NAME: LazyLock<String> = LazyLock::new(|| {
     let is_man = usize::from(ARGV[base_index].eq("manpage"));
     let argv_index = base_index + is_man;
 
-    ARGV[argv_index].to_string_lossy().into_owned()
+    // Strip directory path to show only utility name
+    // (e.g., "mkdir" instead of "./target/debug/mkdir")
+    // in version output, error messages, and other user-facing output
+    std::path::Path::new(&ARGV[argv_index])
+        .file_name()
+        .unwrap_or(&ARGV[argv_index])
+        .to_string_lossy()
+        .into_owned()
 });
 
 /// Derive the utility name.
