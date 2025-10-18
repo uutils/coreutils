@@ -89,8 +89,8 @@ $(info SELINUX_ENABLED=1 but /sbin/selinuxenabled failed)
 	endif
 endif
 
-# Possible programs
-PROGS       := \
+# Possible programs for all platforms. Allow to drop by make PROGS="" for WSL
+PROGS ?= \
 	base32 \
 	base64 \
 	basenc \
