@@ -2236,21 +2236,13 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
         }
         // The default sort in GNU ls respects locale collation (LC_COLLATE)
         Sort::Name => {
-            // Adaptive strategy to reduce overhead in recursive small directories:
-            // - For very small directories (≤16 entries), sort in-place to avoid allocation overhead.
-            // - For larger sets (>16 entries), cache byte slices once to avoid repeated conversions.
-            // Critical: ls_recursive_balanced_tree has 19 entries/dir (4 subdirs + 15 files).
-            // Threshold MUST be <19 to trigger caching for that benchmark.
-            const SMALL_DIR_THRESHOLD: usize = 16;
+            // Hybrid strategy: always cache for recursive mode OR large directories.
+            // Recursive workloads sort many small directories, so caching eliminates
+            // repeated os_str_as_bytes_lossy() overhead across thousands of directories.
             let n = entries.len();
-
-            if n <= SMALL_DIR_THRESHOLD {
-                entries.sort_unstable_by(|a, b| {
-                    let ab = os_str_as_bytes_lossy(a.display_name());
-                    let bb = os_str_as_bytes_lossy(b.display_name());
-                    locale_cmp(&ab, &bb)
-                });
-            } else {
+            let should_cache = config.recursive || n > 8;
+            
+            if should_cache {
                 // Pre-compute byte conversions for all entries (O(n) cost, done once)
                 let bytes_cache: Vec<Cow<'_, [u8]>> = entries
                     .iter()
@@ -2263,6 +2255,13 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
 
                 // Reorder entries according to sorted indices using in-place permutation
                 apply_permutation(entries, &indices);
+            } else {
+                // For non-recursive small directories, use simple in-place sort
+                entries.sort_unstable_by(|a, b| {
+                    let ab = os_str_as_bytes_lossy(a.display_name());
+                    let bb = os_str_as_bytes_lossy(b.display_name());
+                    locale_cmp(&ab, &bb)
+                });
             }
         }
         Sort::Version => entries.sort_by(|a, b| {
