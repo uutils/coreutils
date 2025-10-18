@@ -4329,6 +4329,7 @@ dependencies = [
  "num-traits",
  "number_prefix",
  "os_display",
+ "phf",
  "selinux",
  "sha1",
  "sha2",
