@@ -2,6 +2,8 @@ tests/tail/inotify-dir-recreate
 tests/tail/overlay-headers
 tests/timeout/timeout
 tests/rm/rm1
+tests/misc/invalid-opt
 tests/misc/stdbuf
 tests/misc/usage_vs_getopt
 tests/misc/tee
+tests/runcon/runcon-no-reorder
