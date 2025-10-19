@@ -361,6 +361,15 @@ pub fn parse_size_u64(size: &str) -> Result<u64, ParseSizeError> {
     Parser::default().parse_u64(size)
 }
 
+/// Same as `parse_size_u64()`, except 0 fails to parse
+pub fn parse_size_non_zero_u64(size: &str) -> Result<u64, ParseSizeError> {
+    let v = Parser::default().parse_u64(size)?;
+    if v == 0 {
+        return Err(ParseSizeError::ParseFailure("0".to_string()));
+    }
+    Ok(v)
+}
+
 /// Same as `parse_size_u64()` - deprecated
 #[deprecated = "Please use parse_size_u64(size: &str) -> Result<u64, ParseSizeError> OR parse_size_u128(size: &str) -> Result<u128, ParseSizeError> instead."]
 pub fn parse_size(size: &str) -> Result<u64, ParseSizeError> {

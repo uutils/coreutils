@@ -203,7 +203,48 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Iterate over all dates - whether it's a single date or a file.
     let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
         DateSource::Human(ref input) => {
-            let date = parse_date(input);
+            // GNU compatibility (Pure numbers in date strings):
+            // - Manual: https://www.gnu.org/software/coreutils/manual/html_node/Pure-numbers-in-date-strings.html
+            // - Semantics: a pure decimal number denotes today’s time-of-day (HH or HHMM).
+            //   Examples: "0"/"00" => 00:00 today; "7"/"07" => 07:00 today; "0700" => 07:00 today.
+            // For all other forms, fall back to the general parser.
+            let is_pure_digits =
+                !input.is_empty() && input.len() <= 4 && input.chars().all(|c| c.is_ascii_digit());
+
+            let date = if is_pure_digits {
+                // Derive HH and MM from the input
+                let (hh_opt, mm_opt) = if input.len() <= 2 {
+                    (input.parse::<u32>().ok(), Some(0u32))
+                } else {
+                    let (h, m) = input.split_at(input.len() - 2);
+                    (h.parse::<u32>().ok(), m.parse::<u32>().ok())
+                };
+
+                if let (Some(hh), Some(mm)) = (hh_opt, mm_opt) {
+                    // Compose a concrete datetime string for today with zone offset.
+                    // Use the already-determined 'now' and settings.utc to select offset.
+                    let date_part =
+                        strtime::format("%F", &now).unwrap_or_else(|_| String::from("1970-01-01"));
+                    // If -u, force +00:00; otherwise use the local offset of 'now'.
+                    let offset = if settings.utc {
+                        String::from("+00:00")
+                    } else {
+                        strtime::format("%:z", &now).unwrap_or_default()
+                    };
+                    let composed = if offset.is_empty() {
+                        format!("{date_part} {hh:02}:{mm:02}")
+                    } else {
+                        format!("{date_part} {hh:02}:{mm:02} {offset}")
+                    };
+                    parse_date(composed)
+                } else {
+                    // Fallback on parse failure of digits
+                    parse_date(input)
+                }
+            } else {
+                parse_date(input)
+            };
+
             let iter = std::iter::once(date);
             Box::new(iter)
         }

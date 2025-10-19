@@ -40,7 +40,7 @@ enum MoreError {
 impl std::fmt::Display for MoreError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MoreError::IsDirectory(path) => {
+            Self::IsDirectory(path) => {
                 write!(
                     f,
                     "{}",
@@ -50,7 +50,7 @@ impl std::fmt::Display for MoreError {
                     )
                 )
             }
-            MoreError::CannotOpenNoSuchFile(path) => {
+            Self::CannotOpenNoSuchFile(path) => {
                 write!(
                     f,
                     "{}",
@@ -60,7 +60,7 @@ impl std::fmt::Display for MoreError {
                     )
                 )
             }
-            MoreError::CannotOpenIOError(path, error) => {
+            Self::CannotOpenIOError(path, error) => {
                 write!(
                     f,
                     "{}",
@@ -71,7 +71,7 @@ impl std::fmt::Display for MoreError {
                     )
                 )
             }
-            MoreError::BadUsage => {
+            Self::BadUsage => {
                 write!(f, "{}", translate!("more-error-bad-usage"))
             }
         }
@@ -325,15 +325,15 @@ enum InputType {
 impl InputType {
     fn read_line(&mut self, buf: &mut String) -> std::io::Result<usize> {
         match self {
-            InputType::File(reader) => reader.read_line(buf),
-            InputType::Stdin(stdin) => stdin.read_line(buf),
+            Self::File(reader) => reader.read_line(buf),
+            Self::Stdin(stdin) => stdin.read_line(buf),
         }
     }
 
     fn len(&self) -> std::io::Result<Option<u64>> {
         let len = match self {
-            InputType::File(reader) => Some(reader.get_ref().metadata()?.len()),
-            InputType::Stdin(_) => None,
+            Self::File(reader) => Some(reader.get_ref().metadata()?.len()),
+            Self::Stdin(_) => None,
         };
         Ok(len)
     }
@@ -907,7 +907,7 @@ mod tests {
         type Target = Vec<u8>;
         fn deref(&self) -> &Vec<u8> {
             match self {
-                OutputType::Test(buf) => buf,
+                Self::Test(buf) => buf,
                 _ => unreachable!(),
             }
         }
@@ -916,7 +916,7 @@ mod tests {
     impl DerefMut for OutputType {
         fn deref_mut(&mut self) -> &mut Vec<u8> {
             match self {
-                OutputType::Test(buf) => buf,
+                Self::Test(buf) => buf,
                 _ => unreachable!(),
             }
         }

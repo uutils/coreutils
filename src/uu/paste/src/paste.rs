@@ -271,7 +271,7 @@ enum DelimiterState<'a> {
 }
 
 impl<'a> DelimiterState<'a> {
-    fn new(unescaped_and_encoded_delimiters: &'a [Box<[u8]>]) -> DelimiterState<'a> {
+    fn new(unescaped_and_encoded_delimiters: &'a [Box<[u8]>]) -> Self {
         match unescaped_and_encoded_delimiters {
             [] => DelimiterState::NoDelimiters,
             [only_delimiter] => {
@@ -364,8 +364,8 @@ enum InputSource {
 impl InputSource {
     fn read_until(&mut self, byte: u8, buf: &mut Vec<u8>) -> UResult<usize> {
         let us = match self {
-            InputSource::File(bu) => bu.read_until(byte, buf)?,
-            InputSource::StandardInput(rc) => rc
+            Self::File(bu) => bu.read_until(byte, buf)?,
+            Self::StandardInput(rc) => rc
                 .try_borrow()
                 .map_err(|bo| {
                     USimpleError::new(1, translate!("paste-error-stdin-borrow", "error" => bo))

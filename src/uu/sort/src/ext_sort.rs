@@ -36,6 +36,7 @@ use crate::{
 };
 use crate::{Line, print_sorted};
 
+// Note: update `test_sort::test_start_buffer` if this size is changed
 const START_BUFFER_SIZE: usize = 8_000;
 
 /// Sort files by using auxiliary files for storing intermediate chunks (if needed), and output the result.

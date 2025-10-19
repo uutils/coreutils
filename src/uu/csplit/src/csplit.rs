@@ -172,7 +172,7 @@ where
                         // the error happened when applying the pattern more than once
                         Err(CsplitError::LineOutOfRange(_)) if ith != 1 => {
                             return Err(CsplitError::LineOutOfRangeOnRepetition(
-                                pattern_as_str.to_string(),
+                                pattern_as_str,
                                 ith - 1,
                             ));
                         }
@@ -204,7 +204,7 @@ where
                         // the error happened when applying the pattern more than once
                         (Err(CsplitError::MatchNotFound(_)), Some(m)) if m != 1 && ith != 1 => {
                             return Err(CsplitError::MatchNotFoundOnRepetition(
-                                pattern_as_str.to_string(),
+                                pattern_as_str,
                                 ith - 1,
                             ));
                         }
@@ -623,7 +623,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let patterns: Vec<String> = matches
         .get_many::<String>(options::PATTERN)
         .unwrap()
-        .map(|s| s.to_string())
+        .map(ToOwned::to_owned)
         .collect();
     let options = CsplitOptions::new(&matches)?;
     if file_name == "-" {

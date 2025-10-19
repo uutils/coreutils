@@ -69,6 +69,13 @@ TOYBOX_SRC  := $(TOYBOX_ROOT)/toybox-$(TOYBOX_VER)
 #------------------------------------------------------------------------
 OS ?= $(shell uname -s)
 
+# Windows does not allow symlink by default.
+# Allow to override LN for AppArmor.
+ifeq ($(OS),Windows_NT)
+	LN ?= ln -f
+endif
+LN ?= ln -sf
+
 ifdef SELINUX_ENABLED
 	override SELINUX_ENABLED := 0
 # Now check if we should enable it (only on non-Windows)
@@ -100,6 +107,7 @@ PROGS       := \
 	dir \
 	dircolors \
 	dirname \
+	du \
 	echo \
 	env \
 	expand \
@@ -110,6 +118,7 @@ PROGS       := \
 	fold \
 	hashsum \
 	head \
+	hostname \
 	join \
 	link \
 	ln \
@@ -138,17 +147,18 @@ PROGS       := \
 	sleep \
 	sort \
 	split \
-	stty \
 	sum \
 	sync \
 	tac \
 	tail \
 	tee \
 	test \
+	touch \
 	tr \
 	true \
 	truncate \
 	tsort \
+	uname \
 	unexpand \
 	uniq \
 	vdir \
@@ -162,10 +172,8 @@ UNIX_PROGS := \
 	chmod \
 	chown \
 	chroot \
-	du \
 	groups \
 	hostid \
-	hostname \
 	id \
 	install \
 	kill \
@@ -178,10 +186,9 @@ UNIX_PROGS := \
 	pinky \
 	stat \
 	stdbuf \
+	stty \
 	timeout \
-	touch \
 	tty \
-	uname \
 	unlink \
 	uptime \
 	users \
@@ -225,7 +232,7 @@ ifneq ($(OS),Windows_NT)
 	CARGOFLAGS += --features feat_external_libstdbuf
 endif
 
-UTILS ?= $(PROGS)
+UTILS ?= $(filter-out $(SKIP_UTILS),$(PROGS))
 
 ifneq ($(findstring stdbuf,$(UTILS)),)
     # Use external libstdbuf per default. It is more robust than embedding libstdbuf.
@@ -303,7 +310,7 @@ TEST_PROGS  := \
 	who
 
 TESTS       := \
-	$(sort $(filter $(UTILS),$(filter-out $(SKIP_UTILS),$(TEST_PROGS))))
+	$(sort $(filter $(UTILS),$(TEST_PROGS)))
 
 TEST_NO_FAIL_FAST :=
 TEST_SPEC_FEATURE :=
@@ -323,7 +330,7 @@ endef
 
 # Output names
 EXES        := \
-	$(sort $(filter $(UTILS),$(filter-out $(SKIP_UTILS),$(PROGS))))
+	$(sort $(UTILS))
 
 INSTALLEES  := ${EXES}
 ifeq (${MULTICALL}, y)
@@ -349,7 +356,7 @@ build-coreutils:
 
 build: build-coreutils build-pkgs locales
 
-$(foreach test,$(filter-out $(SKIP_UTILS),$(PROGS)),$(eval $(call TEST_BUSYBOX,$(test))))
+$(foreach test,$(UTILS),$(eval $(call TEST_BUSYBOX,$(test))))
 
 test:
 	${CARGO} test ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
@@ -479,25 +486,25 @@ endif
 
 install: build install-manpages install-completions install-locales
 	mkdir -p $(INSTALLDIR_BIN)
-ifneq ($(OS),Windows_NT)
+ifneq (,$(and $(findstring stdbuf,$(UTILS)),$(findstring feat_external_libstdbuf,$(CARGOFLAGS))))
 	mkdir -p $(DESTDIR)$(LIBSTDBUF_DIR)
 	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf* $(DESTDIR)$(LIBSTDBUF_DIR)/
 endif
 ifeq (${MULTICALL}, y)
 	$(INSTALL) -m 755 $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
 	$(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
-		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
+		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
 	)
 	$(foreach prog, $(HASHSUM_PROGS), \
-		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
+		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
 	)
-	$(if $(findstring test,$(INSTALLEES)), cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
+	$(if $(findstring test,$(INSTALLEES)), cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
 else
 	$(foreach prog, $(INSTALLEES), \
 		$(INSTALL) -m 755 $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog) $(newline) \
 	)
 	$(foreach prog, $(HASHSUM_PROGS), \
-		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)hashsum $(PROG_PREFIX)$(prog) $(newline) \
+		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)hashsum $(PROG_PREFIX)$(prog) $(newline) \
 	)
 	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) -m 755 $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
 endif
