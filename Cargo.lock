@@ -4334,6 +4334,7 @@ dependencies = [
  "num-traits",
  "number_prefix",
  "os_display",
+ "phf",
  "procfs",
  "selinux",
  "sha1",
