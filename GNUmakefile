@@ -216,14 +216,10 @@ HASHSUM_PROGS := \
 
 $(info Detected OS = $(OS))
 
-# Don't build the SELinux programs on macOS (Darwin) and FreeBSD
-ifeq ($(filter $(OS),Darwin FreeBSD),$(OS))
-	SELINUX_PROGS :=
-endif
-
 ifneq ($(OS),Windows_NT)
 	PROGS := $(PROGS) $(UNIX_PROGS)
-# Build the selinux command even if not on the system
+endif
+ifeq ($(SELINUX_ENABLED),1)
 	PROGS := $(PROGS) $(SELINUX_PROGS)
 endif
 
