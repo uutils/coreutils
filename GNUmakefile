@@ -78,7 +78,7 @@ LN ?= ln -sf
 
 ifeq ($(SELINUX_ENABLED),1)
 # Allow to enable SELinux if libselinux is installed even selinuxenabled fails
-	SELINUX_ENABLED := $(shell command -q selinuxenabled && echo 1)
+	SELINUX_ENABLED := $(shell command -v selinuxenabled > /dev/null && echo 1)
 endif
 
 # Possible programs
