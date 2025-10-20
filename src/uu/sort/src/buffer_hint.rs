@@ -4,7 +4,7 @@ use crate::{
     FALLBACK_AUTOMATIC_BUF_SIZE, MAX_AUTOMATIC_BUF_SIZE, MIN_AUTOMATIC_BUF_SIZE, STDIN_FILE,
 };
 
-// Heuristics to size the external sort buffer without overcommitting memory.
+// Heuristics to size the external sort buffer without overcommit memory.
 pub(crate) fn automatic_buffer_size(files: &[OsString]) -> usize {
     let file_hint = file_size_hint(files);
     let mem_hint = available_memory_hint();
