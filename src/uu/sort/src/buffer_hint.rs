@@ -98,8 +98,16 @@ fn physical_memory_bytes() -> Option<u128> {
 fn physical_memory_bytes_unix() -> Option<u128> {
     use nix::unistd::{sysconf, SysconfVar};
 
-    let pages = sysconf(SysconfVar::_PHYS_PAGES).ok().flatten()?.try_into().ok()?;
-    let page_size = sysconf(SysconfVar::PAGE_SIZE).ok().flatten()?.try_into().ok()?;
+    let pages: u128 = sysconf(SysconfVar::_PHYS_PAGES)
+        .ok()
+        .flatten()?
+        .try_into()
+        .ok()?;
+    let page_size: u128 = sysconf(SysconfVar::PAGE_SIZE)
+        .ok()
+        .flatten()?
+        .try_into()
+        .ok()?;
     Some(pages.saturating_mul(page_size))
 }
 

@@ -1644,6 +1644,7 @@ dependencies = [
  "fluent",
  "fnv",
  "itertools",
+ "libc",
  "memchr",
  "nix",
  "rand",
