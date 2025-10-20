@@ -9,6 +9,7 @@
 
 // spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit
 
+mod buffer_hint;
 mod check;
 mod chunks;
 mod custom_str_cmp;
@@ -54,6 +55,7 @@ use uucore::show_error;
 use uucore::translate;
 use uucore::version_cmp::version_cmp;
 
+use crate::buffer_hint::automatic_buffer_size;
 use crate::tmp_dir::TmpDirWrapper;
 
 mod options {
@@ -1053,101 +1055,6 @@ fn default_merge_batch_size() -> usize {
     #[cfg(not(target_os = "linux"))]
     {
         64
-    }
-}
-
-fn automatic_buffer_size(files: &[OsString]) -> usize {
-    let file_hint = file_size_hint(files);
-    let mem_hint = available_memory_hint();
-
-    // Prefer the tighter bound when both hints exist, otherwise fall back to whichever hint is available.
-    match (file_hint, mem_hint) {
-        (Some(file), Some(mem)) => file.min(mem),
-        (Some(file), None) => file,
-        (None, Some(mem)) => mem,
-        (None, None) => FALLBACK_AUTOMATIC_BUF_SIZE,
-    }
-}
-
-fn file_size_hint(files: &[OsString]) -> Option<usize> {
-    let mut total_bytes: u128 = 0;
-
-    for file in files {
-        if file == STDIN_FILE {
-            continue;
-        }
-
-        let Ok(metadata) = std::fs::metadata(file) else {
-            continue;
-        };
-
-        if !metadata.is_file() {
-            continue;
-        }
-
-        total_bytes = total_bytes.saturating_add(metadata.len() as u128);
-
-        if total_bytes >= (MAX_AUTOMATIC_BUF_SIZE as u128) * 8 {
-            break;
-        }
-    }
-
-    if total_bytes == 0 {
-        return None;
-    }
-
-    let desired_bytes = desired_file_buffer_bytes(total_bytes);
-    Some(clamp_hint(desired_bytes))
-}
-
-fn available_memory_hint() -> Option<usize> {
-    #[cfg(target_os = "linux")]
-    if let Some(bytes) = uucore::parser::parse_size::available_memory_bytes() {
-        return Some(clamp_hint(bytes / 4));
-    }
-
-    physical_memory_bytes().map(|bytes| clamp_hint(bytes / 4))
-}
-
-fn clamp_hint(bytes: u128) -> usize {
-    let min = MIN_AUTOMATIC_BUF_SIZE as u128;
-    let max = MAX_AUTOMATIC_BUF_SIZE as u128;
-    let clamped = bytes.clamp(min, max);
-    clamped.min(usize::MAX as u128) as usize
-}
-
-fn desired_file_buffer_bytes(total_bytes: u128) -> u128 {
-    if total_bytes == 0 {
-        return 0;
-    }
-
-    let max = MAX_AUTOMATIC_BUF_SIZE as u128;
-
-    if total_bytes <= max {
-        let expanded = total_bytes.saturating_mul(12).clamp(total_bytes, max);
-        return expanded;
-    }
-
-    let quarter = total_bytes / 4;
-    quarter.max(max)
-}
-
-fn physical_memory_bytes() -> Option<u128> {
-    #[cfg(all(target_family = "unix", not(target_os = "redox")))]
-    {
-        let pages = unsafe { libc::sysconf(libc::_SC_PHYS_PAGES) };
-        let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
-        if pages <= 0 || page_size <= 0 {
-            return None;
-        }
-        let pages = u128::try_from(pages).ok()?;
-        let page_size = u128::try_from(page_size).ok()?;
-        Some(pages.saturating_mul(page_size))
-    }
-
-    #[cfg(any(not(target_family = "unix"), target_os = "redox"))]
-    {
-        None
     }
 }
 
