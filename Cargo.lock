@@ -157,9 +157,9 @@ dependencies = [
 
 [[package]]
 name = "bigdecimal"
-version = "0.4.8"
+version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a22f228ab7a1b23027ccc6c350b72868017af7ea8356fbdf19f8d991c690013"
+checksum = "560f42649de9fa436b73517378a147ec21f6c997a546581df4b4b31677828934"
 dependencies = [
  "autocfg",
  "libm",
@@ -1835,9 +1835,9 @@ dependencies = [
 
 [[package]]
 name = "lscolors"
-version = "0.20.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61183da5de8ba09a58e330d55e5ea796539d8443bd00fdeb863eac39724aa4ab"
+checksum = "d60e266dfb1426eb2d24792602e041131fdc0236bb7007abc0e589acafd60929"
 dependencies = [
  "aho-corasick",
  "nu-ansi-term",

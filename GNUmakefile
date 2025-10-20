@@ -91,6 +91,7 @@ endif
 
 # Possible programs
 PROGS       := \
+	arch \
 	base32 \
 	base64 \
 	basenc \
@@ -107,6 +108,7 @@ PROGS       := \
 	dir \
 	dircolors \
 	dirname \
+	du \
 	echo \
 	env \
 	expand \
@@ -117,6 +119,7 @@ PROGS       := \
 	fold \
 	hashsum \
 	head \
+	hostname \
 	join \
 	link \
 	ln \
@@ -145,34 +148,33 @@ PROGS       := \
 	sleep \
 	sort \
 	split \
-	stty \
 	sum \
 	sync \
 	tac \
 	tail \
 	tee \
 	test \
+	touch \
 	tr \
 	true \
 	truncate \
 	tsort \
+	uname \
 	unexpand \
 	uniq \
+	unlink \
 	vdir \
 	wc \
 	whoami \
 	yes
 
 UNIX_PROGS := \
-	arch \
 	chgrp \
 	chmod \
 	chown \
 	chroot \
-	du \
 	groups \
 	hostid \
-	hostname \
 	id \
 	install \
 	kill \
@@ -185,11 +187,9 @@ UNIX_PROGS := \
 	pinky \
 	stat \
 	stdbuf \
+	stty \
 	timeout \
-	touch \
 	tty \
-	uname \
-	unlink \
 	uptime \
 	users \
 	who
@@ -228,7 +228,7 @@ ifneq ($(OS),Windows_NT)
 	PROGS := $(PROGS) $(SELINUX_PROGS)
 endif
 
-UTILS ?= $(PROGS)
+UTILS ?= $(filter-out $(SKIP_UTILS),$(PROGS))
 
 ifneq ($(findstring stdbuf,$(UTILS)),)
     # Use external libstdbuf per default. It is more robust than embedding libstdbuf.
@@ -306,7 +306,7 @@ TEST_PROGS  := \
 	who
 
 TESTS       := \
-	$(sort $(filter $(UTILS),$(filter-out $(SKIP_UTILS),$(TEST_PROGS))))
+	$(sort $(filter $(UTILS),$(TEST_PROGS)))
 
 TEST_NO_FAIL_FAST :=
 TEST_SPEC_FEATURE :=
@@ -326,7 +326,7 @@ endef
 
 # Output names
 EXES        := \
-	$(sort $(filter $(UTILS),$(filter-out $(SKIP_UTILS),$(PROGS))))
+	$(sort $(UTILS))
 
 INSTALLEES  := ${EXES}
 ifeq (${MULTICALL}, y)
@@ -352,7 +352,7 @@ build-coreutils:
 
 build: build-coreutils build-pkgs locales
 
-$(foreach test,$(filter-out $(SKIP_UTILS),$(PROGS)),$(eval $(call TEST_BUSYBOX,$(test))))
+$(foreach test,$(UTILS),$(eval $(call TEST_BUSYBOX,$(test))))
 
 test:
 	${CARGO} test ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
@@ -482,7 +482,7 @@ endif
 
 install: build install-manpages install-completions install-locales
 	mkdir -p $(INSTALLDIR_BIN)
-ifneq ($(OS),Windows_NT)
+ifneq (,$(and $(findstring stdbuf,$(UTILS)),$(findstring feat_external_libstdbuf,$(CARGOFLAGS))))
 	mkdir -p $(DESTDIR)$(LIBSTDBUF_DIR)
 	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf* $(DESTDIR)$(LIBSTDBUF_DIR)/
 endif
