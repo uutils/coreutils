@@ -29,7 +29,6 @@
 * tests/mkdir/restorecon.sh
 * tests/misc/selinux.sh
 * tests/misc/chcon.sh
-* tests/misc/invalid-opt
 * tests/runcon/runcon-no-reorder.sh
 * tests/install/install-Z-selinux.sh
 * tests/install/install-C-selinux.sh

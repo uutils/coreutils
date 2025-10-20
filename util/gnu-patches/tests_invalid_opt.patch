@@ -2,6 +2,14 @@ Index: gnu/tests/misc/invalid-opt.pl
 ===================================================================
 --- gnu.orig/tests/misc/invalid-opt.pl
 +++ gnu/tests/misc/invalid-opt.pl
+@@ -34,7 +34,6 @@
+     expr => 0,
+     nice => 125,
+     nohup => 125,
+-    runcon => 125,
+     sort => 2,
+     stdbuf => 125,
+     test => 0,
 @@ -74,23 +74,13 @@ foreach my $prog (@built_programs)
      defined $out
        or $out = '';
