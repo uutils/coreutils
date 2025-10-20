@@ -91,6 +91,7 @@ endif
 
 # Possible programs
 PROGS       := \
+	arch \
 	base32 \
 	base64 \
 	basenc \
@@ -161,13 +162,13 @@ PROGS       := \
 	uname \
 	unexpand \
 	uniq \
+	unlink \
 	vdir \
 	wc \
 	whoami \
 	yes
 
 UNIX_PROGS := \
-	arch \
 	chgrp \
 	chmod \
 	chown \
@@ -189,7 +190,6 @@ UNIX_PROGS := \
 	stty \
 	timeout \
 	tty \
-	unlink \
 	uptime \
 	users \
 	who
