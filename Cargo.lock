@@ -179,15 +179,6 @@ dependencies = [
 
 [[package]]
 name = "bincode"
-version = "1.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "bincode"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "36eaf5d7b090263e8150820482d5d93cd964a81e4019913c972f4edcc6edb740"
@@ -446,16 +437,16 @@ dependencies = [
 
 [[package]]
 name = "codspeed"
-version = "3.0.5"
+version = "4.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35584c5fcba8059780748866387fb97c5a203bcfc563fc3d0790af406727a117"
+checksum = "fe68fdd3fe25bc26de0230718d74eb150f09f70be3141c61ea7f9b00812054aa"
 dependencies = [
  "anyhow",
- "bincode 1.3.3",
+ "cc",
  "colored",
  "glob",
  "libc",
- "nix 0.29.0",
+ "nix",
  "serde",
  "serde_json",
  "statrs",
@@ -464,20 +455,22 @@ dependencies = [
 
 [[package]]
 name = "codspeed-divan-compat"
-version = "3.0.5"
+version = "4.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adf64eda57508448d59efd940bad62ede7c50b0d451a150b8d6a0eca642792a6"
+checksum = "3423b17bf22fb889322e1cc28efcbab40cde5542c4dba64df51a60e7f534778e"
 dependencies = [
+ "clap",
  "codspeed",
  "codspeed-divan-compat-macros",
  "codspeed-divan-compat-walltime",
+ "regex",
 ]
 
 [[package]]
 name = "codspeed-divan-compat-macros"
-version = "3.0.5"
+version = "4.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "058167258e819b16a4ba601fdfe270349ef191154758dbce122c62a698f70ba8"
+checksum = "93e373516c58af1c344bfe013b6c9831ce6a08bb59709ab3fa6fe5c9b0e904ff"
 dependencies = [
  "divan-macros",
  "itertools 0.14.0",
@@ -489,9 +482,9 @@ dependencies = [
 
 [[package]]
 name = "codspeed-divan-compat-walltime"
-version = "3.0.5"
+version = "4.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48f9866ee3a4ef9d2868823ea5811886763af244f2df584ca247f49281c43f1f"
+checksum = "dec8839347bcdbe521a18960614fb413a91e15e73f8543b5e0656b3780dbe43e"
 dependencies = [
  "cfg-if",
  "clap",
@@ -588,7 +581,7 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 name = "coreutils"
 version = "0.3.0"
 dependencies = [
- "bincode 2.0.1",
+ "bincode",
  "chrono",
  "clap",
  "clap_complete",
@@ -599,7 +592,7 @@ dependencies = [
  "glob",
  "hex-literal",
  "libc",
- "nix 0.30.1",
+ "nix",
  "num-prime",
  "phf",
  "phf_codegen",
@@ -896,7 +889,7 @@ version = "3.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "46f93780a459b7d656ef7f071fe699c4d3d2cb201c4b24d085b6ddc505276e73"
 dependencies = [
- "nix 0.30.1",
+ "nix",
  "windows-sys 0.59.0",
 ]
 
@@ -1902,18 +1895,6 @@ dependencies = [
  "log",
  "wasi 0.11.1+wasi-snapshot-preview1",
  "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "nix"
-version = "0.29.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71e2746dc3a24dd78b3cfcb7be93368c6de9963d30f43a6a73998a9cf4b17b46"
-dependencies = [
- "bitflags 2.9.1",
- "cfg-if",
- "cfg_aliases",
- "libc",
 ]
 
 [[package]]
@@ -3209,7 +3190,7 @@ dependencies = [
  "clap",
  "fluent",
  "memchr",
- "nix 0.30.1",
+ "nix",
  "tempfile",
  "thiserror 2.0.17",
  "uucore",
@@ -3353,7 +3334,7 @@ dependencies = [
  "fluent",
  "gcd",
  "libc",
- "nix 0.30.1",
+ "nix",
  "signal-hook",
  "thiserror 2.0.17",
  "uucore",
@@ -3427,7 +3408,7 @@ version = "0.3.0"
 dependencies = [
  "clap",
  "fluent",
- "nix 0.30.1",
+ "nix",
  "rust-ini",
  "thiserror 2.0.17",
  "uucore",
@@ -3606,7 +3587,7 @@ version = "0.3.0"
 dependencies = [
  "clap",
  "fluent",
- "nix 0.30.1",
+ "nix",
  "uucore",
 ]
 
@@ -3707,7 +3688,7 @@ dependencies = [
  "clap",
  "crossterm",
  "fluent",
- "nix 0.30.1",
+ "nix",
  "tempfile",
  "uucore",
 ]
@@ -3735,7 +3716,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
- "nix 0.30.1",
+ "nix",
  "uucore",
 ]
 
@@ -3987,7 +3968,7 @@ dependencies = [
  "fnv",
  "itertools 0.14.0",
  "memchr",
- "nix 0.30.1",
+ "nix",
  "rand 0.9.2",
  "rayon",
  "self_cell",
@@ -4046,7 +4027,7 @@ version = "0.3.0"
 dependencies = [
  "clap",
  "fluent",
- "nix 0.30.1",
+ "nix",
  "uucore",
 ]
 
@@ -4065,7 +4046,7 @@ version = "0.3.0"
 dependencies = [
  "clap",
  "fluent",
- "nix 0.30.1",
+ "nix",
  "uucore",
  "windows-sys 0.61.2",
 ]
@@ -4105,7 +4086,7 @@ version = "0.3.0"
 dependencies = [
  "clap",
  "fluent",
- "nix 0.30.1",
+ "nix",
  "uucore",
 ]
 
@@ -4127,7 +4108,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
- "nix 0.30.1",
+ "nix",
  "uucore",
 ]
 
@@ -4192,7 +4173,7 @@ version = "0.3.0"
 dependencies = [
  "clap",
  "fluent",
- "nix 0.30.1",
+ "nix",
  "uucore",
 ]
 
@@ -4279,7 +4260,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "libc",
- "nix 0.30.1",
+ "nix",
  "tempfile",
  "thiserror 2.0.17",
  "unicode-width 0.2.2",
@@ -4312,7 +4293,7 @@ dependencies = [
  "clap",
  "fluent",
  "itertools 0.14.0",
- "nix 0.30.1",
+ "nix",
  "uucore",
 ]
 
@@ -4349,7 +4330,7 @@ dependencies = [
  "libc",
  "md-5",
  "memchr",
- "nix 0.30.1",
+ "nix",
  "num-traits",
  "number_prefix",
  "os_display",
@@ -4398,7 +4379,7 @@ version = "0.3.0"
 dependencies = [
  "ctor",
  "libc",
- "nix 0.30.1",
+ "nix",
  "pretty_assertions",
  "rand 0.9.2",
  "regex",
