@@ -120,11 +120,11 @@ cargo build --release --features windows
 cargo build --release --features unix
 ```
 
-To build SELinux specific features including `chcon` and `runcon`, run
+To build SELinux-specific features, including `chcon` and `runcon`, ensure that `libselinux` 
+and `libclang` are installed on your system. Then, run the following command:
 ```
 cargo build --release --features unix,feat_selinux
 ```
-on the system with `libselinux` and `libclang` installed. 
 
 If you don't want to build every utility available on your platform into the
 final binary, you can also specify which ones you want to build manually. For
