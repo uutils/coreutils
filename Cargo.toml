@@ -339,7 +339,7 @@ jiff = { version = "0.2.10", default-features = false, features = [
 ] }
 libc = "0.2.172"
 linux-raw-sys = "0.11"
-lscolors = { version = "0.20.0", default-features = false, features = [
+lscolors = { version = "0.21.0", default-features = false, features = [
   "gnu_legacy",
 ] }
 memchr = "2.7.2"
