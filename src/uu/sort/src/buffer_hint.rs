@@ -85,7 +85,7 @@ fn desired_file_buffer_bytes(total_bytes: u128) -> u128 {
 fn physical_memory_bytes() -> Option<u128> {
     #[cfg(all(target_family = "unix", not(target_os = "redox")))]
     {
-        return physical_memory_bytes_unix();
+        physical_memory_bytes_unix()
     }
 
     #[cfg(any(not(target_family = "unix"), target_os = "redox"))]
