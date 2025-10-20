@@ -94,9 +94,14 @@ fn physical_memory_bytes() -> Option<u128> {
     }
 }
 
-#[cfg(all(target_family = "unix", not(target_os = "redox"), any(target_os = "linux", target_os = "android")))]
+#[cfg(all(
+    target_family = "unix",
+    not(target_os = "redox"),
+    any(target_os = "linux", target_os = "android")
+))]
 fn physical_memory_bytes_unix() -> Option<u128> {
-    use nix::unistd::{sysconf, SysconfVar};
+    use nix::unistd::{SysconfVar, sysconf};
+
 
     let pages: u128 = sysconf(SysconfVar::_PHYS_PAGES)
         .ok()
