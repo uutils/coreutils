@@ -102,7 +102,6 @@ fn physical_memory_bytes() -> Option<u128> {
 fn physical_memory_bytes_unix() -> Option<u128> {
     use nix::unistd::{SysconfVar, sysconf};
 
-
     let pages: u128 = sysconf(SysconfVar::_PHYS_PAGES)
         .ok()
         .flatten()?
