@@ -136,6 +136,8 @@ cd -
 
 # Pass the feature flags to make, which will pass them to cargo
 "${MAKE}" PROFILE="${UU_MAKE_PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
+# Foece-add SELINUX_PROGS for tests
+"${MAKE}" PROFILE="${UU_MAKE_PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}" UTILS="runcon chcon"
 touch g
 echo "stat with selinux support"
 ./target/debug/stat -c%C g || true
