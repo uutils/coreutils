@@ -5,6 +5,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
+#[cfg(unix)]
 use uucore::display::print_verbatim;
 use uucore::error::{UResult, UUsageError};
 use uucore::format_usage;

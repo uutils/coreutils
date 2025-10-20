@@ -227,16 +227,15 @@ fn test_existing_behavior_preserved() {
 #[test]
 fn test_multiple_paths_comprehensive() {
     // Comprehensive test for multiple paths in single invocation
-    // Tests the loop at line 84 with various edge cases mixed
     new_ucmd!()
         .args(&[
-            "/home/dos/.",   // trailing dot case
-            "/var/log",      // normal path
-            ".",             // current directory
-            "/tmp/.",        // another trailing dot
-            "",              // empty string
-            "/",             // root
-            "relative/path", // relative path
+            "/home/dos/.",
+            "/var/log",
+            ".",
+            "/tmp/.",
+            "",
+            "/",
+            "relative/path",
         ])
         .succeeds()
         .stdout_is("/home/dos\n/var\n.\n/tmp\n.\n/\nrelative\n");
@@ -247,22 +246,17 @@ fn test_all_dot_slash_variations() {
     // Tests for all the cases mentioned in issue #8910 comment
     // https://github.com/uutils/coreutils/issues/8910#issuecomment-3408735720
 
-    // foo//. -> foo
     new_ucmd!().arg("foo//.").succeeds().stdout_is("foo\n");
 
-    // foo///. -> foo
     new_ucmd!().arg("foo///.").succeeds().stdout_is("foo\n");
 
-    // foo/./ -> foo
     new_ucmd!().arg("foo/./").succeeds().stdout_is("foo\n");
 
-    // foo/bar/./ -> foo/bar
     new_ucmd!()
         .arg("foo/bar/./")
         .succeeds()
         .stdout_is("foo/bar\n");
 
-    // foo/./bar -> foo/.
     new_ucmd!().arg("foo/./bar").succeeds().stdout_is("foo/.\n");
 }
 
