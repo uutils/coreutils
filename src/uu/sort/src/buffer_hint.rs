@@ -95,6 +95,7 @@ fn physical_memory_bytes() -> Option<u128> {
 
     #[cfg(any(not(target_family = "unix"), target_os = "redox"))]
     {
+        // No portable or safe API is available here to detect total physical memory.
         None
     }
 }
