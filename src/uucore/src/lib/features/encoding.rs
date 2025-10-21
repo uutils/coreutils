@@ -39,6 +39,14 @@ impl Base64SimdWrapper {
 }
 
 impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
+    fn should_buffer_decoding(&self) -> bool {
+        true
+    }
+
+    fn should_buffer_encoding(&self) -> bool {
+        true
+    }
+
     fn alphabet(&self) -> &'static [u8] {
         self.alphabet
     }
@@ -55,8 +63,8 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
             }
             Err(_) => {
                 // Check if the padding works
-                let decoded_2 = base64_simd::STANDARD.decode_to_vec(input);
-                match decoded_2 {
+                let decoded_with_pad = base64_simd::STANDARD.decode_to_vec(input);
+                match decoded_with_pad {
                     Ok(decoded_bytes_2) => {
                         output.extend_from_slice(&decoded_bytes_2);
                         Ok(())
@@ -184,9 +192,25 @@ pub trait SupportsFastDecodeAndEncode {
     ///
     /// The decoding performed by `fast_decode` depends on this number being correct.
     fn valid_decoding_multiple(&self) -> usize;
+
+    /// Returns whether the encoder should use buffering
+    /// If true, ignore the unpadded_multiple
+    fn should_buffer_encoding(&self) -> bool;
+
+    /// Returns whether the decoder should use buffering
+    /// If true, ignore the valid_decoding_multiple
+    fn should_buffer_decoding(&self) -> bool;
 }
 
 impl SupportsFastDecodeAndEncode for Base58Wrapper {
+    fn should_buffer_decoding(&self) -> bool {
+        true
+    }
+
+    fn should_buffer_encoding(&self) -> bool {
+        false
+    }
+
     fn alphabet(&self) -> &'static [u8] {
         // Base58 alphabet
         b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
@@ -340,6 +364,14 @@ impl SupportsFastDecodeAndEncode for Base58Wrapper {
 }
 
 impl SupportsFastDecodeAndEncode for Z85Wrapper {
+    fn should_buffer_decoding(&self) -> bool {
+        true
+    }
+
+    fn should_buffer_encoding(&self) -> bool {
+        true
+    }
+
     fn alphabet(&self) -> &'static [u8] {
         // Z85 alphabet
         b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#"
@@ -389,6 +421,14 @@ impl SupportsFastDecodeAndEncode for Z85Wrapper {
 }
 
 impl SupportsFastDecodeAndEncode for EncodingWrapper {
+    fn should_buffer_decoding(&self) -> bool {
+        true
+    }
+
+    fn should_buffer_encoding(&self) -> bool {
+        true
+    }
+
     fn alphabet(&self) -> &'static [u8] {
         self.alphabet
     }
