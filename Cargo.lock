@@ -3879,6 +3879,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "indicatif",
  "libc",
  "tempfile",
  "thiserror 2.0.17",
