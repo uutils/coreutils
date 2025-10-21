@@ -88,12 +88,20 @@ fn desired_file_buffer_bytes(total_bytes: u128) -> u128 {
 }
 
 fn physical_memory_bytes() -> Option<u128> {
-    #[cfg(all(target_family = "unix", not(target_os = "redox")))]
+    #[cfg(all(
+        target_family = "unix",
+        not(target_os = "redox"),
+        any(target_os = "linux", target_os = "android")
+    ))]
     {
         physical_memory_bytes_unix()
     }
 
-    #[cfg(any(not(target_family = "unix"), target_os = "redox"))]
+    #[cfg(any(
+        not(target_family = "unix"),
+        target_os = "redox",
+        not(any(target_os = "linux", target_os = "android"))
+    ))]
     {
         // No portable or safe API is available here to detect total physical memory.
         None
@@ -106,31 +114,19 @@ fn physical_memory_bytes() -> Option<u128> {
     any(target_os = "linux", target_os = "android")
 ))]
 fn physical_memory_bytes_unix() -> Option<u128> {
-    use nix::unistd::{SysconfVar, sysconf};
+    use nix::unistd::{sysconf, SysconfVar};
 
-    let pages: u128 = sysconf(SysconfVar::_PHYS_PAGES)
-        .ok()
-        .flatten()?
-        .try_into()
-        .ok()?;
-    let page_size: u128 = sysconf(SysconfVar::PAGE_SIZE)
-        .ok()
-        .flatten()?
-        .try_into()
-        .ok()?;
+    let pages = match sysconf(SysconfVar::_PHYS_PAGES) {
+        Ok(Some(pages)) if pages > 0 => u128::try_from(pages).ok()?,
+        _ => return None,
+    };
+
+    let page_size = match sysconf(SysconfVar::PAGE_SIZE) {
+        Ok(Some(page_size)) if page_size > 0 => u128::try_from(page_size).ok()?,
+        _ => return None,
+    };
+
     Some(pages.saturating_mul(page_size))
-}
-
-#[cfg(all(
-    target_family = "unix",
-    not(target_os = "redox"),
-    not(any(target_os = "linux", target_os = "android"))
-))]
-fn physical_memory_bytes_unix() -> Option<u128> {
-    // SAFETY: `nix` does not expose `_PHYS_PAGES` outside Linux/Android, so we fallback to libc.
-    let pages = unsafe { libc::sysconf(libc::_SC_PHYS_PAGES) };
-    let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
-    (pages > 0 && page_size > 0).then(|| (pages as u128).saturating_mul(page_size as u128))
 }
 
 #[cfg(test)]
