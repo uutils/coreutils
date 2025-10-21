@@ -80,8 +80,7 @@ fn desired_file_buffer_bytes(total_bytes: u128) -> u128 {
     let max = MAX_AUTOMATIC_BUF_SIZE as u128;
 
     if total_bytes <= max {
-        let expanded = total_bytes.saturating_mul(12).clamp(total_bytes, max);
-        return expanded;
+        return total_bytes.saturating_mul(12).clamp(total_bytes, max);
     }
 
     let quarter = total_bytes / 4;
