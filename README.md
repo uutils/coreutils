@@ -1,6 +1,6 @@
 <!-- markdownlint-disable MD033 MD041 MD002 -->
 <!-- markdownlint-disable commands-show-output no-duplicate-heading -->
-<!-- spell-checker:ignore markdownlint ; (options) DESTDIR UTILNAME manpages reimplementation oranda -->
+<!-- spell-checker:ignore markdownlint ; (options) DESTDIR UTILNAME manpages reimplementation oranda libclang -->
 <div class="oranda-hide">
 <div align="center">
 
@@ -118,6 +118,12 @@ cargo build --release --features macos
 cargo build --release --features windows
 # or ...
 cargo build --release --features unix
+```
+
+To build SELinux-specific features, including `chcon` and `runcon`, ensure that `libselinux` 
+and `libclang` are installed on your system. Then, run the following command:
+```
+cargo build --release --features unix,feat_selinux
 ```
 
 If you don't want to build every utility available on your platform into the

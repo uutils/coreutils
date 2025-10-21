@@ -102,7 +102,7 @@ xattr = { workspace = true, optional = true }
 tempfile = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-procfs = "0.18"
+procfs = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi-util = { workspace = true, optional = true }
