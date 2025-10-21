@@ -353,10 +353,10 @@ num-traits = "0.2.19"
 number_prefix = "0.4"
 onig = { version = "~6.5.1", default-features = false }
 parse_datetime = "0.11.0"
-procfs = "0.18"
 phf = "0.13.1"
 phf_codegen = "0.13.1"
 platform-info = "2.0.3"
+procfs = "0.18"
 rand = { version = "0.9.0", features = ["small_rng"] }
 rand_core = "0.9.0"
 rayon = "1.10"
