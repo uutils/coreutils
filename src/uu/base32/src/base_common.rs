@@ -376,9 +376,17 @@ pub mod fast_encode {
         // Based on performance testing
 
         const ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE: usize = 1_024;
-        let encode_in_chunks_of_size =
-            supports_fast_decode_and_encode.unpadded_multiple() * ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
-        assert!(encode_in_chunks_of_size > 0);
+        let mut encode_in_chunks_of_size = 0;
+        if supports_fast_decode_and_encode.should_buffer_encoding() {
+            encode_in_chunks_of_size = supports_fast_decode_and_encode.unpadded_multiple()
+                * ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
+        }
+
+        assert!(
+            (encode_in_chunks_of_size > 0
+                && supports_fast_decode_and_encode.should_buffer_decoding())
+                || !supports_fast_decode_and_encode.should_buffer_encoding()
+        );
 
         // The "data-encoding" crate supports line wrapping, but not arbitrary line wrapping, only certain widths, so
         // line wrapping must be handled here.
@@ -400,51 +408,55 @@ pub mod fast_encode {
 
         // Start of buffers
         // Data that was read from `input` but has not been encoded yet
-        let mut leftover_buffer = VecDeque::<u8>::new();
+        let mut leftover_buffer = Vec::<u8>::new();
         // Encoded data that needs to be written to `output`
         let mut encoded_buffer = VecDeque::<u8>::new();
-        let mut in_reader = BufReader::with_capacity(encode_in_chunks_of_size, input);
         // End of buffers
-        loop {
-            let buf_res = in_reader.fill_buf();
-            if let Ok(buffer) = buf_res {
-                let buffer_len = buffer.len();
-                if buffer.len() < encode_in_chunks_of_size {
-                    leftover_buffer.extend(buffer);
-                    assert!(leftover_buffer.len() < encode_in_chunks_of_size);
-                    break;
-                }
-                assert_eq!(buffer.len(), encode_in_chunks_of_size);
-                encode_in_chunks_to_buffer(
-                    supports_fast_decode_and_encode,
-                    buffer,
-                    &mut encoded_buffer,
-                )?;
-                // Write all data in `encoded_buffer` to `output`
-                write_to_output(
-                    &mut line_wrapping,
-                    &mut encoded_buffer,
-                    output,
-                    false,
-                    wrap == Some(0),
-                )?;
-                in_reader.consume(buffer_len);
-            } else if let Err(err) = buf_res {
-                let kind = err.kind();
+        if supports_fast_decode_and_encode.should_buffer_encoding() {
+            let mut in_reader = BufReader::with_capacity(encode_in_chunks_of_size, input);
+            loop {
+                let buf_res = in_reader.fill_buf();
+                if let Ok(buffer) = buf_res {
+                    let buffer_len = buffer.len();
+                    if buffer.len() < encode_in_chunks_of_size {
+                        leftover_buffer.extend(buffer);
+                        assert!(leftover_buffer.len() < encode_in_chunks_of_size);
+                        break;
+                    }
+                    assert_eq!(buffer.len(), encode_in_chunks_of_size);
+                    encode_in_chunks_to_buffer(
+                        supports_fast_decode_and_encode,
+                        buffer,
+                        &mut encoded_buffer,
+                    )?;
+                    // Write all data in `encoded_buffer` to `output`
+                    write_to_output(
+                        &mut line_wrapping,
+                        &mut encoded_buffer,
+                        output,
+                        false,
+                        wrap == Some(0),
+                    )?;
+                    in_reader.consume(buffer_len);
+                } else if let Err(err) = buf_res {
+                    let kind = err.kind();
 
-                if kind == ErrorKind::Interrupted {
-                    // Retry reading
-                    continue;
-                }
+                    if kind == ErrorKind::Interrupted {
+                        // Retry reading
+                        continue;
+                    }
 
-                return Err(USimpleError::new(1, format_read_error(kind)));
+                    return Err(USimpleError::new(1, format_read_error(kind)));
+                }
             }
+        } else {
+            input.read_to_end(&mut leftover_buffer).unwrap();
         }
         // Cleanup
         // `input` has finished producing data, so the data remaining in the buffers needs to be encoded and printed
         // Encode all remaining unencoded bytes, placing them in `encoded_buffer`
         supports_fast_decode_and_encode
-            .encode_to_vec_deque(leftover_buffer.make_contiguous(), &mut encoded_buffer)?;
+            .encode_to_vec_deque(&leftover_buffer, &mut encoded_buffer)?;
         // Write all data in `encoded_buffer` to output
         // `is_cleanup` triggers special cleanup-only logic
         write_to_output(
@@ -538,10 +550,29 @@ pub mod fast_decode {
     ) -> UResult<()> {
         const DECODE_IN_CHUNKS_OF_SIZE_MULTIPLE: usize = 1_024;
         let alphabet = supports_fast_decode_and_encode.alphabet();
-        let decode_in_chunks_of_size = supports_fast_decode_and_encode.valid_decoding_multiple()
-            * DECODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
-        assert!(decode_in_chunks_of_size > 0);
-        assert!(valid_multiple > 0);
+        let mut decode_in_chunks_of_size = 0;
+        if supports_fast_decode_and_encode.should_buffer_decoding() {
+            decode_in_chunks_of_size = supports_fast_decode_and_encode.valid_decoding_multiple()
+                * DECODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
+        }
+
+        assert!(
+            (decode_in_chunks_of_size > 0
+                && supports_fast_decode_and_encode.should_buffer_decoding())
+                || !supports_fast_decode_and_encode.should_buffer_decoding()
+        );
+
+        // Note that it's not worth using "data-encoding"'s ignore functionality if `ignore_garbage` is true, because
+        // "data-encoding"'s ignore functionality cannot discard non-ASCII bytes. The data has to be filtered before
+        // passing it to "data-encoding", so there is no point in doing any filtering in "data-encoding". This also
+        // allows execution to stay on the happy path in "data-encoding":
+        // https://github.com/ia0/data-encoding/blob/4f42ad7ef242f6d243e4de90cd1b46a57690d00e/lib/src/lib.rs#L754-L756
+        // It is also not worth using "data-encoding"'s ignore functionality when `ignore_garbage` is
+        // false.
+        // Note that the alphabet constants above already include the padding characters
+        // TODO
+        // Precompute this
+        let table = alphabet_to_table(alphabet, ignore_garbage);
 
         // Start of buffers
 
@@ -552,58 +583,64 @@ pub mod fast_decode {
             Vec::with_capacity(decode_in_chunks_of_size),
         ];
         let mut current_buffer_index = 0usize;
-        let mut in_reader = BufReader::with_capacity(decode_in_chunks_of_size, input);
-        // End of buffers
-        loop {
-            while buffers[current_buffer_index].len() < decode_in_chunks_of_size {
-                let read_res = in_reader.fill_buf();
-                if let Ok(read_buffer) = read_res {
-                    let read_size = read_buffer.len();
-                    if read_size == 0 {
-                        break;
-                    }
-                    // Filter and fill the valid buffer. When it is filled, we
-                    // switch buffer to avoid reading again.
-                    read_buffer
-                        .iter()
-                        .filter(|ch| table[usize::from(**ch)])
-                        .for_each(|ch| {
-                            if buffers[current_buffer_index].len() < decode_in_chunks_of_size {
-                                buffers[current_buffer_index].push(*ch);
-                            } else {
-                                buffers[(current_buffer_index + 1) % buffers.len()].push(*ch);
-                            }
-                        });
-                    in_reader.consume(read_size);
-                } else if let Err(err) = read_res {
-                    let kind = err.kind();
+        if supports_fast_decode_and_encode.should_buffer_decoding() {
+            let mut in_reader = BufReader::with_capacity(decode_in_chunks_of_size, input);
+            // End of buffers
+            loop {
+                while buffers[current_buffer_index].len() < decode_in_chunks_of_size {
+                    let read_res = in_reader.fill_buf();
+                    if let Ok(read_buffer) = read_res {
+                        let read_size = read_buffer.len();
+                        if read_size == 0 {
+                            break;
+                        }
+                        // Filter and fill the valid buffer. When it is filled, we
+                        // switch buffer to avoid reading again.
+                        read_buffer
+                            .iter()
+                            .filter(|ch| table[usize::from(**ch)])
+                            .for_each(|ch| {
+                                if buffers[current_buffer_index].len() < decode_in_chunks_of_size {
+                                    buffers[current_buffer_index].push(*ch);
+                                } else {
+                                    buffers[(current_buffer_index + 1) % buffers.len()].push(*ch);
+                                }
+                            });
+                        in_reader.consume(read_size);
+                    } else if let Err(err) = read_res {
+                        let kind = err.kind();
 
-                    if kind == ErrorKind::Interrupted {
-                        // Retry reading
-                        continue;
-                    }
+                        if kind == ErrorKind::Interrupted {
+                            // Retry reading
+                            continue;
+                        }
 
-                    return Err(USimpleError::new(1, format_read_error(kind)));
+                        return Err(USimpleError::new(1, format_read_error(kind)));
+                    }
                 }
-            }
-            if buffers[current_buffer_index].len() < decode_in_chunks_of_size {
-                break;
-            }
-            assert_eq!(
-                buffers[current_buffer_index].len(),
-                decode_in_chunks_of_size
-            );
-            // Decode data in chunks, then place it in `decoded_buffer`
-            decode_in_chunks_to_buffer(
-                supports_fast_decode_and_encode,
-                &buffers[current_buffer_index],
-                &mut decoded_buffer,
-            )?;
-            // Write all data in `decoded_buffer` to `output`
-            write_to_output(&mut decoded_buffer, output)?;
+                if buffers[current_buffer_index].len() < decode_in_chunks_of_size {
+                    break;
+                }
+                assert_eq!(
+                    buffers[current_buffer_index].len(),
+                    decode_in_chunks_of_size
+                );
+                // Decode data in chunks, then place it in `decoded_buffer`
+                decode_in_chunks_to_buffer(
+                    supports_fast_decode_and_encode,
+                    &buffers[current_buffer_index],
+                    &mut decoded_buffer,
+                )?;
+                // Write all data in `decoded_buffer` to `output`
+                write_to_output(&mut decoded_buffer, output)?;
 
-            buffers[current_buffer_index].clear();
-            current_buffer_index = (current_buffer_index + 1) % buffers.len();
+                buffers[current_buffer_index].clear();
+                current_buffer_index = (current_buffer_index + 1) % buffers.len();
+            }
+        } else {
+            input
+                .read_to_end(&mut buffers[current_buffer_index])
+                .unwrap();
         }
         // Cleanup
         // `input` has finished producing data, so the data remaining in the buffers needs to be decoded and printed
