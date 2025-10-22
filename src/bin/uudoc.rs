@@ -78,7 +78,11 @@ fn gen_manpage<T: Args>(args: impl Iterator<Item = OsString>, util_map: &Utility
         gen_coreutils_app(util_map)
     } else {
         validation::setup_localization_or_exit(utility);
-        util_map.get(utility).unwrap().1()
+        let mut cmd = util_map.get(utility).unwrap().1();
+        if let Ok(examples) = get_zip_examples(utility) {
+            cmd = cmd.after_help(examples);
+        }
+        cmd
     };
 
     let man = Man::new(command);
@@ -547,4 +551,65 @@ fn get_zip_content(archive: &mut ZipArchive<impl Read + Seek>, name: &str) -> Op
     let mut s = String::new();
     archive.by_name(name).ok()?.read_to_string(&mut s).unwrap();
     Some(s)
+}
+
+/// # Errors
+/// Returns an error if the tldr.zip file cannot be opened or read
+fn get_zip_examples(name: &str) -> io::Result<String> {
+    fn get_zip_content(archive: &mut ZipArchive<impl Read + Seek>, name: &str) -> Option<String> {
+        let mut s = String::new();
+        archive.by_name(name).ok()?.read_to_string(&mut s).unwrap();
+        Some(s)
+    }
+
+    let mut w = io::BufWriter::new(Vec::new());
+    let file = File::open("docs/tldr.zip")?;
+    let mut tldr_zip = match ZipArchive::new(file) {
+        Ok(zip) => zip,
+        Err(e) => {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Error reading tldr.zip: {}", e),
+            ));
+        }
+    };
+
+    let content = if let Some(f) =
+        get_zip_content(&mut tldr_zip, &format!("pages/common/{}.md", name))
+    {
+        f
+    } else if let Some(f) = get_zip_content(&mut tldr_zip, &format!("pages/linux/{}.md", name)) {
+        f
+    } else {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "Could not find tldr examples",
+        ));
+    };
+
+    writeln!(w, "Examples")?;
+    writeln!(w)?;
+    for line in content.lines().skip_while(|l| !l.starts_with('-')) {
+        if let Some(l) = line.strip_prefix("- ") {
+            writeln!(w, "{l}")?;
+        } else if line.starts_with('`') {
+            writeln!(w, "{}", line.trim_matches('`'))?;
+        } else if line.is_empty() {
+            writeln!(w)?;
+        } else {
+            // println!("Not sure what to do with this line:");
+            // println!("{line}");
+        }
+    }
+    writeln!(w)?;
+    writeln!(
+        w,
+        "> The examples are provided by the [tldr-pages project](https://tldr.sh) under the [CC BY 4.0 License](https://github.com/tldr-pages/tldr/blob/main/LICENSE.md)."
+    )?;
+    writeln!(w, "\n\n\n")?;
+    writeln!(
+        w,
+        "> Please note that, as uutils is a work in progress, some examples might fail."
+    )?;
+    Ok(String::from_utf8(w.into_inner().unwrap()).unwrap())
 }
