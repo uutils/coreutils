@@ -19,9 +19,12 @@ fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     println!("Usage: {name} [function [arguments...]]");
     println!("       {name} --list");
     println!();
-    println!("Functions:");
-    println!("      '<uutils>' [arguments...]");
-    println!();
+    #[cfg(feature = "feat_common_core")]
+    {
+        println!("Functions:");
+        println!("      '<uutils>' [arguments...]");
+        println!();
+    }
     println!("Options:");
     println!("      --list    lists all defined functions, one per row\n");
     println!("Currently defined functions:\n");

@@ -553,7 +553,14 @@ fn get_zip_content(archive: &mut ZipArchive<impl Read + Seek>, name: &str) -> Op
     Some(s)
 }
 
+/// Extract examples for tldr.zip. The file docs/tldr.zip must exists
+///
+/// ```sh
+/// curl https://tldr.sh/assets/tldr.zip -o docs/tldr.zip
+/// ```
+///
 /// # Errors
+///
 /// Returns an error if the tldr.zip file cannot be opened or read
 fn get_zip_examples(name: &str) -> io::Result<String> {
     fn get_zip_content(archive: &mut ZipArchive<impl Read + Seek>, name: &str) -> Option<String> {
