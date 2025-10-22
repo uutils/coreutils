@@ -1019,7 +1019,7 @@ fn test_install_creating_leading_dir_fails_on_long_name() {
 }
 
 #[test]
-#[cfg(not(windows))]
+#[cfg(unix)]
 fn test_install_directory_deep_path_succeeds() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
