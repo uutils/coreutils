@@ -25,6 +25,45 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_version_no_path() {
+    use std::process::Command;
+    use uutests::get_tests_binary;
+
+    // This test verifies that when an individual utility binary is invoked with its full path,
+    // the version output shows just "mkdir", not the full path like "/path/to/mkdir".
+    //
+    // Note: The multicall binary (coreutils) doesn't have this issue because it reads
+    // the utility name from ARGV[1], not ARGV[0]. This bug only affects individual binaries.
+
+    let tests_binary = get_tests_binary!();
+    let mkdir_binary_path = std::path::Path::new(tests_binary)
+        .parent()
+        .unwrap()
+        .join("mkdir");
+
+    // If the individual mkdir binary exists, test it
+    if mkdir_binary_path.exists() {
+        // Invoke the individual mkdir binary with its full path
+        let output = Command::new(&mkdir_binary_path)
+            .arg("--version")
+            .output()
+            .expect("Failed to execute mkdir binary");
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.starts_with("mkdir (uutils coreutils)"));
+    } else {
+        // If only multicall binary exists, test that (it should already pass)
+        let output = Command::new(tests_binary)
+            .args(["mkdir", "--version"])
+            .output()
+            .expect("Failed to execute mkdir via multicall binary");
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.starts_with("mkdir (uutils coreutils)"));
+    }
+}
+
+#[test]
 fn test_no_arg() {
     new_ucmd!()
         .fails_with_code(1)
