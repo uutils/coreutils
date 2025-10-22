@@ -1804,6 +1804,7 @@ impl PathData {
             dir_entry
                 .as_ref()
                 .map(|inner| inner.file_name())
+                .or_else(|| p_buf.file_name().map(|inner| inner.to_os_string()))
                 .unwrap_or_default()
         };
 
@@ -3293,8 +3294,8 @@ fn display_item_name(
                     // This is because relative symlinks will fail to get_metadata.
                     let mut absolute_target = target_path.clone();
                     if target_path.is_relative() {
-                        if let Some(parent) = path.path().parent() {
-                            absolute_target = parent.join(absolute_target);
+                        if let Ok(canonical) = path.path().canonicalize() {
+                            absolute_target = canonical;
                         }
                     }
 
