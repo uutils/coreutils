@@ -576,16 +576,16 @@ fn get_zip_examples(name: &str) -> io::Result<String> {
         Err(e) => {
             return Err(io::Error::new(
                 io::ErrorKind::NotFound,
-                format!("Error reading tldr.zip: {}", e),
+                format!("Error reading tldr.zip: {e}"),
             ));
         }
     };
 
     let content = if let Some(f) =
-        get_zip_content(&mut tldr_zip, &format!("pages/common/{}.md", name))
+        get_zip_content(&mut tldr_zip, &format!("pages/common/{name}.md"))
     {
         f
-    } else if let Some(f) = get_zip_content(&mut tldr_zip, &format!("pages/linux/{}.md", name)) {
+    } else if let Some(f) = get_zip_content(&mut tldr_zip, &format!("pages/linux/{name}.md")) {
         f
     } else {
         return Err(io::Error::new(
@@ -613,7 +613,7 @@ fn get_zip_examples(name: &str) -> io::Result<String> {
         w,
         "> The examples are provided by the [tldr-pages project](https://tldr.sh) under the [CC BY 4.0 License](https://github.com/tldr-pages/tldr/blob/main/LICENSE.md)."
     )?;
-    writeln!(w, "\n\n\n")?;
+    write!(w, "\n")?;
     writeln!(
         w,
         "> Please note that, as uutils is a work in progress, some examples might fail."
