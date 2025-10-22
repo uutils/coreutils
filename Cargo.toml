@@ -21,7 +21,7 @@ edition.workspace = true
 all-features = true
 
 [features]
-default = ["feat_common_core", "coreutils"]
+default = ["feat_common_core"]
 ## OS feature shortcodes
 macos = ["feat_os_macos"]
 unix = ["feat_os_unix"]
@@ -582,7 +582,6 @@ phf_codegen.workspace = true
 [[bin]]
 name = "coreutils"
 path = "src/bin/coreutils.rs"
-required-features = ["coreutils"]
 
 [[bin]]
 name = "uudoc"

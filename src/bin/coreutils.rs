@@ -5,22 +5,12 @@
 
 use std::cmp;
 use std::ffi::OsString;
-use std::fs::File;
-use std::io::Read;
-use std::io::Seek;
 use std::io::{self, Write};
 use std::process;
-use uucore::display::Quotable;
-use zip::ZipArchive;
-
 use clap::Command;
-
 use coreutils::validation;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-const COMPLETION: &str = "completion";
-const MANPAGE: &str = "manpage";
 
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
@@ -30,10 +20,6 @@ fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     println!("       {name} --list");
     println!();
     println!("Functions:");
-    println!("      {COMPLETION}",);
-    println!("           {}", get_completion_args(utils).render_usage());
-    println!("      '{MANPAGE}'",);
-    println!("           {}", get_manpage_args(utils).render_usage());
     println!("      '<uutils>' [arguments...]");
     println!();
     println!("Options:");
