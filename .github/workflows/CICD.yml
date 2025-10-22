@@ -1241,8 +1241,8 @@ jobs:
         CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ;
         for f in $(util/show-utils.sh ${CARGO_FEATURES_OPTION})
         do
-          echo "Running tests with --features="$f coreutils" --no-default-features"
-          cargo test --features="$f coreutils" --no-default-features
+          echo "Running tests with --features="$f" --no-default-features"
+          cargo test --features="$f" --no-default-features
         done
 
   test_selinux:
