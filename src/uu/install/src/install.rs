@@ -12,6 +12,7 @@ use file_diff::diff;
 use filetime::{FileTime, set_file_times};
 #[cfg(feature = "selinux")]
 use selinux::SecurityContext;
+use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fmt::Debug;
 use std::fs::File;
@@ -39,7 +40,7 @@ use uucore::{format_usage, show, show_error, show_if_err};
 
 #[cfg(unix)]
 use std::os::{
-    fd::BorrowedFd,
+    fd::{AsFd, BorrowedFd},
     unix::{
         fs::{FileTypeExt, MetadataExt},
         io::OwnedFd,
@@ -535,7 +536,7 @@ fn create_dir_all_for_install(path: &Path) -> io::Result<()> {
     }
 
     let mut components = path.components().peekable();
-    let mut dirfds: Vec<OwnedFd> = Vec::new();
+    let mut current_fd: Option<OwnedFd> = None;
 
     if path.is_absolute() {
         let fd = open(
@@ -544,7 +545,7 @@ fn create_dir_all_for_install(path: &Path) -> io::Result<()> {
             Mode::empty(),
         )
         .map_err(errno_to_io)?;
-        dirfds.push(fd);
+        current_fd = Some(fd);
         while let Some(Component::RootDir) = components.peek() {
             components.next();
         }
@@ -554,43 +555,39 @@ fn create_dir_all_for_install(path: &Path) -> io::Result<()> {
         match component {
             Component::CurDir => {}
             Component::ParentDir => {
-                dirfds.pop();
+                if let Some(fd) = current_fd.take() {
+                    let parent_fd = openat(
+                        fd.as_fd(),
+                        OsStr::new(".."),
+                        OFlag::O_DIRECTORY | OFlag::O_RDONLY | OFlag::O_CLOEXEC,
+                        Mode::empty(),
+                    )
+                    .map_err(errno_to_io)?;
+                    current_fd = Some(parent_fd);
+                }
             }
             Component::Normal(name) => {
                 let mode = Mode::from_bits_truncate(0o777);
 
-                let mkdir_result = if let Some(parent_fd) = dirfds.last() {
-                    mkdirat(parent_fd, name, mode)
-                } else {
-                    unsafe { mkdirat(BorrowedFd::borrow_raw(uucore::libc::AT_FDCWD), name, mode) }
-                };
+                let base_fd = current_fd
+                    .as_ref()
+                    .map(|fd| fd.as_fd())
+                    .unwrap_or_else(|| unsafe { BorrowedFd::borrow_raw(uucore::libc::AT_FDCWD) });
 
-                if let Err(err) = mkdir_result {
+                if let Err(err) = mkdirat(base_fd, name, mode) {
                     if err != Errno::EEXIST {
                         return Err(errno_to_io(err));
                     }
                 }
 
-                let open_result = if let Some(parent_fd) = dirfds.last() {
-                    openat(
-                        parent_fd,
-                        name,
-                        OFlag::O_DIRECTORY | OFlag::O_RDONLY | OFlag::O_CLOEXEC,
-                        Mode::empty(),
-                    )
-                } else {
-                    unsafe {
-                        openat(
-                            BorrowedFd::borrow_raw(uucore::libc::AT_FDCWD),
-                            name,
-                            OFlag::O_DIRECTORY | OFlag::O_RDONLY | OFlag::O_CLOEXEC,
-                            Mode::empty(),
-                        )
-                    }
-                };
-
+                let open_result = openat(
+                    base_fd,
+                    name,
+                    OFlag::O_DIRECTORY | OFlag::O_RDONLY | OFlag::O_CLOEXEC,
+                    Mode::empty(),
+                );
                 let new_fd = open_result.map_err(errno_to_io)?;
-                dirfds.push(new_fd);
+                current_fd = Some(new_fd);
             }
             Component::RootDir | Component::Prefix(_) => {}
         }
