@@ -15,6 +15,7 @@ use std::path::Path;
 use std::process::Command;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
+use uucore::libc;
 use uucore::process::{getegid, geteuid};
 #[cfg(feature = "feat_selinux")]
 use uucore::selinux::get_getfattr_output;
@@ -1035,7 +1036,8 @@ fn test_install_directory_deep_path_succeeds() {
 
     assert!(
         Path::new(&deep_abs_path).exists(),
-        "expected directory `{deep_abs_path}` to exist"
+        "expected directory `{}` to exist",
+        deep_abs_path.display()
     );
 }
 

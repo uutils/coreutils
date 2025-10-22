@@ -38,11 +38,14 @@ use uucore::translate;
 use uucore::{format_usage, show, show_error, show_if_err};
 
 #[cfg(unix)]
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
-#[cfg(unix)]
-use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd};
-#[cfg(unix)]
-use std::os::unix::prelude::OsStrExt;
+use std::os::{
+    fd::BorrowedFd,
+    unix::{
+        fs::{FileTypeExt, MetadataExt},
+        io::OwnedFd,
+        prelude::OsStrExt,
+    },
+};
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
@@ -522,25 +525,17 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
 
 #[cfg(unix)]
 fn create_dir_all_for_install(path: &Path) -> io::Result<()> {
-    use libc::AT_FDCWD;
     use nix::errno::Errno;
     use nix::fcntl::{OFlag, open, openat};
-    use nix::sys::stat::Mode;
-    use nix::unistd::mkdirat;
-    use std::ffi::CString;
-    use std::os::unix::ffi::OsStrExt;
+    use nix::sys::stat::{Mode, mkdirat};
     use std::path::Component;
 
-    fn nix_err_to_io(err: nix::Error) -> io::Error {
-        match err.as_errno() {
-            Some(errno) => io::Error::from_raw_os_error(errno as i32),
-            None => io::Error::new(io::ErrorKind::Other, err.to_string()),
-        }
+    fn errno_to_io(err: Errno) -> io::Error {
+        io::Error::from_raw_os_error(err as i32)
     }
 
     let mut components = path.components().peekable();
     let mut dirfds: Vec<OwnedFd> = Vec::new();
-    let mut current_fd = AT_FDCWD;
 
     if path.is_absolute() {
         let fd = open(
@@ -548,9 +543,8 @@ fn create_dir_all_for_install(path: &Path) -> io::Result<()> {
             OFlag::O_DIRECTORY | OFlag::O_RDONLY | OFlag::O_CLOEXEC,
             Mode::empty(),
         )
-        .map_err(nix_err_to_io)?;
-        dirfds.push(unsafe { OwnedFd::from_raw_fd(fd) });
-        current_fd = dirfds.last().unwrap().as_raw_fd();
+        .map_err(errno_to_io)?;
+        dirfds.push(fd);
         while let Some(Component::RootDir) = components.peek() {
             components.next();
         }
@@ -561,34 +555,42 @@ fn create_dir_all_for_install(path: &Path) -> io::Result<()> {
             Component::CurDir => {}
             Component::ParentDir => {
                 dirfds.pop();
-                current_fd = dirfds.last().map(|fd| fd.as_raw_fd()).unwrap_or(AT_FDCWD);
             }
             Component::Normal(name) => {
-                let c_name = CString::new(name.as_bytes()).map_err(|_| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "path component contains NUL byte",
-                    )
-                })?;
+                let mode = Mode::from_bits_truncate(0o777);
 
-                match mkdirat(current_fd, &c_name, Mode::from_bits_truncate(0o777)) {
-                    Ok(()) => {}
-                    Err(err) => {
-                        if err != Errno::EEXIST {
-                            return Err(nix_err_to_io(err));
-                        }
+                let mkdir_result = if let Some(parent_fd) = dirfds.last() {
+                    mkdirat(parent_fd, name, mode)
+                } else {
+                    unsafe { mkdirat(BorrowedFd::borrow_raw(uucore::libc::AT_FDCWD), name, mode) }
+                };
+
+                if let Err(err) = mkdir_result {
+                    if err != Errno::EEXIST {
+                        return Err(errno_to_io(err));
                     }
                 }
 
-                let new_fd = openat(
-                    current_fd,
-                    &c_name,
-                    OFlag::O_DIRECTORY | OFlag::O_RDONLY | OFlag::O_CLOEXEC,
-                    Mode::empty(),
-                )
-                .map_err(nix_err_to_io)?;
-                dirfds.push(unsafe { OwnedFd::from_raw_fd(new_fd) });
-                current_fd = dirfds.last().unwrap().as_raw_fd();
+                let open_result = if let Some(parent_fd) = dirfds.last() {
+                    openat(
+                        parent_fd,
+                        name,
+                        OFlag::O_DIRECTORY | OFlag::O_RDONLY | OFlag::O_CLOEXEC,
+                        Mode::empty(),
+                    )
+                } else {
+                    unsafe {
+                        openat(
+                            BorrowedFd::borrow_raw(uucore::libc::AT_FDCWD),
+                            name,
+                            OFlag::O_DIRECTORY | OFlag::O_RDONLY | OFlag::O_CLOEXEC,
+                            Mode::empty(),
+                        )
+                    }
+                };
+
+                let new_fd = open_result.map_err(errno_to_io)?;
+                dirfds.push(new_fd);
             }
             Component::RootDir | Component::Prefix(_) => {}
         }
