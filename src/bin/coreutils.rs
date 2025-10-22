@@ -3,12 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use clap::Command;
+use coreutils::validation;
 use std::cmp;
 use std::ffi::OsString;
 use std::io::{self, Write};
 use std::process;
-use clap::Command;
-use coreutils::validation;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
