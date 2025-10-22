@@ -8,7 +8,7 @@
 //! filesystem mounted at a particular directory. It also includes
 //! information on amount of space available and amount of space used.
 // spell-checker:ignore canonicalized
-use std::path::Path;
+use std::{ffi::OsString, path::Path};
 
 #[cfg(unix)]
 use uucore::fsext::statfs;
@@ -28,7 +28,7 @@ pub(crate) struct Filesystem {
     /// When invoking `df` with a positional argument, it displays
     /// usage information for the filesystem that contains the given
     /// file. If given, this field contains that filename.
-    pub file: Option<String>,
+    pub file: Option<OsString>,
 
     /// Information about the mounted device, mount directory, and related options.
     pub mount_info: MountInfo,
@@ -48,13 +48,10 @@ pub(crate) enum FsError {
 /// Check whether `mount` has been over-mounted.
 ///
 /// `mount` is considered over-mounted if it there is an element in
-/// `mounts` after mount that has the same mount_dir.
+/// `mounts` after mount that has the same `mount_dir`.
 #[cfg(not(windows))]
 fn is_over_mounted(mounts: &[MountInfo], mount: &MountInfo) -> bool {
-    let last_mount_for_dir = mounts
-        .iter()
-        .filter(|m| m.mount_dir == mount.mount_dir)
-        .next_back();
+    let last_mount_for_dir = mounts.iter().rfind(|m| m.mount_dir == mount.mount_dir);
 
     if let Some(lmi) = last_mount_for_dir {
         lmi.dev_name != mount.dev_name
@@ -123,22 +120,22 @@ where
 
 impl Filesystem {
     // TODO: resolve uuid in `mount_info.dev_name` if exists
-    pub(crate) fn new(mount_info: MountInfo, file: Option<String>) -> Option<Self> {
+    pub(crate) fn new(mount_info: MountInfo, file: Option<OsString>) -> Option<Self> {
         let _stat_path = if mount_info.mount_dir.is_empty() {
             #[cfg(unix)]
             {
-                mount_info.dev_name.clone()
+                mount_info.dev_name.clone().into()
             }
             #[cfg(windows)]
             {
                 // On windows, we expect the volume id
-                mount_info.dev_id.clone()
+                mount_info.dev_id.clone().into()
             }
         } else {
             mount_info.mount_dir.clone()
         };
         #[cfg(unix)]
-        let usage = FsUsage::new(statfs(_stat_path).ok()?);
+        let usage = FsUsage::new(statfs(&_stat_path).ok()?);
         #[cfg(windows)]
         let usage = FsUsage::new(Path::new(&_stat_path)).ok()?;
         Some(Self {
@@ -154,7 +151,7 @@ impl Filesystem {
     pub(crate) fn from_mount(
         mounts: &[MountInfo],
         mount: &MountInfo,
-        file: Option<String>,
+        file: Option<OsString>,
     ) -> Result<Self, FsError> {
         if is_over_mounted(mounts, mount) {
             Err(FsError::OverMounted)
@@ -165,7 +162,7 @@ impl Filesystem {
 
     /// Find and create the filesystem from the given mount.
     #[cfg(windows)]
-    pub(crate) fn from_mount(mount: &MountInfo, file: Option<String>) -> Result<Self, FsError> {
+    pub(crate) fn from_mount(mount: &MountInfo, file: Option<OsString>) -> Result<Self, FsError> {
         Self::new(mount.clone(), file).ok_or(FsError::MountMissing)
     }
 
@@ -189,7 +186,7 @@ impl Filesystem {
     where
         P: AsRef<Path>,
     {
-        let file = path.as_ref().display().to_string();
+        let file = path.as_ref().as_os_str().to_owned();
         let canonicalize = true;
 
         let result = mount_info_from_path(mounts, path, canonicalize);
@@ -205,25 +202,27 @@ mod tests {
 
     mod mount_info_from_path {
 
+        use std::ffi::OsString;
+
         use uucore::fsext::MountInfo;
 
         use crate::filesystem::{FsError, mount_info_from_path};
 
-        // Create a fake `MountInfo` with the given directory name.
+        /// Create a fake `MountInfo` with the given directory name.
         fn mount_info(mount_dir: &str) -> MountInfo {
             MountInfo {
                 dev_id: String::default(),
                 dev_name: String::default(),
                 fs_type: String::default(),
-                mount_dir: String::from(mount_dir),
+                mount_dir: OsString::from(mount_dir),
                 mount_option: String::default(),
-                mount_root: String::default(),
+                mount_root: OsString::default(),
                 remote: Default::default(),
                 dummy: Default::default(),
             }
         }
 
-        // Check whether two `MountInfo` instances are equal.
+        /// Check whether two `MountInfo` instances are equal.
         fn mount_info_eq(m1: &MountInfo, m2: &MountInfo) -> bool {
             m1.dev_id == m2.dev_id
                 && m1.dev_name == m2.dev_name
@@ -312,6 +311,8 @@ mod tests {
 
     #[cfg(not(windows))]
     mod over_mount {
+        use std::ffi::OsString;
+
         use crate::filesystem::{Filesystem, FsError, is_over_mounted};
         use uucore::fsext::MountInfo;
 
@@ -320,9 +321,9 @@ mod tests {
                 dev_id: String::default(),
                 dev_name: dev_name.map(String::from).unwrap_or_default(),
                 fs_type: String::default(),
-                mount_dir: String::from(mount_dir),
+                mount_dir: OsString::from(mount_dir),
                 mount_option: String::default(),
-                mount_root: String::default(),
+                mount_root: OsString::default(),
                 remote: Default::default(),
                 dummy: Default::default(),
             }

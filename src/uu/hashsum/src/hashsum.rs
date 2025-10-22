@@ -26,17 +26,19 @@ use uucore::checksum::digest_reader;
 use uucore::checksum::escape_filename;
 use uucore::checksum::perform_checksum_validation;
 use uucore::error::{FromIo, UResult};
+use uucore::format_usage;
 use uucore::sum::{Digest, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::translate;
 
 const NAME: &str = "hashsum";
-const ABOUT: &str = help_about!("hashsum.md");
-const USAGE: &str = help_usage!("hashsum.md");
+// Using the same read buffer size as GNU
+const READ_BUFFER_SIZE: usize = 32 * 1024;
 
-struct Options {
+struct Options<'a> {
     algoname: &'static str,
     digest: Box<dyn Digest + 'static>,
     binary: bool,
+    binary_name: &'a str,
     //check: bool,
     tag: bool,
     nonames: bool,
@@ -57,7 +59,7 @@ struct Options {
 ///
 /// # Returns
 ///
-/// Returns a UResult of a tuple containing the algorithm name, the hasher instance, and
+/// Returns a [`UResult`] of a tuple containing the algorithm name, the hasher instance, and
 /// the output length in bits or an Err if multiple hash algorithms are specified or if a
 /// required flag is missing.
 #[allow(clippy::cognitive_complexity)]
@@ -97,8 +99,10 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
         set_or_err(detect_algo("b3sum", None)?)?;
     }
     if matches.get_flag("sha3") {
-        let bits = matches.get_one::<usize>("bits").copied();
-        set_or_err(create_sha3(bits)?)?;
+        match matches.get_one::<usize>("bits") {
+            Some(bits) => set_or_err(create_sha3(*bits)?)?,
+            None => return Err(ChecksumError::BitsRequiredForSha3.into()),
+        }
     }
     if matches.get_flag("sha3-224") {
         set_or_err(HashAlgorithm {
@@ -136,7 +140,7 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
                 bits: *bits,
             })?,
             None => return Err(ChecksumError::BitsRequiredForShake128.into()),
-        };
+        }
     }
     if matches.get_flag("shake256") {
         match matches.get_one::<usize>("bits") {
@@ -146,7 +150,7 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
                 bits: *bits,
             })?,
             None => return Err(ChecksumError::BitsRequiredForShake256.into()),
-        };
+        }
     }
 
     if alg.is_none() {
@@ -181,7 +185,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     //        causes "error: " to be printed twice (once from crash!() and once from clap).  With
     //        the current setup, the name of the utility is not printed, but I think this is at
     //        least somewhat better from a user's perspective.
-    let matches = command.try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(command, args)?;
 
     let input_length: Option<&usize> = if binary_name == "b2sum" {
         matches.get_one::<usize>(options::LENGTH)
@@ -274,6 +278,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         digest: (algo.create_fn)(),
         output_bits: algo.bits,
         binary,
+        binary_name: &binary_name,
         tag: matches.get_flag("tag"),
         nonames,
         //status,
@@ -308,39 +313,41 @@ mod options {
 }
 
 pub fn uu_app_common() -> Command {
-    #[cfg(windows)]
-    const BINARY_HELP: &str = "read or check in binary mode (default)";
-    #[cfg(not(windows))]
-    const BINARY_HELP: &str = "read in binary mode";
-    #[cfg(windows)]
-    const TEXT_HELP: &str = "read or check in text mode";
-    #[cfg(not(windows))]
-    const TEXT_HELP: &str = "read in text mode (default)";
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("hashsum-about"))
+        .override_usage(format_usage(&translate!("hashsum-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
             Arg::new(options::BINARY)
                 .short('b')
                 .long("binary")
-                .help(BINARY_HELP)
+                .help({
+                    #[cfg(windows)]
+                    {
+                        translate!("hashsum-help-binary-windows")
+                    }
+                    #[cfg(not(windows))]
+                    {
+                        translate!("hashsum-help-binary-other")
+                    }
+                })
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CHECK)
                 .short('c')
                 .long("check")
-                .help("read hashsums from the FILEs and check them")
+                .help(translate!("hashsum-help-check"))
                 .action(ArgAction::SetTrue)
                 .conflicts_with("tag"),
         )
         .arg(
             Arg::new(options::TAG)
                 .long("tag")
-                .help("create a BSD-style checksum")
+                .help(translate!("hashsum-help-tag"))
                 .action(ArgAction::SetTrue)
                 .conflicts_with("text"),
         )
@@ -348,7 +355,16 @@ pub fn uu_app_common() -> Command {
             Arg::new(options::TEXT)
                 .short('t')
                 .long("text")
-                .help(TEXT_HELP)
+                .help({
+                    #[cfg(windows)]
+                    {
+                        translate!("hashsum-help-text-windows")
+                    }
+                    #[cfg(not(windows))]
+                    {
+                        translate!("hashsum-help-text-other")
+                    }
+                })
                 .conflicts_with("binary")
                 .action(ArgAction::SetTrue),
         )
@@ -356,7 +372,7 @@ pub fn uu_app_common() -> Command {
             Arg::new(options::QUIET)
                 .short('q')
                 .long(options::QUIET)
-                .help("don't print OK for each successfully verified file")
+                .help(translate!("hashsum-help-quiet"))
                 .action(ArgAction::SetTrue)
                 .overrides_with_all([options::STATUS, options::WARN]),
         )
@@ -364,27 +380,27 @@ pub fn uu_app_common() -> Command {
             Arg::new(options::STATUS)
                 .short('s')
                 .long("status")
-                .help("don't output anything, status code shows success")
+                .help(translate!("hashsum-help-status"))
                 .action(ArgAction::SetTrue)
                 .overrides_with_all([options::QUIET, options::WARN]),
         )
         .arg(
             Arg::new(options::STRICT)
                 .long("strict")
-                .help("exit non-zero for improperly formatted checksum lines")
+                .help(translate!("hashsum-help-strict"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("ignore-missing")
                 .long("ignore-missing")
-                .help("don't fail or report status for missing files")
+                .help(translate!("hashsum-help-ignore-missing"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::WARN)
                 .short('w')
                 .long("warn")
-                .help("warn about improperly formatted checksum lines")
+                .help(translate!("hashsum-help-warn"))
                 .action(ArgAction::SetTrue)
                 .overrides_with_all([options::QUIET, options::STATUS]),
         )
@@ -392,7 +408,7 @@ pub fn uu_app_common() -> Command {
             Arg::new("zero")
                 .short('z')
                 .long("zero")
-                .help("end each output line with NUL, not newline")
+                .help(translate!("hashsum-help-zero"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -415,10 +431,7 @@ fn uu_app_opt_length(command: Command) -> Command {
             .long(options::LENGTH)
             .value_parser(value_parser!(usize))
             .short('l')
-            .help(
-                "digest length in bits; must not exceed the max for the blake2 algorithm \
-                    and must be a multiple of 8",
-            )
+            .help(translate!("hashsum-help-length"))
             .overrides_with(options::LENGTH)
             .action(ArgAction::Set),
     )
@@ -432,7 +445,7 @@ fn uu_app_b3sum_opts(command: Command) -> Command {
     command.arg(
         Arg::new("no-names")
             .long("no-names")
-            .help("Omits filenames in the output (option not present in GNU/Coreutils)")
+            .help(translate!("hashsum-help-no-names"))
             .action(ArgAction::SetTrue),
     )
 }
@@ -446,7 +459,7 @@ fn uu_app_opt_bits(command: Command) -> Command {
     command.arg(
         Arg::new("bits")
             .long("bits")
-            .help("set the size of the output (only for SHAKE)")
+            .help(translate!("hashsum-help-bits"))
             .value_name("BITS")
             // XXX: should we actually use validators?  they're not particularly efficient
             .value_parser(parse_bit_num),
@@ -456,44 +469,38 @@ fn uu_app_opt_bits(command: Command) -> Command {
 pub fn uu_app_custom() -> Command {
     let mut command = uu_app_b3sum_opts(uu_app_opt_bits(uu_app_common()));
     let algorithms = &[
-        ("md5", "work with MD5"),
-        ("sha1", "work with SHA1"),
-        ("sha224", "work with SHA224"),
-        ("sha256", "work with SHA256"),
-        ("sha384", "work with SHA384"),
-        ("sha512", "work with SHA512"),
-        ("sha3", "work with SHA3"),
-        ("sha3-224", "work with SHA3-224"),
-        ("sha3-256", "work with SHA3-256"),
-        ("sha3-384", "work with SHA3-384"),
-        ("sha3-512", "work with SHA3-512"),
-        (
-            "shake128",
-            "work with SHAKE128 using BITS for the output size",
-        ),
-        (
-            "shake256",
-            "work with SHAKE256 using BITS for the output size",
-        ),
-        ("b2sum", "work with BLAKE2"),
-        ("b3sum", "work with BLAKE3"),
+        ("md5", translate!("hashsum-help-md5")),
+        ("sha1", translate!("hashsum-help-sha1")),
+        ("sha224", translate!("hashsum-help-sha224")),
+        ("sha256", translate!("hashsum-help-sha256")),
+        ("sha384", translate!("hashsum-help-sha384")),
+        ("sha512", translate!("hashsum-help-sha512")),
+        ("sha3", translate!("hashsum-help-sha3")),
+        ("sha3-224", translate!("hashsum-help-sha3-224")),
+        ("sha3-256", translate!("hashsum-help-sha3-256")),
+        ("sha3-384", translate!("hashsum-help-sha3-384")),
+        ("sha3-512", translate!("hashsum-help-sha3-512")),
+        ("shake128", translate!("hashsum-help-shake128")),
+        ("shake256", translate!("hashsum-help-shake256")),
+        ("b2sum", translate!("hashsum-help-b2sum")),
+        ("b3sum", translate!("hashsum-help-b3sum")),
     ];
 
     for (name, desc) in algorithms {
         command = command.arg(
             Arg::new(*name)
                 .long(name)
-                .help(*desc)
+                .help(desc)
                 .action(ArgAction::SetTrue),
         );
     }
     command
 }
 
-// hashsum is handled differently in build.rs, therefore this is not the same
-// as in other utilities.
+/// hashsum is handled differently in build.rs
+/// therefore, this is different from other utilities.
 fn uu_app(binary_name: &str) -> (Command, bool) {
-    match binary_name {
+    let (command, is_hashsum_bin) = match binary_name {
         // These all support the same options.
         "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" => {
             (uu_app_common(), false)
@@ -511,7 +518,19 @@ fn uu_app(binary_name: &str) -> (Command, bool) {
         "b3sum" => (uu_app_b3sum(), false),
         // We're probably just being called as `hashsum`, so give them everything.
         _ => (uu_app_custom(), true),
-    }
+    };
+
+    // If not called as generic hashsum, override the command name and usage
+    let command = if is_hashsum_bin {
+        command
+    } else {
+        let usage = translate!("hashsum-usage-specific", "utility_name" => binary_name);
+        command
+            .help_template(uucore::localized_help_template(binary_name))
+            .override_usage(format_usage(&usage))
+    };
+
+    (command, is_hashsum_bin)
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -520,19 +539,30 @@ where
     I: Iterator<Item = &'a OsStr>,
 {
     let binary_marker = if options.binary { "*" } else { " " };
+    let mut err_found = None;
     for filename in files {
         let filename = Path::new(filename);
 
-        let stdin_buf;
-        let file_buf;
-        let mut file = BufReader::new(if filename == OsStr::new("-") {
-            stdin_buf = stdin();
-            Box::new(stdin_buf) as Box<dyn Read>
-        } else {
-            file_buf =
-                File::open(filename).map_err_context(|| "failed to open file".to_string())?;
-            Box::new(file_buf) as Box<dyn Read>
-        });
+        let mut file = BufReader::with_capacity(
+            READ_BUFFER_SIZE,
+            if filename == OsStr::new("-") {
+                Box::new(stdin()) as Box<dyn Read>
+            } else {
+                let file_buf = match File::open(filename) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        eprintln!(
+                            "{}: {}: {e}",
+                            options.binary_name,
+                            filename.to_string_lossy()
+                        );
+                        err_found = Some(ChecksumError::Io(e));
+                        continue;
+                    }
+                };
+                Box::new(file_buf) as Box<dyn Read>
+            },
+        );
 
         let (sum, _) = digest_reader(
             &mut options.digest,
@@ -540,7 +570,7 @@ where
             options.binary,
             options.output_bits,
         )
-        .map_err_context(|| "failed to read input".to_string())?;
+        .map_err_context(|| translate!("hashsum-error-failed-to-read-input"))?;
         let (escaped_filename, prefix) = escape_filename(filename);
         if options.tag {
             if options.algoname == "blake2b" {
@@ -568,5 +598,8 @@ where
             println!("{prefix}{sum} {binary_marker}{escaped_filename}");
         }
     }
-    Ok(())
+    match err_found {
+        None => Ok(()),
+        Some(e) => Err(Box::new(e)),
+    }
 }

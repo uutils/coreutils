@@ -420,3 +420,16 @@ fn test_fifo_error_reference_and_size() {
         .no_stdout()
         .stderr_contains("cannot open 'fifo' for writing: No such device or address");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_truncate_non_utf8_paths() {
+    use std::os::unix::ffi::OsStrExt;
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let file_name = std::ffi::OsStr::from_bytes(b"test_\xFF\xFE.txt");
+    at.write(&file_name.to_string_lossy(), "test content");
+
+    // Test that truncate can handle non-UTF-8 filenames
+    ts.ucmd().arg("-s").arg("10").arg(file_name).succeeds();
+}

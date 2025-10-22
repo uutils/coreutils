@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (ToDO) coreutil
 
+use std::process::{Command, Stdio};
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
 use uutests::util::{TestScenario, check_coreutil_version, expected_result, is_ci, whoami};
@@ -15,6 +16,11 @@ const VERSION_MIN_MULTIPLE_USERS: &str = "8.31"; // this feature was introduced 
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[test]
+fn test_id_ignore() {
+    new_ucmd!().arg("-a").succeeds();
 }
 
 #[test]
@@ -376,8 +382,7 @@ fn test_id_zero() {
 #[test]
 #[cfg(feature = "feat_selinux")]
 fn test_id_context() {
-    use selinux::{self, KernelSupport};
-    if selinux::kernel_support() == KernelSupport::Unsupported {
+    if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
         return;
     }
@@ -450,12 +455,11 @@ fn test_id_no_specified_user_posixly() {
         feature = "feat_selinux"
     ))]
     {
-        use selinux::{self, KernelSupport};
-        if selinux::kernel_support() == KernelSupport::Unsupported {
-            println!("test skipped: Kernel has no support for SElinux context");
-        } else {
+        if uucore::selinux::is_selinux_enabled() {
             let result = ts.ucmd().succeeds();
             assert!(result.stdout_str().contains("context="));
+        } else {
+            println!("test skipped: Kernel has no support for SElinux context");
         }
     }
 }
@@ -471,4 +475,28 @@ fn test_id_pretty_print_password_record() {
         .arg("-P")
         .fails()
         .stderr_contains("the argument '-p' cannot be used with '-P'");
+}
+
+/// This test requires user with username 200 on system
+#[test]
+#[cfg(unix)]
+fn test_id_digital_username() {
+    match Command::new("id")
+        .arg("200")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+    {
+        Ok(ret) if ret.success() => {}
+        Ok(_) => {
+            println!("Test skipped; requires user with username 200 on system");
+            return;
+        }
+        Err(e) => {
+            println!("failed to run id command: {e}");
+            return;
+        }
+    }
+
+    new_ucmd!().arg("200").succeeds();
 }

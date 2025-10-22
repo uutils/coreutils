@@ -27,6 +27,7 @@ uucore = { workspace = true, features = [
   "lines",
   "fs",
 ] }
+fluent = { workspace = true }
 
 [[bin]]
 name = "head"

@@ -5,11 +5,87 @@
 
 // spell-checker:ignore (encodings) lsbf msbf
 // spell-checker:ignore unpadded
+// spell-checker:ignore ABCDEFGHJKLMNPQRSTUVWXY Zabcdefghijkmnopqrstuvwxyz
 
 use crate::error::{UResult, USimpleError};
+use base64_simd;
 use data_encoding::Encoding;
 use data_encoding_macro::new_encoding;
 use std::collections::VecDeque;
+
+// SIMD base64 wrapper
+pub struct Base64SimdWrapper {
+    pub alphabet: &'static [u8],
+    pub use_padding: bool,
+    pub unpadded_multiple: usize,
+    pub valid_decoding_multiple: usize,
+}
+
+impl Base64SimdWrapper {
+    pub fn new(
+        use_padding: bool,
+        valid_decoding_multiple: usize,
+        unpadded_multiple: usize,
+        alphabet: &'static [u8],
+    ) -> Self {
+        assert!(valid_decoding_multiple > 0);
+        assert!(unpadded_multiple > 0);
+        assert!(!alphabet.is_empty());
+
+        Self {
+            alphabet,
+            use_padding,
+            unpadded_multiple,
+            valid_decoding_multiple,
+        }
+    }
+}
+
+impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
+    fn alphabet(&self) -> &'static [u8] {
+        self.alphabet
+    }
+
+    fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
+        let decoded = if self.use_padding {
+            base64_simd::STANDARD.decode_to_vec(input)
+        } else {
+            base64_simd::STANDARD_NO_PAD.decode_to_vec(input)
+        };
+
+        match decoded {
+            Ok(decoded_bytes) => {
+                output.extend_from_slice(&decoded_bytes);
+                Ok(())
+            }
+            Err(_) => {
+                // Restore original length on error
+                output.truncate(output.len());
+                Err(USimpleError::new(1, "error: invalid input".to_owned()))
+            }
+        }
+    }
+
+    fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()> {
+        let encoded = if self.use_padding {
+            base64_simd::STANDARD.encode_to_string(input)
+        } else {
+            base64_simd::STANDARD_NO_PAD.encode_to_string(input)
+        };
+
+        output.extend(encoded.as_bytes());
+
+        Ok(())
+    }
+
+    fn unpadded_multiple(&self) -> usize {
+        self.unpadded_multiple
+    }
+
+    fn valid_decoding_multiple(&self) -> usize {
+        self.valid_decoding_multiple
+    }
+}
 
 // Re-export for the faster decoding/encoding logic
 pub mod for_base_common {
@@ -30,6 +106,7 @@ pub enum Format {
     Base2Lsbf,
     Base2Msbf,
     Z85,
+    Base58,
 }
 
 pub const BASE2LSBF: Encoding = new_encoding! {
@@ -43,6 +120,8 @@ pub const BASE2MSBF: Encoding = new_encoding! {
 };
 
 pub struct Z85Wrapper {}
+
+pub struct Base58Wrapper {}
 
 pub struct EncodingWrapper {
     pub alphabet: &'static [u8],
@@ -104,6 +183,159 @@ pub trait SupportsFastDecodeAndEncode {
     ///
     /// The decoding performed by `fast_decode` depends on this number being correct.
     fn valid_decoding_multiple(&self) -> usize;
+}
+
+impl SupportsFastDecodeAndEncode for Base58Wrapper {
+    fn alphabet(&self) -> &'static [u8] {
+        // Base58 alphabet
+        b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+    }
+
+    fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
+        if input.is_empty() {
+            return Ok(());
+        }
+
+        // Count leading zeros (will become leading 1s in base58)
+        let leading_ones = input.iter().take_while(|&&b| b == b'1').count();
+
+        // Skip leading 1s for conversion
+        let input_trimmed = &input[leading_ones..];
+        if input_trimmed.is_empty() {
+            output.resize(output.len() + leading_ones, 0);
+            return Ok(());
+        }
+
+        // Convert base58 to big integer
+        let mut num: Vec<u32> = vec![0];
+        let alphabet = self.alphabet();
+
+        for &byte in input_trimmed {
+            // Find position in alphabet
+            let digit = alphabet
+                .iter()
+                .position(|&b| b == byte)
+                .ok_or_else(|| USimpleError::new(1, "error: invalid input".to_owned()))?;
+
+            // Multiply by 58 and add digit
+            let mut carry = digit as u32;
+            for n in &mut num {
+                let tmp = (*n as u64) * 58 + carry as u64;
+                *n = tmp as u32;
+                carry = (tmp >> 32) as u32;
+            }
+            if carry > 0 {
+                num.push(carry);
+            }
+        }
+
+        // Convert to bytes (little endian, then reverse)
+        let mut result = Vec::new();
+        for &n in &num {
+            result.extend_from_slice(&n.to_le_bytes());
+        }
+
+        // Remove trailing zeros and reverse to get big endian
+        while result.last() == Some(&0) && result.len() > 1 {
+            result.pop();
+        }
+        result.reverse();
+
+        // Add leading zeros for leading 1s in input
+        let mut final_result = vec![0; leading_ones];
+        final_result.extend_from_slice(&result);
+
+        output.extend_from_slice(&final_result);
+        Ok(())
+    }
+
+    fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()> {
+        if input.is_empty() {
+            return Ok(());
+        }
+
+        // Count leading zeros
+        let leading_zeros = input.iter().take_while(|&&b| b == 0).count();
+
+        // Skip leading zeros
+        let input_trimmed = &input[leading_zeros..];
+        if input_trimmed.is_empty() {
+            for _ in 0..leading_zeros {
+                output.push_back(b'1');
+            }
+            return Ok(());
+        }
+
+        // Convert bytes to big integer (Vec<u32> in little-endian format)
+        let mut num = Vec::with_capacity(input_trimmed.len().div_ceil(4) + 1);
+        for &byte in input_trimmed {
+            let mut carry = byte as u64;
+            for n in &mut num {
+                let tmp = (*n as u64) * 256 + carry;
+                *n = tmp as u32;
+                carry = tmp >> 32;
+            }
+            if carry > 0 {
+                num.push(carry as u32);
+            }
+        }
+
+        // Convert to base58
+        let mut result = Vec::with_capacity((input_trimmed.len() * 138 / 100) + 1);
+        let alphabet = self.alphabet();
+
+        // Optimized check: stop when all elements are zero
+        while !num.is_empty() {
+            // Check if we're done (all zeros)
+            let mut all_zero = true;
+            let mut carry = 0u64;
+
+            for n in num.iter_mut().rev() {
+                let tmp = carry * (1u64 << 32) + *n as u64;
+                *n = (tmp / 58) as u32;
+                carry = tmp % 58;
+                if *n != 0 {
+                    all_zero = false;
+                }
+            }
+
+            result.push(alphabet[carry as usize]);
+
+            if all_zero {
+                break;
+            }
+
+            // Trim trailing zeros less frequently
+            if num.len() > 1 && result.len() % 8 == 0 {
+                while num.last() == Some(&0) && num.len() > 1 {
+                    num.pop();
+                }
+            }
+        }
+
+        // Add leading 1s for leading zeros in input
+        for _ in 0..leading_zeros {
+            output.push_back(b'1');
+        }
+
+        // Add result (reversed because we built it backwards)
+        for &byte in result.iter().rev() {
+            output.push_back(byte);
+        }
+
+        Ok(())
+    }
+
+    fn unpadded_multiple(&self) -> usize {
+        // Base58 must encode the entire input as one big integer, not in chunks
+        // Use a very large value to effectively disable chunking, but avoid overflow
+        // when multiplied by ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE (1024) in base_common
+        usize::MAX / 2048
+    }
+
+    fn valid_decoding_multiple(&self) -> usize {
+        1 // Any length is valid for Base58
+    }
 }
 
 impl SupportsFastDecodeAndEncode for Z85Wrapper {

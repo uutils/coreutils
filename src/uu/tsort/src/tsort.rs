@@ -5,14 +5,14 @@
 //spell-checker:ignore TAOCP indegree
 use clap::{Arg, Command};
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::ffi::OsString;
 use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult};
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::{format_usage, show};
 
-const ABOUT: &str = help_about!("tsort.md");
-const USAGE: &str = help_usage!("tsort.md");
+use uucore::translate;
 
 mod options {
     pub const FILE: &str = "file";
@@ -21,18 +21,18 @@ mod options {
 #[derive(Debug, Error)]
 enum TsortError {
     /// The input file is actually a directory.
-    #[error("{0}: read error: Is a directory")]
+    #[error("{input}: {message}", input = .0, message = translate!("tsort-error-is-dir"))]
     IsDir(String),
 
     /// The number of tokens in the input data is odd.
     ///
     /// The list of edges must be even because each edge has two
     /// components: a source node and a target node.
-    #[error("{input}: input contains an odd number of tokens", input = .0.maybe_quote())]
+    #[error("{input}: {message}", input = .0.maybe_quote(), message = translate!("tsort-error-odd"))]
     NumTokensOdd(String),
 
     /// The graph contains a cycle.
-    #[error("{0}: input contains a loop:")]
+    #[error("{input}: {message}", input = .0, message = translate!("tsort-error-loop"))]
     Loop(String),
 
     /// A particular node in a cycle. (This is mainly used for printing.)
@@ -44,45 +44,60 @@ impl UError for TsortError {}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let input = matches
-        .get_one::<String>(options::FILE)
+        .get_one::<OsString>(options::FILE)
         .expect("Value is required by clap");
 
     let data = if input == "-" {
         let stdin = std::io::stdin();
         std::io::read_to_string(stdin)?
     } else {
-        let path = Path::new(&input);
+        let path = Path::new(input);
         if path.is_dir() {
-            return Err(TsortError::IsDir(input.to_string()).into());
+            return Err(TsortError::IsDir(input.to_string_lossy().to_string()).into());
         }
         std::fs::read_to_string(path)?
     };
 
     // Create the directed graph from pairs of tokens in the input data.
-    let mut g = Graph::new(input.clone());
-    for ab in data.split_whitespace().collect::<Vec<&str>>().chunks(2) {
-        match ab {
-            [a, b] => g.add_edge(a, b),
-            _ => return Err(TsortError::NumTokensOdd(input.to_string()).into()),
-        }
+    let mut g = Graph::new(input.to_string_lossy().to_string());
+    // Input is considered to be in the format
+    // From1 To1 From2 To2 ...
+    // with tokens separated by whitespaces
+    let mut edge_tokens = data.split_whitespace();
+    // Note: this is equivalent to iterating over edge_tokens.chunks(2)
+    // but chunks() exists only for slices and would require unnecessary Vec allocation.
+    // Itertools::chunks() is not used due to unnecessary overhead for internal RefCells
+    loop {
+        // Try take next pair of tokens
+        let Some(from) = edge_tokens.next() else {
+            // no more tokens -> end of input. Graph constructed
+            break;
+        };
+        let Some(to) = edge_tokens.next() else {
+            return Err(TsortError::NumTokensOdd(input.to_string_lossy().to_string()).into());
+        };
+        g.add_edge(from, to);
     }
 
     g.run_tsort();
     Ok(())
 }
+
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .override_usage(format_usage(&translate!("tsort-usage")))
+        .about(translate!("tsort-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE)
                 .default_value("-")
                 .hide(true)
+                .value_parser(clap::value_parser!(OsString))
                 .value_hint(clap::ValueHint::FilePath),
         )
 }
@@ -117,26 +132,18 @@ struct Graph<'input> {
 }
 
 impl<'input> Graph<'input> {
-    fn new(name: String) -> Graph<'input> {
+    fn new(name: String) -> Self {
         Self {
             name,
             nodes: HashMap::default(),
         }
     }
 
-    fn add_node(&mut self, name: &'input str) {
-        self.nodes.entry(name).or_default();
-    }
-
     fn add_edge(&mut self, from: &'input str, to: &'input str) {
-        self.add_node(from);
+        let from_node = self.nodes.entry(from).or_default();
         if from != to {
-            self.add_node(to);
-
-            let from_node = self.nodes.get_mut(from).unwrap();
             from_node.add_successor(to);
-
-            let to_node = self.nodes.get_mut(to).unwrap();
+            let to_node = self.nodes.entry(to).or_default();
             to_node.predecessor_count += 1;
         }
     }
@@ -148,7 +155,7 @@ impl<'input> Graph<'input> {
 
     /// Implementation of algorithm T from TAOCP (Don. Knuth), vol. 1.
     fn run_tsort(&mut self) {
-        // First, we find a node that have no prerequisites (independent nodes)
+        // First, we find nodes that have no prerequisites (independent nodes).
         // If no such node exists, then there is a cycle.
         let mut independent_nodes_queue: VecDeque<&'input str> = self
             .nodes
@@ -161,8 +168,6 @@ impl<'input> Graph<'input> {
                 }
             })
             .collect();
-        independent_nodes_queue.make_contiguous().sort_unstable(); // to make sure the resulting ordering is deterministic we need to order independent nodes
-        // FIXME: this doesn't comply entirely with the GNU coreutils implementation.
 
         // To make sure the resulting ordering is deterministic we
         // need to order independent nodes.
@@ -180,7 +185,7 @@ impl<'input> Graph<'input> {
                     let successor_node = self.nodes.get_mut(successor_name).unwrap();
                     successor_node.predecessor_count -= 1;
                     if successor_node.predecessor_count == 0 {
-                        // if we find nodes without any other prerequisites, we add them to the queue.
+                        // If we find nodes without any other prerequisites, we add them to the queue.
                         independent_nodes_queue.push_back(successor_name);
                     }
                 }
@@ -220,7 +225,7 @@ impl<'input> Graph<'input> {
         let cycle = self.detect_cycle();
         show!(TsortError::Loop(self.name.clone()));
         for node in &cycle {
-            show!(TsortError::LoopNode(node.to_string()));
+            show!(TsortError::LoopNode((*node).to_string()));
         }
         let u = cycle[0];
         let v = cycle[1];
@@ -232,10 +237,7 @@ impl<'input> Graph<'input> {
 
     fn detect_cycle(&self) -> Vec<&'input str> {
         // Sort the nodes just to make this function deterministic.
-        let mut nodes = Vec::new();
-        for node in self.nodes.keys() {
-            nodes.push(node);
-        }
+        let mut nodes: Vec<_> = self.nodes.keys().collect();
         nodes.sort_unstable();
 
         let mut visited = HashSet::new();

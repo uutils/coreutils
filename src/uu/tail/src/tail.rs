@@ -26,7 +26,7 @@ use args::{FilterMode, Settings, Signum, parse_args};
 use chunks::ReverseChunks;
 use follow::Observer;
 use memchr::{memchr_iter, memrchr_iter};
-use paths::{FileExtTail, HeaderPrinter, Input, InputKind, MetadataExtTail};
+use paths::{FileExtTail, HeaderPrinter, Input, InputKind};
 use same_file::Handle;
 use std::cmp::Ordering;
 use std::fs::File;
@@ -34,10 +34,21 @@ use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, get_exit_code, set_exit_code};
+use uucore::translate;
+
 use uucore::{show, show_error};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // When we receive a SIGPIPE signal, we want to terminate the process so
+    // that we don't print any error messages to stderr. Rust ignores SIGPIPE
+    // (see https://github.com/rust-lang/rust/issues/62569), so we restore it's
+    // default action here.
+    #[cfg(not(target_os = "windows"))]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+
     let settings = parse_args(args)?;
 
     settings.check_warnings();
@@ -46,7 +57,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         args::VerificationResult::CannotFollowStdinByName => {
             return Err(USimpleError::new(
                 1,
-                format!("cannot follow {} by name", text::DASH.quote()),
+                translate!("tail-error-cannot-follow-stdin-by-name", "stdin" => text::DASH.quote()),
             ));
         }
         // Exit early if we do not output anything. Note, that this may break a pipe
@@ -95,7 +106,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
     }
 
     if get_exit_code() > 0 && paths::stdin_is_bad_fd() {
-        show_error!("-: {}", text::BAD_FD);
+        show_error!("{}: {}", text::DASH, translate!("tail-bad-fd"));
     }
 
     Ok(())
@@ -112,27 +123,29 @@ fn tail_file(
     if !path.exists() {
         set_exit_code(1);
         show_error!(
-            "cannot open '{}' for reading: {}",
-            input.display_name,
-            text::NO_SUCH_FILE
+            "{}",
+            translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name.clone(), "error" => translate!("tail-no-such-file-or-directory"))
         );
         observer.add_bad_path(path, input.display_name.as_str(), false)?;
     } else if path.is_dir() {
         set_exit_code(1);
 
         header_printer.print_input(input);
-        let err_msg = "Is a directory".to_string();
+        let err_msg = translate!("tail-is-a-directory");
 
-        show_error!("error reading '{}': {err_msg}", input.display_name);
+        show_error!(
+            "{}",
+            translate!("tail-error-reading-file", "file" => input.display_name.clone(), "error" => err_msg)
+        );
         if settings.follow.is_some() {
             let msg = if settings.retry {
                 ""
             } else {
-                "; giving up on this name"
+                &translate!("tail-giving-up-on-this-name")
             };
             show_error!(
-                "{}: cannot follow end of this type of file{msg}",
-                input.display_name,
+                "{}",
+                translate!("tail-error-cannot-follow-file-type", "file" => input.display_name.clone(), "msg" => msg)
             );
         }
         if !observer.follow_name_retry() {
@@ -140,15 +153,16 @@ fn tail_file(
             return Ok(());
         }
         observer.add_bad_path(path, input.display_name.as_str(), false)?;
-    } else if input.is_tailable() {
-        let metadata = path.metadata().ok();
+    } else {
         match File::open(path) {
             Ok(mut file) => {
+                let st = file.metadata()?;
+                let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
                 header_printer.print_input(input);
                 let mut reader;
                 if !settings.presume_input_pipe
                     && file.is_seekable(if input.is_stdin() { offset } else { 0 })
-                    && metadata.as_ref().unwrap().get_block_size() > 0
+                    && (!st.is_file() || st.len() > blksize_limit)
                 {
                     bounded_tail(&mut file, settings);
                     reader = BufReader::new(file);
@@ -156,28 +170,30 @@ fn tail_file(
                     reader = BufReader::new(file);
                     unbounded_tail(&mut reader, settings)?;
                 }
-                observer.add_path(
-                    path,
-                    input.display_name.as_str(),
-                    Some(Box::new(reader)),
-                    true,
-                )?;
+                if input.is_tailable() {
+                    observer.add_path(
+                        path,
+                        input.display_name.as_str(),
+                        Some(Box::new(reader)),
+                        true,
+                    )?;
+                } else {
+                    observer.add_bad_path(path, input.display_name.as_str(), false)?;
+                }
             }
             Err(e) if e.kind() == ErrorKind::PermissionDenied => {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 show!(e.map_err_context(|| {
-                    format!("cannot open '{}' for reading", input.display_name)
+                    translate!("tail-error-cannot-open-for-reading", "file" => input.display_name.clone())
                 }));
             }
             Err(e) => {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 return Err(e.map_err_context(|| {
-                    format!("cannot open '{}' for reading", input.display_name)
+                    translate!("tail-error-cannot-open-for-reading", "file" => input.display_name.clone())
                 }));
             }
         }
-    } else {
-        observer.add_bad_path(path, input.display_name.as_str(), false)?;
     }
 
     Ok(())
@@ -189,6 +205,28 @@ fn tail_stdin(
     input: &Input,
     observer: &mut Observer,
 ) -> UResult<()> {
+    // on macOS, resolve() will always return None for stdin,
+    // we need to detect if stdin is a directory ourselves.
+    // fstat-ing certain descriptors under /dev/fd fails with
+    // bad file descriptor or might not catch directory cases
+    // e.g. see the differences between running ls -l /dev/stdin /dev/fd/0
+    // on macOS and Linux.
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(mut stdin_handle) = Handle::stdin() {
+            if let Ok(meta) = stdin_handle.as_file_mut().metadata() {
+                if meta.file_type().is_dir() {
+                    set_exit_code(1);
+                    show_error!(
+                        "{}",
+                        translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name.clone(), "error" => translate!("tail-no-such-file-or-directory"))
+                    );
+                    return Ok(());
+                }
+            }
+        }
+    }
+
     match input.resolve() {
         // fifo
         Some(path) => {
@@ -217,15 +255,13 @@ fn tail_stdin(
             if paths::stdin_is_bad_fd() {
                 set_exit_code(1);
                 show_error!(
-                    "cannot fstat {}: {}",
-                    text::STDIN_HEADER.quote(),
-                    text::BAD_FD
+                    "{}",
+                    translate!("tail-error-cannot-fstat", "file" => translate!("tail-stdin-header"), "error" => translate!("tail-bad-fd"))
                 );
                 if settings.follow.is_some() {
                     show_error!(
-                        "error reading {}: {}",
-                        text::STDIN_HEADER.quote(),
-                        text::BAD_FD
+                        "{}",
+                        translate!("tail-error-reading-file", "file" => translate!("tail-stdin-header"), "error" => translate!("tail-bad-fd"))
                     );
                 }
             } else {
@@ -234,7 +270,7 @@ fn tail_stdin(
                 observer.add_stdin(input.display_name.as_str(), Some(Box::new(reader)), true)?;
             }
         }
-    };
+    }
 
     Ok(())
 }
@@ -318,7 +354,7 @@ fn forwards_thru_file(
                 }
                 total += n;
             }
-            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) if e.kind() == ErrorKind::Interrupted => (),
             Err(e) => return Err(e),
         }
     }
@@ -373,6 +409,7 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
 /// being a nice performance win for very large files.
 fn bounded_tail(file: &mut File, settings: &Settings) {
     debug_assert!(!settings.presume_input_pipe);
+    let mut limit = None;
 
     // Find the position in the file to start printing from.
     match &settings.mode {
@@ -387,9 +424,8 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
             return;
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
-            let len = file.seek(SeekFrom::End(0)).unwrap();
-            file.seek(SeekFrom::End(-((*count).min(len) as i64)))
-                .unwrap();
+            file.seek(SeekFrom::End(-(*count as i64))).unwrap();
+            limit = Some(*count);
         }
         FilterMode::Bytes(Signum::Positive(count)) if count > &1 => {
             // GNU `tail` seems to index bytes and lines starting at 1, not
@@ -402,10 +438,7 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
         _ => {}
     }
 
-    // Print the target section of the file.
-    let stdout = stdout();
-    let mut stdout = stdout.lock();
-    io::copy(file, &mut stdout).unwrap();
+    print_target_section(file, limit);
 }
 
 fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
@@ -468,8 +501,32 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         }
         _ => {}
     }
+    #[cfg(not(target_os = "windows"))]
     writer.flush()?;
+
+    // SIGPIPE is not available on Windows.
+    #[cfg(target_os = "windows")]
+    writer.flush().inspect_err(|err| {
+        if err.kind() == ErrorKind::BrokenPipe {
+            std::process::exit(13);
+        }
+    })?;
     Ok(())
+}
+
+fn print_target_section<R>(file: &mut R, limit: Option<u64>)
+where
+    R: Read + ?Sized,
+{
+    // Print the target section of the file.
+    let stdout = stdout();
+    let mut stdout = stdout.lock();
+    if let Some(limit) = limit {
+        let mut reader = file.take(limit);
+        io::copy(&mut reader, &mut stdout).unwrap();
+    } else {
+        io::copy(file, &mut stdout).unwrap();
+    }
 }
 
 #[cfg(test)]

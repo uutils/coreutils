@@ -1,12 +1,10 @@
-# spell-checker:ignore uuhelp
 [package]
 name = "uucore_procs"
 description = "uutils ~ 'uucore' proc-macros"
-authors = ["Roy Ivy III <rivy.dev@gmail.com>"]
 repository = "https://github.com/uutils/coreutils/tree/main/src/uucore_procs"
-# readme = "README.md"
 keywords = ["cross-platform", "proc-macros", "uucore", "uutils"]
 # categories = ["os"]
+authors.workspace = true
 edition.workspace = true
 homepage.workspace = true
 license.workspace = true
@@ -18,4 +16,3 @@ proc-macro = true
 [dependencies]
 proc-macro2 = "1.0.81"
 quote = "1.0.36"
-uuhelp_parser = { path = "../uuhelp_parser", version = "0.0.30" }

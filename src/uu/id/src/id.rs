@@ -42,8 +42,10 @@ use uucore::error::{USimpleError, set_exit_code};
 pub use uucore::libc;
 use uucore::libc::{getlogin, uid_t};
 use uucore::line_ending::LineEnding;
+use uucore::translate;
+
 use uucore::process::{getegid, geteuid, getgid, getuid};
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
+use uucore::{format_usage, show_error};
 
 macro_rules! cstr2cow {
     ($v:expr) => {
@@ -59,16 +61,15 @@ macro_rules! cstr2cow {
     };
 }
 
-const ABOUT: &str = help_about!("id.md");
-const USAGE: &str = help_usage!("id.md");
-const AFTER_HELP: &str = help_section!("after help", "id.md");
-
-#[cfg(not(feature = "selinux"))]
-static CONTEXT_HELP_TEXT: &str = "print only the security context of the process (not enabled)";
-#[cfg(feature = "selinux")]
-static CONTEXT_HELP_TEXT: &str = "print only the security context of the process";
+fn get_context_help_text() -> String {
+    #[cfg(not(feature = "selinux"))]
+    return translate!("id-context-help-disabled");
+    #[cfg(feature = "selinux")]
+    return translate!("id-context-help-enabled");
+}
 
 mod options {
+    pub const OPT_IGNORE: &str = "ignore";
     pub const OPT_AUDIT: &str = "audit"; // GNU's id does not have this
     pub const OPT_CONTEXT: &str = "context";
     pub const OPT_EFFECTIVE_USER: &str = "user";
@@ -119,7 +120,7 @@ struct State {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let users: Vec<String> = matches
         .get_many::<String>(options::ARG_USERS)
@@ -138,7 +139,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         selinux_supported: {
             #[cfg(feature = "selinux")]
             {
-                selinux::kernel_support() != selinux::KernelSupport::Unsupported
+                uucore::selinux::is_selinux_enabled()
             }
             #[cfg(not(feature = "selinux"))]
             {
@@ -157,30 +158,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if (state.nflag || state.rflag) && default_format && !state.cflag {
         return Err(USimpleError::new(
             1,
-            "printing only names or real IDs requires -u, -g, or -G",
+            translate!("id-error-names-real-ids-require-flags"),
         ));
     }
     if state.zflag && default_format && !state.cflag {
         // NOTE: GNU test suite "id/zero.sh" needs this stderr output:
         return Err(USimpleError::new(
             1,
-            "option --zero not permitted in default format",
+            translate!("id-error-zero-not-permitted-default"),
         ));
     }
     if state.user_specified && state.cflag {
         return Err(USimpleError::new(
             1,
-            "cannot print security context when user specified",
+            translate!("id-error-cannot-print-context-with-user"),
         ));
     }
 
-    let delimiter = {
-        if state.zflag {
-            "\0".to_string()
-        } else {
-            " ".to_string()
-        }
-    };
+    let delimiter = if state.zflag { "\0" } else { " " };
     let line_ending = LineEnding::from_zero_flag(state.zflag);
 
     if state.cflag {
@@ -192,13 +187,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 print!("{}{line_ending}", String::from_utf8_lossy(bytes));
             } else {
                 // print error because `cflag` was explicitly requested
-                return Err(USimpleError::new(1, "can't get process context"));
+                return Err(USimpleError::new(
+                    1,
+                    translate!("id-error-cannot-get-context"),
+                ));
             }
             Ok(())
         } else {
             Err(USimpleError::new(
                 1,
-                "--context (-Z) works only on an SELinux-enabled kernel",
+                translate!("id-error-context-selinux-only"),
             ))
         };
     }
@@ -208,13 +206,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             match Passwd::locate(users[i].as_str()) {
                 Ok(p) => Some(p),
                 Err(_) => {
-                    show_error!("{}: no such user", users[i].quote());
+                    show_error!(
+                        "{}",
+                        translate!("id-error-no-such-user",
+                                                     "user" => users[i].quote()
+                        )
+                    );
                     set_exit_code(1);
                     if i + 1 >= users.len() {
                         break;
-                    } else {
-                        continue;
                     }
+
+                    continue;
                 }
             }
         } else {
@@ -226,7 +229,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // BSD's `id` ignores all but the first specified user
             pline(possible_pw.as_ref().map(|v| v.uid));
             return Ok(());
-        };
+        }
         if matches.get_flag(options::OPT_HUMAN_READABLE) {
             // BSD's `id` ignores all but the first specified user
             pretty(possible_pw);
@@ -238,10 +241,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             return Ok(());
         }
 
-        let (uid, gid) = possible_pw.as_ref().map(|p| (p.uid, p.gid)).unwrap_or((
-            if state.rflag { getuid() } else { geteuid() },
-            if state.rflag { getgid() } else { getegid() },
-        ));
+        let (uid, gid) = possible_pw.as_ref().map_or(
+            {
+                let use_effective = !state.rflag && (state.uflag || state.gflag || state.gsflag);
+                if use_effective {
+                    (geteuid(), getegid())
+                } else {
+                    (getuid(), getgid())
+                }
+            },
+            |p| (p.uid, p.gid),
+        );
         state.ids = Some(Ids {
             uid,
             gid,
@@ -254,7 +264,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 "{}",
                 if state.nflag {
                     entries::gid2grp(gid).unwrap_or_else(|_| {
-                        show_error!("cannot find name for group ID {gid}");
+                        show_error!(
+                            "{}",
+                            translate!("id-error-cannot-find-group-name", "gid" => gid)
+                        );
                         set_exit_code(1);
                         gid.to_string()
                     })
@@ -269,7 +282,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 "{}",
                 if state.nflag {
                     entries::uid2usr(uid).unwrap_or_else(|_| {
-                        show_error!("cannot find name for user ID {uid}");
+                        show_error!(
+                            "{}",
+                            translate!("id-error-cannot-find-user-name", "uid" => uid)
+                        );
                         set_exit_code(1);
                         uid.to_string()
                     })
@@ -294,7 +310,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     .map(|&id| {
                         if state.nflag {
                             entries::gid2grp(id).unwrap_or_else(|_| {
-                                show_error!("cannot find name for group ID {id}");
+                                show_error!(
+                                    "{}",
+                                    translate!("id-error-cannot-find-group-name", "gid" => id)
+                                );
                                 set_exit_code(1);
                                 id.to_string()
                             })
@@ -303,7 +322,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         }
                     })
                     .collect::<Vec<_>>()
-                    .join(&delimiter),
+                    .join(delimiter),
                 // NOTE: this is necessary to pass GNU's "tests/id/zero.sh":
                 if state.zflag && state.user_specified && users.len() > 1 {
                     "\0"
@@ -329,10 +348,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("id-about"))
+        .override_usage(format_usage(&translate!("id-usage")))
         .infer_long_args(true)
         .args_override_self(true)
+        .after_help(translate!("id-after-help"))
+        .arg(
+            Arg::new(options::OPT_IGNORE)
+                .short('a')
+                .long(options::OPT_IGNORE)
+                .help(translate!("id-help-ignore"))
+                .action(ArgAction::SetTrue),
+        )
         .arg(
             Arg::new(options::OPT_AUDIT)
                 .short('A')
@@ -344,10 +372,7 @@ pub fn uu_app() -> Command {
                     options::OPT_GROUPS,
                     options::OPT_ZERO,
                 ])
-                .help(
-                    "Display the process audit user ID and other process audit properties,\n\
-                      which requires privilege (not available on Linux).",
-                )
+                .help(translate!("id-help-audit"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -355,7 +380,7 @@ pub fn uu_app() -> Command {
                 .short('u')
                 .long(options::OPT_EFFECTIVE_USER)
                 .conflicts_with(options::OPT_GROUP)
-                .help("Display only the effective user ID as a number.")
+                .help(translate!("id-help-user"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -363,7 +388,7 @@ pub fn uu_app() -> Command {
                 .short('g')
                 .long(options::OPT_GROUP)
                 .conflicts_with(options::OPT_EFFECTIVE_USER)
-                .help("Display only the effective group ID as a number")
+                .help(translate!("id-help-group"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -378,33 +403,26 @@ pub fn uu_app() -> Command {
                     options::OPT_PASSWORD,
                     options::OPT_AUDIT,
                 ])
-                .help(
-                    "Display only the different group IDs as white-space separated numbers, \
-                      in no particular order.",
-                )
+                .help(translate!("id-help-groups"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OPT_HUMAN_READABLE)
                 .short('p')
-                .help("Make the output human-readable. Each display is on a separate line.")
+                .help(translate!("id-help-human-readable"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OPT_NAME)
                 .short('n')
                 .long(options::OPT_NAME)
-                .help(
-                    "Display the name of the user or group ID for the -G, -g and -u options \
-                      instead of the number.\nIf any of the ID numbers cannot be mapped into \
-                      names, the number will be displayed as usual.",
-                )
+                .help(translate!("id-help-name"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OPT_PASSWORD)
                 .short('P')
-                .help("Display the id as a password file entry.")
+                .help(translate!("id-help-password"))
                 .conflicts_with(options::OPT_HUMAN_READABLE)
                 .action(ArgAction::SetTrue),
         )
@@ -412,20 +430,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::OPT_REAL_ID)
                 .short('r')
                 .long(options::OPT_REAL_ID)
-                .help(
-                    "Display the real ID for the -G, -g and -u options instead of \
-                      the effective ID.",
-                )
+                .help(translate!("id-help-real"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OPT_ZERO)
                 .short('z')
                 .long(options::OPT_ZERO)
-                .help(
-                    "delimit entries with NUL characters, not whitespace;\n\
-                      not permitted in default format",
-                )
+                .help(translate!("id-help-zero"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -433,7 +445,7 @@ pub fn uu_app() -> Command {
                 .short('Z')
                 .long(options::OPT_CONTEXT)
                 .conflicts_with_all([options::OPT_GROUP, options::OPT_EFFECTIVE_USER])
-                .help(CONTEXT_HELP_TEXT)
+                .help(get_context_help_text())
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -446,7 +458,12 @@ pub fn uu_app() -> Command {
 
 fn pretty(possible_pw: Option<Passwd>) {
     if let Some(p) = possible_pw {
-        print!("uid\t{}\ngroups\t", p.name);
+        print!(
+            "{}\t{}\n{}\t",
+            translate!("id-output-uid"),
+            p.name,
+            translate!("id-output-groups")
+        );
         println!(
             "{}",
             p.belongs_to()
@@ -460,33 +477,34 @@ fn pretty(possible_pw: Option<Passwd>) {
         let rid = getuid();
         if let Ok(p) = Passwd::locate(rid) {
             if let Some(user_name) = login {
-                println!("login\t{user_name}");
+                println!("{}\t{user_name}", translate!("id-output-login"));
             }
-            println!("uid\t{}", p.name);
+            println!("{}\t{}", translate!("id-output-uid"), p.name);
         } else {
-            println!("uid\t{rid}");
+            println!("{}\t{rid}", translate!("id-output-uid"));
         }
 
         let eid = getegid();
         if eid == rid {
             if let Ok(p) = Passwd::locate(eid) {
-                println!("euid\t{}", p.name);
+                println!("{}\t{}", translate!("id-output-euid"), p.name);
             } else {
-                println!("euid\t{eid}");
+                println!("{}\t{eid}", translate!("id-output-euid"));
             }
         }
 
         let rid = getgid();
         if rid != eid {
             if let Ok(g) = Group::locate(rid) {
-                println!("euid\t{}", g.name);
+                println!("{}\t{}", translate!("id-output-euid"), g.name);
             } else {
-                println!("euid\t{rid}");
+                println!("{}\t{rid}", translate!("id-output-euid"));
             }
         }
 
         println!(
-            "groups\t{}",
+            "{}\t{}",
+            translate!("id-output-groups"),
             entries::get_groups_gnu(None)
                 .unwrap()
                 .iter()
@@ -544,7 +562,7 @@ fn auditid() {
     let mut auditinfo: MaybeUninit<audit::c_auditinfo_addr_t> = MaybeUninit::uninit();
     let address = auditinfo.as_mut_ptr();
     if unsafe { audit::getaudit(address) } < 0 {
-        println!("couldn't retrieve information");
+        println!("{}", translate!("id-error-audit-retrieve"));
         return;
     }
 
@@ -567,7 +585,10 @@ fn id_print(state: &State, groups: &[u32]) {
     print!(
         "uid={uid}({})",
         entries::uid2usr(uid).unwrap_or_else(|_| {
-            show_error!("cannot find name for user ID {uid}");
+            show_error!(
+                "{}",
+                translate!("id-error-cannot-find-user-name", "uid" => uid)
+            );
             set_exit_code(1);
             uid.to_string()
         })
@@ -575,7 +596,10 @@ fn id_print(state: &State, groups: &[u32]) {
     print!(
         " gid={gid}({})",
         entries::gid2grp(gid).unwrap_or_else(|_| {
-            show_error!("cannot find name for group ID {gid}");
+            show_error!(
+                "{}",
+                translate!("id-error-cannot-find-group-name", "gid" => gid)
+            );
             set_exit_code(1);
             gid.to_string()
         })
@@ -584,7 +608,10 @@ fn id_print(state: &State, groups: &[u32]) {
         print!(
             " euid={euid}({})",
             entries::uid2usr(euid).unwrap_or_else(|_| {
-                show_error!("cannot find name for user ID {euid}");
+                show_error!(
+                    "{}",
+                    translate!("id-error-cannot-find-user-name", "uid" => euid)
+                );
                 set_exit_code(1);
                 euid.to_string()
             })
@@ -595,7 +622,10 @@ fn id_print(state: &State, groups: &[u32]) {
         print!(
             " egid={egid}({})",
             entries::gid2grp(egid).unwrap_or_else(|_| {
-                show_error!("cannot find name for group ID {egid}");
+                show_error!(
+                    "{}",
+                    translate!("id-error-cannot-find-group-name", "gid" => egid)
+                );
                 set_exit_code(1);
                 egid.to_string()
             })
@@ -608,7 +638,10 @@ fn id_print(state: &State, groups: &[u32]) {
             .map(|&gr| format!(
                 "{gr}({})",
                 entries::gid2grp(gr).unwrap_or_else(|_| {
-                    show_error!("cannot find name for group ID {gr}");
+                    show_error!(
+                        "{}",
+                        translate!("id-error-cannot-find-group-name", "gid" => gr)
+                    );
                     set_exit_code(1);
                     gr.to_string()
                 })

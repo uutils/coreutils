@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
-//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV sigbus tmpfs
+//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV sigbus tmpfs mksocket
 
 #![allow(dead_code)]
 #![allow(
@@ -12,6 +12,7 @@
     clippy::missing_errors_doc
 )]
 
+use core::str;
 #[cfg(unix)]
 use libc::mode_t;
 #[cfg(unix)]
@@ -32,6 +33,8 @@ use std::io::{self, BufWriter, Read, Result, Write};
 use std::os::fd::OwnedFd;
 #[cfg(unix)]
 use std::os::unix::fs::{PermissionsExt, symlink as symlink_dir, symlink as symlink_file};
+#[cfg(unix)]
+use std::os::unix::net::UnixListener;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 #[cfg(unix)]
@@ -354,6 +357,11 @@ impl CmdResult {
     /// Returns the program's standard output as a string slice
     pub fn stdout_str(&self) -> &str {
         std::str::from_utf8(&self.stdout).unwrap()
+    }
+
+    /// Returns the program's standard output as a string, automatically handling invalid utf8
+    pub fn stdout_str_lossy(self) -> String {
+        String::from_utf8_lossy(&self.stdout).to_string()
     }
 
     /// Returns the program's standard output as a string
@@ -694,7 +702,11 @@ impl CmdResult {
     #[track_caller]
     pub fn fails_silently(&self) -> &Self {
         assert!(!self.succeeded());
-        assert!(self.stderr.is_empty());
+        assert!(
+            self.stderr.is_empty(),
+            "Expected stderr to be empty, but it's:\n{}",
+            self.stderr_str()
+        );
         self
     }
 
@@ -758,6 +770,29 @@ impl CmdResult {
         self
     }
 
+    /// Verify if stdout contains a byte sequence
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// new_ucmd!()
+    /// .arg("--help")
+    /// .succeeds()
+    /// .stdout_contains_bytes(b"hello \xff");
+    /// ```
+    #[track_caller]
+    pub fn stdout_contains_bytes<T: AsRef<[u8]>>(&self, cmp: T) -> &Self {
+        assert!(
+            self.stdout()
+                .windows(cmp.as_ref().len())
+                .any(|sub| sub == cmp.as_ref()),
+            "'{:?}'\ndoes not contain\n'{:?}'",
+            self.stdout(),
+            cmp.as_ref()
+        );
+        self
+    }
+
     /// Verify if stderr contains a specific string
     ///
     /// # Examples
@@ -775,6 +810,29 @@ impl CmdResult {
             self.stderr_str().contains(cmp.as_ref()),
             "'{}' does not contain '{}'",
             self.stderr_str(),
+            cmp.as_ref()
+        );
+        self
+    }
+
+    /// Verify if stderr contains a byte sequence
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// new_ucmd!()
+    /// .arg("--help")
+    /// .succeeds()
+    /// .stdout_contains_bytes(b"hello \xff");
+    /// ```
+    #[track_caller]
+    pub fn stderr_contains_bytes<T: AsRef<[u8]>>(&self, cmp: T) -> &Self {
+        assert!(
+            self.stderr()
+                .windows(cmp.as_ref().len())
+                .any(|sub| sub == cmp.as_ref()),
+            "'{:?}'\ndoes not contain\n'{:?}'",
+            self.stderr(),
             cmp.as_ref()
         );
         self
@@ -1076,6 +1134,13 @@ impl AtPath {
         }
     }
 
+    #[cfg(unix)]
+    pub fn mksocket(&self, socket: &str) {
+        let full_path = self.plus_as_string(socket);
+        log_info("mksocket", &full_path);
+        UnixListener::bind(full_path).expect("Socket file creation failed.");
+    }
+
     #[cfg(not(windows))]
     pub fn is_fifo(&self, fifo: &str) -> bool {
         unsafe {
@@ -1083,6 +1148,19 @@ impl AtPath {
             let mut stat: libc::stat = std::mem::zeroed();
             if libc::stat(name.as_ptr(), &mut stat) >= 0 {
                 libc::S_IFIFO & stat.st_mode as libc::mode_t != 0
+            } else {
+                false
+            }
+        }
+    }
+
+    #[cfg(not(windows))]
+    pub fn is_char_device(&self, char_dev: &str) -> bool {
+        unsafe {
+            let name = CString::new(self.plus_as_string(char_dev)).unwrap();
+            let mut stat: libc::stat = std::mem::zeroed();
+            if libc::stat(name.as_ptr(), &mut stat) >= 0 {
+                libc::S_IFCHR & stat.st_mode as libc::mode_t != 0
             } else {
                 false
             }
@@ -1192,14 +1270,14 @@ impl AtPath {
     }
 
     /// Decide whether the named symbolic link exists in the test directory.
-    pub fn symlink_exists(&self, path: &str) -> bool {
+    pub fn symlink_exists<P: AsRef<Path>>(&self, path: P) -> bool {
         match fs::symlink_metadata(self.plus(path)) {
             Ok(m) => m.file_type().is_symlink(),
             Err(_) => false,
         }
     }
 
-    pub fn dir_exists(&self, path: &str) -> bool {
+    pub fn dir_exists<P: AsRef<Path>>(&self, path: P) -> bool {
         match fs::metadata(self.plus(path)) {
             Ok(m) => m.is_dir(),
             Err(_) => false,
@@ -2249,12 +2327,12 @@ impl UChild {
     }
 
     /// Return a [`UChildAssertion`]
-    pub fn make_assertion(&mut self) -> UChildAssertion {
+    pub fn make_assertion(&mut self) -> UChildAssertion<'_> {
         UChildAssertion::new(self)
     }
 
     /// Convenience function for calling [`UChild::delay`] and then [`UChild::make_assertion`]
-    pub fn make_assertion_with_delay(&mut self, millis: u64) -> UChildAssertion {
+    pub fn make_assertion_with_delay(&mut self, millis: u64) -> UChildAssertion<'_> {
         self.delay(millis).make_assertion()
     }
 
@@ -2810,7 +2888,7 @@ pub fn whoami() -> String {
 
 /// Add prefix 'g' for `util_name` if not on linux
 #[cfg(unix)]
-pub fn host_name_for(util_name: &str) -> Cow<str> {
+pub fn host_name_for(util_name: &str) -> Cow<'_, str> {
     // In some environments, e.g. macOS/freebsd, the GNU coreutils are prefixed with "g"
     // to not interfere with the BSD counterparts already in `$PATH`.
     #[cfg(not(target_os = "linux"))]
@@ -2925,6 +3003,11 @@ fn parse_coreutil_version(version_string: &str) -> f32 {
 /// If the `util_name` in `$PATH` doesn't include a coreutils version string,
 /// or the version is too low, this returns an error and the test should be skipped.
 ///
+/// Arguments:
+/// - `ts`: The test context.
+/// - `args`: Command-line variables applied to the command.
+/// - `envs`: Environment variables applied to the command invocation.
+///
 /// Example:
 ///
 /// ```no_run
@@ -2941,7 +3024,11 @@ fn parse_coreutil_version(version_string: &str) -> f32 {
 /// }
 ///```
 #[cfg(unix)]
-pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<CmdResult, String> {
+pub fn gnu_cmd_result(
+    ts: &TestScenario,
+    args: &[&str],
+    envs: &[(&str, &str)],
+) -> std::result::Result<CmdResult, String> {
     let util_name = ts.util_name.as_str();
     println!("{}", check_coreutil_version(util_name, VERSION_MIN)?);
     let util_name = host_name_for(util_name);
@@ -2950,6 +3037,7 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
         .cmd(util_name.as_ref())
         .env("PATH", PATH)
         .envs(DEFAULT_ENV)
+        .envs(envs.iter().copied())
         .args(args)
         .run();
 
@@ -2976,6 +3064,31 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
         stdout.as_bytes(),
         stderr.as_bytes(),
     ))
+}
+
+/// This runs the GNU coreutils `util_name` binary in `$PATH` in order to
+/// dynamically gather reference values on the system.
+/// If the `util_name` in `$PATH` doesn't include a coreutils version string,
+/// or the version is too low, this returns an error and the test should be skipped.
+///
+/// Example:
+///
+/// ```no_run
+/// use uutests::util::*;
+/// #[test]
+/// fn test_xyz() {
+///     let ts = TestScenario::new(util_name!());
+///     let result = ts.ucmd().run();
+///     let exp_result = unwrap_or_return!(expected_result(&ts, &[]));
+///     result
+///         .stdout_is(exp_result.stdout_str())
+///         .stderr_is(exp_result.stderr_str())
+///         .code_is(exp_result.code());
+/// }
+///```
+#[cfg(unix)]
+pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<CmdResult, String> {
+    gnu_cmd_result(ts, args, &[])
 }
 
 /// This is a convenience wrapper to run a ucmd with root permissions.

@@ -13,6 +13,20 @@
     clippy::cast_possible_truncation
 )]
 
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd")
+))]
+use nix::sys::signal::{Signal, kill};
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd")
+))]
+use nix::unistd::Pid;
 use pretty_assertions::assert_eq;
 use rand::distr::Alphanumeric;
 use rstest::rstest;
@@ -133,12 +147,11 @@ fn test_stdin_redirect_file_follow() {
     // foo
     //
 
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
+
     at.write("f", "foo");
 
-    let mut p = ts
-        .ucmd()
+    let mut p = ucmd
         .arg("-f")
         .set_stdin(File::open(at.plus("f")).unwrap())
         .run_no_wait();
@@ -155,14 +168,13 @@ fn test_stdin_redirect_file_follow() {
 fn test_stdin_redirect_offset() {
     // inspired by: "gnu/tests/tail-2/start-middle.sh"
 
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
 
     at.write("k", "1\n2\n");
     let mut fh = File::open(at.plus("k")).unwrap();
     fh.seek(SeekFrom::Start(2)).unwrap();
 
-    ts.ucmd().set_stdin(fh).succeeds().stdout_only("2\n");
+    ucmd.set_stdin(fh).succeeds().stdout_only("2\n");
 }
 
 #[test]
@@ -170,8 +182,7 @@ fn test_stdin_redirect_offset() {
 fn test_stdin_redirect_offset2() {
     // like test_stdin_redirect_offset but with multiple files
 
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
 
     at.write("k", "1\n2\n");
     at.write("l", "3\n4\n");
@@ -179,8 +190,7 @@ fn test_stdin_redirect_offset2() {
     let mut fh = File::open(at.plus("k")).unwrap();
     fh.seek(SeekFrom::Start(2)).unwrap();
 
-    ts.ucmd()
-        .set_stdin(fh)
+    ucmd.set_stdin(fh)
         .args(&["k", "-", "l", "m"])
         .succeeds()
         .stdout_only(
@@ -246,8 +256,7 @@ fn test_permission_denied() {
 fn test_permission_denied_multiple() {
     use std::os::unix::fs::PermissionsExt;
 
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("file1");
     at.touch("file2");
@@ -256,8 +265,7 @@ fn test_permission_denied_multiple() {
         .set_permissions(PermissionsExt::from_mode(0o000))
         .unwrap();
 
-    ts.ucmd()
-        .args(&["file1", "unreadable", "file2"])
+    ucmd.args(&["file1", "unreadable", "file2"])
         .fails_with_code(1)
         .stderr_is("tail: cannot open 'unreadable' for reading: Permission denied\n")
         .stdout_is("==> file1 <==\n\n==> file2 <==\n");
@@ -344,6 +352,55 @@ fn test_stdin_redirect_dir_when_target_os_is_macos() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_stdin_via_script_redirection_and_pipe() {
+    // $ touch file.txt
+    // $ echo line1 > file.txt
+    // $ echo line2 >> file.txt
+    // $ chmod +x test.sh
+    // $ ./test.sh < file.txt
+    // line1
+    // line2
+    // $ cat file.txt | ./test.sh
+    // line1
+    // line2
+    use std::os::unix::fs::PermissionsExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let data = "line1\nline2\n";
+
+    at.write("file.txt", data);
+
+    let mut script = at.make_file("test.sh");
+    writeln!(script, "#!/usr/bin/env sh").unwrap();
+    writeln!(script, "tail").unwrap();
+    script
+        .set_permissions(PermissionsExt::from_mode(0o755))
+        .unwrap();
+
+    drop(script); // close the file handle to ensure file is not busy
+
+    // test with redirection
+    scene
+        .cmd("sh")
+        .current_dir(at.plus(""))
+        .arg("-c")
+        .arg("./test.sh < file.txt")
+        .succeeds()
+        .stdout_only(data);
+
+    // test with pipe
+    scene
+        .cmd("sh")
+        .current_dir(at.plus(""))
+        .arg("-c")
+        .arg("cat file.txt | ./test.sh")
+        .succeeds()
+        .stdout_only(data);
 }
 
 #[test]
@@ -630,7 +687,7 @@ fn test_follow_invalid_pid() {
         ));
 }
 
-// FixME: test PASSES for usual windows builds, but fails for coverage testing builds (likely related to the specific RUSTFLAGS '-Zpanic_abort_tests -Cpanic=abort')  This test also breaks tty settings under bash requiring a 'stty sane' or reset. // spell-checker:disable-line
+// FixME: test PASSES for usual windows builds, but fails for coverage testing builds (likely related to the specific RUSTFLAGS '-Zpanic_abort_tests -Cpanic=abort') // spell-checker:disable-line
 // FIXME: FreeBSD: See issue https://github.com/uutils/coreutils/issues/4306
 //        Fails intermittently in the CI, but couldn't reproduce the failure locally.
 #[test]
@@ -645,12 +702,7 @@ fn test_follow_with_pid() {
 
     let (at, mut ucmd) = at_and_ucmd!();
 
-    #[cfg(unix)]
     let dummy_cmd = "sh";
-
-    #[cfg(windows)]
-    let dummy_cmd = "cmd";
-
     let mut dummy = Command::new(dummy_cmd).spawn().unwrap();
     let pid = dummy.id();
 
@@ -685,7 +737,7 @@ fn test_follow_with_pid() {
         .stdout_only_fixture("foobar_follow_multiple_appended.expected");
 
     // kill the dummy process and give tail time to notice this
-    dummy.kill().unwrap();
+    kill(Pid::from_raw(i32::try_from(pid).unwrap()), Signal::SIGUSR1).unwrap();
     let _ = dummy.wait();
 
     child.delay(DEFAULT_SLEEP_INTERVAL_MILLIS);
@@ -4830,7 +4882,7 @@ fn test_following_with_pid() {
 // should fail with any command that takes piped input.
 // See also https://github.com/uutils/coreutils/issues/3895
 #[test]
-#[cfg_attr(not(feature = "expensive_tests"), ignore)]
+#[cfg_attr(not(feature = "expensive_tests"), ignore = "")]
 fn test_when_piped_input_then_no_broken_pipe() {
     let ts = TestScenario::new("tail");
     for i in 0..10000 {
@@ -4843,6 +4895,20 @@ fn test_when_piped_input_then_no_broken_pipe() {
             .no_stdout()
             .no_stderr();
     }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_when_output_closed_then_no_broken_pie() {
+    let mut cmd = new_ucmd!();
+    let mut child = cmd
+        .args(&["-c", "100000", "/dev/zero"])
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+    // Dropping the stdout should not lead to an error.
+    // The "Broken pipe" error should be silently ignored.
+    child.close_stdout();
+    child.wait().unwrap().fails_silently();
 }
 
 #[test]
@@ -4870,4 +4936,22 @@ fn test_failed_write_is_reported() {
         .set_stdout(std::fs::File::create("/dev/full").unwrap())
         .fails()
         .stderr_is("tail: No space left on device\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_dev_zero() {
+    new_ucmd!()
+        .args(&["-c", "1", "/dev/zero"])
+        .succeeds()
+        .stdout_only("\0");
+}
+
+#[test]
+fn tail_n_lines_with_emoji() {
+    new_ucmd!()
+        .args(&["-n", "1"])
+        .pipe_in("a\n💐\n")
+        .succeeds()
+        .stdout_only("💐\n");
 }

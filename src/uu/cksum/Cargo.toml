@@ -21,7 +21,7 @@ path = "src/cksum.rs"
 clap = { workspace = true }
 uucore = { workspace = true, features = ["checksum", "encoding", "sum"] }
 hex = { workspace = true }
-regex = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "cksum"

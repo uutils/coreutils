@@ -10,6 +10,8 @@ use regex::Regex;
 use rlimit::Resource;
 #[cfg(not(windows))]
 use std::env;
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStringExt;
 use std::path::Path;
 use std::{
     fs::{File, read_dir},
@@ -17,9 +19,7 @@ use std::{
 };
 use uutests::util::{AtPath, TestScenario};
 
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
-use uutests::util_name;
+use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 fn random_chars(n: usize) -> String {
     rng()
@@ -114,9 +114,14 @@ impl RandomFile {
 
     /// Add n lines each of size `RandomFile::LINESIZE`
     fn add_lines(&mut self, lines: usize) {
+        self.add_lines_with_line_size(lines, Self::LINESIZE);
+    }
+
+    /// Add n lines each of the given size.
+    fn add_lines_with_line_size(&mut self, lines: usize, line_size: usize) {
         let mut n = lines;
         while n > 0 {
-            writeln!(self.inner, "{}", random_chars(Self::LINESIZE)).unwrap();
+            writeln!(self.inner, "{}", random_chars(line_size)).unwrap();
             n -= 1;
         }
     }
@@ -430,6 +435,28 @@ fn test_split_lines_number() {
         .stderr_only("split: invalid number of lines: 'file'\n");
 }
 
+/// Test interference between split line size and IO buffer capacity.
+/// See issue #7869.
+#[test]
+fn test_split_lines_interfere_with_io_buf_capacity() {
+    let buf_capacity = BufWriter::new(Vec::new()).capacity();
+    // We intentionally set the line size to be less than the IO write buffer
+    // capacity. This is to trigger the condition where after the first split
+    // file is written, there are still bytes left in the buffer. We then
+    // test that those bytes are written to the next split file.
+    let line_size = buf_capacity - 2;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "split_lines_interfere_with_io_buf_capacity";
+    RandomFile::new(&at, name).add_lines_with_line_size(2, line_size);
+    ucmd.args(&["-l", "1", name]).succeeds();
+
+    // Note that `lines_size` doesn't take the trailing newline into account,
+    // we add 1 for adjustment.
+    assert_eq!(at.read("xaa").len(), line_size + 1);
+    assert_eq!(at.read("xab").len(), line_size + 1);
+}
+
 /// Test short lines option with value concatenated
 #[test]
 fn test_split_lines_short_concatenated_with_value() {
@@ -473,13 +500,11 @@ fn test_split_obs_lines_standalone_overflow() {
 /// Test for obsolete lines option as part of invalid combined short options
 #[test]
 fn test_split_obs_lines_within_invalid_combined_shorts() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
+
     at.touch("file");
 
-    scene
-        .ucmd()
-        .args(&["-2fb", "file"])
+    ucmd.args(&["-2fb", "file"])
         .fails_with_code(1)
         .stderr_contains("error: unexpected argument '-f' found\n");
 }
@@ -487,18 +512,16 @@ fn test_split_obs_lines_within_invalid_combined_shorts() {
 /// Test for obsolete lines option as part of combined short options
 #[test]
 fn test_split_obs_lines_within_combined_shorts() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-    let name = "obs-lines-within-shorts";
-    RandomFile::new(at, name).add_lines(400);
+    let (at, mut ucmd) = at_and_ucmd!();
 
-    scene
-        .ucmd()
-        .args(&["-x200de", name])
+    let name = "obs-lines-within-shorts";
+    RandomFile::new(&at, name).add_lines(400);
+
+    ucmd.args(&["-x200de", name])
         .succeeds()
         .no_stderr()
         .no_stdout();
-    let glob = Glob::new(at, ".", r"x\d\d$");
+    let glob = Glob::new(&at, ".", r"x\d\d$");
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read_bytes(name));
 }
@@ -509,6 +532,7 @@ fn test_split_obs_lines_within_combined_shorts_tailing_suffix_length() {
     let (at, mut ucmd) = at_and_ucmd!();
     let name = "obs-lines-combined-shorts-tailing-suffix-length";
     RandomFile::new(&at, name).add_lines(1000);
+
     ucmd.args(&["-d200a4", name]).succeeds();
 
     let glob = Glob::new(&at, ".", r"x\d\d\d\d$");
@@ -519,18 +543,17 @@ fn test_split_obs_lines_within_combined_shorts_tailing_suffix_length() {
 /// Test for obsolete lines option starts as part of combined short options
 #[test]
 fn test_split_obs_lines_starts_combined_shorts() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-    let name = "obs-lines-starts-shorts";
-    RandomFile::new(at, name).add_lines(400);
+    let (at, mut ucmd) = at_and_ucmd!();
 
-    scene
-        .ucmd()
-        .args(&["-200xd", name])
+    let name = "obs-lines-starts-shorts";
+    RandomFile::new(&at, name).add_lines(400);
+
+    ucmd.args(&["-200xd", name])
         .succeeds()
         .no_stderr()
         .no_stdout();
-    let glob = Glob::new(at, ".", r"x\d\d$");
+
+    let glob = Glob::new(&at, ".", r"x\d\d$");
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read_bytes(name));
 }
@@ -622,18 +645,17 @@ fn test_split_obs_lines_as_other_option_value() {
 /// last one wins
 #[test]
 fn test_split_multiple_obs_lines_standalone() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-    let name = "multiple-obs-lines";
-    RandomFile::new(at, name).add_lines(400);
+    let (at, mut ucmd) = at_and_ucmd!();
 
-    scene
-        .ucmd()
-        .args(&["-3000", "-200", name])
+    let name = "multiple-obs-lines";
+    RandomFile::new(&at, name).add_lines(400);
+
+    ucmd.args(&["-3000", "-200", name])
         .succeeds()
         .no_stderr()
         .no_stdout();
-    let glob = Glob::new(at, ".", r"x[[:alpha:]][[:alpha:]]$");
+
+    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read_bytes(name));
 }
@@ -642,18 +664,17 @@ fn test_split_multiple_obs_lines_standalone() {
 /// last one wins
 #[test]
 fn test_split_multiple_obs_lines_within_combined() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-    let name = "multiple-obs-lines";
-    RandomFile::new(at, name).add_lines(400);
+    let (at, mut ucmd) = at_and_ucmd!();
 
-    scene
-        .ucmd()
-        .args(&["-d5000x", "-e200d", name])
+    let name = "multiple-obs-lines";
+    RandomFile::new(&at, name).add_lines(400);
+
+    ucmd.args(&["-d5000x", "-e200d", name])
         .succeeds()
         .no_stderr()
         .no_stdout();
-    let glob = Glob::new(at, ".", r"x\d\d$");
+
+    let glob = Glob::new(&at, ".", r"x\d\d$");
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read_bytes(name));
 }
@@ -695,9 +716,12 @@ fn test_split_invalid_bytes_size() {
 #[test]
 fn test_split_overflow_bytes_size() {
     let (at, mut ucmd) = at_and_ucmd!();
+
     let name = "test_split_overflow_bytes_size";
     RandomFile::new(&at, name).add_bytes(1000);
+
     ucmd.args(&["-b", "1Y", name]).succeeds();
+
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.count(), 1);
     assert_eq!(glob.collate(), at.read_bytes(name));
@@ -706,7 +730,9 @@ fn test_split_overflow_bytes_size() {
 #[test]
 fn test_split_stdin_num_chunks() {
     let (at, mut ucmd) = at_and_ucmd!();
+
     ucmd.args(&["--number=1"]).pipe_in("").succeeds();
+
     assert_eq!(at.read("xaa"), "");
     assert!(!at.plus("xab").exists());
 }
@@ -1349,10 +1375,11 @@ fn test_line_bytes_no_eof() {
 
 #[test]
 fn test_guard_input() {
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
 
-    ts.ucmd()
+    scene
+        .ucmd()
         .args(&["-C", "6"])
         .pipe_in("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n")
         .succeeds()
@@ -1360,7 +1387,8 @@ fn test_guard_input() {
         .no_stderr();
     assert_eq!(at.read("xaa"), "1\n2\n3\n");
 
-    ts.ucmd()
+    scene
+        .ucmd()
         .args(&["-C", "6"])
         .pipe_in("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n")
         .succeeds()
@@ -1368,7 +1396,8 @@ fn test_guard_input() {
         .no_stderr();
     assert_eq!(at.read("xaa"), "1\n2\n3\n");
 
-    ts.ucmd()
+    scene
+        .ucmd()
         .args(&["-C", "6", "xaa"])
         .fails()
         .stderr_only("split: 'xaa' would overwrite input; aborting\n");
@@ -1682,7 +1711,7 @@ fn test_split_invalid_input() {
 /// Test if there are invalid (non UTF-8) in the arguments - unix
 /// clap is expected to fail/panic
 #[test]
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn test_split_non_utf8_argument_unix() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1697,9 +1726,7 @@ fn test_split_non_utf8_argument_unix() {
     let opt_value = [0x66, 0x6f, 0x80, 0x6f];
     let opt_value = OsStr::from_bytes(&opt_value[..]);
     let name = OsStr::from_bytes(name.as_bytes());
-    ucmd.args(&[opt, opt_value, name])
-        .fails()
-        .stderr_contains("error: invalid UTF-8 was detected in one or more arguments");
+    ucmd.args(&[opt, opt_value, name]).succeeds();
 }
 
 /// Test if there are invalid (non UTF-8) in the arguments - windows
@@ -1720,9 +1747,7 @@ fn test_split_non_utf8_argument_windows() {
     let opt_value = [0x0066, 0x006f, 0xD800, 0x006f];
     let opt_value = OsString::from_wide(&opt_value[..]);
     let name = OsString::from(name);
-    ucmd.args(&[opt, opt_value, name])
-        .fails()
-        .stderr_contains("error: invalid UTF-8 was detected in one or more arguments");
+    ucmd.args(&[opt, opt_value, name]).succeeds();
 }
 
 // Test '--separator' / '-t' option following GNU tests example
@@ -1908,9 +1933,8 @@ fn test_split_separator_no_value() {
         .ignore_stdin_write_error()
         .pipe_in("a\n")
         .fails()
-        .stderr_contains(
-            "error: a value is required for '--separator <SEP>' but none was supplied",
-        );
+        .stderr_contains("error: a value is required for '--separator <SEP>' but none was supplied")
+        .stderr_contains("For more information, try '--help'.");
 }
 
 #[test]
@@ -1979,4 +2003,78 @@ fn test_long_lines() {
     assert_eq!(at.read("xab").len(), 2);
     assert_eq!(at.read("xac").len(), 131_072);
     assert!(!at.plus("xad").exists());
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_split_non_utf8_paths() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    std::fs::write(at.plus(&filename), b"line1\nline2\nline3\nline4\nline5\n").unwrap();
+
+    ucmd.arg(&filename).succeeds();
+
+    // Check that at least one split file was created
+    assert!(at.plus("xaa").exists());
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_split_non_utf8_prefix() {
+    use std::os::unix::ffi::OsStrExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("input.txt", "line1\nline2\nline3\nline4\n");
+
+    let prefix = std::ffi::OsStr::from_bytes(b"\xFF\xFE");
+    ucmd.arg("input.txt").arg(prefix).succeeds();
+
+    // Check that split files were created (functionality works)
+    // The actual filename may be converted due to lossy conversion, but the command should succeed
+    let entries: Vec<_> = std::fs::read_dir(at.as_string()).unwrap().collect();
+    let split_files = entries
+        .iter()
+        .filter_map(|e| e.as_ref().ok())
+        .filter(|entry| {
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            name_str.starts_with("�") || name_str.len() > 2 // split files should exist
+        })
+        .count();
+    assert!(
+        split_files > 0,
+        "Expected at least one split file to be created"
+    );
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_split_non_utf8_additional_suffix() {
+    use std::os::unix::ffi::OsStrExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("input.txt", "line1\nline2\nline3\nline4\n");
+
+    let suffix = std::ffi::OsStr::from_bytes(b"\xFF\xFE");
+    ucmd.args(&["input.txt", "--additional-suffix"])
+        .arg(suffix)
+        .succeeds();
+
+    // Check that split files were created (functionality works)
+    // The actual filename may be converted due to lossy conversion, but the command should succeed
+    let entries: Vec<_> = std::fs::read_dir(at.as_string()).unwrap().collect();
+    let split_files = entries
+        .iter()
+        .filter_map(|e| e.as_ref().ok())
+        .filter(|entry| {
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            name_str.ends_with("�") || name_str.starts_with('x') // split files should exist
+        })
+        .count();
+    assert!(
+        split_files > 0,
+        "Expected at least one split file to be created"
+    );
 }

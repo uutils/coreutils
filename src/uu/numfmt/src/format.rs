@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore powf
 use uucore::display::Quotable;
+use uucore::translate;
 
 use crate::options::{NumfmtOptions, RoundMethod, TransformOptions};
 use crate::units::{DisplayableSuffix, IEC_BASES, RawSuffix, Result, SI_BASES, Suffix, Unit};
@@ -63,7 +64,7 @@ impl<'a> Iterator for WhitespaceSplitter<'a> {
 
 fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
     if s.is_empty() {
-        return Err("invalid number: ''".to_string());
+        return Err(translate!("numfmt-error-invalid-number-empty"));
     }
 
     let with_i = s.ends_with('i');
@@ -81,7 +82,9 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
         Some('Z') => Some((RawSuffix::Z, with_i)),
         Some('Y') => Some((RawSuffix::Y, with_i)),
         Some('0'..='9') if !with_i => None,
-        _ => return Err(format!("invalid suffix in input: {}", s.quote())),
+        _ => {
+            return Err(translate!("numfmt-error-invalid-suffix", "input" => s.quote()));
+        }
     };
 
     let suffix_len = match suffix {
@@ -92,13 +95,13 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
 
     let number = s[..s.len() - suffix_len]
         .parse::<f64>()
-        .map_err(|_| format!("invalid number: {}", s.quote()))?;
+        .map_err(|_| translate!("numfmt-error-invalid-number", "input" => s.quote()))?;
 
     Ok((number, suffix))
 }
 
-// Returns the implicit precision of a number, which is the count of digits after the dot. For
-// example, 1.23 has an implicit precision of 2.
+/// Returns the implicit precision of a number, which is the count of digits after the dot. For
+/// example, 1.23 has an implicit precision of 2.
 fn parse_implicit_precision(s: &str) -> usize {
     match s.split_once('.') {
         Some((_, decimal_part)) => decimal_part
@@ -132,15 +135,14 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
             RawSuffix::Z => Ok(i * IEC_BASES[7]),
             RawSuffix::Y => Ok(i * IEC_BASES[8]),
         },
-        (Some((raw_suffix, false)), &Unit::Iec(true)) => Err(format!(
-            "missing 'i' suffix in input: '{i}{raw_suffix:?}' (e.g Ki/Mi/Gi)"
-        )),
-        (Some((raw_suffix, with_i)), &Unit::None) => Err(format!(
-            "rejecting suffix in input: '{i}{raw_suffix:?}{}' (consider using --from)",
-            if with_i { "i" } else { "" }
-        )),
+        (Some((raw_suffix, false)), &Unit::Iec(true)) => Err(
+            translate!("numfmt-error-missing-i-suffix", "number" => i, "suffix" => format!("{raw_suffix:?}")),
+        ),
+        (Some((raw_suffix, with_i)), &Unit::None) => Err(
+            translate!("numfmt-error-rejecting-suffix", "number" => i, "suffix" => format!("{raw_suffix:?}{}", if with_i { "i" } else { "" })),
+        ),
         (None, _) => Ok(i),
-        (_, _) => Err("This suffix is unsupported for specified unit".to_owned()),
+        (_, _) => Err(translate!("numfmt-error-suffix-unsupported-for-unit")),
     }
 }
 
@@ -197,7 +199,7 @@ pub fn div_round(n: f64, d: f64, method: RoundMethod) -> f64 {
     }
 }
 
-// Rounds to the specified number of decimal points.
+/// Rounds to the specified number of decimal points.
 fn round_with_precision(n: f64, method: RoundMethod, precision: usize) -> f64 {
     let p = 10.0_f64.powf(precision as f64);
 
@@ -218,7 +220,7 @@ fn consider_suffix(
     let (bases, with_i) = match *u {
         Unit::Si => (&SI_BASES, false),
         Unit::Iec(with_i) => (&IEC_BASES, with_i),
-        Unit::Auto => return Err("Unit 'auto' isn't supported with --to options".to_owned()),
+        Unit::Auto => return Err(translate!("numfmt-error-unit-auto-not-supported-with-to")),
         Unit::None => return Ok((n, None)),
     };
 
@@ -232,7 +234,7 @@ fn consider_suffix(
         _ if abs_n < bases[7] => 6,
         _ if abs_n < bases[8] => 7,
         _ if abs_n < bases[9] => 8,
-        _ => return Err("Number is too big and unsupported".to_string()),
+        _ => return Err(translate!("numfmt-error-number-too-big")),
     };
 
     let v = if precision > 0 {
@@ -390,7 +392,7 @@ fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<()> {
     }
 
     let eol = if options.zero_terminated { '\0' } else { '\n' };
-    print!("{}", eol);
+    print!("{eol}");
 
     Ok(())
 }

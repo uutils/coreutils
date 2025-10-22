@@ -11,6 +11,7 @@ use thiserror::Error;
 use uucore::{
     display::Quotable,
     parser::parse_size::{ParseSizeError, parse_size_u64, parse_size_u64_max},
+    translate,
 };
 
 /// Sub-strategy of the [`Strategy::Number`]
@@ -69,7 +70,7 @@ pub enum NumberTypeError {
     /// -n r/N
     /// -n r/K/N
     /// ```
-    #[error("invalid number of chunks: {}", .0.quote())]
+    #[error("{}", translate!("split-error-invalid-number-of-chunks", "chunks" => .0.quote()))]
     NumberOfChunks(String),
 
     /// The chunk number was invalid.
@@ -84,7 +85,7 @@ pub enum NumberTypeError {
     /// -n l/K/N
     /// -n r/K/N
     /// ```
-    #[error("invalid chunk number: {}", .0.quote())]
+    #[error("{}", translate!("split-error-invalid-chunk-number", "chunk" => .0.quote()))]
     ChunkNumber(String),
 }
 
@@ -198,11 +199,11 @@ pub enum Strategy {
 #[derive(Debug, Error)]
 pub enum StrategyError {
     /// Invalid number of lines.
-    #[error("invalid number of lines: {0}")]
+    #[error("{}", translate!("split-error-invalid-number-of-lines", "error" => .0))]
     Lines(ParseSizeError),
 
     /// Invalid number of bytes.
-    #[error("invalid number of bytes: {0}")]
+    #[error("{}", translate!("split-error-invalid-number-of-bytes", "error" => .0))]
     Bytes(ParseSizeError),
 
     /// Invalid number type.
@@ -210,7 +211,7 @@ pub enum StrategyError {
     NumberType(NumberTypeError),
 
     /// Multiple chunking strategies were specified (but only one should be).
-    #[error("cannot split in more than one way")]
+    #[error("{}", translate!("split-error-cannot-split-more-than-one-way"))]
     MultipleWays,
 }
 
@@ -228,7 +229,7 @@ impl Strategy {
             if n > 0 {
                 Ok(strategy(n))
             } else {
-                Err(error(ParseSizeError::ParseFailure(s.to_string())))
+                Err(error(ParseSizeError::ParseFailure(s.to_owned())))
             }
         }
         // Check that the user is not specifying more than one strategy.

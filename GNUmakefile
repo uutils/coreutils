@@ -5,6 +5,7 @@ PROFILE         ?= debug
 MULTICALL       ?= n
 COMPLETIONS     ?= y
 MANPAGES        ?= y
+LOCALES         ?= y
 INSTALL         ?= install
 ifneq (,$(filter install, $(MAKECMDGOALS)))
 override PROFILE:=release
@@ -32,6 +33,9 @@ PREFIX ?= /usr/local
 DESTDIR ?=
 BINDIR ?= $(PREFIX)/bin
 DATAROOTDIR ?= $(PREFIX)/share
+LIBSTDBUF_DIR ?= $(PREFIX)/libexec/coreutils
+# Export variable so that it is used during the build
+export LIBSTDBUF_DIR
 
 INSTALLDIR_BIN=$(DESTDIR)$(BINDIR)
 
@@ -57,6 +61,20 @@ TOYBOX_ROOT := $(BASEDIR)/tmp
 TOYBOX_VER  := 0.8.12
 TOYBOX_SRC  := $(TOYBOX_ROOT)/toybox-$(TOYBOX_VER)
 
+#------------------------------------------------------------------------
+# Detect the host system.
+# On Windows the environment already sets  OS = Windows_NT.
+# Otherwise let it default to the kernel name returned by uname -s
+# (Linux, Darwin, FreeBSD, …).
+#------------------------------------------------------------------------
+OS ?= $(shell uname -s)
+
+# Windows does not allow symlink by default.
+# Allow to override LN for AppArmor.
+ifeq ($(OS),Windows_NT)
+	LN ?= ln -f
+endif
+LN ?= ln -sf
 
 ifdef SELINUX_ENABLED
 	override SELINUX_ENABLED := 0
@@ -73,6 +91,7 @@ endif
 
 # Possible programs
 PROGS       := \
+	arch \
 	base32 \
 	base64 \
 	basenc \
@@ -89,6 +108,7 @@ PROGS       := \
 	dir \
 	dircolors \
 	dirname \
+	du \
 	echo \
 	env \
 	expand \
@@ -99,6 +119,7 @@ PROGS       := \
 	fold \
 	hashsum \
 	head \
+	hostname \
 	join \
 	link \
 	ln \
@@ -133,27 +154,27 @@ PROGS       := \
 	tail \
 	tee \
 	test \
+	touch \
 	tr \
 	true \
 	truncate \
 	tsort \
+	uname \
 	unexpand \
 	uniq \
+	unlink \
 	vdir \
 	wc \
 	whoami \
 	yes
 
 UNIX_PROGS := \
-	arch \
 	chgrp \
 	chmod \
 	chown \
 	chroot \
-	du \
 	groups \
 	hostid \
-	hostname \
 	id \
 	install \
 	kill \
@@ -166,11 +187,9 @@ UNIX_PROGS := \
 	pinky \
 	stat \
 	stdbuf \
+	stty \
 	timeout \
-	touch \
 	tty \
-	uname \
-	unlink \
 	uptime \
 	users \
 	who
@@ -179,13 +198,42 @@ SELINUX_PROGS := \
 	chcon \
 	runcon
 
+HASHSUM_PROGS := \
+	b2sum \
+	b3sum \
+	md5sum \
+	sha1sum \
+	sha224sum \
+	sha256sum \
+	sha3-224sum \
+	sha3-256sum \
+	sha3-384sum \
+	sha3-512sum \
+	sha384sum \
+	sha3sum \
+	sha512sum \
+	shake128sum \
+	shake256sum
+
+$(info Detected OS = $(OS))
+
+# Don't build the SELinux programs on macOS (Darwin) and FreeBSD
+ifeq ($(filter $(OS),Darwin FreeBSD),$(OS))
+	SELINUX_PROGS :=
+endif
+
 ifneq ($(OS),Windows_NT)
 	PROGS := $(PROGS) $(UNIX_PROGS)
 # Build the selinux command even if not on the system
 	PROGS := $(PROGS) $(SELINUX_PROGS)
 endif
 
-UTILS ?= $(PROGS)
+UTILS ?= $(filter-out $(SKIP_UTILS),$(PROGS))
+
+ifneq ($(findstring stdbuf,$(UTILS)),)
+    # Use external libstdbuf per default. It is more robust than embedding libstdbuf.
+	CARGOFLAGS += --features feat_external_libstdbuf
+endif
 
 # Programs with usable tests
 TEST_PROGS  := \
@@ -254,11 +302,12 @@ TEST_PROGS  := \
 	unexpand \
 	uniq \
 	unlink \
+	uudoc \
 	wc \
 	who
 
 TESTS       := \
-	$(sort $(filter $(UTILS),$(filter-out $(SKIP_UTILS),$(TEST_PROGS))))
+	$(sort $(filter $(UTILS),$(TEST_PROGS)))
 
 TEST_NO_FAIL_FAST :=
 TEST_SPEC_FEATURE :=
@@ -267,8 +316,8 @@ TEST_NO_FAIL_FAST :=--no-fail-fast
 TEST_SPEC_FEATURE := test_unimplemented
 else ifeq ($(SELINUX_ENABLED),1)
 TEST_NO_FAIL_FAST :=
-TEST_SPEC_FEATURE := feat_selinux
-BUILD_SPEC_FEATURE := feat_selinux
+TEST_SPEC_FEATURE := selinux
+BUILD_SPEC_FEATURE := selinux
 endif
 
 define TEST_BUSYBOX
@@ -278,7 +327,7 @@ endef
 
 # Output names
 EXES        := \
-	$(sort $(filter $(UTILS),$(filter-out $(SKIP_UTILS),$(PROGS))))
+	$(sort $(UTILS))
 
 INSTALLEES  := ${EXES}
 ifeq (${MULTICALL}, y)
@@ -302,9 +351,9 @@ endif
 build-coreutils:
 	${CARGO} build ${CARGOFLAGS} --features "${EXES} $(BUILD_SPEC_FEATURE) coreutils" ${PROFILE_CMD} --no-default-features
 
-build: build-coreutils build-pkgs
+build: build-coreutils build-pkgs locales
 
-$(foreach test,$(filter-out $(SKIP_UTILS),$(PROGS)),$(eval $(call TEST_BUSYBOX,$(test))))
+$(foreach test,$(UTILS),$(eval $(call TEST_BUSYBOX,$(test))))
 
 test:
 	${CARGO} test ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE) coreutils" --no-default-features $(TEST_NO_FAIL_FAST)
@@ -358,59 +407,100 @@ distclean: clean
 	$(CARGO) clean $(CARGOFLAGS) && $(CARGO) update $(CARGOFLAGS)
 
 ifeq ($(MANPAGES),y)
-manpages: build-coreutils
-	mkdir -p $(BUILDDIR)/man/
-	$(foreach prog, $(INSTALLEES), \
-		$(BUILDDIR)/coreutils manpage $(prog) > $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(newline) \
-	)
+build-uudoc:
+	${CARGO} build ${CARGOFLAGS} --bin uudoc --features "uudoc ${EXES}" ${PROFILE_CMD} --no-default-features
 
-install-manpages: manpages
+install-manpages: build-uudoc
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/man/man1
-	$(foreach prog, $(INSTALLEES), \
-		$(INSTALL) $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(DESTDIR)$(DATAROOTDIR)/man/man1/ $(newline) \
+	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS), \
+		$(BUILDDIR)/uudoc manpage $(prog) > $(DESTDIR)$(DATAROOTDIR)/man/man1/$(PROG_PREFIX)$(prog).1 $(newline) \
 	)
 else
 install-manpages:
 endif
 
 ifeq ($(COMPLETIONS),y)
-completions: build-coreutils
-	mkdir -p $(BUILDDIR)/completions/zsh $(BUILDDIR)/completions/bash $(BUILDDIR)/completions/fish
-	$(foreach prog, $(INSTALLEES), \
-		$(BUILDDIR)/coreutils completion $(prog) zsh > $(BUILDDIR)/completions/zsh/_$(PROG_PREFIX)$(prog) $(newline) \
-		$(BUILDDIR)/coreutils completion $(prog) bash > $(BUILDDIR)/completions/bash/$(PROG_PREFIX)$(prog) $(newline) \
-		$(BUILDDIR)/coreutils completion $(prog) fish > $(BUILDDIR)/completions/fish/$(PROG_PREFIX)$(prog).fish $(newline) \
-	)
 
-install-completions: completions
+install-completions: build-uudoc
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d
-	$(foreach prog, $(INSTALLEES), \
-		$(INSTALL) $(BUILDDIR)/completions/zsh/_$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/ $(newline) \
-		$(INSTALL) $(BUILDDIR)/completions/bash/$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/ $(newline) \
-		$(INSTALL) $(BUILDDIR)/completions/fish/$(PROG_PREFIX)$(prog).fish $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/ $(newline) \
+	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS) , \
+		$(BUILDDIR)/uudoc completion $(prog) zsh > $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(PROG_PREFIX)$(prog) $(newline) \
+		$(BUILDDIR)/uudoc completion $(prog) bash > $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX)$(prog) $(newline) \
+		$(BUILDDIR)/uudoc completion $(prog) fish > $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX)$(prog).fish $(newline) \
 	)
 else
 install-completions:
 endif
 
-install: build install-manpages install-completions
+ifeq ($(LOCALES),y)
+locales:
+	@# Copy uucore common locales
+	@if [ -d "$(BASEDIR)/src/uucore/locales" ]; then \
+		mkdir -p "$(BUILDDIR)/locales/uucore"; \
+		for locale_file in "$(BASEDIR)"/src/uucore/locales/*.ftl; do \
+			$(INSTALL) -m 644 -v "$$locale_file" "$(BUILDDIR)/locales/uucore/"; \
+		done; \
+	fi; \
+	# Copy utility-specific locales
+	@for prog in $(INSTALLEES); do \
+		if [ -d "$(BASEDIR)/src/uu/$$prog/locales" ]; then \
+			mkdir -p "$(BUILDDIR)/locales/$$prog"; \
+			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
+				if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
+					$(INSTALL) -m 644 -v "$$locale_file" "$(BUILDDIR)/locales/$$prog/"; \
+				fi; \
+			done; \
+		fi; \
+	done
+
+
+install-locales:
+	@for prog in $(INSTALLEES); do \
+		if [ -d "$(BASEDIR)/src/uu/$$prog/locales" ]; then \
+			mkdir -p "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog"; \
+			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
+				if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
+					$(INSTALL) -m 644 -v "$$locale_file" "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog/"; \
+				fi; \
+			done; \
+		fi; \
+	done
+else
+install-locales:
+endif
+
+install: build install-manpages install-completions install-locales
 	mkdir -p $(INSTALLDIR_BIN)
+ifneq (,$(and $(findstring stdbuf,$(UTILS)),$(findstring feat_external_libstdbuf,$(CARGOFLAGS))))
+	mkdir -p $(DESTDIR)$(LIBSTDBUF_DIR)
+	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf* $(DESTDIR)$(LIBSTDBUF_DIR)/
+endif
 ifeq (${MULTICALL}, y)
-	$(INSTALL) $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
+	$(INSTALL) -m 755 $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
 	$(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
-		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
+		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
 	)
-	$(if $(findstring test,$(INSTALLEES)), cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
+	$(foreach prog, $(HASHSUM_PROGS), \
+		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
+	)
+	$(if $(findstring test,$(INSTALLEES)), cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
 else
 	$(foreach prog, $(INSTALLEES), \
-		$(INSTALL) $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog) $(newline) \
+		$(INSTALL) -m 755 $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog) $(newline) \
 	)
-	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
+	$(foreach prog, $(HASHSUM_PROGS), \
+		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)hashsum $(PROG_PREFIX)$(prog) $(newline) \
+	)
+	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) -m 755 $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
 endif
 
 uninstall:
+ifneq ($(OS),Windows_NT)
+	rm -f $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf*
+	-rmdir $(DESTDIR)$(LIBSTDBUF_DIR) 2>/dev/null || true
+endif
 ifeq (${MULTICALL}, y)
 	rm -f $(addprefix $(INSTALLDIR_BIN)/,$(PROG_PREFIX)coreutils)
 endif
@@ -421,4 +511,4 @@ endif
 	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX),$(addsuffix .fish,$(PROGS)))
 	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/man/man1/$(PROG_PREFIX),$(addsuffix .1,$(PROGS)))
 
-.PHONY: all build build-coreutils build-pkgs test distclean clean busytest install uninstall
+.PHONY: all build build-coreutils build-pkgs build-uudoc test distclean clean busytest install uninstall

@@ -18,7 +18,9 @@ use std::{
 
 use crate::{
     error::{FromIo, UError, UResult, USimpleError},
-    os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_error, show_warning_caps,
+    os_str_as_bytes, os_str_from_bytes,
+    quoting_style::{QuotingStyle, locale_aware_escape_name},
+    read_os_string_lines, show, show_error, show_warning_caps,
     sum::{
         Blake2b, Blake3, Bsd, CRC32B, Crc, Digest, DigestWriter, Md5, Sha1, Sha3_224, Sha3_256,
         Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256, Sm3, SysV,
@@ -148,10 +150,11 @@ impl From<ChecksumError> for FileCheckError {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Copy, Default)]
 pub enum ChecksumVerbose {
     Status,
     Quiet,
+    #[default]
     Normal,
     Warning,
 }
@@ -183,12 +186,6 @@ impl ChecksumVerbose {
     #[inline]
     pub fn at_least_warning(self) -> bool {
         self >= Self::Warning
-    }
-}
-
-impl Default for ChecksumVerbose {
-    fn default() -> Self {
-        Self::Normal
     }
 }
 
@@ -233,6 +230,8 @@ pub enum ChecksumError {
     CombineMultipleAlgorithms,
     #[error("Needs an algorithm to hash with.\nUse --help for more information.")]
     NeedAlgorithmToHash,
+    #[error("")]
+    Io(#[from] io::Error),
 }
 
 impl UError for ChecksumError {
@@ -245,34 +244,32 @@ impl UError for ChecksumError {
 ///
 /// # Returns
 ///
-/// Returns a UResult of a tuple containing the algorithm name, the hasher instance, and
-/// the output length in bits or an Err if an unsupported output size is provided, or if
-/// the `--bits` flag is missing.
-pub fn create_sha3(bits: Option<usize>) -> UResult<HashAlgorithm> {
+/// Returns a `UResult` with an `HashAlgorithm` or an `Err` if an unsupported
+/// output size is provided.
+pub fn create_sha3(bits: usize) -> UResult<HashAlgorithm> {
     match bits {
-        Some(224) => Ok(HashAlgorithm {
+        224 => Ok(HashAlgorithm {
             name: "SHA3_224",
             create_fn: Box::new(|| Box::new(Sha3_224::new())),
             bits: 224,
         }),
-        Some(256) => Ok(HashAlgorithm {
+        256 => Ok(HashAlgorithm {
             name: "SHA3_256",
             create_fn: Box::new(|| Box::new(Sha3_256::new())),
             bits: 256,
         }),
-        Some(384) => Ok(HashAlgorithm {
+        384 => Ok(HashAlgorithm {
             name: "SHA3_384",
             create_fn: Box::new(|| Box::new(Sha3_384::new())),
             bits: 384,
         }),
-        Some(512) => Ok(HashAlgorithm {
+        512 => Ok(HashAlgorithm {
             name: "SHA3_512",
             create_fn: Box::new(|| Box::new(Sha3_512::new())),
             bits: 512,
         }),
 
-        Some(_) => Err(ChecksumError::InvalidOutputSizeForSha3.into()),
-        None => Err(ChecksumError::BitsRequiredForSha3.into()),
+        _ => Err(ChecksumError::InvalidOutputSizeForSha3.into()),
     }
 }
 
@@ -317,9 +314,9 @@ impl FileChecksumResult {
     /// either succeeded or failed.
     fn from_bool(checksum_correct: bool) -> Self {
         if checksum_correct {
-            FileChecksumResult::Ok
+            Self::Ok
         } else {
-            FileChecksumResult::Failed
+            Self::Failed
         }
     }
 
@@ -327,9 +324,9 @@ impl FileChecksumResult {
     /// comparison on STDOUT.
     fn can_display(&self, verbose: ChecksumVerbose) -> bool {
         match self {
-            FileChecksumResult::Ok => verbose.over_quiet(),
-            FileChecksumResult::Failed => verbose.over_status(),
-            FileChecksumResult::CantOpen => true,
+            Self::Ok => verbose.over_quiet(),
+            Self::Failed => verbose.over_status(),
+            Self::CantOpen => true,
         }
     }
 }
@@ -337,9 +334,9 @@ impl FileChecksumResult {
 impl Display for FileChecksumResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FileChecksumResult::Ok => write!(f, "OK"),
-            FileChecksumResult::Failed => write!(f, "FAILED"),
-            FileChecksumResult::CantOpen => write!(f, "FAILED open or read"),
+            Self::Ok => write!(f, "OK"),
+            Self::Failed => write!(f, "FAILED"),
+            Self::CantOpen => write!(f, "FAILED open or read"),
         }
     }
 }
@@ -440,8 +437,7 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
             bits: 512,
         }),
         ALGORITHM_OPTIONS_SHAKE128 | "shake128sum" => {
-            let bits =
-                length.ok_or_else(|| USimpleError::new(1, "--bits required for SHAKE128"))?;
+            let bits = length.ok_or(ChecksumError::BitsRequiredForShake128)?;
             Ok(HashAlgorithm {
                 name: ALGORITHM_OPTIONS_SHAKE128,
                 create_fn: Box::new(|| Box::new(Shake128::new())),
@@ -449,16 +445,17 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
             })
         }
         ALGORITHM_OPTIONS_SHAKE256 | "shake256sum" => {
-            let bits =
-                length.ok_or_else(|| USimpleError::new(1, "--bits required for SHAKE256"))?;
+            let bits = length.ok_or(ChecksumError::BitsRequiredForShake256)?;
             Ok(HashAlgorithm {
                 name: ALGORITHM_OPTIONS_SHAKE256,
                 create_fn: Box::new(|| Box::new(Shake256::new())),
                 bits,
             })
         }
-        //ALGORITHM_OPTIONS_SHA3 | "sha3" => (
-        _ if algo.starts_with("sha3") => create_sha3(length),
+        _ if algo.starts_with("sha3") => {
+            let bits = length.ok_or(ChecksumError::BitsRequiredForSha3)?;
+            create_sha3(bits)
+        }
 
         _ => Err(ChecksumError::UnknownAlgorithm.into()),
     }
@@ -481,7 +478,7 @@ impl LineFormat {
         //   r"\MD5 (a\\ b) = abc123",
         //   BLAKE2b(44)= a45a4c4883cce4b50d844fab460414cc2080ca83690e74d850a9253e757384366382625b218c8585daee80f34dc9eb2f2fde5fb959db81cd48837f9216e7b0fa
         let trimmed = line.trim_ascii_start();
-        let algo_start = if trimmed.starts_with(b"\\") { 1 } else { 0 };
+        let algo_start = usize::from(trimmed.starts_with(b"\\"));
         let rest = &trimmed[algo_start..];
 
         enum SubCase {
@@ -555,7 +552,7 @@ impl LineFormat {
             algo_bit_len: algo_bits,
             checksum: checksum_utf8,
             filename: filename.to_vec(),
-            format: LineFormat::AlgoBased,
+            format: Self::AlgoBased,
         })
     }
 
@@ -585,7 +582,7 @@ impl LineFormat {
             algo_bit_len: None,
             checksum: checksum_utf8,
             filename: filename.to_vec(),
-            format: LineFormat::Untagged,
+            format: Self::Untagged,
         })
     }
 
@@ -617,7 +614,7 @@ impl LineFormat {
             algo_bit_len: None,
             checksum: checksum_utf8,
             filename: filename.to_vec(),
-            format: LineFormat::SingleSpace,
+            format: Self::SingleSpace,
         })
     }
 }
@@ -669,7 +666,7 @@ impl LineInfo {
             match cached_format {
                 LineFormat::Untagged => LineFormat::parse_untagged(line_bytes),
                 LineFormat::SingleSpace => LineFormat::parse_single_space(line_bytes),
-                _ => unreachable!("we never catch the algo based format"),
+                LineFormat::AlgoBased => unreachable!("we never catch the algo based format"),
             }
         } else if let Some(info) = LineFormat::parse_untagged(line_bytes) {
             *cached_line_format = Some(LineFormat::Untagged);
@@ -697,7 +694,7 @@ fn get_filename_for_output(filename: &OsStr, input_is_stdin: bool) -> String {
 fn get_expected_digest_as_hex_string(
     line_info: &LineInfo,
     len_hint: Option<usize>,
-) -> Option<Cow<str>> {
+) -> Option<Cow<'_, str>> {
     let ck = &line_info.checksum;
 
     let against_hint = |len| len_hint.is_none_or(|l| l == len);
@@ -732,7 +729,7 @@ fn get_file_to_check(
     opts: ChecksumOptions,
 ) -> Result<Box<dyn Read>, LineCheckError> {
     let filename_bytes = os_str_as_bytes(filename).expect("UTF-8 error");
-    let filename_lossy = String::from_utf8_lossy(filename_bytes);
+
     if filename == "-" {
         Ok(Box::new(stdin())) // Use stdin if "-" is specified in the checksum file
     } else {
@@ -745,15 +742,23 @@ fn get_file_to_check(
                 opts.verbose,
             );
         };
+        let print_error = |err: io::Error| {
+            show!(err.map_err_context(|| {
+                locale_aware_escape_name(filename, QuotingStyle::SHELL_ESCAPE)
+                    // This is non destructive thanks to the escaping
+                    .to_string_lossy()
+                    .to_string()
+            }));
+        };
         match File::open(filename) {
             Ok(f) => {
                 if f.metadata()
                     .map_err(|_| LineCheckError::CantOpenFile)?
                     .is_dir()
                 {
-                    show!(USimpleError::new(
-                        1,
-                        format!("{filename_lossy}: Is a directory")
+                    print_error(io::Error::new(
+                        io::ErrorKind::IsADirectory,
+                        "Is a directory",
                     ));
                     // also regarded as a failed open
                     failed_open();
@@ -765,7 +770,7 @@ fn get_file_to_check(
             Err(err) => {
                 if !opts.ignore_missing {
                     // yes, we have both stderr and stdout here
-                    show!(err.map_err_context(|| filename_lossy.to_string()));
+                    print_error(err);
                     failed_open();
                 }
                 // we could not open the file but we want to continue
@@ -956,7 +961,7 @@ fn process_checksum_line(
     cached_line_format: &mut Option<LineFormat>,
     last_algo: &mut Option<String>,
 ) -> Result<(), LineCheckError> {
-    let line_bytes = os_str_as_bytes(line)?;
+    let line_bytes = os_str_as_bytes(line).map_err(|e| LineCheckError::UError(Box::new(e)))?;
 
     // Early return on empty or commented lines.
     if line.is_empty() || line_bytes.starts_with(b"#") {
@@ -977,7 +982,7 @@ fn process_checksum_line(
         process_non_algo_based_line(i, &line_info, cli_algo, cli_algo_length, opts)
     } else {
         // We have no clue of what algorithm to use
-        return Err(LineCheckError::ImproperlyFormatted);
+        Err(LineCheckError::ImproperlyFormatted)
     }
 }
 
@@ -1061,7 +1066,7 @@ fn process_checksum_file(
             }
             Err(CantOpenFile | FileIsDirectory) => res.failed_open_file += 1,
             Err(FileNotFound) if !opts.ignore_missing => res.failed_open_file += 1,
-            _ => continue,
+            _ => (),
         };
     }
 
@@ -1130,7 +1135,7 @@ where
         match process_checksum_file(filename_input, algo_name_input, length_input, opts) {
             Err(UError(e)) => return Err(e),
             Err(Failed | CantOpenChecksumFile) => failed = true,
-            Ok(_) => continue,
+            Ok(_) => (),
         }
     }
 
@@ -1143,7 +1148,7 @@ where
 
 pub fn digest_reader<T: Read>(
     digest: &mut Box<dyn Digest>,
-    reader: &mut BufReader<T>,
+    reader: &mut T,
     binary: bool,
     output_bits: usize,
 ) -> io::Result<(String, usize)> {
@@ -1635,7 +1640,7 @@ mod tests {
         for (filename, result, prefix, expected) in cases {
             let mut buffer: Vec<u8> = vec![];
             print_file_report(&mut buffer, filename, *result, prefix, opts.verbose);
-            assert_eq!(&buffer, expected)
+            assert_eq!(&buffer, expected);
         }
     }
 }

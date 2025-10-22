@@ -5,24 +5,22 @@
 
 // spell-checker:ignore (ToDO) getpriority execvp setpriority nstr PRIO cstrs ENOENT
 
+use clap::{Arg, ArgAction, Command};
 use libc::{PRIO_PROCESS, c_char, c_int, execvp};
 use std::ffi::{CString, OsString};
 use std::io::{Error, Write};
 use std::ptr;
 
-use clap::{Arg, ArgAction, Command};
+use uucore::translate;
 use uucore::{
-    error::{UClapError, UResult, USimpleError, UUsageError, set_exit_code},
-    format_usage, help_about, help_usage, show_error,
+    error::{UResult, USimpleError, UUsageError, set_exit_code},
+    format_usage, show_error,
 };
 
 pub mod options {
     pub static ADJUSTMENT: &str = "adjustment";
     pub static COMMAND: &str = "COMMAND";
 }
-
-const ABOUT: &str = help_about!("nice.md");
-const USAGE: &str = help_usage!("nice.md");
 
 fn is_prefix_of(maybe_prefix: &str, target: &str, min_match: usize) -> bool {
     if maybe_prefix.len() < min_match || maybe_prefix.len() > target.len() {
@@ -98,7 +96,6 @@ fn standardize_nice_args(mut args: impl uucore::Args) -> impl uucore::Args {
     if saw_n {
         v.push("-n".into());
     }
-
     v.into_iter()
 }
 
@@ -106,7 +103,8 @@ fn standardize_nice_args(mut args: impl uucore::Args) -> impl uucore::Args {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = standardize_nice_args(args);
 
-    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
+    let matches =
+        uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
     nix::errno::Errno::clear();
     let mut niceness = unsafe { libc::getpriority(PRIO_PROCESS, 0) };
@@ -122,15 +120,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if !matches.contains_id(options::COMMAND) {
                 return Err(UUsageError::new(
                     125,
-                    "A command must be given with an adjustment.",
+                    translate!("nice-error-command-required-with-adjustment"),
                 ));
             }
-            match nstr.parse() {
+            match nstr.parse::<i32>() {
                 Ok(num) => num,
                 Err(e) => {
                     return Err(USimpleError::new(
                         125,
-                        format!("\"{nstr}\" is not a valid number: {e}"),
+                        translate!("nice-error-invalid-number", "value" => nstr.clone(), "error" => e),
                     ));
                 }
             }
@@ -149,17 +147,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // isn't writable. The GNU test suite checks specifically that the
     // exit code when failing to write the advisory is 125, but Rust
     // will produce an exit code of 101 when it panics.
-    if unsafe { libc::setpriority(PRIO_PROCESS, 0, niceness) } == -1
-        && write!(
-            std::io::stderr(),
-            "{}: warning: setpriority: {}",
-            uucore::util_name(),
-            Error::last_os_error()
-        )
-        .is_err()
-    {
-        set_exit_code(125);
-        return Ok(());
+    if unsafe { libc::setpriority(PRIO_PROCESS, 0, niceness) } == -1 {
+        let warning_msg = translate!("nice-warning-setpriority", "util_name" => uucore::util_name(), "error" => Error::last_os_error());
+
+        if write!(std::io::stderr(), "{warning_msg}").is_err() {
+            set_exit_code(125);
+            return Ok(());
+        }
     }
 
     let cstrs: Vec<CString> = matches
@@ -175,6 +169,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     show_error!("execvp: {}", Error::last_os_error());
+
     let exit_code = if Error::last_os_error().raw_os_error().unwrap() as c_int == libc::ENOENT {
         127
     } else {
@@ -186,16 +181,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(translate!("nice-about"))
+        .override_usage(format_usage(&translate!("nice-usage")))
         .trailing_var_arg(true)
         .infer_long_args(true)
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .arg(
             Arg::new(options::ADJUSTMENT)
                 .short('n')
                 .long(options::ADJUSTMENT)
-                .help("add N to the niceness (default is 10)")
+                .help(translate!("nice-help-adjustment"))
                 .action(ArgAction::Set)
                 .overrides_with(options::ADJUSTMENT)
                 .allow_hyphen_values(true),

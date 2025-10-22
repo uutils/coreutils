@@ -5,9 +5,8 @@
 use clap::{Arg, ArgAction, Command};
 use std::{ffi::OsString, io::Write};
 use uucore::error::{UResult, set_exit_code};
-use uucore::help_about;
 
-const ABOUT: &str = help_about!("false.md");
+use uucore::translate;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -25,6 +24,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     if let Err(e) = command.try_get_matches_from_mut(args) {
+        // For the false command, we don't want to show any error messages for UnknownArgument
+        // since false should produce no output and just exit with code 1
         let error = match e.kind() {
             clap::error::ErrorKind::DisplayHelp => command.print_help(),
             clap::error::ErrorKind::DisplayVersion => {
@@ -46,20 +47,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("false-about"))
         // We provide our own help and version options, to ensure maximum compatibility with GNU.
         .disable_help_flag(true)
         .disable_version_flag(true)
         .arg(
             Arg::new("help")
                 .long("help")
-                .help("Print help information")
+                .help(translate!("false-help-text"))
                 .action(ArgAction::Help),
         )
         .arg(
             Arg::new("version")
                 .long("version")
-                .help("Print version information")
+                .help(translate!("false-version-text"))
                 .action(ArgAction::Version),
         )
 }

@@ -22,13 +22,12 @@ fn test_invalid_arg() {
 
 #[test]
 fn test_resolve() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("foo");
     at.symlink_file("foo", "bar");
 
-    scene.ucmd().arg("bar").succeeds().stdout_contains("foo\n");
+    ucmd.arg("bar").succeeds().stdout_contains("foo\n");
 }
 
 #[test]
@@ -373,4 +372,26 @@ fn test_delimiters() {
         .succeeds()
         .stderr_contains("ignoring --no-newline with multiple arguments")
         .stdout_is("/a\n/a\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_readlink_non_utf8_paths() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file_name = "target_file";
+    at.touch(file_name);
+    let non_utf8_bytes = b"symlink_\xFF\xFE";
+    let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
+
+    std::os::unix::fs::symlink(at.plus_as_string(file_name), at.plus(non_utf8_name)).unwrap();
+
+    // Test that readlink handles non-UTF-8 symlink names without crashing
+    let result = scene.ucmd().arg(non_utf8_name).succeeds();
+
+    let output = result.stdout_str_lossy();
+    assert!(output.contains(file_name));
 }

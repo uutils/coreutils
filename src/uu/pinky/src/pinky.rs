@@ -6,26 +6,14 @@
 // spell-checker:ignore (ToDO) BUFSIZE gecos fullname, mesg iobuf
 
 use clap::{Arg, ArgAction, Command};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
+use uucore::translate;
 
 mod platform;
 
-#[cfg(target_env = "musl")]
-const ABOUT: &str = concat!(
-    help_about!("pinky.md"),
-    "\n\nWarning: When built with musl libc, the `pinky` utility may show incomplete \n",
-    "or missing user information due to musl's stub implementation of `utmpx` \n",
-    "functions. This limitation affects the ability to retrieve accurate details \n",
-    "about logged-in users."
-);
-
-#[cfg(not(target_env = "musl"))]
-const ABOUT: &str = help_about!("pinky.md");
-
-const USAGE: &str = help_usage!("pinky.md");
-
 mod options {
     pub const LONG_FORMAT: &str = "long_format";
+    pub const LOOKUP: &str = "lookup";
     pub const OMIT_HOME_DIR: &str = "omit_home_dir";
     pub const OMIT_PROJECT_FILE: &str = "omit_project_file";
     pub const OMIT_PLAN_FILE: &str = "omit_plan_file";
@@ -42,65 +30,71 @@ mod options {
 use platform::uumain;
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    #[cfg(not(target_env = "musl"))]
+    let about = translate!("pinky-about");
+    #[cfg(target_env = "musl")]
+    let about = translate!("pinky-about") + &translate!("pinky-about-musl-warning");
+
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
+        .about(about)
+        .override_usage(format_usage(&translate!("pinky-usage")))
+        .infer_long_args(true);
+    uucore::clap_localization::configure_localized_command(cmd)
         .disable_help_flag(true)
         .arg(
             Arg::new(options::LONG_FORMAT)
                 .short('l')
                 .requires(options::USER)
-                .help("produce long format output for the specified USERs")
+                .help(translate!("pinky-help-long-format"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OMIT_HOME_DIR)
                 .short('b')
-                .help("omit the user's home directory and shell in long format")
+                .help(translate!("pinky-help-omit-home-dir"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OMIT_PROJECT_FILE)
                 .short('h')
-                .help("omit the user's project file in long format")
+                .help(translate!("pinky-help-omit-project-file"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OMIT_PLAN_FILE)
                 .short('p')
-                .help("omit the user's plan file in long format")
+                .help(translate!("pinky-help-omit-plan-file"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHORT_FORMAT)
                 .short('s')
-                .help("do short format output, this is the default")
+                .help(translate!("pinky-help-short-format"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OMIT_HEADINGS)
                 .short('f')
-                .help("omit the line of column headings in short format")
+                .help(translate!("pinky-help-omit-headings"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OMIT_NAME)
                 .short('w')
-                .help("omit the user's full name in short format")
+                .help(translate!("pinky-help-omit-name"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OMIT_NAME_HOST)
                 .short('i')
-                .help("omit the user's full name and remote host in short format")
+                .help(translate!("pinky-help-omit-name-host"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OMIT_NAME_HOST_TIME)
                 .short('q')
-                .help("omit the user's full name, remote host and idle time in short format")
+                .help(translate!("pinky-help-omit-name-host-time"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -109,11 +103,17 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::Username),
         )
         .arg(
+            Arg::new(options::LOOKUP)
+                .long(options::LOOKUP)
+                .help(translate!("pinky-help-lookup"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             // Redefine the help argument to not include the short flag
             // since that conflicts with omit_project_file.
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help("Print help information")
+                .help(translate!("pinky-help-help"))
                 .action(ArgAction::Help),
         )
 }
@@ -133,5 +133,18 @@ impl Capitalize for str {
                 }
                 acc
             })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_capitalize() {
+        assert_eq!("Zbnmasd", "zbnmasd".capitalize()); // spell-checker:disable-line
+        assert_eq!("Abnmasd", "Abnmasd".capitalize()); // spell-checker:disable-line
+        assert_eq!("1masd", "1masd".capitalize()); // spell-checker:disable-line
+        assert_eq!("", "".capitalize());
     }
 }

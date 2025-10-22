@@ -7,16 +7,12 @@
 
 use clap::Command;
 use std::ffi::CStr;
-use uucore::{error::UResult, format_usage, help_about, help_usage, show_error};
-
-unsafe extern "C" {
-    // POSIX requires using getlogin (or equivalent code)
-    pub fn getlogin() -> *const libc::c_char;
-}
+use uucore::translate;
+use uucore::{error::UResult, show_error};
 
 fn get_userlogin() -> Option<String> {
     unsafe {
-        let login: *const libc::c_char = getlogin();
+        let login: *const libc::c_char = libc::getlogin();
         if login.is_null() {
             None
         } else {
@@ -25,16 +21,13 @@ fn get_userlogin() -> Option<String> {
     }
 }
 
-const ABOUT: &str = help_about!("logname.md");
-const USAGE: &str = help_usage!("logname.md");
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let _ = uu_app().try_get_matches_from(args)?;
+    let _ = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     match get_userlogin() {
         Some(userlogin) => println!("{userlogin}"),
-        None => show_error!("no login name"),
+        None => show_error!("{}", translate!("logname-error-no-login-name")),
     }
 
     Ok(())
@@ -43,7 +36,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .override_usage(uucore::util_name())
+        .about(translate!("logname-about"))
         .infer_long_args(true)
 }

@@ -2,18 +2,15 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//  *
-//  * Synced with http://lingrok.org/xref/coreutils/src/tty.c
 
 // spell-checker:ignore (ToDO) ttyname filedesc
 
 use clap::{Arg, ArgAction, Command};
 use std::io::{IsTerminal, Write};
 use uucore::error::{UResult, set_exit_code};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
 
-const ABOUT: &str = help_about!("tty.md");
-const USAGE: &str = help_usage!("tty.md");
+use uucore::translate;
 
 mod options {
     pub const SILENT: &str = "silent";
@@ -21,7 +18,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
 
     let silent = matches.get_flag(options::SILENT);
 
@@ -32,7 +29,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             Err(1.into())
         };
-    };
+    }
 
     let mut stdout = std::io::stdout();
 
@@ -42,7 +39,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Ok(name) => writeln!(stdout, "{}", name.display()),
         Err(_) => {
             set_exit_code(1);
-            writeln!(stdout, "not a tty")
+            writeln!(stdout, "{}", translate!("tty-not-a-tty"))
         }
     };
 
@@ -50,23 +47,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // Don't return to prevent a panic later when another flush is attempted
         // because the `uucore_procs::main` macro inserts a flush after execution for every utility.
         std::process::exit(3);
-    };
+    }
 
     Ok(())
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::SILENT)
-                .long(options::SILENT)
-                .visible_alias("quiet")
-                .short('s')
-                .help("print nothing, only return an exit status")
-                .action(ArgAction::SetTrue),
-        )
+        .about(translate!("tty-about"))
+        .override_usage(format_usage(&translate!("tty-usage")))
+        .infer_long_args(true);
+    uucore::clap_localization::configure_localized_command(cmd).arg(
+        Arg::new(options::SILENT)
+            .long(options::SILENT)
+            .visible_alias("quiet")
+            .short('s')
+            .help(translate!("tty-help-silent"))
+            .action(ArgAction::SetTrue),
+    )
 }

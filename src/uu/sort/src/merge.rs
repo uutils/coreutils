@@ -13,7 +13,7 @@
 
 use std::{
     cmp::Ordering,
-    ffi::OsString,
+    ffi::{OsStr, OsString},
     fs::{self, File},
     io::{BufWriter, Read, Write},
     iter,
@@ -38,7 +38,7 @@ use crate::{
 /// and replace its occurrences in the inputs with that copy.
 fn replace_output_file_in_input_files(
     files: &mut [OsString],
-    output: Option<&str>,
+    output: Option<&OsStr>,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
     let mut copy: Option<PathBuf> = None;
@@ -144,7 +144,7 @@ pub fn merge_with_file_limit<
 fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
     files: F,
     settings: &GlobalSettings,
-) -> UResult<FileMerger> {
+) -> UResult<FileMerger<'_>> {
     let (request_sender, request_receiver) = channel();
     let mut reader_files = Vec::with_capacity(files.size_hint().0);
     let mut loaded_receivers = Vec::with_capacity(files.size_hint().0);
@@ -370,7 +370,7 @@ impl Compare<MergeableFile> for FileComparator<'_> {
     }
 }
 
-// Wait for the child to exit and check its exit code.
+/// Wait for the child to exit and check its exit code.
 fn check_child_success(mut child: Child, program: &str) -> UResult<()> {
     if matches!(child.wait().map(|e| e.code()), Ok(Some(0) | None) | Err(_)) {
         Ok(())

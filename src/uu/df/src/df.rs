@@ -15,11 +15,13 @@ use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError, get_exit_code};
 use uucore::fsext::{MountInfo, read_fs_list};
 use uucore::parser::parse_size::ParseSizeError;
-use uucore::{format_usage, help_about, help_section, help_usage, show};
+use uucore::translate;
+use uucore::{format_usage, show};
 
 use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 
 use std::ffi::OsString;
+use std::io::stdout;
 use std::path::Path;
 use thiserror::Error;
 
@@ -28,10 +30,6 @@ use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
 use crate::filesystem::FsError;
 use crate::table::Table;
-
-const ABOUT: &str = help_about!("df.md");
-const USAGE: &str = help_usage!("df.md");
-const AFTER_HELP: &str = help_section!("after help", "df.md");
 
 static OPT_HELP: &str = "help";
 static OPT_ALL: &str = "all";
@@ -117,25 +115,28 @@ impl Default for Options {
 enum OptionsError {
     // TODO This needs to vary based on whether `--block-size`
     // or `-B` were provided.
-    #[error("--block-size argument '{0}' too large")]
+    #[error("{}", translate!("df-error-block-size-too-large", "size" => .0.clone()))]
     BlockSizeTooLarge(String),
     // TODO This needs to vary based on whether `--block-size`
     // or `-B` were provided.,
-    #[error("invalid --block-size argument {0}")]
+    #[error("{}", translate!("df-error-invalid-block-size", "size" => .0.clone()))]
     InvalidBlockSize(String),
     // TODO This needs to vary based on whether `--block-size`
     // or `-B` were provided.
-    #[error("invalid suffix in --block-size argument {0}")]
+    #[error("{}", translate!("df-error-invalid-suffix", "size" => .0.clone()))]
     InvalidSuffix(String),
 
     /// An error getting the columns to display in the output table.
-    #[error("option --output: field {0} used more than once")]
+    #[error("{}", translate!("df-error-field-used-more-than-once", "field" => format!("{}", .0)))]
     ColumnError(ColumnError),
 
-    #[error("{}", .0.iter()
-            .map(|t| format!("file system type {} both selected and excluded", t.quote()))
+    #[error(
+        "{}",
+        .0.iter()
+            .map(|t| translate!("df-error-filesystem-type-both-selected-and-excluded", "type" => t.quote()))
             .collect::<Vec<_>>()
-            .join(format!("\n{}: ", uucore::util_name()).as_str()))]
+            .join(format!("\n{}: ", uucore::util_name()).as_str())
+    )]
     FilesystemTypeBothSelectedAndExcluded(Vec<String>),
 }
 
@@ -162,10 +163,7 @@ impl Options {
             block_size: read_block_size(matches).map_err(|e| match e {
                 ParseSizeError::InvalidSuffix(s) => OptionsError::InvalidSuffix(s),
                 ParseSizeError::SizeTooBig(_) => OptionsError::BlockSizeTooLarge(
-                    matches
-                        .get_one::<String>(OPT_BLOCKSIZE)
-                        .unwrap()
-                        .to_string(),
+                    matches.get_one::<String>(OPT_BLOCKSIZE).unwrap().to_owned(),
                 ),
                 ParseSizeError::ParseFailure(s) => OptionsError::InvalidBlockSize(s),
                 ParseSizeError::PhysicalMem(s) => OptionsError::InvalidBlockSize(s),
@@ -305,13 +303,24 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
     }
 
     let mut mounts = vec![];
-    for mi in read_fs_list()? {
+    for mut mi in read_fs_list()? {
         // TODO The running time of the `is_best()` function is linear
         // in the length of `result`. That makes the running time of
         // this loop quadratic in the length of `vmi`. This could be
         // improved by a more efficient implementation of `is_best()`,
         // but `vmi` is probably not very long in practice.
         if is_included(&mi, opt) && is_best(&mounts, &mi) {
+            let dev_path: &Path = Path::new(&mi.dev_name);
+            if dev_path.is_symlink() {
+                if let Ok(canonicalized_symlink) = uucore::fs::canonicalize(
+                    dev_path,
+                    uucore::fs::MissingHandling::Existing,
+                    uucore::fs::ResolveMode::Logical,
+                ) {
+                    mi.dev_name = canonicalized_symlink.to_string_lossy().to_string();
+                }
+            }
+
             mounts.push(mi);
         }
     }
@@ -361,26 +370,29 @@ where
             Err(FsError::InvalidPath) => {
                 show!(USimpleError::new(
                     1,
-                    format!("{}: No such file or directory", path.as_ref().display())
+                    translate!("df-error-no-such-file-or-directory", "path" => path.as_ref().display())
                 ));
             }
             Err(FsError::MountMissing) => {
-                show!(USimpleError::new(1, "no file systems processed"));
+                show!(USimpleError::new(
+                    1,
+                    translate!("df-error-no-file-systems-processed")
+                ));
             }
             #[cfg(not(windows))]
             Err(FsError::OverMounted) => {
                 show!(USimpleError::new(
                     1,
-                    format!(
-                        "cannot access {}: over-mounted by another device",
-                        path.as_ref().quote()
-                    )
+                    translate!("df-error-cannot-access-over-mounted", "path" => path.as_ref().quote())
                 ));
             }
         }
     }
     if get_exit_code() == 0 && result.is_empty() {
-        show!(USimpleError::new(1, "no file systems processed"));
+        show!(USimpleError::new(
+            1,
+            translate!("df-error-no-file-systems-processed")
+        ));
         return Ok(result);
     }
 
@@ -402,27 +414,33 @@ impl UError for DfError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     #[cfg(windows)]
     {
         if matches.get_flag(OPT_INODES) {
-            println!("{}: doesn't support -i option", uucore::util_name());
+            println!(
+                "{}",
+                translate!("df-error-inodes-not-supported-windows", "program" => uucore::util_name())
+            );
             return Ok(());
         }
     }
 
     let opt = Options::from(&matches).map_err(DfError::OptionsError)?;
     // Get the list of filesystems to display in the output table.
-    let filesystems: Vec<Filesystem> = match matches.get_many::<String>(OPT_PATHS) {
+    let filesystems: Vec<Filesystem> = match matches.get_many::<OsString>(OPT_PATHS) {
         None => {
             let filesystems = get_all_filesystems(&opt).map_err(|e| {
-                let context = "cannot read table of mounted file systems";
+                let context = translate!("df-error-cannot-read-table-of-mounted-filesystems");
                 USimpleError::new(e.code(), format!("{context}: {e}"))
             })?;
 
             if filesystems.is_empty() {
-                return Err(USimpleError::new(1, "no file systems processed"));
+                return Err(USimpleError::new(
+                    1,
+                    translate!("df-error-no-file-systems-processed"),
+                ));
             }
 
             filesystems
@@ -430,7 +448,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(paths) => {
             let paths: Vec<_> = paths.collect();
             let filesystems = get_named_filesystems(&paths, &opt).map_err(|e| {
-                let context = "cannot read table of mounted file systems";
+                let context = translate!("df-error-cannot-read-table-of-mounted-filesystems");
                 USimpleError::new(e.code(), format!("{context}: {e}"))
             })?;
 
@@ -444,7 +462,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    println!("{}", Table::new(&opt, filesystems));
+    Table::new(&opt, filesystems).write_to(&mut stdout())?;
 
     Ok(())
 }
@@ -452,15 +470,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("df-about"))
+        .override_usage(format_usage(&translate!("df-usage")))
+        .after_help(translate!("df-after-help"))
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(
             Arg::new(OPT_HELP)
                 .long(OPT_HELP)
-                .help("Print help information.")
+                .help(translate!("df-help-print-help"))
                 .action(ArgAction::Help),
         )
         .arg(
@@ -468,7 +487,7 @@ pub fn uu_app() -> Command {
                 .short('a')
                 .long("all")
                 .overrides_with(OPT_ALL)
-                .help("include dummy file systems")
+                .help(translate!("df-help-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -477,16 +496,13 @@ pub fn uu_app() -> Command {
                 .long("block-size")
                 .value_name("SIZE")
                 .overrides_with_all([OPT_KILO, OPT_BLOCKSIZE])
-                .help(
-                    "scale sizes by SIZE before printing them; e.g.\
-                    '-BM' prints sizes in units of 1,048,576 bytes",
-                ),
+                .help(translate!("df-help-block-size")),
         )
         .arg(
             Arg::new(OPT_TOTAL)
                 .long("total")
                 .overrides_with(OPT_TOTAL)
-                .help("produce a grand total")
+                .help(translate!("df-help-total"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -494,7 +510,7 @@ pub fn uu_app() -> Command {
                 .short('h')
                 .long("human-readable")
                 .overrides_with_all([OPT_HUMAN_READABLE_DECIMAL, OPT_HUMAN_READABLE_BINARY])
-                .help("print sizes in human readable format (e.g., 1K 234M 2G)")
+                .help(translate!("df-help-human-readable"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -502,7 +518,7 @@ pub fn uu_app() -> Command {
                 .short('H')
                 .long("si")
                 .overrides_with_all([OPT_HUMAN_READABLE_BINARY, OPT_HUMAN_READABLE_DECIMAL])
-                .help("likewise, but use powers of 1000 not 1024")
+                .help(translate!("df-help-si"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -510,13 +526,13 @@ pub fn uu_app() -> Command {
                 .short('i')
                 .long("inodes")
                 .overrides_with(OPT_INODES)
-                .help("list inode information instead of block usage")
+                .help(translate!("df-help-inodes"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_KILO)
                 .short('k')
-                .help("like --block-size=1K")
+                .help(translate!("df-help-kilo"))
                 .overrides_with_all([OPT_BLOCKSIZE, OPT_KILO])
                 .action(ArgAction::SetTrue),
         )
@@ -525,14 +541,14 @@ pub fn uu_app() -> Command {
                 .short('l')
                 .long("local")
                 .overrides_with(OPT_LOCAL)
-                .help("limit listing to local file systems")
+                .help(translate!("df-help-local"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_NO_SYNC)
                 .long("no-sync")
                 .overrides_with_all([OPT_SYNC, OPT_NO_SYNC])
-                .help("do not invoke sync before getting usage info (default)")
+                .help(translate!("df-help-no-sync"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -547,24 +563,21 @@ pub fn uu_app() -> Command {
                 .default_missing_values(OUTPUT_FIELD_LIST)
                 .default_values(["source", "size", "used", "avail", "pcent", "target"])
                 .conflicts_with_all([OPT_INODES, OPT_PORTABILITY, OPT_PRINT_TYPE])
-                .help(
-                    "use the output format defined by FIELD_LIST, \
-                     or print all fields if FIELD_LIST is omitted.",
-                ),
+                .help(translate!("df-help-output")),
         )
         .arg(
             Arg::new(OPT_PORTABILITY)
                 .short('P')
                 .long("portability")
                 .overrides_with(OPT_PORTABILITY)
-                .help("use the POSIX output format")
+                .help(translate!("df-help-portability"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_SYNC)
                 .long("sync")
                 .overrides_with_all([OPT_NO_SYNC, OPT_SYNC])
-                .help("invoke sync before getting usage info (non-windows only)")
+                .help(translate!("df-help-sync"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -574,14 +587,14 @@ pub fn uu_app() -> Command {
                 .value_parser(ValueParser::os_string())
                 .value_name("TYPE")
                 .action(ArgAction::Append)
-                .help("limit listing to file systems of type TYPE"),
+                .help(translate!("df-help-type")),
         )
         .arg(
             Arg::new(OPT_PRINT_TYPE)
                 .short('T')
                 .long("print-type")
                 .overrides_with(OPT_PRINT_TYPE)
-                .help("print file system type")
+                .help(translate!("df-help-print-type"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -592,11 +605,12 @@ pub fn uu_app() -> Command {
                 .value_parser(ValueParser::os_string())
                 .value_name("TYPE")
                 .use_value_delimiter(true)
-                .help("limit listing to file systems not of type TYPE"),
+                .help(translate!("df-help-exclude-type")),
         )
         .arg(
             Arg::new(OPT_PATHS)
                 .action(ArgAction::Append)
+                .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }
@@ -615,9 +629,9 @@ mod tests {
                 dev_id: String::new(),
                 dev_name: String::from(dev_name),
                 fs_type: String::new(),
-                mount_dir: String::from(mount_dir),
+                mount_dir: mount_dir.into(),
                 mount_option: String::new(),
-                mount_root: String::from(mount_root),
+                mount_root: mount_root.into(),
                 remote: false,
                 dummy: false,
             }
@@ -665,9 +679,9 @@ mod tests {
                 dev_id: String::from(dev_id),
                 dev_name: String::new(),
                 fs_type: String::new(),
-                mount_dir: String::from(mount_dir),
+                mount_dir: mount_dir.into(),
                 mount_option: String::new(),
-                mount_root: String::new(),
+                mount_root: "/".into(),
                 remote: false,
                 dummy: false,
             }
@@ -683,7 +697,7 @@ mod tests {
         fn test_different_dev_id() {
             let m1 = mount_info("0", "/mnt/bar");
             let m2 = mount_info("1", "/mnt/bar");
-            assert!(is_best(&[m1.clone()], &m2));
+            assert!(is_best(std::slice::from_ref(&m1), &m2));
             assert!(is_best(&[m2], &m1));
         }
 
@@ -694,7 +708,7 @@ mod tests {
             // one condition in this test.
             let m1 = mount_info("0", "/mnt/bar");
             let m2 = mount_info("0", "/mnt/bar/baz");
-            assert!(!is_best(&[m1.clone()], &m2));
+            assert!(!is_best(std::slice::from_ref(&m1), &m2));
             assert!(is_best(&[m2], &m1));
         }
     }
@@ -710,9 +724,9 @@ mod tests {
                 dev_id: String::new(),
                 dev_name: String::new(),
                 fs_type: String::from(fs_type),
-                mount_dir: String::from(mount_dir),
+                mount_dir: mount_dir.into(),
                 mount_option: String::new(),
-                mount_root: String::new(),
+                mount_root: "/".into(),
                 remote,
                 dummy,
             }

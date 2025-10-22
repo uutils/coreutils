@@ -7,8 +7,6 @@ use rstest::rstest;
 use uucore::display::Quotable;
 // spell-checker:ignore dont SIGBUS SIGSEGV sigsegv sigbus infd
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[cfg(unix)]
 use nix::sys::signal::Signal::{SIGBUS, SIGSEGV};
@@ -317,7 +315,7 @@ fn test_invalid_duration(#[case] input: &str) {
 #[test]
 #[should_panic = "Program must be run first or has not finished"]
 fn test_cmd_result_signal_when_still_running_then_panic() {
-    let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
+    let mut child = new_ucmd!().arg("60").run_no_wait();
 
     child
         .make_assertion()
@@ -329,7 +327,7 @@ fn test_cmd_result_signal_when_still_running_then_panic() {
 #[cfg(unix)]
 #[test]
 fn test_cmd_result_signal_when_kill_then_signal() {
-    let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
+    let mut child = new_ucmd!().arg("60").run_no_wait();
 
     child.kill();
     child
@@ -343,8 +341,9 @@ fn test_cmd_result_signal_when_kill_then_signal() {
         .signal()
         .expect("Signal was none");
 
-    let result = child.wait().unwrap();
-    result
+    child
+        .wait()
+        .unwrap()
         .signal_is(9)
         .signal_name_is("SIGKILL")
         .signal_name_is("KILL")
@@ -361,16 +360,16 @@ fn test_cmd_result_signal_when_kill_then_signal() {
 #[case::signal_value_negative("-1")]
 #[should_panic = "Invalid signal name or value"]
 fn test_cmd_result_signal_when_invalid_signal_name_then_panic(#[case] signal_name: &str) {
-    let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
+    let mut child = new_ucmd!().arg("60").run_no_wait();
+
     child.kill();
-    let result = child.wait().unwrap();
-    result.signal_name_is(signal_name);
+    child.wait().unwrap().signal_name_is(signal_name);
 }
 
 #[test]
 #[cfg(unix)]
 fn test_cmd_result_signal_name_is_accepts_lowercase() {
-    let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
+    let mut child = new_ucmd!().arg("60").run_no_wait();
     child.kill();
     let result = child.wait().unwrap();
     result.signal_name_is("sigkill");
@@ -379,9 +378,7 @@ fn test_cmd_result_signal_name_is_accepts_lowercase() {
 
 #[test]
 fn test_uchild_when_wait_and_timeout_is_reached_then_timeout_error() {
-    let ts = TestScenario::new("sleep");
-    let child = ts
-        .ucmd()
+    let child = new_ucmd!()
         .timeout(Duration::from_secs(1))
         .arg("10.0")
         .run_no_wait();
@@ -398,9 +395,7 @@ fn test_uchild_when_wait_and_timeout_is_reached_then_timeout_error() {
 #[rstest]
 #[timeout(Duration::from_secs(5))]
 fn test_uchild_when_kill_and_timeout_higher_than_kill_time_then_no_panic() {
-    let ts = TestScenario::new("sleep");
-    let mut child = ts
-        .ucmd()
+    let mut child = new_ucmd!()
         .timeout(Duration::from_secs(60))
         .arg("20.0")
         .run_no_wait();
@@ -410,8 +405,10 @@ fn test_uchild_when_kill_and_timeout_higher_than_kill_time_then_no_panic() {
 
 #[test]
 fn test_uchild_when_try_kill_and_timeout_is_reached_then_error() {
-    let ts = TestScenario::new("sleep");
-    let mut child = ts.ucmd().timeout(Duration::ZERO).arg("10.0").run_no_wait();
+    let mut child = new_ucmd!()
+        .timeout(Duration::ZERO)
+        .arg("10.0")
+        .run_no_wait();
 
     match child.try_kill() {
         Err(error) if error.kind() == ErrorKind::Other => {
@@ -425,8 +422,10 @@ fn test_uchild_when_try_kill_and_timeout_is_reached_then_error() {
 #[test]
 #[should_panic = "kill: Timeout of '0s' reached"]
 fn test_uchild_when_kill_with_timeout_and_timeout_is_reached_then_panic() {
-    let ts = TestScenario::new("sleep");
-    let mut child = ts.ucmd().timeout(Duration::ZERO).arg("10.0").run_no_wait();
+    let mut child = new_ucmd!()
+        .timeout(Duration::ZERO)
+        .arg("10.0")
+        .run_no_wait();
 
     child.kill();
     panic!("Assertion failed: Expected timeout of `kill`.");
@@ -435,8 +434,7 @@ fn test_uchild_when_kill_with_timeout_and_timeout_is_reached_then_panic() {
 #[test]
 #[should_panic(expected = "wait: Timeout of '1.1s' reached")]
 fn test_ucommand_when_run_with_timeout_and_timeout_is_reached_then_panic() {
-    let ts = TestScenario::new("sleep");
-    ts.ucmd()
+    new_ucmd!()
         .timeout(Duration::from_millis(1100))
         .arg("10.0")
         .run();
@@ -447,6 +445,8 @@ fn test_ucommand_when_run_with_timeout_and_timeout_is_reached_then_panic() {
 #[rstest]
 #[timeout(Duration::from_secs(10))]
 fn test_ucommand_when_run_with_timeout_higher_then_execution_time_then_no_panic() {
-    let ts = TestScenario::new("sleep");
-    ts.ucmd().timeout(Duration::from_secs(60)).arg("1.0").run();
+    new_ucmd!()
+        .timeout(Duration::from_secs(60))
+        .arg("1.0")
+        .run();
 }

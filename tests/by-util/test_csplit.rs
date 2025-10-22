@@ -5,13 +5,49 @@
 use glob::glob;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 /// Returns a string of numbers with the given range, each on a new line.
 /// The upper bound is not included.
 fn generate(from: u32, to: u32) -> String {
     (from..to).fold(String::new(), |acc, v| format!("{acc}{v}\n"))
+}
+
+#[test]
+fn test_line_numbers_suppress_matched_final_empty() {
+    // Repro for #7286
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--suppress-matched", "-", "2", "4", "6"]) // stdin, split at 2/4/6
+        .pipe_in("1\n2\n3\n4\n5\n6\n")
+        .succeeds()
+        .stdout_only("2\n2\n2\n0\n");
+
+    // Expect four files: xx00:"1\n", xx01:"3\n", xx02:"5\n", xx03:""
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be splits created")
+        .count();
+    assert_eq!(count, 4);
+    assert_eq!(at.read("xx00"), "1\n");
+    assert_eq!(at.read("xx01"), "3\n");
+    assert_eq!(at.read("xx02"), "5\n");
+    assert_eq!(at.read("xx03"), "");
+}
+
+#[test]
+fn test_line_numbers_suppress_matched_final_empty_elided_with_z() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--suppress-matched", "-z", "-", "2", "4", "6"]) // elide empty
+        .pipe_in("1\n2\n3\n4\n5\n6\n")
+        .succeeds()
+        .stdout_only("2\n2\n2\n");
+
+    // Expect three files: xx00:"1\n", xx01:"3\n", xx02:"5\n"
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be splits created")
+        .count();
+    assert_eq!(count, 3);
+    assert_eq!(at.read("xx00"), "1\n");
+    assert_eq!(at.read("xx01"), "3\n");
+    assert_eq!(at.read("xx02"), "5\n");
 }
 
 #[test]
@@ -81,6 +117,15 @@ fn test_up_to_line_sequence() {
     assert_eq!(at.read("xx00"), generate(1, 10));
     assert_eq!(at.read("xx01"), generate(10, 25));
     assert_eq!(at.read("xx02"), generate(25, 51));
+}
+
+#[test]
+fn test_up_to_line_with_non_ascii_repeat() {
+    // we use a different error message than GNU
+    new_ucmd!()
+        .args(&["numbers50.txt", "10", "{𝟚}"])
+        .fails()
+        .stderr_contains("invalid pattern");
 }
 
 #[test]
@@ -165,6 +210,15 @@ fn test_up_to_match_offset_repeat_twice() {
     assert_eq!(at.read("xx01"), generate(12, 22));
     assert_eq!(at.read("xx02"), generate(22, 32));
     assert_eq!(at.read("xx03"), generate(32, 51));
+}
+
+#[test]
+fn test_up_to_match_non_ascii_offset() {
+    // we use a different error message than GNU
+    new_ucmd!()
+        .args(&["numbers50.txt", "/9$/𝟚"])
+        .fails()
+        .stderr_contains("invalid pattern");
 }
 
 #[test]
@@ -1475,4 +1529,25 @@ fn test_directory_input_file() {
     ucmd.args(&["test_directory", "1"])
         .fails_with_code(1)
         .stderr_only("csplit: cannot open 'test_directory' for reading: Permission denied\n");
+}
+
+#[test]
+fn test_stdin_no_trailing_newline() {
+    new_ucmd!()
+        .args(&["-", "2"])
+        .pipe_in("a\nb\nc\nd")
+        .succeeds()
+        .stdout_only("2\n5\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_csplit_non_utf8_paths() {
+    use std::os::unix::ffi::OsStringExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    std::fs::write(at.plus(&filename), b"line1\nline2\nline3\nline4\nline5\n").unwrap();
+
+    ucmd.arg(&filename).arg("3").succeeds();
 }

@@ -7,8 +7,6 @@
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 static INPUT: &str = "lists.txt";
 
@@ -376,6 +374,20 @@ fn test_output_delimiter_with_adjacent_ranges() {
         .stdout_only("ab:cd\n");
 }
 
+#[test]
+fn test_emoji_delim() {
+    new_ucmd!()
+        .args(&["-d🗿", "-f1"])
+        .pipe_in("💐🗿🌹\n")
+        .succeeds()
+        .stdout_only("💐\n");
+    new_ucmd!()
+        .args(&["-d🗿", "-f2"])
+        .pipe_in("💐🗿🌹\n")
+        .succeeds()
+        .stdout_only("🌹\n");
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn test_failed_write_is_reported() {
@@ -386,4 +398,29 @@ fn test_failed_write_is_reported() {
         .set_stdout(std::fs::File::create("/dev/full").unwrap())
         .fails()
         .stderr_is("cut: write error: No space left on device\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cut_non_utf8_paths() {
+    use std::fs::File;
+    use std::io::Write;
+    use std::os::unix::ffi::OsStrExt;
+    use uutests::util::TestScenario;
+    use uutests::util_name;
+
+    let ts = TestScenario::new(util_name!());
+    let test_dir = ts.fixtures.subdir.as_path();
+
+    // Create file directly with non-UTF-8 name
+    let file_name = std::ffi::OsStr::from_bytes(b"test_\xFF\xFE.txt");
+    let mut file = File::create(test_dir.join(file_name)).unwrap();
+    file.write_all(b"a\tb\tc\n1\t2\t3\n").unwrap();
+
+    // Test that cut can handle non-UTF-8 filenames
+    ts.ucmd()
+        .arg("-f1,3")
+        .arg(file_name)
+        .succeeds()
+        .stdout_only("a\tc\n1\t3\n");
 }

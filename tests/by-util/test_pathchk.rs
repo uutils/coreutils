@@ -2,9 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStringExt;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[test]
 fn test_no_args() {
@@ -165,4 +165,11 @@ fn test_posix_all() {
 
     // fail on empty path
     new_ucmd!().args(&["-p", "-P", ""]).fails().no_stdout();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_pathchk_non_utf8_paths() {
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    new_ucmd!().arg(&filename).succeeds();
 }

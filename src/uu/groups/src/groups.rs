@@ -10,26 +10,25 @@ use uucore::{
     display::Quotable,
     entries::{Locate, Passwd, get_groups_gnu, gid2grp},
     error::{UError, UResult},
-    format_usage, help_about, help_usage, show,
+    format_usage, show,
 };
 
 use clap::{Arg, ArgAction, Command};
+use uucore::translate;
 
 mod options {
     pub const USERS: &str = "USERNAME";
 }
-const ABOUT: &str = help_about!("groups.md");
-const USAGE: &str = help_usage!("groups.md");
 
 #[derive(Debug, Error)]
 enum GroupsError {
-    #[error("failed to fetch groups")]
+    #[error("{message}", message = translate!("groups-error-fetch"))]
     GetGroupsFailed,
 
-    #[error("cannot find name for group ID {0}")]
+    #[error("{message} {gid}", message = translate!("groups-error-notfound"), gid = .0)]
     GroupNotFound(u32),
 
-    #[error("{user}: no such user", user = .0.quote())]
+    #[error("{user}: {message}", user = .0.quote(), message = translate!("groups-error-user"))]
     UserNotFound(String),
 }
 
@@ -48,7 +47,7 @@ fn infallible_gid2grp(gid: &u32) -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let users: Vec<String> = matches
         .get_many::<String>(options::USERS)
@@ -82,8 +81,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("groups-about"))
+        .override_usage(format_usage(&translate!("groups-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::USERS)
