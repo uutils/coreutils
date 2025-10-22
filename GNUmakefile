@@ -334,11 +334,6 @@ ifeq (${MULTICALL}, y)
 INSTALLEES  := ${INSTALLEES} coreutils
 endif
 
-all: build
-
-do_install = $(INSTALL) ${1}
-use_default := 1
-
 build-pkgs:
 ifneq (${MULTICALL}, y)
 ifdef BUILD_SPEC_FEATURE
