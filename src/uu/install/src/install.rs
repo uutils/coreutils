@@ -16,6 +16,7 @@ use std::ffi::OsString;
 use std::fmt::Debug;
 use std::fs::File;
 use std::fs::{self, metadata};
+use std::io;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process;
 use thiserror::Error;
@@ -38,6 +39,8 @@ use uucore::{format_usage, show, show_error, show_if_err};
 
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
+#[cfg(unix)]
+use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd};
 #[cfg(unix)]
 use std::os::unix::prelude::OsStrExt;
 
@@ -471,7 +474,7 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                 // target directory. All created ancestor directories will have
                 // the default mode. Hence it is safe to use fs::create_dir_all
                 // and then only modify the target's dir mode.
-                if let Err(e) = fs::create_dir_all(path_to_create.as_path())
+                if let Err(e) = create_dir_all_for_install(path_to_create.as_path())
                     .map_err_context(|| path_to_create.as_path().maybe_quote().to_string())
                 {
                     show!(e);
@@ -515,6 +518,88 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
         // this return.
         Ok(())
     }
+}
+
+#[cfg(unix)]
+fn create_dir_all_for_install(path: &Path) -> io::Result<()> {
+    use libc::AT_FDCWD;
+    use nix::errno::Errno;
+    use nix::fcntl::{OFlag, open, openat};
+    use nix::sys::stat::Mode;
+    use nix::unistd::mkdirat;
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    use std::path::Component;
+
+    fn nix_err_to_io(err: nix::Error) -> io::Error {
+        match err.as_errno() {
+            Some(errno) => io::Error::from_raw_os_error(errno as i32),
+            None => io::Error::new(io::ErrorKind::Other, err.to_string()),
+        }
+    }
+
+    let mut components = path.components().peekable();
+    let mut dirfds: Vec<OwnedFd> = Vec::new();
+    let mut current_fd = AT_FDCWD;
+
+    if path.is_absolute() {
+        let fd = open(
+            Path::new("/"),
+            OFlag::O_DIRECTORY | OFlag::O_RDONLY | OFlag::O_CLOEXEC,
+            Mode::empty(),
+        )
+        .map_err(nix_err_to_io)?;
+        dirfds.push(unsafe { OwnedFd::from_raw_fd(fd) });
+        current_fd = dirfds.last().unwrap().as_raw_fd();
+        while let Some(Component::RootDir) = components.peek() {
+            components.next();
+        }
+    }
+
+    for component in components {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                dirfds.pop();
+                current_fd = dirfds.last().map(|fd| fd.as_raw_fd()).unwrap_or(AT_FDCWD);
+            }
+            Component::Normal(name) => {
+                let c_name = CString::new(name.as_bytes()).map_err(|_| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "path component contains NUL byte",
+                    )
+                })?;
+
+                match mkdirat(current_fd, &c_name, Mode::from_bits_truncate(0o777)) {
+                    Ok(()) => {}
+                    Err(err) => {
+                        if err != Errno::EEXIST {
+                            return Err(nix_err_to_io(err));
+                        }
+                    }
+                }
+
+                let new_fd = openat(
+                    current_fd,
+                    &c_name,
+                    OFlag::O_DIRECTORY | OFlag::O_RDONLY | OFlag::O_CLOEXEC,
+                    Mode::empty(),
+                )
+                .map_err(nix_err_to_io)?;
+                dirfds.push(unsafe { OwnedFd::from_raw_fd(new_fd) });
+                current_fd = dirfds.last().unwrap().as_raw_fd();
+            }
+            Component::RootDir | Component::Prefix(_) => {}
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn create_dir_all_for_install(path: &Path) -> io::Result<()> {
+    fs::create_dir_all(path)
 }
 
 /// Test if the path is a new file path that can be
