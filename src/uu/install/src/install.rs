@@ -538,13 +538,19 @@ fn create_dir_all_for_install(path: &Path) -> io::Result<()> {
     let mut components = path.components().peekable();
     let mut current_fd: Option<OwnedFd> = None;
 
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn dir_open_flags() -> OFlag {
+        OFlag::O_PATH | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    fn dir_open_flags() -> OFlag {
+        OFlag::O_DIRECTORY | OFlag::O_RDONLY | OFlag::O_CLOEXEC
+    }
+
+    let dir_open_flags = dir_open_flags();
+
     if path.is_absolute() {
-        let fd = open(
-            Path::new("/"),
-            OFlag::O_DIRECTORY | OFlag::O_RDONLY | OFlag::O_CLOEXEC,
-            Mode::empty(),
-        )
-        .map_err(errno_to_io)?;
+        let fd = open(Path::new("/"), dir_open_flags, Mode::empty()).map_err(errno_to_io)?;
         current_fd = Some(fd);
         while let Some(Component::RootDir) = components.peek() {
             components.next();
@@ -556,13 +562,9 @@ fn create_dir_all_for_install(path: &Path) -> io::Result<()> {
             Component::CurDir => {}
             Component::ParentDir => {
                 if let Some(fd) = current_fd.take() {
-                    let parent_fd = openat(
-                        fd.as_fd(),
-                        OsStr::new(".."),
-                        OFlag::O_DIRECTORY | OFlag::O_RDONLY | OFlag::O_CLOEXEC,
-                        Mode::empty(),
-                    )
-                    .map_err(errno_to_io)?;
+                    let parent_fd =
+                        openat(fd.as_fd(), OsStr::new(".."), dir_open_flags, Mode::empty())
+                            .map_err(errno_to_io)?;
                     current_fd = Some(parent_fd);
                 }
             }
@@ -575,17 +577,15 @@ fn create_dir_all_for_install(path: &Path) -> io::Result<()> {
                     .unwrap_or_else(|| unsafe { BorrowedFd::borrow_raw(uucore::libc::AT_FDCWD) });
 
                 if let Err(err) = mkdirat(base_fd, name, mode) {
-                    if err != Errno::EEXIST {
+                    if err == Errno::ENOSYS {
+                        return fs::create_dir_all(path);
+                    }
+                    if err != Errno::EEXIST && err != Errno::EACCES && err != Errno::EPERM {
                         return Err(errno_to_io(err));
                     }
                 }
 
-                let open_result = openat(
-                    base_fd,
-                    name,
-                    OFlag::O_DIRECTORY | OFlag::O_RDONLY | OFlag::O_CLOEXEC,
-                    Mode::empty(),
-                );
+                let open_result = openat(base_fd, name, dir_open_flags, Mode::empty());
                 let new_fd = open_result.map_err(errno_to_io)?;
                 current_fd = Some(new_fd);
             }
