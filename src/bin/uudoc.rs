@@ -612,7 +612,7 @@ fn get_zip_examples(name: &str) -> io::Result<String> {
         w,
         "> The examples are provided by the [tldr-pages project](https://tldr.sh) under the [CC BY 4.0 License](https://github.com/tldr-pages/tldr/blob/main/LICENSE.md)."
     )?;
-    write!(w, "\n")?;
+    writeln!(w)?;
     writeln!(
         w,
         "> Please note that, as uutils is a work in progress, some examples might fail."
