@@ -267,7 +267,13 @@ fn tail_stdin(
             } else {
                 let mut reader = BufReader::new(stdin());
                 unbounded_tail(&mut reader, settings)?;
-                observer.add_stdin(input.display_name.as_str(), Some(Box::new(reader)), true)?;
+                // Wrap stdin reader in NonSeekableReader since stdin doesn't implement Seek
+                let seekable_reader = follow::NonSeekableReader::new(reader);
+                observer.add_stdin(
+                    input.display_name.as_str(),
+                    Some(Box::new(seekable_reader)),
+                    true,
+                )?;
             }
         }
     }
