@@ -43,10 +43,9 @@ use std::os::{
     unix::{
         fs::{FileTypeExt, MetadataExt},
         io::OwnedFd,
+        prelude::OsStrExt,
     },
 };
-#[cfg(unix)]
-use std::os::unix::prelude::OsStrExt;
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
