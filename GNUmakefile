@@ -198,22 +198,27 @@ SELINUX_PROGS := \
 	chcon \
 	runcon
 
-HASHSUM_PROGS := \
+# make EXTRA_HASHSUM_PROGS="b2sum" is also useful.
+ifeq ($(EXTRA_HASHSUM_PROGS),"y")
+	EXTRA_HASHSUM_PROGS := \
+		b3sum \
+		sha3-224sum \
+		sha3-256sum \
+		sha3-384sum \
+		sha3-512sum \
+		sha3sum \
+		shake128sum \
+		shake256sum
+endif
+
+HASHSUM_PROGS := $(EXTRA_HASHSUM_PROGS) \
 	b2sum \
-	b3sum \
 	md5sum \
 	sha1sum \
 	sha224sum \
 	sha256sum \
-	sha3-224sum \
-	sha3-256sum \
-	sha3-384sum \
-	sha3-512sum \
 	sha384sum \
-	sha3sum \
-	sha512sum \
-	shake128sum \
-	shake256sum
+	sha512sum
 
 $(info Detected OS = $(OS))
 
