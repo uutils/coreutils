@@ -42,25 +42,22 @@ fn test_version_no_path() {
         .join("mkdir");
 
     // If the individual mkdir binary exists, test it
-    if mkdir_binary_path.exists() {
+    let output = if mkdir_binary_path.exists() {
         // Invoke the individual mkdir binary with its full path
-        let output = Command::new(&mkdir_binary_path)
+        Command::new(&mkdir_binary_path)
             .arg("--version")
             .output()
-            .expect("Failed to execute mkdir binary");
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.starts_with("mkdir (uutils coreutils)"));
+            .expect("Failed to execute mkdir binary")
     } else {
         // If only multicall binary exists, test that (it should already pass)
-        let output = Command::new(tests_binary)
+        Command::new(tests_binary)
             .args(["mkdir", "--version"])
             .output()
-            .expect("Failed to execute mkdir via multicall binary");
+            .expect("Failed to execute mkdir via multicall binary")
+    };
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.starts_with("mkdir (uutils coreutils)"));
-    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.starts_with("mkdir (uutils coreutils)"));
 }
 
 #[test]
