@@ -9,6 +9,7 @@
 
 // spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit
 
+mod buffer_hint;
 mod check;
 mod chunks;
 mod custom_str_cmp;
@@ -54,6 +55,7 @@ use uucore::show_error;
 use uucore::translate;
 use uucore::version_cmp::version_cmp;
 
+use crate::buffer_hint::automatic_buffer_size;
 use crate::tmp_dir::TmpDirWrapper;
 
 mod options {
@@ -115,10 +117,12 @@ const DECIMAL_PT: u8 = b'.';
 const NEGATIVE: &u8 = &b'-';
 const POSITIVE: &u8 = &b'+';
 
-// Choosing a higher buffer size does not result in performance improvements
-// (at least not on my machine). TODO: In the future, we should also take the amount of
-// available memory into consideration, instead of relying on this constant only.
-const DEFAULT_BUF_SIZE: usize = 1_000_000_000; // 1 GB
+// The automatic buffer heuristics clamp to this range to avoid
+// over-committing memory on constrained systems while still keeping
+// reasonably large chunks for typical workloads.
+const MIN_AUTOMATIC_BUF_SIZE: usize = 512 * 1024; // 512 KiB
+const FALLBACK_AUTOMATIC_BUF_SIZE: usize = 32 * 1024 * 1024; // 32 MiB
+const MAX_AUTOMATIC_BUF_SIZE: usize = 1024 * 1024 * 1024; // 1 GiB
 
 #[derive(Debug, Error)]
 pub enum SortError {
@@ -283,6 +287,7 @@ pub struct GlobalSettings {
     threads: String,
     line_ending: LineEnding,
     buffer_size: usize,
+    buffer_size_is_explicit: bool,
     compress_prog: Option<String>,
     merge_batch_size: usize,
     precomputed: Precomputed,
@@ -359,9 +364,10 @@ impl Default for GlobalSettings {
             separator: None,
             threads: String::new(),
             line_ending: LineEnding::Newline,
-            buffer_size: DEFAULT_BUF_SIZE,
+            buffer_size: FALLBACK_AUTOMATIC_BUF_SIZE,
+            buffer_size_is_explicit: false,
             compress_prog: None,
-            merge_batch_size: 32,
+            merge_batch_size: default_merge_batch_size(),
             precomputed: Precomputed::default(),
         }
     }
@@ -1036,6 +1042,31 @@ fn get_rlimit() -> UResult<usize> {
 }
 
 const STDIN_FILE: &str = "-";
+#[cfg(target_os = "linux")]
+const LINUX_BATCH_DIVISOR: usize = 4;
+#[cfg(target_os = "linux")]
+const LINUX_BATCH_MIN: usize = 32;
+#[cfg(target_os = "linux")]
+const LINUX_BATCH_MAX: usize = 256;
+
+fn default_merge_batch_size() -> usize {
+    #[cfg(target_os = "linux")]
+    {
+        // Adjust merge batch size dynamically based on available file descriptors.
+        match get_rlimit() {
+            Ok(limit) => {
+                let usable_limit = limit.saturating_div(LINUX_BATCH_DIVISOR);
+                usable_limit.clamp(LINUX_BATCH_MIN, LINUX_BATCH_MAX)
+            }
+            Err(_) => 64,
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        64
+    }
+}
 
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
@@ -1157,14 +1188,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    settings.buffer_size =
-        matches
-            .get_one::<String>(options::BUF_SIZE)
-            .map_or(Ok(DEFAULT_BUF_SIZE), |s| {
-                GlobalSettings::parse_byte_count(s).map_err(|e| {
-                    USimpleError::new(2, format_error_message(&e, s, options::BUF_SIZE))
-                })
-            })?;
+    if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
+        settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|e| {
+            USimpleError::new(2, format_error_message(&e, size_str, options::BUF_SIZE))
+        })?;
+        settings.buffer_size_is_explicit = true;
+    } else {
+        settings.buffer_size = automatic_buffer_size(&files);
+        settings.buffer_size_is_explicit = false;
+    }
 
     let mut tmp_dir = TmpDirWrapper::new(
         matches
