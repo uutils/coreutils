@@ -355,10 +355,10 @@ jobs:
         test -h /tmp/usr/local/bin/sha1sum
         test -h /tmp/usr/local/bin/sha224sum
         test -h /tmp/usr/local/bin/sha256sum
-        test -h /tmp/usr/local/bin/sha3-224sum
-        test -h /tmp/usr/local/bin/sha3-256sum
-        test -h /tmp/usr/local/bin/sha3-384sum
-        test -h /tmp/usr/local/bin/sha3-512sum
+        ! test -h /tmp/usr/local/bin/sha3-224sum
+        ! test -h /tmp/usr/local/bin/sha3-256sum
+        ! test -h /tmp/usr/local/bin/sha3-384sum
+        ! test -h /tmp/usr/local/bin/sha3-512sum
         test -h /tmp/usr/local/bin/sha384sum
         ! test -h /tmp/usr/local/bin/sha3sum
         test -h /tmp/usr/local/bin/sha512sum
