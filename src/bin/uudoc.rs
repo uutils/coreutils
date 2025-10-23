@@ -61,7 +61,11 @@ fn gen_coreutils_app<T: Args>(util_map: &UtilityMap<T>) -> clap::Command {
 }
 
 /// Generate the manpage for the utility in the first parameter
-fn gen_manpage<T: Args>(args: impl Iterator<Item = OsString>, util_map: &UtilityMap<T>) -> ! {
+fn gen_manpage<T: Args>(
+    tldr: &mut Option<ZipArchive<File>>,
+    args: impl Iterator<Item = OsString>,
+    util_map: &UtilityMap<T>,
+) -> ! {
     let all_utilities = validation::get_all_utilities(util_map);
 
     let matches = Command::new("manpage")
@@ -79,8 +83,10 @@ fn gen_manpage<T: Args>(args: impl Iterator<Item = OsString>, util_map: &Utility
     } else {
         validation::setup_localization_or_exit(utility);
         let mut cmd = util_map.get(utility).unwrap().1();
-        if let Ok(examples) = get_zip_examples(utility) {
-            cmd = cmd.after_help(examples);
+        if let Some(zip) = tldr {
+            if let Ok(examples) = write_zip_examples(zip, utility, false) {
+                cmd = cmd.after_help(examples);
+            }
         }
         cmd
     };
@@ -132,13 +138,32 @@ fn gen_completions<T: Args>(args: impl Iterator<Item = OsString>, util_map: &Uti
 fn main() -> io::Result<()> {
     let args: Vec<OsString> = uucore::args_os_filtered().collect();
 
+    let mut tldr_zip = File::open("docs/tldr.zip")
+        .ok()
+        .and_then(|f| ZipArchive::new(f).ok());
+
+    if tldr_zip.is_none() {
+        eprintln!(
+            "Warning: No tldr archive found, so the documentation will not include examples."
+        );
+        eprintln!(
+            "To include examples in the documentation, download the tldr archive and put it in the docs/ folder."
+        );
+        eprintln!();
+        eprintln!("  curl https://tldr.sh/assets/tldr.zip -o docs/tldr.zip");
+        eprintln!();
+    }
     // Check for manpage/completion commands first
     if args.len() > 1 {
         let command = args.get(1).and_then(|s| s.to_str()).unwrap_or_default();
         match command {
             "manpage" => {
                 let args_iter = args.into_iter().skip(2);
-                gen_manpage(args_iter, &util_map::<Box<dyn Iterator<Item = OsString>>>());
+                gen_manpage(
+                    &mut tldr_zip,
+                    args_iter,
+                    &util_map::<Box<dyn Iterator<Item = OsString>>>(),
+                );
             }
             "completion" => {
                 let args_iter = args.into_iter().skip(2);
@@ -154,19 +179,6 @@ fn main() -> io::Result<()> {
                 process::exit(1);
             }
         }
-    }
-    let mut tldr_zip = File::open("docs/tldr.zip")
-        .ok()
-        .and_then(|f| ZipArchive::new(f).ok());
-
-    if tldr_zip.is_none() {
-        println!("Warning: No tldr archive found, so the documentation will not include examples.");
-        println!(
-            "To include examples in the documentation, download the tldr archive and put it in the docs/ folder."
-        );
-        println!();
-        println!("  curl https://tldr.sh/assets/tldr.zip -o docs/tldr.zip");
-        println!();
     }
 
     let utils = util_map::<Box<dyn Iterator<Item = OsString>>>();
@@ -435,44 +447,9 @@ impl MDWriter<'_, '_> {
     /// Returns an error if the writer fails.
     fn examples(&mut self) -> io::Result<()> {
         if let Some(zip) = self.tldr_zip {
-            let content = if let Some(f) =
-                get_zip_content(zip, &format!("pages/common/{}.md", self.name))
-            {
-                f
-            } else if let Some(f) = get_zip_content(zip, &format!("pages/linux/{}.md", self.name)) {
-                f
-            } else {
-                println!(
-                    "Warning: Could not find tldr examples for page '{}'",
-                    self.name
-                );
-                return Ok(());
-            };
-
-            writeln!(self.w, "## Examples")?;
-            writeln!(self.w)?;
-            for line in content.lines().skip_while(|l| !l.starts_with('-')) {
-                if let Some(l) = line.strip_prefix("- ") {
-                    writeln!(self.w, "{l}")?;
-                } else if line.starts_with('`') {
-                    writeln!(self.w, "```shell\n{}\n```", line.trim_matches('`'))?;
-                } else if line.is_empty() {
-                    writeln!(self.w)?;
-                } else {
-                    println!("Not sure what to do with this line:");
-                    println!("{line}");
-                }
+            if let Ok(examples) = write_zip_examples(zip, self.name, true) {
+                writeln!(self.w, "{examples}")?;
             }
-            writeln!(self.w)?;
-            writeln!(
-                self.w,
-                "> The examples are provided by the [tldr-pages project](https://tldr.sh) under the [CC BY 4.0 License](https://github.com/tldr-pages/tldr/blob/main/LICENSE.md)."
-            )?;
-            writeln!(self.w, ">")?;
-            writeln!(
-                self.w,
-                "> Please note that, as uutils is a work in progress, some examples might fail."
-            )?;
         }
         Ok(())
     }
@@ -562,44 +539,35 @@ fn get_zip_content(archive: &mut ZipArchive<impl Read + Seek>, name: &str) -> Op
 /// # Errors
 ///
 /// Returns an error if the tldr.zip file cannot be opened or read
-fn get_zip_examples(name: &str) -> io::Result<String> {
-    fn get_zip_content(archive: &mut ZipArchive<impl Read + Seek>, name: &str) -> Option<String> {
-        let mut s = String::new();
-        archive.by_name(name).ok()?.read_to_string(&mut s).unwrap();
-        Some(s)
-    }
-
+fn write_zip_examples(
+    archive: &mut ZipArchive<impl Read + Seek>,
+    name: &str,
+    output_markdown: bool,
+) -> io::Result<String> {
     let mut w = io::BufWriter::new(Vec::new());
-    let file = File::open("docs/tldr.zip")?;
-    let mut tldr_zip = match ZipArchive::new(file) {
-        Ok(zip) => zip,
-        Err(e) => {
-            return Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                format!("Error reading tldr.zip: {e}"),
-            ));
-        }
+    let content = if let Some(f) = get_zip_content(archive, &format!("pages/common/{name}.md")) {
+        f
+    } else if let Some(f) = get_zip_content(archive, &format!("pages/linux/{name}.md")) {
+        f
+    } else {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "Could not find tldr examples",
+        ));
     };
 
-    let content =
-        if let Some(f) = get_zip_content(&mut tldr_zip, &format!("pages/common/{name}.md")) {
-            f
-        } else if let Some(f) = get_zip_content(&mut tldr_zip, &format!("pages/linux/{name}.md")) {
-            f
-        } else {
-            return Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                "Could not find tldr examples",
-            ));
-        };
-
+    writeln!(w)?;
     writeln!(w, "Examples")?;
     writeln!(w)?;
     for line in content.lines().skip_while(|l| !l.starts_with('-')) {
         if let Some(l) = line.strip_prefix("- ") {
             writeln!(w, "{l}")?;
         } else if line.starts_with('`') {
-            writeln!(w, "{}", line.trim_matches('`'))?;
+            if output_markdown {
+                writeln!(w, "```shell\n{}\n```", line.trim_matches('`'))?;
+            } else {
+                writeln!(w, "{}", line.trim_matches('`'))?;
+            }
         } else if line.is_empty() {
             writeln!(w)?;
         } else {
@@ -612,7 +580,7 @@ fn get_zip_examples(name: &str) -> io::Result<String> {
         w,
         "> The examples are provided by the [tldr-pages project](https://tldr.sh) under the [CC BY 4.0 License](https://github.com/tldr-pages/tldr/blob/main/LICENSE.md)."
     )?;
-    writeln!(w)?;
+    writeln!(w, ">")?;
     writeln!(
         w,
         "> Please note that, as uutils is a work in progress, some examples might fail."
