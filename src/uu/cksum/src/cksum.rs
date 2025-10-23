@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) fname, algo
 
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, Command, value_parser};
+use clap::{Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufReader, Read, Write, stdin, stdout};
@@ -14,9 +14,9 @@ use std::iter;
 use std::path::Path;
 use uucore::checksum::{
     ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC,
-    ALGORITHM_OPTIONS_CRC32B, ALGORITHM_OPTIONS_SYSV, ChecksumError, ChecksumOptions,
-    ChecksumVerbose, SUPPORTED_ALGORITHMS, calculate_blake2b_length, detect_algo, digest_reader,
-    perform_checksum_validation,
+    ALGORITHM_OPTIONS_CRC32B, ALGORITHM_OPTIONS_SHA2, ALGORITHM_OPTIONS_SYSV, ChecksumError,
+    ChecksumOptions, ChecksumVerbose, SUPPORTED_ALGORITHMS, detect_algo, digest_reader,
+    perform_checksum_validation, validate_blake2b_length,
 };
 use uucore::translate;
 
@@ -250,12 +250,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    let input_length = matches.get_one::<usize>(options::LENGTH);
+    let input_length = matches.get_one::<String>(options::LENGTH);
 
     let length = match input_length {
-        Some(length) => {
+        Some(length_str) => {
             if algo_name == ALGORITHM_OPTIONS_BLAKE2B {
-                calculate_blake2b_length(*length)?
+                validate_blake2b_length(length_str, "cksum")?
+            } else if algo_name == ALGORITHM_OPTIONS_SHA2
+                || algo_name.starts_with("sha3")
+                || algo_name == "shake128"
+                || algo_name == "shake256"
+            {
+                // Parse length for sha2, sha3, and shake algorithms
+                Some(
+                    length_str
+                        .parse::<usize>()
+                        .map_err(|_| ChecksumError::InvalidLength)?,
+                )
             } else {
                 return Err(ChecksumError::LengthOnlyForBlake2b.into());
             }
@@ -378,7 +389,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::LENGTH)
                 .long(options::LENGTH)
-                .value_parser(value_parser!(usize))
+                .value_parser(ValueParser::string())
                 .short('l')
                 .help(translate!("cksum-help-length"))
                 .action(ArgAction::Set),
