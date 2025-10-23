@@ -581,18 +581,17 @@ fn get_zip_examples(name: &str) -> io::Result<String> {
         }
     };
 
-    let content = if let Some(f) =
-        get_zip_content(&mut tldr_zip, &format!("pages/common/{name}.md"))
-    {
-        f
-    } else if let Some(f) = get_zip_content(&mut tldr_zip, &format!("pages/linux/{name}.md")) {
-        f
-    } else {
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            "Could not find tldr examples",
-        ));
-    };
+    let content =
+        if let Some(f) = get_zip_content(&mut tldr_zip, &format!("pages/common/{name}.md")) {
+            f
+        } else if let Some(f) = get_zip_content(&mut tldr_zip, &format!("pages/linux/{name}.md")) {
+            f
+        } else {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "Could not find tldr examples",
+            ));
+        };
 
     writeln!(w, "Examples")?;
     writeln!(w)?;
