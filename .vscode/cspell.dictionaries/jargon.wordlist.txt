@@ -11,6 +11,7 @@ bytewise
 canonicalization
 canonicalize
 canonicalizing
+CLOEXEC
 capget
 CLOEXEC
 codepoint
@@ -35,6 +36,7 @@ dirfds
 discoverability
 duplicative
 dsync
+FDCWD
 endianness
 enqueue
 errored
@@ -120,6 +122,7 @@ RDONLY
 readonly
 reparse
 seedable
+RDONLY
 semver
 semiprime
 semiprimes

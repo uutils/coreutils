@@ -12,8 +12,7 @@ use file_diff::diff;
 use filetime::{FileTime, set_file_times};
 #[cfg(feature = "selinux")]
 use selinux::SecurityContext;
-use std::ffi::OsStr;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Debug;
 use std::fs::File;
 use std::fs::{self, metadata};
@@ -44,9 +43,10 @@ use std::os::{
     unix::{
         fs::{FileTypeExt, MetadataExt},
         io::OwnedFd,
-        prelude::OsStrExt,
     },
 };
+#[cfg(unix)]
+use std::os::unix::prelude::OsStrExt;
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
