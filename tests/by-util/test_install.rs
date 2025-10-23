@@ -9,15 +9,14 @@ use filetime::FileTime;
 use std::fs;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
+#[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
-use std::path::Path;
 use std::path::Path;
 #[cfg(not(windows))]
 use std::process::Command;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
-use uucore::libc;
-#[cfg(not(windows))]
+#[cfg(unix)]
 use uucore::libc;
 use uucore::process::{getegid, geteuid};
 #[cfg(feature = "feat_selinux")]
