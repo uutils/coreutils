@@ -267,6 +267,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(ChecksumError::AlgorithmNotSupportedWithCheck.into());
     }
 
+    let files = matches.get_many::<OsString>(options::FILE).map_or_else(
+        // No files given, read from stdin.
+        || Box::new(iter::once(OsStr::new("-"))) as Box<dyn Iterator<Item = &OsStr>>,
+        // At least one file given, read from them.
+        |files| Box::new(files.map(OsStr::new)) as Box<dyn Iterator<Item = &OsStr>>,
+    );
+
     if check {
         let text_flag = matches.get_flag(options::TEXT);
         let binary_flag = matches.get_flag(options::BINARY);
@@ -290,11 +297,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         // Execute the checksum validation based on the presence of files or the use of stdin
 
-        let files = matches.get_many::<OsString>(options::FILE).map_or_else(
-            || iter::once(OsStr::new("-")).collect::<Vec<_>>(),
-            |files| files.map(OsStr::new).collect::<Vec<_>>(),
-        );
-
         let verbose = ChecksumVerbose::new(status, quiet, warn);
         let opts = ChecksumOptions {
             binary: binary_flag,
@@ -303,7 +305,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             verbose,
         };
 
-        return perform_checksum_validation(files.iter().copied(), algo_option, length, opts);
+        return perform_checksum_validation(files, algo_option, length, opts);
     }
 
     let (tag, asterisk) = handle_tag_text_binary_flags(std::env::args_os())?;
@@ -330,10 +332,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         line_ending,
     };
 
-    match matches.get_many::<OsString>(options::FILE) {
-        Some(files) => cksum(opts, files.map(OsStr::new))?,
-        None => cksum(opts, iter::once(OsStr::new("-")))?,
-    }
+    cksum(opts, files)?;
 
     Ok(())
 }
