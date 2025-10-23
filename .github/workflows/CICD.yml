@@ -348,9 +348,9 @@ jobs:
         DESTDIR=/tmp/ make PROFILE=release MULTICALL=n install
         # Check that the utils are present
         test -f /tmp/usr/local/bin/hashsum
-        # Check that hashsum symlinks are present
+        # Check that hashsum symlinks are synced with GNU coreutils
         test -h /tmp/usr/local/bin/b2sum
-        test -h /tmp/usr/local/bin/b3sum
+        ! test -h /tmp/usr/local/bin/b3sum
         test -h /tmp/usr/local/bin/md5sum
         test -h /tmp/usr/local/bin/sha1sum
         test -h /tmp/usr/local/bin/sha224sum
@@ -360,10 +360,10 @@ jobs:
         test -h /tmp/usr/local/bin/sha3-384sum
         test -h /tmp/usr/local/bin/sha3-512sum
         test -h /tmp/usr/local/bin/sha384sum
-        test -h /tmp/usr/local/bin/sha3sum
+        ! test -h /tmp/usr/local/bin/sha3sum
         test -h /tmp/usr/local/bin/sha512sum
-        test -h /tmp/usr/local/bin/shake128sum
-        test -h /tmp/usr/local/bin/shake256sum
+        ! test -h /tmp/usr/local/bin/shake128sum
+        ! test -h /tmp/usr/local/bin/shake256sum
     - name: "`make install MULTICALL=y LN=ln -svf`"
       shell: bash
       run: |
@@ -373,6 +373,7 @@ jobs:
         [ $(readlink /tmp/usr/local/bin/b2sum) = coreutils ]
         [ $(readlink /tmp/usr/local/bin/md5sum) = coreutils ]
         [ $(readlink /tmp/usr/local/bin/sha512sum) = coreutils ]
+        ! test -h /tmp/usr/local/bin/shake256sum
     - name: "`make UTILS=XXX`"
       shell: bash
       run: |
