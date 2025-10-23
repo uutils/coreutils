@@ -218,10 +218,10 @@ HASHSUM_PROGS := \
 $(info Detected OS = $(OS))
 
 ifneq ($(OS),Windows_NT)
-	PROGS := $(PROGS) $(UNIX_PROGS)
+	PROGS += $(UNIX_PROGS)
 endif
 ifeq ($(SELINUX_ENABLED),1)
-	PROGS := $(PROGS) $(SELINUX_PROGS)
+	PROGS += $(SELINUX_PROGS)
 endif
 
 UTILS ?= $(filter-out $(SKIP_UTILS),$(PROGS))
