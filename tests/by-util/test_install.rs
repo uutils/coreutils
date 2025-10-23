@@ -7,17 +7,17 @@
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
 use std::fs;
-use std::path::Path;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
-#[cfg(not(windows))]
-use uucore::libc;
+use std::path::Path;
 #[cfg(not(windows))]
 use std::process::Command;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
+use uucore::libc;
+#[cfg(not(windows))]
 use uucore::libc;
 use uucore::process::{getegid, geteuid};
 #[cfg(feature = "feat_selinux")]
