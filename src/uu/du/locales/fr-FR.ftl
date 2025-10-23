@@ -69,6 +69,7 @@ du-error-printing-thread-panicked = Le thread d'affichage a paniqué.
 du-error-invalid-suffix = suffixe invalide dans l'argument --{ $option } { $value }
 du-error-invalid-argument = argument --{ $option } invalide { $value }
 du-error-argument-too-large = argument --{ $option } { $value } trop grand
+du-error-hyphen-file-name-not-allowed = le nom de fichier '-' n'est pas autorisé lors de la lecture de l'entrée standard
 
 # Messages verbeux/de statut
 du-verbose-ignored = { $path } ignoré
