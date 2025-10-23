@@ -40,7 +40,7 @@ fn compute_num_digits(input: &str, ebd: ExtendedBigDecimal) -> PreciseNumber {
         return PreciseNumber {
             number: ebd,
             num_integral_digits: 0,
-            num_fractional_digits: if input.contains(".") || input.contains("p") {
+            num_fractional_digits: if input.contains('.') || input.contains('p') {
                 None
             } else {
                 Some(0)
@@ -49,17 +49,17 @@ fn compute_num_digits(input: &str, ebd: ExtendedBigDecimal) -> PreciseNumber {
     }
 
     // Split the exponent part, if any
-    let parts: Vec<&str> = input.split("e").collect();
+    let parts: Vec<&str> = input.split('e').collect();
     debug_assert!(parts.len() <= 2);
 
     // Count all the digits up to `.`, `-` sign is included.
-    let (mut int_digits, mut frac_digits) = match parts[0].find(".") {
+    let (mut int_digits, mut frac_digits) = match parts[0].find('.') {
         Some(i) => {
             // Cover special case .X and -.X where we behave as if there was a leading 0:
             // 0.X, -0.X.
             let int_digits = match i {
                 0 => 1,
-                1 if parts[0].starts_with("-") => 2,
+                1 if parts[0].starts_with('-') => 2,
                 _ => i,
             };
 
@@ -75,7 +75,7 @@ fn compute_num_digits(input: &str, ebd: ExtendedBigDecimal) -> PreciseNumber {
         // For positive exponents, effectively expand the number. Ignore negative exponents.
         // Also ignore overflowed exponents (unwrap_or(0)).
         if exp > 0 {
-            int_digits += exp.try_into().unwrap_or(0)
+            int_digits += exp.try_into().unwrap_or(0);
         };
         frac_digits = if exp < frac_digits as i64 {
             // Subtract from i128 to avoid any overflow
@@ -106,7 +106,7 @@ impl FromStr for PreciseNumber {
                     ebd
                 }
                 ExtendedBigDecimal::Infinity | ExtendedBigDecimal::MinusInfinity => {
-                    return Ok(PreciseNumber {
+                    return Ok(Self {
                         number: ebd,
                         num_integral_digits: 0,
                         num_fractional_digits: Some(0),

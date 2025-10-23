@@ -110,6 +110,7 @@ jobs:
         ## Install/setup prerequisites
         case '${{ matrix.job.os }}' in
           ubuntu-*)
+            sudo apt-get -y update
             # selinux and systemd headers needed to enable all features
             sudo apt-get -y install libselinux1-dev libsystemd-dev
           ;;

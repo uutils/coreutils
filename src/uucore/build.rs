@@ -69,6 +69,9 @@ fn project_root() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
 fn detect_target_utility() -> Option<String> {
     use std::fs;
 
+    // Tell Cargo to rerun if this environment variable changes
+    println!("cargo:rerun-if-env-changed=UUCORE_TARGET_UTIL");
+
     // First check if an explicit environment variable was set
     if let Ok(target_util) = env::var("UUCORE_TARGET_UTIL") {
         if !target_util.is_empty() {
@@ -79,7 +82,7 @@ fn detect_target_utility() -> Option<String> {
     // Auto-detect utility name from CARGO_PKG_NAME if it's a uu_* package
     if let Ok(pkg_name) = env::var("CARGO_PKG_NAME") {
         if let Some(util_name) = pkg_name.strip_prefix("uu_") {
-            println!("cargo:warning=Auto-detected utility name: {}", util_name);
+            println!("cargo:warning=Auto-detected utility name: {util_name}");
             return Some(util_name.to_string());
         }
     }

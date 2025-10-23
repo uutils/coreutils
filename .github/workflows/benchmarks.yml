@@ -1,0 +1,82 @@
+name: Benchmarks
+
+# spell-checker:ignore codspeed dtolnay Swatinem sccache
+
+on:
+  pull_request:
+  push:
+    branches:
+      - '*'
+
+permissions:
+  contents: read # to fetch code (actions/checkout)
+
+# End the current execution if there is a new changeset in the PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  benchmarks:
+    name: Run benchmarks (CodSpeed)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        benchmark-target:
+          - { package: uu_base64 }
+          - { package: uu_cp }
+          - { package: uu_cut }
+          - { package: uu_du }
+          - { package: uu_expand }
+          - { package: uu_fold }
+          - { package: uu_hashsum }
+          - { package: uu_ls }
+          - { package: uu_mv }
+          - { package: uu_nl }
+          - { package: uu_numfmt }
+          - { package: uu_rm }
+          - { package: uu_seq }
+          - { package: uu_sort }
+          - { package: uu_split }
+          - { package: uu_tsort }
+          - { package: uu_unexpand }
+          - { package: uu_uniq }
+          - { package: uu_wc }
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Install system dependencies
+        shell: bash
+        run: |
+          sudo apt-get -y update
+          sudo apt-get -y install libselinux1-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Install cargo-codspeed
+        shell: bash
+        run: cargo install cargo-codspeed --locked
+
+      - name: Build benchmarks for ${{ matrix.benchmark-target.package }}
+        shell: bash
+        run: |
+          echo "Building benchmarks for ${{ matrix.benchmark-target.package }}"
+          cargo codspeed build -p ${{ matrix.benchmark-target.package }}
+
+      - name: Run benchmarks for ${{ matrix.benchmark-target.package }}
+        uses: CodSpeedHQ/action@v4
+        env:
+          CODSPEED_LOG: debug
+        with:
+          mode: instrumentation
+          run: |
+            echo "Running benchmarks for ${{ matrix.benchmark-target.package }}"
+            cargo codspeed run -p ${{ matrix.benchmark-target.package }} > /dev/null
+          token: ${{ secrets.CODSPEED_TOKEN }}

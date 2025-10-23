@@ -364,35 +364,26 @@ jobs:
         test -h /tmp/usr/local/bin/sha512sum
         test -h /tmp/usr/local/bin/shake128sum
         test -h /tmp/usr/local/bin/shake256sum
-    - name: "`make install MULTICALL=y`"
+    - name: "`make install MULTICALL=y LN=ln -svf`"
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/ make PROFILE=release MULTICALL=y install
-        # Check that the utils are present
-        test -f /tmp/usr/local/bin/coreutils
-        # Check that hashsum symlinks are present
-        test -h /tmp/usr/local/bin/b2sum
-        test -h /tmp/usr/local/bin/b3sum
-        test -h /tmp/usr/local/bin/md5sum
-        test -h /tmp/usr/local/bin/sha1sum
-        test -h /tmp/usr/local/bin/sha224sum
-        test -h /tmp/usr/local/bin/sha256sum
-        test -h /tmp/usr/local/bin/sha3-224sum
-        test -h /tmp/usr/local/bin/sha3-256sum
-        test -h /tmp/usr/local/bin/sha3-384sum
-        test -h /tmp/usr/local/bin/sha3-512sum
-        test -h /tmp/usr/local/bin/sha384sum
-        test -h /tmp/usr/local/bin/sha3sum
-        test -h /tmp/usr/local/bin/sha512sum
-        test -h /tmp/usr/local/bin/shake128sum
-        test -h /tmp/usr/local/bin/shake256sum
+        DESTDIR=/tmp/ make PROFILE=release MULTICALL=y LN="ln -svf" install
+        # Check that relative symlinks of hashsum are present
+        [ $(readlink /tmp/usr/local/bin/b2sum) = coreutils ]
+        [ $(readlink /tmp/usr/local/bin/md5sum) = coreutils ]
+        [ $(readlink /tmp/usr/local/bin/sha512sum) = coreutils ]
     - name: "`make UTILS=XXX`"
       shell: bash
       run: |
         set -x
         # Regression-test for https://github.com/uutils/coreutils/issues/8701
         make UTILS="rm chmod chown chgrp mv du"
+        # Verifies that
+        # 1. there is no "error: none of the selected packages contains this
+        # feature: feat_external_libstdbuf"
+        # 2. the makefile doesn't try to install libstdbuf even though stdbuf is skipped
+        DESTDIR=/tmp/ make SKIP_UTILS="stdbuf" install
 
   build_rust_stable:
     name: Build/stable
@@ -483,9 +474,13 @@ jobs:
       run: |
         ## `make install`
         make install DESTDIR=target/size-release/
-        make install MULTICALL=y DESTDIR=target/size-multi-release/
+        make install MULTICALL=y LN="ln -vf" DESTDIR=target/size-multi-release/
         # strip the results
         strip target/size*/usr/local/bin/*
+    - name: Test for hardlinks
+      shell: bash
+      run: |
+        [ $(stat -c %i target/size-multi-release/usr/local/bin/cp) = $(stat -c %i target/size-multi-release/usr/local/bin/coreutils) ]
     - name: Compute uutil release sizes
       shell: bash
       run: |
@@ -782,6 +777,9 @@ jobs:
             # We also create a couple optional files pinky looks for
             touch /home/runner/.project
             echo "foo" > /home/runner/.plan
+            # add user with digital username for testing with issue #7787
+            echo 200:x:2000:2000::/home/200:/bin/bash | sudo tee -a /etc/passwd
+            echo 200:x:2000: | sudo tee -a /etc/group
             ;;
         esac
     - uses: taiki-e/install-action@v2
@@ -1156,6 +1154,9 @@ jobs:
             # We also create a couple optional files pinky looks for
             touch /home/runner/.project
             echo "foo" > /home/runner/.plan
+            # add user with digital username for testing with issue #7787
+            echo 200:x:2000:2000::/home/200:/bin/bash | sudo tee -a /etc/passwd
+            echo 200:x:2000: | sudo tee -a /etc/group
             ;;
         esac
 
@@ -1193,11 +1194,14 @@ jobs:
 
   test_separately:
     name: Separate Builds
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        job:
+          - { os: ubuntu-latest  , features: feat_os_unix }
+          - { os: macos-latest   , features: feat_os_macos }
+          - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v5
       with:
@@ -1207,21 +1211,24 @@ jobs:
     - name: build and test all programs individually
       shell: bash
       run: |
-        for f in $(util/show-utils.sh)
+        CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ;
+        for f in $(util/show-utils.sh ${CARGO_FEATURES_OPTION})
         do
           echo "Building and testing $f"
-          cargo test -p "uu_$f" || exit 1
+          cargo test -p "uu_$f"
         done
 
   test_all_features:
     name: Test all features separately
     needs: [ min_version, deps ]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        # windows-latest - https://github.com/uutils/coreutils/issues/7044
+        job:
+          - { os: ubuntu-latest  , features: feat_os_unix }
+          - { os: macos-latest   , features: feat_os_macos }
+          # - { os: windows-latest , features: feat_os_windows } https://github.com/uutils/coreutils/issues/7044
     steps:
     - uses: actions/checkout@v5
       with:
@@ -1231,7 +1238,8 @@ jobs:
     - name: build and test all features individually
       shell: bash
       run: |
-        for f in $(util/show-utils.sh)
+        CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ;
+        for f in $(util/show-utils.sh ${CARGO_FEATURES_OPTION})
         do
           echo "Running tests with --features=$f and --no-default-features"
           cargo test --features=$f --no-default-features
@@ -1274,66 +1282,52 @@ jobs:
     - name: Lint with SELinux
       run: lima bash -c "cd work && cargo clippy --all-targets --features 'feat_selinux' -- -D warnings"
 
-  benchmarks:
-    name: Run benchmarks (CodSpeed)
-    runs-on: ubuntu-latest
-    needs: min_version
+  test_selinux_stubs:
+    name: Build/SELinux-Stubs (Non-Linux)
+    needs: [ min_version, deps ]
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: macos-latest   , features: feat_os_macos }
+          - { os: windows-latest , features: feat_os_windows }
+
     steps:
-      - uses: actions/checkout@v5
-        with:
-          persist-credentials: false
+    - uses: actions/checkout@v5
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    - name: Build SELinux utilities as stubs
+      run: cargo build -p uu_chcon -p uu_runcon
+    - name: Verify stub binaries exist
+      shell: bash
+      run: |
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          test -f target/debug/chcon.exe
+          test -f target/debug/runcon.exe
+        else
+          test -f target/debug/chcon
+          test -f target/debug/runcon
+        fi
+    - name: Verify workspace builds with stubs
+      run: cargo build --features ${{ matrix.job.features }}
 
-      - name: Install system dependencies
-        shell: bash
-        run: |
-          sudo apt-get -y update
-          sudo apt-get -y install libselinux1-dev
+  test_safe_traversal:
+    name: Safe Traversal Security Check
+    runs-on: ubuntu-latest
+    needs: [ min_version, deps ]
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.9
-
-      - name: Install cargo-codspeed
-        shell: bash
-        run: cargo install cargo-codspeed --locked
-
-      - name: Get benchmark list
-        id: benchmark_list
-        shell: bash
-        run: |
-          echo "Finding all utilities with benchmarks..."
-          benchmark_packages=""
-          for bench_dir in $(ls -d src/uu/*/benches 2>/dev/null); do
-            prog_dir=$(dirname "$bench_dir")
-            prog_name=$(basename "$prog_dir")
-            echo "Found benchmarks for uu_$prog_name"
-            benchmark_packages="$benchmark_packages uu_$prog_name"
-          done
-          echo "benchmark_packages=${benchmark_packages}" >> $GITHUB_OUTPUT
-          echo "Found benchmark packages:${benchmark_packages}"
-
-      - name: Build benchmarks
-        shell: bash
-        run: |
-          echo "Building benchmarks for packages: ${{ steps.benchmark_list.outputs.benchmark_packages }}"
-          for package in ${{ steps.benchmark_list.outputs.benchmark_packages }}; do
-            echo "Building benchmarks for $package"
-            cargo codspeed build -p $package
-          done
-
-      - name: Run benchmarks
-        uses: CodSpeedHQ/action@v4
-        env:
-          CODSPEED_LOG: debug
-        with:
-          mode: instrumentation
-          run: |
-            echo "Running benchmarks for packages: ${{ steps.benchmark_list.outputs.benchmark_packages }}"
-            for package in ${{ steps.benchmark_list.outputs.benchmark_packages }}; do
-              echo "Running benchmarks for $package"
-              cargo codspeed run -p $package > /dev/null
-            done
-          token: ${{ secrets.CODSPEED_TOKEN }}
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    - name: Install strace
+      run: sudo apt-get update && sudo apt-get install -y strace
+    - name: Build utilities with safe traversal
+      run: cargo build --release -p uu_rm -p uu_chmod -p uu_chown -p uu_chgrp -p uu_mv -p uu_du
+    - name: Run safe traversal verification
+      run: ./util/check-safe-traversal.sh

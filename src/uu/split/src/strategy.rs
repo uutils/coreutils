@@ -229,7 +229,7 @@ impl Strategy {
             if n > 0 {
                 Ok(strategy(n))
             } else {
-                Err(error(ParseSizeError::ParseFailure(s.to_string())))
+                Err(error(ParseSizeError::ParseFailure(s.to_owned())))
             }
         }
         // Check that the user is not specifying more than one strategy.

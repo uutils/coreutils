@@ -1078,3 +1078,142 @@ fn test_rm_recursive_long_path_safe_traversal() {
     // Verify the directory is completely removed
     assert!(!at.dir_exists("rm_deep"));
 }
+
+#[cfg(all(not(windows), feature = "chmod"))]
+#[test]
+fn test_rm_directory_not_executable() {
+    // Test from GNU rm/rm2.sh
+    // Exercise code paths when directories have no execute permission
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create directory structure: a/0, a/1/2, a/2, a/3, b/3
+    at.mkdir_all("a/0");
+    at.mkdir_all("a/1/2");
+    at.mkdir("a/2");
+    at.mkdir("a/3");
+    at.mkdir_all("b/3");
+
+    // Remove execute permission from a/1 and b
+    scene.ccmd("chmod").arg("u-x").arg("a/1").succeeds();
+    scene.ccmd("chmod").arg("u-x").arg("b").succeeds();
+
+    // Try to remove both directories recursively - this should fail
+    let result = scene.ucmd().args(&["-rf", "a", "b"]).fails();
+
+    // Check for expected error messages
+    // When directories don't have execute permission, we get "Permission denied"
+    // when trying to access subdirectories
+    let stderr = result.stderr_str();
+    assert!(stderr.contains("rm: cannot remove 'a/1/2': Permission denied"));
+    assert!(stderr.contains("rm: cannot remove 'b/3': Permission denied"));
+
+    // Check which directories still exist
+    assert!(!at.dir_exists("a/0")); // Should be removed
+    assert!(at.dir_exists("a/1")); // Should still exist (no execute permission)
+    assert!(!at.dir_exists("a/2")); // Should be removed
+    assert!(!at.dir_exists("a/3")); // Should be removed
+
+    // Restore execute permission to check b/3
+    scene.ccmd("chmod").arg("u+x").arg("b").succeeds();
+    assert!(at.dir_exists("b/3")); // Should still exist
+}
+
+#[cfg(all(not(windows), feature = "chmod"))]
+#[test]
+fn test_rm_directory_not_writable() {
+    // Test from GNU rm/rm1.sh
+    // Exercise code paths when directories have no write permission
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create directory structure: b/a/p, b/c, b/d
+    at.mkdir_all("b/a/p");
+    at.mkdir("b/c");
+    at.mkdir("b/d");
+
+    // Remove write permission from b/a
+    scene.ccmd("chmod").arg("ug-w").arg("b/a").succeeds();
+
+    // Try to remove b recursively - this should fail
+    let result = scene.ucmd().args(&["-rf", "b"]).fails();
+
+    // Check for expected error message
+    // When the parent directory (b/a) doesn't have write permission,
+    // we get "Permission denied" when trying to remove the subdirectory
+    let stderr = result.stderr_str();
+    assert!(stderr.contains("rm: cannot remove 'b/a/p': Permission denied"));
+
+    // Check which directories still exist
+    assert!(at.dir_exists("b/a/p")); // Should still exist (parent not writable)
+    assert!(!at.dir_exists("b/c")); // Should be removed
+    assert!(!at.dir_exists("b/d")); // Should be removed
+}
+
+#[test]
+fn test_progress_flag_short() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_rm_progress_file";
+
+    at.touch(file);
+
+    // Test that -g flag is accepted
+    ucmd.arg("-g").arg(file).succeeds();
+
+    assert!(!at.file_exists(file));
+}
+
+#[test]
+fn test_progress_flag_long() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_rm_progress_file";
+
+    at.touch(file);
+
+    // Test that --progress flag is accepted
+    ucmd.arg("--progress").arg(file).succeeds();
+
+    assert!(!at.file_exists(file));
+}
+
+#[test]
+fn test_progress_with_recursive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("test_dir");
+    at.touch("test_dir/file1");
+    at.touch("test_dir/file2");
+    at.mkdir("test_dir/subdir");
+    at.touch("test_dir/subdir/file3");
+
+    // Test progress with recursive removal
+    ucmd.arg("-rg").arg("test_dir").succeeds();
+
+    assert!(!at.dir_exists("test_dir"));
+}
+
+#[test]
+fn test_progress_with_verbose() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_rm_progress_verbose_file";
+
+    at.touch(file);
+
+    // Test that progress and verbose work together
+    ucmd.arg("-gv").arg(file).succeeds().stdout_contains(file);
+
+    assert!(!at.file_exists(file));
+}
+
+#[test]
+fn test_progress_no_output_on_error() {
+    let nonexistent_file = "this_file_does_not_exist";
+
+    // Test that progress bar is not shown when file doesn't exist
+    new_ucmd!()
+        .arg("--progress")
+        .arg(nonexistent_file)
+        .fails()
+        .stderr_contains("cannot remove")
+        .stderr_contains("No such file or directory");
+}

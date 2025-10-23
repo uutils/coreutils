@@ -92,7 +92,7 @@ pub use crate::features::perms;
 pub use crate::features::pipes;
 #[cfg(all(unix, feature = "process"))]
 pub use crate::features::process;
-#[cfg(all(target_os = "linux", feature = "safe-traversal"))]
+#[cfg(target_os = "linux")]
 pub use crate::features::safe_traversal;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
 pub use crate::features::signals;
@@ -328,7 +328,14 @@ static UTIL_NAME: LazyLock<String> = LazyLock::new(|| {
     let is_man = usize::from(ARGV[base_index].eq("manpage"));
     let argv_index = base_index + is_man;
 
-    ARGV[argv_index].to_string_lossy().into_owned()
+    // Strip directory path to show only utility name
+    // (e.g., "mkdir" instead of "./target/debug/mkdir")
+    // in version output, error messages, and other user-facing output
+    std::path::Path::new(&ARGV[argv_index])
+        .file_name()
+        .unwrap_or(&ARGV[argv_index])
+        .to_string_lossy()
+        .into_owned()
 });
 
 /// Derive the utility name.
@@ -375,6 +382,13 @@ impl<T: Iterator<Item = OsString> + Sized> Args for T {}
 /// args_os() can be expensive to call
 pub fn args_os() -> impl Iterator<Item = OsString> {
     ARGV.iter().cloned()
+}
+
+/// Returns an iterator over the command line arguments as `OsString`s, filtering out empty arguments.
+/// This is useful for handling cases where extra whitespace or empty arguments are present.
+/// args_os_filtered() can be expensive to call
+pub fn args_os_filtered() -> impl Iterator<Item = OsString> {
+    ARGV.iter().filter(|arg| !arg.is_empty()).cloned()
 }
 
 /// Read a line from stdin and check whether the first character is `'y'` or `'Y'`
@@ -559,19 +573,19 @@ pub enum CharByte {
 
 impl From<char> for CharByte {
     fn from(value: char) -> Self {
-        CharByte::Char(value)
+        Self::Char(value)
     }
 }
 
 impl From<u8> for CharByte {
     fn from(value: u8) -> Self {
-        CharByte::Byte(value)
+        Self::Byte(value)
     }
 }
 
 impl From<&u8> for CharByte {
     fn from(value: &u8) -> Self {
-        CharByte::Byte(*value)
+        Self::Byte(*value)
     }
 }
 
@@ -588,7 +602,7 @@ impl Iterator for Utf8ChunkIterator<'_> {
 }
 
 impl<'a> From<Utf8Chunk<'a>> for Utf8ChunkIterator<'a> {
-    fn from(chk: Utf8Chunk<'a>) -> Utf8ChunkIterator<'a> {
+    fn from(chk: Utf8Chunk<'a>) -> Self {
         Self {
             iter: Box::new(
                 chk.valid()
@@ -609,7 +623,7 @@ pub struct CharByteIterator<'a> {
 impl<'a> CharByteIterator<'a> {
     /// Make a `CharByteIterator` from a byte slice.
     /// [`CharByteIterator`]
-    pub fn new(input: &'a [u8]) -> CharByteIterator<'a> {
+    pub fn new(input: &'a [u8]) -> Self {
         Self {
             iter: Box::new(input.utf8_chunks().flat_map(Utf8ChunkIterator::from)),
         }

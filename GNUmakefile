@@ -69,6 +69,13 @@ TOYBOX_SRC  := $(TOYBOX_ROOT)/toybox-$(TOYBOX_VER)
 #------------------------------------------------------------------------
 OS ?= $(shell uname -s)
 
+# Windows does not allow symlink by default.
+# Allow to override LN for AppArmor.
+ifeq ($(OS),Windows_NT)
+	LN ?= ln -f
+endif
+LN ?= ln -sf
+
 ifdef SELINUX_ENABLED
 	override SELINUX_ENABLED := 0
 # Now check if we should enable it (only on non-Windows)
@@ -84,6 +91,7 @@ endif
 
 # Possible programs
 PROGS       := \
+	arch \
 	base32 \
 	base64 \
 	basenc \
@@ -100,6 +108,7 @@ PROGS       := \
 	dir \
 	dircolors \
 	dirname \
+	du \
 	echo \
 	env \
 	expand \
@@ -110,6 +119,7 @@ PROGS       := \
 	fold \
 	hashsum \
 	head \
+	hostname \
 	join \
 	link \
 	ln \
@@ -138,34 +148,33 @@ PROGS       := \
 	sleep \
 	sort \
 	split \
-	stty \
 	sum \
 	sync \
 	tac \
 	tail \
 	tee \
 	test \
+	touch \
 	tr \
 	true \
 	truncate \
 	tsort \
+	uname \
 	unexpand \
 	uniq \
+	unlink \
 	vdir \
 	wc \
 	whoami \
 	yes
 
 UNIX_PROGS := \
-	arch \
 	chgrp \
 	chmod \
 	chown \
 	chroot \
-	du \
 	groups \
 	hostid \
-	hostname \
 	id \
 	install \
 	kill \
@@ -178,11 +187,9 @@ UNIX_PROGS := \
 	pinky \
 	stat \
 	stdbuf \
+	stty \
 	timeout \
-	touch \
 	tty \
-	uname \
-	unlink \
 	uptime \
 	users \
 	who
@@ -221,7 +228,7 @@ ifneq ($(OS),Windows_NT)
 	PROGS := $(PROGS) $(SELINUX_PROGS)
 endif
 
-UTILS ?= $(PROGS)
+UTILS ?= $(filter-out $(SKIP_UTILS),$(PROGS))
 
 ifneq ($(findstring stdbuf,$(UTILS)),)
     # Use external libstdbuf per default. It is more robust than embedding libstdbuf.
@@ -295,11 +302,12 @@ TEST_PROGS  := \
 	unexpand \
 	uniq \
 	unlink \
+	uudoc \
 	wc \
 	who
 
 TESTS       := \
-	$(sort $(filter $(UTILS),$(filter-out $(SKIP_UTILS),$(TEST_PROGS))))
+	$(sort $(filter $(UTILS),$(TEST_PROGS)))
 
 TEST_NO_FAIL_FAST :=
 TEST_SPEC_FEATURE :=
@@ -319,7 +327,7 @@ endef
 
 # Output names
 EXES        := \
-	$(sort $(filter $(UTILS),$(filter-out $(SKIP_UTILS),$(PROGS))))
+	$(sort $(UTILS))
 
 INSTALLEES  := ${EXES}
 ifeq (${MULTICALL}, y)
@@ -345,7 +353,7 @@ build-coreutils:
 
 build: build-coreutils build-pkgs locales
 
-$(foreach test,$(filter-out $(SKIP_UTILS),$(PROGS)),$(eval $(call TEST_BUSYBOX,$(test))))
+$(foreach test,$(UTILS),$(eval $(call TEST_BUSYBOX,$(test))))
 
 test:
 	${CARGO} test ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
@@ -399,38 +407,28 @@ distclean: clean
 	$(CARGO) clean $(CARGOFLAGS) && $(CARGO) update $(CARGOFLAGS)
 
 ifeq ($(MANPAGES),y)
-manpages: build-coreutils
-	mkdir -p $(BUILDDIR)/man/
-	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS), \
-		$(BUILDDIR)/coreutils manpage $(prog) > $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(newline) \
-	)
+build-uudoc:
+	${CARGO} build ${CARGOFLAGS} --bin uudoc --features "uudoc ${EXES}" ${PROFILE_CMD} --no-default-features
 
-install-manpages: manpages
+install-manpages: build-uudoc
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/man/man1
 	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS), \
-		$(INSTALL) -m 644 $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(DESTDIR)$(DATAROOTDIR)/man/man1/ $(newline) \
+		$(BUILDDIR)/uudoc manpage $(prog) > $(DESTDIR)$(DATAROOTDIR)/man/man1/$(PROG_PREFIX)$(prog).1 $(newline) \
 	)
 else
 install-manpages:
 endif
 
 ifeq ($(COMPLETIONS),y)
-completions: build-coreutils
-	mkdir -p $(BUILDDIR)/completions/zsh $(BUILDDIR)/completions/bash $(BUILDDIR)/completions/fish
-	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS) , \
-		$(BUILDDIR)/coreutils completion $(prog) zsh > $(BUILDDIR)/completions/zsh/_$(PROG_PREFIX)$(prog) $(newline) \
-		$(BUILDDIR)/coreutils completion $(prog) bash > $(BUILDDIR)/completions/bash/$(PROG_PREFIX)$(prog) $(newline) \
-		$(BUILDDIR)/coreutils completion $(prog) fish > $(BUILDDIR)/completions/fish/$(PROG_PREFIX)$(prog).fish $(newline) \
-	)
 
-install-completions: completions
+install-completions: build-uudoc
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d
 	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS) , \
-		$(INSTALL) -m 644 $(BUILDDIR)/completions/zsh/_$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/ $(newline) \
-		$(INSTALL) -m 644 $(BUILDDIR)/completions/bash/$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/ $(newline) \
-		$(INSTALL) -m 644 $(BUILDDIR)/completions/fish/$(PROG_PREFIX)$(prog).fish $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/ $(newline) \
+		$(BUILDDIR)/uudoc completion $(prog) zsh > $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(PROG_PREFIX)$(prog) $(newline) \
+		$(BUILDDIR)/uudoc completion $(prog) bash > $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX)$(prog) $(newline) \
+		$(BUILDDIR)/uudoc completion $(prog) fish > $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX)$(prog).fish $(newline) \
 	)
 else
 install-completions:
@@ -475,25 +473,25 @@ endif
 
 install: build install-manpages install-completions install-locales
 	mkdir -p $(INSTALLDIR_BIN)
-ifneq ($(OS),Windows_NT)
+ifneq (,$(and $(findstring stdbuf,$(UTILS)),$(findstring feat_external_libstdbuf,$(CARGOFLAGS))))
 	mkdir -p $(DESTDIR)$(LIBSTDBUF_DIR)
 	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf* $(DESTDIR)$(LIBSTDBUF_DIR)/
 endif
 ifeq (${MULTICALL}, y)
 	$(INSTALL) -m 755 $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
 	$(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
-		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
+		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
 	)
 	$(foreach prog, $(HASHSUM_PROGS), \
-		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
+		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
 	)
-	$(if $(findstring test,$(INSTALLEES)), cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
+	$(if $(findstring test,$(INSTALLEES)), cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
 else
 	$(foreach prog, $(INSTALLEES), \
 		$(INSTALL) -m 755 $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog) $(newline) \
 	)
 	$(foreach prog, $(HASHSUM_PROGS), \
-		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)hashsum $(PROG_PREFIX)$(prog) $(newline) \
+		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)hashsum $(PROG_PREFIX)$(prog) $(newline) \
 	)
 	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) -m 755 $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
 endif
@@ -513,4 +511,4 @@ endif
 	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX),$(addsuffix .fish,$(PROGS)))
 	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/man/man1/$(PROG_PREFIX),$(addsuffix .1,$(PROGS)))
 
-.PHONY: all build build-coreutils build-pkgs test distclean clean busytest install uninstall
+.PHONY: all build build-coreutils build-pkgs build-uudoc test distclean clean busytest install uninstall

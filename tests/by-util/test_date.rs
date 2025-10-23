@@ -778,3 +778,60 @@ fn test_date_resolution_no_combine() {
         .arg("2025-01-01")
         .fails();
 }
+
+#[test]
+fn test_date_numeric_d_basic_utc() {
+    // Verify GNU-compatible pure-digit parsing for -d STRING under UTC
+    // 0/00 -> today at 00:00; 7/07 -> today at 07:00; 0700 -> today at 07:00
+    let today = Utc::now().date_naive();
+    let yyyy = today.year();
+    let mm = today.month();
+    let dd = today.day();
+
+    let mk =
+        |h: u32, m: u32| -> String { format!("{yyyy:04}-{mm:02}-{dd:02} {h:02}:{m:02}:00 UTC\n") };
+
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("0")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_only(mk(0, 0));
+
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("7")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_only(mk(7, 0));
+
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("0700")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_only(mk(7, 0));
+}
+
+#[test]
+fn test_date_numeric_d_invalid_numbers() {
+    // Ensure invalid HHMM values are rejected (GNU-compatible)
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("2400")
+        .arg("+%F %T %Z")
+        .fails()
+        .stderr_contains("invalid date");
+
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("2360")
+        .arg("+%F %T %Z")
+        .fails()
+        .stderr_contains("invalid date");
+}

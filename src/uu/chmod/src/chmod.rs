@@ -133,7 +133,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let cmode = if let Some(parsed_cmode) = parsed_cmode {
         parsed_cmode
     } else {
-        modes.unwrap().to_string() // modes is required
+        modes.unwrap().to_owned() // modes is required
     };
     let mut files: Vec<OsString> = matches
         .get_many::<OsString>(options::FILE)

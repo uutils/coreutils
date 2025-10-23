@@ -62,7 +62,7 @@ pub fn fast_inc(val: &mut [u8], start: &mut usize, end: usize, inc: &[u8]) {
         return;
     }
 
-    fast_inc_one(val, start, pos)
+    fast_inc_one(val, start, pos);
 }
 
 /// Fast increment by one function, operating on ASCII strings.
