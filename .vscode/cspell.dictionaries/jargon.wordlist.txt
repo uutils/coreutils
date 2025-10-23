@@ -135,7 +135,6 @@ symlinks
 syscall
 syscalls
 sysconf
-sysinfo
 tokenize
 toolchain
 totalram

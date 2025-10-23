@@ -1085,6 +1085,31 @@ fn get_rlimit() -> UResult<usize> {
 }
 
 const STDIN_FILE: &str = "-";
+#[cfg(target_os = "linux")]
+const LINUX_BATCH_DIVISOR: usize = 4;
+#[cfg(target_os = "linux")]
+const LINUX_BATCH_MIN: usize = 32;
+#[cfg(target_os = "linux")]
+const LINUX_BATCH_MAX: usize = 256;
+
+fn default_merge_batch_size() -> usize {
+    #[cfg(target_os = "linux")]
+    {
+        // Adjust merge batch size dynamically based on available file descriptors.
+        match get_rlimit() {
+            Ok(limit) => {
+                let usable_limit = limit.saturating_div(LINUX_BATCH_DIVISOR);
+                usable_limit.clamp(LINUX_BATCH_MIN, LINUX_BATCH_MAX)
+            }
+            Err(_) => 64,
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        64
+    }
+}
 
 #[cfg(target_os = "linux")]
 const LINUX_BATCH_DIVISOR: usize = 4;

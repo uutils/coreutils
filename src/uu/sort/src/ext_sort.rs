@@ -86,8 +86,8 @@ fn reader_writer<
 ) -> UResult<()> {
     let separator = settings.line_ending.into();
 
-    // Cap oversized buffer requests at 512MiB to avoid unnecessary allocations.
-    // It's a safeguard against excessively large user-specified buffers: halving requests beyond 512 MiB keeps chunk sizes reasonable, preventing runaway memory usage and the overhead of allocating unnecessarily huge buffers.
+    // Cap oversized buffer requests to avoid unnecessary allocations and give the automatic
+    // heuristic room to grow when the user does not provide an explicit value.
     let mut buffer_size = match settings.buffer_size {
         size if size <= 512 * 1024 * 1024 => size,
         size => size / 2,
