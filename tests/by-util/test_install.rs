@@ -7,10 +7,10 @@
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
 use std::fs;
-#[cfg(target_os = "linux")]
-use std::os::unix::ffi::OsStringExt;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStringExt;
 #[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
@@ -1039,10 +1039,7 @@ fn test_install_directory_deep_path_succeeds() {
         .saturating_sub(prefix_len)
         .checked_div(unit_len)
         .unwrap_or(0);
-    let min_repeat = min_len
-        .saturating_sub(prefix_len)
-        .div_ceil(unit_len)
-        .max(1);
+    let min_repeat = min_len.saturating_sub(prefix_len).div_ceil(unit_len).max(1);
     if max_repeat == 0 {
         panic!(
             "temporary directory path `{}` leaves no room under PATH_MAX",
