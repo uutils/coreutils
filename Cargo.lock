@@ -2129,11 +2129,11 @@ dependencies = [
 
 [[package]]
 name = "parse_datetime"
-version = "0.11.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5b77d27257a460cefd73a54448e5f3fd4db224150baf6ca3e02eedf4eb2b3e9"
+checksum = "f0f83bf646386359db88030a10fe477d0946b0838101cddf259729eeb8c572ff"
 dependencies = [
- "chrono",
+ "jiff",
  "num-traits",
  "regex",
  "winnow",
@@ -4118,10 +4118,10 @@ dependencies = [
 name = "uu_touch"
 version = "0.3.0"
 dependencies = [
- "chrono",
  "clap",
  "filetime",
  "fluent",
+ "jiff",
  "parse_datetime",
  "thiserror 2.0.17",
  "uucore",
