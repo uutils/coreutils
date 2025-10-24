@@ -496,6 +496,19 @@ else
 	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) -m 755 $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
 endif
 
+install-noprefix-compat:
+	# inconflict with bash-completion
+	# Skip coreutils and leave unexisting prog for simplity
+	mkdir -p $(INSTALLDIR_BIN) $(DESTDIR)$(DATAROOTDIR)/{man/man1,zsh/site-functions,fish/vendor_completions.d}
+	$(foreach prog, $(HASHSUM_PROGS) $(INSTALLEES), \
+		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)$(prog) $(prog) $(newline) \
+	)
+	$(foreach prog, $(HASHSUM_PROGS) $(INSTALLEES), \
+		@echo ".so man1/$(PROG_PREFIX)$(prog).1" > $(DESTDIR)$(DATAROOTDIR)/man/man1/$(prog).1 $(newline) \
+		@echo -e "#compdef $(prog)=$(PROG_PREFIX)$(prog)\n_$(PROG_PREFIX)$(prog)" > $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(prog) $(newline) \
+		@echo "complete -c $(prog) -w $(PROG_PREFIX)$(prog)" > $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(prog).fish $(newline) \
+	)
+
 uninstall:
 ifneq ($(OS),Windows_NT)
 	rm -f $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf*
