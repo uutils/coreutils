@@ -291,14 +291,14 @@ impl BytesChunkBuffer {
         // fill chunks with all bytes from reader and reuse already instantiated chunks if possible
         while chunk.fill(reader)?.is_some() {
             self.bytes += chunk.bytes as u64;
-            self.chunks.push_back(chunk);
+            self.chunks.push_back(chunk.clone());
 
             let first = &self.chunks[0];
             if self.bytes - first.bytes as u64 > self.num_print {
                 chunk = self.chunks.pop_front().unwrap();
                 self.bytes -= chunk.bytes as u64;
             } else {
-                chunk = Box::new(BytesChunk::new());
+                *chunk = BytesChunk::new();
             }
         }
 
@@ -333,7 +333,7 @@ impl BytesChunkBuffer {
 
 /// Works similar to a [`BytesChunk`] but also stores the number of lines encountered in the current
 /// buffer. The size of the buffer is limited to a fixed size number of bytes.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct LinesChunk {
     /// Work on top of a [`BytesChunk`]
     chunk: BytesChunk,
@@ -567,7 +567,7 @@ impl LinesChunkBuffer {
 
         while chunk.fill(reader)?.is_some() {
             self.lines += chunk.lines as u64;
-            self.chunks.push_back(chunk);
+            self.chunks.push_back(chunk.clone());
 
             let first = &self.chunks[0];
             if self.lines - first.lines as u64 > self.num_print {
@@ -575,7 +575,7 @@ impl LinesChunkBuffer {
 
                 self.lines -= chunk.lines as u64;
             } else {
-                chunk = Box::new(LinesChunk::new(self.delimiter));
+                *chunk = LinesChunk::new(self.delimiter);
             }
         }
 
