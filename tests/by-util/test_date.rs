@@ -689,7 +689,7 @@ fn test_date_timezone_parsing_fix() {
     // This test ensures that dates like "2025-03-29 8:30:00" are interpreted as 8:30 in the
     // local timezone for that specific date, not as UTC converted to local time.
 
-    fn test_tz_parsing(tz: &str, date: &str, expected_time: &str, expected_tz: &str) {
+    fn test_tz_parsing(tz: &str, date: &str, expected_time: &str, expected_offset: &str) {
         println!("Test with TZ={tz}, date=\"{date}\".");
         new_ucmd!()
             .env("TZ", tz)
@@ -697,11 +697,21 @@ fn test_date_timezone_parsing_fix() {
             .arg(date)
             .arg("+%Y-%m-%d %H:%M:%S %Z")
             .succeeds()
-            .stdout_only(format!("{expected_time} {expected_tz}\n"));
+            .stdout_only(format!("{expected_time} {expected_offset}\n"));
     }
 
     // Test Europe/Prague timezone (CET/CEST) - the timezone from the original issue
+    // January 15, 2025 is clearly in standard time (CET, UTC+1)
+    test_tz_parsing(
+        "Europe/Prague",
+        "2025-01-15 8:30:00",
+        "2025-01-15 08:30:00",
+        "CET",
+    );
+
     // March 29, 2025 is in standard time (CET, UTC+1)
+    // This is the critical case that causes Windows CI failures due to different
+    // DST transition rules - Windows interprets this as CEST instead of CET
     test_tz_parsing(
         "Europe/Prague",
         "2025-03-29 8:30:00",
