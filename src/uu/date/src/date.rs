@@ -475,22 +475,34 @@ fn parse_date<S: AsRef<str> + Clone>(
                 let timestamp =
                     Timestamp::new(local.timestamp(), local.timestamp_subsec_nanos() as i32)
                         .unwrap();
-
                 // Get the offset that chrono calculated for this date
                 let chrono_offset_seconds = local.offset().local_minus_utc();
 
                 // Try to use the system timezone first to preserve timezone abbreviations (CET, EST, etc.)
                 if let Ok(system_tz) = TimeZone::try_system() {
-                    let zoned = Zoned::new(timestamp, system_tz);
-                    // Verify that the system timezone offset matches chrono's calculation
-                    // This avoids Windows vs Unix DST rule differences
-                    if zoned.offset().seconds() == chrono_offset_seconds {
+                    let zoned = Zoned::new(timestamp, system_tz.clone());
+                    let system_offset_seconds = zoned.offset().seconds();
+
+                    // If the system timezone offset matches chrono's offset, we're good
+                    if system_offset_seconds == chrono_offset_seconds {
                         return Ok(zoned);
                     }
+
+                    // On Windows/some systems, timezone DST rules may differ. Adjust timestamp
+                    // so the displayed time is correct when interpreted with system_tz's offset.
+                    // The timestamp was created assuming chrono's offset. If jiff has a different
+                    // offset, we need to adjust by the difference.
+                    let offset_diff = system_offset_seconds - chrono_offset_seconds;
+                    let adjusted_timestamp = Timestamp::new(
+                        timestamp.as_second() - offset_diff as i64,
+                        timestamp.subsec_nanosecond(),
+                    )
+                    .unwrap();
+                    return Ok(Zoned::new(adjusted_timestamp, system_tz));
                 }
 
                 // Fallback: Use fixed offset from chrono
-                // This ensures correctness when system timezone has different DST rules
+                // This ensures correctness when system timezone is unavailable
                 let timezone = if chrono_offset_seconds == 0 {
                     TimeZone::UTC
                 } else {
