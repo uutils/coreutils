@@ -1782,6 +1782,41 @@ fn test_wrong_number_err_msg() {
 }
 
 #[test]
+#[cfg(all(
+    unix,
+    not(target_os = "macos"),
+    not(target_os = "freebsd"),
+    feature = "printf"
+))]
+fn test_no_dropped_writes() {
+    const BLK_SIZE: usize = 0x4000;
+    const COUNT: usize = 1000;
+    const NUM_BYTES: usize = BLK_SIZE * COUNT;
+
+    let mut reader_command = Command::new(get_tests_binary());
+    let child = reader_command
+        .args([
+            "dd",
+            "if=/dev/urandom",
+            &format!("bs={BLK_SIZE}"),
+            &format!("count={COUNT}"),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .env("LC_ALL", "C")
+        .spawn()
+        .unwrap();
+
+    let output = child.wait_with_output().unwrap();
+    assert_eq!(output.stdout.len(), NUM_BYTES);
+    assert!(
+        std::str::from_utf8(&output.stderr)
+            .unwrap()
+            .contains(&format!("{NUM_BYTES} bytes"))
+    );
+}
+
+#[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_oflag_direct_partial_block() {
     // Test for issue #9003: dd should handle partial blocks with oflag=direct
