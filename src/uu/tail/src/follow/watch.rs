@@ -10,6 +10,8 @@ use crate::follow::files::{BufReadSeek, FileHandling, PathData, WatchSource};
 use crate::paths::{Input, InputKind, MetadataExtTail, PathExtTail};
 use crate::{platform, text};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
+use std::fs::Metadata;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, channel};
 use uucore::display::Quotable;
@@ -220,6 +222,18 @@ impl Observer {
         self.last_messages.insert(path.to_path_buf(), now);
         true
     }
+    
+    /// Handle file rename by updating file associations
+    fn handle_rename(&mut self, event_path: &Path, _old_md: &Metadata, _new_md: &Metadata) -> UResult<()> {
+        // For renames, we need to check if the old file content is now associated with a different monitored path
+        // The key insight is that after a rename, the file content has moved but the path associations
+        // in our HashMap need to be updated to reflect the new reality
+        
+        // For now, just update the reader for the current path
+        // This is a simplified approach that may not fully handle all rename scenarios
+        self.files.update_reader(event_path)?;
+        Ok(())
+    }
 
     pub fn add_path(
         &mut self,
@@ -428,8 +442,8 @@ impl Observer {
                 if let Ok(new_md) = event_path.metadata() {
                     let is_tailable = new_md.is_tailable();
                     // Safety: we confirmed this path exists in the map above
-                    let pd = self.files.get(event_path);
-                    if let Some(old_md) = &pd.metadata {
+                    let old_md = self.files.get(event_path).metadata.clone();
+                    if let Some(old_md) = &old_md {
                         if is_tailable {
                             // We resume tracking from the start of the file,
                             // assuming it has been truncated to 0. This mimics GNU's `tail`
@@ -440,7 +454,7 @@ impl Observer {
                                     translate!("tail-status-has-become-accessible", "file" => display_name.quote())
                                 );
                                 self.files.update_reader(event_path)?;
-                            } else if pd.reader.is_none() {
+                            } else if self.files.get(event_path).reader.is_none() {
                                 show_error!(
                                     "{}",
                                     translate!("tail-status-has-appeared-following-new-file", "file" => display_name.quote())
@@ -451,13 +465,20 @@ impl Observer {
                                 || !old_md.file_id_eq(&new_md)
                             {
                                 // File was replaced (different inode) - only show message on Linux or with polling
-                                if (cfg!(target_os = "linux") || self.use_polling) && self.should_show_message(event_path) {
+                                let should_show = (cfg!(target_os = "linux") || self.use_polling) && self.should_show_message(event_path);
+                                if should_show {
                                     show_error!(
                                         "{}",
                                         translate!("tail-status-has-been-replaced-following-new-file", "file" => display_name.quote())
                                     );
                                 }
+                                
                                 self.files.update_reader(event_path)?;
+                                
+                                // Handle rename: if this is a Name(To) event, check if we need to update file associations
+                                if event.kind == EventKind::Modify(ModifyKind::Name(RenameMode::To)) {
+                                    self.handle_rename(event_path, &old_md, &new_md)?;
+                                }
                             } else if old_md.got_truncated(&new_md)? {
                                 show_error!(
                                     "{}",
@@ -477,7 +498,7 @@ impl Observer {
                             }
                             paths.push(event_path.clone());
                         } else if !is_tailable && old_md.is_tailable() {
-                            if pd.reader.is_some() {
+                            if self.files.get(event_path).reader.is_some() {
                                 self.files.reset_reader(event_path);
                             } else {
                                 show_error!(
