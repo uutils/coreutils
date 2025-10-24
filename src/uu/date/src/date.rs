@@ -7,7 +7,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime;
-use jiff::tz::TimeZone;
+use jiff::tz::{Offset, TimeZone};
 use jiff::{Timestamp, Zoned};
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 use libc::clock_settime;
@@ -470,10 +470,33 @@ fn parse_date<S: AsRef<str> + Clone>(
             // Convert naive datetime to local time, which will use the correct timezone offset
             // for that specific date (not the current date's offset)
             if let LocalResult::Single(local) = Local.from_local_datetime(&naive) {
+                // The timestamp from chrono already encodes the correct timezone offset
+                // for this specific date (not the current date's offset)
                 let timestamp =
                     Timestamp::new(local.timestamp(), local.timestamp_subsec_nanos() as i32)
                         .unwrap();
-                let timezone = TimeZone::try_system().unwrap_or(TimeZone::UTC);
+
+                // Get the offset that chrono calculated for this date
+                let chrono_offset_seconds = local.offset().local_minus_utc();
+
+                // Try to use the system timezone first to preserve timezone abbreviations (CET, EST, etc.)
+                if let Ok(system_tz) = TimeZone::try_system() {
+                    let zoned = Zoned::new(timestamp, system_tz);
+                    // Verify that the system timezone offset matches chrono's calculation
+                    // This avoids Windows vs Unix DST rule differences
+                    if zoned.offset().seconds() == chrono_offset_seconds {
+                        return Ok(zoned);
+                    }
+                }
+
+                // Fallback: Use fixed offset from chrono
+                // This ensures correctness when system timezone has different DST rules
+                let timezone = if chrono_offset_seconds == 0 {
+                    TimeZone::UTC
+                } else {
+                    let offset = Offset::from_seconds(chrono_offset_seconds).unwrap();
+                    TimeZone::fixed(offset)
+                };
                 return Ok(Zoned::new(timestamp, timezone));
             }
         }
