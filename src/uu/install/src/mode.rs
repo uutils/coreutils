@@ -74,7 +74,7 @@ pub fn chmod(path: &Path, mode: u32) -> Result<(), ()> {
 #[cfg(all(unix, not(target_os = "redox")))]
 fn chmod_long_path(path: &Path, mode: u32) -> std::io::Result<()> {
     use nix::errno::Errno;
-    use nix::fcntl::{open, openat, OFlag};
+    use nix::fcntl::{OFlag, open, openat};
     use nix::sys::stat::{Mode, fchmod};
     use std::ffi::{CString, OsStr};
     use std::io;
@@ -131,22 +131,17 @@ fn chmod_long_path(path: &Path, mode: u32) -> std::io::Result<()> {
                 let base_fd = current_fd
                     .as_ref()
                     .map(|fd| fd.as_fd())
-                    .unwrap_or_else(|| unsafe {
-                        BorrowedFd::borrow_raw(libc::AT_FDCWD)
-                    });
+                    .unwrap_or_else(|| unsafe { BorrowedFd::borrow_raw(libc::AT_FDCWD) });
 
-                let fd =
-                    openat(base_fd, OsStr::new(".."), dir_open_flags(), Mode::empty())
-                        .map_err(errno_to_io)?;
+                let fd = openat(base_fd, OsStr::new(".."), dir_open_flags(), Mode::empty())
+                    .map_err(errno_to_io)?;
                 current_fd = Some(fd);
             }
             Component::Normal(name) => {
                 let base_fd = current_fd
                     .as_ref()
                     .map(|fd| fd.as_fd())
-                    .unwrap_or_else(|| unsafe {
-                        BorrowedFd::borrow_raw(libc::AT_FDCWD)
-                    });
+                    .unwrap_or_else(|| unsafe { BorrowedFd::borrow_raw(libc::AT_FDCWD) });
 
                 let is_last = components.peek().is_none();
 
@@ -157,7 +152,10 @@ fn chmod_long_path(path: &Path, mode: u32) -> std::io::Result<()> {
                 };
 
                 let name_cstr = CString::new(name.as_bytes()).map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidInput, "path segment contains null byte")
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "path segment contains null byte",
+                    )
                 })?;
 
                 let fd = openat(base_fd, name_cstr.as_c_str(), flags, Mode::empty())
@@ -168,7 +166,10 @@ fn chmod_long_path(path: &Path, mode: u32) -> std::io::Result<()> {
     }
 
     let fd = current_fd.ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "path does not reference an entry")
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "path does not reference an entry",
+        )
     })?;
 
     fchmod(&fd, Mode::from_bits_truncate(mode)).map_err(errno_to_io)
