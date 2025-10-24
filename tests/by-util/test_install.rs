@@ -1032,9 +1032,12 @@ fn test_install_directory_deep_path_succeeds() {
     let prefix_len = "./".len();
     let min_len: usize = 3000; // request a path of at least 3000 characters
     let path_max = libc::PATH_MAX as usize;
+    let safety_margin = if path_max <= 1024 { 32 } else { 0 };
     let base_len = scene.fixtures.subdir.as_os_str().as_bytes().len();
     let sep_len = usize::from(base_len > 0);
-    let available_for_rel = path_max.saturating_sub(base_len + sep_len);
+    let available_for_rel = path_max
+        .saturating_sub(safety_margin)
+        .saturating_sub(base_len + sep_len);
     let max_repeat = available_for_rel
         .saturating_sub(prefix_len)
         .checked_div(unit_len)
