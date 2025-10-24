@@ -301,6 +301,8 @@ struct Precomputed {
     num_infos_per_line: usize,
     floats_per_line: usize,
     selections_per_line: usize,
+    fast_lexicographic: bool,
+    fast_ascii_insensitive: bool,
 }
 
 impl GlobalSettings {
@@ -341,6 +343,47 @@ impl GlobalSettings {
             .iter()
             .filter(|s| matches!(s.settings.mode, SortMode::GeneralNumeric))
             .count();
+
+        self.precomputed.fast_lexicographic = self.can_use_fast_lexicographic();
+        self.precomputed.fast_ascii_insensitive = self.can_use_fast_ascii_insensitive();
+    }
+
+    /// Returns true when the fast lexicographic path can be used safely.
+    fn can_use_fast_lexicographic(&self) -> bool {
+        self.mode == SortMode::Default
+            && !self.ignore_case
+            && !self.dictionary_order
+            && !self.ignore_non_printing
+            && !self.ignore_leading_blanks
+            && self.selectors.len() == 1
+            && {
+                let selector = &self.selectors[0];
+                !selector.needs_selection
+                    && matches!(selector.settings.mode, SortMode::Default)
+                    && !selector.settings.ignore_case
+                    && !selector.settings.dictionary_order
+                    && !selector.settings.ignore_non_printing
+                    && !selector.settings.ignore_blanks
+            }
+    }
+
+    /// Returns true when the ASCII case-insensitive fast path is valid.
+    fn can_use_fast_ascii_insensitive(&self) -> bool {
+        self.mode == SortMode::Default
+            && self.ignore_case
+            && !self.dictionary_order
+            && !self.ignore_non_printing
+            && !self.ignore_leading_blanks
+            && self.selectors.len() == 1
+            && {
+                let selector = &self.selectors[0];
+                !selector.needs_selection
+                    && matches!(selector.settings.mode, SortMode::Default)
+                    && selector.settings.ignore_case
+                    && !selector.settings.dictionary_order
+                    && !selector.settings.ignore_non_printing
+                    && !selector.settings.ignore_blanks
+            }
     }
 }
 
@@ -1643,6 +1686,26 @@ fn compare_by<'a>(
     a_line_data: &LineData<'a>,
     b_line_data: &LineData<'a>,
 ) -> Ordering {
+    if global_settings.precomputed.fast_lexicographic {
+        let cmp = a.line.cmp(b.line);
+        return if global_settings.reverse {
+            cmp.reverse()
+        } else {
+            cmp
+        };
+    }
+
+    if global_settings.precomputed.fast_ascii_insensitive {
+        let cmp = ascii_case_insensitive_cmp(a.line, b.line);
+        if cmp != Ordering::Equal || a.line == b.line {
+            return if global_settings.reverse {
+                cmp.reverse()
+            } else {
+                cmp
+            };
+        }
+    }
+
     let mut selection_index = 0;
     let mut num_info_index = 0;
     let mut parsed_float_index = 0;
@@ -1752,6 +1815,26 @@ fn compare_by<'a>(
     } else {
         cmp
     }
+}
+
+/// Compare two byte slices in ASCII case-insensitive order without allocating.
+/// We lower each byte on the fly so that binary input (including `NUL`) stays
+/// untouched and we avoid locale-sensitive routines such as `strcasecmp`.
+fn ascii_case_insensitive_cmp(a: &[u8], b: &[u8]) -> Ordering {
+    #[inline]
+    fn lower(byte: u8) -> u8 {
+        byte.to_ascii_lowercase()
+    }
+
+    for (lhs, rhs) in a.iter().copied().zip(b.iter().copied()) {
+        let l = lower(lhs);
+        let r = lower(rhs);
+        if l != r {
+            return l.cmp(&r);
+        }
+    }
+
+    a.len().cmp(&b.len())
 }
 
 // This function cleans up the initial comparison done by leading_num_common for a general numeric compare.
