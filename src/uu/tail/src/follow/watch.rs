@@ -467,10 +467,9 @@ impl Observer {
                                     );
                                 }
                                 
+                                // File was replaced - reopen and read all content
                                 self.files.update_reader(event_path)?;
-                                
-                                // Note: Rename handling is complex and needs careful implementation
-                                // For now, we rely on the existing logic to handle file associations
+                                paths.push(event_path.clone());
                             } else if old_md.got_truncated(&new_md)? {
                                 show_error!(
                                     "{}",
@@ -487,8 +486,11 @@ impl Observer {
                                         follow_name,
                                     )?;
                                 }
+                                paths.push(event_path.clone());
+                            } else {
+                                // Normal modify event - just read new data
+                                paths.push(event_path.clone());
                             }
-                            paths.push(event_path.clone());
                         } else if !is_tailable && old_md.is_tailable() {
                             if self.files.get(event_path).reader.is_some() {
                                 self.files.reset_reader(event_path);

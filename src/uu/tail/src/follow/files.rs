@@ -228,21 +228,8 @@ impl FileHandling {
 
     /// Reopen the file at the monitored `path`, or reset reader state if already open
     pub fn update_reader(&mut self, path: &Path) -> UResult<()> {
-        let path_data = self.get_mut(path);
-
-        if let Some(reader) = path_data.reader.as_mut() {
-            // File is already open. In descriptor mode after rename, the path may not exist
-            // but the FD is still valid. Seek to current position to clear any internal EOF state.
-            if let Ok(pos) = reader.stream_position() {
-                if reader.seek(SeekFrom::Start(pos)).is_ok() {
-                    // Successfully cleared EOF state without changing position
-                    return Ok(());
-                }
-            }
-            // If seek failed, fall through to reopen
-        }
-
-        // No reader or seek failed, try to reopen file
+        // Always try to reopen the file to get a fresh file descriptor
+        // This is important when a file is replaced (different inode)
         if let Ok(file) = File::open(path) {
             self.get_mut(path)
                 .reader
