@@ -5,6 +5,8 @@
 use std::fs;
 use std::path::Path;
 #[cfg(all(unix, not(target_os = "redox")))]
+use std::os::fd::AsFd;
+#[cfg(all(unix, not(target_os = "redox")))]
 use uucore::libc;
 #[cfg(not(windows))]
 use uucore::mode;
