@@ -10,7 +10,6 @@ use crate::follow::files::{BufReadSeek, FileHandling, PathData, WatchSource};
 use crate::paths::{Input, InputKind, MetadataExtTail, PathExtTail};
 use crate::{platform, text};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
-use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, channel};
 use uucore::display::Quotable;
@@ -94,7 +93,7 @@ impl WatcherRx {
     fn watch_with_parent(
         &mut self,
         path: &Path,
-        use_polling: bool,
+        _use_polling: bool,
         _follow_name: bool,
     ) -> UResult<()> {
         let mut path = path.to_owned();
@@ -103,7 +102,7 @@ impl WatcherRx {
         // This is a workaround recommended by the notify crate authors to handle renames reliably.
         // NOTE: Watching both file and parent causes duplicate/wrong events, so we only watch parent.
         #[cfg(target_os = "linux")]
-        if path.is_file() && !use_polling {
+        if path.is_file() && !_use_polling {
             /*
             NOTE: Using the parent directory instead of the file is a workaround.
             This workaround follows the recommendation of the notify crate authors:
@@ -172,6 +171,9 @@ pub struct Observer {
     
     /// Simple deduplication: track last message time per file
     last_messages: std::collections::HashMap<PathBuf, std::time::Instant>,
+    
+    /// Track if the last processed event was synthetic (from fallback logic)
+    last_event_was_synthetic: bool,
 }
 
 impl Observer {
@@ -197,6 +199,7 @@ impl Observer {
             files,
             pid,
             last_messages: std::collections::HashMap::new(),
+            last_event_was_synthetic: false,
         }
     }
 
@@ -443,10 +446,13 @@ impl Observer {
                                 );
                                 self.files.update_reader(event_path)?;
                             } else if self.files.get(event_path).reader.is_none() {
-                                show_error!(
-                                    "{}",
-                                    translate!("tail-status-has-appeared-following-new-file", "file" => display_name.quote())
-                                );
+                                // Only show "has appeared" message for real events, not synthetic ones
+                                if !self.last_event_was_synthetic {
+                                    show_error!(
+                                        "{}",
+                                        translate!("tail-status-has-appeared-following-new-file", "file" => display_name.quote())
+                                    );
+                                }
                                 self.files.update_reader(event_path)?;
                             } else if event.kind
                                 == EventKind::Modify(ModifyKind::Name(RenameMode::To))
@@ -470,7 +476,7 @@ impl Observer {
                                     "{}",
                                     translate!("tail-status-file-truncated", "file" => display_name)
                                 );
-                                self.files.update_reader(event_path)?;
+                                self.files.update_reader_with_positioning(event_path, settings)?;
                                 // Re-setup watch after file truncation/recreation
                                 if self.follow_name() {
                                     let use_polling = self.use_polling;
@@ -774,6 +780,9 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                     let event_paths =
                         observer.handle_event(&modified_event, watch_source, settings)?;
                     paths.extend(event_paths);
+                    
+                    // Reset synthetic flag after processing real event
+                    observer.last_event_was_synthetic = false;
                 }
 
                 // Fallback: if no paths were resolved but we're in follow=name mode,
@@ -785,6 +794,9 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                             modified_event.paths = vec![monitored_path.clone()];
                             modified_event.kind =
                                 notify::EventKind::Create(notify::event::CreateKind::File);
+                            
+                            // Mark this as a synthetic event
+                            observer.last_event_was_synthetic = true;
                             let event_paths = observer.handle_event(
                                 &modified_event,
                                 WatchSource::File,

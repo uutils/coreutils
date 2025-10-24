@@ -255,6 +255,27 @@ impl FileHandling {
         }
     }
 
+    /// Reopen file and position at the last N lines/bytes (for truncate events)
+    pub fn update_reader_with_positioning(&mut self, path: &Path, settings: &Settings) -> UResult<()> {
+        // Close existing reader
+        self.get_mut(path).reader = None;
+
+        // Reopen file and position at end
+        if let Ok(mut file) = File::open(path) {
+            // Apply bounded_tail logic to position at last N lines/bytes
+            super::super::bounded_tail(&mut file, settings);
+
+            // Create buffered reader from positioned file
+            self.get_mut(path)
+                .reader
+                .replace(Box::new(BufReader::new(file)));
+            Ok(())
+        } else {
+            // File doesn't exist
+            Ok(())
+        }
+    }
+
     /// Reload metadata from `path`, or `metadata`
     pub fn update_metadata(&mut self, path: &Path, metadata: Option<Metadata>) {
         self.get_mut(path).metadata = if metadata.is_some() {
