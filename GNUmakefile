@@ -496,7 +496,8 @@ else
 	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) -m 755 $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
 endif
 
-install-noprefix-compat:
+# shim files without PROG_PREFIX
+install-compat:
 	# Use bash-completion
 	# Skip coreutils
 	mkdir -p $(INSTALLDIR_BIN) $(DESTDIR)$(DATAROOTDIR)/{man/man1,zsh/site-functions,fish/vendor_completions.d}
