@@ -120,7 +120,6 @@ RDONLY
 readonly
 reparse
 seedable
-RDONLY
 semver
 semiprime
 semiprimes
