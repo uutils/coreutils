@@ -1040,12 +1040,11 @@ fn test_install_directory_deep_path_succeeds() {
         .checked_div(unit_len)
         .unwrap_or(0);
     let min_repeat = min_len.saturating_sub(prefix_len).div_ceil(unit_len).max(1);
-    if max_repeat == 0 {
-        panic!(
-            "temporary directory path `{}` leaves no room under PATH_MAX",
-            scene.fixtures.subdir.display()
-        );
-    }
+    assert!(
+        max_repeat > 0,
+        "temporary directory path `{}` leaves no room under PATH_MAX",
+        scene.fixtures.subdir.display()
+    );
     let repeat_count = std::cmp::max(1, std::cmp::min(max_repeat, min_repeat));
     let deep_rel_path = format!("./{}", "a/".repeat(repeat_count));
     let deep_abs_path = at.plus(deep_rel_path.as_str());
