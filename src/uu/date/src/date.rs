@@ -451,7 +451,7 @@ fn make_format_string(settings: &Settings) -> &str {
 /// Parse a `String` into a `DateTime`.
 /// If it fails, return a tuple of the `String` along with its `ParseError`.
 // TODO: Convert `parse_datetime` to jiff and remove wrapper from chrono to jiff structures.
-// NOTE: Currently uses chrono as bandaid fix for issue #8976 (timezone parsing bug).
+// NOTE: Currently uses chrono as band-aid fix for issue #8976 (timezone parsing bug).
 // This reintroduces chrono dependencies that were removed in jiff migration.
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
@@ -460,24 +460,25 @@ fn parse_date<S: AsRef<str> + Clone>(
     // This ensures dates without timezone are interpreted as local time for that specific date
     // (not the current date's timezone offset)
     let formats = [
-        "%Y-%m-%d %H:%M:%S",  // "2025-03-29 8:30:00"
-        "%Y-%m-%d %H:%M",      // "2025-03-29 8:30"
-        "%Y-%m-%d",            // "2025-03-29"
+        "%Y-%m-%d %H:%M:%S", // "2025-03-29 8:30:00"
+        "%Y-%m-%d %H:%M",    // "2025-03-29 8:30"
+        "%Y-%m-%d",          // "2025-03-29"
     ];
-    
+
     for format in &formats {
         if let Ok(naive) = NaiveDateTime::parse_from_str(s.as_ref(), format) {
             // Convert naive datetime to local time, which will use the correct timezone offset
             // for that specific date (not the current date's offset)
             if let LocalResult::Single(local) = Local.from_local_datetime(&naive) {
                 let timestamp =
-                    Timestamp::new(local.timestamp(), local.timestamp_subsec_nanos() as i32).unwrap();
+                    Timestamp::new(local.timestamp(), local.timestamp_subsec_nanos() as i32)
+                        .unwrap();
                 let timezone = TimeZone::try_system().unwrap_or(TimeZone::UTC);
                 return Ok(Zoned::new(timestamp, timezone));
             }
         }
     }
-    
+
     // Fall back to parse_datetime for more complex parsing (relative dates, etc.)
     let ref_time = Local::now();
     match parse_datetime::parse_datetime_at_date(ref_time, s.as_ref()) {
