@@ -780,9 +780,6 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                     let event_paths =
                         observer.handle_event(&modified_event, watch_source, settings)?;
                     paths.extend(event_paths);
-                    
-                    // Reset synthetic flag after processing real event
-                    observer.last_event_was_synthetic = false;
                 }
 
                 // Fallback: if no paths were resolved but we're in follow=name mode,
@@ -803,6 +800,9 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                                 settings,
                             )?;
                             paths.extend(event_paths);
+                            
+                            // Reset synthetic flag after processing synthetic event
+                            observer.last_event_was_synthetic = false;
                             break;
                         }
                     }
