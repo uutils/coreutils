@@ -285,6 +285,7 @@ impl BytesChunkBuffer {
     /// let mut chunks = BytesChunkBuffer::new(num_print);
     /// chunks.fill(&mut reader).unwrap();
     /// ```
+    #[allow(clippy::replace_box)]
     pub fn fill(&mut self, reader: &mut impl BufRead) -> UResult<()> {
         let mut chunk = Box::new(BytesChunk::new());
 
@@ -562,6 +563,7 @@ impl LinesChunkBuffer {
     /// in sum exactly `self.num_print` lines stored in all chunks. The method returns an iterator
     /// over these chunks. If there are no chunks, for example because the piped stdin contained no
     /// lines, or `num_print = 0` then `iterator.next` will return None.
+    #[allow(clippy::replace_box)]
     pub fn fill(&mut self, reader: &mut impl BufRead) -> UResult<()> {
         let mut chunk = Box::new(LinesChunk::new(self.delimiter));
 
