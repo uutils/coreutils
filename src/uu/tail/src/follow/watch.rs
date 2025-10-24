@@ -168,6 +168,9 @@ pub struct Observer {
     pub files: FileHandling,
 
     pub pid: platform::Pid,
+    
+    /// Simple deduplication: track last message time per file
+    last_messages: std::collections::HashMap<PathBuf, std::time::Instant>,
 }
 
 impl Observer {
@@ -192,6 +195,7 @@ impl Observer {
             orphans: Vec::new(),
             files,
             pid,
+            last_messages: std::collections::HashMap::new(),
         }
     }
 
@@ -203,6 +207,18 @@ impl Observer {
             FileHandling::from(settings),
             settings.pid,
         )
+    }
+    
+    /// Simple deduplication: check if message should be shown (not shown within last 100ms)
+    fn should_show_message(&mut self, path: &Path) -> bool {
+        let now = std::time::Instant::now();
+        if let Some(last_time) = self.last_messages.get(path) {
+            if now.duration_since(*last_time).as_millis() < 100 {
+                return false; // Too recent, suppress
+            }
+        }
+        self.last_messages.insert(path.to_path_buf(), now);
+        true
     }
 
     pub fn add_path(
@@ -435,7 +451,7 @@ impl Observer {
                                 || !old_md.file_id_eq(&new_md)
                             {
                                 // File was replaced (different inode) - only show message on Linux or with polling
-                                if cfg!(target_os = "linux") || self.use_polling {
+                                if (cfg!(target_os = "linux") || self.use_polling) && self.should_show_message(event_path) {
                                     show_error!(
                                         "{}",
                                         translate!("tail-status-has-been-replaced-following-new-file", "file" => display_name.quote())
