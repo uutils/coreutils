@@ -10,6 +10,8 @@ use std::fs;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 #[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
+#[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 #[cfg(not(windows))]
@@ -1029,11 +1031,32 @@ fn test_install_directory_deep_path_succeeds() {
     let unit_len = "a/".len();
     let prefix_len = "./".len();
     let min_len: usize = 3000; // request a path of at least 3000 characters
-    let max_repeat = (libc::PATH_MAX as usize - prefix_len) / unit_len;
-    let min_repeat = min_len.saturating_sub(prefix_len).div_ceil(unit_len).max(1);
-    let repeat_count = std::cmp::min(max_repeat, min_repeat);
+    let path_max = libc::PATH_MAX as usize;
+    let base_len = scene.fixtures.subdir.as_os_str().as_bytes().len();
+    let sep_len = usize::from(base_len > 0);
+    let available_for_rel = path_max.saturating_sub(base_len + sep_len);
+    let max_repeat = available_for_rel
+        .saturating_sub(prefix_len)
+        .checked_div(unit_len)
+        .unwrap_or(0);
+    let min_repeat = min_len
+        .saturating_sub(prefix_len)
+        .div_ceil(unit_len)
+        .max(1);
+    if max_repeat == 0 {
+        panic!(
+            "temporary directory path `{}` leaves no room under PATH_MAX",
+            scene.fixtures.subdir.display()
+        );
+    }
+    let repeat_count = std::cmp::max(1, std::cmp::min(max_repeat, min_repeat));
     let deep_rel_path = format!("./{}", "a/".repeat(repeat_count));
     let deep_abs_path = at.plus(deep_rel_path.as_str());
+    debug_assert!(
+        deep_abs_path.as_os_str().as_bytes().len() <= path_max,
+        "absolute path {} exceeds PATH_MAX",
+        deep_abs_path.display()
+    );
 
     scene
         .ucmd()
