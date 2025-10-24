@@ -684,6 +684,44 @@ fn test_date_tz_with_relative_time() {
 }
 
 #[test]
+fn test_date_timezone_parsing_fix() {
+    // Test the fix for issue #8976: dates without timezone should be interpreted as local time
+    // This test ensures that dates like "2025-03-29 8:30:00" are interpreted as 8:30 in the
+    // local timezone for that specific date, not as UTC converted to local time.
+    
+    fn test_tz_parsing(tz: &str, date: &str, expected_time: &str, expected_tz: &str) {
+        println!("Test with TZ={tz}, date=\"{date}\".");
+        new_ucmd!()
+            .env("TZ", tz)
+            .arg("-d")
+            .arg(date)
+            .arg("+%Y-%m-%d %H:%M:%S %Z")
+            .succeeds()
+            .stdout_only(format!("{expected_time} {expected_tz}\n"));
+    }
+
+    // Test Europe/Prague timezone (CET/CEST) - the timezone from the original issue
+    // March 29, 2025 is in standard time (CET, UTC+1)
+    test_tz_parsing("Europe/Prague", "2025-03-29 8:30:00", "2025-03-29 08:30:00", "CET");
+    
+    // March 30, 2025 is in daylight saving time (CEST, UTC+2) 
+    test_tz_parsing("Europe/Prague", "2025-03-30 8:30:00", "2025-03-30 08:30:00", "CEST");
+    
+    // October 25, 2025 is still in daylight saving time (CEST, UTC+2)
+    test_tz_parsing("Europe/Prague", "2025-10-25 8:30:00", "2025-10-25 08:30:00", "CEST");
+    
+    // October 26, 2025 is back to standard time (CET, UTC+1)
+    test_tz_parsing("Europe/Prague", "2025-10-26 8:30:00", "2025-10-26 08:30:00", "CET");
+    
+    // Test the original issue case
+    test_tz_parsing("Europe/Prague", "2031-01-26 8:30", "2031-01-26 08:30:00", "CET");
+    
+    // Test other timezone to ensure the fix works generally
+    test_tz_parsing("America/New_York", "2025-03-29 8:30:00", "2025-03-29 08:30:00", "EDT");
+    test_tz_parsing("America/New_York", "2025-01-15 8:30:00", "2025-01-15 08:30:00", "EST");
+}
+
+#[test]
 fn test_date_utc_time() {
     // Test that -u flag shows correct UTC time
     // We get 2 UTC times just in case we're really unlucky and this runs around
