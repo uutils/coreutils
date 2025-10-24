@@ -35,7 +35,6 @@ dirfds
 discoverability
 duplicative
 dsync
-FDCWD
 endianness
 enqueue
 errored
