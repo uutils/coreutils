@@ -1,4 +1,4 @@
-# spell-checker:ignore (misc) testsuite runtest findstring (targets) busytest toybox distclean pkgs nextest ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MULTICALL DATAROOTDIR TESTDIR manpages
+# spell-checker:ignore (misc) testsuite runtest findstring (targets) busytest toybox distclean pkgs nextest ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MULTICALL DATAROOTDIR TESTDIR manpages compdef
 
 # Config options
 PROFILE         ?= debug
@@ -497,8 +497,8 @@ else
 endif
 
 install-noprefix-compat:
-	# inconflict with bash-completion
-	# Skip coreutils and leave unexisting prog for simplity
+	# Use bash-completion
+	# Skip coreutils
 	mkdir -p $(INSTALLDIR_BIN) $(DESTDIR)$(DATAROOTDIR)/{man/man1,zsh/site-functions,fish/vendor_completions.d}
 	$(foreach prog, $(HASHSUM_PROGS) $(INSTALLEES), \
 		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)$(prog) $(prog) $(newline) \
