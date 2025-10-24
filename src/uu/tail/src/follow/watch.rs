@@ -11,7 +11,6 @@ use crate::paths::{Input, InputKind, MetadataExtTail, PathExtTail};
 use crate::{platform, text};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::fs::Metadata;
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, channel};
 use uucore::display::Quotable;
@@ -223,17 +222,6 @@ impl Observer {
         true
     }
     
-    /// Handle file rename by updating file associations
-    fn handle_rename(&mut self, event_path: &Path, _old_md: &Metadata, _new_md: &Metadata) -> UResult<()> {
-        // For renames, we need to check if the old file content is now associated with a different monitored path
-        // The key insight is that after a rename, the file content has moved but the path associations
-        // in our HashMap need to be updated to reflect the new reality
-        
-        // For now, just update the reader for the current path
-        // This is a simplified approach that may not fully handle all rename scenarios
-        self.files.update_reader(event_path)?;
-        Ok(())
-    }
 
     pub fn add_path(
         &mut self,
@@ -475,10 +463,8 @@ impl Observer {
                                 
                                 self.files.update_reader(event_path)?;
                                 
-                                // Handle rename: if this is a Name(To) event, check if we need to update file associations
-                                if event.kind == EventKind::Modify(ModifyKind::Name(RenameMode::To)) {
-                                    self.handle_rename(event_path, &old_md, &new_md)?;
-                                }
+                                // Note: Rename handling is complex and needs careful implementation
+                                // For now, we rely on the existing logic to handle file associations
                             } else if old_md.got_truncated(&new_md)? {
                                 show_error!(
                                     "{}",
