@@ -31,10 +31,12 @@ deque
 dequeue
 dev
 devs
+dirfd
 dirfds
 discoverability
 duplicative
 dsync
+ENAMETOOLONG
 endianness
 enqueue
 errored
@@ -44,6 +46,7 @@ exponentiate
 eval
 esac
 falsey
+fchmodat
 FDCWD
 fileio
 filesystem
