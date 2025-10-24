@@ -451,6 +451,8 @@ fn make_format_string(settings: &Settings) -> &str {
 /// Parse a `String` into a `DateTime`.
 /// If it fails, return a tuple of the `String` along with its `ParseError`.
 // TODO: Convert `parse_datetime` to jiff and remove wrapper from chrono to jiff structures.
+// NOTE: Currently uses chrono as bandaid fix for issue #8976 (timezone parsing bug).
+// This reintroduces chrono dependencies that were removed in jiff migration.
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
 ) -> Result<Zoned, (String, parse_datetime::ParseDateTimeError)> {
