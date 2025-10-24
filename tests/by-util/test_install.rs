@@ -1028,7 +1028,7 @@ fn test_install_directory_deep_path_succeeds() {
 
     let unit_len = "a/".len();
     let prefix_len = "./".len();
-    let min_len = 3000; // request a path of at least 3000 characters
+    let min_len: usize = 3000; // request a path of at least 3000 characters
     let max_repeat = (libc::PATH_MAX as usize - prefix_len) / unit_len;
     let min_repeat = ((min_len.saturating_sub(prefix_len) + unit_len - 1) / unit_len).max(1);
     let repeat_count = std::cmp::min(max_repeat, min_repeat);
