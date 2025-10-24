@@ -20,7 +20,7 @@ path = "src/date.rs"
 
 [dependencies]
 clap = { workspace = true }
-chrono = { workspace = true } # TODO: Eventually we'll want to remove this
+chrono = { workspace = true } # TODO: Remove after jiff-native timezone parsing implementation
 jiff = { workspace = true, features = [
   "tzdb-bundle-platform",
   "tzdb-zoneinfo",
