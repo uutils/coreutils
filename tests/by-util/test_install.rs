@@ -1026,7 +1026,7 @@ fn test_install_directory_deep_path_succeeds() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let deep_rel_path = format!("./{}", "a/".repeat((libc::PATH_MAX as usize));
+    let deep_rel_path = format!("./{}", "a/".repeat((libc::PATH_MAX as usize)));
     let deep_abs_path = at.plus(deep_rel_path.as_str());
 
     scene
