@@ -946,17 +946,30 @@ fn test_date_tz_abbreviation_unknown() {
 }
 
 #[test]
-#[ignore = "we reject 'J', GNU treats as midnight"]
-fn test_date_fuzz_military_timezone_j() {
-    // J is reserved for local time in military timezones
-    // GNU date treats it as midnight, we reject it
+fn test_date_military_timezone_j_variations() {
+    // Test multiple variations of 'J' input (case insensitive, with whitespace)
+    // All should produce midnight (00:00:00)
+    let test_cases = vec!["J", "j", " J ", " j ", "\tJ\t"];
+
+    for input in test_cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg("+%T")
+            .succeeds()
+            .stdout_is("00:00:00\n");
+    }
+
+    // Test with -u flag to verify UTC behavior
     new_ucmd!()
-        .env("TZ", "UTC+1")
+        .arg("-u")
         .arg("-d")
         .arg("J")
-        .arg("+%F %T %Z")
+        .arg("+%T %Z")
         .succeeds()
-        .stdout_contains("00:00:00");
+        .stdout_contains("00:00:00")
+        .stdout_contains("UTC");
 }
 
 #[test]
