@@ -997,8 +997,8 @@ fn test_od_options_after_filename() {
 fn test_od_eintr_handling() {
     // Test that od properly handles EINTR (ErrorKind::Interrupted) during read operations
     // This verifies the signal interruption retry logic in PartialReader implementation
-    use std::io::{Error, ErrorKind, Read};
-    use std::sync::{Arc, Mutex};
+    // Test that od properly handles EINTR (ErrorKind::Interrupted) during read operations
+    // This verifies the signal interruption retry logic in PartialReader implementation
 
     let file = "test_eintr";
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1017,7 +1017,11 @@ fn test_od_eintr_handling() {
         .stdout_contains("H"); // Should contain 'H' from "Hello"
 
     // Test with skip and offset options to exercise different code paths
-    ucmd.arg(file)
+    // Create a new command instance to avoid "already run this UCommand" error
+    let (at, mut ucmd2) = at_and_ucmd!();
+    at.write_bytes(file, &test_data);
+    
+    ucmd2.arg(file)
         .arg("-j")
         .arg("1")
         .arg("-N")

@@ -831,7 +831,7 @@ fn test_child_when_pipe_in() {
 fn test_cat_eintr_handling() {
     // Test that cat properly handles EINTR (ErrorKind::Interrupted) during I/O operations
     // This verifies the signal interruption retry logic added in the EINTR handling fix
-    use std::io::{Error, ErrorKind, Read, Write};
+    use std::io::{Error, ErrorKind, Read};
     use std::sync::{Arc, Mutex};
 
     // Create a mock reader that simulates EINTR interruptions
