@@ -1713,6 +1713,29 @@ fn test_install_dir_req_verbose() {
     result_sub5.stdout_contains("'source_file1' -> 'sub5/a/b/c/file'");
 }
 
+#[test]
+#[cfg(unix)]
+fn test_install_broken_pipe() {
+    use std::process::Stdio;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("source.txt", "content");
+
+    let mut child = scene
+        .ucmd()
+        .arg("-v")
+        .arg("source.txt")
+        .arg("dest.txt")
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+
+    child.close_stdout();
+    child.wait().unwrap().fails_silently();
+
+    assert!(at.file_exists("dest.txt"));
+}
+
 #[cfg(unix)]
 #[test]
 fn test_install_chown_file_invalid() {

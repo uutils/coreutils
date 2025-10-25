@@ -36,6 +36,8 @@ use uucore::selinux::{
     SeLinuxError, contexts_differ, get_selinux_security_context, is_selinux_enabled,
     selinux_error_description, set_selinux_security_context,
 };
+#[cfg(unix)]
+use uucore::signals::enable_pipe_errors;
 use uucore::translate;
 use uucore::{format_usage, os_str_from_bytes, show, show_error, show_if_err};
 
@@ -196,6 +198,9 @@ static ARG_FILES: &str = "files";
 ///
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    #[cfg(unix)]
+    enable_pipe_errors()?;
+
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let paths: Vec<OsString> = matches
