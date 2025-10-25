@@ -11,12 +11,13 @@ use clap::{Arg, ArgAction, Command};
 use std::ffi::CString;
 use std::io::{Error, ErrorKind};
 use std::os::unix::prelude::OsStrExt;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::ptr;
+use std::process::Command as ProcessCommand;
 use uucore::entries::{Locate, Passwd, grp2gid, usr2uid};
 use uucore::error::{UResult, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
-use uucore::libc::{self, chroot, execvp, setgid, setgroups, setuid};
+use uucore::libc::{self, chroot, setgid, setgroups, setuid};
 use uucore::{format_usage, show};
 
 use uucore::translate;
@@ -209,28 +210,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // NOTE: Tests can only trigger code beyond this point if they're invoked with root permissions
     set_context(&options)?;
 
-    let mut argv_storage = Vec::with_capacity(command.len());
-    for &arg in &command {
-        match CString::new(arg) {
-            Ok(value) => argv_storage.push(value),
-            Err(_) => {
-                let error = Error::new(
-                    ErrorKind::InvalidInput,
-                    "command contains interior null byte",
-                );
-                return Err(ChrootError::CommandFailed(chroot_command.to_owned(), error).into());
-            }
-        }
-    }
+    let err = ProcessCommand::new(chroot_command)
+        .args(&command[1..])
+        .exec();
 
-    let mut argv: Vec<*const libc::c_char> = argv_storage.iter().map(|c| c.as_ptr()).collect();
-    argv.push(ptr::null());
-
-    unsafe {
-        execvp(argv_storage[0].as_ptr(), argv.as_ptr());
-    }
-
-    let err = Error::last_os_error();
     Err(if err.kind() == ErrorKind::NotFound {
         ChrootError::CommandNotFound(chroot_command.to_owned(), err)
     } else {
