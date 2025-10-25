@@ -1694,10 +1694,7 @@ fn test_install_dir_req_verbose() {
         "install: creating directory 'sub4{sep}a'",
         sep = MAIN_SEPARATOR
     ));
-    result_sub4.stdout_contains(format!(
-        "'source_file1' -> 'sub4{sep}a/source_file1'",
-        sep = MAIN_SEPARATOR
-    ));
+    result_sub4.stdout_contains("'source_file1' -> 'sub4/a");
 
     at.mkdir("sub5");
     let result_sub5 = scene
