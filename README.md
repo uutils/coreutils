@@ -221,6 +221,14 @@ To install every program with a prefix (e.g. uu-echo uu-cat):
 make PROG_PREFIX=PREFIX_GOES_HERE install
 ```
 
+To enable integration with systemd: 
+
+```shell
+./configure --enable-systemd
+make
+make install
+```
+
 To install the multicall binary:
 
 ```shell
