@@ -7,7 +7,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime;
-use jiff::tz::TimeZone;
+use jiff::tz::{Offset, TimeZone};
 use jiff::{Timestamp, Zoned};
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 use libc::clock_settime;
@@ -24,6 +24,8 @@ use uucore::{format_usage, show};
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+
+use chrono::{Local, LocalResult, NaiveDateTime, TimeZone as ChronoTimeZone};
 
 // Options
 const DATE: &str = "date";
@@ -449,17 +451,77 @@ fn make_format_string(settings: &Settings) -> &str {
 /// Parse a `String` into a `DateTime`.
 /// If it fails, return a tuple of the `String` along with its `ParseError`.
 // TODO: Convert `parse_datetime` to jiff and remove wrapper from chrono to jiff structures.
+// NOTE: Currently uses chrono as band-aid fix for issue #8976 (timezone parsing bug).
+// This reintroduces chrono dependencies that were removed in jiff migration.
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
 ) -> Result<Zoned, (String, parse_datetime::ParseDateTimeError)> {
-    match parse_datetime::parse_datetime(s.as_ref()) {
+    // Try to parse as naive datetime first for common formats like "2025-03-29 8:30:00"
+    // This ensures dates without timezone are interpreted as local time for that specific date
+    // (not the current date's timezone offset)
+    let formats = [
+        "%Y-%m-%d %H:%M:%S", // "2025-03-29 8:30:00"
+        "%Y-%m-%d %H:%M",    // "2025-03-29 8:30"
+        "%Y-%m-%d",          // "2025-03-29"
+    ];
+
+    for format in &formats {
+        if let Ok(naive) = NaiveDateTime::parse_from_str(s.as_ref(), format) {
+            // Convert naive datetime to local time, which will use the correct timezone offset
+            // for that specific date (not the current date's offset)
+            if let LocalResult::Single(local) = Local.from_local_datetime(&naive) {
+                // The timestamp from chrono already encodes the correct timezone offset
+                // for this specific date (not the current date's offset)
+                let timestamp =
+                    Timestamp::new(local.timestamp(), local.timestamp_subsec_nanos() as i32)
+                        .unwrap();
+                // Get the offset that chrono calculated for this date
+                let chrono_offset_seconds = local.offset().local_minus_utc();
+
+                // Try to use the system timezone first to preserve timezone abbreviations (CET, EST, etc.)
+                if let Ok(system_tz) = TimeZone::try_system() {
+                    let zoned = Zoned::new(timestamp, system_tz.clone());
+                    let system_offset_seconds = zoned.offset().seconds();
+
+                    // If the system timezone offset matches chrono's offset, we're good
+                    if system_offset_seconds == chrono_offset_seconds {
+                        return Ok(zoned);
+                    }
+
+                    // On Windows/some systems, timezone DST rules may differ. Adjust timestamp
+                    // so the displayed time is correct when interpreted with system_tz's offset.
+                    // The timestamp was created assuming chrono's offset. If jiff has a different
+                    // offset, we need to adjust by the difference.
+                    let offset_diff = system_offset_seconds - chrono_offset_seconds;
+                    let adjusted_timestamp = Timestamp::new(
+                        timestamp.as_second() - offset_diff as i64,
+                        timestamp.subsec_nanosecond(),
+                    )
+                    .unwrap();
+                    return Ok(Zoned::new(adjusted_timestamp, system_tz));
+                }
+
+                // Fallback: Use fixed offset from chrono
+                // This ensures correctness when system timezone is unavailable
+                let timezone = if chrono_offset_seconds == 0 {
+                    TimeZone::UTC
+                } else {
+                    let offset = Offset::from_seconds(chrono_offset_seconds).unwrap();
+                    TimeZone::fixed(offset)
+                };
+                return Ok(Zoned::new(timestamp, timezone));
+            }
+        }
+    }
+
+    // Fall back to parse_datetime for more complex parsing (relative dates, etc.)
+    let ref_time = Local::now();
+    match parse_datetime::parse_datetime_at_date(ref_time, s.as_ref()) {
         Ok(date) => {
             let timestamp =
                 Timestamp::new(date.timestamp(), date.timestamp_subsec_nanos() as i32).unwrap();
-            Ok(Zoned::new(
-                timestamp,
-                TimeZone::try_system().unwrap_or(TimeZone::UTC),
-            ))
+            let timezone = TimeZone::try_system().unwrap_or(TimeZone::UTC);
+            Ok(Zoned::new(timestamp, timezone))
         }
         Err(e) => Err((s.as_ref().into(), e)),
     }
