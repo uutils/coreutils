@@ -38,41 +38,60 @@ test-after-help = Quitter avec le statut déterminé par EXPRESSION.
 
   - -b FILE FILE existe et est un fichier spécial de type bloc
 
+
   - -c FILE FILE existe et est un fichier spécial de type caractère
+
 
   - -d FILE FILE existe et est un répertoire
 
+
   - -e FILE FILE existe
+
 
   - -f FILE FILE existe et est un fichier régulier
 
+
   - -g FILE FILE existe et a le bit set-group-ID
+
 
   - -G FILE FILE existe et appartient à l'ID de groupe effectif
 
+
   - -h FILE FILE existe et est un lien symbolique (identique à -L)
+
 
   - -k FILE FILE existe et a son bit sticky défini
 
+
   - -L FILE FILE existe et est un lien symbolique (identique à -h)
+
 
   - -N FILE FILE existe et a été modifié depuis sa dernière lecture
 
+
   - -O FILE FILE existe et appartient à l'ID utilisateur effectif
+
 
   - -p FILE FILE existe et est un tube nommé
 
+
   - -r FILE FILE existe et la permission de lecture est accordée
+
 
   - -s FILE FILE existe et a une taille supérieure à zéro
 
+
   - -S FILE FILE existe et est un socket
+
 
   - -t FD le descripteur de fichier FD est ouvert sur un terminal
 
+
   - -u FILE FILE existe et son bit set-user-ID est défini
 
+
   - -w FILE FILE existe et la permission d'écriture est accordée
+
 
   - -x FILE FILE existe et la permission d'exécution (ou de recherche) est accordée
 
