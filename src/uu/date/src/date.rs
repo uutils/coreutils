@@ -117,6 +117,57 @@ impl From<&str> for Rfc3339Format {
     }
 }
 
+/// Parse military timezone with optional hour offset.
+/// Pattern: single letter (a-z except j) optionally followed by 1-2 digits.
+/// Returns Some(total_hours_in_utc) or None if pattern doesn't match.
+///
+/// Military timezone mappings:
+/// - A-I: UTC+1 to UTC+9 (J is skipped for local time)
+/// - K-M: UTC+10 to UTC+12
+/// - N-Y: UTC-1 to UTC-12
+/// - Z: UTC+0
+///
+/// The hour offset from digits is added to the base military timezone offset.
+/// Examples: "m" -> 12 (noon UTC), "m9" -> 21 (9pm UTC), "a5" -> 4 (4am UTC next day)
+fn parse_military_timezone_with_offset(s: &str) -> Option<i32> {
+    if s.is_empty() || s.len() > 3 {
+        return None;
+    }
+
+    let mut chars = s.chars();
+    let letter = chars.next()?.to_ascii_lowercase();
+
+    // Check if first character is a letter (a-z, except j which is handled separately)
+    if !letter.is_ascii_lowercase() || letter == 'j' {
+        return None;
+    }
+
+    // Parse optional digits (1-2 digits for hour offset)
+    let additional_hours: i32 = if let Some(rest) = chars.as_str().chars().next() {
+        if !rest.is_ascii_digit() {
+            return None;
+        }
+        chars.as_str().parse().ok()?
+    } else {
+        0
+    };
+
+    // Map military timezone letter to UTC offset
+    let tz_offset = match letter {
+        'a'..='i' => (letter as i32 - 'a' as i32) + 1, // A=+1, B=+2, ..., I=+9
+        'k'..='m' => (letter as i32 - 'k' as i32) + 10, // K=+10, L=+11, M=+12
+        'n'..='y' => -((letter as i32 - 'n' as i32) + 1), // N=-1, O=-2, ..., Y=-12
+        'z' => 0,                                      // Z=+0
+        _ => return None,
+    };
+
+    // Calculate total hours: midnight (0) + tz_offset + additional_hours
+    // Midnight in timezone X converted to UTC
+    let total_hours = (0 - tz_offset + additional_hours).rem_euclid(24);
+
+    Some(total_hours)
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -215,6 +266,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // GNU date accepts it and treats it as midnight today (00:00:00).
             let is_military_j = input.eq_ignore_ascii_case("j");
 
+            // GNU compatibility (Military timezone with optional hour offset):
+            // Single letter (a-z except j) optionally followed by 1-2 digits.
+            // Letter represents midnight in that military timezone (UTC offset).
+            // Digits represent additional hours to add.
+            // Examples: "m" -> noon UTC (12:00); "m9" -> 21:00 UTC; "a5" -> 04:00 UTC
+            let military_tz_with_offset = parse_military_timezone_with_offset(input);
+
             // GNU compatibility (Pure numbers in date strings):
             // - Manual: https://www.gnu.org/software/coreutils/manual/html_node/Pure-numbers-in-date-strings.html
             // - Semantics: a pure decimal number denotes today's time-of-day (HH or HHMM).
@@ -237,6 +295,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 } else {
                     format!("{date_part} 00:00 {offset}")
                 };
+                parse_date(composed)
+            } else if let Some(total_hours) = military_tz_with_offset {
+                // Military timezone with optional hour offset
+                // Convert to UTC time: midnight + military_tz_offset + additional_hours
+                let date_part =
+                    strtime::format("%F", &now).unwrap_or_else(|_| String::from("1970-01-01"));
+                let composed = format!("{date_part} {total_hours:02}:00:00 +00:00");
                 parse_date(composed)
             } else if is_pure_digits {
                 // Derive HH and MM from the input
@@ -740,5 +805,26 @@ fn set_system_datetime(date: Zoned) -> UResult<()> {
             .map_err_context(|| translate!("date-error-cannot-set-date")))
     } else {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_military_timezone_with_offset() {
+        // Valid cases: letter only, letter + digit, uppercase
+        assert_eq!(parse_military_timezone_with_offset("m"), Some(12)); // UTC+12 -> 12:00 UTC
+        assert_eq!(parse_military_timezone_with_offset("m9"), Some(21)); // 12 + 9 = 21
+        assert_eq!(parse_military_timezone_with_offset("a5"), Some(4)); // 23 + 5 = 28 % 24 = 4
+        assert_eq!(parse_military_timezone_with_offset("z"), Some(0)); // UTC+0 -> 00:00 UTC
+        assert_eq!(parse_military_timezone_with_offset("M9"), Some(21)); // Uppercase works
+
+        // Invalid cases: 'j' reserved, empty, too long, starts with digit
+        assert_eq!(parse_military_timezone_with_offset("j"), None); // Reserved for local time
+        assert_eq!(parse_military_timezone_with_offset(""), None); // Empty
+        assert_eq!(parse_military_timezone_with_offset("m999"), None); // Too long
+        assert_eq!(parse_military_timezone_with_offset("9m"), None); // Starts with digit
     }
 }
