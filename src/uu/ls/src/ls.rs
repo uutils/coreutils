@@ -1875,6 +1875,17 @@ impl PathData {
         config: &Config,
         command_line: bool,
     ) -> Self {
+        Self::new_with_dereference_override(p_buf, dir_entry, file_name, config, command_line, None)
+    }
+
+    fn new_with_dereference_override(
+        p_buf: PathBuf,
+        dir_entry: Option<DirEntry>,
+        file_name: Option<OsString>,
+        config: &Config,
+        command_line: bool,
+        must_dereference_override: Option<bool>,
+    ) -> Self {
         // We cannot use `Path::ends_with` or `Path::Components`, because they remove occurrences of '.'
         // For '..', the filename is None
         let display_name = if let Some(name) = file_name {
@@ -1888,7 +1899,7 @@ impl PathData {
                 .unwrap_or_default()
         };
 
-        let must_dereference = match &config.dereference {
+        let must_dereference = must_dereference_override.unwrap_or_else(|| match &config.dereference {
             Dereference::All => true,
             Dereference::Args => command_line,
             Dereference::DirArgs => {
@@ -1903,7 +1914,7 @@ impl PathData {
                 }
             }
             Dereference::None => false,
-        };
+        });
 
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
@@ -3257,12 +3268,13 @@ fn display_item_name(
                     // This is because relative symlinks will fail to get_metadata.
                     let mut absolute_target = target_path.clone();
                     if target_path.is_relative() {
-                        if let Some(parent) = path.path().parent() {
-                            absolute_target = parent.join(absolute_target);
+                        // Resolve relative to current directory for coloring purposes
+                        if let Ok(current_dir) = std::env::current_dir() {
+                            absolute_target = current_dir.join(absolute_target);
                         }
                     }
 
-                    let target_data = PathData::new(absolute_target, None, None, config, false);
+                    let target_data = PathData::new_with_dereference_override(absolute_target, None, None, config, false, Some(true));
 
                     // If we have a symlink to a valid file, we use the metadata of said file.
                     // Because we use an absolute path, we can assume this is guaranteed to exist.

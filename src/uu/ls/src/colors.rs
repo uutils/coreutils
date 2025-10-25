@@ -172,17 +172,26 @@ pub(crate) fn color_name(
         }
     }
 
-    if !path.must_dereference {
+    if let Some(target) = target_symlink {
+        // use the optional target_symlink
+        // Use the target's metadata to color it according to its actual type
+        let md_option = target.p_buf.metadata().ok();
+        let style = if let Some(md) = &md_option {
+            if md.is_dir() {
+                style_manager.colors.style_for_indicator(lscolors::Indicator::Directory)
+            } else {
+                // For files and other types, use Normal style (no special coloring)
+                style_manager.colors.style_for_indicator(lscolors::Indicator::Normal)
+            }
+        } else {
+            // If metadata is not available (dangling symlink), use Normal style
+            style_manager.colors.style_for_indicator(lscolors::Indicator::Normal)
+        };
+        style_manager.apply_style(style, name, wrap)
+    } else if !path.must_dereference {
         // If we need to dereference (follow) a symlink, we will need to get the metadata
         // There is a DirEntry, we don't need to get the metadata for the color
         return style_manager.apply_style_based_on_colorable(path, name, wrap);
-    }
-
-    if let Some(target) = target_symlink {
-        // use the optional target_symlink
-        // Use fn symlink_metadata directly instead of get_metadata() here because ls
-        // should not exit with an err, if we are unable to obtain the target_metadata
-        style_manager.apply_style_based_on_colorable(target, name, wrap)
     } else {
         let md_option: Option<Metadata> = path
             .metadata()
