@@ -205,15 +205,35 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Iterate over all dates - whether it's a single date or a file.
     let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
         DateSource::Human(ref input) => {
+            // GNU compatibility (Military timezone 'J'):
+            // 'J' is reserved for local time in military timezones.
+            // GNU date accepts it and treats it as midnight today (00:00:00).
+            let is_military_j = input.eq_ignore_ascii_case("j");
+
             // GNU compatibility (Pure numbers in date strings):
             // - Manual: https://www.gnu.org/software/coreutils/manual/html_node/Pure-numbers-in-date-strings.html
-            // - Semantics: a pure decimal number denotes today’s time-of-day (HH or HHMM).
+            // - Semantics: a pure decimal number denotes today's time-of-day (HH or HHMM).
             //   Examples: "0"/"00" => 00:00 today; "7"/"07" => 07:00 today; "0700" => 07:00 today.
             // For all other forms, fall back to the general parser.
             let is_pure_digits =
                 !input.is_empty() && input.len() <= 4 && input.chars().all(|c| c.is_ascii_digit());
 
-            let date = if is_pure_digits {
+            let date = if is_military_j {
+                // Treat 'J' as midnight today (00:00:00) in local time
+                let date_part =
+                    strtime::format("%F", &now).unwrap_or_else(|_| String::from("1970-01-01"));
+                let offset = if settings.utc {
+                    String::from("+00:00")
+                } else {
+                    strtime::format("%:z", &now).unwrap_or_default()
+                };
+                let composed = if offset.is_empty() {
+                    format!("{date_part} 00:00")
+                } else {
+                    format!("{date_part} 00:00 {offset}")
+                };
+                parse_date(composed)
+            } else if is_pure_digits {
                 // Derive HH and MM from the input
                 let (hh_opt, mm_opt) = if input.len() <= 2 {
                     (input.parse::<u32>().ok(), Some(0u32))
