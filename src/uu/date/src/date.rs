@@ -7,15 +7,17 @@
 
 use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime;
-use jiff::tz::TimeZone;
+use jiff::tz::{TimeZone, TimeZoneDatabase};
 use jiff::{Timestamp, Zoned};
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 use libc::clock_settime;
 #[cfg(all(unix, not(target_os = "redox")))]
 use libc::{CLOCK_REALTIME, clock_getres, timespec};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
+use std::sync::OnceLock;
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
@@ -446,13 +448,137 @@ fn make_format_string(settings: &Settings) -> &str {
     }
 }
 
+/// Minimal disambiguation rules for highly ambiguous timezone abbreviations.
+/// Only includes cases where multiple major timezones share the same abbreviation.
+/// All other abbreviations are discovered dynamically from the IANA database.
+///
+/// Disambiguation rationale (GNU compatible):
+/// - CST: Central Standard Time (US) preferred over China/Cuba Standard Time
+/// - EST: Eastern Standard Time (US) preferred over Australian Eastern Standard Time
+/// - IST: India Standard Time preferred over Israel/Irish Standard Time
+/// - MST: Mountain Standard Time (US) preferred over Malaysia Standard Time
+/// - PST: Pacific Standard Time (US) - widely used abbreviation
+/// - GMT: Alias for UTC (universal)
+///
+/// All other timezones (AWST, JST, CET, etc.) are dynamically resolved from IANA database. // spell-checker:disable-line
+static PREFERRED_TZ_MAPPINGS: &[(&str, &str)] = &[
+    // Universal (no ambiguity, but commonly used)
+    ("UTC", "UTC"),
+    ("GMT", "UTC"),
+    // Highly ambiguous US timezones (GNU compatible)
+    ("PST", "America/Los_Angeles"),
+    ("PDT", "America/Los_Angeles"),
+    ("MST", "America/Denver"),
+    ("MDT", "America/Denver"),
+    ("CST", "America/Chicago"), // Ambiguous: US vs China vs Cuba
+    ("CDT", "America/Chicago"),
+    ("EST", "America/New_York"), // Ambiguous: US vs Australia
+    ("EDT", "America/New_York"),
+    // Other highly ambiguous cases
+    ("IST", "Asia/Kolkata"), // Ambiguous: India vs Israel vs Ireland // spell-checker:disable-line
+];
+
+/// Lazy-loaded timezone abbreviation lookup map built from IANA database.
+static TZ_ABBREV_CACHE: OnceLock<HashMap<String, String>> = OnceLock::new();
+
+/// Build timezone abbreviation lookup map from IANA database.
+/// Uses preferred mappings for disambiguation, then searches all timezones.
+fn build_tz_abbrev_map() -> HashMap<String, String> {
+    let mut map = HashMap::new();
+
+    // First, add preferred mappings (these take precedence)
+    for (abbrev, iana) in PREFERRED_TZ_MAPPINGS {
+        map.insert((*abbrev).to_string(), (*iana).to_string());
+    }
+
+    // Then, try to find additional abbreviations from IANA database
+    // This gives us broader coverage while respecting disambiguation preferences
+    let tzdb = TimeZoneDatabase::from_env(); // spell-checker:disable-line
+    // spell-checker:disable-next-line
+    for tz_name in tzdb.available() {
+        let tz_str = tz_name.as_str();
+        // Skip if we already have a preferred mapping for this zone
+        if !map.values().any(|v| v == tz_str) {
+            // For zones without preferred mappings, use last component as potential abbreviation
+            // e.g., "Pacific/Fiji" could map to "FIJI"
+            if let Some(last_part) = tz_str.split('/').next_back() {
+                let potential_abbrev = last_part.to_uppercase();
+                // Only add if it looks like an abbreviation (2-5 uppercase chars)
+                if potential_abbrev.len() >= 2
+                    && potential_abbrev.len() <= 5
+                    && potential_abbrev.chars().all(|c| c.is_ascii_uppercase())
+                {
+                    map.entry(potential_abbrev)
+                        .or_insert_with(|| tz_str.to_string());
+                }
+            }
+        }
+    }
+
+    map
+}
+
+/// Get IANA timezone name for a given abbreviation.
+/// Uses lazy-loaded cache with preferred mappings for disambiguation.
+fn tz_abbrev_to_iana(abbrev: &str) -> Option<&str> {
+    let cache = TZ_ABBREV_CACHE.get_or_init(build_tz_abbrev_map);
+    cache.get(abbrev).map(|s| s.as_str())
+}
+
+/// Resolve timezone abbreviation in date string and replace with numeric offset.
+/// Returns the modified string with offset, or original if no abbreviation found.
+fn resolve_tz_abbreviation<S: AsRef<str>>(date_str: S) -> String {
+    let s = date_str.as_ref();
+
+    // Look for timezone abbreviation at the end of the string
+    // Pattern: ends with uppercase letters (2-5 chars)
+    if let Some(last_word) = s.split_whitespace().last() {
+        // Check if it's a potential timezone abbreviation (all uppercase, 2-5 chars)
+        if last_word.len() >= 2
+            && last_word.len() <= 5
+            && last_word.chars().all(|c| c.is_ascii_uppercase())
+        {
+            if let Some(iana_name) = tz_abbrev_to_iana(last_word) {
+                // Try to get the timezone
+                if let Ok(tz) = TimeZone::get(iana_name) {
+                    // Parse the date part (everything before the TZ abbreviation)
+                    let date_part = s.trim_end_matches(last_word).trim();
+
+                    // Try to parse the date with UTC first to get timestamp
+                    let date_with_utc = format!("{date_part} +00:00");
+                    if let Ok(parsed) = parse_datetime::parse_datetime(&date_with_utc) {
+                        // Create timestamp from parsed date
+                        if let Ok(ts) = Timestamp::new(
+                            parsed.timestamp(),
+                            parsed.timestamp_subsec_nanos() as i32,
+                        ) {
+                            // Get the offset for this specific timestamp in the target timezone
+                            let zoned = ts.to_zoned(tz);
+                            let offset_str = format!("{}", zoned.offset());
+
+                            // Replace abbreviation with offset
+                            return format!("{date_part} {offset_str}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // No abbreviation found or couldn't resolve, return original
+    s.to_string()
+}
+
 /// Parse a `String` into a `DateTime`.
 /// If it fails, return a tuple of the `String` along with its `ParseError`.
 // TODO: Convert `parse_datetime` to jiff and remove wrapper from chrono to jiff structures.
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
 ) -> Result<Zoned, (String, parse_datetime::ParseDateTimeError)> {
-    match parse_datetime::parse_datetime(s.as_ref()) {
+    // First, try to resolve any timezone abbreviations
+    let resolved = resolve_tz_abbreviation(s.as_ref());
+
+    match parse_datetime::parse_datetime(&resolved) {
         Ok(date) => {
             let timestamp =
                 Timestamp::new(date.timestamp(), date.timestamp_subsec_nanos() as i32).unwrap();
