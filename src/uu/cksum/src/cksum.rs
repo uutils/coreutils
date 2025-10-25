@@ -203,11 +203,9 @@ mod options {
     pub const ZERO: &str = "zero";
 }
 
-/***
- * cksum has a bunch of legacy behavior.
- * We handle this in this function to make sure they are self contained
- * and "easier" to understand
- */
+/// cksum has a bunch of legacy behavior.
+/// We handle this in this function to make sure they are self contained
+/// and "easier" to understand
 fn handle_tag_text_binary_flags<S: AsRef<OsStr>>(
     args: impl Iterator<Item = S>,
 ) -> UResult<(bool, bool)> {

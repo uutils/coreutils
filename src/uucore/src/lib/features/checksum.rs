@@ -1115,9 +1115,7 @@ fn process_checksum_file(
     Ok(())
 }
 
-/***
- * Do the checksum validation (can be strict or not)
-*/
+/// Do the checksum validation (can be strict or not)
 pub fn perform_checksum_validation<'a, I>(
     files: I,
     algo_name_input: Option<&str>,
