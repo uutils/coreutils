@@ -6,6 +6,7 @@
 
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
+#[cfg(unix)]
 use std::fs;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
