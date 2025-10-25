@@ -39,6 +39,7 @@ uucore = { workspace = true, default-features = true, features = [
   "perms",
   "entries",
   "process",
+  "signals",
 ] }
 
 [[bin]]
