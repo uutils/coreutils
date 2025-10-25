@@ -973,8 +973,7 @@ fn test_date_military_timezone_j_variations() {
 }
 
 #[test]
-#[ignore = "we use current time, GNU uses midnight"]
-fn test_date_fuzz_empty_string() {
+fn test_date_empty_string() {
     // Empty string should be treated as midnight today
     new_ucmd!()
         .env("TZ", "UTC+1")
@@ -982,6 +981,33 @@ fn test_date_fuzz_empty_string() {
         .arg("")
         .succeeds()
         .stdout_contains("00:00:00");
+}
+
+#[test]
+fn test_date_empty_string_variations() {
+    // Test multiple variations of empty/whitespace strings
+    // All should produce midnight (00:00:00)
+    let test_cases = vec!["", " ", "  ", "\t", "\n", " \t ", "\t\n\t"];
+
+    for input in test_cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg("+%T")
+            .succeeds()
+            .stdout_is("00:00:00\n");
+    }
+
+    // Test with -u flag to verify UTC behavior
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("")
+        .arg("+%T %Z")
+        .succeeds()
+        .stdout_contains("00:00:00")
+        .stdout_contains("UTC");
 }
 
 #[test]

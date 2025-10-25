@@ -205,6 +205,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Iterate over all dates - whether it's a single date or a file.
     let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
         DateSource::Human(ref input) => {
+            let input = input.trim();
+            // GNU compatibility (Empty string):
+            // An empty string (or whitespace-only) should be treated as midnight today.
+            let is_empty_or_whitespace = input.is_empty();
+
             // GNU compatibility (Military timezone 'J'):
             // 'J' is reserved for local time in military timezones.
             // GNU date accepts it and treats it as midnight today (00:00:00).
@@ -218,8 +223,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let is_pure_digits =
                 !input.is_empty() && input.len() <= 4 && input.chars().all(|c| c.is_ascii_digit());
 
-            let date = if is_military_j {
-                // Treat 'J' as midnight today (00:00:00) in local time
+            let date = if is_empty_or_whitespace || is_military_j {
+                // Treat empty string or 'J' as midnight today (00:00:00) in local time
                 let date_part =
                     strtime::format("%F", &now).unwrap_or_else(|_| String::from("1970-01-01"));
                 let offset = if settings.utc {
