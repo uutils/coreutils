@@ -1665,9 +1665,12 @@ fn test_install_dir_req_verbose() {
         .arg("sub3/a/b/c/file")
         .succeeds();
     result_sub3.stdout_contains("install: creating directory 'sub3'");
-    result_sub3.stdout_contains(&format!("install: creating directory 'sub3{MAIN_SEPARATOR}a'"));
-    result_sub3
-        .stdout_contains(&format!("install: creating directory 'sub3{MAIN_SEPARATOR}a{MAIN_SEPARATOR}b'"));
+    result_sub3.stdout_contains(&format!(
+        "install: creating directory 'sub3{MAIN_SEPARATOR}a'"
+    ));
+    result_sub3.stdout_contains(&format!(
+        "install: creating directory 'sub3{MAIN_SEPARATOR}a{MAIN_SEPARATOR}b'"
+    ));
     result_sub3.stdout_contains(&format!(
         "install: creating directory 'sub3{MAIN_SEPARATOR}a{MAIN_SEPARATOR}b{MAIN_SEPARATOR}c'"
     ));
@@ -1681,8 +1684,9 @@ fn test_install_dir_req_verbose() {
         .arg(file_1)
         .succeeds();
     result_sub4.stdout_contains("install: creating directory 'sub4'");
-    result_sub4
-        .stdout_contains(&format!("install: creating directory 'sub4{MAIN_SEPARATOR}a'"));
+    result_sub4.stdout_contains(&format!(
+        "install: creating directory 'sub4{MAIN_SEPARATOR}a'"
+    ));
     result_sub4.stdout_contains("'source_file1' -> 'sub4/a");
 
     at.mkdir("sub5");
@@ -2175,13 +2179,9 @@ fn test_install_same_file() {
     let file = "file";
 
     at.touch(file);
-    ucmd
-        .arg(file)
-        .arg(".")
-        .fails()
-        .stderr_contains(&format!(
-            "'file' and '.{MAIN_SEPARATOR}file' are the same file"
-        ));
+    ucmd.arg(file).arg(".").fails().stderr_contains(&format!(
+        "'file' and '.{MAIN_SEPARATOR}file' are the same file"
+    ));
 }
 
 #[cfg(unix)]
