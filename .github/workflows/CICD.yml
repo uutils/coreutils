@@ -269,9 +269,8 @@ jobs:
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
-    - uses: dtolnay/rust-toolchain@stable
-        with:
-          target: aarch64-unknown-linux-gnu
+      with:
+        target: aarch64-unknown-linux-gnu
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Install/setup prerequisites
@@ -292,7 +291,7 @@ jobs:
         fi
         # Minimal cross-built with native uudoc
         make UTILS=true RUSTC_ARCH="--target aarch64-unknown-linux-gnu"
-        ./target/debug/uudoc manpage
+        ./target/debug/uudoc manpage true
         # build (host)
         make build
         echo "Check that target directory will be ignored by backup tools"
