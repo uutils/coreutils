@@ -341,16 +341,17 @@ jobs:
         ! test -f /tmp/usr/local/share/zsh/site-functions/_install
         ! test -f /tmp/usr/local/share/bash-completion/completions/head
         ! test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
-    - name: "`make install MULTICALL=n`"
+    - name: "`make install MULTICALL=n SKIP_UTILS=b3sum`"
       shell: bash
       run: |
         set -x
         DESTDIR=/tmp/ make PROFILE=release MULTICALL=n install
         # Check that the utils are present
         test -f /tmp/usr/local/bin/hashsum
+        # Check that b3sum is not present
+        ! test -e /tmp/usr/local/bin/b3sum
         # Check that hashsum symlinks are present
         test -h /tmp/usr/local/bin/b2sum
-        test -h /tmp/usr/local/bin/b3sum
         test -h /tmp/usr/local/bin/md5sum
         test -h /tmp/usr/local/bin/sha1sum
         test -h /tmp/usr/local/bin/sha224sum
