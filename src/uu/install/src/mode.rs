@@ -2,10 +2,12 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+#[cfg(any(unix, target_os = "redox"))]
 use std::fs;
 use std::path::Path;
 #[cfg(not(windows))]
 use uucore::mode;
+#[cfg(any(unix, target_os = "redox"))]
 use uucore::translate;
 
 /// Takes a user-supplied string and tries to parse to u16 mode bitmask.
@@ -51,7 +53,7 @@ pub fn chmod(path: &Path, mode: u32) -> Result<(), ()> {
 /// Adapted from mkdir.rs.
 ///
 #[cfg(windows)]
-pub fn chmod(path: &Path, mode: u32) -> Result<(), ()> {
+pub fn chmod(_path: &Path, _mode: u32) -> Result<(), ()> {
     // chmod on Windows only sets the readonly flag, which isn't even honored on directories
     Ok(())
 }
