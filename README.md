@@ -246,16 +246,16 @@ make COMPLETIONS=n MANPAGES=n install
 
 ### Manually install shell completions
 
-The `coreutils` binary can generate completions for the `bash`, `elvish`,
-`fish`, `powershell` and `zsh` shells. It prints the result to stdout.
+The `uudoc` binary generates completions for the `bash`, `elvish`,
+`fish`, `powershell` and `zsh` shells to stdout.
 
-The syntax is:
-
+Install `uudoc` by
 ```shell
-# Install uudoc first
 cargo install --bin uudoc --features uudoc --path .
+```
 
-# Then use the installed binary
+Then use the installed binary:
+```shell
 uudoc completion <utility> <shell>
 ```
 
@@ -276,10 +276,6 @@ env PROG_PREFIX=uu- uudoc completion cp zsh
 To generate manpages, the syntax is:
 
 ```bash
-# Install uudoc first
-cargo install --bin uudoc --features uudoc --path .
-
-# Then use the installed binary
 uudoc manpage <utility>
 ```
 
