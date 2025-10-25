@@ -944,3 +944,41 @@ fn test_date_tz_abbreviation_unknown() {
         .fails()
         .stderr_contains("invalid date");
 }
+
+#[test]
+#[ignore = "we reject 'J', GNU treats as midnight"]
+fn test_date_fuzz_military_timezone_j() {
+    // J is reserved for local time in military timezones
+    // GNU date treats it as midnight, we reject it
+    new_ucmd!()
+        .env("TZ", "UTC+1")
+        .arg("-d")
+        .arg("J")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_contains("00:00:00");
+}
+
+#[test]
+#[ignore = "we use current time, GNU uses midnight"]
+fn test_date_fuzz_empty_string() {
+    // Empty string should be treated as midnight today
+    new_ucmd!()
+        .env("TZ", "UTC+1")
+        .arg("-d")
+        .arg("")
+        .succeeds()
+        .stdout_contains("00:00:00");
+}
+
+#[test]
+#[ignore = "we produce year 0008, GNU gives today 12:00"]
+fn test_date_fuzz_relative_m9() {
+    // Relative date string "m9" should be parsed correctly
+    new_ucmd!()
+        .env("TZ", "UTC+9")
+        .arg("-d")
+        .arg("m9")
+        .succeeds()
+        .stdout_contains("12:00:00");
+}
