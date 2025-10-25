@@ -6,7 +6,6 @@
 
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
-use std::fs;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 #[cfg(unix)]
@@ -22,9 +21,11 @@ use uucore::process::{getegid, geteuid};
 use uucore::selinux::get_getfattr_output;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
+use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util::is_ci;
 #[cfg(unix)]
 use uutests::util::run_ucmd_as_root;
-use uutests::util::{TestScenario, is_ci};
 use uutests::util_name;
 
 #[test]
@@ -755,6 +756,7 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
     assert_ne!(after_install_sticky, after_install_sticky_again);
 }
 
+#[cfg(not(windows))]
 const STRIP_TARGET_FILE: &str = "helloworld_installed";
 #[cfg(all(not(windows), not(target_os = "freebsd")))]
 const SYMBOL_DUMP_PROGRAM: &str = "objdump";
@@ -763,6 +765,7 @@ const SYMBOL_DUMP_PROGRAM: &str = "llvm-objdump";
 #[cfg(not(windows))]
 const STRIP_SOURCE_FILE_SYMBOL: &str = "main";
 
+#[cfg(not(windows))]
 fn strip_source_file() -> &'static str {
     if cfg!(target_os = "freebsd") {
         "helloworld_freebsd"
