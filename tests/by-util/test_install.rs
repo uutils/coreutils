@@ -9,17 +9,21 @@ use filetime::FileTime;
 use std::fs;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
+#[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(not(windows))]
 use std::process::Command;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
+#[cfg(unix)]
 use uucore::process::{getegid, geteuid};
 #[cfg(feature = "feat_selinux")]
 use uucore::selinux::get_getfattr_output;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-use uutests::util::{TestScenario, is_ci, run_ucmd_as_root};
+use uutests::util::{TestScenario, is_ci};
+#[cfg(unix)]
+use uutests::util::run_ucmd_as_root;
 use uutests::util_name;
 
 #[test]
@@ -91,6 +95,7 @@ fn test_install_ancestors_directories() {
     assert!(at.dir_exists(target_dir));
 }
 
+#[cfg(unix)]
 #[test]
 fn test_install_ancestors_mode_directories() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -119,6 +124,7 @@ fn test_install_ancestors_mode_directories() {
     assert_eq!(0o40_200_u32, at.metadata(target_dir).permissions().mode());
 }
 
+#[cfg(unix)]
 #[test]
 fn test_install_ancestors_mode_directories_with_file() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -187,6 +193,7 @@ fn test_install_several_directories() {
     assert!(at.dir_exists(dir3));
 }
 
+#[cfg(unix)]
 #[test]
 fn test_install_mode_numeric() {
     let scene = TestScenario::new(util_name!());
@@ -225,6 +232,7 @@ fn test_install_mode_numeric() {
     assert_eq!(0o100_333_u32, PermissionsExt::mode(&permissions));
 }
 
+#[cfg(unix)]
 #[test]
 fn test_install_mode_symbolic() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -332,6 +340,7 @@ fn test_install_mode_failing() {
     assert!(!at.file_exists(dest_file));
 }
 
+#[cfg(unix)]
 #[test]
 fn test_install_mode_directories() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -381,6 +390,7 @@ fn test_install_target_new_file() {
     assert!(at.file_exists(format!("{dir}/{file}")));
 }
 
+#[cfg(unix)]
 #[test]
 fn test_install_target_new_file_with_group() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -408,6 +418,7 @@ fn test_install_target_new_file_with_group() {
     assert!(at.file_exists(format!("{dir}/{file}")));
 }
 
+#[cfg(unix)]
 #[test]
 fn test_install_target_new_file_with_owner() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -520,6 +531,7 @@ fn test_install_nested_paths_copy_file() {
     assert!(at.file_exists(format!("{dir2}/{file1}")));
 }
 
+#[cfg(unix)]
 #[test]
 fn test_multiple_mode_arguments_override_not_error() {
     let scene = TestScenario::new(util_name!());
@@ -2040,6 +2052,7 @@ fn test_target_file_ends_with_slash() {
         .stderr_contains("failed to access 'dir/target_file/': Not a directory");
 }
 
+#[cfg(unix)]
 #[test]
 fn test_install_root_combined() {
     let ts = TestScenario::new(util_name!());
@@ -2069,8 +2082,8 @@ fn test_install_root_combined() {
     run_and_check(&["-Cv", "c", "d"], "d", 0, 0);
 }
 
-#[test]
 #[cfg(unix)]
+#[test]
 fn test_install_from_fifo() {
     use std::fs::OpenOptions;
     use std::io::Write;
@@ -2103,8 +2116,8 @@ fn test_install_from_fifo() {
     assert_eq!(s.fixtures.read(target_name), test_string);
 }
 
-#[test]
 #[cfg(unix)]
+#[test]
 fn test_install_from_stdin() {
     let (at, mut ucmd) = at_and_ucmd!();
     let target = "target";
