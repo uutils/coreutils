@@ -1,3 +1,4 @@
+accum
 AFAICT
 alloc
 arity
@@ -12,6 +13,7 @@ canonicalization
 canonicalize
 canonicalizing
 capget
+CLOEXEC
 codepoint
 codepoints
 codeready
@@ -30,9 +32,12 @@ deque
 dequeue
 dev
 devs
+dirfd
+dirfds
 discoverability
 duplicative
 dsync
+ENAMETOOLONG
 endianness
 enqueue
 errored
@@ -42,6 +47,8 @@ exponentiate
 eval
 esac
 falsey
+fchmodat
+FDCWD
 fileio
 filesystem
 filesystems
@@ -81,6 +88,7 @@ mergeable
 microbenchmark
 microbenchmarks
 microbenchmarking
+mkdirat
 multibyte
 multicall
 nmerge
@@ -101,6 +109,7 @@ noxfer
 ofile
 oflag
 oflags
+openat
 peekable
 performant
 precompiled
@@ -112,6 +121,7 @@ primality
 pseudoprime
 pseudoprimes
 quantiles
+RDONLY
 readonly
 reparse
 seedable
