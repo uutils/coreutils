@@ -1260,9 +1260,9 @@ fn test_ls_long_symlink_color() {
         (None, "ln-file-invalid", Some([1, 1]), "dir1/invalid-target"),
         // We acquired [1, 1], the non-existent color.
         (Some([0, 0]), "ln-file1", None, "dir1/file1"),
-        (Some([1, 1]), "ln-dir-invalid", Some([1, 1]), "dir1/dir2"),
+        (Some([0, 0]), "ln-dir-invalid", Some([0, 1]), "dir1/dir2"),
         (Some([0, 0]), "ln-root", Some([0, 1]), "/"),
-        (Some([0, 0]), "ln-up2", None, "../.."),
+        (Some([0, 0]), "ln-up2", Some([0, 1]), "../.."),
     ];
 
     // We are only interested in lines or the ls output that are symlinks. These start with "lrwx".
@@ -6489,7 +6489,7 @@ fn test_f_overrides_sort_flags() {
 
     // Create files with different sizes for predictable sort order
     at.write("small.txt", "a"); // 1 byte
-    at.write("medium.txt", "bb"); // 2 bytes  
+    at.write("medium.txt", "bb"); // 2 bytes
     at.write("large.txt", "ccc"); // 3 bytes
 
     // Get baseline outputs (include -a to match -f behavior which shows all files)

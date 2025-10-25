@@ -152,6 +152,18 @@ pub(crate) fn color_name(
     target_symlink: Option<&PathData>,
     wrap: bool,
 ) -> OsString {
+    color_name_with_dangling_hint(name, path, style_manager, target_symlink, false, wrap)
+}
+
+/// Colors the provided name, with a hint about whether the target is dangling
+pub(crate) fn color_name_with_dangling_hint(
+    name: OsString,
+    path: &PathData,
+    style_manager: &mut StyleManager,
+    target_symlink: Option<&PathData>,
+    target_is_dangling: bool,
+    wrap: bool,
+) -> OsString {
     // Check if the file has capabilities
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     {
@@ -172,17 +184,38 @@ pub(crate) fn color_name(
         }
     }
 
-    if !path.must_dereference {
-        // If we need to dereference (follow) a symlink, we will need to get the metadata
-        // There is a DirEntry, we don't need to get the metadata for the color
-        return style_manager.apply_style_based_on_colorable(path, name, wrap);
-    }
-
     if let Some(target) = target_symlink {
         // use the optional target_symlink
-        // Use fn symlink_metadata directly instead of get_metadata() here because ls
-        // should not exit with an err, if we are unable to obtain the target_metadata
-        style_manager.apply_style_based_on_colorable(target, name, wrap)
+        // Use the target's metadata to color it according to its actual type
+        let md_option = target.p_buf.metadata().ok();
+        let style = if let Some(md) = &md_option {
+            if md.is_dir() {
+                style_manager
+                    .colors
+                    .style_for_indicator(lscolors::Indicator::Directory)
+            } else {
+                // For files and other types, use Normal style (no special coloring)
+                style_manager
+                    .colors
+                    .style_for_indicator(lscolors::Indicator::Normal)
+            }
+        } else {
+            // If metadata is not available (dangling symlink), fall back to the original behavior
+            // which colors it based on the Colorable trait implementation
+            return style_manager.apply_style_based_on_colorable(target, name, wrap);
+        };
+        style_manager.apply_style(style, name, wrap)
+    } else if target_is_dangling {
+        // For dangling symlinks, use a special "missing" style
+        // This should correspond to the "non-existent" color that ls uses
+        let missing_style = style_manager
+            .colors
+            .style_for_path_with_metadata(std::path::Path::new(""), None);
+        style_manager.apply_style(missing_style, name, wrap)
+    } else if !path.must_dereference {
+        // If we need to dereference (follow) a symlink, we will need to get the metadata
+        // There is a DirEntry, we don't need to get the metadata for the color
+        style_manager.apply_style_based_on_colorable(path, name, wrap)
     } else {
         let md_option: Option<Metadata> = path
             .metadata()

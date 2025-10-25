@@ -81,7 +81,7 @@ mod dired;
 use dired::{DiredOutput, is_dired_arg_present};
 mod colors;
 use crate::options::QUOTING_STYLE;
-use colors::{StyleManager, color_name};
+use colors::{StyleManager, color_name, color_name_with_dangling_hint};
 
 pub mod options {
     pub mod format {
@@ -1875,6 +1875,17 @@ impl PathData {
         config: &Config,
         command_line: bool,
     ) -> Self {
+        Self::new_with_dereference_override(p_buf, dir_entry, file_name, config, command_line, None)
+    }
+
+    fn new_with_dereference_override(
+        p_buf: PathBuf,
+        dir_entry: Option<DirEntry>,
+        file_name: Option<OsString>,
+        config: &Config,
+        command_line: bool,
+        must_dereference_override: Option<bool>,
+    ) -> Self {
         // We cannot use `Path::ends_with` or `Path::Components`, because they remove occurrences of '.'
         // For '..', the filename is None
         let display_name = if let Some(name) = file_name {
@@ -1888,22 +1899,23 @@ impl PathData {
                 .unwrap_or_default()
         };
 
-        let must_dereference = match &config.dereference {
-            Dereference::All => true,
-            Dereference::Args => command_line,
-            Dereference::DirArgs => {
-                if command_line {
-                    if let Ok(md) = p_buf.metadata() {
-                        md.is_dir()
+        let must_dereference =
+            must_dereference_override.unwrap_or_else(|| match &config.dereference {
+                Dereference::All => true,
+                Dereference::Args => command_line,
+                Dereference::DirArgs => {
+                    if command_line {
+                        if let Ok(md) = p_buf.metadata() {
+                            md.is_dir()
+                        } else {
+                            false
+                        }
                     } else {
                         false
                     }
-                } else {
-                    false
                 }
-            }
-            Dereference::None => false,
-        };
+                Dereference::None => false,
+            });
 
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
@@ -3253,29 +3265,33 @@ fn display_item_name(
                 // This makes extra system calls, but provides important information that
                 // people run `ls -l --color` are very interested in.
                 if let Some(style_manager) = &mut state.style_manager {
-                    // We get the absolute path to be able to construct PathData with valid Metadata.
-                    // This is because relative symlinks will fail to get_metadata.
-                    let mut absolute_target = target_path.clone();
-                    if target_path.is_relative() {
-                        if let Some(parent) = path.path().parent() {
-                            absolute_target = parent.join(absolute_target);
-                        }
-                    }
+                    if target_path.exists() {
+                        // Target exists, create PathData and use enhanced coloring
+                        let target_data = PathData::new_with_dereference_override(
+                            target_path.clone(),
+                            None,
+                            None,
+                            config,
+                            false,
+                            Some(true), // Force dereferencing to get target metadata
+                        );
 
-                    let target_data = PathData::new(absolute_target, None, None, config, false);
-
-                    // If we have a symlink to a valid file, we use the metadata of said file.
-                    // Because we use an absolute path, we can assume this is guaranteed to exist.
-                    // Otherwise, we use path.md(), which will guarantee we color to the same
-                    // color of non-existent symlinks according to style_for_path_with_metadata.
-                    if path.metadata().is_none() && target_data.metadata().is_none() {
-                        name.push(target_path);
-                    } else {
+                        // Use the enhanced coloring logic that checks target metadata
                         name.push(color_name(
                             locale_aware_escape_name(target_path.as_os_str(), config.quoting_style),
                             path,
                             style_manager,
                             Some(&target_data),
+                            is_wrap(name.len()),
+                        ));
+                    } else {
+                        // Target doesn't exist (dangling symlink), use special coloring
+                        name.push(color_name_with_dangling_hint(
+                            locale_aware_escape_name(target_path.as_os_str(), config.quoting_style),
+                            path,
+                            style_manager,
+                            None,
+                            true, // target_is_dangling = true
                             is_wrap(name.len()),
                         ));
                     }
