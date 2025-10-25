@@ -27,7 +27,7 @@ RM := rm -rf
 # Binaries
 CARGO  ?= cargo
 CARGOFLAGS ?=
-RUSTC_ARCH ?= # should be empty instead of --target $(shell rustc -vV | sed -n 's/host: //p') to share crates ar target dir
+RUSTC_ARCH ?= # should be empty except for cross-build, not --target $(shell rustc -vV | sed -n 's/host: //p')
 
 # Install directories
 PREFIX ?= /usr/local
