@@ -152,6 +152,18 @@ pub(crate) fn color_name(
     target_symlink: Option<&PathData>,
     wrap: bool,
 ) -> OsString {
+    color_name_with_dangling_hint(name, path, style_manager, target_symlink, false, wrap)
+}
+
+/// Colors the provided name, with a hint about whether the target is dangling
+pub(crate) fn color_name_with_dangling_hint(
+    name: OsString,
+    path: &PathData,
+    style_manager: &mut StyleManager,
+    target_symlink: Option<&PathData>,
+    target_is_dangling: bool,
+    wrap: bool,
+) -> OsString {
     // Check if the file has capabilities
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     {
@@ -193,6 +205,13 @@ pub(crate) fn color_name(
             return style_manager.apply_style_based_on_colorable(target, name, wrap);
         };
         style_manager.apply_style(style, name, wrap)
+    } else if target_is_dangling {
+        // For dangling symlinks, use a special "missing" style
+        // This should correspond to the "non-existent" color that ls uses
+        let missing_style = style_manager
+            .colors
+            .style_for_path_with_metadata(std::path::Path::new(""), None);
+        style_manager.apply_style(missing_style, name, wrap)
     } else if !path.must_dereference {
         // If we need to dereference (follow) a symlink, we will need to get the metadata
         // There is a DirEntry, we don't need to get the metadata for the color

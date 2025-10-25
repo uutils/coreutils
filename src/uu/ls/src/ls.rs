@@ -81,7 +81,7 @@ mod dired;
 use dired::{DiredOutput, is_dired_arg_present};
 mod colors;
 use crate::options::QUOTING_STYLE;
-use colors::{StyleManager, color_name};
+use colors::{StyleManager, color_name, color_name_with_dangling_hint};
 
 pub mod options {
     pub mod format {
@@ -3265,22 +3265,17 @@ fn display_item_name(
                 // This makes extra system calls, but provides important information that
                 // people run `ls -l --color` are very interested in.
                 if let Some(style_manager) = &mut state.style_manager {
-                    // For coloring purposes, handle problematic paths specially
-                    let target_for_coloring = if target_path.is_absolute() && !target_path.exists()
-                    {
-                        // For non-existent absolute paths, skip enhanced coloring to avoid access errors
-                        None
-                    } else {
-                        Some(PathData::new(
+                    if target_path.exists() {
+                        // Target exists, create PathData and use enhanced coloring
+                        let target_data = PathData::new_with_dereference_override(
                             target_path.clone(),
                             None,
                             None,
                             config,
                             false,
-                        ))
-                    };
+                            Some(true), // Force dereferencing to get target metadata
+                        );
 
-                    if let Some(target_data) = target_for_coloring {
                         // Use the enhanced coloring logic that checks target metadata
                         name.push(color_name(
                             locale_aware_escape_name(target_path.as_os_str(), config.quoting_style),
@@ -3290,12 +3285,13 @@ fn display_item_name(
                             is_wrap(name.len()),
                         ));
                     } else {
-                        // For problematic absolute paths, use basic coloring
-                        name.push(color_name(
+                        // Target doesn't exist (dangling symlink), use special coloring
+                        name.push(color_name_with_dangling_hint(
                             locale_aware_escape_name(target_path.as_os_str(), config.quoting_style),
                             path,
                             style_manager,
                             None,
+                            true, // target_is_dangling = true
                             is_wrap(name.len()),
                         ));
                     }
