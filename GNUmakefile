@@ -232,7 +232,7 @@ ifneq ($(OS),Windows_NT)
 endif
 
 UTILS ?= $(filter-out $(SKIP_UTILS),$(PROGS))
-HASHSUM_PROGS ?= $(filter-out $(SKIP_UTILS),$(HASHSUM_PROGS))
+HASHSUM_PROGS := $(filter-out $(SKIP_UTILS),$(HASHSUM_PROGS))
 
 ifneq ($(findstring stdbuf,$(UTILS)),)
     # Use external libstdbuf per default. It is more robust than embedding libstdbuf.
