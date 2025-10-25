@@ -14,13 +14,11 @@ use filetime::{FileTime, set_file_times};
 use selinux::SecurityContext;
 use std::ffi::OsString;
 use std::fmt::Debug;
-use std::fs::File;
 use std::fs::{self, metadata};
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process;
 use thiserror::Error;
 use uucore::backup_control::{self, BackupMode};
-use uucore::buf_copy::copy_stream;
 use uucore::display::Quotable;
 #[cfg(unix)]
 use uucore::entries::{grp2gid, usr2uid};
@@ -37,12 +35,15 @@ use uucore::selinux::{
     selinux_error_description, set_selinux_security_context,
 };
 use uucore::translate;
-use uucore::{format_usage, show, show_error, show_if_err};
+use uucore::{format_usage, os_str_from_bytes, show, show_error, show_if_err};
+
+#[cfg(unix)]
+use std::fs::File;
+#[cfg(unix)]
+use uucore::buf_copy::copy_stream;
 
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
-#[cfg(unix)]
-use std::os::unix::prelude::OsStrExt;
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
@@ -662,9 +663,13 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     while trimmed_bytes.ends_with(b"/") {
                         trimmed_bytes = &trimmed_bytes[..trimmed_bytes.len() - 1];
                     }
-                    let trimmed_os_str = std::ffi::OsStr::from_bytes(trimmed_bytes);
-                    to_create_owned = PathBuf::from(trimmed_os_str);
-                    to_create_owned.as_path()
+                    match os_str_from_bytes(trimmed_bytes) {
+                        Ok(trimmed_os_str) => {
+                            to_create_owned = PathBuf::from(trimmed_os_str.as_ref());
+                            to_create_owned.as_path()
+                        }
+                        Err(_) => to_create,
+                    }
                 }
                 _ => to_create,
             };
@@ -905,22 +910,31 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         }
     }
 
-    let ft = match metadata(from) {
-        Ok(ft) => ft.file_type(),
-        Err(err) => {
-            return Err(
-                InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into(),
-            );
-        }
-    };
-
-    // Stream-based copying to get around the limitations of std::fs::copy
     #[cfg(unix)]
-    if ft.is_char_device() || ft.is_block_device() || ft.is_fifo() {
-        let mut handle = File::open(from)?;
-        let mut dest = File::create(to)?;
-        copy_stream(&mut handle, &mut dest)?;
-        return Ok(());
+    {
+        let file_type = match metadata(from) {
+            Ok(meta) => meta.file_type(),
+            Err(err) => {
+                return Err(
+                    InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into(),
+                );
+            }
+        };
+
+        // Stream-based copying to get around the limitations of std::fs::copy
+        if file_type.is_char_device() || file_type.is_block_device() || file_type.is_fifo() {
+            let mut handle = File::open(from)?;
+            let mut dest = File::create(to)?;
+            copy_stream(&mut handle, &mut dest)?;
+            return Ok(());
+        }
+    }
+
+    #[cfg(not(unix))]
+    if let Err(err) = metadata(from) {
+        return Err(
+            InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into(),
+        );
     }
 
     copy_normal_file(from, to)?;
@@ -1102,6 +1116,7 @@ fn should_set_selinux_context(b: &Behavior) -> bool {
 
 /// Check if a file needs to be copied due to ownership differences when no explicit group is specified.
 /// Returns true if the destination file's ownership would differ from what it should be after installation.
+#[cfg(unix)]
 fn needs_copy_for_ownership(to: &Path, to_meta: &fs::Metadata) -> bool {
     use std::os::unix::fs::MetadataExt;
 
