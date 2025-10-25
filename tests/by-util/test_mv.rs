@@ -1434,7 +1434,21 @@ fn test_mv_overwrite_nonempty_dir_error() {
     let dir_b = "test_mv_overwrite_nonempty_dir_error_b";
     let shared_dir = "dir";
     let dummy_dir_a = &format!("{dir_a}/{shared_dir}");
-    let dummy_dir_b = &format!("{dir_b}/{shared_dir}");
+
+    let dummy_dir_b = {
+        // for Windows OS which uses back slash for paths on
+        // err msg
+        #[cfg(not(unix))]
+        {
+            &format!("{dir_b}\\{shared_dir}")
+        }
+        // for Unix OS which uses forward slash for paths on
+        // err msg
+        #[cfg(unix)]
+        {
+            &format!("{dir_b}/{shared_dir}")
+        }
+    };
     let dummy_file = &format!("{dir_b}/{shared_dir}/file");
 
     at.mkdir(dir_a);
