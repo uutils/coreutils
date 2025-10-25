@@ -361,13 +361,15 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     let specified_mode: Option<u32> = if matches.contains_id(OPT_MODE) {
         let x = matches.get_one::<String>(OPT_MODE).ok_or(1)?;
-        Some(mode::parse(x, considering_dir, platform_umask()).map_err(|err| {
-            show_error!(
-                "{}",
-                translate!("install-error-invalid-mode", "error" => err)
-            );
-            1
-        })?)
+        Some(
+            mode::parse(x, considering_dir, platform_umask()).map_err(|err| {
+                show_error!(
+                    "{}",
+                    translate!("install-error-invalid-mode", "error" => err)
+                );
+                1
+            })?,
+        )
     } else {
         None
     };
