@@ -9,11 +9,24 @@ use uucore::mode;
 use uucore::translate;
 
 /// Takes a user-supplied string and tries to parse to u16 mode bitmask.
+#[cfg(not(windows))]
 pub fn parse(mode_string: &str, considering_dir: bool, umask: u32) -> Result<u32, String> {
     if mode_string.chars().any(|c| c.is_ascii_digit()) {
         mode::parse_numeric(0, mode_string, considering_dir)
     } else {
         mode::parse_symbolic(0, mode_string, umask, considering_dir)
+    }
+}
+
+#[cfg(windows)]
+pub fn parse(mode_string: &str, _considering_dir: bool, _umask: u32) -> Result<u32, String> {
+    if mode_string.chars().all(|c| c.is_ascii_digit()) {
+        u32::from_str_radix(mode_string, 8)
+            .map_err(|_| format!("invalid numeric mode '{mode_string}'"))
+    } else {
+        Err(format!(
+            "symbolic modes like '{mode_string}' are not supported on Windows"
+        ))
     }
 }
 

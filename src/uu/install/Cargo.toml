@@ -27,15 +27,19 @@ uucore = { workspace = true, default-features = true, features = [
   "backup-control",
   "buf-copy",
   "fs",
-  "mode",
-  "perms",
-  "entries",
-  "process",
 ] }
 fluent = { workspace = true }
 
 [features]
 selinux = ["dep:selinux", "uucore/selinux"]
+
+[target.'cfg(unix)'.dependencies]
+uucore = { workspace = true, default-features = true, features = [
+  "mode",
+  "perms",
+  "entries",
+  "process",
+] }
 
 [[bin]]
 name = "install"
