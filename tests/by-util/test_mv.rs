@@ -1428,6 +1428,32 @@ fn test_mv_overwrite_nonempty_dir() {
 }
 
 #[test]
+fn test_mv_overwrite_nonempty_dir_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir_a = "test_mv_overwrite_nonempty_dir_error_a";
+    let dir_b = "test_mv_overwrite_nonempty_dir_error_b";
+    let shared_dir = "dir";
+    let dummy_dir_a = &format!("{dir_a}/{shared_dir}");
+    let dummy_dir_b = &format!("{dir_b}/{shared_dir}");
+    let dummy_file = &format!("{dir_b}/{shared_dir}/file");
+
+    at.mkdir(dir_a);
+    at.mkdir(dummy_dir_a);
+    at.mkdir(dir_b);
+    at.mkdir(dummy_dir_b);
+    at.touch(dummy_file);
+
+    // Not same error as GNU; the error message is a rust builtin as mentioned in
+    // https://github.com/uutils/coreutils/issues/5102
+    // Current: "mv: cannot overwrite: A non-empty directory: 'b' exists at destination"
+    // GNU:     "mv: cannot overwrite 'b': Directory not empty"
+
+    let result = ucmd.arg(dummy_dir_a).arg(dir_b).fails().stderr_is(format!(
+        "mv: cannot overwrite: A non-empty directory: '{dummy_dir_b}' exists at destination\n"
+    ));
+}
+
+#[test]
 fn test_mv_backup_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir_a = "test_mv_backup_dir_dir_a";
