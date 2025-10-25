@@ -466,3 +466,25 @@ fn test_selinux_invalid() {
     // invalid context, so, no directory
     assert!(!at.dir_exists(dest));
 }
+
+#[test]
+fn test_mkdir_deep_nesting() {
+    // Regression test for stack overflow with deeply nested directories.
+    // The iterative implementation should handle arbitrary depth without stack overflow.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a path with 350 levels of nesting
+    let depth = 350;
+    let dir_name = "d";
+    let mut path = std::path::PathBuf::new();
+    for _ in 0..depth {
+        path.push(dir_name);
+    }
+
+    // This should succeed without stack overflow
+    scene.ucmd().arg("-p").arg(&path).succeeds();
+
+    // Verify the deepest directory exists
+    assert!(at.dir_exists(&path));
+}

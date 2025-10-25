@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ugoa cmode
+// spell-checker:ignore (ToDO) ugoa cmode dotdot
 
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
@@ -216,10 +216,9 @@ fn chmod(_path: &Path, _mode: u32) -> UResult<()> {
     Ok(())
 }
 
-// Return true if the directory at `path` has been created by this call.
-// `is_parent` argument is not used on windows
-#[allow(unused_variables)]
-fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
+// Create a directory at the given path.
+// Uses iterative approach instead of recursion to avoid stack overflow with deep nesting.
+fn create_dir(path: &Path, _is_parent: bool, config: &Config) -> UResult<()> {
     let path_exists = path.exists();
     if path_exists && !config.recursive {
         return Err(USimpleError::new(
@@ -231,14 +230,47 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
         return Ok(());
     }
 
+    // Iterative implementation: collect all directories to create, then create them
+    // This avoids stack overflow with deeply nested directories
     if config.recursive {
-        match path.parent() {
-            Some(p) => create_dir(p, true, config)?,
-            None => {
-                USimpleError::new(1, translate!("mkdir-error-failed-to-create-tree"));
+        // Collect all parent directories that need to be created
+        let mut dirs_to_create = Vec::new();
+        let mut current = path;
+
+        // Walk up the tree collecting non-existent directories
+        while let Some(parent) = current.parent() {
+            if parent == Path::new("") {
+                break;
             }
+            // Only check exists() for paths without ".." to avoid false positives
+            // ("test_dir/.." may return true even when the logical parent doesn't exist)
+            let has_dotdot = parent.components().any(|c| c.as_os_str() == "..");
+
+            if !has_dotdot && parent.exists() {
+                break;
+            }
+            dirs_to_create.push(parent);
+            current = parent;
+        }
+
+        // Reverse to create from root to leaf
+        dirs_to_create.reverse();
+
+        // Create each parent directory
+        for dir in dirs_to_create {
+            create_single_dir(dir, true, config)?;
         }
     }
+
+    // Create the target directory
+    create_single_dir(path, _is_parent, config)
+}
+
+// Helper function to create a single directory with appropriate permissions
+// `is_parent` argument is not used on windows
+fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
+    #[cfg(unix)]
+    let path_exists = path.exists();
 
     match std::fs::create_dir(path) {
         Ok(()) => {
@@ -264,7 +296,9 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
                 }
             };
             #[cfg(all(unix, not(target_os = "linux")))]
-            let new_mode = if is_parent {
+            let new_mode = if path_exists {
+                config.mode
+            } else if is_parent {
                 (!mode::get_umask() & 0o777) | 0o300
             } else {
                 config.mode
@@ -287,7 +321,23 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
             Ok(())
         }
 
-        Err(_) if path.is_dir() => Ok(()),
+        Err(_) if path.is_dir() => {
+            // Directory already exists - still need to print verbose message if requested
+            // in recursive mode, but only for logical directory names, not parent references
+            // (i.e., paths ending in ".." like "test_dir/.." shouldn't print)
+            let ends_with_dotdot = matches!(
+                path.components().next_back(),
+                Some(std::path::Component::ParentDir)
+            );
+
+            if config.verbose && is_parent && config.recursive && !ends_with_dotdot {
+                println!(
+                    "{}",
+                    translate!("mkdir-verbose-created-directory", "util_name" => uucore::util_name(), "path" => path.quote())
+                );
+            }
+            Ok(())
+        }
         Err(e) => Err(e.into()),
     }
 }
