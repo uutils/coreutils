@@ -232,27 +232,24 @@ pub fn safe_remove_dir_recursive(
     if error {
         error
     } else {
-        // Ask user permission if needed
-        if options.interactive == InteractiveMode::Always && !prompt_dir(path, options) {
+        // Ask user permission if needed.
+        //
+        // Before trying to remove the directory, check if it's actually empty.
+        // This handles the case where some children weren't removed due to user "no" responses.
+        // In interactive mode, this might be expected if user said "no" to some children.
+        // In non-interactive mode, this indicates an error (some children couldn't be removed).
+        if options.interactive == InteractiveMode::Always
+            && (!prompt_dir(path, options) || !is_dir_empty(path))
+        {
             return false;
         }
 
-        // Before trying to remove the directory, check if it's actually empty
-        // This handles the case where some children weren't removed due to user "no" responses
-        if !is_dir_empty(path) {
-            // Directory is not empty, so we can't/shouldn't remove it
-            // In interactive mode, this might be expected if user said "no" to some children
-            // In non-interactive mode, this indicates an error (some children couldn't be removed)
-            if options.interactive == InteractiveMode::Always {
-                return false;
-            }
-            // Try to remove the directory anyway and let the system tell us why it failed
-            // Use false for error_occurred since this is the main error we want to report
-            return remove_dir_with_special_cases(path, options, false);
-        }
-
-        // Directory is empty and user approved removal
-        remove_dir_with_special_cases(path, options, error)
+        // Either:
+        // 1. Directory is empty and user approved removal.
+        // 2. We are in interactive mode, so try to remove the directory anyway and let the system
+        //    tell us why it failed.
+        //    Use false for error_occurred since this is the main error we want to report.
+        remove_dir_with_special_cases(path, options, false)
     }
 }
 
@@ -281,7 +278,7 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
         let entry_stat = match dir_fd.stat_at(&entry_name, false) {
             Ok(stat) => stat,
             Err(e) => {
-                error = handle_error_with_force(e, &entry_path, options);
+                error |= handle_error_with_force(e, &entry_path, options);
                 continue;
             }
         };
@@ -305,21 +302,21 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
                     // If we can't open the subdirectory for safe traversal,
                     // try to handle it as best we can with safe operations
                     if e.kind() == std::io::ErrorKind::PermissionDenied {
-                        error = handle_permission_denied(
+                        error |= handle_permission_denied(
                             dir_fd,
                             entry_name.as_ref(),
                             &entry_path,
                             options,
                         );
                     } else {
-                        error = handle_error_with_force(e, &entry_path, options);
+                        error |= handle_error_with_force(e, &entry_path, options);
                     }
                     continue;
                 }
             };
 
             let child_error = safe_remove_dir_recursive_impl(&entry_path, &child_dir_fd, options);
-            error = error || child_error;
+            error |= child_error;
 
             // Ask user permission if needed for this subdirectory
             if !child_error
@@ -331,12 +328,12 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
 
             // Remove the now-empty subdirectory using safe unlinkat
             if !child_error {
-                error = handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, true, options);
+                error |= handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, true, options);
             }
         } else {
             // Remove file - check if user wants to remove it first
             if prompt_file(&entry_path, options) {
-                error = handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, false, options);
+                error |= handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, false, options);
             }
         }
     }

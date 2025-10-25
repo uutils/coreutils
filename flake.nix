@@ -44,6 +44,7 @@
           gperf
           gettext
           texinfo
+          perl
         ];
       in {
         default = pkgsFor.${system}.pkgs.mkShell {
