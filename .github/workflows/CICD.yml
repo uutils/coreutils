@@ -271,10 +271,10 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
-    - name: Install/setup prerequisites
+    - name: Install/setup prerequisites (no libselinux)
       shell: bash
       run: |
-        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
+        sudo apt-get -y update
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: "`make build`"
@@ -303,6 +303,8 @@ jobs:
       run: |
         set -x
         DESTDIR=/tmp/ make PROFILE=release COMPLETIONS=n MANPAGES=n install
+        # Check that SELinux progs are missing
+        ! test -f /tmp/usr/local/bin/chcon
         # Check that the utils are present
         test -f /tmp/usr/local/bin/tty
         # Check that the manpage is not present
