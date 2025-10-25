@@ -8,6 +8,16 @@
 //! This module provides test utilities and integration tests to verify that
 //! utilities properly handle signal interruptions during I/O operations.
 //!
+//! # CI Integration
+//! EINTR handling tests are NOW visible in CI logs through integration tests:
+//! - `test_cat_eintr_handling` in `tests/by-util/test_cat.rs`
+//! - `test_comm_eintr_handling` in `tests/by-util/test_comm.rs`  
+//! - `test_od_eintr_handling` in `tests/by-util/test_od.rs`
+//! 
+//! These integration tests use the mock utilities from this module to verify
+//! that each utility properly handles signal interruptions during I/O operations.
+//! Test results appear in CI logs under the "Test" steps when running `cargo nextest run`.
+//!
 //! # Note
 //! EINTR is a POSIX error code for interrupted system calls
 //! cspell:ignore EINTR worl
