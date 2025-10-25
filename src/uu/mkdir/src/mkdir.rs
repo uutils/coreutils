@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ugoa cmode
+// spell-checker:ignore (ToDO) ugoa cmode dotdot
 
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
@@ -218,9 +218,7 @@ fn chmod(_path: &Path, _mode: u32) -> UResult<()> {
 
 // Create a directory at the given path.
 // Uses iterative approach instead of recursion to avoid stack overflow with deep nesting.
-// `is_parent` argument is not used on windows
-#[allow(unused_variables)]
-fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
+fn create_dir(path: &Path, _is_parent: bool, config: &Config) -> UResult<()> {
     let path_exists = path.exists();
     if path_exists && !config.recursive {
         return Err(USimpleError::new(
@@ -246,12 +244,7 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
             }
             // Only check exists() for paths without ".." to avoid false positives
             // ("test_dir/.." may return true even when the logical parent doesn't exist)
-            // Use as_os_str() to avoid string allocation which can use stack space
-            let has_dotdot = parent
-                .as_os_str()
-                .as_encoded_bytes()
-                .windows(2)
-                .any(|w| w == b"..");
+            let has_dotdot = parent.components().any(|c| c.as_os_str() == "..");
 
             if !has_dotdot && parent.exists() {
                 break;
@@ -270,12 +263,13 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
     }
 
     // Create the target directory
-    create_single_dir(path, is_parent, config)
+    create_single_dir(path, _is_parent, config)
 }
 
 // Helper function to create a single directory with appropriate permissions
-#[allow(unused_variables)]
+// `is_parent` argument is not used on windows
 fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
+    #[cfg(unix)]
     let path_exists = path.exists();
 
     match std::fs::create_dir(path) {
@@ -302,7 +296,9 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
                 }
             };
             #[cfg(all(unix, not(target_os = "linux")))]
-            let new_mode = if is_parent {
+            let new_mode = if path_exists {
+                config.mode
+            } else if is_parent {
                 (!mode::get_umask() & 0o777) | 0o300
             } else {
                 config.mode
@@ -329,11 +325,10 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
             // Directory already exists - still need to print verbose message if requested
             // in recursive mode, but only for logical directory names, not parent references
             // (i.e., paths ending in ".." like "test_dir/.." shouldn't print)
-            let ends_with_dotdot = path
-                .components()
-                .next_back()
-                .map(|c| matches!(c, std::path::Component::ParentDir))
-                .unwrap_or(false);
+            let ends_with_dotdot = matches!(
+                path.components().next_back(),
+                Some(std::path::Component::ParentDir)
+            );
 
             if config.verbose && is_parent && config.recursive && !ends_with_dotdot {
                 println!(

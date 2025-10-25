@@ -441,12 +441,9 @@ fn test_mkdir_deep_nesting() {
     // Create a path with 350 levels of nesting
     let depth = 350;
     let dir_name = "d";
-    let mut path = String::new();
-    for i in 0..depth {
-        if i > 0 {
-            path.push('/');
-        }
-        path.push_str(dir_name);
+    let mut path = std::path::PathBuf::new();
+    for _ in 0..depth {
+        path.push(dir_name);
     }
 
     // This should succeed without stack overflow
