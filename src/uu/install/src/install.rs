@@ -17,6 +17,7 @@ use std::ffi::OsString;
 use std::fmt::Debug;
 use std::fs::{self, metadata};
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
+#[cfg(not(windows))]
 use std::process;
 use thiserror::Error;
 use uucore::backup_control::{self, BackupMode};
