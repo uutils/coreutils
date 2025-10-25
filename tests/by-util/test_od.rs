@@ -999,14 +999,14 @@ fn test_od_eintr_handling() {
     // This verifies the signal interruption retry logic in PartialReader implementation
     use std::io::{Error, ErrorKind, Read};
     use std::sync::{Arc, Mutex};
-    
+
     let file = "test_eintr";
     let (at, mut ucmd) = at_and_ucmd!();
-    
+
     // Create test data
     let test_data = [0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x0a]; // "Hello\n"
     at.write_bytes(file, &test_data);
-    
+
     // Test that od can handle interrupted reads during file processing
     // The EINTR handling in PartialReader should retry and complete successfully
     ucmd.arg(file)
@@ -1015,7 +1015,7 @@ fn test_od_eintr_handling() {
         .succeeds()
         .no_stderr()
         .stdout_contains("H"); // Should contain 'H' from "Hello"
-    
+
     // Test with skip and offset options to exercise different code paths
     ucmd.arg(file)
         .arg("-j")

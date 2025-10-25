@@ -144,7 +144,7 @@ pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
                 result => break result?,
             }
         };
-        
+
         // Read from second file with EINTR retry handling
         // Same retry logic as above for the second file to ensure consistent behavior
         let bytes2 = loop {
