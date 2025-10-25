@@ -8,11 +8,11 @@
 mod mode;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use std::borrow::Cow;
 use file_diff::diff;
 use filetime::{FileTime, set_file_times};
 #[cfg(feature = "selinux")]
 use selinux::SecurityContext;
+use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fmt::Debug;
 use std::fs::{self, metadata};
@@ -44,9 +44,11 @@ use std::fs::File;
 use uucore::buf_copy::copy_stream;
 
 #[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
+#[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::prelude::OsStrExt;
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
@@ -938,9 +940,7 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
 
     #[cfg(not(unix))]
     if let Err(err) = metadata(from) {
-        return Err(
-            InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into(),
-        );
+        return Err(InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into());
     }
 
     copy_normal_file(from, to)?;

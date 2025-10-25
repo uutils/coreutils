@@ -22,9 +22,9 @@ use uucore::process::{getegid, geteuid};
 use uucore::selinux::get_getfattr_output;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-use uutests::util::{TestScenario, is_ci};
 #[cfg(unix)]
 use uutests::util::run_ucmd_as_root;
+use uutests::util::{TestScenario, is_ci};
 use uutests::util_name;
 
 #[test]
@@ -1898,10 +1898,7 @@ fn test_install_compare_basic() {
         .no_stdout();
 }
 
-#[cfg(all(
-    unix,
-    not(any(target_os = "openbsd", target_os = "freebsd"))
-))]
+#[cfg(all(unix, not(any(target_os = "openbsd", target_os = "freebsd"))))]
 #[test]
 fn test_install_compare_special_mode_bits() {
     let scene = TestScenario::new(util_name!());
@@ -2192,13 +2189,10 @@ fn test_install_same_file() {
     let file = "file";
 
     at.touch(file);
-    ucmd.arg(file)
-        .arg(".")
-        .fails()
-        .stderr_contains(format!(
-            "'file' and '.{sep}file' are the same file",
-            sep = MAIN_SEPARATOR
-        ));
+    ucmd.arg(file).arg(".").fails().stderr_contains(format!(
+        "'file' and '.{sep}file' are the same file",
+        sep = MAIN_SEPARATOR
+    ));
 }
 
 #[cfg(unix)]
