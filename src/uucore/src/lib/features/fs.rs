@@ -28,6 +28,8 @@ use std::io::{Error, ErrorKind, Result as IOResult};
 use std::os::fd::AsFd;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
+#[cfg(target_os = "windows")]
+use std::path::Prefix;
 use std::path::{Component, MAIN_SEPARATOR, Path, PathBuf};
 #[cfg(target_os = "windows")]
 use winapi_util::AsHandleRef;
@@ -549,6 +551,72 @@ pub fn dir_strip_dot_for_creation(path: &Path) -> PathBuf {
     }
 }
 
+/// Convert a path to its Windows extended-length (`\\?\`) representation.
+///
+/// Windows APIs that bypass the legacy `MAX_PATH` limit expect absolute verbatim
+/// paths prefixed with `\\?\` (or `\\?\UNC\` for network shares).  This helper
+/// mirrors the logic used by the standard library to detect existing verbatim
+/// prefixes and, when missing, expands relative inputs against the current
+/// directory before prepending the appropriate prefix.
+///
+/// Platforms other than Windows simply return the path unchanged.
+pub fn to_windows_extended_path<P: AsRef<Path>>(path: P) -> IOResult<PathBuf> {
+    let path = path.as_ref();
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::ffi::OsString;
+
+        if path.as_os_str().is_empty() {
+            return Ok(PathBuf::new());
+        }
+
+        let absolute = if path.is_relative() {
+            env::current_dir()?.join(path)
+        } else {
+            path.to_path_buf()
+        };
+
+        let mut components = absolute.components();
+        let Some(prefix_component) = components.next() else {
+            return Ok(absolute);
+        };
+
+        let Component::Prefix(prefix_component) = prefix_component else {
+            return Ok(absolute);
+        };
+
+        match prefix_component.kind() {
+            Prefix::Verbatim(_)
+            | Prefix::VerbatimUNC(_, _)
+            | Prefix::VerbatimDisk(_)
+            | Prefix::DeviceNS(_) => Ok(absolute),
+            Prefix::Disk(_) => {
+                let mut result = OsString::from(r"\\?\");
+                result.push(absolute.as_os_str());
+                Ok(PathBuf::from(result))
+            }
+            Prefix::UNC(server, share) => {
+                let mut result = OsString::from(r"\\?\UNC\");
+                result.push(server);
+                result.push(r"\");
+                result.push(share);
+
+                let rest = components.as_path();
+                if !rest.as_os_str().is_empty() {
+                    result.push(rest.as_os_str());
+                }
+                Ok(PathBuf::from(result))
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(path.to_path_buf())
+    }
+}
+
 /// Checks if `p1` and `p2` are the same file.
 /// If error happens when trying to get files' metadata, returns false
 pub fn paths_refer_to_same_file<P: AsRef<Path>>(p1: P, p2: P, dereference: bool) -> bool {
@@ -849,6 +917,41 @@ mod tests {
     use std::os::unix::fs::FileTypeExt;
     #[cfg(unix)]
     use tempfile::{NamedTempFile, tempdir};
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_to_windows_extended_path_relative() {
+        use std::ffi::OsString;
+
+        let relative = Path::new("nested\\dir");
+        let absolute = env::current_dir().unwrap().join(relative);
+
+        let mut expected = OsString::from(r"\\?\");
+        expected.push(absolute.as_os_str());
+
+        assert_eq!(
+            PathBuf::from(expected),
+            to_windows_extended_path(relative).unwrap()
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_to_windows_extended_path_keeps_verbatim() {
+        let verbatim = Path::new(r"\\?\C:\data\path");
+        assert_eq!(
+            PathBuf::from(verbatim),
+            to_windows_extended_path(verbatim).unwrap()
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_to_windows_extended_path_unc() {
+        let unc = Path::new(r"\\server\share\folder");
+        let expected = PathBuf::from(r"\\?\UNC\server\share\folder");
+        assert_eq!(expected, to_windows_extended_path(unc).unwrap());
+    }
 
     struct NormalizePathTestCase<'a> {
         path: &'a str,

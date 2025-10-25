@@ -25,6 +25,8 @@ use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::fs::dir_strip_dot_for_creation;
+#[cfg(target_os = "windows")]
+use uucore::fs::to_windows_extended_path;
 use uucore::mode::get_umask;
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 use uucore::process::{getegid, geteuid};
@@ -146,6 +148,17 @@ impl Behavior {
     pub fn mode(&self) -> u32 {
         self.specified_mode.unwrap_or(DEFAULT_MODE)
     }
+}
+
+#[cfg(target_os = "windows")]
+fn create_dir_all_with_long_path(path: &Path) -> std::io::Result<()> {
+    let path = to_windows_extended_path(path)?;
+    fs::create_dir_all(path)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn create_dir_all_with_long_path(path: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(path)
 }
 
 static OPT_COMPARE: &str = "compare";
@@ -471,7 +484,7 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                 // target directory. All created ancestor directories will have
                 // the default mode. Hence it is safe to use fs::create_dir_all
                 // and then only modify the target's dir mode.
-                if let Err(e) = fs::create_dir_all(path_to_create.as_path())
+                if let Err(e) = create_dir_all_with_long_path(path_to_create.as_path())
                     .map_err_context(|| path_to_create.as_path().maybe_quote().to_string())
                 {
                     show!(e);
@@ -623,7 +636,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     }
                 }
 
-                if let Err(e) = fs::create_dir_all(to_create) {
+                if let Err(e) = create_dir_all_with_long_path(to_create) {
                     return Err(InstallError::CreateDirFailed(to_create.to_path_buf(), e).into());
                 }
 
