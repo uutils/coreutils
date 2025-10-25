@@ -83,6 +83,7 @@ enum InstallError {
     #[error("{}", translate!("install-error-chmod-failed", "path" => .0.quote()))]
     ChmodFailed(PathBuf),
 
+    #[cfg(unix)]
     #[error("{}", translate!("install-error-chown-failed", "path" => .0.quote(), "error" => .1.clone()))]
     ChownFailed(PathBuf, String),
 
@@ -98,15 +99,18 @@ enum InstallError {
     #[error("{}", translate!("install-error-install-failed", "from" => .0.to_string_lossy(), "to" => .1.to_string_lossy()))]
     InstallFailed(PathBuf, PathBuf, #[source] std::io::Error),
 
+    #[cfg(not(windows))]
     #[error("{}", translate!("install-error-strip-failed", "error" => .0.clone()))]
     StripProgramFailed(String),
 
     #[error("{}", translate!("install-error-metadata-failed"))]
     MetadataFailed(#[source] std::io::Error),
 
+    #[cfg(unix)]
     #[error("{}", translate!("install-error-invalid-user", "user" => .0.quote()))]
     InvalidUser(String),
 
+    #[cfg(unix)]
     #[error("{}", translate!("install-error-invalid-group", "group" => .0.quote()))]
     InvalidGroup(String),
 
@@ -937,6 +941,7 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     Ok(())
 }
 
+#[cfg(not(windows))]
 /// Strip a file using an external program.
 ///
 /// # Parameters
@@ -1122,11 +1127,6 @@ fn needs_copy_for_ownership(to: &Path, to_meta: &fs::Metadata) -> bool {
         .map_or(getegid(), |parent_meta| parent_meta.gid());
 
     to_meta.gid() != expected_gid
-}
-
-#[cfg(not(unix))]
-fn needs_copy_for_ownership(_to: &Path, _to_meta: &fs::Metadata) -> bool {
-    false
 }
 
 /// Return true if a file is necessary to copy. This is the case when:
