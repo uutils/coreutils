@@ -1633,7 +1633,7 @@ fn test_install_dir_dot() {
         .arg("dir5/./cali/.")
         .arg("-v")
         .succeeds()
-        .stdout_contains(&format!("creating directory 'dir5{MAIN_SEPARATOR}cali'"));
+        .stdout_contains(format!("creating directory 'dir5{MAIN_SEPARATOR}cali'"));
     scene
         .ucmd()
         .arg("-d")
@@ -1665,13 +1665,13 @@ fn test_install_dir_req_verbose() {
         .arg("sub3/a/b/c/file")
         .succeeds();
     result_sub3.stdout_contains("install: creating directory 'sub3'");
-    result_sub3.stdout_contains(&format!(
+    result_sub3.stdout_contains(format!(
         "install: creating directory 'sub3{MAIN_SEPARATOR}a'"
     ));
-    result_sub3.stdout_contains(&format!(
+    result_sub3.stdout_contains(format!(
         "install: creating directory 'sub3{MAIN_SEPARATOR}a{MAIN_SEPARATOR}b'"
     ));
-    result_sub3.stdout_contains(&format!(
+    result_sub3.stdout_contains(format!(
         "install: creating directory 'sub3{MAIN_SEPARATOR}a{MAIN_SEPARATOR}b{MAIN_SEPARATOR}c'"
     ));
     result_sub3.stdout_contains("'source_file1' -> 'sub3/a/b/c/file'");
@@ -1684,7 +1684,7 @@ fn test_install_dir_req_verbose() {
         .arg(file_1)
         .succeeds();
     result_sub4.stdout_contains("install: creating directory 'sub4'");
-    result_sub4.stdout_contains(&format!(
+    result_sub4.stdout_contains(format!(
         "install: creating directory 'sub4{MAIN_SEPARATOR}a'"
     ));
     result_sub4.stdout_contains("'source_file1' -> 'sub4/a");
@@ -1696,13 +1696,13 @@ fn test_install_dir_req_verbose() {
         .arg(file_1)
         .arg("sub5/a/b/c/file")
         .succeeds();
-    result_sub5.stdout_contains(&format!(
+    result_sub5.stdout_contains(format!(
         "install: creating directory 'sub5{MAIN_SEPARATOR}a'"
     ));
-    result_sub5.stdout_contains(&format!(
+    result_sub5.stdout_contains(format!(
         "install: creating directory 'sub5{MAIN_SEPARATOR}a{MAIN_SEPARATOR}b'"
     ));
-    result_sub5.stdout_contains(&format!(
+    result_sub5.stdout_contains(format!(
         "install: creating directory 'sub5{MAIN_SEPARATOR}a{MAIN_SEPARATOR}b{MAIN_SEPARATOR}c'"
     ));
     result_sub5.stdout_contains("'source_file1' -> 'sub5/a/b/c/file'");
@@ -2179,7 +2179,7 @@ fn test_install_same_file() {
     let file = "file";
 
     at.touch(file);
-    ucmd.arg(file).arg(".").fails().stderr_contains(&format!(
+    ucmd.arg(file).arg(".").fails().stderr_contains(format!(
         "'file' and '.{MAIN_SEPARATOR}file' are the same file"
     ));
 }
