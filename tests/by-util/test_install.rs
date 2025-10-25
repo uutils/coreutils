@@ -11,6 +11,7 @@ use std::fs;
 use std::os::unix::ffi::OsStringExt;
 #[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
+use std::path::MAIN_SEPARATOR;
 #[cfg(not(windows))]
 use std::process::Command;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -333,7 +334,7 @@ fn test_install_mode_failing() {
         .arg(dir)
         .arg(mode_arg)
         .fails()
-        .stderr_contains("Invalid mode string: invalid digit found in string");
+        .stderr_contains("Invalid mode string");
 
     let dest_file = &format!("{dir}/{file}");
     assert!(at.file_exists(file));
@@ -1630,7 +1631,10 @@ fn test_install_dir_dot() {
         .arg("dir5/./cali/.")
         .arg("-v")
         .succeeds()
-        .stdout_contains("creating directory 'dir5/cali'");
+        .stdout_contains(format!(
+            "creating directory 'dir5{sep}cali'",
+            sep = MAIN_SEPARATOR
+        ));
     scene
         .ucmd()
         .arg("-d")
@@ -1656,33 +1660,64 @@ fn test_install_dir_req_verbose() {
 
     let file_1 = "source_file1";
     at.touch(file_1);
-    scene
+    let result_sub3 = scene
         .ucmd()
         .arg("-Dv")
         .arg(file_1)
         .arg("sub3/a/b/c/file")
-        .succeeds()
-        .stdout_contains("install: creating directory 'sub3'\ninstall: creating directory 'sub3/a'\ninstall: creating directory 'sub3/a/b'\ninstall: creating directory 'sub3/a/b/c'\n'source_file1' -> 'sub3/a/b/c/file'");
+        .succeeds();
+    result_sub3.stdout_contains("install: creating directory 'sub3'");
+    result_sub3.stdout_contains(format!(
+        "install: creating directory 'sub3{sep}a'",
+        sep = MAIN_SEPARATOR
+    ));
+    result_sub3.stdout_contains(format!(
+        "install: creating directory 'sub3{sep}a{sep}b'",
+        sep = MAIN_SEPARATOR
+    ));
+    result_sub3.stdout_contains(format!(
+        "install: creating directory 'sub3{sep}a{sep}b{sep}c'",
+        sep = MAIN_SEPARATOR
+    ));
+    result_sub3.stdout_contains("'source_file1' -> 'sub3/a/b/c/file'");
 
-    scene
+    let result_sub4 = scene
         .ucmd()
         .arg("-t")
         .arg("sub4/a")
         .arg("-Dv")
         .arg(file_1)
-        .succeeds()
-        .stdout_contains("install: creating directory 'sub4'\ninstall: creating directory 'sub4/a'\n'source_file1' -> 'sub4/a/source_file1'");
+        .succeeds();
+    result_sub4.stdout_contains("install: creating directory 'sub4'");
+    result_sub4.stdout_contains(format!(
+        "install: creating directory 'sub4{sep}a'",
+        sep = MAIN_SEPARATOR
+    ));
+    result_sub4.stdout_contains("'source_file1' -> 'sub4/a/source_file1'");
 
     at.mkdir("sub5");
-    scene
+    let result_sub5 = scene
         .ucmd()
         .arg("-Dv")
         .arg(file_1)
         .arg("sub5/a/b/c/file")
-        .succeeds()
-        .stdout_contains("install: creating directory 'sub5/a'\ninstall: creating directory 'sub5/a/b'\ninstall: creating directory 'sub5/a/b/c'\n'source_file1' -> 'sub5/a/b/c/file'");
+        .succeeds();
+    result_sub5.stdout_contains(format!(
+        "install: creating directory 'sub5{sep}a'",
+        sep = MAIN_SEPARATOR
+    ));
+    result_sub5.stdout_contains(format!(
+        "install: creating directory 'sub5{sep}a{sep}b'",
+        sep = MAIN_SEPARATOR
+    ));
+    result_sub5.stdout_contains(format!(
+        "install: creating directory 'sub5{sep}a{sep}b{sep}c'",
+        sep = MAIN_SEPARATOR
+    ));
+    result_sub5.stdout_contains("'source_file1' -> 'sub5/a/b/c/file'");
 }
 
+#[cfg(unix)]
 #[test]
 fn test_install_chown_file_invalid() {
     let scene = TestScenario::new(util_name!());
@@ -1732,6 +1767,7 @@ fn test_install_chown_file_invalid() {
         .stderr_contains("install: invalid user: 'test_invalid_user'");
 }
 
+#[cfg(unix)]
 #[test]
 fn test_install_chown_directory_invalid() {
     let scene = TestScenario::new(util_name!());
@@ -1777,8 +1813,8 @@ fn test_install_chown_directory_invalid() {
         .stderr_contains("install: invalid user: 'test_invalid_user'");
 }
 
+#[cfg(all(unix, not(target_os = "openbsd")))]
 #[test]
-#[cfg(not(target_os = "openbsd"))]
 fn test_install_compare_option() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1861,8 +1897,11 @@ fn test_install_compare_basic() {
         .no_stdout();
 }
 
+#[cfg(all(
+    unix,
+    not(any(target_os = "openbsd", target_os = "freebsd"))
+))]
 #[test]
-#[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
 fn test_install_compare_special_mode_bits() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1938,8 +1977,8 @@ fn test_install_compare_special_mode_bits() {
         .no_stdout();
 }
 
+#[cfg(all(unix, not(target_os = "openbsd")))]
 #[test]
-#[cfg(not(target_os = "openbsd"))]
 fn test_install_compare_group_ownership() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2155,9 +2194,13 @@ fn test_install_same_file() {
     ucmd.arg(file)
         .arg(".")
         .fails()
-        .stderr_contains("'file' and './file' are the same file");
+        .stderr_contains(format!(
+            "'file' and '.{sep}file' are the same file",
+            sep = MAIN_SEPARATOR
+        ));
 }
 
+#[cfg(unix)]
 #[test]
 fn test_install_symlink_same_file() {
     let (at, mut ucmd) = at_and_ucmd!();
