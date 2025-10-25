@@ -36,6 +36,7 @@ install-error-strip-abnormal = le processus strip s'est terminé anormalement - 
 install-error-metadata-failed = erreur de métadonnées
 install-error-invalid-user = utilisateur invalide : { $user }
 install-error-invalid-group = groupe invalide : { $group }
+install-error-option-unsupported = l'option { $option } n'est pas prise en charge sur cette plateforme
 install-error-omitting-directory = omission du répertoire { $path }
 install-error-not-a-directory = échec de l'accès à { $path } : N'est pas un répertoire
 install-error-override-directory-failed = impossible d'écraser le répertoire { $dir } avec un non-répertoire { $file }

@@ -22,10 +22,14 @@ use thiserror::Error;
 use uucore::backup_control::{self, BackupMode};
 use uucore::buf_copy::copy_stream;
 use uucore::display::Quotable;
+#[cfg(unix)]
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::fs::dir_strip_dot_for_creation;
+#[cfg(unix)]
+use uucore::mode::get_umask;
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
+#[cfg(unix)]
 use uucore::process::{getegid, geteuid};
 #[cfg(feature = "selinux")]
 use uucore::selinux::{
@@ -146,6 +150,16 @@ impl Behavior {
     pub fn mode(&self) -> u32 {
         self.specified_mode.unwrap_or(DEFAULT_MODE)
     }
+}
+
+#[cfg(unix)]
+fn platform_umask() -> u32 {
+    get_umask()
+}
+
+#[cfg(not(unix))]
+fn platform_umask() -> u32 {
+    0
 }
 
 static OPT_COMPARE: &str = "compare";
@@ -347,7 +361,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     let specified_mode: Option<u32> = if matches.contains_id(OPT_MODE) {
         let x = matches.get_one::<String>(OPT_MODE).ok_or(1)?;
-        Some(uucore::mode::parse(x, considering_dir, 0).map_err(|err| {
+        Some(mode::parse(x, considering_dir, platform_umask()).map_err(|err| {
             show_error!(
                 "{}",
                 translate!("install-error-invalid-mode", "error" => err)
@@ -400,12 +414,29 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         .map_or("", |s| s.as_str())
         .to_string();
 
-    let owner_id = if owner.is_empty() {
-        None
-    } else {
-        match usr2uid(&owner) {
-            Ok(u) => Some(u),
-            Err(_) => return Err(InstallError::InvalidUser(owner.clone()).into()),
+    let owner_id = {
+        #[cfg(unix)]
+        {
+            if owner.is_empty() {
+                None
+            } else {
+                match usr2uid(&owner) {
+                    Ok(u) => Some(u),
+                    Err(_) => return Err(InstallError::InvalidUser(owner.clone()).into()),
+                }
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            if owner.is_empty() {
+                None
+            } else {
+                show_error!(
+                    "{}",
+                    translate!("install-error-option-unsupported", "option" => "--owner")
+                );
+                return Err(1.into());
+            }
         }
     };
 
@@ -414,12 +445,29 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         .map_or("", |s| s.as_str())
         .to_string();
 
-    let group_id = if group.is_empty() {
-        None
-    } else {
-        match grp2gid(&group) {
-            Ok(g) => Some(g),
-            Err(_) => return Err(InstallError::InvalidGroup(group.clone()).into()),
+    let group_id = {
+        #[cfg(unix)]
+        {
+            if group.is_empty() {
+                None
+            } else {
+                match grp2gid(&group) {
+                    Ok(g) => Some(g),
+                    Err(_) => return Err(InstallError::InvalidGroup(group.clone()).into()),
+                }
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            if group.is_empty() {
+                None
+            } else {
+                show_error!(
+                    "{}",
+                    translate!("install-error-option-unsupported", "option" => "--group")
+                );
+                return Err(1.into());
+            }
         }
     };
 
@@ -737,6 +785,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
 /// If the owner or group are invalid or copy system call fails, we print a verbose error and
 /// return an empty error value.
 ///
+#[cfg(unix)]
 fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
     // GNU coreutils doesn't print chown operations during install with verbose flag.
     let verbosity = Verbosity {
@@ -762,6 +811,11 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
         Err(e) => return Err(InstallError::ChownFailed(path.to_path_buf(), e).into()),
     }
 
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn chown_optional_user_group(_path: &Path, _b: &Behavior) -> UResult<()> {
     Ok(())
 }
 
@@ -1067,6 +1121,11 @@ fn needs_copy_for_ownership(to: &Path, to_meta: &fs::Metadata) -> bool {
     to_meta.gid() != expected_gid
 }
 
+#[cfg(not(unix))]
+fn needs_copy_for_ownership(_to: &Path, _to_meta: &fs::Metadata) -> bool {
+    false
+}
+
 /// Return true if a file is necessary to copy. This is the case when:
 ///
 /// - _from_ or _to_ is nonexistent;
@@ -1084,6 +1143,7 @@ fn needs_copy_for_ownership(to: &Path, to_meta: &fs::Metadata) -> bool {
 ///
 /// Crashes the program if a nonexistent owner or group is specified in _b_.
 ///
+#[cfg(unix)]
 fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     // Attempt to retrieve metadata for the source file.
     // If this fails, assume the file needs to be copied.
@@ -1158,6 +1218,37 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     }
 
     // Check if the contents of the source and destination files differ.
+    if !diff(&from.to_string_lossy(), &to.to_string_lossy()) {
+        return true;
+    }
+
+    false
+}
+
+#[cfg(not(unix))]
+fn need_copy(from: &Path, to: &Path, _b: &Behavior) -> bool {
+    let Ok(from_meta) = metadata(from) else {
+        return true;
+    };
+
+    let Ok(to_meta) = metadata(to) else {
+        return true;
+    };
+
+    if let Ok(to_symlink_meta) = fs::symlink_metadata(to) {
+        if to_symlink_meta.file_type().is_symlink() {
+            return true;
+        }
+    }
+
+    if !from_meta.is_file() || !to_meta.is_file() {
+        return true;
+    }
+
+    if from_meta.len() != to_meta.len() {
+        return true;
+    }
+
     if !diff(&from.to_string_lossy(), &to.to_string_lossy()) {
         return true;
     }
