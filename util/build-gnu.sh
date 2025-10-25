@@ -326,7 +326,6 @@ sed -i -e "s/du: invalid -t argument/du: invalid --threshold argument/" -e "s/du
 
 # Remove the extra output check
 sed -i -e "s|Try '\$prog --help' for more information.\\\n||" tests/du/files0-from.pl
-sed -i -e "s|when reading file names from stdin, no file name of\"|-: No such file or directory\n\"|" -e "s| '-' allowed\\\n||" tests/du/files0-from.pl
 sed -i -e "s|-: No such file or directory|cannot access '-': No such file or directory|g" tests/du/files0-from.pl
 
 # Skip the move-dir-while-traversing test - our implementation uses safe traversal with openat()
