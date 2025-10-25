@@ -41,6 +41,48 @@ pub fn get_formatted_time() -> String {
     Local::now().time().format("%H:%M:%S").to_string()
 }
 
+/// Safely get macOS boot time using sysctl command
+///
+/// This function uses the sysctl command-line tool to retrieve the kernel
+/// boot time on macOS, avoiding any unsafe code. It parses the output
+/// of the sysctl command to extract the boot time.
+///
+/// # Returns
+///
+/// Returns Some(time_t) if successful, None if the call fails.
+#[cfg(target_os = "macos")]
+fn get_macos_boot_time_sysctl() -> Option<time_t> {
+    use std::process::Command;
+
+    // Execute sysctl command to get boot time
+    let output = Command::new("sysctl")
+        .arg("-n")
+        .arg("kern.boottime")
+        .output();
+
+    if let Ok(output) = output {
+        if output.status.success() {
+            // Parse output format: { sec = 1729338352, usec = 0 } Wed Oct 19 08:25:52 2025
+            // We need to extract the seconds value from the structured output
+            let stdout = String::from_utf8_lossy(&output.stdout);
+
+            // Extract the seconds from the output
+            // Look for "sec = " pattern
+            if let Some(sec_start) = stdout.find("sec = ") {
+                let sec_part = &stdout[sec_start + 6..];
+                if let Some(sec_end) = sec_part.find(',') {
+                    let sec_str = &sec_part[..sec_end];
+                    if let Ok(boot_time) = sec_str.trim().parse::<i64>() {
+                        return Some(boot_time as time_t);
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
 /// Get the system uptime
 ///
 /// # Arguments
@@ -135,38 +177,11 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
     // This fallback only runs if utmpx failed to provide a boot time.
     #[cfg(target_os = "macos")]
     let derived_boot_time = {
-        use libc::{c_int, c_void, size_t, sysctl, timeval};
-        use std::mem::size_of;
-        use std::ptr;
-
         let mut t = derived_boot_time;
         if t.is_none() {
-            // MIB for kern.boottime - the macOS-specific way to get boot time
-            let mut mib: [c_int; 2] = [libc::CTL_KERN, libc::KERN_BOOTTIME];
-            let mut tv: timeval = timeval {
-                tv_sec: 0,
-                tv_usec: 0,
-            };
-            let mut tv_len: size_t = size_of::<timeval>() as size_t;
-
-            // SAFETY: We're calling sysctl with valid parameters:
-            // - mib is a valid 2-element array for kern.boottime
-            // - tv is a properly initialized timeval struct
-            // - tv_len correctly reflects the size of tv
-            // - All pointers are valid and properly aligned
-            // - We check the return value before using the result
-            let ret = unsafe {
-                sysctl(
-                    mib.as_mut_ptr(),
-                    2u32, // namelen
-                    std::ptr::from_mut::<timeval>(&mut tv) as *mut c_void,
-                    std::ptr::from_mut::<size_t>(&mut tv_len),
-                    ptr::null_mut(),
-                    0,
-                )
-            };
-            if ret == 0 && tv.tv_sec > 0 {
-                t = Some(tv.tv_sec as time_t);
+            // Use a safe wrapper function to get boot time via sysctl
+            if let Some(boot_time) = get_macos_boot_time_sysctl() {
+                t = Some(boot_time);
             }
         }
         t
@@ -446,47 +461,27 @@ mod tests {
     #[test]
     #[cfg(target_os = "macos")]
     fn test_macos_sysctl_boottime_available() {
-        use libc::{c_int, c_void, size_t, sysctl, timeval};
-        use std::mem::size_of;
-        use std::ptr;
+        // Test the safe wrapper function
+        let boot_time = get_macos_boot_time_sysctl();
 
-        // Attempt to get boot time directly via sysctl
-        let mut mib: [c_int; 2] = [libc::CTL_KERN, libc::KERN_BOOTTIME];
-        let mut tv: timeval = timeval {
-            tv_sec: 0,
-            tv_usec: 0,
-        };
-        let mut tv_len: size_t = size_of::<timeval>() as size_t;
+        // Verify the safe wrapper succeeded
+        assert!(
+            boot_time.is_some(),
+            "get_macos_boot_time_sysctl should succeed on macOS"
+        );
 
-        // SAFETY: We're calling sysctl with valid parameters:
-        // - mib is a valid 2-element array for kern.boottime
-        // - tv is a properly initialized timeval struct
-        // - tv_len correctly reflects the size of tv
-        // - We check the return value before using the result
-        let ret = unsafe {
-            sysctl(
-                mib.as_mut_ptr(),
-                2u32,
-                std::ptr::from_mut::<timeval>(&mut tv) as *mut c_void,
-                std::ptr::from_mut::<size_t>(&mut tv_len),
-                ptr::null_mut(),
-                0,
-            )
-        };
-
-        // Verify sysctl succeeded
-        assert_eq!(ret, 0, "sysctl kern.boottime should succeed on macOS");
+        let boot_time = boot_time.unwrap();
 
         // Verify boot time is valid (positive, reasonable value)
-        assert!(tv.tv_sec > 0, "Boot time should be positive");
+        assert!(boot_time > 0, "Boot time should be positive");
 
         // Boot time should be after 2000-01-01 (946684800 seconds since epoch)
-        assert!(tv.tv_sec > 946684800, "Boot time should be after year 2000");
+        assert!(boot_time > 946684800, "Boot time should be after year 2000");
 
         // Boot time should be before current time
         let now = chrono::Local::now().timestamp();
         assert!(
-            (tv.tv_sec as i64) < now,
+            (boot_time as i64) < now,
             "Boot time should be before current time"
         );
     }
