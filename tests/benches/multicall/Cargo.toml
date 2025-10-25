@@ -1,0 +1,21 @@
+[package]
+name = "uu_multicall_benches"
+version = "0.0.0"
+authors = ["uutils developers"]
+description = "Benchmarks for multicall binary performance"
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+name = "uu_multicall_benches"
+path = "lib.rs"
+
+[dev-dependencies]
+criterion = "0.6.0"
+
+[[bench]]
+name = "performance"
+path = "benches/performance.rs"
+harness = false
