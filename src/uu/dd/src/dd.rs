@@ -686,6 +686,62 @@ fn is_sparse(buf: &[u8]) -> bool {
     buf.iter().all(|&e| e == 0u8)
 }
 
+/// Handle O_DIRECT write errors by temporarily removing the flag and retrying.
+/// This follows GNU dd behavior for partial block writes with O_DIRECT.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn handle_o_direct_write(f: &mut File, buf: &[u8], original_error: io::Error) -> io::Result<usize> {
+    use libc::{F_GETFL, F_SETFL, c_int, fcntl};
+    use nix::fcntl::OFlag;
+    use std::os::fd::AsRawFd;
+
+    let fd = f.as_raw_fd();
+
+    // Get current flags, using map_err to preserve original error context
+    let current_flags = unsafe { fcntl(fd, F_GETFL) };
+    if current_flags == -1 {
+        return Err(original_error);
+    }
+    let oflags = OFlag::from_bits_retain(current_flags as c_int);
+
+    // If O_DIRECT is set, try removing it temporarily
+    if oflags.contains(OFlag::O_DIRECT) {
+        let flags_without_direct = oflags - OFlag::O_DIRECT;
+
+        // Remove O_DIRECT flag, preserving original error on failure
+        let result = unsafe { fcntl(fd, F_SETFL, flags_without_direct.bits()) };
+        if result == -1 {
+            return Err(original_error);
+        }
+
+        // Retry the write without O_DIRECT
+        let write_result = f.write(buf);
+
+        // Restore O_DIRECT flag (GNU doesn't restore it, but we'll be safer)
+        // Log any restoration errors without failing the operation
+        let restore_result = unsafe { fcntl(fd, F_SETFL, oflags.bits()) };
+        if restore_result == -1 {
+            // Just log the error, don't fail the whole operation
+            let os_error = std::io::Error::last_os_error();
+            show_error!("Failed to restore O_DIRECT flag: {}", os_error);
+        }
+
+        write_result
+    } else {
+        // O_DIRECT wasn't set, return original error
+        Err(original_error)
+    }
+}
+
+/// Stub for non-Linux platforms - just return the original error.
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn handle_o_direct_write(
+    _f: &mut File,
+    _buf: &[u8],
+    original_error: io::Error,
+) -> io::Result<usize> {
+    Err(original_error)
+}
+
 impl Write for Dest {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match self {
@@ -697,7 +753,21 @@ impl Write for Dest {
                 f.seek(SeekFrom::Current(seek_amt))?;
                 Ok(buf.len())
             }
-            Self::File(f, _) => f.write(buf),
+            Self::File(f, _) => {
+                // Try the write first
+                match f.write(buf) {
+                    Ok(len) => Ok(len),
+                    Err(e)
+                        if e.kind() == io::ErrorKind::InvalidInput
+                            && e.raw_os_error() == Some(libc::EINVAL) =>
+                    {
+                        // This might be an O_DIRECT alignment issue.
+                        // Try removing O_DIRECT temporarily and retry.
+                        handle_o_direct_write(f, buf, e)
+                    }
+                    Err(e) => Err(e),
+                }
+            }
             Self::Stdout(stdout) => stdout.write(buf),
             #[cfg(unix)]
             Self::Fifo(f) => f.write(buf),
