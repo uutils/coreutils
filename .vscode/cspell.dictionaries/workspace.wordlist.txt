@@ -8,6 +8,19 @@ advapi32-sys
 aho-corasick
 backtrace
 blake2b_simd
+
+# * uutils project
+uutils
+coreutils
+uucore
+uutests
+ucmd
+uumain
+rlimit
+mkfifo
+urandom
+uchild
+ello
 bstr
 bytecount
 byteorder
