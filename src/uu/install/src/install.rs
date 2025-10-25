@@ -47,9 +47,6 @@ use uucore::buf_copy::copy_stream;
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
-#[cfg(unix)]
-use std::os::unix::prelude::OsStrExt;
-
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
 
