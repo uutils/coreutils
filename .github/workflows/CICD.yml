@@ -122,7 +122,7 @@ jobs:
     - name: Install/setup prerequisites
       shell: bash
       run: |
-        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
+        sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu libselinux1-dev
     - name: Initialize workflow variables
       id: vars
       shell: bash
