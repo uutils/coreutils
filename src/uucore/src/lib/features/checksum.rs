@@ -357,7 +357,11 @@ fn print_file_report<W: Write>(
     }
 }
 
-pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> {
+pub fn detect_algo_with_label(
+    algo: &str,
+    length: Option<usize>,
+    is_cksum: bool,
+) -> UResult<HashAlgorithm> {
     match algo {
         ALGORITHM_OPTIONS_SYSV => Ok(HashAlgorithm {
             name: ALGORITHM_OPTIONS_SYSV,
@@ -437,7 +441,12 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
             bits: 512,
         }),
         ALGORITHM_OPTIONS_SHAKE128 | "shake128sum" => {
-            let bits = length.ok_or(ChecksumError::BitsRequiredForShake128)?;
+            let Some(bits) = length else {
+                if is_cksum {
+                    return Err(USimpleError::new(1, "--length required for SHAKE128"));
+                }
+                return Err(ChecksumError::BitsRequiredForShake128.into());
+            };
             Ok(HashAlgorithm {
                 name: ALGORITHM_OPTIONS_SHAKE128,
                 create_fn: Box::new(|| Box::new(Shake128::new())),
@@ -445,7 +454,12 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
             })
         }
         ALGORITHM_OPTIONS_SHAKE256 | "shake256sum" => {
-            let bits = length.ok_or(ChecksumError::BitsRequiredForShake256)?;
+            let Some(bits) = length else {
+                if is_cksum {
+                    return Err(USimpleError::new(1, "--length required for SHAKE256"));
+                }
+                return Err(ChecksumError::BitsRequiredForShake256.into());
+            };
             Ok(HashAlgorithm {
                 name: ALGORITHM_OPTIONS_SHAKE256,
                 create_fn: Box::new(|| Box::new(Shake256::new())),
@@ -453,12 +467,21 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
             })
         }
         _ if algo.starts_with("sha3") => {
-            let bits = length.ok_or(ChecksumError::BitsRequiredForSha3)?;
+            let Some(bits) = length else {
+                if is_cksum {
+                    return Err(USimpleError::new(1, "--length required for SHA3"));
+                }
+                return Err(ChecksumError::BitsRequiredForSha3.into());
+            };
             create_sha3(bits)
         }
 
         _ => Err(ChecksumError::UnknownAlgorithm.into()),
     }
+}
+
+pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> {
+    detect_algo_with_label(algo, length, false)
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

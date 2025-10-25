@@ -15,7 +15,7 @@ use std::path::Path;
 use uucore::checksum::{
     ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC,
     ALGORITHM_OPTIONS_CRC32B, ALGORITHM_OPTIONS_SYSV, ChecksumError, ChecksumOptions,
-    ChecksumVerbose, SUPPORTED_ALGORITHMS, calculate_blake2b_length, detect_algo, digest_reader,
+    ChecksumVerbose, SUPPORTED_ALGORITHMS, calculate_blake2b_length, digest_reader,
     perform_checksum_validation,
 };
 use uucore::translate;
@@ -201,6 +201,7 @@ mod options {
     pub const IGNORE_MISSING: &str = "ignore-missing";
     pub const QUIET: &str = "quiet";
     pub const ZERO: &str = "zero";
+    pub const DEBUG: &str = "debug";
 }
 
 /***
@@ -256,8 +257,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(length) => {
             if algo_name == ALGORITHM_OPTIONS_BLAKE2B {
                 calculate_blake2b_length(*length)?
+            } else if algo_name.starts_with("sha3")
+                || algo_name == "shake128"
+                || algo_name == "shake256"
+            {
+                // SHA3 and SHAKE algorithms require --length in bits
+                Some(*length)
             } else {
-                return Err(ChecksumError::LengthOnlyForBlake2b.into());
+                return Err(USimpleError::new(
+                    1,
+                    "--length is only supported with --algorithm=blake2b, sha3, shake128, or shake256",
+                ));
             }
         }
         None => None,
@@ -308,7 +318,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let (tag, asterisk) = handle_tag_text_binary_flags(std::env::args_os())?;
 
-    let algo = detect_algo(algo_name, length)?;
+    let algo = uucore::checksum::detect_algo_with_label(algo_name, length, true)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
     let output_format = if matches.get_flag(options::RAW) {
@@ -460,6 +470,12 @@ pub fn uu_app() -> Command {
                 .long(options::ZERO)
                 .short('z')
                 .help(translate!("cksum-help-zero"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::DEBUG)
+                .long(options::DEBUG)
+                .help(translate!("cksum-help-debug"))
                 .action(ArgAction::SetTrue),
         )
         .after_help(translate!("cksum-after-help"))

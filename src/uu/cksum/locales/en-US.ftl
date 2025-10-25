@@ -14,6 +14,9 @@ cksum-after-help = DIGEST determines the digest algorithm and default output for
   - sha512: (equivalent to sha512sum)
   - blake2b: (equivalent to b2sum)
   - sm3: (only available through cksum)
+  - sha3: (requires --length: 224, 256, 384, or 512)
+  - shake128: (requires --length)
+  - shake256: (requires --length)
 
 # Help messages
 cksum-help-algorithm = select the digest type to use. See DIGEST below
@@ -29,6 +32,7 @@ cksum-help-status = don't output anything, status code shows success
 cksum-help-quiet = don't print OK for each successfully verified file
 cksum-help-ignore-missing = don't fail or report status for missing files
 cksum-help-zero = end each output line with NUL, not newline, and disable file name escaping
+cksum-help-debug = indicate which implementation used
 
 # Error messages
 cksum-error-is-directory = { $file }: Is a directory

@@ -2215,6 +2215,243 @@ mod gnu_cksum_c {
     }
 }
 
+#[test]
+fn test_debug_flag() {
+    // Test that --debug flag is accepted (no-op for now)
+    new_ucmd!()
+        .arg("--debug")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture("crc_single_file.expected");
+
+    // Test --debug with algorithm
+    new_ucmd!()
+        .arg("--debug")
+        .arg("-a")
+        .arg("md5")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture("md5_single_file.expected");
+
+    // Test --debug with multiple files
+    new_ucmd!()
+        .arg("--debug")
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .succeeds()
+        .stdout_is_fixture("crc_multiple_files.expected");
+}
+
+#[test]
+fn test_sha3_with_length() {
+    // Test SHA3-224
+    new_ucmd!()
+        .arg("-a")
+        .arg("sha3")
+        .arg("--length")
+        .arg("224")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_contains("SHA3_224 (lorem_ipsum.txt) = ");
+
+    // Test SHA3-256
+    new_ucmd!()
+        .arg("-a")
+        .arg("sha3")
+        .arg("--length")
+        .arg("256")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_contains("SHA3_256 (lorem_ipsum.txt) = ");
+
+    // Test SHA3-384
+    new_ucmd!()
+        .arg("-a")
+        .arg("sha3")
+        .arg("--length")
+        .arg("384")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_contains("SHA3_384 (lorem_ipsum.txt) = ");
+
+    // Test SHA3-512
+    new_ucmd!()
+        .arg("-a")
+        .arg("sha3")
+        .arg("--length")
+        .arg("512")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_contains("SHA3_512 (lorem_ipsum.txt) = ");
+}
+
+#[test]
+fn test_sha3_invalid_length() {
+    // Test SHA3 with invalid length (not 224, 256, 384, or 512)
+    new_ucmd!()
+        .arg("-a")
+        .arg("sha3")
+        .arg("--length")
+        .arg("128")
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .stderr_contains("Invalid output size for SHA3");
+
+    // Test SHA3 without length
+    new_ucmd!()
+        .arg("-a")
+        .arg("sha3")
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .stderr_contains("--length required for SHA3");
+}
+
+#[test]
+fn test_shake128_with_length() {
+    // Test SHAKE128 with various lengths
+    new_ucmd!()
+        .arg("-a")
+        .arg("shake128")
+        .arg("--length")
+        .arg("256")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_contains("SHAKE128 (lorem_ipsum.txt) = ");
+
+    // Test SHAKE128 with short length
+    new_ucmd!()
+        .arg("-a")
+        .arg("shake128")
+        .arg("--length")
+        .arg("64")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_contains("SHAKE128 (lorem_ipsum.txt) = ");
+
+    // Test SHAKE128 with long length
+    new_ucmd!()
+        .arg("-a")
+        .arg("shake128")
+        .arg("--length")
+        .arg("512")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_contains("SHAKE128 (lorem_ipsum.txt) = ");
+}
+
+#[test]
+fn test_shake128_without_length() {
+    // Test SHAKE128 without --length (should fail)
+    new_ucmd!()
+        .arg("-a")
+        .arg("shake128")
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .stderr_contains("--length required for SHAKE128");
+}
+
+#[test]
+fn test_shake256_with_length() {
+    // Test SHAKE256 with various lengths
+    new_ucmd!()
+        .arg("-a")
+        .arg("shake256")
+        .arg("--length")
+        .arg("256")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_contains("SHAKE256 (lorem_ipsum.txt) = ");
+
+    // Test SHAKE256 with short length
+    new_ucmd!()
+        .arg("-a")
+        .arg("shake256")
+        .arg("--length")
+        .arg("128")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_contains("SHAKE256 (lorem_ipsum.txt) = ");
+
+    // Test SHAKE256 with long length
+    new_ucmd!()
+        .arg("-a")
+        .arg("shake256")
+        .arg("--length")
+        .arg("1024")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_contains("SHAKE256 (lorem_ipsum.txt) = ");
+}
+
+#[test]
+fn test_shake256_without_length() {
+    // Test SHAKE256 without --length (should fail)
+    new_ucmd!()
+        .arg("-a")
+        .arg("shake256")
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .stderr_contains("--length required for SHAKE256");
+}
+
+#[test]
+fn test_sha3_shake_stdin() {
+    // Test SHA3 with stdin
+    new_ucmd!()
+        .arg("-a")
+        .arg("sha3")
+        .arg("--length")
+        .arg("256")
+        .pipe_in_fixture("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_contains("c9b081db1c20bdb4d8f376f45b3fb412b48c75932451d13dd79bea61e7bddbe4");
+
+    // Test SHAKE128 with stdin
+    new_ucmd!()
+        .arg("-a")
+        .arg("shake128")
+        .arg("--length")
+        .arg("256")
+        .pipe_in_fixture("lorem_ipsum.txt")
+        .succeeds();
+
+    // Test SHAKE256 with stdin
+    new_ucmd!()
+        .arg("-a")
+        .arg("shake256")
+        .arg("--length")
+        .arg("256")
+        .pipe_in_fixture("lorem_ipsum.txt")
+        .succeeds();
+}
+
+#[test]
+fn test_sha3_base64_output() {
+    // Test SHA3 with base64 output format
+    new_ucmd!()
+        .arg("--base64")
+        .arg("-a")
+        .arg("sha3")
+        .arg("--length")
+        .arg("256")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_contains("SHA3_256 (lorem_ipsum.txt) = ");
+}
+
+#[test]
+fn test_sha3_untagged() {
+    // Test SHA3 with untagged output
+    new_ucmd!()
+        .arg("--untagged")
+        .arg("-a")
+        .arg("sha3")
+        .arg("--length")
+        .arg("256")
+        .arg("lorem_ipsum.txt")
+        .succeeds();
+}
+
 /// The tests in this module check the behavior of cksum when given different
 /// checksum formats and algorithms in the same file, while specifying an
 /// algorithm on CLI or not.
