@@ -615,20 +615,67 @@ fn test_reset_binary_but_set() {
         .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *");
 }
 
-#[test]
-fn test_text_tag() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+/// Test legacy behaviors with --tag, --untagged, --binary and --text
+mod output_format {
+    use super::*;
 
-    at.touch("f");
+    #[test]
+    fn test_text_tag() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("f");
 
-    scene
-        .ucmd()
-        .arg("--text") // should disappear because of the following option
-        .arg("--tag")
-        .arg(at.subdir.join("f"))
-        .succeeds()
-        .stdout_contains("4294967295 0 ");
+        ucmd.arg("--text") // should disappear because of the following option
+            .arg("--tag")
+            .args(&["-a", "md5"])
+            .arg(at.subdir.join("f"))
+            .succeeds()
+            // Tagged output is used
+            .stdout_contains("f) = d41d8cd98f00b204e9800998ecf8427e");
+    }
+
+    #[test]
+    fn test_text_no_untagged() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("f");
+
+        // --text without --untagged fails
+        ucmd.arg("--text")
+            .args(&["-a", "md5"])
+            .arg(at.subdir.join("f"))
+            .fails_with_code(1)
+            .stderr_contains("--text mode is only supported with --untagged");
+    }
+
+    #[test]
+    fn test_text_binary() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("f");
+
+        // --binary overwrites --text, thus no error is raised
+        ucmd.arg("--text")
+            .arg("--binary")
+            .args(&["-a", "md5"])
+            .arg(at.subdir.join("f"))
+            .succeeds()
+            // No --untagged, tagged output is used
+            .stdout_contains("f) = d41d8cd98f00b204e9800998ecf8427e");
+    }
+
+    #[test]
+    fn test_text_binary_untagged() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("f");
+
+        // --binary overwrites --text
+        ucmd.arg("--text")
+            .arg("--binary")
+            .arg("--untagged")
+            .args(&["-a", "md5"])
+            .arg(at.subdir.join("f"))
+            .succeeds()
+            // Untagged output is used
+            .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *");
+    }
 }
 
 #[test]
