@@ -8,6 +8,7 @@
 mod mode;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use std::borrow::Cow;
 use file_diff::diff;
 use filetime::{FileTime, set_file_times};
 #[cfg(feature = "selinux")]
@@ -44,6 +45,8 @@ use uucore::buf_copy::copy_stream;
 
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
@@ -665,7 +668,10 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     }
                     match os_str_from_bytes(trimmed_bytes) {
                         Ok(trimmed_os_str) => {
-                            to_create_owned = PathBuf::from(trimmed_os_str.as_ref());
+                            to_create_owned = match trimmed_os_str {
+                                Cow::Borrowed(s) => PathBuf::from(s),
+                                Cow::Owned(os_string) => PathBuf::from(os_string),
+                            };
                             to_create_owned.as_path()
                         }
                         Err(_) => to_create,
