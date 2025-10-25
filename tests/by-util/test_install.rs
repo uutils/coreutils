@@ -1731,7 +1731,12 @@ fn test_install_broken_pipe() {
         .run_no_wait();
 
     child.close_stdout();
-    child.wait().unwrap().fails_silently();
+    let result = child.wait().unwrap();
+    assert!(
+        result.stderr_str().is_empty(),
+        "Expected no stderr output on broken pipe, got:\n{}",
+        result.stderr_str()
+    );
 
     assert!(at.file_exists("dest.txt"));
 }
