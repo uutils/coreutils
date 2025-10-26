@@ -135,8 +135,24 @@ pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
     let mut buffer2 = [0; 8192];
 
     loop {
-        let bytes1 = reader1.read(&mut buffer1)?;
-        let bytes2 = reader2.read(&mut buffer2)?;
+        // Read from first file with EINTR retry handling
+        // This loop retries the read operation if it's interrupted by signals (e.g., SIGUSR1)
+        // instead of failing, which is the POSIX-compliant way to handle interrupted I/O
+        let bytes1 = loop {
+            match reader1.read(&mut buffer1) {
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                result => break result?,
+            }
+        };
+
+        // Read from second file with EINTR retry handling
+        // Same retry logic as above for the second file to ensure consistent behavior
+        let bytes2 = loop {
+            match reader2.read(&mut buffer2) {
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                result => break result?,
+            }
+        };
 
         if bytes1 != bytes2 {
             return Ok(false);

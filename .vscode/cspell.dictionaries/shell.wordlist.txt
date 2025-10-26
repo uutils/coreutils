@@ -13,6 +13,19 @@ mountinfo
 mountpoint
 mtab
 nullglob
+
+# * Signals
+SIGUSR
+SIGUSR1
+SIGUSR2
+SIGINT
+SIGTERM
+SIGKILL
+SIGSTOP
+SIGCONT
+SIGPIPE
+SIGALRM
+SIGCHLD
 passwd
 pipefail
 popd
