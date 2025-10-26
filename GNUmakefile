@@ -27,6 +27,7 @@ RM := rm -rf
 # Binaries
 CARGO  ?= cargo
 CARGOFLAGS ?=
+RUSTC_ARCH ?= # should be empty except for cross-build, not --target $(shell rustc -vV | sed -n 's/host: //p')
 
 # Install directories
 PREFIX ?= /usr/local
@@ -229,6 +230,9 @@ ifneq ($(OS),Windows_NT)
 endif
 
 UTILS ?= $(filter-out $(SKIP_UTILS),$(PROGS))
+ifneq ($(filter hashsum,$(UTILS)),hashsum)
+	HASHSUM_PROGS :=
+endif
 
 ifneq ($(findstring stdbuf,$(UTILS)),)
     # Use external libstdbuf per default. It is more robust than embedding libstdbuf.
@@ -342,14 +346,14 @@ use_default := 1
 build-pkgs:
 ifneq (${MULTICALL}, y)
 ifdef BUILD_SPEC_FEATURE
-	${CARGO} build ${CARGOFLAGS} --features "$(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg))
+	${CARGO} build ${CARGOFLAGS} --features "$(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg)) $(RUSTC_ARCH)
 else
-	${CARGO} build ${CARGOFLAGS} ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg))
+	${CARGO} build ${CARGOFLAGS} ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg)) $(RUSTC_ARCH)
 endif
 endif
 
 build-coreutils:
-	${CARGO} build ${CARGOFLAGS} --features "${EXES} $(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} --no-default-features
+	${CARGO} build ${CARGOFLAGS} --features "${EXES} $(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} --no-default-features $(RUSTC_ARCH)
 
 build: build-coreutils build-pkgs locales
 
@@ -400,14 +404,15 @@ busytest: $(BUILDDIR)/busybox $(addprefix test_busybox_,$(filter-out $(SKIP_UTIL
 endif
 
 clean:
-	cargo clean
-	cd $(DOCSDIR) && $(MAKE) clean
+	cargo clean $(RUSTC_ARCH)
+	cd $(DOCSDIR) && $(MAKE) clean $(RUSTC_ARCH)
 
 distclean: clean
-	$(CARGO) clean $(CARGOFLAGS) && $(CARGO) update $(CARGOFLAGS)
+	$(CARGO) clean $(CARGOFLAGS) $(RUSTC_ARCH) && $(CARGO) update $(CARGOFLAGS) $(RUSTC_ARCH)
 
 ifeq ($(MANPAGES),y)
 build-uudoc:
+	# Use same PROFILE with coreutils to share crates (if not cross-build)
 	${CARGO} build ${CARGOFLAGS} --bin uudoc --features "uudoc ${EXES}" ${PROFILE_CMD} --no-default-features
 
 install-manpages: build-uudoc
