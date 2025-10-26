@@ -19,7 +19,6 @@ test-after-help = Exit with the status determined by EXPRESSION.
 
   - EXPRESSION1 -o EXPRESSION2 either EXPRESSION1 or EXPRESSION2 is true
 
-
   String operations:
 
   - -n STRING the length of STRING is nonzero
@@ -31,7 +30,6 @@ test-after-help = Exit with the status determined by EXPRESSION.
   - STRING1 = STRING2 the strings are equal
 
   - STRING1 != STRING2 the strings are not equal
-
 
   Integer comparisons:
 
@@ -46,7 +44,6 @@ test-after-help = Exit with the status determined by EXPRESSION.
   - INTEGER1 -lt INTEGER2 INTEGER1 is less than INTEGER2
 
   - INTEGER1 -ne INTEGER2 INTEGER1 is not equal to INTEGER2
-
 
   File operations:
 

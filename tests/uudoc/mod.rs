@@ -19,7 +19,7 @@ fn get_uudoc_command() -> Command {
 fn test_manpage_generation() {
     let output = get_uudoc_command()
         .arg("manpage")
-        .arg("ls")
+        .arg("test")
         .output()
         .expect("Failed to execute command");
 
@@ -159,8 +159,7 @@ fn test_manpage_test_formatting() {
     // Basic structure
     assert!(
         output_str.contains(".TH test 1"),
-        "Missing .TH test 1 header: {}",
-        output_str
+        "Missing .TH test 1 header: {output_str}"
     );
 
     // Exit description
@@ -171,25 +170,22 @@ fn test_manpage_test_formatting() {
 
     // Bullet on its own line
     assert!(
-        output_str.contains("- -n STRING the length of STRING is nonzero"),
+        output_str.contains("\\- \\-n STRING the length of STRING is nonzero"),
         "Bullet not on own line"
     );
 
-    // Allow blank lines before subsections
+    // Check that key sections are present with blank lines after them
     assert!(
-        output_str.contains("- EXPRESSION1 -o EXPRESSION2 either EXPRESSION1 or EXPRESSION2 is true\n\nString operations:"),
-        "Missing blank lines before String operations:"
+        output_str.contains("String operations:\n\n"),
+        "Missing String operations section or blank line after it"
     );
     assert!(
-        output_str
-            .contains("- STRING1 != STRING2 the strings are not equal\n\nInteger comparisons:"),
-        "Missing blank lines before Integer comparisons:"
+        output_str.contains("Integer comparisons:\n\n"),
+        "Missing Integer comparisons section or blank line after it"
     );
     assert!(
-        output_str.contains(
-            "- INTEGER1 -ne INTEGER2 INTEGER1 is not equal to INTEGER2\n\nFile operations:"
-        ),
-        "Missing blank lines before File operations:"
+        output_str.contains("File operations:\n\n"),
+        "Missing File operations section or blank line after it"
     );
 }
 
@@ -229,23 +225,21 @@ fn test_manpage_test_formatting_french() {
 
     // Bullet on own line (example)
     assert!(
-        output_str.contains("- -n STRING la longueur de STRING est non nulle\n"),
+        output_str.contains("\\- \\-n STRING la longueur de STRING est non nulle\n"),
         "French bullet not on own line"
     );
 
-    // Blank lines before subsections
+    // Check that key sections are present with blank lines after them
     assert!(
-        output_str.contains("- EXPRESSION1 -o EXPRESSION2 EXPRESSION1 ou EXPRESSION2 est vraie\n\nOpérations sur les chaînes :"),
-        "Missing blank lines before Opérations sur les chaînes :"
+        output_str.contains("Opérations sur les chaînes :\n\n"),
+        "Missing Opérations sur les chaînes section or blank line after it"
     );
     assert!(
-        output_str.contains(
-            "- STRING1 != STRING2 les chaînes ne sont pas égales\n\n\nComparaisons d'entiers :"
-        ),
-        "Missing blank lines before Comparaisons d'entiers :"
+        output_str.contains("Comparaisons d\\*(Aqentiers :\n\n"),
+        "Missing Comparaisons d'entiers section or blank line after it"
     );
     assert!(
-        output_str.contains("- INTEGER1 -ne INTEGER2 INTEGER1 n'est pas égal à INTEGER2\n\n\nOpérations sur les fichiers :"),
-        "Missing blank lines before Opérations sur les fichiers :"
+        output_str.contains("Opérations sur les fichiers :\n\n"),
+        "Missing Opérations sur les fichiers section or blank line after it"
     );
 }

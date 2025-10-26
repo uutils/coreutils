@@ -19,7 +19,6 @@ test-after-help = Quitter avec le statut déterminé par EXPRESSION.
 
   - EXPRESSION1 -o EXPRESSION2 EXPRESSION1 ou EXPRESSION2 est vraie
 
-
   Opérations sur les chaînes :
 
   - -n STRING la longueur de STRING est non nulle
@@ -31,7 +30,6 @@ test-after-help = Quitter avec le statut déterminé par EXPRESSION.
   - STRING1 = STRING2 les chaînes sont égales
 
   - STRING1 != STRING2 les chaînes ne sont pas égales
-
 
   Comparaisons d'entiers :
 
@@ -46,7 +44,6 @@ test-after-help = Quitter avec le statut déterminé par EXPRESSION.
   - INTEGER1 -lt INTEGER2 INTEGER1 est inférieur à INTEGER2
 
   - INTEGER1 -ne INTEGER2 INTEGER1 n'est pas égal à INTEGER2
-
 
   Opérations sur les fichiers :
 
