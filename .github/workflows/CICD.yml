@@ -290,6 +290,7 @@ jobs:
           mv -T target target.cache
         fi
         # Check that we don't cross-build uudoc
+        # also do not try to generate manpages for unexisting b2sum
         make install-manpages PREFIX=/tmp/usr UTILS=true RUSTC_ARCH="--target aarch64-unknown-linux-gnu"
         # build (host)
         make build
