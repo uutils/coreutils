@@ -473,6 +473,7 @@ install-locales:
 		fi; \
 	done
 else
+locales:
 install-locales:
 endif
 
