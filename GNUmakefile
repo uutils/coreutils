@@ -234,8 +234,6 @@ ifeq ($(filter hashsum,$(UTILS)),hashsum)
 	HASHSUM_PROGS :=
 endif
 
-endif
-
 ifneq ($(findstring stdbuf,$(UTILS)),)
     # Use external libstdbuf per default. It is more robust than embedding libstdbuf.
 	CARGOFLAGS += --features feat_external_libstdbuf
