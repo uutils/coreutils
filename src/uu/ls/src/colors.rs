@@ -206,12 +206,12 @@ pub(crate) fn color_name_with_dangling_hint(
         };
         style_manager.apply_style(style, name, wrap)
     } else if target_is_dangling {
-        // For dangling symlinks, use a special "missing" style
-        // This should correspond to the "non-existent" color that ls uses
-        let missing_style = style_manager
+        // For dangling symlinks, color the target name like a symbolic link
+        // so symlink and target share the same visible style.
+        let symlink_style = style_manager
             .colors
-            .style_for_path_with_metadata(std::path::Path::new(""), None);
-        style_manager.apply_style(missing_style, name, wrap)
+            .style_for_indicator(Indicator::SymbolicLink);
+        style_manager.apply_style(symlink_style, name, wrap)
     } else if !path.must_dereference {
         // If we need to dereference (follow) a symlink, we will need to get the metadata
         // There is a DirEntry, we don't need to get the metadata for the color
