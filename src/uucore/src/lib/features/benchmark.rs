@@ -280,25 +280,6 @@ pub mod text_data {
         generate_data_from_words_simple(&base_words, num_lines)
     }
 
-    /// Generate random strings with mixed charset including accented characters
-    pub fn generate_random_strings(num_lines: usize, length: usize) -> Vec<u8> {
-        let mut data = Vec::new();
-        let charset =
-            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789äöüÄÖÜßéèêëàâîïôûç";
-        let charset_bytes = charset.as_bytes();
-
-        for i in 0..num_lines {
-            let mut line = String::new();
-            for j in 0..length {
-                let idx = ((i * length + j) * 17 + 42) % charset_bytes.len();
-                line.push(charset_bytes[idx] as char);
-            }
-            line.push('\n');
-            data.extend_from_slice(line.as_bytes());
-        }
-        data
-    }
-
     /// Generate numeric data for benchmarking (simple sequential numbers)
     pub fn generate_numbers(count: usize) -> String {
         (1..=count)
