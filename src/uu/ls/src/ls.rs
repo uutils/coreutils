@@ -1875,17 +1875,6 @@ impl PathData {
         config: &Config,
         command_line: bool,
     ) -> Self {
-        Self::new_with_dereference_override(p_buf, dir_entry, file_name, config, command_line, None)
-    }
-
-    fn new_with_dereference_override(
-        p_buf: PathBuf,
-        dir_entry: Option<DirEntry>,
-        file_name: Option<OsString>,
-        config: &Config,
-        command_line: bool,
-        must_dereference_override: Option<bool>,
-    ) -> Self {
         // We cannot use `Path::ends_with` or `Path::Components`, because they remove occurrences of '.'
         // For '..', the filename is None
         let display_name = if let Some(name) = file_name {
@@ -1899,23 +1888,7 @@ impl PathData {
                 .unwrap_or_default()
         };
 
-        let must_dereference =
-            must_dereference_override.unwrap_or_else(|| match &config.dereference {
-                Dereference::All => true,
-                Dereference::Args => command_line,
-                Dereference::DirArgs => {
-                    if command_line {
-                        if let Ok(md) = p_buf.metadata() {
-                            md.is_dir()
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    }
-                }
-                Dereference::None => false,
-            });
+        let must_dereference = compute_must_dereference(config, command_line, p_buf.as_path());
 
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
@@ -3267,14 +3240,7 @@ fn display_item_name(
                 if let Some(style_manager) = &mut state.style_manager {
                     if target_path.exists() {
                         // Target exists, create PathData and use enhanced coloring
-                        let target_data = PathData::new_with_dereference_override(
-                            target_path.clone(),
-                            None,
-                            None,
-                            config,
-                            false,
-                            Some(true), // Force dereferencing to get target metadata
-                        );
+                        let target_data = PathData::new(target_path.clone(), None, None, config, false);
 
                         // Use the enhanced coloring logic that checks target metadata
                         name.push(color_name(
@@ -3546,4 +3512,19 @@ fn os_str_starts_with(haystack: &OsStr, needle: &[u8]) -> bool {
 
 fn write_os_str<W: Write>(writer: &mut W, string: &OsStr) -> std::io::Result<()> {
     writer.write_all(&os_str_as_bytes_lossy(string))
+}
+
+/// Checks if the path is a directory when processed from the command line.
+fn is_command_line_directory(p_buf: &Path, command_line: bool) -> bool {
+    command_line && p_buf.metadata().map(|md| md.is_dir()).unwrap_or(false)
+}
+
+/// Computes whether to dereference the path based on config.
+fn compute_must_dereference(config: &Config, command_line: bool, p_buf: &Path) -> bool {
+    match &config.dereference {
+        Dereference::All => true,
+        Dereference::Args => command_line,
+        Dereference::DirArgs => is_command_line_directory(p_buf, command_line),
+        Dereference::None => false,
+    }
 }
