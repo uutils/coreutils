@@ -675,7 +675,9 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         ) {
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
-                let e = e.map_err_context(|| translate!("mv-error-cannot-overwrite"));
+                let e = e.map_err_context(
+                    || translate!("mv-error-cannot-overwrite", "target" => targetpath.quote()),
+                );
                 match display_manager {
                     Some(ref pb) => pb.suspend(|| show!(e)),
                     None => show!(e),
@@ -754,9 +756,7 @@ fn rename(
             if is_empty_dir(to) {
                 fs::remove_dir(to)?;
             } else {
-                return Err(io::Error::other(
-                    translate!("mv-error-directory-not-empty", "target" => to.quote()),
-                ));
+                return Err(io::Error::other(translate!("mv-error-directory-not-empty")));
             }
         }
     }

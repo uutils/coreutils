@@ -1463,7 +1463,7 @@ fn test_mv_overwrite_nonempty_dir_error() {
     // GNU:     "mv: cannot overwrite 'b': Directory not empty"
 
     ucmd.arg(dummy_dir_a).arg(dir_b).fails().stderr_is(format!(
-        "mv: cannot overwrite: A non-empty directory: '{dummy_dir_b}' exists at destination\n"
+        "mv: cannot overwrite '{dummy_dir_b}': Directory not empty\n"
     ));
 }
 
