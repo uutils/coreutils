@@ -459,8 +459,9 @@ fn make_format_string(settings: &Settings) -> &str {
 /// - MST: Mountain Standard Time (US) preferred over Malaysia Standard Time
 /// - PST: Pacific Standard Time (US) - widely used abbreviation
 /// - GMT: Alias for UTC (universal)
+/// - Australian timezones: AWST, ACST, AEST (cannot be dynamically discovered)
 ///
-/// All other timezones (AWST, JST, CET, etc.) are dynamically resolved from IANA database. // spell-checker:disable-line
+/// All other timezones (JST, CET, etc.) are dynamically resolved from IANA database. // spell-checker:disable-line
 static PREFERRED_TZ_MAPPINGS: &[(&str, &str)] = &[
     // Universal (no ambiguity, but commonly used)
     ("UTC", "UTC"),
@@ -476,6 +477,12 @@ static PREFERRED_TZ_MAPPINGS: &[(&str, &str)] = &[
     ("EDT", "America/New_York"),
     // Other highly ambiguous cases
     ("IST", "Asia/Kolkata"), // Ambiguous: India vs Israel vs Ireland // spell-checker:disable-line
+    // Australian timezones (cannot be discovered from IANA location names)
+    ("AWST", "Australia/Perth"),    // Australian Western Standard Time
+    ("ACST", "Australia/Adelaide"), // Australian Central Standard Time
+    ("ACDT", "Australia/Adelaide"), // Australian Central Daylight Time
+    ("AEST", "Australia/Sydney"),   // Australian Eastern Standard Time
+    ("AEDT", "Australia/Sydney"),   // Australian Eastern Daylight Time
 ];
 
 /// Lazy-loaded timezone abbreviation lookup map built from IANA database.
@@ -547,18 +554,15 @@ fn resolve_tz_abbreviation<S: AsRef<str>>(date_str: S) -> String {
                     // Try to parse the date with UTC first to get timestamp
                     let date_with_utc = format!("{date_part} +00:00");
                     if let Ok(parsed) = parse_datetime::parse_datetime(&date_with_utc) {
-                        // Create timestamp from parsed date
-                        if let Ok(ts) = Timestamp::new(
-                            parsed.timestamp(),
-                            parsed.timestamp_subsec_nanos() as i32,
-                        ) {
-                            // Get the offset for this specific timestamp in the target timezone
-                            let zoned = ts.to_zoned(tz);
-                            let offset_str = format!("{}", zoned.offset());
+                        // Get timestamp from parsed date (which is already a Zoned)
+                        let ts = parsed.timestamp();
 
-                            // Replace abbreviation with offset
-                            return format!("{date_part} {offset_str}");
-                        }
+                        // Get the offset for this specific timestamp in the target timezone
+                        let zoned = ts.to_zoned(tz);
+                        let offset_str = format!("{}", zoned.offset());
+
+                        // Replace abbreviation with offset
+                        return format!("{date_part} {offset_str}");
                     }
                 }
             }
@@ -585,7 +589,12 @@ fn parse_date<S: AsRef<str> + Clone>(
     let resolved = resolve_tz_abbreviation(s.as_ref());
 
     match parse_datetime::parse_datetime(&resolved) {
-        Ok(date) => Ok(date),
+        Ok(date) => {
+            // Convert to system timezone for display
+            // (parse_datetime 0.13 returns Zoned in the input's timezone)
+            let timestamp = date.timestamp();
+            Ok(timestamp.to_zoned(TimeZone::try_system().unwrap_or(TimeZone::UTC)))
+        }
         Err(e) => Err((s.as_ref().into(), e)),
     }
 }
