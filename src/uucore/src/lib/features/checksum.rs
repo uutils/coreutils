@@ -66,6 +66,13 @@ pub const SUPPORTED_ALGORITHMS: [&str; 16] = [
     ALGORITHM_OPTIONS_SHAKE256,
 ];
 
+pub const LEGACY_ALGORITHMS: [&str; 4] = [
+    ALGORITHM_OPTIONS_SYSV,
+    ALGORITHM_OPTIONS_BSD,
+    ALGORITHM_OPTIONS_CRC,
+    ALGORITHM_OPTIONS_CRC32B,
+];
+
 pub struct HashAlgorithm {
     pub name: &'static str,
     pub create_fn: Box<dyn Fn() -> Box<dyn Digest + 'static>>,
@@ -224,6 +231,8 @@ pub enum ChecksumError {
     LengthOnlyForBlake2b,
     #[error("the --binary and --text options are meaningless when verifying checksums")]
     BinaryTextConflict,
+    #[error("--text mode is only supported with --untagged")]
+    TextWithoutUntagged,
     #[error("--check is not supported with --algorithm={{bsd,sysv,crc,crc32b}}")]
     AlgorithmNotSupportedWithCheck,
     #[error("You cannot combine multiple hash algorithms!")]
@@ -1115,9 +1124,7 @@ fn process_checksum_file(
     Ok(())
 }
 
-/***
- * Do the checksum validation (can be strict or not)
-*/
+/// Do the checksum validation (can be strict or not)
 pub fn perform_checksum_validation<'a, I>(
     files: I,
     algo_name_input: Option<&str>,
