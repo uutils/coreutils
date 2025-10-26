@@ -383,14 +383,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let input_length = matches.get_one::<usize>(options::LENGTH);
 
     let length = match input_length {
-        Some(length) => {
-            if algo_name == ALGORITHM_OPTIONS_BLAKE2B {
-                calculate_blake2b_length(*length)?
-            } else {
-                return Err(ChecksumError::LengthOnlyForBlake2b.into());
-            }
+        None | Some(0) => None,
+        Some(length) if algo_name == ALGORITHM_OPTIONS_BLAKE2B => {
+            calculate_blake2b_length(*length)?
         }
-        None => None,
+        _ => {
+            return Err(ChecksumError::LengthOnlyForBlake2b.into());
+        }
     };
 
     if LEGACY_ALGORITHMS.contains(&algo_name) && check {
