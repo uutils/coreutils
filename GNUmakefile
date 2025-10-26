@@ -343,14 +343,14 @@ use_default := 1
 build-pkgs:
 ifneq (${MULTICALL}, y)
 ifdef BUILD_SPEC_FEATURE
-	$(CARGO) build $(CARGOFLAGS) --features "$(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg)) $(RUSTC_ARCH)
+	${CARGO} build ${CARGOFLAGS} --features "$(BUILD_SPEC_FEATURE)" $(PROFILE_CMD) $(foreach pkg,$(EXES),-p uu_$(pkg)) $(RUSTC_ARCH)
 else
-	$(CARGO) build $(CARGOFLAGS) $(PROFILE_CMD) $(foreach pkg,$(EXES),-p uu_$(pkg)) $(RUSTC_ARCH)
+	${CARGO} build ${CARGOFLAGS} ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg)) $(RUSTC_ARCH)
 endif
 endif
 
 build-coreutils:
-	$(CARGO) build $(CARGOFLAGS) --features "$(EXES) $(BUILD_SPEC_FEATURE)" $(PROFILE_CMD) --no-default-features $(RUSTC_ARCH)
+	${CARGO} build ${CARGOFLAGS} --features "${EXES} $(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} --no-default-features $(RUSTC_ARCH)
 
 build: build-coreutils build-pkgs locales
 
@@ -410,7 +410,7 @@ distclean: clean
 ifeq ($(MANPAGES),y)
 build-uudoc:
 	# Use same PROFILE with coreutils to share crates (if not cross-build)
-	$(CARGO) build $(CARGOFLAGS) --bin uudoc --features "uudoc $(EXES)" $(PROFILE_CMD) --no-default-features
+	${CARGO} build ${CARGOFLAGS} --bin uudoc --features "uudoc ${EXES}" ${PROFILE_CMD} --no-default-features
 
 install-manpages: build-uudoc
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/man/man1
