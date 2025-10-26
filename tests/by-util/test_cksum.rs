@@ -336,7 +336,9 @@ fn test_length_with_wrong_algorithm() {
         .arg("lorem_ipsum.txt")
         .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("cksum: --length is only supported with --algorithm=blake2b");
+        .stderr_contains(
+            "cksum: --length is only supported with --algorithm blake2b, sha2, or sha3",
+        );
 
     new_ucmd!()
         .arg("--length=16")
@@ -345,7 +347,9 @@ fn test_length_with_wrong_algorithm() {
         .arg("foo.sums")
         .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("cksum: --length is only supported with --algorithm=blake2b");
+        .stderr_contains(
+            "cksum: --length is only supported with --algorithm blake2b, sha2, or sha3",
+        );
 }
 
 /// Giving --length to a wrong algorithm doesn't fail if the length is zero
@@ -369,7 +373,9 @@ fn test_length_not_supported() {
         .arg("lorem_ipsum.txt")
         .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("--length is only supported with --algorithm=blake2b");
+        .stderr_contains(
+            "cksum: --length is only supported with --algorithm blake2b, sha2, or sha3",
+        );
 
     new_ucmd!()
         .arg("-l")
@@ -380,7 +386,9 @@ fn test_length_not_supported() {
         .arg("/tmp/xxx")
         .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("--length is only supported with --algorithm=blake2b");
+        .stderr_contains(
+            "cksum: --length is only supported with --algorithm blake2b, sha2, or sha3",
+        );
 }
 
 #[test]
