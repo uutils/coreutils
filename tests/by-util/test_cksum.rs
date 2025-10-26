@@ -10,7 +10,8 @@ use uutests::util::TestScenario;
 use uutests::util_name;
 
 const ALGOS: [&str; 12] = [
-    "sysv", "bsd", "crc", "crc32b", "md5", "sha1", "sha224", "sha256", "sha384", "sha512", "blake2b", "sm3",
+    "sysv", "bsd", "crc", "crc32b", "md5", "sha1", "sha224", "sha256", "sha384", "sha512",
+    "blake2b", "sm3",
 ];
 
 #[test]
@@ -442,8 +443,6 @@ fn test_raw_multiple_files() {
         .no_stdout()
         .stderr_contains("cksum: the --raw option is not supported with multiple files");
 }
-
-
 
 #[test]
 fn test_base64_raw_conflicts() {
