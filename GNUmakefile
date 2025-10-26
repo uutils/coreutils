@@ -230,6 +230,9 @@ ifneq ($(OS),Windows_NT)
 endif
 
 UTILS ?= $(filter-out $(SKIP_UTILS),$(PROGS))
+ifneq ($(filter hashsum,$(UTILS)),hashsum)
+	HASHSUM_PROGS :=
+endif
 
 ifneq ($(findstring stdbuf,$(UTILS)),)
     # Use external libstdbuf per default. It is more robust than embedding libstdbuf.
