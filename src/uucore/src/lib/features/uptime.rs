@@ -38,10 +38,18 @@ impl UError for UptimeError {
     }
 }
 
+// setup_localization() stores its state in thread local storage,
+// so every thread that might format uptime strings has to call it once.
+// Track that per thread so our helpers can lazily initialize
+// the locale only once per thread.
 thread_local! {
     static LOCALE_READY: Cell<bool> = const { Cell::new(false) };
 }
 
+// Lazily initialize the uptime localization for the current thread, marking it
+// done even if a sibling thread already ran setup_localization() so we avoid
+// propagating the "already initialized" error and only log unexpected failures
+// in debug builds.
 fn ensure_uptime_locale() {
     LOCALE_READY.with(|ready| {
         if ready.get() {
