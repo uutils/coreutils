@@ -348,6 +348,20 @@ fn test_length_with_wrong_algorithm() {
         .stderr_contains("cksum: --length is only supported with --algorithm=blake2b");
 }
 
+/// Giving --length to a wrong algorithm doesn't fail if the length is zero
+#[test]
+fn test_length_is_zero_with_wrong_algorithm() {
+    for algo in ["md5", "crc", "sha1", "sha224", "sha256", "sha384", "sha512"] {
+        new_ucmd!()
+            .arg("--length=0")
+            .args(&["-a", algo])
+            .arg("lorem_ipsum.txt")
+            .succeeds()
+            .no_stderr()
+            .stdout_is_fixture(format!("{algo}_single_file.expected"));
+    }
+}
+
 #[test]
 fn test_length_not_supported() {
     new_ucmd!()
