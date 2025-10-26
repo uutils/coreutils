@@ -13,9 +13,11 @@
 // See https://github.com/uutils/coreutils/pull/7289 for discussion.
 
 use crate::error::{UError, UResult};
+use crate::locale::{self, LocalizationError};
 use crate::translate;
 use chrono::Local;
 use libc::time_t;
+use std::cell::Cell;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -36,6 +38,29 @@ impl UError for UptimeError {
     }
 }
 
+thread_local! {
+    static LOCALE_READY: Cell<bool> = const { Cell::new(false) };
+}
+
+fn ensure_uptime_locale() {
+    LOCALE_READY.with(|ready| {
+        if ready.get() {
+            return;
+        }
+
+        match locale::setup_localization("uptime") {
+            Ok(()) => ready.set(true),
+            Err(LocalizationError::Bundle(msg)) if msg.contains("already initialized") => {
+                ready.set(true);
+            }
+            Err(err) => {
+                #[cfg(debug_assertions)]
+                eprintln!("uucore::uptime localization setup failed: {err}");
+            }
+        }
+    });
+}
+
 /// Returns the formatted time string, e.g. "12:34:56"
 pub fn get_formatted_time() -> String {
     Local::now().time().format("%H:%M:%S").to_string()
@@ -52,6 +77,7 @@ pub fn get_formatted_time() -> String {
 /// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
 #[cfg(target_os = "openbsd")]
 pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
+    ensure_uptime_locale();
     use libc::CLOCK_BOOTTIME;
     use libc::clock_gettime;
 
@@ -91,6 +117,7 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
 pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
+    ensure_uptime_locale();
     use crate::utmpx::Utmpx;
     use libc::BOOT_TIME;
     use std::fs::File;
@@ -150,6 +177,7 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
 /// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
 #[cfg(windows)]
 pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
+    ensure_uptime_locale();
     use windows_sys::Win32::System::SystemInformation::GetTickCount;
     // SAFETY: always return u32
     let uptime = unsafe { GetTickCount() };
@@ -167,6 +195,7 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
 /// Returns a UResult with the uptime in a human-readable format(e.g. "1 day, 3:45") if successful, otherwise an UptimeError.
 #[inline]
 pub fn get_formatted_uptime(boot_time: Option<time_t>) -> UResult<String> {
+    ensure_uptime_locale();
     let up_secs = get_uptime(boot_time)?;
 
     if up_secs < 0 {
@@ -302,6 +331,7 @@ pub fn get_nusers() -> usize {
 /// e.g. "0 users", "1 user", "2 users"
 #[inline]
 pub fn format_nusers(n: usize) -> String {
+    ensure_uptime_locale();
     translate!(
         "uptime-user-count",
         "count" => n
@@ -315,6 +345,7 @@ pub fn format_nusers(n: usize) -> String {
 /// e.g. "0 user", "1 user", "2 users"
 #[inline]
 pub fn get_formatted_nusers() -> String {
+    ensure_uptime_locale();
     #[cfg(not(target_os = "openbsd"))]
     return format_nusers(get_nusers());
 
@@ -330,6 +361,7 @@ pub fn get_formatted_nusers() -> String {
 /// The load average is a tuple of three floating point numbers representing the 1-minute, 5-minute, and 15-minute load averages.
 #[cfg(unix)]
 pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
+    ensure_uptime_locale();
     use crate::libc::c_double;
     use libc::getloadavg;
 
@@ -352,6 +384,7 @@ pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
 /// Returns a UResult with an UptimeError.
 #[cfg(windows)]
 pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
+    ensure_uptime_locale();
     Err(UptimeError::WindowsLoadavg)?
 }
 
@@ -363,6 +396,7 @@ pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
 /// e.g. "load average: 0.00, 0.00, 0.00"
 #[inline]
 pub fn get_formatted_loadavg() -> UResult<String> {
+    ensure_uptime_locale();
     let loadavg = get_loadavg()?;
     Ok(translate!(
         "uptime-lib-format-loadavg",
@@ -386,5 +420,25 @@ mod tests {
         assert_eq!("0 users", format_nusers(0));
         assert_eq!("1 user", format_nusers(1));
         assert_eq!("2 users", format_nusers(2));
+    }
+
+    #[test]
+    fn test_format_nusers_threaded() {
+        unsafe {
+            std::env::set_var("LANG", "en_US.UTF-8");
+        }
+        let _ = locale::setup_localization("top");
+        let _ = locale::setup_localization("uptime");
+
+        assert_eq!("uptime-user-count", format_nusers(0));
+
+        std::thread::spawn(move || {
+            let _ = locale::setup_localization("uptime");
+            assert_eq!("0 users", format_nusers(0));
+            assert_eq!("1 user", format_nusers(1));
+            assert_eq!("2 users", format_nusers(2));
+        })
+        .join()
+        .expect("thread should succeed");
     }
 }
