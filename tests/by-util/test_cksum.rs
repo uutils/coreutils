@@ -118,9 +118,7 @@ fn test_one_nonexisting_file() {
 // but <128 bytes (1 fold pclmul) // spell-checker:disable-line
 #[test]
 fn test_crc_for_bigger_than_32_bytes() {
-    let (_, mut ucmd) = at_and_ucmd!();
-
-    let result = ucmd.arg("chars.txt").succeeds();
+    let result = new_ucmd!().arg("chars.txt").succeeds();
 
     let mut stdout_split = result.stdout_str().split(' ');
 
@@ -133,9 +131,7 @@ fn test_crc_for_bigger_than_32_bytes() {
 
 #[test]
 fn test_stdin_larger_than_128_bytes() {
-    let (_, mut ucmd) = at_and_ucmd!();
-
-    let result = ucmd.arg("larger_than_2056_bytes.txt").succeeds();
+    let result = new_ucmd!().arg("larger_than_2056_bytes.txt").succeeds();
 
     let mut stdout_split = result.stdout_str().split(' ');
 
@@ -298,34 +294,18 @@ fn test_untagged_algorithm_stdin() {
 
 #[test]
 fn test_check_algo() {
-    new_ucmd!()
-        .arg("-a=bsd")
-        .arg("--check")
-        .arg("lorem_ipsum.txt")
-        .fails()
-        .no_stdout()
-        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}");
-    new_ucmd!()
-        .arg("-a=sysv")
-        .arg("--check")
-        .arg("lorem_ipsum.txt")
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}");
-    new_ucmd!()
-        .arg("-a=crc")
-        .arg("--check")
-        .arg("lorem_ipsum.txt")
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}");
-    new_ucmd!()
-        .arg("-a=crc32b")
-        .arg("--check")
-        .arg("lorem_ipsum.txt")
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}");
+    for algo in ["bsd", "sysv", "crc", "crc32b"] {
+        new_ucmd!()
+            .arg("-a")
+            .arg(algo)
+            .arg("--check")
+            .arg("lorem_ipsum.txt")
+            .fails()
+            .no_stdout()
+            .stderr_contains(
+                "cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}",
+            );
+    }
 }
 
 #[test]
