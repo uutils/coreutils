@@ -12,6 +12,8 @@ use crate::translate;
 use selinux::SecurityContext;
 use thiserror::Error;
 
+use crate::error::UError;
+
 #[derive(Debug, Error)]
 pub enum SeLinuxError {
     #[error("{}", translate!("selinux-error-not-enabled"))]
@@ -30,15 +32,21 @@ pub enum SeLinuxError {
     ContextConversionFailure(String, String),
 }
 
+impl UError for SeLinuxError {
+    fn code(&self) -> i32 {
+        match self {
+            Self::SELinuxNotEnabled => 1,
+            Self::FileOpenFailure(_) => 2,
+            Self::ContextRetrievalFailure(_) => 3,
+            Self::ContextSetFailure(_, _) => 4,
+            Self::ContextConversionFailure(_, _) => 5,
+        }
+    }
+}
+
 impl From<SeLinuxError> for i32 {
     fn from(error: SeLinuxError) -> Self {
-        match error {
-            SeLinuxError::SELinuxNotEnabled => 1,
-            SeLinuxError::FileOpenFailure(_) => 2,
-            SeLinuxError::ContextRetrievalFailure(_) => 3,
-            SeLinuxError::ContextSetFailure(_, _) => 4,
-            SeLinuxError::ContextConversionFailure(_, _) => 5,
-        }
+        error.code()
     }
 }
 
@@ -50,7 +58,7 @@ pub fn is_selinux_enabled() -> bool {
 }
 
 /// Returns a string describing the error and its causes.
-fn selinux_error_description(mut error: &dyn Error) -> String {
+pub fn selinux_error_description(mut error: &dyn Error) -> String {
     let mut description = String::new();
     while let Some(source) = error.source() {
         let error_text = source.to_string();
@@ -120,7 +128,7 @@ pub fn set_selinux_security_context(
         // Create a CString from the provided context string
         let c_context = std::ffi::CString::new(ctx_str.as_str()).map_err(|e| {
             SeLinuxError::ContextConversionFailure(
-                ctx_str.to_string(),
+                ctx_str.to_owned(),
                 selinux_error_description(&e),
             )
         })?;
@@ -129,7 +137,7 @@ pub fn set_selinux_security_context(
         let security_context =
             selinux::OpaqueSecurityContext::from_c_str(&c_context).map_err(|e| {
                 SeLinuxError::ContextConversionFailure(
-                    ctx_str.to_string(),
+                    ctx_str.to_owned(),
                     selinux_error_description(&e),
                 )
             })?;
@@ -138,7 +146,7 @@ pub fn set_selinux_security_context(
         SecurityContext::from_c_str(
             &security_context.to_c_string().map_err(|e| {
                 SeLinuxError::ContextConversionFailure(
-                    ctx_str.to_string(),
+                    ctx_str.to_owned(),
                     selinux_error_description(&e),
                 )
             })?,
@@ -146,7 +154,7 @@ pub fn set_selinux_security_context(
         )
         .set_for_path(path, false, false)
         .map_err(|e| {
-            SeLinuxError::ContextSetFailure(ctx_str.to_string(), selinux_error_description(&e))
+            SeLinuxError::ContextSetFailure(ctx_str.to_owned(), selinux_error_description(&e))
         })
     } else {
         // If no context provided, set the default SELinux context for the path
@@ -569,12 +577,12 @@ mod tests {
             .expect("Failed to get security context.");
         let symlink_context = get_selinux_security_context(&symlink_path, false)
             .expect("Failed to get security context.");
-        assert_ne!(file_context.to_string(), symlink_context.to_string());
+        assert_ne!(file_context, symlink_context);
 
         // Context must be the same if we follow the link
         let symlink_follow_context = get_selinux_security_context(&symlink_path, true)
             .expect("Failed to get security context.");
-        assert_eq!(file_context.to_string(), symlink_follow_context.to_string());
+        assert_eq!(file_context, symlink_follow_context);
     }
 
     #[test]

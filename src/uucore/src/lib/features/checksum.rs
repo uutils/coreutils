@@ -150,10 +150,11 @@ impl From<ChecksumError> for FileCheckError {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Copy, Default)]
 pub enum ChecksumVerbose {
     Status,
     Quiet,
+    #[default]
     Normal,
     Warning,
 }
@@ -185,12 +186,6 @@ impl ChecksumVerbose {
     #[inline]
     pub fn at_least_warning(self) -> bool {
         self >= Self::Warning
-    }
-}
-
-impl Default for ChecksumVerbose {
-    fn default() -> Self {
-        Self::Normal
     }
 }
 

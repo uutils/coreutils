@@ -140,6 +140,30 @@ fn test_df_follows_symlinks() {
 }
 
 #[test]
+fn test_df_trailing_zeros() {
+    use regex::Regex;
+
+    new_ucmd!()
+        .arg("-h")
+        .arg("--output=size,used")
+        .arg("--total")
+        .succeeds()
+        .stdout_does_not_match(&Regex::new("\\s[1-9][A-Z]").unwrap());
+}
+
+#[test]
+fn test_df_rounding() {
+    use regex::Regex;
+
+    new_ucmd!()
+        .arg("-H")
+        .arg("--output=size,used")
+        .arg("--total")
+        .succeeds()
+        .stdout_does_not_match(&Regex::new("\\s\\d{3}\\.\\d[A-Z]").unwrap());
+}
+
+#[test]
 fn test_df_output_overridden() {
     let expected = if cfg!(target_os = "macos") {
         vec![
@@ -667,6 +691,24 @@ fn test_block_size_from_env() {
 }
 
 #[test]
+fn test_block_size_from_env_zero() {
+    fn get_header(env_var: &str, env_value: &str) -> String {
+        let output = new_ucmd!()
+            .arg("--output=size")
+            .env(env_var, env_value)
+            .succeeds()
+            .stdout_str_lossy();
+        output.lines().next().unwrap().trim().to_string()
+    }
+
+    let default_block_size_header = "1K-blocks";
+
+    assert_eq!(get_header("DF_BLOCK_SIZE", "0"), default_block_size_header);
+    assert_eq!(get_header("BLOCK_SIZE", "0"), default_block_size_header);
+    assert_eq!(get_header("BLOCKSIZE", "0"), default_block_size_header);
+}
+
+#[test]
 fn test_block_size_from_env_precedences() {
     fn get_header(one: (&str, &str), two: (&str, &str)) -> String {
         let (k1, v1) = one;
@@ -717,6 +759,16 @@ fn test_invalid_block_size_from_env() {
     let output = new_ucmd!()
         .arg("--output=size")
         .env("DF_BLOCK_SIZE", "invalid")
+        .env("BLOCK_SIZE", "222")
+        .succeeds()
+        .stdout_str_lossy();
+    let header = output.lines().next().unwrap().trim().to_string();
+
+    assert_eq!(header, default_block_size_header);
+
+    let output = new_ucmd!()
+        .arg("--output=size")
+        .env("DF_BLOCK_SIZE", "0")
         .env("BLOCK_SIZE", "222")
         .succeeds()
         .stdout_str_lossy();

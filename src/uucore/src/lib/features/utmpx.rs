@@ -275,7 +275,7 @@ impl Utmpx {
             }
         }
 
-        Ok(host.to_string())
+        Ok(host)
     }
 
     /// Iterate through all the utmp records.

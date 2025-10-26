@@ -152,7 +152,7 @@ impl WordFilter {
                     if v.is_empty() {
                         None
                     } else {
-                        Some(v.to_string())
+                        Some(v.to_owned())
                     }
                 }
                 None => None,
@@ -227,16 +227,16 @@ fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
     config.right_ref = matches.get_flag(options::RIGHT_SIDE_REFS);
     config.ignore_case = matches.get_flag(options::IGNORE_CASE);
     if matches.contains_id(options::MACRO_NAME) {
-        config.macro_name = matches
+        matches
             .get_one::<String>(options::MACRO_NAME)
             .expect(err_msg)
-            .to_string();
+            .clone_into(&mut config.macro_name);
     }
     if matches.contains_id(options::FLAG_TRUNCATION) {
-        config.trunc_str = matches
+        matches
             .get_one::<String>(options::FLAG_TRUNCATION)
             .expect(err_msg)
-            .to_string();
+            .clone_into(&mut config.trunc_str);
     }
     if matches.contains_id(options::WIDTH) {
         config.line_width = matches

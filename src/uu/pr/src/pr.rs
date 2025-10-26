@@ -406,7 +406,7 @@ fn parse_usize(matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>
     };
     matches
         .get_one::<String>(opt)
-        .map(|i| (i.to_string(), format!("-{opt}")))
+        .map(|i| (i.to_owned(), format!("-{opt}")))
         .map(from_parse_error_to_pr_error)
 }
 

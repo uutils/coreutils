@@ -244,9 +244,7 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
     let mut new_linebreaks = vec![];
     let mut is_sentence_start = false;
     let mut least_demerits = 0;
-    loop {
-        let Some(w) = iter.next() else { break };
-
+    while let Some(w) = iter.next() {
         // if this is the last word, we don't add additional demerits for this break
         let (is_last_word, is_sentence_end) = match iter.peek() {
             None => (true, true),
