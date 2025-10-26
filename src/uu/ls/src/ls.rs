@@ -3240,7 +3240,8 @@ fn display_item_name(
                 if let Some(style_manager) = &mut state.style_manager {
                     if target_path.exists() {
                         // Target exists, create PathData and use enhanced coloring
-                        let target_data = PathData::new(target_path.clone(), None, None, config, false);
+                        let target_data =
+                            PathData::new(target_path.clone(), None, None, config, false);
 
                         // Use the enhanced coloring logic that checks target metadata
                         name.push(color_name(
