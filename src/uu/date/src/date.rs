@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres
+// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST
 
 use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime;
@@ -476,13 +476,15 @@ static PREFERRED_TZ_MAPPINGS: &[(&str, &str)] = &[
     ("EST", "America/New_York"), // Ambiguous: US vs Australia
     ("EDT", "America/New_York"),
     // Other highly ambiguous cases
-    ("IST", "Asia/Kolkata"), // Ambiguous: India vs Israel vs Ireland // spell-checker:disable-line
+    /* spell-checker: disable */
+    ("IST", "Asia/Kolkata"), // Ambiguous: India vs Israel vs Ireland
     // Australian timezones (cannot be discovered from IANA location names)
     ("AWST", "Australia/Perth"),    // Australian Western Standard Time
     ("ACST", "Australia/Adelaide"), // Australian Central Standard Time
     ("ACDT", "Australia/Adelaide"), // Australian Central Daylight Time
     ("AEST", "Australia/Sydney"),   // Australian Eastern Standard Time
     ("AEDT", "Australia/Sydney"),   // Australian Eastern Daylight Time
+                                    /* spell-checker: enable */
 ];
 
 /// Lazy-loaded timezone abbreviation lookup map built from IANA database.
