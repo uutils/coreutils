@@ -434,6 +434,146 @@ fn test_check_untagged_sha2_multiple_files() {
 }
 
 #[test]
+fn test_sha3_wrong_length() {
+    for l in [0, 13, 819_111_123] {
+        new_ucmd!()
+            .arg("--algorithm=sha3")
+            .arg(format!("--length={l}"))
+            .arg("lorem_ipsum.txt")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains(format!("invalid length: '{l}'"));
+    }
+}
+
+#[test]
+fn test_sha3_single_file() {
+    for l in SHA_LENGTHS {
+        new_ucmd!()
+            .arg("--algorithm=sha3")
+            .arg(format!("--length={l}"))
+            .arg("lorem_ipsum.txt")
+            .succeeds()
+            .stdout_is_fixture(format!("sha3_{l}_single_file.expected"));
+    }
+}
+
+#[test]
+fn test_sha3_multiple_files() {
+    for l in SHA_LENGTHS {
+        new_ucmd!()
+            .arg("--algorithm=sha3")
+            .arg(format!("--length={l}"))
+            .arg("lorem_ipsum.txt")
+            .arg("alice_in_wonderland.txt")
+            .succeeds()
+            .stdout_is_fixture(format!("sha3_{l}_multiple_files.expected"));
+    }
+}
+
+#[test]
+fn test_sha3_stdin() {
+    for l in SHA_LENGTHS {
+        new_ucmd!()
+            .arg("--algorithm=sha3")
+            .arg(format!("--length={l}"))
+            .pipe_in_fixture("lorem_ipsum.txt")
+            .succeeds()
+            .stdout_is_fixture(format!("sha3_{l}_stdin.expected"));
+    }
+}
+
+#[test]
+fn test_untagged_sha3_single_file() {
+    for l in SHA_LENGTHS {
+        new_ucmd!()
+            .arg("--untagged")
+            .arg("--algorithm=sha3")
+            .arg(format!("--length={l}"))
+            .arg("lorem_ipsum.txt")
+            .succeeds()
+            .stdout_is_fixture(format!("untagged/sha3_{l}_single_file.expected"));
+    }
+}
+
+#[test]
+fn test_untagged_sha3_multiple_files() {
+    for l in SHA_LENGTHS {
+        new_ucmd!()
+            .arg("--untagged")
+            .arg("--algorithm=sha3")
+            .arg(format!("--length={l}"))
+            .arg("lorem_ipsum.txt")
+            .arg("alice_in_wonderland.txt")
+            .succeeds()
+            .stdout_is_fixture(format!("untagged/sha3_{l}_multiple_files.expected"));
+    }
+}
+
+#[test]
+fn test_untagged_sha3_stdin() {
+    for l in SHA_LENGTHS {
+        new_ucmd!()
+            .arg("--untagged")
+            .arg("--algorithm=sha3")
+            .arg(format!("--length={l}"))
+            .pipe_in_fixture("lorem_ipsum.txt")
+            .succeeds()
+            .stdout_is_fixture(format!("untagged/sha3_{l}_stdin.expected"));
+    }
+}
+
+#[test]
+fn test_check_tagged_sha3_single_file() {
+    for l in SHA_LENGTHS {
+        new_ucmd!()
+            .arg("--check")
+            .arg(format!("sha3_{l}_single_file.expected"))
+            .succeeds()
+            .stdout_is("lorem_ipsum.txt: OK\n");
+    }
+}
+
+#[test]
+fn test_check_tagged_sha3_multiple_files() {
+    for l in SHA_LENGTHS {
+        new_ucmd!()
+            .arg("--check")
+            .arg(format!("sha3_{l}_multiple_files.expected"))
+            .succeeds()
+            .stdout_contains("lorem_ipsum.txt: OK\n")
+            .stdout_contains("alice_in_wonderland.txt: OK\n");
+    }
+}
+
+// When checking sha3 in untagged mode, the length is automatically deduced
+// from the length of the digest.
+#[test]
+fn test_check_untagged_sha3_single_file() {
+    for l in SHA_LENGTHS {
+        new_ucmd!()
+            .arg("--check")
+            .arg("--algorithm=sha3")
+            .arg(format!("untagged/sha3_{l}_single_file.expected"))
+            .succeeds()
+            .stdout_is("lorem_ipsum.txt: OK\n");
+    }
+}
+
+#[test]
+fn test_check_untagged_sha3_multiple_files() {
+    for l in SHA_LENGTHS {
+        new_ucmd!()
+            .arg("--check")
+            .arg("--algorithm=sha3")
+            .arg(format!("untagged/sha3_{l}_multiple_files.expected"))
+            .succeeds()
+            .stdout_contains("lorem_ipsum.txt: OK\n")
+            .stdout_contains("alice_in_wonderland.txt: OK\n");
+    }
+}
+
+#[test]
 fn test_check_algo() {
     for algo in ["bsd", "sysv", "crc", "crc32b"] {
         new_ucmd!()
