@@ -441,17 +441,108 @@ fn test_mkdir_deep_nesting() {
     // Create a path with 350 levels of nesting
     let depth = 350;
     let dir_name = "d";
-    let mut path = String::new();
-    for i in 0..depth {
-        if i > 0 {
-            path.push('/');
-        }
-        path.push_str(dir_name);
+    let mut path = std::path::PathBuf::new();
+    for _ in 0..depth {
+        path.push(dir_name);
     }
 
-    // This should succeed without stack overflow
     scene.ucmd().arg("-p").arg(&path).succeeds();
 
-    // Verify the deepest directory exists
     assert!(at.dir_exists(&path));
+}
+
+#[test]
+fn test_mkdir_dot_components() {
+    // Test handling of "." (current directory) components
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Test case from review comment: test/././test2/././test3/././test4
+    // GNU mkdir normalizes this path and creates test/test2/test3/test4
+    let path = "test/././test2/././test3/././test4";
+    scene.ucmd().arg("-p").arg(path).succeeds();
+
+    // Verify expected structure exists (GNU compatibility)
+    assert!(at.dir_exists("test/test2/test3/test4"));
+
+    // Test leading "." - should create test_dot/test_dot2
+    scene
+        .ucmd()
+        .arg("-p")
+        .arg("./test_dot/test_dot2")
+        .succeeds();
+    assert!(at.dir_exists("test_dot/test_dot2"));
+
+    // Test mixed "." and normal components
+    scene
+        .ucmd()
+        .arg("-p")
+        .arg("mixed/./normal/./path")
+        .succeeds();
+    assert!(at.dir_exists("mixed/normal/path"));
+
+    // Test that the command works without creating redundant directories
+    // The key test is that it doesn't fail or create incorrect structure
+    // The actual filesystem behavior (whether literal "." dirs exist)
+    // may vary, but the logical result should be correct
+}
+
+#[test]
+fn test_mkdir_parent_dir_components() {
+    // Test handling of ".." (parent directory) components
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("base");
+    at.mkdir("base/child");
+
+    scene
+        .ucmd()
+        .arg("-p")
+        .arg("base/child/../sibling")
+        .succeeds();
+    assert!(at.dir_exists("base/sibling"));
+
+    scene
+        .ucmd()
+        .arg("-p")
+        .arg("base/child/../../other")
+        .succeeds();
+    assert!(at.dir_exists("other"));
+
+    scene
+        .ucmd()
+        .arg("-p")
+        .arg("base/child/../sibling")
+        .succeeds();
+    assert!(at.dir_exists("base/sibling"));
+}
+
+#[test]
+fn test_mkdir_mixed_special_components() {
+    // Test complex paths with both "." and ".." components
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene
+        .ucmd()
+        .arg("-p")
+        .arg("./start/./middle/../end/./final")
+        .succeeds();
+    assert!(at.dir_exists("start/end/final"));
+}
+
+#[test]
+fn test_mkdir_special_characters_quotes() {
+    // Test paths with special characters that might behave differently on Windows
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Test double quotes in path
+    scene.ucmd().arg("-p").arg("a/\"\"/b/c").succeeds();
+    assert!(at.dir_exists("a/\"\"/b/c"));
+
+    // Test single quotes in path
+    scene.ucmd().arg("-p").arg("x/'/y/z").succeeds();
+    assert!(at.dir_exists("x/'/y/z"));
 }
