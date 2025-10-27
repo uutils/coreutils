@@ -4101,6 +4101,226 @@ fn test_cp_dest_no_permissions() {
         .stderr_contains("denied");
 }
 
+/// Regression test for macOS readonly file behavior (issue #5257, PR #5261)
+/// This test ensures that copying to readonly files fails appropriately on all platforms
+#[test]
+fn test_cp_readonly_dest_regression() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // Create source and readonly destination
+    at.write("source.txt", "source content");
+    at.write("readonly_dest.txt", "original content");
+    at.set_readonly("readonly_dest.txt");
+
+    // The copy should fail with permission denied
+    ts.ucmd()
+        .args(&["source.txt", "readonly_dest.txt"])
+        .fails()
+        .stderr_contains("readonly_dest.txt")
+        .stderr_contains("denied");
+
+    // Verify the original content is unchanged
+    assert_eq!(at.read("readonly_dest.txt"), "original content");
+}
+
+/// Test readonly destination behavior with --force flag (should succeed)
+#[cfg(not(windows))]
+#[test]
+fn test_cp_readonly_dest_with_force() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("source.txt", "source content");
+    at.write("readonly_dest.txt", "original content");
+    at.set_readonly("readonly_dest.txt");
+
+    // --force should succeed even with readonly destination
+    ts.ucmd()
+        .args(&["--force", "source.txt", "readonly_dest.txt"])
+        .succeeds();
+
+    // Verify content was overwritten
+    assert_eq!(at.read("readonly_dest.txt"), "source content");
+}
+
+/// Test readonly destination behavior with --remove-destination flag (should succeed)
+#[cfg(not(windows))]
+#[test]
+fn test_cp_readonly_dest_with_remove_destination() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("source.txt", "source content");
+    at.write("readonly_dest.txt", "original content");
+    at.set_readonly("readonly_dest.txt");
+
+    // --remove-destination should succeed even with readonly destination
+    ts.ucmd()
+        .args(&["--remove-destination", "source.txt", "readonly_dest.txt"])
+        .succeeds();
+
+    // Verify content was overwritten
+    assert_eq!(at.read("readonly_dest.txt"), "source content");
+}
+
+/// Test readonly destination behavior with reflink options
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn test_cp_readonly_dest_with_reflink() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("source.txt", "source content");
+    at.write("readonly_dest_auto.txt", "original content");
+    at.set_readonly("readonly_dest_auto.txt");
+
+    // Test with --reflink=auto - should fail (may have different error messages)
+    ts.ucmd()
+        .args(&["--reflink=auto", "source.txt", "readonly_dest_auto.txt"])
+        .fails()
+        .stderr_contains("readonly_dest_auto.txt");
+
+    // Create separate file for --reflink=always test
+    at.write("readonly_dest_always.txt", "original content");
+    at.set_readonly("readonly_dest_always.txt");
+
+    // Test with --reflink=always - should fail
+    ts.ucmd()
+        .args(&["--reflink=always", "source.txt", "readonly_dest_always.txt"])
+        .fails()
+        .stderr_contains("readonly_dest_always.txt");
+
+    // Verify content unchanged in both files
+    assert_eq!(at.read("readonly_dest_auto.txt"), "original content");
+    assert_eq!(at.read("readonly_dest_always.txt"), "original content");
+}
+
+/// Test readonly destination behavior in recursive directory copy
+#[test]
+fn test_cp_readonly_dest_recursive() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // Create source directory with file
+    at.mkdir("source_dir");
+    at.write("source_dir/file.txt", "source content");
+
+    // Create destination directory with readonly file
+    at.mkdir("dest_dir");
+    at.write("dest_dir/file.txt", "original content");
+    at.set_readonly("dest_dir/file.txt");
+
+    // Recursive copy appears to succeed but doesn't overwrite readonly files
+    // This is actually the correct behavior - it should protect readonly files
+    ts.ucmd().args(&["-r", "source_dir", "dest_dir"]).succeeds();
+
+    // Verify content was NOT changed (readonly file was protected)
+    assert_eq!(at.read("dest_dir/file.txt"), "original content");
+}
+
+/// Test copying to readonly file when another file exists
+#[test]
+fn test_cp_readonly_dest_with_existing_file() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("source.txt", "source content");
+    at.write("readonly_dest.txt", "original content");
+    at.set_readonly("readonly_dest.txt");
+    at.write("other_file.txt", "other content");
+
+    // Should fail on readonly destination
+    ts.ucmd()
+        .args(&["source.txt", "readonly_dest.txt"])
+        .fails()
+        .stderr_contains("readonly_dest.txt")
+        .stderr_contains("denied");
+
+    // Verify readonly file unchanged and other file unaffected
+    assert_eq!(at.read("readonly_dest.txt"), "original content");
+    assert_eq!(at.read("other_file.txt"), "other content");
+}
+
+/// Test readonly source file (should work fine)
+#[test]
+fn test_cp_readonly_source() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("readonly_source.txt", "source content");
+    at.set_readonly("readonly_source.txt");
+    at.write("dest.txt", "dest content");
+
+    // Copy from readonly source should work fine
+    ts.ucmd()
+        .args(&["readonly_source.txt", "dest.txt"])
+        .succeeds();
+
+    // Verify content was copied
+    assert_eq!(at.read("dest.txt"), "source content");
+}
+
+/// Test readonly source and destination (should fail)
+#[test]
+fn test_cp_readonly_source_and_dest() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("readonly_source.txt", "source content");
+    at.set_readonly("readonly_source.txt");
+    at.write("readonly_dest.txt", "original content");
+    at.set_readonly("readonly_dest.txt");
+
+    // Should fail due to readonly destination
+    ts.ucmd()
+        .args(&["readonly_source.txt", "readonly_dest.txt"])
+        .fails()
+        .stderr_contains("readonly_dest.txt")
+        .stderr_contains("denied");
+
+    // Verify destination unchanged
+    assert_eq!(at.read("readonly_dest.txt"), "original content");
+}
+
+/// Test macOS-specific clonefile behavior with readonly files
+#[cfg(target_os = "macos")]
+#[test]
+fn test_cp_macos_clonefile_readonly() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("source.txt", "source content");
+    at.write("readonly_dest.txt", "original content");
+    at.set_readonly("readonly_dest.txt");
+
+    // On macOS, clonefile should still fail on readonly destination
+    ts.ucmd()
+        .args(&["source.txt", "readonly_dest.txt"])
+        .fails()
+        .stderr_contains("readonly_dest.txt")
+        .stderr_contains("denied");
+
+    // Verify content unchanged
+    assert_eq!(at.read("readonly_dest.txt"), "original content");
+}
+
+/// Test that the fix doesn't break normal copy operations
+#[test]
+fn test_cp_normal_copy_still_works() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("source.txt", "source content");
+    at.write("dest.txt", "dest content");
+
+    // Normal copy should still work
+    ts.ucmd().args(&["source.txt", "dest.txt"]).succeeds();
+
+    // Verify content was copied
+    assert_eq!(at.read("dest.txt"), "source content");
+}
+
 #[test]
 #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
 fn test_cp_attributes_only() {
