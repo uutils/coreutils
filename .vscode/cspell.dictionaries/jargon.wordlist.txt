@@ -89,6 +89,7 @@ nocache
 nocreat
 noctty
 noerror
+noexec
 nofollow
 nolinks
 nonblock
