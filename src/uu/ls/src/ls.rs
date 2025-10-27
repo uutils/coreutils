@@ -1381,7 +1381,6 @@ pub fn uu_app() -> Command {
         Arg::new(options::quoting::LITERAL)
             .short('N')
             .long(options::quoting::LITERAL)
-            .alias("l")
             .help(translate!("ls-help-literal-quoting-style"))
             .overrides_with_all([
                 QUOTING_STYLE,
