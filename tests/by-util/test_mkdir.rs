@@ -761,7 +761,6 @@ fn test_mkdir_environment_expansion() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    // Set an environment variable
     unsafe {
         std::env::set_var("TEST_VAR", "expanded_value");
     }
@@ -785,7 +784,6 @@ fn test_mkdir_environment_expansion() {
     scene.ucmd().arg("-p").arg("~/test_dir").succeeds();
     assert!(at.dir_exists("~/test_dir"));
 
-    // Clean up
     unsafe {
         std::env::remove_var("TEST_VAR");
     }
