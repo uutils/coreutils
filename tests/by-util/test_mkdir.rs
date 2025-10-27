@@ -580,7 +580,7 @@ fn test_mkdir_control_characters() {
         assert!(at.dir_exists("test\tname"));
     }
 
-    // Test backspace (space in name - should work on all systems)
+    // Test space character in directory name (should work on all systems)
     scene.ucmd().arg("-p").arg("test name").succeeds();
     assert!(at.dir_exists("test name"));
 
