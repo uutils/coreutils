@@ -3321,7 +3321,6 @@ dependencies = [
 name = "uu_date"
 version = "0.3.0"
 dependencies = [
- "chrono",
  "clap",
  "fluent",
  "jiff",
