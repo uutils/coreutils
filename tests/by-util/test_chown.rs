@@ -363,13 +363,16 @@ fn test_chown_only_group() {
     result.stderr_contains("retained as");
     result.success();
 
-    scene
-        .ucmd()
-        .arg(format!(":{ROOT_GROUP}"))
-        .arg("--verbose")
-        .arg(file1)
-        .fails()
-        .stderr_contains("failed to change");
+    // FreeBSD user on CI is part of wheel group
+    if group_name != ROOT_GROUP {
+        scene
+            .ucmd()
+            .arg(format!(":{ROOT_GROUP}"))
+            .arg("--verbose")
+            .arg(file1)
+            .fails()
+            .stderr_contains("failed to change");
+    }
 }
 
 #[test]
@@ -494,13 +497,16 @@ fn test_chown_only_group_id() {
     // Apparently on CI "macos-latest, x86_64-apple-darwin, feat_os_macos"
     // the process has the rights to change from runner:staff to runner:wheel
     #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
-    scene
-        .ucmd()
-        .arg(":0")
-        .arg("--verbose")
-        .arg(file1)
-        .fails()
-        .stderr_contains("failed to change");
+    // FreeBSD user on CI is part of wheel group
+    if group_id != "0" {
+        scene
+            .ucmd()
+            .arg(":0")
+            .arg("--verbose")
+            .arg(file1)
+            .fails()
+            .stderr_contains("failed to change");
+    }
 }
 
 /// Test for setting the group to a group ID for a group that does not exist.
