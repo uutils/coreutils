@@ -837,25 +837,41 @@ fn identify_algo_name_and_length(
     last_algo: &mut Option<String>,
 ) -> Result<(String, Option<usize>), LineCheckError> {
     let algo_from_line = line_info.algo_name.clone().unwrap_or_default();
-    let algorithm = algo_from_line.to_lowercase();
+    let line_algo = algo_from_line.to_lowercase();
     *last_algo = Some(algo_from_line);
 
-    // check if we are called with XXXsum (example: md5sum) but we detected a different algo parsing the file
-    // (for example SHA1 (f) = d...)
+    // check if we are called with XXXsum (example: md5sum) but we detected a
+    // different algo parsing the file (for example SHA1 (f) = d...)
+    //
     // Also handle the case cksum -s sm3 but the file contains other formats
-    if algo_name_input.is_some() && algo_name_input != Some(&algorithm) {
-        return Err(LineCheckError::ImproperlyFormatted);
+    if let Some(algo_name_input) = algo_name_input {
+        match (algo_name_input, line_algo.as_str()) {
+            (l, r) if l == r => (),
+            // Edge case for SHA2, which matches SHA(224|256|384|512)
+            (
+                ALGORITHM_OPTIONS_SHA2,
+                ALGORITHM_OPTIONS_SHA224
+                | ALGORITHM_OPTIONS_SHA256
+                | ALGORITHM_OPTIONS_SHA384
+                | ALGORITHM_OPTIONS_SHA512,
+            ) => (),
+            _ => return Err(LineCheckError::ImproperlyFormatted),
+        }
     }
 
-    if !SUPPORTED_ALGORITHMS.contains(&algorithm.as_str()) {
+    if !SUPPORTED_ALGORITHMS.contains(&line_algo.as_str()) {
         // Not supported algo, leave early
         return Err(LineCheckError::ImproperlyFormatted);
     }
 
     let bytes = if let Some(bitlen) = line_info.algo_bit_len {
-        match algorithm.as_str() {
+        match line_algo.as_str() {
             ALGORITHM_OPTIONS_BLAKE2B if bitlen % 8 == 0 => Some(bitlen / 8),
-            ALGORITHM_OPTIONS_SHA3 if [224, 256, 384, 512].contains(&bitlen) => Some(bitlen),
+            ALGORITHM_OPTIONS_SHA2 | ALGORITHM_OPTIONS_SHA3
+                if [224, 256, 384, 512].contains(&bitlen) =>
+            {
+                Some(bitlen)
+            }
             // Either
             //  the algo based line is provided with a bit length
             //  with an algorithm that does not support it (only Blake2B does).
@@ -866,14 +882,14 @@ fn identify_algo_name_and_length(
             //  the given length is wrong because it's not a multiple of 8.
             _ => return Err(LineCheckError::ImproperlyFormatted),
         }
-    } else if algorithm == ALGORITHM_OPTIONS_BLAKE2B {
+    } else if line_algo == ALGORITHM_OPTIONS_BLAKE2B {
         // Default length with BLAKE2b,
         Some(64)
     } else {
         None
     };
 
-    Ok((algorithm, bytes))
+    Ok((line_algo, bytes))
 }
 
 /// Given a filename and an algorithm, compute the digest and compare it with

@@ -7,6 +7,7 @@
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
+use uutests::util::log_info;
 use uutests::util_name;
 
 const ALGOS: [&str; 11] = [
@@ -430,6 +431,60 @@ fn test_check_untagged_sha2_multiple_files() {
             .succeeds()
             .stdout_contains("lorem_ipsum.txt: OK\n")
             .stdout_contains("alice_in_wonderland.txt: OK\n");
+    }
+}
+
+#[test]
+fn test_check_sha2_tagged_variant() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("f");
+
+    // SHA2-xxx is an alias to SHAxxx we don't output but we still recognize.
+    let checksum_lines = [
+        (
+            "SHA224",
+            "SHA2-224",
+            "(f) = d14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f",
+        ),
+        (
+            "SHA256",
+            "SHA2-256",
+            "(f) = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ),
+        (
+            "SHA384",
+            "SHA2-384",
+            "(f) = 38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b",
+        ),
+        (
+            "SHA512",
+            "SHA2-512",
+            "(f) = cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e",
+        ),
+    ];
+
+    for (basic, variant, digest) in checksum_lines {
+        let stdin = format!("{basic} {digest}");
+        log_info("stdin is: ", &stdin);
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("--algorithm=sha2")
+            .pipe_in(stdin)
+            .succeeds()
+            .stdout_is("f: OK\n");
+
+        // Check that the variant works the same
+        let stdin = format!("{variant} {digest}");
+        log_info("stdin is: ", &stdin);
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("--algorithm=sha2")
+            .pipe_in(stdin)
+            .succeeds()
+            .stdout_is("f: OK\n");
     }
 }
 
