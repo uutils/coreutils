@@ -584,19 +584,29 @@ fn test_mkdir_control_characters() {
     scene.ucmd().arg("-p").arg("test name").succeeds();
     assert!(at.dir_exists("test name"));
 
-    // Test double quotes in path
-    // Note: This may fail on Windows
-    let result = scene.ucmd().arg("-p").arg("a/\"\"/b/c").run();
-    if result.succeeded() {
+    // Test double quotes in path - platform-specific behavior expected
+    // On Linux/Unix: Should succeed and create directory with quotes
+    // On Windows: Should fail with "Invalid argument" error
+    #[cfg(unix)]
+    {
+        scene.ucmd().arg("-pv").arg("a/\"\"/b/c").succeeds();
         assert!(at.dir_exists("a/\"\"/b/c"));
     }
-
-    // Test single quotes in path
-    // Note: This may fail on Windows
-    let result = scene.ucmd().arg("-p").arg("x/'/y/z").run();
-    if result.succeeded() {
-        assert!(at.dir_exists("x/'/y/z"));
+    #[cfg(windows)]
+    {
+        let result = scene.ucmd().arg("-pv").arg("a/\"\"/b/c").run();
+        // Should fail after creating 'a' directory
+        assert!(at.dir_exists("a"));
+        assert!(!at.dir_exists("a/\"\""));
+        assert!(!result.succeeded());
+        // Check for appropriate error message
+        assert!(result.stderr_str().contains("Invalid argument") || 
+                result.stderr_str().contains("cannot create directory"));
     }
+
+    // Test single quotes in path - should work on both Unix and Windows
+    scene.ucmd().arg("-p").arg("a/''/b/c").succeeds();
+    assert!(at.dir_exists("a/''/b/c"));
 }
 
 #[test]
