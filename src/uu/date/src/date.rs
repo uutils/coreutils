@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres
+// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST
 
 use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime;
@@ -459,8 +459,9 @@ fn make_format_string(settings: &Settings) -> &str {
 /// - MST: Mountain Standard Time (US) preferred over Malaysia Standard Time
 /// - PST: Pacific Standard Time (US) - widely used abbreviation
 /// - GMT: Alias for UTC (universal)
+/// - Australian timezones: AWST, ACST, AEST (cannot be dynamically discovered)
 ///
-/// All other timezones (AWST, JST, CET, etc.) are dynamically resolved from IANA database. // spell-checker:disable-line
+/// All other timezones (JST, CET, etc.) are dynamically resolved from IANA database. // spell-checker:disable-line
 static PREFERRED_TZ_MAPPINGS: &[(&str, &str)] = &[
     // Universal (no ambiguity, but commonly used)
     ("UTC", "UTC"),
@@ -475,7 +476,15 @@ static PREFERRED_TZ_MAPPINGS: &[(&str, &str)] = &[
     ("EST", "America/New_York"), // Ambiguous: US vs Australia
     ("EDT", "America/New_York"),
     // Other highly ambiguous cases
-    ("IST", "Asia/Kolkata"), // Ambiguous: India vs Israel vs Ireland // spell-checker:disable-line
+    /* spell-checker: disable */
+    ("IST", "Asia/Kolkata"), // Ambiguous: India vs Israel vs Ireland
+    // Australian timezones (cannot be discovered from IANA location names)
+    ("AWST", "Australia/Perth"),    // Australian Western Standard Time
+    ("ACST", "Australia/Adelaide"), // Australian Central Standard Time
+    ("ACDT", "Australia/Adelaide"), // Australian Central Daylight Time
+    ("AEST", "Australia/Sydney"),   // Australian Eastern Standard Time
+    ("AEDT", "Australia/Sydney"),   // Australian Eastern Daylight Time
+                                    /* spell-checker: enable */
 ];
 
 /// Lazy-loaded timezone abbreviation lookup map built from IANA database.
@@ -547,18 +556,15 @@ fn resolve_tz_abbreviation<S: AsRef<str>>(date_str: S) -> String {
                     // Try to parse the date with UTC first to get timestamp
                     let date_with_utc = format!("{date_part} +00:00");
                     if let Ok(parsed) = parse_datetime::parse_datetime(&date_with_utc) {
-                        // Create timestamp from parsed date
-                        if let Ok(ts) = Timestamp::new(
-                            parsed.timestamp(),
-                            parsed.timestamp_subsec_nanos() as i32,
-                        ) {
-                            // Get the offset for this specific timestamp in the target timezone
-                            let zoned = ts.to_zoned(tz);
-                            let offset_str = format!("{}", zoned.offset());
+                        // Get timestamp from parsed date (which is already a Zoned)
+                        let ts = parsed.timestamp();
 
-                            // Replace abbreviation with offset
-                            return format!("{date_part} {offset_str}");
-                        }
+                        // Get the offset for this specific timestamp in the target timezone
+                        let zoned = ts.to_zoned(tz);
+                        let offset_str = format!("{}", zoned.offset());
+
+                        // Replace abbreviation with offset
+                        return format!("{date_part} {offset_str}");
                     }
                 }
             }
@@ -571,7 +577,13 @@ fn resolve_tz_abbreviation<S: AsRef<str>>(date_str: S) -> String {
 
 /// Parse a `String` into a `DateTime`.
 /// If it fails, return a tuple of the `String` along with its `ParseError`.
-// TODO: Convert `parse_datetime` to jiff and remove wrapper from chrono to jiff structures.
+///
+/// **Update for parse_datetime 0.13:**
+/// - parse_datetime 0.11: returned `chrono::DateTime` → required conversion to `jiff::Zoned`
+/// - parse_datetime 0.13: returns `jiff::Zoned` directly → no conversion needed
+///
+/// This change was necessary to fix issue #8754 (parsing large second values like
+/// "12345.123456789 seconds ago" which failed in 0.11 but works in 0.13).
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
 ) -> Result<Zoned, (String, parse_datetime::ParseDateTimeError)> {
@@ -580,12 +592,10 @@ fn parse_date<S: AsRef<str> + Clone>(
 
     match parse_datetime::parse_datetime(&resolved) {
         Ok(date) => {
-            let timestamp =
-                Timestamp::new(date.timestamp(), date.timestamp_subsec_nanos() as i32).unwrap();
-            Ok(Zoned::new(
-                timestamp,
-                TimeZone::try_system().unwrap_or(TimeZone::UTC),
-            ))
+            // Convert to system timezone for display
+            // (parse_datetime 0.13 returns Zoned in the input's timezone)
+            let timestamp = date.timestamp();
+            Ok(timestamp.to_zoned(TimeZone::try_system().unwrap_or(TimeZone::UTC)))
         }
         Err(e) => Err((s.as_ref().into(), e)),
     }
