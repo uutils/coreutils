@@ -295,15 +295,79 @@ fn test_untagged_algorithm_stdin() {
 }
 
 #[test]
-fn test_sha2_wrong_length() {
-    for l in [0, 13, 819_111_123] {
+fn test_sha_length_invalid() {
+    for algo in ["sha2", "sha3"] {
+        for l in ["0", "00", "13", "56", "99999999999999999999999999"] {
+            new_ucmd!()
+                .arg("--algorithm")
+                .arg(algo)
+                .arg("--length")
+                .arg(l)
+                .arg("/dev/null")
+                .fails_with_code(1)
+                .no_stdout()
+                .stderr_contains(format!("invalid length: '{l}'"))
+                .stderr_contains(format!(
+                    "digest length for '{}' must be 224, 256, 384, or 512",
+                    algo.to_ascii_uppercase()
+                ));
+
+            // Also fails with --check
+            new_ucmd!()
+                .arg("--algorithm")
+                .arg(algo)
+                .arg("--length")
+                .arg(l)
+                .arg("/dev/null")
+                .arg("--check")
+                .fails_with_code(1)
+                .no_stdout()
+                .stderr_contains(format!("invalid length: '{l}'"))
+                .stderr_contains(format!(
+                    "digest length for '{}' must be 224, 256, 384, or 512",
+                    algo.to_ascii_uppercase()
+                ));
+        }
+
+        // Different error for NaNs
+        for l in ["512x", "x512", "512x512"] {
+            new_ucmd!()
+                .arg("--algorithm")
+                .arg(algo)
+                .arg("--length")
+                .arg(l)
+                .arg("/dev/null")
+                .fails_with_code(1)
+                .no_stdout()
+                .stderr_contains(format!("invalid length: '{l}'"));
+
+            // Also fails with --check
+            new_ucmd!()
+                .arg("--algorithm")
+                .arg(algo)
+                .arg("--length")
+                .arg(l)
+                .arg("/dev/null")
+                .arg("--check")
+                .fails_with_code(1)
+                .no_stdout()
+                .stderr_contains(format!("invalid length: '{l}'"));
+        }
+    }
+}
+
+#[test]
+fn test_sha_missing_length() {
+    for algo in ["sha2", "sha3"] {
         new_ucmd!()
-            .arg("--algorithm=sha2")
-            .arg(format!("--length={l}"))
+            .arg("--algorithm")
+            .arg(algo)
             .arg("lorem_ipsum.txt")
             .fails_with_code(1)
             .no_stdout()
-            .stderr_contains(format!("invalid length: '{l}'"));
+            .stderr_contains(format!(
+                "--algorithm={algo} requires specifying --length 224, 256, 384, or 512"
+            ));
     }
 }
 
@@ -485,19 +549,6 @@ fn test_check_sha2_tagged_variant() {
             .pipe_in(stdin)
             .succeeds()
             .stdout_is("f: OK\n");
-    }
-}
-
-#[test]
-fn test_sha3_wrong_length() {
-    for l in [0, 13, 819_111_123] {
-        new_ucmd!()
-            .arg("--algorithm=sha3")
-            .arg(format!("--length={l}"))
-            .arg("lorem_ipsum.txt")
-            .fails_with_code(1)
-            .no_stdout()
-            .stderr_contains(format!("invalid length: '{l}'"));
     }
 }
 
@@ -708,7 +759,7 @@ fn test_length_not_supported() {
 }
 
 #[test]
-fn test_length() {
+fn test_blake2b_length() {
     new_ucmd!()
         .arg("--length=16")
         .arg("--algorithm=blake2b")
@@ -721,7 +772,7 @@ fn test_length() {
 }
 
 #[test]
-fn test_length_greater_than_512() {
+fn test_blake2b_length_greater_than_512() {
     new_ucmd!()
         .arg("--length=1024")
         .arg("--algorithm=blake2b")
@@ -733,7 +784,7 @@ fn test_length_greater_than_512() {
 }
 
 #[test]
-fn test_length_is_zero() {
+fn test_blake2b_length_is_zero() {
     new_ucmd!()
         .arg("--length=0")
         .arg("--algorithm=blake2b")
@@ -745,7 +796,7 @@ fn test_length_is_zero() {
 }
 
 #[test]
-fn test_length_repeated() {
+fn test_blake2b_length_repeated() {
     new_ucmd!()
         .arg("--length=10")
         .arg("--length=123456")
@@ -756,6 +807,23 @@ fn test_length_repeated() {
         .succeeds()
         .no_stderr()
         .stdout_is_fixture("length_is_zero.expected");
+}
+
+#[test]
+fn test_blake2b_length_invalid() {
+    for len in [
+        "1", "01", // Odd
+        "",
+    ] {
+        new_ucmd!()
+            .arg("--length")
+            .arg(len)
+            .arg("--algorithm=blake2b")
+            .arg("lorem_ipsum.txt")
+            .arg("alice_in_wonderland.txt")
+            .fails_with_code(1)
+            .stderr_contains(format!("invalid length: '{len}'"));
+    }
 }
 
 #[test]
