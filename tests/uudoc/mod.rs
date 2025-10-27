@@ -5,7 +5,6 @@
 
 use std::{env, path::PathBuf, process::Command, sync::OnceLock};
 
-
 static UUDOC_BINARY_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 fn get_uudoc_command() -> Command {
@@ -26,59 +25,89 @@ fn test_manpage_formatting_for_utility(utility: &str) {
 /// This tests only the structural formatting, not specific content
 fn test_manpage_formatting_for_utility_with_lang(utility: &str, lang: Option<&str>) {
     let mut binding = get_uudoc_command();
-    let mut command = binding
-        .arg("manpage")
-        .arg(utility);
+    let mut command = binding.arg("manpage").arg(utility);
 
     if let Some(lang_val) = lang {
         command = command.env("LANG", lang_val);
     }
 
-    let output = command
-        .output()
-        .unwrap_or_else(|_| panic!("Failed to execute manpage command for {} with lang {:?}", utility, lang));
+    let output = command.output().unwrap_or_else(|_| {
+        panic!(
+            "Failed to execute manpage command for {} with lang {:?}",
+            utility, lang
+        )
+    });
 
     let lang_desc = lang.unwrap_or("default");
     assert!(
         output.status.success(),
         "Command failed with status: {} for utility {} with lang {}",
-        output.status, utility, lang_desc
+        output.status,
+        utility,
+        lang_desc
     );
 
     assert!(
         output.stderr.is_empty(),
         "stderr should be empty but got: {} for utility {} with lang {}",
-        String::from_utf8_lossy(&output.stderr), utility, lang_desc
+        String::from_utf8_lossy(&output.stderr),
+        utility,
+        lang_desc
     );
 
     let output_str = String::from_utf8_lossy(&output.stdout);
 
     // Basic structure checks
-    assert!(output_str.contains("\n.TH"), "Missing .TH header for utility {} with lang {}", utility, lang_desc);
-    assert!(output_str.contains(utility), "Utility name '{}' not found in manpage with lang {}", utility, lang_desc);
+    assert!(
+        output_str.contains("\n.TH"),
+        "Missing .TH header for utility {} with lang {}",
+        utility,
+        lang_desc
+    );
+    assert!(
+        output_str.contains(utility),
+        "Utility name '{}' not found in manpage with lang {}",
+        utility,
+        lang_desc
+    );
 
-    // Test bullet point formatting - this is the core formatting test
+    // Test formatting - validate both section headers and bullet points
     // We only care about the structural formatting, not the content
     let lines: Vec<&str> = output_str.lines().collect();
 
     for (i, line) in lines.iter().enumerate() {
+        // Check that section headers (lines ending with ':') are followed by empty lines
+        if line.trim().ends_with(':') && i + 1 < lines.len() {
+            let next_line = lines[i + 1];
+            let properly_formatted = next_line.trim().is_empty();
+
+            assert!(
+                properly_formatted,
+                "Section header formatting issue in {} manpage: line {} '{}' is not followed by empty line",
+                utility,
+                i + 1,
+                line
+            );
+        }
+
+        // Check that bullet points are properly preceded by empty lines
         if line.trim_start().starts_with("\\- ") {
-            // Check if this bullet is properly preceded by an empty line
-            // (either the previous line is empty, or this is the first line, or previous line ends a section)
-            let _properly_formatted = if i == 0 {
+            let properly_formatted = if i == 0 {
                 // First line can't be a bullet in a proper man page
                 false
             } else {
                 let prev_line = lines[i - 1];
-                // Should be preceded by an empty line, or the previous line should end with ':' (section header)
-                prev_line.trim().is_empty() || prev_line.trim().ends_with(':')
+                // Should be preceded by an empty line (after trimming whitespace)
+                prev_line.trim().is_empty()
             };
 
-            // TODO: Once clap fixes clap-rs/clap#6087, uncomment this assertion:
-            // This is the core formatting assertion - bullet points should be properly formatted
-            // assert!(properly_formatted,
-            //         "Bullet point formatting issue in {} manpage: line {} '{}' is not properly preceded by empty line",
-            //         utility, i + 1, line);
+            assert!(
+                properly_formatted,
+                "Bullet point formatting issue in {} manpage: line {} '{}' is not properly preceded by empty line",
+                utility,
+                i + 1,
+                line
+            );
         }
     }
 }
@@ -208,10 +237,7 @@ fn test_manpage_formatting_all_utilities() {
     // the formatting issue is consistent across all utilities
 
     // Test a representative sample of utilities
-    let utilities_to_test = vec![
-        "cat", "test", "wc", "uniq",      
-        "echo", "head", "tail", "cut",     
-    ];
+    let utilities_to_test = vec!["cat", "test", "wc", "uniq", "echo", "head", "tail", "cut"];
 
     for utility in utilities_to_test {
         test_manpage_formatting_for_utility(utility);
