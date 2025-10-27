@@ -314,7 +314,7 @@ jobs:
         ! test -f /tmp/usr/local/share/man/man1/whoami.1
         # Check that the completion is not present
         ! test -f /tmp/usr/local/share/zsh/site-functions/_install
-        ! test -f /tmp/usr/local/share/bash-completion/completions/head
+        ! test -f /tmp/usr/local/share/bash-completion/completions/head.bash
         ! test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
       env:
         RUST_BACKTRACE: "1"
@@ -329,7 +329,7 @@ jobs:
         test -f /tmp/usr/local/share/man/man1/md5sum.1
         # Check that the completion is present
         test -f /tmp/usr/local/share/zsh/site-functions/_b2sum
-        test -f /tmp/usr/local/share/bash-completion/completions/head
+        test -f /tmp/usr/local/share/bash-completion/completions/head.bash
         test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
       env:
         RUST_BACKTRACE: "1"
@@ -344,7 +344,7 @@ jobs:
         ! test -f /tmp/usr/local/share/man/man1/whoami.1
         # Check that the completion is not present
         ! test -f /tmp/usr/local/share/zsh/site-functions/_install
-        ! test -f /tmp/usr/local/share/bash-completion/completions/head
+        ! test -f /tmp/usr/local/share/bash-completion/completions/head.bash
         ! test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
     - name: "`make install MULTICALL=n`"
       shell: bash
