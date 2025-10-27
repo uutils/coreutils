@@ -667,9 +667,9 @@ fn test_mkdir_reserved_device_names() {
 }
 
 #[test]
-fn test_mkdir_concurrent_creation() {
-    // Test concurrent directory creation to handle race conditions
-    // Note: This test is simplified because TestScenario creates separate fixtures
+fn test_mkdir_idempotent_behavior() {
+    // Test that mkdir -p can be called multiple times on the same directories
+    // This verifies the idempotent behavior and proper handling of existing directories
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
@@ -677,13 +677,13 @@ fn test_mkdir_concurrent_creation() {
     scene
         .ucmd()
         .arg("-p")
-        .arg("concurrent_test/subdir")
+        .arg("idempotent_test/subdir")
         .succeeds();
-    assert!(at.dir_exists("concurrent_test/subdir"));
+    assert!(at.dir_exists("idempotent_test/subdir"));
 
-    // Create multiple subdirectories sequentially (concurrent testing is complex)
+    // Create multiple subdirectories sequentially
     for i in 0..5 {
-        let path = format!("concurrent_test/subdir/thread_{i}");
+        let path = format!("idempotent_test/subdir/dir_{i}");
         scene.ucmd().arg("-p").arg(&path).succeeds();
         assert!(at.dir_exists(&path));
     }
@@ -692,14 +692,14 @@ fn test_mkdir_concurrent_creation() {
     scene
         .ucmd()
         .arg("-p")
-        .arg("concurrent_test/subdir/existing")
+        .arg("idempotent_test/subdir/existing")
         .succeeds();
     scene
         .ucmd()
         .arg("-p")
-        .arg("concurrent_test/subdir/existing")
+        .arg("idempotent_test/subdir/existing")
         .succeeds();
-    assert!(at.dir_exists("concurrent_test/subdir/existing"));
+    assert!(at.dir_exists("idempotent_test/subdir/existing"));
 }
 
 #[test]
