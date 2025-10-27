@@ -600,8 +600,10 @@ fn test_mkdir_control_characters() {
         assert!(!at.dir_exists("a/\"\""));
         assert!(!result.succeeded());
         // Check for appropriate error message
-        assert!(result.stderr_str().contains("Invalid argument") || 
-                result.stderr_str().contains("cannot create directory"));
+        assert!(
+            result.stderr_str().contains("Invalid argument")
+                || result.stderr_str().contains("cannot create directory")
+        );
     }
 
     // Test single quotes in path - should work on both Unix and Windows
