@@ -419,7 +419,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_UNIVERSAL)
                 .short('u')
                 .long(OPT_UNIVERSAL)
-                .alias(OPT_UNIVERSAL_2)
+                .visible_alias(OPT_UNIVERSAL_2)
                 .help(translate!("date-help-universal"))
                 .action(ArgAction::SetTrue),
         )
