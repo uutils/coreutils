@@ -445,7 +445,7 @@ locales:
 	@if [ -d "$(BASEDIR)/src/uucore/locales" ]; then \
 		mkdir -p "$(BUILDDIR)/locales/uucore"; \
 		for locale_file in "$(BASEDIR)"/src/uucore/locales/*.ftl; do \
-			$(INSTALL) -m 644 -v "$$locale_file" "$(BUILDDIR)/locales/uucore/"; \
+			$(INSTALL) -m 644 "$$locale_file" "$(BUILDDIR)/locales/uucore/"; \
 		done; \
 	fi; \
 	# Copy utility-specific locales
@@ -454,7 +454,7 @@ locales:
 			mkdir -p "$(BUILDDIR)/locales/$$prog"; \
 			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
 				if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
-					$(INSTALL) -m 644 -v "$$locale_file" "$(BUILDDIR)/locales/$$prog/"; \
+					$(INSTALL) -m 644 "$$locale_file" "$(BUILDDIR)/locales/$$prog/"; \
 				fi; \
 			done; \
 		fi; \
@@ -467,7 +467,7 @@ install-locales:
 			mkdir -p "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog"; \
 			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
 				if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
-					$(INSTALL) -m 644 -v "$$locale_file" "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog/"; \
+					$(INSTALL) -m 644 "$$locale_file" "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog/"; \
 				fi; \
 			done; \
 		fi; \
