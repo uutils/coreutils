@@ -1269,8 +1269,6 @@ jobs:
         key: lima-${{ steps.lima-actions-setup.outputs.version }}
     - name: Start Fedora VM with SELinux
       run: limactl start --plain --name=default --cpus=4 --disk=30 --memory=4 --network=lima:user-v2 template://fedora
-    - name: Setup SSH
-      uses: lima-vm/lima-actions/ssh@v1
     - run: rsync -v -a -e ssh . lima-default:~/work/
     - name: Setup Rust and other build deps in VM
       run: |
