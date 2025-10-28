@@ -754,10 +754,10 @@ fn test_mkdir_environment_expansion() {
 
 #[test]
 fn test_mkdir_concurrent_creation() {
-    // Test concurrent mkdir -p operations: 100 iterations, 8 threads, 40 levels nesting
+    // Test concurrent mkdir -p operations: 10 iterations, 8 threads, 40 levels nesting
     use std::thread;
 
-    for _ in 0..100 {
+    for _ in 0..10 {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
 
@@ -769,16 +769,31 @@ fn test_mkdir_concurrent_creation() {
         }
 
         let path_str = dir.to_string_lossy().to_string();
+        let bin_path = scene.bin_path.clone();
 
         let mut handles = vec![];
 
         for _ in 0..8 {
             let path_clone = path_str.clone();
+            let bin_path_clone = bin_path.clone();
 
             let handle = thread::spawn(move || {
-                // Use std::fs::create_dir_all directly since it's equivalent to mkdir -p
-                // This avoids thread safety issues with TestScenario
-                std::fs::create_dir_all(&path_clone).expect("Failed to create directory");
+                // Use the actual uutils mkdir binary to test the real implementation
+                let result = std::process::Command::new(&bin_path_clone)
+                    .arg("mkdir")
+                    .arg("-p")
+                    .arg(&path_clone)
+                    .current_dir(std::env::current_dir().unwrap())
+                    .output();
+
+                match result {
+                    Ok(output) => {
+                        if !output.status.success() {
+                            panic!("mkdir failed: {}", String::from_utf8_lossy(&output.stderr));
+                        }
+                    }
+                    Err(e) => panic!("Failed to execute mkdir: {e}"),
+                }
             });
             handles.push(handle);
         }
