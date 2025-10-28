@@ -788,9 +788,11 @@ fn test_mkdir_concurrent_creation() {
 
                 match result {
                     Ok(output) => {
-                        if !output.status.success() {
-                            panic!("mkdir failed: {}", String::from_utf8_lossy(&output.stderr));
-                        }
+                        assert!(
+                            output.status.success(),
+                            "mkdir failed: {}",
+                            String::from_utf8_lossy(&output.stderr)
+                        );
                     }
                     Err(e) => panic!("Failed to execute mkdir: {e}"),
                 }
