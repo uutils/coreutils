@@ -289,6 +289,118 @@ pub mod text_data {
     }
 }
 
+/// Common benchmark helper for utilities that process files
+///
+/// This helper sets up a temporary file with test data and runs the utility
+/// through its main function, measuring performance.
+pub fn bench_util<F>(bencher: divan::Bencher, data: impl AsRef<[u8]>, args: &[&str], util_func: F)
+where
+    F: Fn(std::vec::IntoIter<std::ffi::OsString>) -> i32 + Copy + Sync,
+{
+    let temp_dir = tempfile::tempdir().unwrap();
+    let file_path = create_test_file(data.as_ref(), temp_dir.path());
+    let file_path_str = file_path.to_str().unwrap();
+
+    let mut all_args = vec![];
+    all_args.extend_from_slice(args);
+    all_args.push(file_path_str);
+
+    bencher.bench(|| {
+        divan::black_box(run_util_function(util_func, &all_args));
+    });
+}
+
+/// Generate text data with leading spaces for unexpand benchmarks
+pub fn generate_indented_text(num_lines: usize) -> Vec<u8> {
+    let mut data = Vec::new();
+    for i in 0..num_lines {
+        // Add varying amounts of leading spaces (4, 8, 12, etc.)
+        let indent = (i % 4 + 1) * 4;
+        data.extend(std::iter::repeat_n(b' ', indent));
+        data.extend_from_slice(b"This is a line of text with leading spaces\n");
+    }
+    data
+}
+
+/// Generate text data with tabs for expand benchmarks
+pub fn generate_tabbed_text(num_lines: usize) -> String {
+    use std::fmt::Write;
+    (0..num_lines).fold(String::new(), |mut acc, i| {
+        writeln!(&mut acc, "line{i}\tvalue{}\tdata{}", i * 2, i * 3).unwrap();
+        acc
+    })
+}
+
+/// Generate text data with multiple tabs for expand with custom tab stops
+pub fn generate_multi_tab_text(num_lines: usize) -> String {
+    use std::fmt::Write;
+    (0..num_lines).fold(String::new(), |mut acc, i| {
+        writeln!(&mut acc, "a\tb\tc\td\te{i}").unwrap();
+        acc
+    })
+}
+
+/// Generate data with many consecutive duplicate lines for uniq benchmarks
+pub fn generate_duplicate_heavy_data(num_groups: usize, duplicates_per_group: usize) -> Vec<u8> {
+    let mut data = Vec::new();
+
+    for group in 0..num_groups {
+        // Generate a line with realistic content
+        let line = format!(
+            "Line content for group {group:06} with additional text to make it more realistic for testing performance\n"
+        );
+
+        // Repeat the line multiple times
+        for _ in 0..duplicates_per_group {
+            data.extend_from_slice(line.as_bytes());
+        }
+    }
+
+    data
+}
+
+/// Generate case-insensitive test data for uniq benchmarks
+pub fn generate_case_variation_data(num_lines: usize) -> Vec<u8> {
+    let mut data = Vec::new();
+    let words = [
+        "Hello",
+        "WORLD",
+        "Testing",
+        "UNIQ",
+        "Benchmark",
+        "Performance",
+    ];
+
+    // Generate groups of case variations
+    for i in 0..num_lines {
+        let word = words[(i / 50) % words.len()];
+
+        // Create case variations that should be treated as duplicates with -i
+        let variation = match i % 4 {
+            0 => word.to_lowercase(),
+            1 => word.to_uppercase(),
+            2 => word.to_string(),
+            _ => {
+                // Mixed case
+                word.chars()
+                    .enumerate()
+                    .map(|(idx, c)| {
+                        if idx % 2 == 0 {
+                            c.to_lowercase().to_string()
+                        } else {
+                            c.to_uppercase().to_string()
+                        }
+                    })
+                    .collect()
+            }
+        };
+
+        data.extend_from_slice(format!("{variation}\n").as_bytes());
+    }
+
+    data
+}
+
 /// Filesystem tree generation utilities for benchmarking
 pub mod fs_tree {
     use std::fs::{self, File};
