@@ -186,13 +186,14 @@ fn cksum<'a, I>(mut options: Options, files: I) -> UResult<()>
 where
     I: Iterator<Item = &'a OsStr>,
 {
-    let files: Vec<_> = files.collect();
+    let mut files = files.peekable();
 
-    if options.output_format.is_raw() && files.len() > 1 {
-        return Err(Box::new(ChecksumError::RawMultipleFiles));
-    }
+    while let Some(filename) = files.next() {
+        // Check that in raw mode, we are not provided with several files.
+        if options.output_format.is_raw() && files.peek().is_some() {
+            return Err(Box::new(ChecksumError::RawMultipleFiles));
+        }
 
-    for filename in files {
         let filepath = Path::new(filename);
         let stdin_buf;
         let file_buf;
@@ -369,36 +370,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let check = matches.get_flag(options::CHECK);
 
-    let algo_name: &str = match matches.get_one::<String>(options::ALGORITHM) {
-        Some(v) => v,
-        None => {
-            if check {
-                // if we are doing a --check, we should not default to crc
-                ""
-            } else {
-                ALGORITHM_OPTIONS_CRC
-            }
-        }
-    };
+    let algo_cli = matches
+        .get_one::<String>(options::ALGORITHM)
+        .map(String::as_str);
 
     let input_length = matches.get_one::<usize>(options::LENGTH);
 
-    let length = match (input_length, algo_name) {
+    let length = match (input_length, algo_cli) {
         // Length for sha2 and sha3 should be saved, it will be validated
         // afterwards if necessary.
-        (Some(len), ALGORITHM_OPTIONS_SHA2 | ALGORITHM_OPTIONS_SHA3) => Some(*len),
+        (Some(len), Some(ALGORITHM_OPTIONS_SHA2 | ALGORITHM_OPTIONS_SHA3)) => Some(*len),
         (None | Some(0), _) => None,
         // Length for Blake2b if saved only if it's not zero.
-        (Some(len), ALGORITHM_OPTIONS_BLAKE2B) => calculate_blake2b_length(*len)?,
+        (Some(len), Some(ALGORITHM_OPTIONS_BLAKE2B)) => calculate_blake2b_length(*len)?,
         // a --length flag set with any other algorithm is an error.
         _ => {
             return Err(ChecksumError::LengthOnlyForBlake2bSha2Sha3.into());
         }
     };
-
-    if LEGACY_ALGORITHMS.contains(&algo_name) && check {
-        return Err(ChecksumError::AlgorithmNotSupportedWithCheck.into());
-    }
 
     let files = matches.get_many::<OsString>(options::FILE).map_or_else(
         // No files given, read from stdin.
@@ -408,6 +397,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     );
 
     if check {
+        // cksum does not support '--check'ing legacy algorithms
+        if algo_cli.is_some_and(|algo_name| LEGACY_ALGORITHMS.contains(&algo_name)) {
+            return Err(ChecksumError::AlgorithmNotSupportedWithCheck.into());
+        }
+
         let text_flag = matches.get_flag(options::TEXT);
         let binary_flag = matches.get_flag(options::BINARY);
         let strict = matches.get_flag(options::STRICT);
@@ -421,13 +415,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             return Err(ChecksumError::BinaryTextConflict.into());
         }
 
-        // Determine the appropriate algorithm option to pass
-        let algo_option = if algo_name.is_empty() {
-            None
-        } else {
-            Some(algo_name)
-        };
-
         // Execute the checksum validation based on the presence of files or the use of stdin
 
         let verbose = ChecksumVerbose::new(status, quiet, warn);
@@ -438,8 +425,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             verbose,
         };
 
-        return perform_checksum_validation(files, algo_option, length, opts);
+        return perform_checksum_validation(files, algo_cli, length, opts);
     }
+
+    // Not --check
+
+    // Set the default algorithm to CRC when not '--check'ing.
+    let algo_name = algo_cli.unwrap_or(ALGORITHM_OPTIONS_CRC);
 
     let (tag, binary) = handle_tag_text_binary_flags(std::env::args_os())?;
 
