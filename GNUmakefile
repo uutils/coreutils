@@ -22,8 +22,6 @@ ifeq ($(PROFILE),release)
 	PROFILE_CMD = --release
 endif
 
-RM := rm -rf
-
 # Binaries
 CARGO  ?= cargo
 CARGOFLAGS ?=
@@ -340,7 +338,6 @@ endif
 
 all: build
 
-do_install = $(INSTALL) ${1}
 use_default := 1
 
 build-pkgs:
@@ -386,12 +383,11 @@ busybox-src:
 
 # This is a busybox-specific config file their test suite wants to parse.
 $(BUILDDIR)/.config: $(BASEDIR)/.busybox-config
-	cp $< $@
+	$(INSTALL) -m 644 $< $@
 
 # Test under the busybox test suite
 $(BUILDDIR)/busybox: busybox-src build-coreutils $(BUILDDIR)/.config
-	cp "$(BUILDDIR)/coreutils" "$(BUILDDIR)/busybox"
-	chmod +x $@
+	$(INSTALL) -m 755 "$(BUILDDIR)/coreutils" "$(BUILDDIR)/busybox"
 
 prepare-busytest: $(BUILDDIR)/busybox
 	# disable inapplicable tests
@@ -504,7 +500,7 @@ endif
 uninstall:
 ifneq ($(OS),Windows_NT)
 	rm -f $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf*
-	-rmdir $(DESTDIR)$(LIBSTDBUF_DIR) 2>/dev/null || true
+	-rm -d $(DESTDIR)$(LIBSTDBUF_DIR) 2>/dev/null || true
 endif
 ifeq (${MULTICALL}, y)
 	rm -f $(addprefix $(INSTALLDIR_BIN)/,$(PROG_PREFIX)coreutils)
