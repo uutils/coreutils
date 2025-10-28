@@ -134,11 +134,13 @@ example:
 cargo build --features "base32 cat echo rm" --no-default-features
 ```
 
-If you don't want to build the multicall binary and would prefer to build the
-utilities as individual binaries, that is also possible. Each utility is
-contained in its own package within the main repository, named "uu_UTILNAME". To
-build individual utilities, use cargo to build just the specific packages (using
-the `--package` [aka `-p`] option). For example:
+If you want to build the utilities as individual binaries, that is also possible:
+
+```shell
+cargo build --release --workspace --exclude uu_runcon --exclude uu_chcon
+```
+Each utility is contained in its own package within the main repository, named "uu_UTILNAME". To
+build selected individual utilities, use the `--package` [aka `-p`] option). For example:
 
 ```shell
 cargo build -p uu_base32 -p uu_cat -p uu_echo -p uu_rm
