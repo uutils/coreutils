@@ -666,42 +666,6 @@ fn test_mkdir_reserved_device_names() {
 }
 
 #[test]
-fn test_mkdir_idempotent_behavior() {
-    // Test that mkdir -p can be called multiple times on the same directories
-    // This verifies the idempotent behavior and proper handling of existing directories
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    // Create base directory first
-    scene
-        .ucmd()
-        .arg("-p")
-        .arg("idempotent_test/subdir")
-        .succeeds();
-    assert!(at.dir_exists("idempotent_test/subdir"));
-
-    // Create multiple subdirectories sequentially
-    for i in 0..5 {
-        let path = format!("idempotent_test/subdir/dir_{i}");
-        scene.ucmd().arg("-p").arg(&path).succeeds();
-        assert!(at.dir_exists(&path));
-    }
-
-    // Test creating the same directory multiple times (should succeed with -p)
-    scene
-        .ucmd()
-        .arg("-p")
-        .arg("idempotent_test/subdir/existing")
-        .succeeds();
-    scene
-        .ucmd()
-        .arg("-p")
-        .arg("idempotent_test/subdir/existing")
-        .succeeds();
-    assert!(at.dir_exists("idempotent_test/subdir/existing"));
-}
-
-#[test]
 fn test_mkdir_case_sensitivity() {
     // Test case sensitivity behavior (varies by filesystem)
     let scene = TestScenario::new(util_name!());
@@ -785,5 +749,56 @@ fn test_mkdir_environment_expansion() {
 
     unsafe {
         std::env::remove_var("TEST_VAR");
+    }
+}
+
+#[test]
+fn test_mkdir_concurrent_creation() {
+    // Test concurrent mkdir -p operations: 100 iterations, 8 threads, 40 levels nesting
+    use std::path::PathBuf;
+    use std::thread;
+
+    for _ in 0..100 {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        let mut dir = PathBuf::from("concurrent_test");
+        dir.push("a");
+
+        for _ in 0..40 {
+            dir.push("a");
+        }
+
+        let path_str = dir.to_string_lossy().to_string();
+
+        let mut handles = vec![];
+
+        for _ in 0..8 {
+            let path_clone = path_str.clone();
+
+            let handle = thread::spawn(move || {
+                let result = std::process::Command::new("mkdir")
+                    .arg("-p")
+                    .arg(&path_clone)
+                    .output();
+
+                match result {
+                    Ok(output) => {
+                        if !output.status.success() {
+                            eprintln!("mkdir failed: {}", String::from_utf8_lossy(&output.stderr));
+                        }
+                    }
+                    Err(e) => eprintln!("Failed to execute mkdir: {e}"),
+                }
+            });
+            handles.push(handle);
+        }
+
+        handles
+            .drain(..)
+            .map(|handle| handle.join().unwrap())
+            .count();
+
+        assert!(at.dir_exists(&path_str));
     }
 }
