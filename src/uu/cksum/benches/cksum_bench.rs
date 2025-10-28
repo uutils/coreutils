@@ -23,6 +23,26 @@ macro_rules! bench_algorithm {
             });
         }
     };
+    ($algo_name:ident, $algo_str:expr, length) => {
+        #[divan::bench]
+        fn $algo_name(bencher: Bencher) {
+            let data = text_data::generate_by_size(10, 80);
+            let file_path = setup_test_file(&data);
+
+            bencher.bench(|| {
+                black_box(run_util_function(
+                    uumain,
+                    &[
+                        "--algorithm",
+                        $algo_str,
+                        "--length",
+                        "256",
+                        file_path.to_str().unwrap(),
+                    ],
+                ));
+            });
+        }
+    };
 }
 
 // Generate benchmarks for all supported algorithms
@@ -32,8 +52,8 @@ bench_algorithm!(cksum_crc, "crc");
 bench_algorithm!(cksum_crc32b, "crc32b");
 bench_algorithm!(cksum_md5, "md5");
 bench_algorithm!(cksum_sha1, "sha1");
-bench_algorithm!(cksum_sha2, "sha2");
-bench_algorithm!(cksum_sha3, "sha3");
+bench_algorithm!(cksum_sha2, "sha2", length);
+bench_algorithm!(cksum_sha3, "sha3", length);
 bench_algorithm!(cksum_blake2b, "blake2b");
 bench_algorithm!(cksum_sm3, "sm3");
 bench_algorithm!(cksum_sha224, "sha224");
@@ -41,35 +61,13 @@ bench_algorithm!(cksum_sha256, "sha256");
 bench_algorithm!(cksum_sha384, "sha384");
 bench_algorithm!(cksum_sha512, "sha512");
 bench_algorithm!(cksum_blake3, "blake3");
-bench_algorithm!(cksum_shake128, "shake128");
-bench_algorithm!(cksum_shake256, "shake256");
+bench_algorithm!(cksum_shake128, "shake128", length);
+bench_algorithm!(cksum_shake256, "shake256", length);
 
 /// Benchmark cksum with default CRC algorithm
 #[divan::bench]
 fn cksum_default(bencher: Bencher) {
     let data = text_data::generate_by_size(10, 80);
-    let file_path = setup_test_file(&data);
-
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[file_path.to_str().unwrap()]));
-    });
-}
-
-/// Benchmark cksum on small file
-#[divan::bench]
-fn cksum_small_file(bencher: Bencher) {
-    let data = text_data::generate_by_size(1, 80);
-    let file_path = setup_test_file(&data);
-
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[file_path.to_str().unwrap()]));
-    });
-}
-
-/// Benchmark cksum on large file
-#[divan::bench]
-fn cksum_large_file(bencher: Bencher) {
-    let data = text_data::generate_by_size(50, 80);
     let file_path = setup_test_file(&data);
 
     bencher.bench(|| {
