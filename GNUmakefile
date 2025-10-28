@@ -233,8 +233,9 @@ ifneq ($(OS),Windows_NT)
 endif
 
 UTILS ?= $(filter-out $(SKIP_UTILS),$(PROGS))
-HASHSUM_PROGS := $(filter-out $(SKIP_UTILS),$(HASHSUM_PROGS))
-ifneq ($(filter hashsum,$(UTILS)),hashsum)
+ifeq ($(filter hashsum,$(UTILS)),hashsum)
+	HASHSUM_PROGS := $(filter-out $(SKIP_UTILS),$(HASHSUM_PROGS))
+else
 	HASHSUM_PROGS :=
 endif
 
