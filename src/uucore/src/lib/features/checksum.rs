@@ -12,6 +12,7 @@ use std::{
     fmt::Display,
     fs::File,
     io::{self, BufReader, Read, Write, stdin},
+    num::IntErrorKind,
     path::Path,
     str,
 };
@@ -220,12 +221,12 @@ pub enum ChecksumError {
     QuietNotCheck,
     #[error("--length required for {}", .0.quote())]
     LengthRequired(String),
-    #[error("unknown algorithm: {0}: clap should have prevented this case")]
-    UnknownAlgorithm(String),
-    #[error("length is not a multiple of 8")]
-    InvalidLength,
+    #[error("invalid length: {}", .0.quote())]
+    InvalidLength(String),
     #[error("digest length for {} must be 224, 256, 384, or 512", .0.quote())]
-    InvalidLengthFor(String),
+    InvalidLengthForSha(String),
+    #[error("--algorithm={0} requires specifying --length 224, 256, 384, or 512")]
+    LengthRequiredForSha(String),
     #[error("--length is only supported with --algorithm blake2b, sha2, or sha3")]
     LengthOnlyForBlake2bSha2Sha3,
     #[error("the --binary and --text options are meaningless when verifying checksums")]
@@ -238,6 +239,8 @@ pub enum ChecksumError {
     CombineMultipleAlgorithms,
     #[error("Needs an algorithm to hash with.\nUse --help for more information.")]
     NeedAlgorithmToHash,
+    #[error("unknown algorithm: {0}: clap should have prevented this case")]
+    UnknownAlgorithm(String),
     #[error("")]
     Io(#[from] io::Error),
 }
@@ -277,7 +280,7 @@ pub fn create_sha3(bits: usize) -> UResult<HashAlgorithm> {
             bits: 512,
         }),
 
-        _ => Err(ChecksumError::InvalidLengthFor("SHA3".into()).into()),
+        _ => Err(ChecksumError::InvalidLengthForSha("SHA3".into()).into()),
     }
 }
 
@@ -304,7 +307,7 @@ pub fn create_sha2(bits: usize) -> UResult<HashAlgorithm> {
             bits: 512,
         }),
 
-        _ => Err(ChecksumError::InvalidLengthFor("SHA2".into()).into()),
+        _ => Err(ChecksumError::InvalidLengthForSha("SHA2".into()).into()),
     }
 }
 
@@ -1235,21 +1238,29 @@ pub fn digest_reader<T: Read>(
 
 /// Calculates the length of the digest.
 pub fn calculate_blake2b_length(length: usize) -> UResult<Option<usize>> {
-    match length {
-        0 => Ok(None),
-        n if n % 8 != 0 => {
-            show_error!("invalid length: \u{2018}{length}\u{2019}");
+    calculate_blake2b_length_str(length.to_string().as_str())
+}
+
+/// Calculates the length of the digest.
+pub fn calculate_blake2b_length_str(length: &str) -> UResult<Option<usize>> {
+    match length.parse() {
+        Ok(0) => Ok(None),
+        Ok(n) if n % 8 != 0 => {
+            show_error!("{}", ChecksumError::InvalidLength(length.into()));
             Err(io::Error::new(io::ErrorKind::InvalidInput, "length is not a multiple of 8").into())
         }
-        n if n > 512 => {
-            show_error!("invalid length: \u{2018}{length}\u{2019}");
+        Ok(n) if n > 512 => {
+            show_error!("{}", ChecksumError::InvalidLength(length.into()));
             Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "maximum digest length for \u{2018}BLAKE2b\u{2019} is 512 bits",
+                format!(
+                    "maximum digest length for {} is 512 bits",
+                    "BLAKE2b".quote()
+                ),
             )
             .into())
         }
-        n => {
+        Ok(n) => {
             // Divide by 8, as our blake2b implementation expects bytes instead of bits.
             if n == 512 {
                 // When length is 512, it is blake2b's default.
@@ -1259,6 +1270,7 @@ pub fn calculate_blake2b_length(length: usize) -> UResult<Option<usize>> {
                 Ok(Some(n / 8))
             }
         }
+        Err(_) => Err(ChecksumError::InvalidLength(length.into()).into()),
     }
 }
 
@@ -1266,10 +1278,35 @@ pub fn validate_sha2_sha3_length(algo_name: &str, length: Option<usize>) -> URes
     match length {
         Some(len @ (224 | 256 | 384 | 512)) => Ok(len),
         Some(len) => {
-            show_error!("invalid length: '{len}'");
-            Err(ChecksumError::InvalidLengthFor(algo_name.to_ascii_uppercase()).into())
+            show_error!("{}", ChecksumError::InvalidLength(len.to_string()));
+            Err(ChecksumError::InvalidLengthForSha(algo_name.to_ascii_uppercase()).into())
         }
-        None => Err(ChecksumError::LengthRequired(algo_name.to_ascii_uppercase()).into()),
+        None => Err(ChecksumError::LengthRequiredForSha(algo_name.into()).into()),
+    }
+}
+
+pub fn sanitize_sha2_sha3_length_str(algo_name: &str, length: &str) -> UResult<usize> {
+    // There is a difference in the errors sent when the length is not a number
+    // vs. its an invalid number.
+    //
+    // When inputting an invalid number, an extra error message it printed to
+    // remind of the accepted inputs.
+    let len = match length.parse::<usize>() {
+        Ok(l) => l,
+        // Note: Positive overflow while parsing counts as an invalid number,
+        // but a number still.
+        Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
+            show_error!("{}", ChecksumError::InvalidLength(length.into()));
+            return Err(ChecksumError::InvalidLengthForSha(algo_name.to_ascii_uppercase()).into());
+        }
+        Err(_) => return Err(ChecksumError::InvalidLength(length.into()).into()),
+    };
+
+    if [224, 256, 384, 512].contains(&len) {
+        Ok(len)
+    } else {
+        show_error!("{}", ChecksumError::InvalidLength(length.into()));
+        Err(ChecksumError::InvalidLengthForSha(algo_name.to_ascii_uppercase()).into())
     }
 }
 

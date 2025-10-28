@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) fname, algo
 
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, Command, value_parser};
+use clap::{Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufReader, Read, Write, stdin, stdout};
@@ -16,8 +16,8 @@ use uucore::checksum::{
     ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC,
     ALGORITHM_OPTIONS_CRC32B, ALGORITHM_OPTIONS_SHA2, ALGORITHM_OPTIONS_SHA3,
     ALGORITHM_OPTIONS_SYSV, ChecksumError, ChecksumOptions, ChecksumVerbose, HashAlgorithm,
-    LEGACY_ALGORITHMS, SUPPORTED_ALGORITHMS, calculate_blake2b_length, detect_algo, digest_reader,
-    perform_checksum_validation,
+    LEGACY_ALGORITHMS, SUPPORTED_ALGORITHMS, calculate_blake2b_length_str, detect_algo,
+    digest_reader, perform_checksum_validation, sanitize_sha2_sha3_length_str,
 };
 use uucore::translate;
 
@@ -364,6 +364,30 @@ fn figure_out_output_format(
     }
 }
 
+/// Sanitize the `--length` argument depending on `--algorithm` and `--length`.
+fn maybe_sanitize_length(
+    algo_cli: Option<&str>,
+    input_length: Option<&str>,
+) -> UResult<Option<usize>> {
+    match (algo_cli, input_length) {
+        // No provided length is not a problem so far.
+        (_, None) => Ok(None),
+
+        // For SHA2 and SHA3, if a length is provided, ensure it is correct.
+        (Some(algo @ (ALGORITHM_OPTIONS_SHA2 | ALGORITHM_OPTIONS_SHA3)), Some(s_len)) => {
+            sanitize_sha2_sha3_length_str(algo, s_len).map(Some)
+        }
+
+        // For BLAKE2b, if a length is provided, validate it.
+        (Some(ALGORITHM_OPTIONS_BLAKE2B), Some(len)) => calculate_blake2b_length_str(len),
+
+        // For any other provided algorithm, check if length is 0.
+        // Otherwise, this is an error.
+        (_, Some(len)) if len.parse::<u32>() == Ok(0_u32) => Ok(None),
+        (_, Some(_)) => Err(ChecksumError::LengthOnlyForBlake2bSha2Sha3.into()),
+    }
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
@@ -374,20 +398,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_one::<String>(options::ALGORITHM)
         .map(String::as_str);
 
-    let input_length = matches.get_one::<usize>(options::LENGTH);
+    let input_length = matches
+        .get_one::<String>(options::LENGTH)
+        .map(String::as_str);
 
-    let length = match (input_length, algo_cli) {
-        // Length for sha2 and sha3 should be saved, it will be validated
-        // afterwards if necessary.
-        (Some(len), Some(ALGORITHM_OPTIONS_SHA2 | ALGORITHM_OPTIONS_SHA3)) => Some(*len),
-        (None | Some(0), _) => None,
-        // Length for Blake2b if saved only if it's not zero.
-        (Some(len), Some(ALGORITHM_OPTIONS_BLAKE2B)) => calculate_blake2b_length(*len)?,
-        // a --length flag set with any other algorithm is an error.
-        _ => {
-            return Err(ChecksumError::LengthOnlyForBlake2bSha2Sha3.into());
-        }
-    };
+    let length = maybe_sanitize_length(algo_cli, input_length)?;
 
     let files = matches.get_many::<OsString>(options::FILE).map_or_else(
         // No files given, read from stdin.
@@ -500,7 +515,6 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::LENGTH)
                 .long(options::LENGTH)
-                .value_parser(value_parser!(usize))
                 .short('l')
                 .help(translate!("cksum-help-length"))
                 .action(ArgAction::Set),
