@@ -36,6 +36,11 @@ fn skipping_test_is_okay(result: &CmdResult, needle: &str) -> bool {
     false
 }
 
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
+const ROOT_GROUP: &str = "root";
+#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "windows")))]
+const ROOT_GROUP: &str = "wheel";
+
 #[cfg(test)]
 mod test_passgrp {
     use chown::entries::{gid2grp, grp2gid, uid2usr, usr2uid};
@@ -49,11 +54,7 @@ mod test_passgrp {
 
     #[test]
     fn test_grp2gid() {
-        if cfg!(target_os = "linux") || cfg!(target_os = "android") || cfg!(target_os = "windows") {
-            assert_eq!(0, grp2gid("root").unwrap());
-        } else {
-            assert_eq!(0, grp2gid("wheel").unwrap());
-        }
+        assert_eq!(0, grp2gid(super::ROOT_GROUP).unwrap());
         assert!(grp2gid("88_888_888").is_err());
         assert!(grp2gid("agroupthatdoesntexist").is_err());
     }
@@ -66,11 +67,7 @@ mod test_passgrp {
 
     #[test]
     fn test_gid2grp() {
-        if cfg!(target_os = "linux") || cfg!(target_os = "android") || cfg!(target_os = "windows") {
-            assert_eq!("root", gid2grp(0).unwrap());
-        } else {
-            assert_eq!("wheel", gid2grp(0).unwrap());
-        }
+        assert_eq!(super::ROOT_GROUP, gid2grp(0).unwrap());
         assert!(gid2grp(88_888_888).is_err());
     }
 }
@@ -218,8 +215,7 @@ fn test_chown_failed_stdout() {
 }
 
 #[test]
-// FixME: Fails on freebsd because of chown: invalid group: 'root:root'
-#[cfg(all(not(target_os = "freebsd"), not(target_os = "openbsd")))]
+#[cfg(not(target_os = "openbsd"))]
 fn test_chown_owner_group() {
     // test chown username:group file.txt
 
@@ -271,11 +267,9 @@ fn test_chown_owner_group() {
         .fails()
         .stderr_contains("invalid group");
 
-    // TODO: on macos group name is not recognized correctly: "chown: invalid group: 'root:root'
-    #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
     scene
         .ucmd()
-        .arg("root:root")
+        .arg(format!("root:{ROOT_GROUP}"))
         .arg("--verbose")
         .arg(file1)
         .fails()
@@ -283,8 +277,7 @@ fn test_chown_owner_group() {
 }
 
 #[test]
-// FixME: Fails on freebsd because of chown: invalid group: 'root:root'
-#[cfg(all(not(target_os = "freebsd"), not(target_os = "openbsd")))]
+#[cfg(not(target_os = "openbsd"))]
 fn test_chown_various_input() {
     // test chown username:group file.txt
 
@@ -344,54 +337,42 @@ fn test_chown_various_input() {
 }
 
 #[test]
-// FixME: on macos & freebsd group name is not recognized correctly: "chown: invalid group: ':groupname'
-#[cfg(any(
-    windows,
-    all(
-        unix,
-        not(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd"))
-    )
-))]
+#[cfg(any(windows, all(unix, not(target_os = "openbsd"))))]
 fn test_chown_only_group() {
     // test chown :group file.txt
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let result = scene.cmd("whoami").run();
-    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+    let result = scene.cmd("id").arg("-gn").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
-    let user_name = String::from(result.stdout_str().trim());
-    assert!(!user_name.is_empty());
+    let group_name = String::from(result.stdout_str().trim());
+    assert!(!group_name.is_empty());
 
     let file1 = "test_chown_file1";
     at.touch(file1);
 
     let result = scene
         .ucmd()
-        .arg(format!(":{user_name}"))
+        .arg(format!(":{group_name}"))
         .arg("--verbose")
         .arg(file1)
         .run();
-    if is_ci() && result.stderr_str().contains("Operation not permitted") {
-        // With ubuntu with old Rust in the CI, we can get an error
-        return;
-    }
-    if is_ci() && result.stderr_str().contains("chown: invalid group:") {
-        // With mac into the CI, we can get this answer
-        return;
-    }
     result.stderr_contains("retained as");
     result.success();
 
-    scene
-        .ucmd()
-        .arg(":root")
-        .arg("--verbose")
-        .arg(file1)
-        .fails()
-        .stderr_contains("failed to change");
+    // FreeBSD user on CI is part of wheel group
+    if group_name != ROOT_GROUP {
+        scene
+            .ucmd()
+            .arg(format!(":{ROOT_GROUP}"))
+            .arg("--verbose")
+            .arg(file1)
+            .fails()
+            .stderr_contains("failed to change");
+    }
 }
 
 #[test]
@@ -484,8 +465,7 @@ fn test_chown_only_user_id_nonexistent_user() {
 }
 
 #[test]
-// FixME: stderr = chown: ownership of 'test_chown_file1' retained as cuuser:wheel
-#[cfg(all(not(target_os = "freebsd"), not(target_os = "openbsd")))]
+#[cfg(not(target_os = "openbsd"))]
 fn test_chown_only_group_id() {
     // test chown :1111 file.txt
 
@@ -517,13 +497,16 @@ fn test_chown_only_group_id() {
     // Apparently on CI "macos-latest, x86_64-apple-darwin, feat_os_macos"
     // the process has the rights to change from runner:staff to runner:wheel
     #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
-    scene
-        .ucmd()
-        .arg(":0")
-        .arg("--verbose")
-        .arg(file1)
-        .fails()
-        .stderr_contains("failed to change");
+    // FreeBSD user on CI is part of wheel group
+    if group_id != "0" {
+        scene
+            .ucmd()
+            .arg(":0")
+            .arg("--verbose")
+            .arg(file1)
+            .fails()
+            .stderr_contains("failed to change");
+    }
 }
 
 /// Test for setting the group to a group ID for a group that does not exist.
@@ -610,8 +593,7 @@ fn test_chown_owner_group_id() {
 }
 
 #[test]
-// FixME: Fails on freebsd because of chown: invalid group: '0:root'
-#[cfg(all(not(target_os = "freebsd"), not(target_os = "openbsd")))]
+#[cfg(not(target_os = "openbsd"))]
 fn test_chown_owner_group_mix() {
     // test chown 1111:group file.txt
 
@@ -643,11 +625,9 @@ fn test_chown_owner_group_mix() {
         .run();
     result.stderr_contains("retained as");
 
-    // TODO: on macos group name is not recognized correctly: "chown: invalid group: '0:root'
-    #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
     scene
         .ucmd()
-        .arg("0:root")
+        .arg(format!("0:{ROOT_GROUP}"))
         .arg("--verbose")
         .arg(file1)
         .fails()

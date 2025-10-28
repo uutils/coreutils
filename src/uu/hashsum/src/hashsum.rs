@@ -101,7 +101,7 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
     if matches.get_flag("sha3") {
         match matches.get_one::<usize>("bits") {
             Some(bits) => set_or_err(create_sha3(*bits)?)?,
-            None => return Err(ChecksumError::BitsRequiredForSha3.into()),
+            None => return Err(ChecksumError::LengthRequired("SHA3".into()).into()),
         }
     }
     if matches.get_flag("sha3-224") {
@@ -139,7 +139,7 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
                 create_fn: Box::new(|| Box::new(Shake128::new())),
                 bits: *bits,
             })?,
-            None => return Err(ChecksumError::BitsRequiredForShake128.into()),
+            None => return Err(ChecksumError::LengthRequired("SHAKE128".into()).into()),
         }
     }
     if matches.get_flag("shake256") {
@@ -149,7 +149,7 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
                 create_fn: Box::new(|| Box::new(Shake256::new())),
                 bits: *bits,
             })?,
-            None => return Err(ChecksumError::BitsRequiredForShake256.into()),
+            None => return Err(ChecksumError::LengthRequired("SHAKE256".into()).into()),
         }
     }
 

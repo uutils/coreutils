@@ -437,7 +437,7 @@ install-completions: build-uudoc
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d
 	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS) , \
 		$(BUILDDIR)/uudoc completion $(prog) zsh > $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(PROG_PREFIX)$(prog) $(newline) \
-		$(BUILDDIR)/uudoc completion $(prog) bash > $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX)$(prog) $(newline) \
+		$(BUILDDIR)/uudoc completion $(prog) bash > $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX)$(prog).bash $(newline) \
 		$(BUILDDIR)/uudoc completion $(prog) fish > $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX)$(prog).fish $(newline) \
 	)
 else
@@ -450,7 +450,7 @@ locales:
 	@if [ -d "$(BASEDIR)/src/uucore/locales" ]; then \
 		mkdir -p "$(BUILDDIR)/locales/uucore"; \
 		for locale_file in "$(BASEDIR)"/src/uucore/locales/*.ftl; do \
-			$(INSTALL) -m 644 -v "$$locale_file" "$(BUILDDIR)/locales/uucore/"; \
+			$(INSTALL) -m 644 "$$locale_file" "$(BUILDDIR)/locales/uucore/"; \
 		done; \
 	fi; \
 	# Copy utility-specific locales
@@ -459,7 +459,7 @@ locales:
 			mkdir -p "$(BUILDDIR)/locales/$$prog"; \
 			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
 				if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
-					$(INSTALL) -m 644 -v "$$locale_file" "$(BUILDDIR)/locales/$$prog/"; \
+					$(INSTALL) -m 644 "$$locale_file" "$(BUILDDIR)/locales/$$prog/"; \
 				fi; \
 			done; \
 		fi; \
@@ -472,7 +472,7 @@ install-locales:
 			mkdir -p "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog"; \
 			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
 				if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
-					$(INSTALL) -m 644 -v "$$locale_file" "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog/"; \
+					$(INSTALL) -m 644 "$$locale_file" "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog/"; \
 				fi; \
 			done; \
 		fi; \
@@ -517,7 +517,7 @@ endif
 	rm -f $(addprefix $(INSTALLDIR_BIN)/$(PROG_PREFIX),$(PROGS))
 	rm -f $(INSTALLDIR_BIN)/$(PROG_PREFIX)[
 	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(PROG_PREFIX),$(PROGS))
-	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX),$(PROGS))
+	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX),$(PROGS).bash)
 	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX),$(addsuffix .fish,$(PROGS)))
 	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/man/man1/$(PROG_PREFIX),$(addsuffix .1,$(PROGS)))
 

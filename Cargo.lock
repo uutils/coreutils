@@ -1566,9 +1566,9 @@ dependencies = [
 
 [[package]]
 name = "indicatif"
-version = "0.18.1"
+version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2e0ddd45fe8e09ee1a607920b12271f8a5528a41ecaf6e1d1440d6493315b6b"
+checksum = "ade6dfcba0dfb62ad59e59e7241ec8912af34fd29e0e743e3db992bd278e8b65"
 dependencies = [
  "console",
  "portable-atomic",
@@ -1754,7 +1754,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07033963ba89ebaf1584d767badaa2e8fcec21aedea6b8c0346d487d49c28667"
 dependencies = [
  "cfg-if",
- "windows-targets 0.53.2",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -3321,7 +3321,6 @@ dependencies = [
 name = "uu_date"
 version = "0.3.0"
 dependencies = [
- "chrono",
  "clap",
  "fluent",
  "jiff",
