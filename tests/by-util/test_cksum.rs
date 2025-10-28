@@ -7,6 +7,7 @@
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
+use uutests::util::log_info;
 use uutests::util_name;
 
 const ALGOS: [&str; 11] = [
@@ -294,15 +295,79 @@ fn test_untagged_algorithm_stdin() {
 }
 
 #[test]
-fn test_sha2_wrong_length() {
-    for l in [0, 13, 819_111_123] {
+fn test_sha_length_invalid() {
+    for algo in ["sha2", "sha3"] {
+        for l in ["0", "00", "13", "56", "99999999999999999999999999"] {
+            new_ucmd!()
+                .arg("--algorithm")
+                .arg(algo)
+                .arg("--length")
+                .arg(l)
+                .arg("/dev/null")
+                .fails_with_code(1)
+                .no_stdout()
+                .stderr_contains(format!("invalid length: '{l}'"))
+                .stderr_contains(format!(
+                    "digest length for '{}' must be 224, 256, 384, or 512",
+                    algo.to_ascii_uppercase()
+                ));
+
+            // Also fails with --check
+            new_ucmd!()
+                .arg("--algorithm")
+                .arg(algo)
+                .arg("--length")
+                .arg(l)
+                .arg("/dev/null")
+                .arg("--check")
+                .fails_with_code(1)
+                .no_stdout()
+                .stderr_contains(format!("invalid length: '{l}'"))
+                .stderr_contains(format!(
+                    "digest length for '{}' must be 224, 256, 384, or 512",
+                    algo.to_ascii_uppercase()
+                ));
+        }
+
+        // Different error for NaNs
+        for l in ["512x", "x512", "512x512"] {
+            new_ucmd!()
+                .arg("--algorithm")
+                .arg(algo)
+                .arg("--length")
+                .arg(l)
+                .arg("/dev/null")
+                .fails_with_code(1)
+                .no_stdout()
+                .stderr_contains(format!("invalid length: '{l}'"));
+
+            // Also fails with --check
+            new_ucmd!()
+                .arg("--algorithm")
+                .arg(algo)
+                .arg("--length")
+                .arg(l)
+                .arg("/dev/null")
+                .arg("--check")
+                .fails_with_code(1)
+                .no_stdout()
+                .stderr_contains(format!("invalid length: '{l}'"));
+        }
+    }
+}
+
+#[test]
+fn test_sha_missing_length() {
+    for algo in ["sha2", "sha3"] {
         new_ucmd!()
-            .arg("--algorithm=sha2")
-            .arg(format!("--length={l}"))
+            .arg("--algorithm")
+            .arg(algo)
             .arg("lorem_ipsum.txt")
             .fails_with_code(1)
             .no_stdout()
-            .stderr_contains(format!("invalid length: '{l}'"));
+            .stderr_contains(format!(
+                "--algorithm={algo} requires specifying --length 224, 256, 384, or 512"
+            ));
     }
 }
 
@@ -434,15 +499,56 @@ fn test_check_untagged_sha2_multiple_files() {
 }
 
 #[test]
-fn test_sha3_wrong_length() {
-    for l in [0, 13, 819_111_123] {
-        new_ucmd!()
-            .arg("--algorithm=sha3")
-            .arg(format!("--length={l}"))
-            .arg("lorem_ipsum.txt")
-            .fails_with_code(1)
-            .no_stdout()
-            .stderr_contains(format!("invalid length: '{l}'"));
+fn test_check_sha2_tagged_variant() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("f");
+
+    // SHA2-xxx is an alias to SHAxxx we don't output but we still recognize.
+    let checksum_lines = [
+        (
+            "SHA224",
+            "SHA2-224",
+            "(f) = d14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f",
+        ),
+        (
+            "SHA256",
+            "SHA2-256",
+            "(f) = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ),
+        (
+            "SHA384",
+            "SHA2-384",
+            "(f) = 38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b",
+        ),
+        (
+            "SHA512",
+            "SHA2-512",
+            "(f) = cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e",
+        ),
+    ];
+
+    for (basic, variant, digest) in checksum_lines {
+        let stdin = format!("{basic} {digest}");
+        log_info("stdin is: ", &stdin);
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("--algorithm=sha2")
+            .pipe_in(stdin)
+            .succeeds()
+            .stdout_is("f: OK\n");
+
+        // Check that the variant works the same
+        let stdin = format!("{variant} {digest}");
+        log_info("stdin is: ", &stdin);
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("--algorithm=sha2")
+            .pipe_in(stdin)
+            .succeeds()
+            .stdout_is("f: OK\n");
     }
 }
 
@@ -653,7 +759,7 @@ fn test_length_not_supported() {
 }
 
 #[test]
-fn test_length() {
+fn test_blake2b_length() {
     new_ucmd!()
         .arg("--length=16")
         .arg("--algorithm=blake2b")
@@ -666,7 +772,7 @@ fn test_length() {
 }
 
 #[test]
-fn test_length_greater_than_512() {
+fn test_blake2b_length_greater_than_512() {
     new_ucmd!()
         .arg("--length=1024")
         .arg("--algorithm=blake2b")
@@ -678,7 +784,7 @@ fn test_length_greater_than_512() {
 }
 
 #[test]
-fn test_length_is_zero() {
+fn test_blake2b_length_is_zero() {
     new_ucmd!()
         .arg("--length=0")
         .arg("--algorithm=blake2b")
@@ -690,7 +796,7 @@ fn test_length_is_zero() {
 }
 
 #[test]
-fn test_length_repeated() {
+fn test_blake2b_length_repeated() {
     new_ucmd!()
         .arg("--length=10")
         .arg("--length=123456")
@@ -701,6 +807,23 @@ fn test_length_repeated() {
         .succeeds()
         .no_stderr()
         .stdout_is_fixture("length_is_zero.expected");
+}
+
+#[test]
+fn test_blake2b_length_invalid() {
+    for len in [
+        "1", "01", // Odd
+        "",
+    ] {
+        new_ucmd!()
+            .arg("--length")
+            .arg(len)
+            .arg("--algorithm=blake2b")
+            .arg("lorem_ipsum.txt")
+            .arg("alice_in_wonderland.txt")
+            .fails_with_code(1)
+            .stderr_contains(format!("invalid length: '{len}'"));
+    }
 }
 
 #[test]
