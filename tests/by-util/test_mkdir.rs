@@ -755,14 +755,13 @@ fn test_mkdir_environment_expansion() {
 #[test]
 fn test_mkdir_concurrent_creation() {
     // Test concurrent mkdir -p operations: 100 iterations, 8 threads, 40 levels nesting
-    use std::path::PathBuf;
     use std::thread;
 
     for _ in 0..100 {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
 
-        let mut dir = PathBuf::from("concurrent_test");
+        let mut dir = at.plus("concurrent_test");
         dir.push("a");
 
         for _ in 0..40 {
@@ -777,19 +776,9 @@ fn test_mkdir_concurrent_creation() {
             let path_clone = path_str.clone();
 
             let handle = thread::spawn(move || {
-                let result = std::process::Command::new("mkdir")
-                    .arg("-p")
-                    .arg(&path_clone)
-                    .output();
-
-                match result {
-                    Ok(output) => {
-                        if !output.status.success() {
-                            eprintln!("mkdir failed: {}", String::from_utf8_lossy(&output.stderr));
-                        }
-                    }
-                    Err(e) => eprintln!("Failed to execute mkdir: {e}"),
-                }
+                // Use std::fs::create_dir_all directly since it's equivalent to mkdir -p
+                // This avoids thread safety issues with TestScenario
+                std::fs::create_dir_all(&path_clone).expect("Failed to create directory");
             });
             handles.push(handle);
         }
