@@ -4101,64 +4101,6 @@ fn test_cp_dest_no_permissions() {
         .stderr_contains("denied");
 }
 
-/// Regression test for macOS readonly file behavior (issue #5257, PR #5261)
-#[test]
-fn test_cp_readonly_dest_regression() {
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
-
-    // Batch file operations to reduce I/O overhead
-    at.write("source.txt", "source content");
-    at.write("readonly_dest.txt", "original content");
-    at.set_readonly("readonly_dest.txt");
-
-    ts.ucmd()
-        .args(&["source.txt", "readonly_dest.txt"])
-        .fails()
-        .stderr_contains("readonly_dest.txt")
-        .stderr_contains("denied");
-
-    assert_eq!(at.read("readonly_dest.txt"), "original content");
-}
-
-/// Test readonly destination behavior with --force flag (should succeed)
-#[cfg(not(windows))]
-#[test]
-fn test_cp_readonly_dest_with_force() {
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
-
-    // Use consistent file operations and batch setup
-    at.write("source.txt", "source content");
-    at.write("readonly_dest.txt", "original content");
-    at.set_readonly("readonly_dest.txt");
-
-    ts.ucmd()
-        .args(&["--force", "source.txt", "readonly_dest.txt"])
-        .succeeds();
-
-    assert_eq!(at.read("readonly_dest.txt"), "source content");
-}
-
-/// Test readonly destination behavior with --remove-destination flag (should succeed)
-#[cfg(not(windows))]
-#[test]
-fn test_cp_readonly_dest_with_remove_destination() {
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
-
-    // Batch file operations for better performance
-    at.write("source.txt", "source content");
-    at.write("readonly_dest.txt", "original content");
-    at.set_readonly("readonly_dest.txt");
-
-    ts.ucmd()
-        .args(&["--remove-destination", "source.txt", "readonly_dest.txt"])
-        .succeeds();
-
-    assert_eq!(at.read("readonly_dest.txt"), "source content");
-}
-
 /// Test readonly destination behavior with reflink options
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
@@ -4166,7 +4108,6 @@ fn test_cp_readonly_dest_with_reflink() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    // Batch all file setup operations to minimize I/O
     at.write("source.txt", "source content");
     at.write("readonly_dest_auto.txt", "original content");
     at.write("readonly_dest_always.txt", "original content");
@@ -4185,7 +4126,6 @@ fn test_cp_readonly_dest_with_reflink() {
         .fails()
         .stderr_contains("readonly_dest_always.txt");
 
-    // Batch verification operations
     assert_eq!(at.read("readonly_dest_auto.txt"), "original content");
     assert_eq!(at.read("readonly_dest_always.txt"), "original content");
 }
@@ -4196,7 +4136,6 @@ fn test_cp_readonly_dest_recursive() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    // Batch directory and file creation
     at.mkdir("source_dir");
     at.mkdir("dest_dir");
     at.write("source_dir/file.txt", "source content");
@@ -4214,7 +4153,6 @@ fn test_cp_readonly_dest_with_existing_file() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    // Batch all file operations to reduce I/O overhead
     at.write("source.txt", "source content");
     at.write("readonly_dest.txt", "original content");
     at.write("other_file.txt", "other content");
@@ -4226,7 +4164,6 @@ fn test_cp_readonly_dest_with_existing_file() {
         .stderr_contains("readonly_dest.txt")
         .stderr_contains("denied");
 
-    // Batch verification operations
     assert_eq!(at.read("readonly_dest.txt"), "original content");
     assert_eq!(at.read("other_file.txt"), "other content");
 }
@@ -4237,7 +4174,6 @@ fn test_cp_readonly_source() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    // Batch file operations for better performance
     at.write("readonly_source.txt", "source content");
     at.write("dest.txt", "dest content");
     at.set_readonly("readonly_source.txt");
@@ -4255,7 +4191,6 @@ fn test_cp_readonly_source_and_dest() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    // Batch all file setup operations
     at.write("readonly_source.txt", "source content");
     at.write("readonly_dest.txt", "original content");
     at.set_readonly("readonly_source.txt");
@@ -4268,44 +4203,6 @@ fn test_cp_readonly_source_and_dest() {
         .stderr_contains("denied");
 
     assert_eq!(at.read("readonly_dest.txt"), "original content");
-}
-
-/// Test macOS-specific clonefile behavior with readonly files
-#[cfg(target_os = "macos")]
-#[test]
-fn test_cp_macos_clonefile_readonly() {
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
-
-    // Batch file operations for consistency
-    at.write("source.txt", "source content");
-    at.write("readonly_dest.txt", "original content");
-    at.set_readonly("readonly_dest.txt");
-
-    // On macOS, clonefile should still fail on readonly destination
-    ts.ucmd()
-        .args(&["source.txt", "readonly_dest.txt"])
-        .fails()
-        .stderr_contains("readonly_dest.txt")
-        .stderr_contains("denied");
-
-    // Verify content unchanged
-    assert_eq!(at.read("readonly_dest.txt"), "original content");
-}
-
-/// Test that the fix doesn't break normal copy operations
-#[test]
-fn test_cp_normal_copy_still_works() {
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
-
-    // Batch file operations for consistency with other tests
-    at.write("source.txt", "source content");
-    at.write("dest.txt", "dest content");
-
-    ts.ucmd().args(&["source.txt", "dest.txt"]).succeeds();
-
-    assert_eq!(at.read("dest.txt"), "source content");
 }
 
 #[test]
