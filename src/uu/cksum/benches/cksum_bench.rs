@@ -36,7 +36,7 @@ macro_rules! bench_algorithm {
                         "--algorithm",
                         $algo_str,
                         "--length",
-                        "256",
+                        "1048576",
                         file_path.to_str().unwrap(),
                     ],
                 ));
@@ -61,8 +61,6 @@ bench_algorithm!(cksum_sha256, "sha256");
 bench_algorithm!(cksum_sha384, "sha384");
 bench_algorithm!(cksum_sha512, "sha512");
 bench_algorithm!(cksum_blake3, "blake3");
-bench_algorithm!(cksum_shake128, "shake128", length);
-bench_algorithm!(cksum_shake256, "shake256", length);
 
 /// Benchmark cksum with default CRC algorithm
 #[divan::bench]
