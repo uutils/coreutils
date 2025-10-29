@@ -70,6 +70,8 @@ struct Flags {
     space: bool,
     sign: bool,
     group: bool,
+    major: bool,
+    minor: bool,
 }
 
 /// checks if the string is within the specified bound,
@@ -297,6 +299,16 @@ fn group_num(s: &str) -> Cow<'_, str> {
         alone += 3;
     }
     res.into()
+}
+
+/// Keeps major part of an integer
+fn major(n: u64) -> u64 {
+    (n >> 8) & 0xFF
+}
+
+// Keeps minor part of an integer
+fn minor(n: u64) -> u64 {
+    n & 0xFF
 }
 
 struct Stater {
@@ -794,13 +806,14 @@ impl Stater {
             if let Some(&next_char) = chars.get(*i + 1) {
                 if (chars[*i] == 'H' || chars[*i] == 'L') && (next_char == 'd' || next_char == 'r')
                 {
-                    let specifier = format!("{}{next_char}", chars[*i]);
+                    flag.major = chars[*i] == 'H';
+                    flag.minor = chars[*i] == 'L';
                     *i += 1;
                     return Ok(Token::Directive {
                         flag,
                         width,
                         precision,
-                        format: specifier.chars().next().unwrap(),
+                        format: next_char,
                     });
                 }
             }
@@ -1063,6 +1076,8 @@ impl Stater {
                         }
                     }
                     // device number in decimal
+                    'd' if flag.major => OutputType::Unsigned(major(meta.dev())),
+                    'd' if flag.minor => OutputType::Unsigned(minor(meta.dev())),
                     'd' => OutputType::Unsigned(meta.dev()),
                     // device number in hex
                     'D' => OutputType::UnsignedHex(meta.dev()),
@@ -1101,10 +1116,10 @@ impl Stater {
                     's' => OutputType::Integer(meta.len() as i64),
                     // major device type in hex, for character/block device special
                     // files
-                    't' => OutputType::UnsignedHex(meta.rdev() >> 8),
+                    't' => OutputType::UnsignedHex(major(meta.rdev())),
                     // minor device type in hex, for character/block device special
                     // files
-                    'T' => OutputType::UnsignedHex(meta.rdev() & 0xff),
+                    'T' => OutputType::UnsignedHex(minor(meta.rdev())),
                     // user ID of owner
                     'u' => OutputType::Unsigned(meta.uid() as u64),
                     // user name of owner
@@ -1147,15 +1162,10 @@ impl Stater {
                             .map_or((0, 0), system_time_to_sec);
                         OutputType::Float(sec as f64 + nsec as f64 / 1_000_000_000.0)
                     }
-                    'R' => {
-                        let major = meta.rdev() >> 8;
-                        let minor = meta.rdev() & 0xff;
-                        OutputType::Str(format!("{major},{minor}"))
-                    }
+                    'R' => OutputType::UnsignedHex(meta.rdev()),
+                    'r' if flag.major => OutputType::Unsigned(major(meta.rdev())),
+                    'r' if flag.minor => OutputType::Unsigned(minor(meta.rdev())),
                     'r' => OutputType::Unsigned(meta.rdev()),
-                    'H' => OutputType::Unsigned(meta.rdev() >> 8), // Major in decimal
-                    'L' => OutputType::Unsigned(meta.rdev() & 0xff), // Minor in decimal
-
                     _ => OutputType::Unknown,
                 };
                 print_it(&output, flag, width, precision);
@@ -1280,7 +1290,7 @@ impl Stater {
         } else {
             let device_line = if show_dev_type {
                 format!(
-                    "{}: %Dh/%dd\t{}: %-10i  {}: %-5h {} {}: %t,%T\n",
+                    "{}: %Hd,%Ld\t{}: %-10i  {}: %-5h {} {}: %t,%T\n",
                     translate!("stat-word-device"),
                     translate!("stat-word-inode"),
                     translate!("stat-word-links"),
@@ -1289,7 +1299,7 @@ impl Stater {
                 )
             } else {
                 format!(
-                    "{}: %Dh/%dd\t{}: %-10i  {}: %h\n",
+                    "{}: %Hd,%Ld\t{}: %-10i  {}: %h\n",
                     translate!("stat-word-device"),
                     translate!("stat-word-inode"),
                     translate!("stat-word-links")
