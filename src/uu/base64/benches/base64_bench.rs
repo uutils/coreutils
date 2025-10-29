@@ -20,7 +20,10 @@ fn b64_encode_synthetic(bencher: Bencher) {
     let file_path_str = &create_tmp_file(5_000);
 
     bencher.bench(|| {
-        black_box(run_util_function(uumain, &[file_path_str]));
+        black_box(run_util_function(
+            uumain,
+            &["-o", "/dev/null", file_path_str],
+        ));
     });
 }
 
@@ -33,15 +36,20 @@ fn b64_decode_synthetic(bencher: Bencher) {
     let in_file_str = in_file.to_str().unwrap();
     uumain(
         [
+            OsString::from(uucore::util_name()),
+            OsString::from("-o"),
+            OsString::from(in_file_str),
             OsString::from(file_path_str),
-            OsString::from(format!(">{in_file_str}")),
         ]
         .iter()
         .map(|x| (*x).clone()),
     );
 
     bencher.bench(|| {
-        black_box(run_util_function(uumain, &["-d", in_file_str]));
+        black_box(run_util_function(
+            uumain,
+            &["-d", "-o", "/dev/null", in_file_str],
+        ));
     });
 }
 
@@ -54,15 +62,20 @@ fn b64_decode_ignore_garbage_synthetic(bencher: Bencher) {
     let in_file_str = in_file.to_str().unwrap();
     uumain(
         [
+            OsString::from(uucore::util_name()),
+            OsString::from("-o"),
+            OsString::from(in_file_str),
             OsString::from(file_path_str),
-            OsString::from(format!(">{in_file_str}")),
         ]
         .iter()
         .map(|x| (*x).clone()),
     );
 
     bencher.bench(|| {
-        black_box(run_util_function(uumain, &["-d", "-i", in_file_str]));
+        black_box(run_util_function(
+            uumain,
+            &["-d", "-i", "-o", "/dev/null", in_file_str],
+        ));
     });
 }
 
