@@ -12,7 +12,7 @@ macro_rules! bench_algorithm {
     ($algo_name:ident, $algo_str:expr) => {
         #[divan::bench]
         fn $algo_name(bencher: Bencher) {
-            let data = text_data::generate_by_size(50, 80);
+            let data = text_data::generate_by_size(100, 80);
             let file_path = setup_test_file(&data);
 
             bencher.bench(|| {
@@ -26,7 +26,7 @@ macro_rules! bench_algorithm {
     ($algo_name:ident, $algo_str:expr, length) => {
         #[divan::bench]
         fn $algo_name(bencher: Bencher) {
-            let data = text_data::generate_by_size(50, 80);
+            let data = text_data::generate_by_size(100, 80);
             let file_path = setup_test_file(&data);
 
             bencher.bench(|| {
@@ -67,7 +67,7 @@ bench_algorithm!(cksum_shake256, "shake256", length);
 /// Benchmark cksum with default CRC algorithm
 #[divan::bench]
 fn cksum_default(bencher: Bencher) {
-    let data = text_data::generate_by_size(50, 80);
+    let data = text_data::generate_by_size(100, 80);
     let file_path = setup_test_file(&data);
 
     bencher.bench(|| {
@@ -78,7 +78,7 @@ fn cksum_default(bencher: Bencher) {
 /// Benchmark cksum with raw output format
 #[divan::bench]
 fn cksum_raw_output(bencher: Bencher) {
-    let data = text_data::generate_by_size(50, 80);
+    let data = text_data::generate_by_size(100, 80);
     let file_path = setup_test_file(&data);
 
     bencher.bench(|| {
@@ -94,9 +94,9 @@ fn cksum_raw_output(bencher: Bencher) {
 fn cksum_multiple_files(bencher: Bencher) {
     bencher
         .with_inputs(|| {
-            let data1 = text_data::generate_by_size(25, 80);
-            let data2 = text_data::generate_by_size(25, 80);
-            let data3 = text_data::generate_by_size(25, 80);
+            let data1 = text_data::generate_by_size(50, 80);
+            let data2 = text_data::generate_by_size(50, 80);
+            let data3 = text_data::generate_by_size(50, 80);
 
             let file1 = setup_test_file(&data1);
             let file2 = setup_test_file(&data2);
@@ -115,8 +115,6 @@ fn cksum_multiple_files(bencher: Bencher) {
             ));
         });
 }
-
-
 
 fn main() {
     divan::main();
