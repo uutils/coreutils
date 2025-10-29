@@ -751,7 +751,6 @@ impl Stater {
             return Ok(Token::Char('%'));
         }
         if chars[*i] == '%' {
-            *i += 1;
             return Ok(Token::Char('%'));
         }
 
