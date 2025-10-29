@@ -49,15 +49,34 @@ macro_rules! bench_algorithm {
 // Since SHAKE algorithms have fundamental --length parameter conflicts in cksum,
 // we implement them using direct digest calculation for meaningful benchmarks
 macro_rules! bench_shake_algorithm {
-    ($algo_name:ident, $algo_str:expr, $shake_type:ty) => {
+    ($algo_name:ident, $algo_str:expr, Shake128) => {
         #[divan::bench]
         fn $algo_name(bencher: Bencher) {
-            use uucore::sum::{Digest, Shake128, Shake256};
+            use uucore::sum::{Digest, Shake128};
 
             let data = text_data::generate_by_size(100, 80);
 
             bencher.bench(|| {
-                let mut shake = <$shake_type>::new();
+                let mut shake = Shake128::new();
+                shake.hash_update(&data);
+
+                // SHAKE algorithms can output any length, use 256 bits (32 bytes) for meaningful comparison
+                let mut output = [0u8; 32];
+                shake.hash_finalize(&mut output);
+
+                black_box(output);
+            });
+        }
+    };
+    ($algo_name:ident, $algo_str:expr, Shake256) => {
+        #[divan::bench]
+        fn $algo_name(bencher: Bencher) {
+            use uucore::sum::{Digest, Shake256};
+
+            let data = text_data::generate_by_size(100, 80);
+
+            bencher.bench(|| {
+                let mut shake = Shake256::new();
                 shake.hash_update(&data);
 
                 // SHAKE algorithms can output any length, use 256 bits (32 bytes) for meaningful comparison
