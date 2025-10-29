@@ -441,6 +441,9 @@ mod tests {
         assert_eq!("uptime-user-count", format_nusers(0));
 
         std::thread::spawn(move || {
+            unsafe {
+                std::env::set_var("LANG", "en_US.UTF-8");
+            }
             let _ = locale::setup_localization("uptime");
             assert_eq!("0 users", format_nusers(0));
             assert_eq!("1 user", format_nusers(1));
