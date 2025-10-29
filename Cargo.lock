@@ -3259,8 +3259,10 @@ name = "uu_cksum"
 version = "0.3.0"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "hex",
+ "tempfile",
  "uucore",
 ]
 

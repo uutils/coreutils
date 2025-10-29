@@ -15,9 +15,9 @@ use std::path::Path;
 use uucore::checksum::{
     ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC,
     ALGORITHM_OPTIONS_CRC32B, ALGORITHM_OPTIONS_SHA2, ALGORITHM_OPTIONS_SHA3,
-    ALGORITHM_OPTIONS_SYSV, ChecksumError, ChecksumOptions, ChecksumVerbose, HashAlgorithm,
-    LEGACY_ALGORITHMS, SUPPORTED_ALGORITHMS, calculate_blake2b_length, detect_algo, digest_reader,
-    perform_checksum_validation,
+    ALGORITHM_OPTIONS_SHAKE128, ALGORITHM_OPTIONS_SHAKE256, ALGORITHM_OPTIONS_SYSV, ChecksumError,
+    ChecksumOptions, ChecksumVerbose, HashAlgorithm, LEGACY_ALGORITHMS, SUPPORTED_ALGORITHMS,
+    calculate_blake2b_length, detect_algo, digest_reader, perform_checksum_validation,
 };
 use uucore::translate;
 
@@ -387,9 +387,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // Length for sha2 and sha3 should be saved, it will be validated
         // afterwards if necessary.
         (Some(len), ALGORITHM_OPTIONS_SHA2 | ALGORITHM_OPTIONS_SHA3) => Some(*len),
-        (None | Some(0), _) => None,
         // Length for Blake2b if saved only if it's not zero.
         (Some(len), ALGORITHM_OPTIONS_BLAKE2B) => calculate_blake2b_length(*len)?,
+        // Length for SHAKE algorithms is required and must be > 0
+        (Some(len), ALGORITHM_OPTIONS_SHAKE128 | ALGORITHM_OPTIONS_SHAKE256) => {
+            if *len == 0 {
+                return Err(ChecksumError::LengthRequiredForShake.into());
+            }
+            Some(*len)
+        }
+        // SHAKE algorithms require --length parameter
+        (None, ALGORITHM_OPTIONS_SHAKE128 | ALGORITHM_OPTIONS_SHAKE256) => {
+            return Err(ChecksumError::LengthRequiredForShake.into());
+        }
+        (None | Some(0), _) => None,
         // a --length flag set with any other algorithm is an error.
         _ => {
             return Err(ChecksumError::LengthOnlyForBlake2bSha2Sha3.into());
