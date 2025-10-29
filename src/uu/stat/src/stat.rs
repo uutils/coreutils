@@ -908,6 +908,28 @@ impl Stater {
         Ok(tokens)
     }
 
+    fn populate_mount_list() -> UResult<Vec<OsString>> {
+        let mut mount_list = read_fs_list()
+            .map_err(|e| {
+                USimpleError::new(
+                    e.code(),
+                    StatError::CannotReadFilesystem {
+                        error: e.to_string(),
+                    }
+                    .to_string(),
+                )
+            })?
+            .iter()
+            .map(|mi| mi.mount_dir.clone())
+            .collect::<Vec<_>>();
+
+        // Reverse sort. The longer comes first.
+        mount_list.sort();
+        mount_list.reverse();
+
+        Ok(mount_list)
+    }
+
     fn new(matches: &ArgMatches) -> UResult<Self> {
         let files: Vec<OsString> = matches
             .get_many::<OsString>(options::FILES)
@@ -938,27 +960,16 @@ impl Stater {
         let default_dev_tokens =
             Self::generate_tokens(&Self::default_format(show_fs, terse, true), use_printf)?;
 
-        let mount_list = if show_fs {
-            // mount points aren't displayed when showing filesystem information
+        // mount points aren't displayed when showing filesystem information, or
+        // whenever the format string does not request the mount point.
+        let mount_list = if show_fs
+            || !default_tokens
+                .iter()
+                .any(|tok| matches!(tok, Token::Directive { format: 'm', .. }))
+        {
             None
         } else {
-            let mut mount_list = read_fs_list()
-                .map_err(|e| {
-                    USimpleError::new(
-                        e.code(),
-                        StatError::CannotReadFilesystem {
-                            error: e.to_string(),
-                        }
-                        .to_string(),
-                    )
-                })?
-                .iter()
-                .map(|mi| mi.mount_dir.clone())
-                .collect::<Vec<_>>();
-            // Reverse sort. The longer comes first.
-            mount_list.sort();
-            mount_list.reverse();
-            Some(mount_list)
+            Some(Self::populate_mount_list()?)
         };
 
         Ok(Self {
