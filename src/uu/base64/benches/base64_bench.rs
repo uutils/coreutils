@@ -6,12 +6,11 @@
 use divan::{Bencher, black_box};
 use std::ffi::OsString;
 use uu_base64::uumain;
-use uucore::benchmark::{create_test_file, run_util_function, text_data};
+use uucore::benchmark::{create_test_file, run_util_function, setup_test_file, text_data};
 
 fn create_tmp_file(size_mb: usize) -> String {
-    let temp_dir = tempfile::tempdir().unwrap();
     let data = text_data::generate_by_size(size_mb, 80);
-    let file_path = create_test_file(&data, temp_dir.path());
+    let file_path = setup_test_file(&data);
     String::from(file_path.to_str().unwrap())
 }
 
