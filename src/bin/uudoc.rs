@@ -73,12 +73,29 @@ fn gen_manpage<T: Args>(args: impl Iterator<Item = OsString>, util_map: &Utility
         )
         .get_matches_from(std::iter::once(OsString::from("manpage")).chain(args));
 
-    let utility = matches.get_one::<String>("utility").unwrap();
+    let utility = matches.get_one::<String>("utility").unwrap().clone();
     let command = if utility == "coreutils" {
         gen_coreutils_app(util_map)
     } else {
-        validation::setup_localization_or_exit(utility);
-        util_map.get(utility).unwrap().1()
+        validation::setup_localization_or_exit(&utility);
+        let cmd = util_map.get(&utility).unwrap().1();
+        // Create a command with the correct name and copy essential properties
+        // Leak strings to make them 'static for clap
+        let utility_static: &'static str = Box::leak(utility.clone().into_boxed_str());
+        let mut new_cmd = Command::new(utility_static);
+        if let Some(about) = cmd.get_about() {
+            let about_str = about.to_string();
+            let about_static: &'static str = Box::leak(about_str.into_boxed_str());
+            new_cmd = new_cmd.about(about_static);
+        }
+        if let Some(after_help) = cmd.get_after_help() {
+            let after_help_str = after_help.to_string();
+            let after_help_static: &'static str = Box::leak(after_help_str.into_boxed_str());
+            new_cmd = new_cmd.after_help(after_help_static);
+        }
+        // Copy arguments
+        new_cmd = new_cmd.args(cmd.get_arguments());
+        new_cmd
     };
 
     let man = Man::new(command);
