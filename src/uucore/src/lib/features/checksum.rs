@@ -228,6 +228,8 @@ pub enum ChecksumError {
     InvalidLengthFor(String),
     #[error("--length is only supported with --algorithm blake2b, sha2, or sha3")]
     LengthOnlyForBlake2bSha2Sha3,
+    #[error("--length is required for SHAKE algorithms")]
+    LengthRequiredForShake,
     #[error("the --binary and --text options are meaningless when verifying checksums")]
     BinaryTextConflict,
     #[error("--text mode is only supported with --untagged")]

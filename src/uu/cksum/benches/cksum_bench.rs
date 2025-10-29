@@ -45,6 +45,31 @@ macro_rules! bench_algorithm {
     };
 }
 
+// Special macro for SHAKE algorithms that require length parameter
+// Since SHAKE algorithms have fundamental --length parameter conflicts in cksum,
+// we implement them using direct digest calculation for meaningful benchmarks
+macro_rules! bench_shake_algorithm {
+    ($algo_name:ident, $algo_str:expr, $shake_type:ty) => {
+        #[divan::bench]
+        fn $algo_name(bencher: Bencher) {
+            use uucore::sum::{Digest, Shake128, Shake256};
+
+            let data = text_data::generate_by_size(100, 80);
+
+            bencher.bench(|| {
+                let mut shake = <$shake_type>::new();
+                shake.hash_update(&data);
+
+                // SHAKE algorithms can output any length, use 256 bits (32 bytes) for meaningful comparison
+                let mut output = [0u8; 32];
+                shake.hash_finalize(&mut output);
+
+                black_box(output);
+            });
+        }
+    };
+}
+
 // Generate benchmarks for all supported algorithms
 bench_algorithm!(cksum_sysv, "sysv");
 bench_algorithm!(cksum_bsd, "bsd");
@@ -61,6 +86,8 @@ bench_algorithm!(cksum_sha256, "sha256");
 bench_algorithm!(cksum_sha384, "sha384");
 bench_algorithm!(cksum_sha512, "sha512");
 bench_algorithm!(cksum_blake3, "blake3");
+bench_shake_algorithm!(cksum_shake128, "shake128", Shake128);
+bench_shake_algorithm!(cksum_shake256, "shake256", Shake256);
 
 /// Benchmark cksum with default CRC algorithm
 #[divan::bench]
