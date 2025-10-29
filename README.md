@@ -140,7 +140,7 @@ If you want to build the utilities as individual binaries, that is also possible
 cargo build --release --bins --workspace --exclude coreutils --exclude uu_runcon --exclude uu_chcon
 ```
 Each utility is contained in its own package within the main repository, named "uu_UTILNAME". To
-build selected individual utilities, use the `--package` [aka `-p`] option). For example:
+build selected individual utilities, use the `--package` [aka `-p`] option. For example:
 
 ```shell
 cargo build -p uu_base32 -p uu_cat -p uu_echo -p uu_rm
