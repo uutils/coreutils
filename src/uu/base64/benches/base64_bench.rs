@@ -17,7 +17,7 @@ fn create_tmp_file(size_mb: usize) -> String {
 /// Benchmark for base64 encoding
 #[divan::bench()]
 fn b64_encode_synthetic(bencher: Bencher) {
-    let file_path_str = &create_tmp_file(5_000);
+    let file_path_str = &create_tmp_file(50);
 
     bencher.bench(|| {
         black_box(run_util_function(
@@ -31,7 +31,7 @@ fn b64_encode_synthetic(bencher: Bencher) {
 #[divan::bench()]
 fn b64_decode_synthetic(bencher: Bencher) {
     let temp_dir = tempfile::tempdir().unwrap();
-    let file_path_str = &create_tmp_file(5_000);
+    let file_path_str = &create_tmp_file(50);
     let in_file = create_test_file(b"", temp_dir.path());
     let in_file_str = in_file.to_str().unwrap();
     uumain(
@@ -57,7 +57,7 @@ fn b64_decode_synthetic(bencher: Bencher) {
 #[divan::bench()]
 fn b64_decode_ignore_garbage_synthetic(bencher: Bencher) {
     let temp_dir = tempfile::tempdir().unwrap();
-    let file_path_str = &create_tmp_file(5_000);
+    let file_path_str = &create_tmp_file(50);
     let in_file = create_test_file(b"", temp_dir.path());
     let in_file_str = in_file.to_str().unwrap();
     uumain(
