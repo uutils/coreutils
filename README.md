@@ -137,7 +137,7 @@ cargo build --features "base32 cat echo rm" --no-default-features
 If you want to build the utilities as individual binaries, that is also possible:
 
 ```shell
-cargo build --release --workspace --exclude uu_runcon --exclude uu_chcon
+cargo build --release --bins --workspace --exclude coreutils --exclude uu_runcon --exclude uu_chcon
 ```
 Each utility is contained in its own package within the main repository, named "uu_UTILNAME". To
 build selected individual utilities, use the `--package` [aka `-p`] option). For example:
