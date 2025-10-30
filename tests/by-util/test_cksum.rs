@@ -2678,7 +2678,7 @@ fn test_sha3_with_length() {
         .arg("224")
         .arg("lorem_ipsum.txt")
         .succeeds()
-        .stdout_contains("SHA3_224 (lorem_ipsum.txt) = ");
+        .stdout_contains("SHA3-224 (lorem_ipsum.txt) = ");
 
     // Test SHA3-256
     new_ucmd!()
@@ -2688,7 +2688,7 @@ fn test_sha3_with_length() {
         .arg("256")
         .arg("lorem_ipsum.txt")
         .succeeds()
-        .stdout_contains("SHA3_256 (lorem_ipsum.txt) = ");
+        .stdout_contains("SHA3-256 (lorem_ipsum.txt) = ");
 
     // Test SHA3-384
     new_ucmd!()
@@ -2698,7 +2698,7 @@ fn test_sha3_with_length() {
         .arg("384")
         .arg("lorem_ipsum.txt")
         .succeeds()
-        .stdout_contains("SHA3_384 (lorem_ipsum.txt) = ");
+        .stdout_contains("SHA3-384 (lorem_ipsum.txt) = ");
 
     // Test SHA3-512
     new_ucmd!()
@@ -2708,7 +2708,7 @@ fn test_sha3_with_length() {
         .arg("512")
         .arg("lorem_ipsum.txt")
         .succeeds()
-        .stdout_contains("SHA3_512 (lorem_ipsum.txt) = ");
+        .stdout_contains("SHA3-512 (lorem_ipsum.txt) = ");
 }
 
 #[test]
@@ -2721,7 +2721,7 @@ fn test_sha3_invalid_length() {
         .arg("128")
         .arg("lorem_ipsum.txt")
         .fails()
-        .stderr_contains("Invalid output size for SHA3");
+        .stderr_contains("digest length for 'SHA3' must be 224, 256, 384, or 512");
 
     // Test SHA3 without length
     new_ucmd!()
@@ -2729,7 +2729,7 @@ fn test_sha3_invalid_length() {
         .arg("sha3")
         .arg("lorem_ipsum.txt")
         .fails()
-        .stderr_contains("--length required for SHA3");
+        .stderr_contains("--length required for 'SHA3'");
 }
 
 #[test]
@@ -2773,7 +2773,7 @@ fn test_shake128_without_length() {
         .arg("shake128")
         .arg("lorem_ipsum.txt")
         .fails()
-        .stderr_contains("--length required for SHAKE128");
+        .stderr_contains("--length required for 'SHAKE128'");
 }
 
 #[test]
@@ -2817,7 +2817,7 @@ fn test_shake256_without_length() {
         .arg("shake256")
         .arg("lorem_ipsum.txt")
         .fails()
-        .stderr_contains("--length required for SHAKE256");
+        .stderr_contains("--length required for 'SHAKE256'");
 }
 
 #[test]
@@ -2862,7 +2862,7 @@ fn test_sha3_base64_output() {
         .arg("256")
         .arg("lorem_ipsum.txt")
         .succeeds()
-        .stdout_contains("SHA3_256 (lorem_ipsum.txt) = ");
+        .stdout_contains("SHA3-256 (lorem_ipsum.txt) = ");
 }
 
 #[test]
