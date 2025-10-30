@@ -2,23 +2,155 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore tldr uuhelp
 
-use clap::Command;
+// spell-checker:ignore mangen tldr
+
+use std::{
+    collections::HashMap,
+    ffi::OsString,
+    fs::File,
+    io::{self, Read, Seek, Write},
+    process,
+};
+
+use clap::{Arg, Command};
+use clap_complete::Shell;
+use clap_mangen::Man;
 use fluent_syntax::ast::{Entry, Message, Pattern};
 use fluent_syntax::parser;
-use std::collections::HashMap;
-use std::ffi::OsString;
-use std::fs::File;
-use std::io::{self, Read, Seek, Write};
+use textwrap::{fill, indent, termwidth};
 use zip::ZipArchive;
 
+use coreutils::validation;
+use uucore::Args;
+
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
+
+/// Print usage information for uudoc
+fn usage<T: Args>(utils: &UtilityMap<T>) {
+    println!("uudoc - Documentation generator for uutils coreutils");
+    println!();
+    println!("Usage: uudoc [command] [args]");
+    println!();
+    println!("Commands:");
+    println!("  (no command)                   Generate mdbook documentation (default)");
+    println!("  manpage <utility>              Generate manpage for a utility");
+    println!("  completion <utility> <shell>   Generate shell completions for a utility");
+    println!();
+    println!("Available utilities:");
+    let all_utilities = validation::get_all_utilities(utils);
+    let display_list = all_utilities.join(", ");
+    let width = std::cmp::min(termwidth(), 100) - 4 * 2;
+    println!("{}", indent(&fill(&display_list, width), "    "));
+}
+
+/// Generates the coreutils app for the utility map
+fn gen_coreutils_app<T: Args>(util_map: &UtilityMap<T>) -> clap::Command {
+    let mut command = clap::Command::new("coreutils");
+    for (name, (_, sub_app)) in util_map {
+        // Recreate a small subcommand with only the relevant info
+        // (name & short description)
+        let about = sub_app()
+            .get_about()
+            .expect("Could not get the 'about'")
+            .to_string();
+        let sub_app = clap::Command::new(name).about(about);
+        command = command.subcommand(sub_app);
+    }
+    command
+}
+
+/// Generate the manpage for the utility in the first parameter
+fn gen_manpage<T: Args>(args: impl Iterator<Item = OsString>, util_map: &UtilityMap<T>) -> ! {
+    let all_utilities = validation::get_all_utilities(util_map);
+
+    let matches = Command::new("manpage")
+        .about("Prints manpage to stdout")
+        .arg(
+            Arg::new("utility")
+                .value_parser(clap::builder::PossibleValuesParser::new(&all_utilities))
+                .required(true),
+        )
+        .get_matches_from(std::iter::once(OsString::from("manpage")).chain(args));
+
+    let utility = matches.get_one::<String>("utility").unwrap();
+    let command = if utility == "coreutils" {
+        gen_coreutils_app(util_map)
+    } else {
+        validation::setup_localization_or_exit(utility);
+        util_map.get(utility).unwrap().1()
+    };
+
+    let man = Man::new(command);
+    man.render(&mut io::stdout())
+        .expect("Man page generation failed");
+    io::stdout().flush().unwrap();
+    process::exit(0);
+}
+
+/// Generate shell completions for the utility in the first parameter
+fn gen_completions<T: Args>(args: impl Iterator<Item = OsString>, util_map: &UtilityMap<T>) -> ! {
+    let all_utilities = validation::get_all_utilities(util_map);
+
+    let matches = Command::new("completion")
+        .about("Prints completions to stdout")
+        .arg(
+            Arg::new("utility")
+                .value_parser(clap::builder::PossibleValuesParser::new(&all_utilities))
+                .required(true),
+        )
+        .arg(
+            Arg::new("shell")
+                .value_parser(clap::builder::EnumValueParser::<Shell>::new())
+                .required(true),
+        )
+        .get_matches_from(std::iter::once(OsString::from("completion")).chain(args));
+
+    let utility = matches.get_one::<String>("utility").unwrap();
+    let shell = *matches.get_one::<Shell>("shell").unwrap();
+
+    let mut command = if utility == "coreutils" {
+        gen_coreutils_app(util_map)
+    } else {
+        validation::setup_localization_or_exit(utility);
+        util_map.get(utility).unwrap().1()
+    };
+    let bin_name = std::env::var("PROG_PREFIX").unwrap_or_default() + utility;
+
+    clap_complete::generate(shell, &mut command, bin_name, &mut io::stdout());
+    io::stdout().flush().unwrap();
+    process::exit(0);
+}
 
 /// # Errors
 /// Returns an error if the writer fails.
 #[allow(clippy::too_many_lines)]
 fn main() -> io::Result<()> {
+    let args: Vec<OsString> = uucore::args_os_filtered().collect();
+
+    // Check for manpage/completion commands first
+    if args.len() > 1 {
+        let command = args.get(1).and_then(|s| s.to_str()).unwrap_or_default();
+        match command {
+            "manpage" => {
+                let args_iter = args.into_iter().skip(2);
+                gen_manpage(args_iter, &util_map::<Box<dyn Iterator<Item = OsString>>>());
+            }
+            "completion" => {
+                let args_iter = args.into_iter().skip(2);
+                gen_completions(args_iter, &util_map::<Box<dyn Iterator<Item = OsString>>>());
+            }
+            "--help" | "-h" => {
+                usage(&util_map::<Box<dyn Iterator<Item = OsString>>>());
+                process::exit(0);
+            }
+            _ => {
+                eprintln!("Unknown command: {command}");
+                eprintln!("Use 'uudoc --help' for usage information.");
+                process::exit(1);
+            }
+        }
+    }
     let mut tldr_zip = File::open("docs/tldr.zip")
         .ok()
         .and_then(|f| ZipArchive::new(f).ok());

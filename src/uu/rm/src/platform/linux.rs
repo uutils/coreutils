@@ -7,6 +7,7 @@
 
 // spell-checker:ignore fstatat unlinkat
 
+use indicatif::ProgressBar;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::Path;
@@ -28,7 +29,11 @@ pub fn is_readable(path: &Path) -> bool {
 }
 
 /// Remove a single file using safe traversal
-pub fn safe_remove_file(path: &Path, options: &Options) -> Option<bool> {
+pub fn safe_remove_file(
+    path: &Path,
+    options: &Options,
+    progress_bar: Option<&ProgressBar>,
+) -> Option<bool> {
     let parent = path.parent()?;
     let file_name = path.file_name()?;
 
@@ -36,6 +41,10 @@ pub fn safe_remove_file(path: &Path, options: &Options) -> Option<bool> {
 
     match dir_fd.unlink_at(file_name, false) {
         Ok(_) => {
+            // Update progress bar for file removal
+            if let Some(pb) = progress_bar {
+                pb.inc(1);
+            }
             verbose_removed_file(path, options);
             Some(false)
         }
@@ -51,7 +60,11 @@ pub fn safe_remove_file(path: &Path, options: &Options) -> Option<bool> {
 }
 
 /// Remove an empty directory using safe traversal
-pub fn safe_remove_empty_dir(path: &Path, options: &Options) -> Option<bool> {
+pub fn safe_remove_empty_dir(
+    path: &Path,
+    options: &Options,
+    progress_bar: Option<&ProgressBar>,
+) -> Option<bool> {
     let parent = path.parent()?;
     let dir_name = path.file_name()?;
 
@@ -59,6 +72,10 @@ pub fn safe_remove_empty_dir(path: &Path, options: &Options) -> Option<bool> {
 
     match dir_fd.unlink_at(dir_name, true) {
         Ok(_) => {
+            // Update progress bar for directory removal
+            if let Some(pb) = progress_bar {
+                pb.inc(1);
+            }
             verbose_removed_directory(path, options);
             Some(false)
         }
@@ -172,12 +189,16 @@ pub fn remove_dir_with_special_cases(path: &Path, options: &Options, error_occur
     }
 }
 
-pub fn safe_remove_dir_recursive(path: &Path, options: &Options) -> bool {
+pub fn safe_remove_dir_recursive(
+    path: &Path,
+    options: &Options,
+    progress_bar: Option<&ProgressBar>,
+) -> bool {
     // Base case 1: this is a file or a symbolic link.
     // Use lstat to avoid race condition between check and use
     match fs::symlink_metadata(path) {
         Ok(metadata) if !metadata.is_dir() => {
-            return remove_file(path, options);
+            return remove_file(path, options, progress_bar);
         }
         Ok(_) => {}
         Err(e) => {

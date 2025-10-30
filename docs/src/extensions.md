@@ -43,6 +43,10 @@ packages.
 
 `mv` can display a progress bar when the `-g`/`--progress` flag is set.
 
+## `rm`
+
+`rm` can display a progress bar when the `-g`/`--progress` flag is set.
+
 ## `hashsum`
 
 This utility does not exist in GNU coreutils. `hashsum` is a utility that

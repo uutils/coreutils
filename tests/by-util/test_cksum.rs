@@ -348,6 +348,20 @@ fn test_length_with_wrong_algorithm() {
         .stderr_contains("cksum: --length is only supported with --algorithm=blake2b");
 }
 
+/// Giving --length to a wrong algorithm doesn't fail if the length is zero
+#[test]
+fn test_length_is_zero_with_wrong_algorithm() {
+    for algo in ["md5", "crc", "sha1", "sha224", "sha256", "sha384", "sha512"] {
+        new_ucmd!()
+            .arg("--length=0")
+            .args(&["-a", algo])
+            .arg("lorem_ipsum.txt")
+            .succeeds()
+            .no_stderr()
+            .stdout_is_fixture(format!("{algo}_single_file.expected"));
+    }
+}
+
 #[test]
 fn test_length_not_supported() {
     new_ucmd!()
@@ -615,20 +629,67 @@ fn test_reset_binary_but_set() {
         .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *");
 }
 
-#[test]
-fn test_text_tag() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+/// Test legacy behaviors with --tag, --untagged, --binary and --text
+mod output_format {
+    use super::*;
 
-    at.touch("f");
+    #[test]
+    fn test_text_tag() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("f");
 
-    scene
-        .ucmd()
-        .arg("--text") // should disappear because of the following option
-        .arg("--tag")
-        .arg(at.subdir.join("f"))
-        .succeeds()
-        .stdout_contains("4294967295 0 ");
+        ucmd.arg("--text") // should disappear because of the following option
+            .arg("--tag")
+            .args(&["-a", "md5"])
+            .arg(at.subdir.join("f"))
+            .succeeds()
+            // Tagged output is used
+            .stdout_contains("f) = d41d8cd98f00b204e9800998ecf8427e");
+    }
+
+    #[test]
+    fn test_text_no_untagged() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("f");
+
+        // --text without --untagged fails
+        ucmd.arg("--text")
+            .args(&["-a", "md5"])
+            .arg(at.subdir.join("f"))
+            .fails_with_code(1)
+            .stderr_contains("--text mode is only supported with --untagged");
+    }
+
+    #[test]
+    fn test_text_binary() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("f");
+
+        // --binary overwrites --text, thus no error is raised
+        ucmd.arg("--text")
+            .arg("--binary")
+            .args(&["-a", "md5"])
+            .arg(at.subdir.join("f"))
+            .succeeds()
+            // No --untagged, tagged output is used
+            .stdout_contains("f) = d41d8cd98f00b204e9800998ecf8427e");
+    }
+
+    #[test]
+    fn test_text_binary_untagged() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("f");
+
+        // --binary overwrites --text
+        ucmd.arg("--text")
+            .arg("--binary")
+            .arg("--untagged")
+            .args(&["-a", "md5"])
+            .arg(at.subdir.join("f"))
+            .succeeds()
+            // Untagged output is used
+            .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *");
+    }
 }
 
 #[test]

@@ -25,12 +25,14 @@ use uucore::checksum::detect_algo;
 use uucore::checksum::digest_reader;
 use uucore::checksum::escape_filename;
 use uucore::checksum::perform_checksum_validation;
-use uucore::error::{FromIo, UResult};
+use uucore::error::{UResult, strip_errno};
 use uucore::format_usage;
 use uucore::sum::{Digest, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
 use uucore::translate;
 
 const NAME: &str = "hashsum";
+// Using the same read buffer size as GNU
+const READ_BUFFER_SIZE: usize = 32 * 1024;
 
 struct Options<'a> {
     algoname: &'static str,
@@ -541,31 +543,47 @@ where
     for filename in files {
         let filename = Path::new(filename);
 
-        let mut file = BufReader::new(if filename == OsStr::new("-") {
-            Box::new(stdin()) as Box<dyn Read>
-        } else {
-            let file_buf = match File::open(filename) {
-                Ok(f) => f,
-                Err(e) => {
-                    eprintln!(
-                        "{}: {}: {e}",
-                        options.binary_name,
-                        filename.to_string_lossy()
-                    );
-                    err_found = Some(ChecksumError::Io(e));
-                    continue;
-                }
-            };
-            Box::new(file_buf) as Box<dyn Read>
-        });
+        let mut file = BufReader::with_capacity(
+            READ_BUFFER_SIZE,
+            if filename == OsStr::new("-") {
+                Box::new(stdin()) as Box<dyn Read>
+            } else {
+                let file_buf = match File::open(filename) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        eprintln!(
+                            "{}: {}: {}",
+                            options.binary_name,
+                            filename.to_string_lossy(),
+                            strip_errno(&e)
+                        );
+                        err_found = Some(ChecksumError::Io(e));
+                        continue;
+                    }
+                };
+                Box::new(file_buf) as Box<dyn Read>
+            },
+        );
 
-        let (sum, _) = digest_reader(
+        let sum = match digest_reader(
             &mut options.digest,
             &mut file,
             options.binary,
             options.output_bits,
-        )
-        .map_err_context(|| translate!("hashsum-error-failed-to-read-input"))?;
+        ) {
+            Ok((sum, _)) => sum,
+            Err(e) => {
+                eprintln!(
+                    "{}: {}: {}",
+                    options.binary_name,
+                    filename.to_string_lossy(),
+                    strip_errno(&e)
+                );
+                err_found = Some(ChecksumError::Io(e));
+                continue;
+            }
+        };
+
         let (escaped_filename, prefix) = escape_filename(filename);
         if options.tag {
             if options.algoname == "blake2b" {

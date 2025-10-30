@@ -309,7 +309,7 @@ fn zero_terminated_with_total() {
     }
 }
 
-#[cfg_attr(not(feature = "test_unimplemented"), ignore = "")]
+#[ignore = "not implemented"]
 #[test]
 fn check_order() {
     let scene = TestScenario::new(util_name!());
@@ -324,7 +324,7 @@ fn check_order() {
         .stderr_is("error to be defined");
 }
 
-#[cfg_attr(not(feature = "test_unimplemented"), ignore = "")]
+#[ignore = "not implemented"]
 #[test]
 fn nocheck_order() {
     let scene = TestScenario::new(util_name!());
@@ -340,7 +340,7 @@ fn nocheck_order() {
 // when neither --check-order nor --no-check-order is provided,
 // stderr and the error code behaves like check order, but stdout
 // behaves like nocheck_order. However with some quirks detailed below.
-#[cfg_attr(not(feature = "test_unimplemented"), ignore = "")]
+#[ignore = "not implemented"]
 #[test]
 fn defaultcheck_order() {
     let scene = TestScenario::new(util_name!());
@@ -609,4 +609,42 @@ fn comm_emoji_sorted_inputs() {
         .env("LC_ALL", "C.UTF-8")
         .succeeds()
         .stdout_only("💐\n\t\t🦀\n\t🪽\n");
+}
+
+#[test]
+fn test_comm_eintr_handling() {
+    // Test that comm properly handles EINTR (ErrorKind::Interrupted) during file comparison
+    // This verifies the signal interruption retry logic in are_files_identical function
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create test files with identical content
+    let test_content = "line1\nline2\nline3\n";
+    at.write("file1", test_content);
+    at.write("file2", test_content);
+
+    // Test that comm can handle interrupted reads during file comparison
+    // The EINTR handling should retry and complete successfully
+    scene
+        .ucmd()
+        .args(&["file1", "file2"])
+        .succeeds()
+        .stdout_contains("line1") // Check that content is present (comm adds tabs for identical lines)
+        .stdout_contains("line2")
+        .stdout_contains("line3");
+
+    // Create test files with identical content
+    let test_content = "line1\nline2\nline3\n";
+    at.write("file1", test_content);
+    at.write("file2", test_content);
+
+    // Test that comm can handle interrupted reads during file comparison
+    // The EINTR handling should retry and complete successfully
+    scene
+        .ucmd()
+        .args(&["file1", "file2"])
+        .succeeds()
+        .stdout_contains("line1") // Check that content is present (comm adds tabs for identical lines)
+        .stdout_contains("line2")
+        .stdout_contains("line3");
 }

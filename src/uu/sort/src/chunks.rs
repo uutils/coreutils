@@ -271,11 +271,12 @@ fn read_to_buffer<T: Read>(
                         if max_buffer_size > buffer.len() {
                             // we can grow the buffer
                             let prev_len = buffer.len();
-                            if buffer.len() < max_buffer_size / 2 {
-                                buffer.resize(buffer.len() * 2, 0);
+                            let target = if buffer.len() < max_buffer_size / 2 {
+                                buffer.len().saturating_mul(2)
                             } else {
-                                buffer.resize(max_buffer_size, 0);
-                            }
+                                max_buffer_size
+                            };
+                            buffer.resize(target.min(max_buffer_size), 0);
                             read_target = &mut buffer[prev_len..];
                             continue;
                         }
@@ -295,8 +296,8 @@ fn read_to_buffer<T: Read>(
 
                     // We need to read more lines
                     let len = buffer.len();
-                    // resize the vector to 10 KB more
-                    buffer.resize(len + 1024 * 10, 0);
+                    let grow_by = (len / 2).max(1024 * 1024);
+                    buffer.resize(len + grow_by, 0);
                     read_target = &mut buffer[len..];
                 } else {
                     // This file has been fully read.

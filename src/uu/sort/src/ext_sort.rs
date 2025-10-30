@@ -86,9 +86,15 @@ fn reader_writer<
 ) -> UResult<()> {
     let separator = settings.line_ending.into();
 
-    // Heuristically chosen: Dividing by 10 seems to keep our memory usage roughly
-    // around settings.buffer_size as a whole.
-    let buffer_size = settings.buffer_size / 10;
+    // Cap oversized buffer requests to avoid unnecessary allocations and give the automatic
+    // heuristic room to grow when the user does not provide an explicit value.
+    let mut buffer_size = match settings.buffer_size {
+        size if size <= 512 * 1024 * 1024 => size,
+        size => size / 2,
+    };
+    if !settings.buffer_size_is_explicit {
+        buffer_size = buffer_size.max(8 * 1024 * 1024);
+    }
     let read_result: ReadResult<Tmp> = read_write_loop(
         files,
         tmp_dir,

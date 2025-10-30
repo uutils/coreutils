@@ -180,6 +180,105 @@ fn test_du_with_posixly_correct() {
 }
 
 #[test]
+fn test_du_zero_env_block_size() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "a";
+
+    at.mkdir(dir);
+    at.write(&format!("{dir}/file"), "some content");
+
+    let expected = ts
+        .ucmd()
+        .arg(dir)
+        .arg("--block-size=1024")
+        .succeeds()
+        .stdout_move_str();
+
+    let result = ts
+        .ucmd()
+        .arg(dir)
+        .env("DU_BLOCK_SIZE", "0")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(expected, result);
+}
+
+#[test]
+fn test_du_zero_env_block_size_hierarchy() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "a";
+
+    at.mkdir(dir);
+    at.write(&format!("{dir}/file"), "some content");
+
+    let expected = ts
+        .ucmd()
+        .arg(dir)
+        .arg("--block-size=1024")
+        .succeeds()
+        .stdout_move_str();
+
+    let result1 = ts
+        .ucmd()
+        .arg(dir)
+        .env("BLOCK_SIZE", "1")
+        .env("DU_BLOCK_SIZE", "0")
+        .succeeds()
+        .stdout_move_str();
+
+    let result2 = ts
+        .ucmd()
+        .arg(dir)
+        .env("BLOCK_SIZE", "1")
+        .env("BLOCKSIZE", "1")
+        .env("DU_BLOCK_SIZE", "0")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(expected, result1);
+    assert_eq!(expected, result2);
+}
+
+#[test]
+fn test_du_env_block_size_hierarchy() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "a";
+
+    at.mkdir(dir);
+    at.write(&format!("{dir}/file"), "some content");
+
+    let expected = ts
+        .ucmd()
+        .arg(dir)
+        .arg("--block-size=1")
+        .succeeds()
+        .stdout_move_str();
+
+    let result1 = ts
+        .ucmd()
+        .arg(dir)
+        .env("BLOCK_SIZE", "0")
+        .env("DU_BLOCK_SIZE", "1")
+        .succeeds()
+        .stdout_move_str();
+
+    let result2 = ts
+        .ucmd()
+        .arg(dir)
+        .env("BLOCK_SIZE", "1")
+        .env("BLOCKSIZE", "0")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(expected, result1);
+    assert_eq!(expected, result2);
+}
+
+#[test]
 fn test_du_non_existing_files() {
     new_ucmd!()
         .arg("non_existing_a")

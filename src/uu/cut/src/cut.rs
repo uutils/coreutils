@@ -464,6 +464,8 @@ mod options {
     pub const WHITESPACE_DELIMITED: &str = "whitespace-delimited";
     pub const COMPLEMENT: &str = "complement";
     pub const FILE: &str = "file";
+    // ignored option
+    pub const NOTHING: &str = "nothing";
 }
 
 #[uucore::main]
@@ -682,5 +684,11 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath)
                 .value_parser(clap::value_parser!(OsString)),
+        )
+        .arg(
+            Arg::new(options::NOTHING)
+                .short('n')
+                .help("(ignored)")
+                .action(ArgAction::SetTrue),
         )
 }
