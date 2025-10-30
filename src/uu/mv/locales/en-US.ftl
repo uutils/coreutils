@@ -31,6 +31,7 @@ mv-error-extra-operand = mv: extra operand {$operand}
 mv-error-backup-might-destroy-source = backing up {$target} might destroy source;  {$source} not moved
 mv-error-will-not-overwrite-just-created = will not overwrite just-created '{$target}' with '{$source}'
 mv-error-not-replacing = not replacing {$target}
+mv-error-cannot-overwrite = cannot overwrite {$target}
 mv-error-cannot-move = cannot move {$source} to {$target}
 mv-error-directory-not-empty = Directory not empty
 mv-error-dangling-symlink = can't determine symlink type, since it is dangling
