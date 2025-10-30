@@ -201,7 +201,6 @@ mod options {
     pub const IGNORE_MISSING: &str = "ignore-missing";
     pub const QUIET: &str = "quiet";
     pub const ZERO: &str = "zero";
-    pub const DEBUG: &str = "debug";
 }
 
 /***
@@ -470,12 +469,6 @@ pub fn uu_app() -> Command {
                 .long(options::ZERO)
                 .short('z')
                 .help(translate!("cksum-help-zero"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::DEBUG)
-                .long(options::DEBUG)
-                .help(translate!("cksum-help-debug"))
                 .action(ArgAction::SetTrue),
         )
         .after_help(translate!("cksum-after-help"))

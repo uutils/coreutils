@@ -2216,33 +2216,6 @@ mod gnu_cksum_c {
 }
 
 #[test]
-fn test_debug_flag() {
-    // Test that --debug flag is accepted (no-op for now)
-    new_ucmd!()
-        .arg("--debug")
-        .arg("lorem_ipsum.txt")
-        .succeeds()
-        .stdout_is_fixture("crc_single_file.expected");
-
-    // Test --debug with algorithm
-    new_ucmd!()
-        .arg("--debug")
-        .arg("-a")
-        .arg("md5")
-        .arg("lorem_ipsum.txt")
-        .succeeds()
-        .stdout_is_fixture("md5_single_file.expected");
-
-    // Test --debug with multiple files
-    new_ucmd!()
-        .arg("--debug")
-        .arg("lorem_ipsum.txt")
-        .arg("alice_in_wonderland.txt")
-        .succeeds()
-        .stdout_is_fixture("crc_multiple_files.expected");
-}
-
-#[test]
 fn test_sha3_with_length() {
     // Test SHA3-224
     new_ucmd!()
