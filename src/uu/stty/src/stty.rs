@@ -11,6 +11,7 @@
 // spell-checker:ignore lnext rprnt susp swtch vdiscard veof veol verase vintr vkill vlnext vquit vreprint vstart vstop vsusp vswtc vwerase werase
 // spell-checker:ignore sigquit sigtstp
 // spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain
+// spell-checker:ignore notaflag notacombo notabaud
 
 mod flags;
 
@@ -1080,5 +1081,1039 @@ impl TermiosFlag for LocalFlags {
 
     fn apply(&self, termios: &mut Termios, val: bool) {
         termios.local_flags.set(*self, val);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Helper function to create a test Termios structure
+    fn create_test_termios() -> Termios {
+        // Create a zeroed termios structure for testing
+        // This is safe because Termios is a C struct that can be zero-initialized
+        unsafe { std::mem::zeroed() }
+    }
+
+    #[test]
+    fn test_flag_new() {
+        let flag = Flag::new("test", ControlFlags::PARENB);
+        assert_eq!(flag.name, "test");
+        assert_eq!(flag.flag, ControlFlags::PARENB);
+        assert!(flag.show);
+        assert!(!flag.sane);
+        assert!(flag.group.is_none());
+    }
+
+    #[test]
+    fn test_flag_new_grouped() {
+        let flag = Flag::new_grouped("cs5", ControlFlags::CS5, ControlFlags::CSIZE);
+        assert_eq!(flag.name, "cs5");
+        assert_eq!(flag.flag, ControlFlags::CS5);
+        assert!(flag.show);
+        assert!(!flag.sane);
+        assert_eq!(flag.group, Some(ControlFlags::CSIZE));
+    }
+
+    #[test]
+    fn test_flag_hidden() {
+        let flag = Flag::new("test", ControlFlags::PARENB).hidden();
+        assert!(!flag.show);
+        assert!(!flag.sane);
+    }
+
+    #[test]
+    fn test_flag_sane() {
+        let flag = Flag::new("test", ControlFlags::PARENB).sane();
+        assert!(flag.show);
+        assert!(flag.sane);
+    }
+
+    #[test]
+    fn test_flag_method_chaining() {
+        let flag = Flag::new("test", ControlFlags::PARENB).hidden().sane();
+        assert!(!flag.show);
+        assert!(flag.sane);
+    }
+
+    #[test]
+    fn test_control_char_to_string_undef() {
+        assert_eq!(
+            control_char_to_string(0).unwrap(),
+            translate!("stty-output-undef")
+        );
+    }
+
+    #[test]
+    fn test_control_char_to_string_control_chars() {
+        // Test ^A through ^Z
+        assert_eq!(control_char_to_string(1).unwrap(), "^A");
+        assert_eq!(control_char_to_string(3).unwrap(), "^C");
+        assert_eq!(control_char_to_string(26).unwrap(), "^Z");
+        assert_eq!(control_char_to_string(0x1f).unwrap(), "^_");
+    }
+
+    #[test]
+    fn test_control_char_to_string_printable() {
+        assert_eq!(control_char_to_string(b' ').unwrap(), " ");
+        assert_eq!(control_char_to_string(b'A').unwrap(), "A");
+        assert_eq!(control_char_to_string(b'z').unwrap(), "z");
+        assert_eq!(control_char_to_string(b'~').unwrap(), "~");
+    }
+
+    #[test]
+    fn test_control_char_to_string_del() {
+        assert_eq!(control_char_to_string(0x7f).unwrap(), "^?");
+    }
+
+    #[test]
+    fn test_control_char_to_string_meta() {
+        assert_eq!(control_char_to_string(0x80).unwrap(), "M-^@");
+        assert_eq!(control_char_to_string(0x81).unwrap(), "M-^A");
+        assert_eq!(control_char_to_string(0xa0).unwrap(), "M- ");
+        assert_eq!(control_char_to_string(0xff).unwrap(), "M-^?");
+    }
+
+    #[test]
+    fn test_string_to_control_char_undef() {
+        assert_eq!(string_to_control_char("undef").unwrap(), 0);
+        assert_eq!(string_to_control_char("^-").unwrap(), 0);
+        assert_eq!(string_to_control_char("").unwrap(), 0);
+    }
+
+    #[test]
+    fn test_string_to_control_char_hat_notation() {
+        assert_eq!(string_to_control_char("^C").unwrap(), 3);
+        assert_eq!(string_to_control_char("^A").unwrap(), 1);
+        assert_eq!(string_to_control_char("^Z").unwrap(), 26);
+        assert_eq!(string_to_control_char("^?").unwrap(), 127);
+    }
+
+    #[test]
+    fn test_string_to_control_char_single_char() {
+        assert_eq!(string_to_control_char("A").unwrap(), b'A');
+        assert_eq!(string_to_control_char("'").unwrap(), b'\'');
+    }
+
+    #[test]
+    fn test_string_to_control_char_decimal() {
+        assert_eq!(string_to_control_char("3").unwrap(), 3);
+        assert_eq!(string_to_control_char("127").unwrap(), 127);
+        assert_eq!(string_to_control_char("255").unwrap(), 255);
+    }
+
+    #[test]
+    fn test_string_to_control_char_hex() {
+        assert_eq!(string_to_control_char("0x03").unwrap(), 3);
+        assert_eq!(string_to_control_char("0x7f").unwrap(), 127);
+        assert_eq!(string_to_control_char("0xff").unwrap(), 255);
+    }
+
+    #[test]
+    fn test_string_to_control_char_octal() {
+        assert_eq!(string_to_control_char("0").unwrap(), 0);
+        assert_eq!(string_to_control_char("03").unwrap(), 3);
+        assert_eq!(string_to_control_char("0177").unwrap(), 127);
+        assert_eq!(string_to_control_char("0377").unwrap(), 255);
+    }
+
+    #[test]
+    fn test_string_to_control_char_overflow() {
+        assert!(matches!(
+            string_to_control_char("256"),
+            Err(ControlCharMappingError::IntOutOfRange(_))
+        ));
+        assert!(matches!(
+            string_to_control_char("0x100"),
+            Err(ControlCharMappingError::IntOutOfRange(_))
+        ));
+    }
+
+    #[test]
+    fn test_string_to_control_char_multiple_chars() {
+        assert!(matches!(
+            string_to_control_char("ab"),
+            Err(ControlCharMappingError::MultipleChars(_))
+        ));
+    }
+
+    #[test]
+    fn test_parse_rows_cols() {
+        assert_eq!(parse_rows_cols("100"), Some(100));
+        assert_eq!(parse_rows_cols("65535"), Some(65535));
+        // Test wrapping at u16::MAX + 1
+        assert_eq!(parse_rows_cols("65536"), Some(0));
+        assert_eq!(parse_rows_cols("65537"), Some(1));
+        assert_eq!(parse_rows_cols("invalid"), None);
+    }
+
+    #[test]
+    fn test_get_sane_control_char() {
+        assert_eq!(get_sane_control_char(S::VINTR), 3); // ^C
+        assert_eq!(get_sane_control_char(S::VQUIT), 28); // ^\
+        assert_eq!(get_sane_control_char(S::VERASE), 127); // DEL
+        assert_eq!(get_sane_control_char(S::VKILL), 21); // ^U
+        assert_eq!(get_sane_control_char(S::VEOF), 4); // ^D
+        assert_eq!(get_sane_control_char(S::VEOL), 0); // default
+        assert_eq!(get_sane_control_char(S::VMIN), 1); // default
+        assert_eq!(get_sane_control_char(S::VTIME), 0); // default
+    }
+
+    #[test]
+    fn test_combo_to_flags_sane() {
+        let result = combo_to_flags("sane");
+        // Should have many flags + control chars
+        assert!(!result.is_empty());
+        // Verify it contains both flags and mappings
+        let has_flags = result.iter().any(|r| matches!(r, ArgOptions::Flags(_)));
+        let has_mappings = result.iter().any(|r| matches!(r, ArgOptions::Mapping(_)));
+        assert!(has_flags);
+        assert!(has_mappings);
+    }
+
+    #[test]
+    fn test_combo_to_flags_raw() {
+        let result = combo_to_flags("raw");
+        assert!(!result.is_empty());
+        // raw should set VMIN=1 and VTIME=0
+        let vmin_mapping = result.iter().find_map(|r| {
+            if let ArgOptions::Mapping((S::VMIN, val)) = r {
+                Some(*val)
+            } else {
+                None
+            }
+        });
+        let vtime_mapping = result.iter().find_map(|r| {
+            if let ArgOptions::Mapping((S::VTIME, val)) = r {
+                Some(*val)
+            } else {
+                None
+            }
+        });
+        assert_eq!(vmin_mapping, Some(1));
+        assert_eq!(vtime_mapping, Some(0));
+    }
+
+    #[test]
+    fn test_combo_to_flags_cooked() {
+        let result = combo_to_flags("cooked");
+        assert!(!result.is_empty());
+        // cooked should set VEOF=^D and VEOL=""
+        let veof_mapping = result.iter().find_map(|r| {
+            if let ArgOptions::Mapping((S::VEOF, val)) = r {
+                Some(*val)
+            } else {
+                None
+            }
+        });
+        assert_eq!(veof_mapping, Some(4)); // ^D
+    }
+
+    #[test]
+    fn test_combo_to_flags_cbreak() {
+        let result = combo_to_flags("cbreak");
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_combo_to_flags_neg_cbreak() {
+        let result = combo_to_flags("-cbreak");
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_combo_to_flags_dec() {
+        let result = combo_to_flags("dec");
+        assert!(!result.is_empty());
+        // dec should set VINTR=^C, VERASE=^?, VKILL=^U
+        let vintr = result.iter().find_map(|r| {
+            if let ArgOptions::Mapping((S::VINTR, val)) = r {
+                Some(*val)
+            } else {
+                None
+            }
+        });
+        assert_eq!(vintr, Some(3)); // ^C
+    }
+
+    #[test]
+    fn test_combo_to_flags_crt() {
+        let result = combo_to_flags("crt");
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_combo_to_flags_ek() {
+        let result = combo_to_flags("ek");
+        assert!(!result.is_empty());
+        // ek should only set control chars, no flags
+        let has_flags = result.iter().any(|r| matches!(r, ArgOptions::Flags(_)));
+        assert!(!has_flags);
+    }
+
+    #[test]
+    fn test_combo_to_flags_evenp() {
+        let result = combo_to_flags("evenp");
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_combo_to_flags_parity() {
+        let result = combo_to_flags("parity");
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_combo_to_flags_neg_evenp() {
+        let result = combo_to_flags("-evenp");
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_combo_to_flags_oddp() {
+        let result = combo_to_flags("oddp");
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_combo_to_flags_neg_oddp() {
+        let result = combo_to_flags("-oddp");
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_combo_to_flags_nl() {
+        let result = combo_to_flags("nl");
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_combo_to_flags_neg_nl() {
+        let result = combo_to_flags("-nl");
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_combo_to_flags_litout() {
+        let result = combo_to_flags("litout");
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_combo_to_flags_neg_litout() {
+        let result = combo_to_flags("-litout");
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_combo_to_flags_pass8() {
+        let result = combo_to_flags("pass8");
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_combo_to_flags_neg_pass8() {
+        let result = combo_to_flags("-pass8");
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_combo_to_flags_lcase() {
+        let result = combo_to_flags("lcase");
+        // lcase uses xcase, iuclc, olcuc which may not be supported on all platforms
+        // Just verify the function doesn't panic
+        let _ = result;
+    }
+
+    #[test]
+    fn test_combo_to_flags_lcase_upper() {
+        let result = combo_to_flags("LCASE");
+        // LCASE uses xcase, iuclc, olcuc which may not be supported on all platforms
+        // Just verify the function doesn't panic
+        let _ = result;
+    }
+
+    #[test]
+    fn test_combo_to_flags_neg_lcase() {
+        let result = combo_to_flags("-lcase");
+        // -lcase uses -xcase, -iuclc, -olcuc which may not be supported on all platforms
+        // Just verify the function doesn't panic
+        let _ = result;
+    }
+
+    #[test]
+    fn test_combo_to_flags_decctlq() {
+        let result = combo_to_flags("decctlq");
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_combo_to_flags_neg_decctlq() {
+        let result = combo_to_flags("-decctlq");
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_apply_char_mapping() {
+        let mut termios = create_test_termios();
+        let mapping = (S::VINTR, 5);
+        apply_char_mapping(&mut termios, &mapping);
+        assert_eq!(termios.control_chars[S::VINTR as usize], 5);
+    }
+
+    #[test]
+    fn test_apply_setting_control_flags_enable() {
+        let mut termios = create_test_termios();
+        let flag = Flag::new("parenb", ControlFlags::PARENB);
+        let setting = AllFlags::ControlFlags((&flag, false));
+        apply_setting(&mut termios, &setting);
+        assert!(termios.control_flags.contains(ControlFlags::PARENB));
+    }
+
+    #[test]
+    fn test_apply_setting_control_flags_disable() {
+        let mut termios = create_test_termios();
+        termios.control_flags.insert(ControlFlags::PARENB);
+        let flag = Flag::new("parenb", ControlFlags::PARENB);
+        let setting = AllFlags::ControlFlags((&flag, true)); // true means disable
+        apply_setting(&mut termios, &setting);
+        assert!(!termios.control_flags.contains(ControlFlags::PARENB));
+    }
+
+    #[test]
+    fn test_apply_setting_input_flags_enable() {
+        let mut termios = create_test_termios();
+        let flag = Flag::new("ignbrk", InputFlags::IGNBRK);
+        let setting = AllFlags::InputFlags((&flag, false));
+        apply_setting(&mut termios, &setting);
+        assert!(termios.input_flags.contains(InputFlags::IGNBRK));
+    }
+
+    #[test]
+    fn test_apply_setting_input_flags_disable() {
+        let mut termios = create_test_termios();
+        termios.input_flags.insert(InputFlags::IGNBRK);
+        let flag = Flag::new("ignbrk", InputFlags::IGNBRK);
+        let setting = AllFlags::InputFlags((&flag, true));
+        apply_setting(&mut termios, &setting);
+        assert!(!termios.input_flags.contains(InputFlags::IGNBRK));
+    }
+
+    #[test]
+    fn test_apply_setting_output_flags_enable() {
+        let mut termios = create_test_termios();
+        let flag = Flag::new("opost", OutputFlags::OPOST);
+        let setting = AllFlags::OutputFlags((&flag, false));
+        apply_setting(&mut termios, &setting);
+        assert!(termios.output_flags.contains(OutputFlags::OPOST));
+    }
+
+    #[test]
+    fn test_apply_setting_output_flags_disable() {
+        let mut termios = create_test_termios();
+        termios.output_flags.insert(OutputFlags::OPOST);
+        let flag = Flag::new("opost", OutputFlags::OPOST);
+        let setting = AllFlags::OutputFlags((&flag, true));
+        apply_setting(&mut termios, &setting);
+        assert!(!termios.output_flags.contains(OutputFlags::OPOST));
+    }
+
+    #[test]
+    fn test_apply_setting_local_flags_enable() {
+        let mut termios = create_test_termios();
+        let flag = Flag::new("isig", LocalFlags::ISIG);
+        let setting = AllFlags::LocalFlags((&flag, false));
+        apply_setting(&mut termios, &setting);
+        assert!(termios.local_flags.contains(LocalFlags::ISIG));
+    }
+
+    #[test]
+    fn test_apply_setting_local_flags_disable() {
+        let mut termios = create_test_termios();
+        termios.local_flags.insert(LocalFlags::ISIG);
+        let flag = Flag::new("isig", LocalFlags::ISIG);
+        let setting = AllFlags::LocalFlags((&flag, true));
+        apply_setting(&mut termios, &setting);
+        assert!(!termios.local_flags.contains(LocalFlags::ISIG));
+    }
+
+    #[test]
+    #[cfg(not(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
+    fn test_apply_baud_rate_flag() {
+        use nix::sys::termios::BaudRate;
+        let mut termios = create_test_termios();
+        let setting = AllFlags::Baud(BaudRate::B9600);
+        apply_baud_rate_flag(&mut termios, &setting);
+        assert_eq!(cfgetospeed(&termios), BaudRate::B9600);
+    }
+
+    #[test]
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    fn test_apply_baud_rate_flag_bsd() {
+        let mut termios = create_test_termios();
+        let setting = AllFlags::Baud(9600);
+        apply_baud_rate_flag(&mut termios, &setting);
+        assert_eq!(cfgetospeed(&termios), 9600);
+    }
+
+    #[test]
+    fn test_apply_setting_baud() {
+        #[cfg(not(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        )))]
+        {
+            use nix::sys::termios::BaudRate;
+            let mut termios = create_test_termios();
+            let setting = AllFlags::Baud(BaudRate::B9600);
+            apply_setting(&mut termios, &setting);
+            assert_eq!(cfgetospeed(&termios), BaudRate::B9600);
+        }
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        ))]
+        {
+            let mut termios = create_test_termios();
+            let setting = AllFlags::Baud(9600);
+            apply_setting(&mut termios, &setting);
+            assert_eq!(cfgetospeed(&termios), 9600);
+        }
+    }
+
+    #[test]
+    fn test_print_flags_with_all_flag() {
+        let mut termios = create_test_termios();
+        termios.control_flags.insert(ControlFlags::PARENB);
+
+        let opts = Options {
+            all: true,
+            save: false,
+            file: Device::Stdout(std::io::stdout()),
+            settings: None,
+        };
+
+        // Test that print_flags doesn't panic
+        // We can't easily capture stdout in unit tests, but we can verify it runs
+        let flags = &[Flag::new("parenb", ControlFlags::PARENB)];
+        print_flags(&termios, &opts, flags);
+    }
+
+    #[test]
+    fn test_print_flags_without_all_flag() {
+        let mut termios = create_test_termios();
+        termios.control_flags.insert(ControlFlags::PARENB);
+
+        let opts = Options {
+            all: false,
+            save: false,
+            file: Device::Stdout(std::io::stdout()),
+            settings: None,
+        };
+
+        let flags = &[Flag::new("parenb", ControlFlags::PARENB)];
+        print_flags(&termios, &opts, flags);
+    }
+
+    #[test]
+    fn test_print_flags_grouped() {
+        let mut termios = create_test_termios();
+        termios.control_flags.insert(ControlFlags::CS7);
+
+        let opts = Options {
+            all: true,
+            save: false,
+            file: Device::Stdout(std::io::stdout()),
+            settings: None,
+        };
+
+        let flags = &[
+            Flag::new_grouped("cs7", ControlFlags::CS7, ControlFlags::CSIZE),
+            Flag::new_grouped("cs8", ControlFlags::CS8, ControlFlags::CSIZE),
+        ];
+        print_flags(&termios, &opts, flags);
+    }
+
+    #[test]
+    fn test_print_flags_hidden() {
+        let mut termios = create_test_termios();
+        termios.control_flags.insert(ControlFlags::PARENB);
+
+        let opts = Options {
+            all: true,
+            save: false,
+            file: Device::Stdout(std::io::stdout()),
+            settings: None,
+        };
+
+        let flags = &[Flag::new("parenb", ControlFlags::PARENB).hidden()];
+        print_flags(&termios, &opts, flags);
+    }
+
+    #[test]
+    fn test_print_flags_sane() {
+        let mut termios = create_test_termios();
+        termios.control_flags.insert(ControlFlags::PARENB);
+
+        let opts = Options {
+            all: false,
+            save: false,
+            file: Device::Stdout(std::io::stdout()),
+            settings: None,
+        };
+
+        let flags = &[Flag::new("parenb", ControlFlags::PARENB).sane()];
+        print_flags(&termios, &opts, flags);
+    }
+
+    #[test]
+    fn test_termios_flag_control_flags() {
+        let mut termios = create_test_termios();
+
+        // Test is_in
+        assert!(!ControlFlags::PARENB.is_in(&termios, None));
+        termios.control_flags.insert(ControlFlags::PARENB);
+        assert!(ControlFlags::PARENB.is_in(&termios, None));
+
+        // Test apply
+        ControlFlags::PARODD.apply(&mut termios, true);
+        assert!(termios.control_flags.contains(ControlFlags::PARODD));
+        ControlFlags::PARODD.apply(&mut termios, false);
+        assert!(!termios.control_flags.contains(ControlFlags::PARODD));
+    }
+
+    #[test]
+    fn test_termios_flag_input_flags() {
+        let mut termios = create_test_termios();
+
+        // Test is_in
+        assert!(!InputFlags::IGNBRK.is_in(&termios, None));
+        termios.input_flags.insert(InputFlags::IGNBRK);
+        assert!(InputFlags::IGNBRK.is_in(&termios, None));
+
+        // Test apply
+        InputFlags::BRKINT.apply(&mut termios, true);
+        assert!(termios.input_flags.contains(InputFlags::BRKINT));
+        InputFlags::BRKINT.apply(&mut termios, false);
+        assert!(!termios.input_flags.contains(InputFlags::BRKINT));
+    }
+
+    #[test]
+    fn test_termios_flag_output_flags() {
+        let mut termios = create_test_termios();
+
+        // Test is_in
+        assert!(!OutputFlags::OPOST.is_in(&termios, None));
+        termios.output_flags.insert(OutputFlags::OPOST);
+        assert!(OutputFlags::OPOST.is_in(&termios, None));
+
+        // Test apply
+        OutputFlags::ONLCR.apply(&mut termios, true);
+        assert!(termios.output_flags.contains(OutputFlags::ONLCR));
+        OutputFlags::ONLCR.apply(&mut termios, false);
+        assert!(!termios.output_flags.contains(OutputFlags::ONLCR));
+    }
+
+    #[test]
+    fn test_termios_flag_local_flags() {
+        let mut termios = create_test_termios();
+
+        // Test is_in
+        assert!(!LocalFlags::ISIG.is_in(&termios, None));
+        termios.local_flags.insert(LocalFlags::ISIG);
+        assert!(LocalFlags::ISIG.is_in(&termios, None));
+
+        // Test apply
+        LocalFlags::ICANON.apply(&mut termios, true);
+        assert!(termios.local_flags.contains(LocalFlags::ICANON));
+        LocalFlags::ICANON.apply(&mut termios, false);
+        assert!(!termios.local_flags.contains(LocalFlags::ICANON));
+    }
+
+    #[test]
+    fn test_string_to_control_char_empty_octal() {
+        // Test "0" which should parse as octal 0
+        let result = string_to_control_char("0");
+        assert_eq!(result.unwrap(), 0);
+    }
+
+    #[test]
+    fn test_string_to_control_char_hat_question() {
+        // Test "^?" which is DEL (127)
+        let result = string_to_control_char("^?");
+        assert_eq!(result.unwrap(), 127);
+    }
+
+    #[test]
+    fn test_string_to_control_char_hat_lowercase() {
+        // Test that lowercase is converted to uppercase for hat notation
+        let result = string_to_control_char("^c");
+        assert_eq!(result.unwrap(), 3); // Same as ^C
+    }
+
+    #[test]
+    fn test_get_sane_control_char_veol2() {
+        // Test VEOL2 which should return 0
+        assert_eq!(get_sane_control_char(S::VEOL2), 0);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_get_sane_control_char_vswtc() {
+        // Test VSWTC on Linux which should return 0
+        assert_eq!(get_sane_control_char(S::VSWTC), 0);
+    }
+
+    #[test]
+    fn test_termios_flag_grouped() {
+        let mut termios = create_test_termios();
+
+        // Test grouped flags (e.g., CS7 within CSIZE group)
+        termios.control_flags.insert(ControlFlags::CS7);
+
+        // CS7 should be in when group is CSIZE
+        assert!(ControlFlags::CS7.is_in(&termios, Some(ControlFlags::CSIZE)));
+
+        // CS8 should not be in
+        assert!(!ControlFlags::CS8.is_in(&termios, Some(ControlFlags::CSIZE)));
+    }
+
+    #[test]
+    fn test_combo_to_flags_minus_raw() {
+        // Test that -raw is same as cooked
+        let result = combo_to_flags("-raw");
+        assert!(!result.is_empty());
+        // Should set VEOF and VEOL
+        let has_veof = result
+            .iter()
+            .any(|r| matches!(r, ArgOptions::Mapping((S::VEOF, _))));
+        assert!(has_veof);
+    }
+
+    #[test]
+    fn test_combo_to_flags_minus_cooked() {
+        // Test that -cooked is same as raw
+        let result = combo_to_flags("-cooked");
+        assert!(!result.is_empty());
+        // Should set VMIN and VTIME
+        let has_vmin = result
+            .iter()
+            .any(|r| matches!(r, ArgOptions::Mapping((S::VMIN, _))));
+        assert!(has_vmin);
+    }
+
+    #[test]
+    fn test_apply_char_mapping_vquit() {
+        let mut termios = create_test_termios();
+        let mapping = (S::VQUIT, 28); // ^\
+        apply_char_mapping(&mut termios, &mapping);
+        assert_eq!(termios.control_chars[S::VQUIT as usize], 28);
+    }
+
+    #[test]
+    fn test_control_char_to_string_meta_control() {
+        // Test meta+control character (0x80 + control char)
+        let result = control_char_to_string(0x81).unwrap(); // M-^A
+        assert!(result.starts_with("M-"));
+    }
+
+    #[test]
+    fn test_control_char_to_string_meta_printable() {
+        // Test meta+printable character
+        let result = control_char_to_string(0xA0).unwrap(); // M-<space>
+        assert!(result.starts_with("M-"));
+    }
+
+    #[test]
+    fn test_control_char_to_string_meta_del() {
+        // Test meta+DEL
+        let result = control_char_to_string(0xFF).unwrap(); // M-^?
+        assert!(result.starts_with("M-"));
+    }
+
+    #[test]
+    fn test_parse_rows_cols_max_u16() {
+        // Test wrapping behavior at u16 boundary
+        let result = parse_rows_cols("65535");
+        assert_eq!(result.unwrap(), 65535);
+    }
+
+    #[test]
+    fn test_parse_rows_cols_overflow() {
+        // Test overflow wrapping
+        let result = parse_rows_cols("65536");
+        assert_eq!(result.unwrap(), 0); // Wraps to 0
+    }
+
+    #[test]
+    fn test_parse_rows_cols_large_overflow() {
+        // Test large overflow
+        let result = parse_rows_cols("65537");
+        assert_eq!(result.unwrap(), 1); // Wraps to 1
+    }
+
+    #[test]
+    fn test_flag_builder_pattern() {
+        // Test full builder pattern
+        let flag = Flag::new("test", ControlFlags::PARENB).hidden().sane();
+        assert_eq!(flag.name, "test");
+        assert!(!flag.show);
+        assert!(flag.sane);
+    }
+
+    #[test]
+    fn test_flag_new_grouped_with_builder() {
+        // Test grouped flag with builder methods
+        let flag = Flag::new_grouped("cs7", ControlFlags::CS7, ControlFlags::CSIZE).sane();
+        assert_eq!(flag.group, Some(ControlFlags::CSIZE));
+        assert!(flag.sane);
+    }
+
+    #[test]
+    fn test_string_to_flag_control_flag() {
+        // Test parsing a control flag
+        let result = string_to_flag("parenb");
+        assert!(result.is_some());
+        assert!(matches!(result.unwrap(), AllFlags::ControlFlags(_)));
+    }
+
+    #[test]
+    fn test_string_to_flag_control_flag_negated() {
+        // Test parsing a negated control flag
+        let result = string_to_flag("-parenb");
+        assert!(result.is_some());
+        if let Some(AllFlags::ControlFlags((_, remove))) = result {
+            assert!(remove); // Should be true for negated flag
+        } else {
+            panic!("Expected ControlFlags");
+        }
+    }
+
+    #[test]
+    fn test_string_to_flag_input_flag() {
+        // Test parsing an input flag
+        let result = string_to_flag("ignbrk");
+        assert!(result.is_some());
+        assert!(matches!(result.unwrap(), AllFlags::InputFlags(_)));
+    }
+
+    #[test]
+    fn test_string_to_flag_input_flag_negated() {
+        // Test parsing a negated input flag
+        let result = string_to_flag("-ignbrk");
+        assert!(result.is_some());
+        if let Some(AllFlags::InputFlags((_, remove))) = result {
+            assert!(remove);
+        } else {
+            panic!("Expected InputFlags");
+        }
+    }
+
+    #[test]
+    fn test_string_to_flag_output_flag() {
+        // Test parsing an output flag
+        let result = string_to_flag("opost");
+        assert!(result.is_some());
+        assert!(matches!(result.unwrap(), AllFlags::OutputFlags(_)));
+    }
+
+    #[test]
+    fn test_string_to_flag_output_flag_negated() {
+        // Test parsing a negated output flag
+        let result = string_to_flag("-opost");
+        assert!(result.is_some());
+        if let Some(AllFlags::OutputFlags((_, remove))) = result {
+            assert!(remove);
+        } else {
+            panic!("Expected OutputFlags");
+        }
+    }
+
+    #[test]
+    fn test_string_to_flag_local_flag() {
+        // Test parsing a local flag
+        let result = string_to_flag("isig");
+        assert!(result.is_some());
+        assert!(matches!(result.unwrap(), AllFlags::LocalFlags(_)));
+    }
+
+    #[test]
+    fn test_string_to_flag_local_flag_negated() {
+        // Test parsing a negated local flag
+        let result = string_to_flag("-isig");
+        assert!(result.is_some());
+        if let Some(AllFlags::LocalFlags((_, remove))) = result {
+            assert!(remove);
+        } else {
+            panic!("Expected LocalFlags");
+        }
+    }
+
+    #[test]
+    fn test_string_to_flag_invalid() {
+        // Test parsing an invalid flag
+        let result = string_to_flag("notaflag");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_string_to_flag_invalid_negated() {
+        // Test parsing an invalid negated flag
+        let result = string_to_flag("-notaflag");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_arg_options_from_all_flags() {
+        // Test From trait for ArgOptions
+        let flag = Flag::new("parenb", ControlFlags::PARENB);
+        let all_flags = AllFlags::ControlFlags((&flag, false));
+        let arg_option: ArgOptions = all_flags.into();
+        assert!(matches!(arg_option, ArgOptions::Flags(_)));
+    }
+
+    #[test]
+    fn test_device_as_raw_fd_stdout() {
+        // Test AsRawFd trait for Device::Stdout
+        let device = Device::Stdout(std::io::stdout());
+        let _fd = device.as_raw_fd();
+        // Just verify it doesn't panic
+    }
+
+    #[test]
+    fn test_check_flag_group_with_group() {
+        // Test check_flag_group returns true when removing a grouped flag
+        let flag = Flag::new_grouped("cs7", ControlFlags::CS7, ControlFlags::CSIZE);
+        assert!(check_flag_group(&flag, true)); // remove=true, has group
+    }
+
+    #[test]
+    fn test_check_flag_group_without_group() {
+        // Test check_flag_group returns false when flag has no group
+        let flag = Flag::new("parenb", ControlFlags::PARENB);
+        assert!(!check_flag_group(&flag, true)); // remove=true, no group
+    }
+
+    #[test]
+    fn test_check_flag_group_not_removing() {
+        // Test check_flag_group returns false when not removing
+        let flag = Flag::new_grouped("cs7", ControlFlags::CS7, ControlFlags::CSIZE);
+        assert!(!check_flag_group(&flag, false)); // remove=false
+    }
+
+    #[test]
+    fn test_string_to_combo_valid() {
+        // Test parsing a valid combination setting
+        let result = string_to_combo("sane");
+        assert_eq!(result, Some("sane"));
+    }
+
+    #[test]
+    fn test_string_to_combo_valid_negatable() {
+        // Test parsing a negatable combination setting
+        let result = string_to_combo("-cbreak");
+        assert_eq!(result, Some("-cbreak"));
+    }
+
+    #[test]
+    fn test_string_to_combo_invalid_negation() {
+        // Test parsing a non-negatable combination with negation
+        let result = string_to_combo("-sane");
+        assert!(result.is_none()); // sane is not negatable
+    }
+
+    #[test]
+    fn test_string_to_combo_invalid() {
+        // Test parsing an invalid combination
+        let result = string_to_combo("notacombo");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    fn test_string_to_baud_bsd_numeric() {
+        // Test parsing numeric baud rate on BSD systems
+        let result = string_to_baud("9600");
+        assert!(result.is_some());
+        if let Some(AllFlags::Baud(rate)) = result {
+            assert_eq!(rate, 9600);
+        } else {
+            panic!("Expected Baud flag");
+        }
+    }
+
+    #[test]
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    fn test_string_to_baud_bsd_invalid() {
+        // Test parsing invalid baud rate on BSD systems
+        let result = string_to_baud("notabaud");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    #[cfg(not(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
+    fn test_string_to_baud_linux_b9600() {
+        // Test parsing B9600 on Linux
+        let result = string_to_baud("9600");
+        assert!(result.is_some());
+        assert!(matches!(result.unwrap(), AllFlags::Baud(_)));
+    }
+
+    #[test]
+    #[cfg(not(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
+    fn test_string_to_baud_linux_invalid() {
+        // Test parsing invalid baud rate on Linux
+        let result = string_to_baud("99999");
+        assert!(result.is_none());
     }
 }

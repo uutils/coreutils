@@ -320,3 +320,156 @@ fn non_negatable_combo() {
         .fails()
         .stderr_contains("invalid argument '-ek'");
 }
+
+#[test]
+fn help_output() {
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("Usage:")
+        .stdout_contains("stty");
+}
+
+#[test]
+fn version_output() {
+    new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .stdout_contains("stty");
+}
+
+#[test]
+fn invalid_control_char_names() {
+    // Test invalid control character names
+    new_ucmd!()
+        .args(&["notachar", "^C"])
+        .fails()
+        .stderr_contains("invalid argument 'notachar'");
+}
+
+#[test]
+fn control_char_overflow_hex() {
+    // Test hex overflow for control characters
+    new_ucmd!()
+        .args(&["erase", "0xFFF"])
+        .fails()
+        .stderr_contains("Value too large for defined data type");
+}
+
+#[test]
+fn control_char_overflow_octal() {
+    // Test octal overflow for control characters
+    new_ucmd!()
+        .args(&["kill", "0777"])
+        .fails()
+        .stderr_contains("Value too large for defined data type");
+}
+
+#[test]
+fn multiple_invalid_args() {
+    // Test multiple invalid arguments
+    new_ucmd!()
+        .args(&["invalid1", "invalid2"])
+        .fails()
+        .stderr_contains("invalid argument");
+}
+
+#[test]
+#[ignore = "Fails because cargo test does not run in a tty"]
+fn negatable_combo_settings() {
+    // These should fail without TTY but validate the argument parsing
+    // Testing that negatable combos are recognized (even if they fail later)
+    new_ucmd!().args(&["-cbreak"]).fails();
+
+    new_ucmd!().args(&["-evenp"]).fails();
+
+    new_ucmd!().args(&["-oddp"]).fails();
+}
+
+#[test]
+fn grouped_flag_removal() {
+    // Test that removing a grouped flag is invalid
+    // cs7 is part of CSIZE group, removing it should fail
+    new_ucmd!()
+        .args(&["-cs7"])
+        .fails()
+        .stderr_contains("invalid argument '-cs7'");
+
+    new_ucmd!()
+        .args(&["-cs8"])
+        .fails()
+        .stderr_contains("invalid argument '-cs8'");
+}
+
+#[test]
+#[ignore = "Fails because cargo test does not run in a tty"]
+fn baud_rate_validation() {
+    // Test various baud rate formats
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    {
+        // BSD accepts numeric baud rates
+        new_ucmd!().args(&["9600"]).fails(); // Fails due to no TTY, but validates parsing
+    }
+
+    // Test ispeed/ospeed with valid baud rates
+    new_ucmd!().args(&["ispeed", "9600"]).fails(); // Fails due to no TTY
+    new_ucmd!().args(&["ospeed", "115200"]).fails(); // Fails due to no TTY
+}
+
+#[test]
+#[ignore = "Fails because cargo test does not run in a tty"]
+fn combination_setting_validation() {
+    // Test that combination settings are recognized
+    new_ucmd!().args(&["sane"]).fails(); // Fails due to no TTY, but validates parsing
+    new_ucmd!().args(&["raw"]).fails();
+    new_ucmd!().args(&["cooked"]).fails();
+    new_ucmd!().args(&["cbreak"]).fails();
+}
+
+#[test]
+#[ignore = "Fails because cargo test does not run in a tty"]
+fn control_char_hat_notation() {
+    // Test various hat notation formats
+    new_ucmd!().args(&["intr", "^?"]).fails(); // Fails due to no TTY
+    new_ucmd!().args(&["quit", "^\\"]).fails();
+    new_ucmd!().args(&["erase", "^H"]).fails();
+}
+
+#[test]
+#[ignore = "Fails because cargo test does not run in a tty"]
+fn special_settings() {
+    // Test special settings that require arguments
+    new_ucmd!().args(&["speed"]).fails(); // Fails due to no TTY but validates it's recognized
+
+    new_ucmd!().args(&["size"]).fails(); // Fails due to no TTY but validates it's recognized
+}
+
+#[test]
+fn file_argument() {
+    // Test --file argument with non-existent file
+    new_ucmd!()
+        .args(&["--file", "/nonexistent/device"])
+        .fails()
+        .stderr_contains("No such file or directory");
+}
+
+#[test]
+fn conflicting_print_modes() {
+    // Test more conflicting option combinations
+    new_ucmd!()
+        .args(&["--save", "speed"])
+        .fails()
+        .stderr_contains("when specifying an output style, modes may not be set");
+
+    new_ucmd!()
+        .args(&["--all", "speed"])
+        .fails()
+        .stderr_contains("when specifying an output style, modes may not be set");
+}
