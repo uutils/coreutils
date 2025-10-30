@@ -1,3 +1,5 @@
+# spell-checker:ignore bigdecimal cfgs extendedbigdecimal
+
 [package]
 name = "uu_od"
 description = "od ~ (uutils) display formatted representation of input"
@@ -18,10 +20,15 @@ workspace = true
 path = "src/od.rs"
 
 [dependencies]
+bigdecimal = { workspace = true }
 byteorder = { workspace = true }
 clap = { workspace = true }
 half = { workspace = true }
-uucore = { workspace = true, features = ["parser"] }
+uucore = { workspace = true, features = [
+  "extendedbigdecimal",
+  "format",
+  "parser",
+] }
 fluent = { workspace = true }
 
 [[bin]]
