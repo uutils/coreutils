@@ -12,8 +12,6 @@ cksum-after-help = DIGEST determines the digest algorithm and default output for
   - sha3: (requires --length: 224, 256, 384, or 512)
   - blake2b: (equivalent to b2sum)
   - sm3: (only available through cksum)
-  - shake128: (requires --length)
-  - shake256: (requires --length)
 
 # Help messages
 cksum-help-algorithm = select the digest type to use. See DIGEST below

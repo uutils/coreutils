@@ -12,8 +12,6 @@ cksum-after-help = DIGEST détermine l'algorithme de condensé et le format de s
   - sha3 : (nécessite --length : 224, 256, 384, ou 512)
   - blake2b : (équivalent à b2sum)
   - sm3 : (disponible uniquement via cksum)
-  - shake128 : (nécessite --length)
-  - shake256 : (nécessite --length)
 
 # Messages d'aide
 cksum-help-algorithm = sélectionner le type de condensé à utiliser. Voir DIGEST ci-dessous
