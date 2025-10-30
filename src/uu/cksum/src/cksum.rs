@@ -37,6 +37,7 @@ struct Options {
     length: Option<usize>,
     output_format: OutputFormat,
     line_ending: LineEnding,
+    debug: bool,
 }
 
 /// Reading mode used to compute digest.
@@ -176,6 +177,22 @@ fn print_untagged_checksum(
     Ok(())
 }
 
+fn print_debug_info(filename: &OsStr, algo_name: &str) {
+    let file_display = if filename == OsStr::new("-") {
+        "standard input".to_string()
+    } else {
+        filename.to_string_lossy().to_string()
+    };
+    eprintln!(
+        "{}",
+        translate!(
+            "cksum-debug-algorithm",
+            "file" => file_display,
+            "algorithm" => algo_name.to_uppercase()
+        )
+    );
+}
+
 /// Calculate checksum
 ///
 /// # Arguments
@@ -219,6 +236,10 @@ where
             };
             Box::new(file_buf) as Box<dyn Read>
         });
+
+        if options.debug {
+            print_debug_info(filename, options.algo_name);
+        }
 
         let (sum_hex, sz) =
             digest_reader(&mut options.digest, &mut file, false, options.output_bits)
@@ -469,6 +490,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         length,
         output_format,
         line_ending,
+        debug: matches.get_flag(options::DEBUG),
     };
 
     cksum(opts, files)?;

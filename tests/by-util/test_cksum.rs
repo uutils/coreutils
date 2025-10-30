@@ -2748,27 +2748,79 @@ mod format_mix {
 
 #[test]
 fn test_debug_flag() {
-    // Test that --debug flag is accepted (no-op for now)
+    // Test with default CRC algorithm
     new_ucmd!()
         .arg("--debug")
         .arg("lorem_ipsum.txt")
         .succeeds()
-        .stdout_is_fixture("crc_single_file.expected");
+        .stdout_is_fixture("crc_single_file.expected")
+        .stderr_contains("lorem_ipsum.txt: CRC");
 
-    // Test --debug with algorithm
+    // Test with MD5 algorithm
     new_ucmd!()
         .arg("--debug")
         .arg("-a")
         .arg("md5")
         .arg("lorem_ipsum.txt")
         .succeeds()
-        .stdout_is_fixture("md5_single_file.expected");
+        .stdout_is_fixture("md5_single_file.expected")
+        .stderr_contains("lorem_ipsum.txt: MD5");
 
-    // Test --debug with multiple files
+    // Test with stdin
+    new_ucmd!()
+        .arg("--debug")
+        .pipe_in("test")
+        .succeeds()
+        .stderr_contains("standard input: CRC");
+
+    // Test with multiple files
     new_ucmd!()
         .arg("--debug")
         .arg("lorem_ipsum.txt")
         .arg("alice_in_wonderland.txt")
         .succeeds()
-        .stdout_is_fixture("crc_multiple_files.expected");
+        .stdout_is_fixture("crc_multiple_files.expected")
+        .stderr_contains("lorem_ipsum.txt: CRC")
+        .stderr_contains("alice_in_wonderland.txt: CRC");
+}
+
+#[test]
+fn test_debug_with_algorithms() {
+    // Test with SHA256
+    new_ucmd!()
+        .arg("--debug")
+        .arg("-a")
+        .arg("sha256")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stderr_contains("lorem_ipsum.txt: SHA256");
+
+    // Test with BLAKE2b default length
+    new_ucmd!()
+        .arg("--debug")
+        .arg("-a")
+        .arg("blake2b")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stderr_contains("lorem_ipsum.txt: BLAKE2B");
+
+    // Test with BLAKE2b custom length
+    new_ucmd!()
+        .arg("--debug")
+        .arg("-a")
+        .arg("blake2b")
+        .arg("--length")
+        .arg("256")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stderr_contains("lorem_ipsum.txt: BLAKE2B");
+
+    // Test with SHA1
+    new_ucmd!()
+        .arg("--debug")
+        .arg("-a")
+        .arg("sha1")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stderr_contains("lorem_ipsum.txt: SHA1");
 }

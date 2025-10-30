@@ -27,7 +27,10 @@ cksum-help-status = don't output anything, status code shows success
 cksum-help-quiet = don't print OK for each successfully verified file
 cksum-help-ignore-missing = don't fail or report status for missing files
 cksum-help-zero = end each output line with NUL, not newline, and disable file name escaping
-cksum-help-debug = indicate which implementation used (not yet implemented)
+cksum-help-debug = indicate which algorithm is used
+
+# Debug messages
+cksum-debug-algorithm = {$file}: {$algorithm}
 
 # Error messages
 cksum-error-is-directory = { $file }: Is a directory
