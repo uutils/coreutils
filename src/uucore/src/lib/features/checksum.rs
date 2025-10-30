@@ -219,16 +219,23 @@ pub enum ChecksumError {
     StrictNotCheck,
     #[error("the --quiet option is meaningful only when verifying checksums")]
     QuietNotCheck,
+
+    // --length sanitization errors
     #[error("--length required for {}", .0.quote())]
     LengthRequired(String),
     #[error("invalid length: {}", .0.quote())]
     InvalidLength(String),
+    #[error("maximum digest length for {} is 512 bits", .0.quote())]
+    LengthTooBigForBlake(String),
+    #[error("length is not a multiple of 8")]
+    LengthNotMultipleOf8,
     #[error("digest length for {} must be 224, 256, 384, or 512", .0.quote())]
     InvalidLengthForSha(String),
     #[error("--algorithm={0} requires specifying --length 224, 256, 384, or 512")]
     LengthRequiredForSha(String),
     #[error("--length is only supported with --algorithm blake2b, sha2, or sha3")]
     LengthOnlyForBlake2bSha2Sha3,
+
     #[error("the --binary and --text options are meaningless when verifying checksums")]
     BinaryTextConflict,
     #[error("--text mode is only supported with --untagged")]
@@ -1243,34 +1250,32 @@ pub fn calculate_blake2b_length(length: usize) -> UResult<Option<usize>> {
 
 /// Calculates the length of the digest.
 pub fn calculate_blake2b_length_str(length: &str) -> UResult<Option<usize>> {
-    match length.parse() {
+    // Blake2b's length is parsed in an u64.
+    match length.parse::<usize>() {
         Ok(0) => Ok(None),
-        Ok(n) if n % 8 != 0 => {
-            show_error!("{}", ChecksumError::InvalidLength(length.into()));
-            Err(io::Error::new(io::ErrorKind::InvalidInput, "length is not a multiple of 8").into())
-        }
+
+        // Error cases
         Ok(n) if n > 512 => {
             show_error!("{}", ChecksumError::InvalidLength(length.into()));
-            Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!(
-                    "maximum digest length for {} is 512 bits",
-                    "BLAKE2b".quote()
-                ),
-            )
-            .into())
+            Err(ChecksumError::LengthTooBigForBlake("BLAKE2b".into()).into())
         }
-        Ok(n) => {
-            // Divide by 8, as our blake2b implementation expects bytes instead of bits.
-            if n == 512 {
-                // When length is 512, it is blake2b's default.
-                // So, don't show it
-                Ok(None)
-            } else {
-                Ok(Some(n / 8))
-            }
+        Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
+            show_error!("{}", ChecksumError::InvalidLength(length.into()));
+            Err(ChecksumError::LengthTooBigForBlake("BLAKE2b".into()).into())
         }
         Err(_) => Err(ChecksumError::InvalidLength(length.into()).into()),
+
+        Ok(n) if n % 8 != 0 => {
+            show_error!("{}", ChecksumError::InvalidLength(length.into()));
+            Err(ChecksumError::LengthNotMultipleOf8.into())
+        }
+
+        // Valid cases
+
+        // When length is 512, it is blake2b's default. So, don't show it
+        Ok(512) => Ok(None),
+        // Divide by 8, as our blake2b implementation expects bytes instead of bits.
+        Ok(n) => Ok(Some(n / 8)),
     }
 }
 
