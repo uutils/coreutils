@@ -52,7 +52,7 @@ packages.
 This utility does not exist in GNU coreutils. `hashsum` is a utility that
 supports computing the checksums with several algorithms. The flags and options
 are identical to the `*sum` family of utils (`sha1sum`, `sha256sum`, `b2sum`,
-etc.). This utility will be removed in the future and advised to use `cksum --untagged` instead.
+etc.). This utility will be removed in the future and it is advised to use `cksum --untagged` instead.
 
 ## `b3sum`
 
