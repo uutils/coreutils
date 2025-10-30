@@ -774,14 +774,31 @@ fn test_blake2b_length() {
 
 #[test]
 fn test_blake2b_length_greater_than_512() {
-    new_ucmd!()
-        .arg("--length=1024")
-        .arg("--algorithm=blake2b")
-        .arg("lorem_ipsum.txt")
-        .arg("alice_in_wonderland.txt")
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_is_fixture("length_larger_than_512.expected");
+    for l in ["513", "1024", "73786976294838206464"] {
+        new_ucmd!()
+            .arg("--algorithm=blake2b")
+            .arg("--length")
+            .arg(l)
+            .arg("lorem_ipsum.txt")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains(format!("invalid length: '{l}'"))
+            .stderr_contains("maximum digest length for 'BLAKE2b' is 512 bits");
+    }
+}
+
+#[test]
+fn test_blake2b_length_nan() {
+    for l in ["foo", "512x", "x512", "0xff"] {
+        new_ucmd!()
+            .arg("--algorithm=blake2b")
+            .arg("--length")
+            .arg(l)
+            .arg("lorem_ipsum.txt")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains(format!("invalid length: '{l}'"));
+    }
 }
 
 #[test]
