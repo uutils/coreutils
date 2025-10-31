@@ -350,9 +350,8 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
     // Iterate through all sessions
     for session_id in sessions {
         // Get session UID using safe wrapper
-        let uid = match login::get_session_uid(&session_id) {
-            Ok(uid) => uid,
-            Err(_) => continue,
+        let Ok(uid) = login::get_session_uid(&session_id) else {
+            continue;
         };
 
         // Get username from UID
@@ -524,7 +523,7 @@ pub struct SystemdUtmpxCompat {
 impl SystemdUtmpxCompat {
     /// Create new instance from a SystemdLoginRecord
     pub fn new(record: SystemdLoginRecord) -> Self {
-        SystemdUtmpxCompat { record }
+        Self { record }
     }
 
     /// A.K.A. ut.ut_type
@@ -596,7 +595,7 @@ impl SystemdUtmpxIter {
     /// Create new instance and read records from systemd-logind
     pub fn new() -> UResult<Self> {
         let records = read_login_records()?;
-        Ok(SystemdUtmpxIter {
+        Ok(Self {
             records,
             current_index: 0,
         })
@@ -604,7 +603,7 @@ impl SystemdUtmpxIter {
 
     /// Create empty iterator (for when systemd initialization fails)
     pub fn empty() -> Self {
-        SystemdUtmpxIter {
+        Self {
             records: Vec::new(),
             current_index: 0,
         }

@@ -43,17 +43,13 @@ use std::collections::VecDeque;
 pub struct RingBuffer<T> {
     /// The data stored in the ring buffer.
     pub data: VecDeque<T>,
-
-    /// The maximum number of elements that the ring buffer can hold.
-    size: usize,
 }
 
 impl<T> RingBuffer<T> {
     /// Create a new ring buffer with a maximum size of `size`.
     pub fn new(size: usize) -> Self {
         Self {
-            data: VecDeque::new(),
-            size,
+            data: VecDeque::with_capacity(size),
         }
     }
 
@@ -100,10 +96,10 @@ impl<T> RingBuffer<T> {
     /// assert_eq!(Some(2), buf.push_back(2));
     /// ```
     pub fn push_back(&mut self, value: T) -> Option<T> {
-        if self.size == 0 {
+        if self.data.capacity() == 0 {
             return Some(value);
         }
-        let result = if self.size <= self.data.len() {
+        let result = if self.data.len() == self.data.capacity() {
             self.data.pop_front()
         } else {
             None

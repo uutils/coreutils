@@ -873,6 +873,38 @@ fn test_check_directory_error() {
 }
 
 #[test]
+#[cfg(not(windows))]
+fn test_continue_after_directory_error() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("d");
+    at.touch("file");
+    at.touch("no_read_perms");
+    at.set_mode("no_read_perms", 200);
+
+    let (out, err_msg) = (
+        "d41d8cd98f00b204e9800998ecf8427e  file\n",
+        [
+            "md5sum: d: Is a directory",
+            "md5sum: dne: No such file or directory",
+            "md5sum: no_read_perms: Permission denied\n",
+        ]
+        .join("\n"),
+    );
+
+    scene
+        .ccmd("md5sum")
+        .arg("d")
+        .arg("dne")
+        .arg("no_read_perms")
+        .arg("file")
+        .fails()
+        .stdout_is(out)
+        .stderr_is(err_msg);
+}
+
+#[test]
 fn test_check_quiet() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

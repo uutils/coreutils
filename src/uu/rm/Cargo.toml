@@ -22,6 +22,7 @@ thiserror = { workspace = true }
 clap = { workspace = true }
 uucore = { workspace = true, features = ["fs", "parser", "safe-traversal"] }
 fluent = { workspace = true }
+indicatif = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
@@ -32,3 +33,12 @@ windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
 [[bin]]
 name = "rm"
 path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "rm_bench"
+harness = false

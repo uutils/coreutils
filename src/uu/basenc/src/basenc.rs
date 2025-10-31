@@ -39,6 +39,7 @@ fn get_encodings() -> Vec<(&'static str, Format, String)> {
             translate!("basenc-help-base2msbf"),
         ),
         ("z85", Format::Z85, translate!("basenc-help-z85")),
+        ("base58", Format::Base58, translate!("basenc-help-base58")),
     ]
 }
 

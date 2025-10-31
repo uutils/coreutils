@@ -1906,4 +1906,25 @@ fn test_color_environment_variables() {
     }
 }
 
+#[test]
+fn test_start_buffer() {
+    // Test that a file with the exact same size as the start buffer is handled correctly
+    const FILE_B: &[u8] = &[b'b'; 8_000];
+    const FILE_A: &[u8] = b"aaa";
+
+    let mut expected = FILE_A.to_vec();
+    expected.push(b'\n');
+    expected.extend_from_slice(FILE_B);
+    expected.push(b'\n');
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write_bytes("b", FILE_B);
+    at.write_bytes("a", FILE_A);
+
+    ucmd.args(&["b", "a"])
+        .succeeds()
+        .stdout_only_bytes(&expected);
+}
+
 /* spell-checker: enable */

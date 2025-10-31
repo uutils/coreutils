@@ -52,6 +52,22 @@ fn main() {
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR not set");
     let target = env::var("TARGET").unwrap_or_else(|_| "unknown".to_string());
 
+    // Check if we're building from the repository (where src/libstdbuf exists)
+    // or from crates.io (where it doesn't)
+    let libstdbuf_src = Path::new("src/libstdbuf");
+    if !libstdbuf_src.exists() {
+        // When building from crates.io, libstdbuf is already available as a dependency
+        // We can't build it here, so we'll need to handle this differently
+        // For now, we'll create a dummy library file to satisfy the include_bytes! macro
+        let lib_name = format!("libstdbuf{}", platform::DYLIB_EXT);
+        let dest_path = Path::new(&out_dir).join(&lib_name);
+
+        // Create an empty file as a placeholder
+        // The actual library will be provided by the dependency
+        fs::write(&dest_path, []).expect("Failed to create placeholder libstdbuf");
+        return;
+    }
+
     // Create a separate build directory for libstdbuf to avoid conflicts
     let build_dir = Path::new(&out_dir).join("libstdbuf-build");
     fs::create_dir_all(&build_dir).expect("Failed to create build directory");
@@ -66,11 +82,8 @@ fn main() {
     // See the tracking issue: https://github.com/rust-lang/cargo/issues/9096
     let mut cmd = Command::new(&cargo);
     cmd.env_clear().envs(env::vars());
-    cmd.current_dir(Path::new("src/libstdbuf")).args([
-        "build",
-        "--target-dir",
-        build_dir.to_str().unwrap(),
-    ]);
+    cmd.current_dir(libstdbuf_src)
+        .args(["build", "--target-dir", build_dir.to_str().unwrap()]);
 
     // Get the current profile
     let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());

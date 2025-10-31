@@ -385,7 +385,6 @@ fn test_cp_arg_no_target_directory_with_recursive() {
 }
 
 #[test]
-#[ignore = "disabled until https://github.com/uutils/coreutils/issues/7455 is fixed"]
 fn test_cp_arg_no_target_directory_with_recursive_target_does_not_exists() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -768,7 +767,7 @@ fn test_cp_f_i_verbose_non_writeable_destination_y() {
         .pipe_in("y")
         .succeeds()
         .stderr_is("cp: replace 'b', overriding mode 0000 (---------)? ")
-        .stdout_is("'a' -> 'b'\n");
+        .stdout_is("removed 'b'\n'a' -> 'b'\n");
 }
 
 #[test]
@@ -2374,7 +2373,11 @@ fn test_cp_no_preserve_timestamps() {
     println!("creation {creation:?} / {creation2:?}");
 
     assert_ne!(creation, creation2);
-    let res = creation.elapsed().unwrap() - creation2.elapsed().unwrap();
+    let res = creation
+        .elapsed()
+        .unwrap()
+        .checked_sub(creation2.elapsed().unwrap())
+        .unwrap();
     // Some margins with time check
     assert!(res.as_secs() > 3595);
     assert!(res.as_secs() < 3605);
@@ -7089,4 +7092,138 @@ fn test_cp_recursive_files_ending_in_backslash() {
     at.touch("a/foo\\");
     ts.ucmd().args(&["-r", "a", "b"]).succeeds();
     assert!(at.file_exists("b/foo\\"));
+}
+
+#[test]
+fn test_cp_no_preserve_target_directory() {
+    /* Expected result:
+    ├── a
+    │   └── b
+    │       └── c
+    │           └── d
+    │               └── f1
+    ├── d
+    │   └── f1
+    └── e
+        ├── b
+        │   └── c
+        │       └── d
+        │           ├── c
+        │           │   └── d
+        │           │       └── f1
+        │           └── f1
+        ├── d
+        │   └── f1
+        ├── f2
+        └── f3
+     */
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir_all("a/b/c/d");
+    at.touch("a/b/c/d/f1");
+    ts.ucmd().args(&["-rT", "a", "e"]).succeeds();
+    at.touch("e/f2");
+    ts.ucmd().args(&["-rT", "a/", "e/"]).succeeds();
+    at.touch("e/f3");
+    ts.ucmd().args(&["-rvT", "a/b/c", "e/"]).succeeds();
+    ts.ucmd().args(&["-rvT", "a/b/", "e/b/c/d/"]).succeeds();
+    ts.ucmd().args(&["-rT", "a/b/c", "."]).succeeds();
+    assert!(!at.dir_exists("e/a"));
+    assert!(at.file_exists("e/b/c/d/f1"));
+    assert!(at.file_exists("e/b/c/d/c/d/f1"));
+    assert!(!at.dir_exists("e/c"));
+    assert!(!at.dir_exists("e/c/d/b"));
+    assert!(at.file_exists("e/d/f1"));
+    assert!(at.file_exists("./d/f1"));
+    assert!(at.file_exists("e/f2"));
+    assert!(at.file_exists("e/f3"));
+}
+
+#[test]
+fn test_cp_recurse_verbose_output() {
+    let source_dir = "source_dir";
+    let target_dir = "target_dir";
+    let file = "file";
+    #[cfg(not(windows))]
+    let output = format!(
+        "'{source_dir}' -> '{target_dir}/'\n'{source_dir}/{file}' -> '{target_dir}/{file}'\n"
+    );
+    #[cfg(windows)]
+    let output = format!(
+        "'{source_dir}' -> '{target_dir}\\'\n'{source_dir}\\{file}' -> '{target_dir}\\{file}'\n"
+    );
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir(source_dir);
+    at.touch(format!("{source_dir}/{file}"));
+
+    ucmd.arg(source_dir)
+        .arg(target_dir)
+        .arg("-r")
+        .arg("--verbose")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(output);
+}
+
+#[test]
+fn test_cp_recurse_verbose_output_with_symlink() {
+    let source_dir = "source_dir";
+    let target_dir = "target_dir";
+    let file = "file";
+    let symlink = "symlink";
+    #[cfg(not(windows))]
+    let output = format!(
+        "'{source_dir}' -> '{target_dir}/'\n'{source_dir}/{symlink}' -> '{target_dir}/{symlink}'\n"
+    );
+    #[cfg(windows)]
+    let output = format!(
+        "'{source_dir}' -> '{target_dir}\\'\n'{source_dir}\\{symlink}' -> '{target_dir}\\{symlink}'\n"
+    );
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir(source_dir);
+    at.touch(file);
+    at.symlink_file(file, format!("{source_dir}/{symlink}").as_str());
+
+    ucmd.arg(source_dir)
+        .arg(target_dir)
+        .arg("-r")
+        .arg("--verbose")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(output);
+}
+
+#[test]
+fn test_cp_recurse_verbose_output_with_symlink_already_exists() {
+    let source_dir = "source_dir";
+    let target_dir = "target_dir";
+    let file = "file";
+    let symlink = "symlink";
+    #[cfg(not(windows))]
+    let output = format!(
+        "removed '{target_dir}/{symlink}'\n'{source_dir}/{symlink}' -> '{target_dir}/{symlink}'\n"
+    );
+    #[cfg(windows)]
+    let output = format!(
+        "removed '{target_dir}\\{symlink}'\n'{source_dir}\\{symlink}' -> '{target_dir}\\{symlink}'\n"
+    );
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir(source_dir);
+    at.touch(file);
+    at.symlink_file(file, format!("{source_dir}/{symlink}").as_str());
+    at.mkdir(target_dir);
+    at.symlink_file(file, format!("{target_dir}/{symlink}").as_str());
+
+    ucmd.arg(source_dir)
+        .arg(target_dir)
+        .arg("-r")
+        .arg("--verbose")
+        .arg("-T")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(output);
 }

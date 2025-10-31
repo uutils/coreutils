@@ -55,8 +55,6 @@ highlight = "all"
 # introduces it.
 # spell-checker: disable
 skip = [
-  # nu-ansi-term
-  { name = "windows-sys", version = "0.52.0" },
   # various crates
   { name = "windows-sys", version = "0.59.0" },
   # various crates
@@ -107,8 +105,10 @@ skip = [
   { name = "rand_core", version = "0.6.4" },
   # utmp-classic
   { name = "zerocopy", version = "0.7.35" },
-  # divans/codspeed tooling
-  { name = "nix", version = "0.29.0" },
+  # zerocopy
+  { name = "zerocopy-derive", version = "0.7.35" },
+  # rustix
+  { name = "linux-raw-sys", version = "0.11.0" },
 ]
 # spell-checker: enable
 
