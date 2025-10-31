@@ -8,7 +8,11 @@ use uutests::new_ucmd;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+    new_ucmd!()
+        .arg("--definitely-invalid")
+        .fails_with_code(1)
+        .stderr_contains("invalid argument")
+        .stderr_contains("--definitely-invalid");
 }
 
 #[test]
@@ -1110,4 +1114,207 @@ fn test_parity_settings() {
     result.stdout_contains("parenb");
     result.stdout_contains("parodd");
     result.stdout_contains("cs7");
+}
+
+// Additional integration tests for missing coverage
+
+#[test]
+fn missing_arg_ispeed() {
+    // Test missing argument for ispeed
+    new_ucmd!()
+        .args(&["ispeed"])
+        .fails()
+        .stderr_contains("missing argument")
+        .stderr_contains("ispeed");
+}
+
+#[test]
+fn missing_arg_ospeed() {
+    // Test missing argument for ospeed
+    new_ucmd!()
+        .args(&["ospeed"])
+        .fails()
+        .stderr_contains("missing argument")
+        .stderr_contains("ospeed");
+}
+
+#[test]
+fn missing_arg_line() {
+    // Test missing argument for line
+    new_ucmd!()
+        .args(&["line"])
+        .fails()
+        .stderr_contains("missing argument")
+        .stderr_contains("line");
+}
+
+#[test]
+fn missing_arg_min() {
+    // Test missing argument for min
+    new_ucmd!()
+        .args(&["min"])
+        .fails()
+        .stderr_contains("missing argument")
+        .stderr_contains("min");
+}
+
+#[test]
+fn missing_arg_time() {
+    // Test missing argument for time
+    new_ucmd!()
+        .args(&["time"])
+        .fails()
+        .stderr_contains("missing argument")
+        .stderr_contains("time");
+}
+
+#[test]
+fn missing_arg_rows() {
+    // Test missing argument for rows
+    new_ucmd!()
+        .args(&["rows"])
+        .fails()
+        .stderr_contains("missing argument")
+        .stderr_contains("rows");
+}
+
+#[test]
+fn missing_arg_cols() {
+    // Test missing argument for cols
+    new_ucmd!()
+        .args(&["cols"])
+        .fails()
+        .stderr_contains("missing argument")
+        .stderr_contains("cols");
+}
+
+#[test]
+fn missing_arg_columns() {
+    // Test missing argument for columns
+    new_ucmd!()
+        .args(&["columns"])
+        .fails()
+        .stderr_contains("missing argument")
+        .stderr_contains("columns");
+}
+
+#[test]
+fn missing_arg_control_char() {
+    // Test missing argument for control character
+    new_ucmd!()
+        .args(&["intr"])
+        .fails()
+        .stderr_contains("missing argument")
+        .stderr_contains("intr");
+
+    new_ucmd!()
+        .args(&["erase"])
+        .fails()
+        .stderr_contains("missing argument")
+        .stderr_contains("erase");
+}
+
+#[test]
+fn invalid_integer_rows() {
+    // Test invalid integer for rows
+    new_ucmd!()
+        .args(&["rows", "abc"])
+        .fails()
+        .stderr_contains("invalid integer argument");
+
+    new_ucmd!()
+        .args(&["rows", "-1"])
+        .fails()
+        .stderr_contains("invalid integer argument");
+}
+
+#[test]
+fn invalid_integer_cols() {
+    // Test invalid integer for cols
+    new_ucmd!()
+        .args(&["cols", "xyz"])
+        .fails()
+        .stderr_contains("invalid integer argument");
+
+    new_ucmd!()
+        .args(&["columns", "12.5"])
+        .fails()
+        .stderr_contains("invalid integer argument");
+}
+
+#[test]
+fn invalid_min_value() {
+    // Test invalid min value
+    new_ucmd!()
+        .args(&["min", "256"])
+        .fails()
+        .stderr_contains("Value too large");
+
+    new_ucmd!()
+        .args(&["min", "-1"])
+        .fails()
+        .stderr_contains("invalid integer argument");
+}
+
+#[test]
+fn invalid_time_value() {
+    // Test invalid time value
+    new_ucmd!()
+        .args(&["time", "1000"])
+        .fails()
+        .stderr_contains("Value too large");
+
+    new_ucmd!()
+        .args(&["time", "abc"])
+        .fails()
+        .stderr_contains("invalid integer argument");
+}
+
+#[test]
+fn invalid_baud_rate() {
+    // Test invalid baud rate for ispeed (non-numeric string)
+    new_ucmd!()
+        .args(&["ispeed", "notabaud"])
+        .fails()
+        .stderr_contains("invalid ispeed");
+
+    // On non-BSD systems, test invalid numeric baud rate
+    // On BSD systems, any u32 is accepted, so we skip this test
+    #[cfg(not(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
+    {
+        new_ucmd!()
+            .args(&["ospeed", "999999999"])
+            .fails()
+            .stderr_contains("invalid ospeed");
+    }
+}
+
+#[test]
+fn control_char_multiple_chars_error() {
+    // Test that control characters with multiple chars fail
+    new_ucmd!()
+        .args(&["intr", "ABC"])
+        .fails()
+        .stderr_contains("invalid integer argument");
+}
+
+#[test]
+fn control_char_decimal_overflow() {
+    // Test decimal overflow for control characters
+    new_ucmd!()
+        .args(&["quit", "256"])
+        .fails()
+        .stderr_contains("Value too large");
+
+    new_ucmd!()
+        .args(&["susp", "1000"])
+        .fails()
+        .stderr_contains("Value too large");
 }
