@@ -63,7 +63,7 @@ const SANE_CONTROL_CHARS: [(S, u8); 12] = [
     (S::VDISCARD, 15), // ^O
 ];
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Flag<T> {
     name: &'static str,
     #[expect(clippy::struct_field_names)]
