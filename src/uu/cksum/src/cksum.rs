@@ -14,10 +14,10 @@ use std::iter;
 use std::path::Path;
 use uucore::checksum::{
     ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC,
-    ALGORITHM_OPTIONS_CRC32B, ALGORITHM_OPTIONS_SHA2, ALGORITHM_OPTIONS_SHA3,
-    ALGORITHM_OPTIONS_SYSV, ChecksumError, ChecksumOptions, ChecksumVerbose, HashAlgorithm,
-    LEGACY_ALGORITHMS, SUPPORTED_ALGORITHMS, calculate_blake2b_length_str, detect_algo,
-    digest_reader, perform_checksum_validation, sanitize_sha2_sha3_length_str,
+    ALGORITHM_OPTIONS_CRC32B, ALGORITHM_OPTIONS_SYSV, AlgoKind, ChecksumError, ChecksumOptions,
+    ChecksumVerbose, HashAlgorithm, LEGACY_ALGORITHMS, SUPPORTED_ALGORITHMS,
+    calculate_blake2b_length_str, detect_algo, digest_reader, perform_checksum_validation,
+    sanitize_sha2_sha3_length_str,
 };
 use uucore::translate;
 
@@ -368,7 +368,7 @@ fn figure_out_output_format(
 
 /// Sanitize the `--length` argument depending on `--algorithm` and `--length`.
 fn maybe_sanitize_length(
-    algo_cli: Option<&str>,
+    algo_cli: Option<AlgoKind>,
     input_length: Option<&str>,
 ) -> UResult<Option<usize>> {
     match (algo_cli, input_length) {
@@ -376,12 +376,12 @@ fn maybe_sanitize_length(
         (_, None) => Ok(None),
 
         // For SHA2 and SHA3, if a length is provided, ensure it is correct.
-        (Some(algo @ (ALGORITHM_OPTIONS_SHA2 | ALGORITHM_OPTIONS_SHA3)), Some(s_len)) => {
+        (Some(algo @ (AlgoKind::Sha2 | AlgoKind::Sha3)), Some(s_len)) => {
             sanitize_sha2_sha3_length_str(algo, s_len).map(Some)
         }
 
         // For BLAKE2b, if a length is provided, validate it.
-        (Some(ALGORITHM_OPTIONS_BLAKE2B), Some(len)) => calculate_blake2b_length_str(len),
+        (Some(AlgoKind::Blake2b), Some(len)) => calculate_blake2b_length_str(len),
 
         // For any other provided algorithm, check if length is 0.
         // Otherwise, this is an error.
@@ -398,7 +398,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let algo_cli = matches
         .get_one::<String>(options::ALGORITHM)
-        .map(String::as_str);
+        .map(AlgoKind::from_cksum)
+        .transpose()?;
 
     let input_length = matches
         .get_one::<String>(options::LENGTH)
@@ -415,7 +416,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if check {
         // cksum does not support '--check'ing legacy algorithms
-        if algo_cli.is_some_and(|algo_name| LEGACY_ALGORITHMS.contains(&algo_name)) {
+        if algo_cli.is_some_and(AlgoKind::is_legacy) {
             return Err(ChecksumError::AlgorithmNotSupportedWithCheck.into());
         }
 
@@ -448,11 +449,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Not --check
 
     // Set the default algorithm to CRC when not '--check'ing.
-    let algo_name = algo_cli.unwrap_or(ALGORITHM_OPTIONS_CRC);
+    let algo_kind = algo_cli.unwrap_or(AlgoKind::Crc);
 
     let (tag, binary) = handle_tag_text_binary_flags(std::env::args_os())?;
 
-    let algo = detect_algo(algo_name, length)?;
+    let algo = detect_algo(algo_kind, length)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
     let output_format = figure_out_output_format(

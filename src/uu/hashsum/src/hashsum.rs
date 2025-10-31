@@ -15,19 +15,17 @@ use std::io::{BufReader, Read, stdin};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
-use uucore::checksum::ChecksumError;
 use uucore::checksum::ChecksumOptions;
 use uucore::checksum::ChecksumVerbose;
-use uucore::checksum::HashAlgorithm;
 use uucore::checksum::calculate_blake2b_length;
-use uucore::checksum::create_sha3;
 use uucore::checksum::detect_algo;
 use uucore::checksum::digest_reader;
 use uucore::checksum::escape_filename;
 use uucore::checksum::perform_checksum_validation;
+use uucore::checksum::{AlgoKind, ChecksumError};
 use uucore::error::{UResult, strip_errno};
 use uucore::format_usage;
-use uucore::sum::{Digest, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
+use uucore::sum::Digest;
 use uucore::translate;
 
 const NAME: &str = "hashsum";
@@ -63,10 +61,10 @@ struct Options<'a> {
 /// the output length in bits or an Err if multiple hash algorithms are specified or if a
 /// required flag is missing.
 #[allow(clippy::cognitive_complexity)]
-fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
-    let mut alg: Option<HashAlgorithm> = None;
+fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<(AlgoKind, Option<usize>)> {
+    let mut alg: Option<(AlgoKind, Option<usize>)> = None;
 
-    let mut set_or_err = |new_alg: HashAlgorithm| -> UResult<()> {
+    let mut set_or_err = |new_alg: (AlgoKind, Option<usize>)| -> UResult<()> {
         if alg.is_some() {
             return Err(ChecksumError::CombineMultipleAlgorithms.into());
         }
@@ -75,80 +73,57 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
     };
 
     if matches.get_flag("md5") {
-        set_or_err(detect_algo("md5sum", None)?)?;
+        set_or_err((AlgoKind::Md5, None))?;
     }
     if matches.get_flag("sha1") {
-        set_or_err(detect_algo("sha1sum", None)?)?;
+        set_or_err((AlgoKind::Sha1, None))?;
     }
     if matches.get_flag("sha224") {
-        set_or_err(detect_algo("sha224sum", None)?)?;
+        set_or_err((AlgoKind::Sha224, None))?;
     }
     if matches.get_flag("sha256") {
-        set_or_err(detect_algo("sha256sum", None)?)?;
+        set_or_err((AlgoKind::Sha256, None))?;
     }
     if matches.get_flag("sha384") {
-        set_or_err(detect_algo("sha384sum", None)?)?;
+        set_or_err((AlgoKind::Sha384, None))?;
     }
     if matches.get_flag("sha512") {
-        set_or_err(detect_algo("sha512sum", None)?)?;
+        set_or_err((AlgoKind::Sha512, None))?;
     }
     if matches.get_flag("b2sum") {
-        set_or_err(detect_algo("b2sum", None)?)?;
+        set_or_err((AlgoKind::Blake2b, None))?;
     }
     if matches.get_flag("b3sum") {
-        set_or_err(detect_algo("b3sum", None)?)?;
+        set_or_err((AlgoKind::Blake3, None))?;
     }
     if matches.get_flag("sha3") {
         match matches.get_one::<usize>("bits") {
-            Some(bits) => set_or_err(create_sha3(*bits)?)?,
+            Some(bits @ (224 | 256 | 384 | 512)) => set_or_err((AlgoKind::Sha3, Some(*bits)))?,
+            Some(bits) => return Err(ChecksumError::InvalidLengthForSha(bits.to_string()).into()),
             None => return Err(ChecksumError::LengthRequired("SHA3".into()).into()),
         }
     }
     if matches.get_flag("sha3-224") {
-        set_or_err(HashAlgorithm {
-            name: "SHA3-224",
-            create_fn: Box::new(|| Box::new(Sha3_224::new())),
-            bits: 224,
-        })?;
+        set_or_err((AlgoKind::Sha3, Some(224)))?;
     }
     if matches.get_flag("sha3-256") {
-        set_or_err(HashAlgorithm {
-            name: "SHA3-256",
-            create_fn: Box::new(|| Box::new(Sha3_256::new())),
-            bits: 256,
-        })?;
+        set_or_err((AlgoKind::Sha3, Some(256)))?;
     }
     if matches.get_flag("sha3-384") {
-        set_or_err(HashAlgorithm {
-            name: "SHA3-384",
-            create_fn: Box::new(|| Box::new(Sha3_384::new())),
-            bits: 384,
-        })?;
+        set_or_err((AlgoKind::Sha3, Some(384)))?;
     }
     if matches.get_flag("sha3-512") {
-        set_or_err(HashAlgorithm {
-            name: "SHA3-512",
-            create_fn: Box::new(|| Box::new(Sha3_512::new())),
-            bits: 512,
-        })?;
+        set_or_err((AlgoKind::Sha3, Some(512)))?;
     }
     if matches.get_flag("shake128") {
         match matches.get_one::<usize>("bits") {
-            Some(bits) => set_or_err(HashAlgorithm {
-                name: "SHAKE128",
-                create_fn: Box::new(|| Box::new(Shake128::new())),
-                bits: *bits,
-            })?,
+            Some(bits) => set_or_err((AlgoKind::Shake128, Some(*bits)))?,
             None => return Err(ChecksumError::LengthRequired("SHAKE128".into()).into()),
         }
     }
     if matches.get_flag("shake256") {
         match matches.get_one::<usize>("bits") {
-            Some(bits) => set_or_err(HashAlgorithm {
-                name: "SHAKE256",
-                create_fn: Box::new(|| Box::new(Shake256::new())),
-                bits: *bits,
-            })?,
+            Some(bits) => set_or_err((AlgoKind::Shake256, Some(*bits)))?,
             None => return Err(ChecksumError::LengthRequired("SHAKE256".into()).into()),
         }
     }
@@ -198,10 +173,10 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         None => None,
     };
 
-    let algo = if is_hashsum_bin {
+    let (algo_kind, length) = if is_hashsum_bin {
         create_algorithm_from_flags(&matches)?
     } else {
-        detect_algo(&binary_name, length)?
+        (AlgoKind::from_bin_name(&binary_name)?, length)
     };
 
     let binary = if matches.get_flag("binary") {
@@ -255,12 +230,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         };
 
         // Execute the checksum validation
-        return perform_checksum_validation(
-            input.iter().copied(),
-            Some(algo.name),
-            Some(algo.bits),
-            opts,
-        );
+        return perform_checksum_validation(input.iter().copied(), Some(algo_kind), length, opts);
     } else if quiet {
         return Err(ChecksumError::QuietNotCheck.into());
     } else if strict {
@@ -272,6 +242,8 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         .unwrap_or(None)
         .unwrap_or(&false);
     let zero = matches.get_flag("zero");
+
+    let algo = detect_algo(algo_kind, length)?;
 
     let opts = Options {
         algoname: algo.name,
