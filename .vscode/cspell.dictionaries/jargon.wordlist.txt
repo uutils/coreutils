@@ -19,6 +19,7 @@ codegen
 colorizable
 colorize
 coprime
+vpclmulqdq
 consts
 conv
 cyclomatic
@@ -131,6 +132,7 @@ shortcode
 shortcodes
 siginfo
 sigusr
+ssse
 strcasecmp
 subcommand
 subexpression

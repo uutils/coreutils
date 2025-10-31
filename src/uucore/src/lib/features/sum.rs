@@ -431,11 +431,7 @@ impl Digest for CRC32B {
         let optimal_size = if cfg!(target_arch = "x86_64") {
             #[cfg(target_arch = "x86_64")]
             {
-                if has_avx512 {
-                    65536
-                } else {
-                    8192
-                }
+                if has_avx512 { 65536 } else { 8192 }
             }
             #[cfg(not(target_arch = "x86_64"))]
             {
@@ -637,14 +633,24 @@ mod crc32b_tests {
     fn test_crc32b_known_vector_1() {
         let (data, expected) = TEST_VECTOR_1;
         let result = compute_crc32b(data);
-        assert_eq!(result, expected, "Failed for input: {:?}", std::str::from_utf8(data));
+        assert_eq!(
+            result,
+            expected,
+            "Failed for input: {:?}",
+            std::str::from_utf8(data)
+        );
     }
 
     #[test]
     fn test_crc32b_known_vector_2() {
         let (data, expected) = TEST_VECTOR_2;
         let result = compute_crc32b(data);
-        assert_eq!(result, expected, "Failed for input: {:?}", std::str::from_utf8(data));
+        assert_eq!(
+            result,
+            expected,
+            "Failed for input: {:?}",
+            std::str::from_utf8(data)
+        );
     }
 
     #[test]
@@ -725,7 +731,10 @@ mod crc32b_tests {
         crc2.hash_finalize(&mut out2);
         let result2 = u32::from_be_bytes(out2);
 
-        assert_eq!(result1, result2, "Incremental updates should match single update");
+        assert_eq!(
+            result1, result2,
+            "Incremental updates should match single update"
+        );
     }
 
     #[test]
@@ -751,7 +760,10 @@ mod crc32b_tests {
         let mut crc = CRC32B::new();
         crc.hash_update(b"Test");
         let result_str = crc.result_str();
-        assert_eq!(result_str, "2018365746", "result_str should match expected format");
+        assert_eq!(
+            result_str, "2018365746",
+            "result_str should match expected format"
+        );
     }
 
     #[test]
@@ -770,7 +782,10 @@ mod crc32b_tests {
         let result2 = compute_crc32b(&data);
 
         // Results should be different
-        assert_ne!(result1, result2, "Different inputs should produce different CRCs");
+        assert_ne!(
+            result1, result2,
+            "Different inputs should produce different CRCs"
+        );
     }
 
     #[test]
@@ -783,7 +798,10 @@ mod crc32b_tests {
         let result2 = compute_crc32b(&data);
 
         // Results should be different
-        assert_ne!(result1, result2, "Different inputs should produce different CRCs");
+        assert_ne!(
+            result1, result2,
+            "Different inputs should produce different CRCs"
+        );
     }
 
     #[test]
