@@ -197,22 +197,25 @@ SELINUX_PROGS := \
 	chcon \
 	runcon
 
-HASHSUM_PROGS := \
-	b2sum \
+# Allow to drop hashsums not in GNU coreutils
+EXTRA_HASHSUM_PROGS ?= \
 	b3sum \
-	md5sum \
-	sha1sum \
-	sha224sum \
-	sha256sum \
 	sha3-224sum \
 	sha3-256sum \
 	sha3-384sum \
 	sha3-512sum \
-	sha384sum \
 	sha3sum \
-	sha512sum \
 	shake128sum \
 	shake256sum
+
+HASHSUM_PROGS := $(EXTRA_HASHSUM_PROGS) \
+	b2sum \
+	md5sum \
+	sha1sum \
+	sha224sum \
+	sha256sum \
+	sha384sum \
+	sha512sum
 
 $(info Detected OS = $(OS))
 
@@ -228,7 +231,9 @@ ifneq ($(OS),Windows_NT)
 endif
 
 UTILS ?= $(filter-out $(SKIP_UTILS),$(PROGS))
-ifneq ($(filter hashsum,$(UTILS)),hashsum)
+ifeq ($(filter hashsum,$(UTILS)),hashsum)
+	HASHSUM_PROGS := $(filter-out $(SKIP_UTILS),$(HASHSUM_PROGS))
+else
 	HASHSUM_PROGS :=
 endif
 
