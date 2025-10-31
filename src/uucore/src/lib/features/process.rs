@@ -141,10 +141,11 @@ impl ChildExt for Child {
                 break;
             }
 
-            // XXX: this is kinda gross, but it's cleaner than starting a thread just to wait
-            //      (which was the previous solution).  We might want to use a different duration
-            //      here as well
-            thread::sleep(Duration::from_millis(100));
+            // Yield back to the OS' scheduler; this is better than just arbitrarily
+            // waiting and the usually preferred solution, spinning with
+            // [`std::hint::spin_loop()`], because the operations here are all
+            // OS-related and orders of magnitude slower than single CPU operations.
+            thread::yield_now();
         }
 
         Ok(None)
