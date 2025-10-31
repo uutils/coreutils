@@ -186,8 +186,8 @@ impl Digest for Crc {
 /// CRC32B (ISO 3309) implementation using crc_fast with SIMD optimization
 ///
 /// Performance characteristics:
-/// - AVX512 (>100 GiB/s): x86_64 with AVX512 support
-/// - SSE: x86_64 without AVX512 (fallback)
+/// - AVX512 (>100 GiB/s): x86_64 with AVX512 support (optimized for 256+ byte chunks)
+/// - SSE: x86_64 without AVX512 (fallback with buffer batching)
 /// - NEON: ARM64 with NEON support
 /// - Software: Other architectures
 ///
@@ -197,10 +197,46 @@ impl Digest for Crc {
 pub struct CRC32B {
     digest: crc_fast::Digest,
     /// Buffer for batch processing to improve cache efficiency
+    /// Sized for optimal AVX512 performance (256+ bytes for SIMD)
     buffer: Vec<u8>,
+    /// Detected SIMD capability for optimization
+    #[cfg(target_arch = "x86_64")]
+    has_avx512: bool,
 }
 
 impl CRC32B {
+    /// Detect AVX512 support on x86_64
+    #[cfg(target_arch = "x86_64")]
+    fn detect_avx512() -> bool {
+        #[cfg(target_feature = "avx512f")]
+        {
+            true
+        }
+        #[cfg(not(target_feature = "avx512f"))]
+        {
+            false
+        }
+    }
+
+    /// Get optimal buffer size based on SIMD capabilities
+    #[cfg(target_arch = "x86_64")]
+    fn optimal_buffer_size(&self) -> usize {
+        if self.has_avx512 {
+            // AVX512 processes 256+ bytes efficiently
+            // Use larger buffer to maximize throughput
+            65536 // 64KB for AVX512 optimization
+        } else {
+            // SSE processes smaller chunks
+            // Use smaller buffer to avoid cache misses
+            8192 // 8KB for SSE fallback
+        }
+    }
+
+    #[cfg(not(target_arch = "x86_64"))]
+    fn optimal_buffer_size(&self) -> usize {
+        8192 // Default 8KB for other architectures
+    }
+
     /// Flush buffered data to digest
     fn flush_buffer(&mut self) {
         if !self.buffer.is_empty() {
@@ -212,18 +248,47 @@ impl CRC32B {
 
 impl Digest for CRC32B {
     fn new() -> Self {
+        #[cfg(target_arch = "x86_64")]
+        let has_avx512 = Self::detect_avx512();
+
+        let optimal_size = if cfg!(target_arch = "x86_64") {
+            #[cfg(target_arch = "x86_64")]
+            {
+                if has_avx512 {
+                    65536
+                } else {
+                    8192
+                }
+            }
+            #[cfg(not(target_arch = "x86_64"))]
+            {
+                8192
+            }
+        } else {
+            8192
+        };
+
         Self {
             digest: crc_fast::Digest::new(crc_fast::CrcAlgorithm::Crc32IsoHdlc),
-            buffer: Vec::with_capacity(8192),
+            buffer: Vec::with_capacity(optimal_size),
+            #[cfg(target_arch = "x86_64")]
+            has_avx512,
         }
     }
 
     fn hash_update(&mut self, input: &[u8]) {
+        #[cfg(target_arch = "x86_64")]
+        let threshold = if self.has_avx512 { 256 } else { 4096 };
+
+        #[cfg(not(target_arch = "x86_64"))]
+        let threshold = 4096;
+
         // For small inputs, buffer them for better cache efficiency
         // For large inputs, flush buffer and process directly
-        if input.len() < 4096 {
+        if input.len() < threshold {
             self.buffer.extend_from_slice(input);
-            if self.buffer.len() >= 8192 {
+            let max_buffer = self.optimal_buffer_size();
+            if self.buffer.len() >= max_buffer {
                 self.flush_buffer();
             }
         } else {
