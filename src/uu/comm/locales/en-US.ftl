@@ -20,7 +20,6 @@ comm-help-no-check-order = do not check that the input is correctly sorted
 # Error messages
 comm-error-file-not-sorted = comm: file { $file_num } is not in sorted order
 comm-error-input-not-sorted = comm: input is not in sorted order
-comm-error-is-directory = Is a directory
 comm-error-multiple-conflicting-delimiters = multiple conflicting output delimiters specified
 
 # Other messages
