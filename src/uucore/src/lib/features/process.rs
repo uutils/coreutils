@@ -129,22 +129,33 @@ impl ChildExt for Child {
         // .try_wait() doesn't drop stdin, so we do it manually
         drop(self.stdin.take());
 
+        const MAX_SLEEP: Duration = Duration::from_millis(50);
+        const MIN_SLEEP: Duration = Duration::from_micros(500);
+
         let start = Instant::now();
         loop {
             if let Some(status) = self.try_wait()? {
                 return Ok(Some(status));
             }
 
-            if start.elapsed() >= timeout
-                || signaled.is_some_and(|signaled| signaled.load(atomic::Ordering::Relaxed))
-            {
+            if signaled.is_some_and(|signaled| signaled.load(atomic::Ordering::Relaxed)) {
                 break;
             }
 
-            // XXX: this is kinda gross, but it's cleaner than starting a thread just to wait
-            //      (which was the previous solution).  We might want to use a different duration
-            //      here as well
-            thread::sleep(Duration::from_millis(100));
+            let Some(remaining) = timeout.checked_sub(start.elapsed()) else {
+                break;
+            };
+            if remaining.is_zero() {
+                break;
+            }
+
+            // For tiny remaining durations, yield so we do not oversleep.
+            if remaining < MIN_SLEEP {
+                std::thread::yield_now();
+                continue;
+            }
+
+            thread::sleep(remaining.min(MAX_SLEEP));
         }
 
         Ok(None)
