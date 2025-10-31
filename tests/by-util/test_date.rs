@@ -944,3 +944,108 @@ fn test_date_tz_abbreviation_unknown() {
         .fails()
         .stderr_contains("invalid date");
 }
+
+#[test]
+fn test_date_military_timezone_j_variations() {
+    // Test multiple variations of 'J' input (case insensitive, with whitespace)
+    // All should produce midnight (00:00:00)
+    let test_cases = vec!["J", "j", " J ", " j ", "\tJ\t"];
+
+    for input in test_cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg("+%T")
+            .succeeds()
+            .stdout_is("00:00:00\n");
+    }
+
+    // Test with -u flag to verify UTC behavior
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("J")
+        .arg("+%T %Z")
+        .succeeds()
+        .stdout_contains("00:00:00")
+        .stdout_contains("UTC");
+}
+
+#[test]
+fn test_date_empty_string() {
+    // Empty string should be treated as midnight today
+    new_ucmd!()
+        .env("TZ", "UTC+1")
+        .arg("-d")
+        .arg("")
+        .succeeds()
+        .stdout_contains("00:00:00");
+}
+
+#[test]
+fn test_date_empty_string_variations() {
+    // Test multiple variations of empty/whitespace strings
+    // All should produce midnight (00:00:00)
+    let test_cases = vec!["", " ", "  ", "\t", "\n", " \t ", "\t\n\t"];
+
+    for input in test_cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg("+%T")
+            .succeeds()
+            .stdout_is("00:00:00\n");
+    }
+
+    // Test with -u flag to verify UTC behavior
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("")
+        .arg("+%T %Z")
+        .succeeds()
+        .stdout_contains("00:00:00")
+        .stdout_contains("UTC");
+}
+
+#[test]
+fn test_date_relative_m9() {
+    // Military timezone "m9" should be parsed as noon + 9 hours = 21:00 UTC
+    // When displayed in TZ=UTC+9 (which is UTC-9), this shows as 12:00 local time
+    new_ucmd!()
+        .env("TZ", "UTC+9")
+        .arg("-d")
+        .arg("m9")
+        .succeeds()
+        .stdout_contains("12:00:00");
+}
+
+#[test]
+fn test_date_military_timezone_with_offset_variations() {
+    // Test various military timezone + offset combinations
+    // Format: single letter (a-z except j) optionally followed by 1-2 digits
+
+    // Test cases: (input, expected_time_utc)
+    let test_cases = vec![
+        ("a", "23:00:00"),  // A = UTC+1, midnight in UTC+1 = 23:00 UTC
+        ("m", "12:00:00"),  // M = UTC+12, midnight in UTC+12 = 12:00 UTC
+        ("z", "00:00:00"),  // Z = UTC+0, midnight in UTC+0 = 00:00 UTC
+        ("m9", "21:00:00"), // M + 9 hours = 12 + 9 = 21:00 UTC
+        ("a5", "04:00:00"), // A + 5 hours = 23 + 5 = 04:00 UTC (next day)
+        ("z3", "03:00:00"), // Z + 3 hours = 00 + 3 = 03:00 UTC
+        ("M", "12:00:00"),  // Uppercase should work too
+        ("A5", "04:00:00"), // Uppercase with offset
+    ];
+
+    for (input, expected) in test_cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg("+%T")
+            .succeeds()
+            .stdout_is(format!("{expected}\n"));
+    }
+}

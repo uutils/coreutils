@@ -29,6 +29,12 @@ denoland
 deque
 dequeue
 dev
+EINTR
+eintr
+nextest
+SIGUSR
+nonprinting
+multibyte
 devs
 discoverability
 duplicative
