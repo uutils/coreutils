@@ -4,6 +4,8 @@ pwd-usage = pwd [OPTION]...
 # Messages d'aide
 pwd-help-logical = utiliser PWD de l'environnement, même s'il contient des liens symboliques
 pwd-help-physical = éviter tous les liens symboliques
+pwd-help-text = Afficher l'aide
+pwd-version-text = Afficher les informations de version
 
 # Messages d'erreur
 pwd-error-failed-to-get-current-directory = échec de l'obtention du répertoire actuel
