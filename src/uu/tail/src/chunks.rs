@@ -207,9 +207,9 @@ impl BytesChunk {
     }
 
     /// Fills `self.buffer` with maximal [`BUFFER_SIZE`] number of bytes, draining the reader by
-    /// that number of bytes. If EOF is reached (so 0 bytes are read), then returns
-    /// [`UResult<None>`] or else the result with [`Some(bytes)`] where bytes is the number of bytes
-    /// read from the source.
+    /// that number of bytes. If EOF is reached (so 0 bytes are read), it returns
+    /// [`UResult<None>`]; otherwise, it returns [`UResult<Some(bytes)>`], where bytes is the
+    /// number of bytes read from the source.
     pub fn fill(&mut self, filehandle: &mut impl BufRead) -> UResult<Option<usize>> {
         let num_bytes = filehandle.read(&mut self.buffer)?;
         self.bytes = num_bytes;
