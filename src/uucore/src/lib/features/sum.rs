@@ -199,11 +199,8 @@ impl Digest for CRC32B {
     }
 
     fn hash_finalize(&mut self, out: &mut [u8]) {
-        let result = self.digest.finalize();
-        // crc_fast returns a 64-bit value, but CRC32B should be 32-bit
-        // Take the lower 32 bits and convert to big-endian bytes
-        let crc32_value = (result & 0xffffffff) as u32;
-        out.copy_from_slice(&crc32_value.to_be_bytes());
+        let result = self.digest.finalize() as u32;
+        out.copy_from_slice(&result.to_be_bytes());
     }
 
     fn reset(&mut self) {
@@ -215,9 +212,8 @@ impl Digest for CRC32B {
     }
 
     fn result_str(&mut self) -> String {
-        let mut out = [0; 4];
-        self.hash_finalize(&mut out);
-        format!("{}", u32::from_be_bytes(out))
+        let result = (self.digest.finalize() as u32).to_be_bytes();
+        format!("{}", u32::from_be_bytes(result))
     }
 }
 
