@@ -1326,10 +1326,10 @@ mod tests {
         let flag_with_group = Flag::new_grouped("cs5", ControlFlags::CS5, ControlFlags::CSIZE);
         let flag_without_group = Flag::new("parenb", ControlFlags::PARENB);
 
-        assert_eq!(check_flag_group(&flag_with_group, true), true);
-        assert_eq!(check_flag_group(&flag_with_group, false), false);
-        assert_eq!(check_flag_group(&flag_without_group, true), false);
-        assert_eq!(check_flag_group(&flag_without_group, false), false);
+        assert!(check_flag_group(&flag_with_group, true));
+        assert!(!check_flag_group(&flag_with_group, false));
+        assert!(!check_flag_group(&flag_without_group, true));
+        assert!(!check_flag_group(&flag_without_group, false));
     }
 
     // Additional tests for get_sane_control_char
@@ -1359,9 +1359,10 @@ mod tests {
         // Note: In test environment, translate!() returns the key, not the translated string
         let err = parse_u8_or_err("256").unwrap_err();
         assert!(
-            err.contains("value-too-large") || err.contains("Value too large") || err.contains("Valeur trop grande"),
-            "Expected overflow error, got: {}",
-            err
+            err.contains("value-too-large")
+                || err.contains("Value too large")
+                || err.contains("Valeur trop grande"),
+            "Expected overflow error, got: {err}"
         );
 
         assert!(parse_u8_or_err("1000").is_err());
@@ -1374,9 +1375,10 @@ mod tests {
         // Note: In test environment, translate!() returns the key, not the translated string
         let err = parse_u8_or_err("-1").unwrap_err();
         assert!(
-            err.contains("invalid-integer-argument") || err.contains("invalid integer argument") || err.contains("argument entier invalide"),
-            "Expected invalid argument error, got: {}",
-            err
+            err.contains("invalid-integer-argument")
+                || err.contains("invalid integer argument")
+                || err.contains("argument entier invalide"),
+            "Expected invalid argument error, got: {err}"
         );
 
         assert!(parse_u8_or_err("abc").is_err());
