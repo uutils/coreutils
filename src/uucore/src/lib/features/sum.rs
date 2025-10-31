@@ -183,6 +183,13 @@ impl Digest for Crc {
     }
 }
 
+/// CRC32B (ISO 3309) implementation using crc_fast
+///
+/// Performance Note: Uses SIMD acceleration when available:
+/// - AVX512 (>100 GiB/s) on x86_64 with AVX512 support
+/// - SSE (~40.8ms) on x86_64 without AVX512
+/// - NEON on ARM64
+/// - Software fallback on other architectures
 pub struct CRC32B {
     digest: crc_fast::Digest,
 }
@@ -212,8 +219,8 @@ impl Digest for CRC32B {
     }
 
     fn result_str(&mut self) -> String {
-        let result = (self.digest.finalize() as u32).to_be_bytes();
-        format!("{}", u32::from_be_bytes(result))
+        let crc_value = self.digest.finalize() as u32;
+        format!("{crc_value}")
     }
 }
 
