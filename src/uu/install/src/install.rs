@@ -12,35 +12,45 @@ use file_diff::diff;
 use filetime::{FileTime, set_file_times};
 #[cfg(feature = "selinux")]
 use selinux::SecurityContext;
+use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fmt::Debug;
-use std::fs::File;
 use std::fs::{self, metadata};
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
+#[cfg(not(windows))]
 use std::process;
 use thiserror::Error;
 use uucore::backup_control::{self, BackupMode};
-use uucore::buf_copy::copy_stream;
 use uucore::display::Quotable;
+#[cfg(unix)]
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::fs::dir_strip_dot_for_creation;
+#[cfg(unix)]
 use uucore::mode::get_umask;
+#[cfg(unix)]
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
+#[cfg(unix)]
 use uucore::process::{getegid, geteuid};
 #[cfg(feature = "selinux")]
 use uucore::selinux::{
     SeLinuxError, contexts_differ, get_selinux_security_context, is_selinux_enabled,
     selinux_error_description, set_selinux_security_context,
 };
+#[cfg(unix)]
+use uucore::signals::enable_pipe_errors;
 use uucore::translate;
-use uucore::{format_usage, show, show_error, show_if_err};
+use uucore::{format_usage, os_str_from_bytes, show, show_error, show_if_err};
 
+#[cfg(unix)]
+use std::fs::File;
+#[cfg(unix)]
+use uucore::buf_copy::copy_stream;
+
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
-#[cfg(unix)]
-use std::os::unix::prelude::OsStrExt;
-
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
 
@@ -76,6 +86,7 @@ enum InstallError {
     #[error("{}", translate!("install-error-chmod-failed", "path" => .0.quote()))]
     ChmodFailed(PathBuf),
 
+    #[cfg(unix)]
     #[error("{}", translate!("install-error-chown-failed", "path" => .0.quote(), "error" => .1.clone()))]
     ChownFailed(PathBuf, String),
 
@@ -91,15 +102,18 @@ enum InstallError {
     #[error("{}", translate!("install-error-install-failed", "from" => .0.to_string_lossy(), "to" => .1.to_string_lossy()))]
     InstallFailed(PathBuf, PathBuf, #[source] std::io::Error),
 
+    #[cfg(not(windows))]
     #[error("{}", translate!("install-error-strip-failed", "error" => .0.clone()))]
     StripProgramFailed(String),
 
     #[error("{}", translate!("install-error-metadata-failed"))]
     MetadataFailed(#[source] std::io::Error),
 
+    #[cfg(unix)]
     #[error("{}", translate!("install-error-invalid-user", "user" => .0.quote()))]
     InvalidUser(String),
 
+    #[cfg(unix)]
     #[error("{}", translate!("install-error-invalid-group", "group" => .0.quote()))]
     InvalidGroup(String),
 
@@ -148,6 +162,16 @@ impl Behavior {
     }
 }
 
+#[cfg(unix)]
+fn platform_umask() -> u32 {
+    get_umask()
+}
+
+#[cfg(not(unix))]
+fn platform_umask() -> u32 {
+    0
+}
+
 static OPT_COMPARE: &str = "compare";
 static OPT_DIRECTORY: &str = "directory";
 static OPT_IGNORED: &str = "ignored";
@@ -173,6 +197,9 @@ static ARG_FILES: &str = "files";
 ///
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    #[cfg(unix)]
+    enable_pipe_errors()?;
+
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let paths: Vec<OsString> = matches
@@ -339,13 +366,15 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     let specified_mode: Option<u32> = if matches.contains_id(OPT_MODE) {
         let x = matches.get_one::<String>(OPT_MODE).ok_or(1)?;
-        Some(mode::parse(x, considering_dir, get_umask()).map_err(|err| {
-            show_error!(
-                "{}",
-                translate!("install-error-invalid-mode", "error" => err)
-            );
-            1
-        })?)
+        Some(
+            mode::parse(x, considering_dir, platform_umask()).map_err(|err| {
+                show_error!(
+                    "{}",
+                    translate!("install-error-invalid-mode", "error" => err)
+                );
+                1
+            })?,
+        )
     } else {
         None
     };
@@ -392,12 +421,29 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         .map_or("", |s| s.as_str())
         .to_string();
 
-    let owner_id = if owner.is_empty() {
-        None
-    } else {
-        match usr2uid(&owner) {
-            Ok(u) => Some(u),
-            Err(_) => return Err(InstallError::InvalidUser(owner.clone()).into()),
+    let owner_id = {
+        #[cfg(unix)]
+        {
+            if owner.is_empty() {
+                None
+            } else {
+                match usr2uid(&owner) {
+                    Ok(u) => Some(u),
+                    Err(_) => return Err(InstallError::InvalidUser(owner.clone()).into()),
+                }
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            if owner.is_empty() {
+                None
+            } else {
+                show_error!(
+                    "{}",
+                    translate!("install-error-option-unsupported", "option" => "--owner")
+                );
+                return Err(1.into());
+            }
         }
     };
 
@@ -406,12 +452,29 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         .map_or("", |s| s.as_str())
         .to_string();
 
-    let group_id = if group.is_empty() {
-        None
-    } else {
-        match grp2gid(&group) {
-            Ok(g) => Some(g),
-            Err(_) => return Err(InstallError::InvalidGroup(group.clone()).into()),
+    let group_id = {
+        #[cfg(unix)]
+        {
+            if group.is_empty() {
+                None
+            } else {
+                match grp2gid(&group) {
+                    Ok(g) => Some(g),
+                    Err(_) => return Err(InstallError::InvalidGroup(group.clone()).into()),
+                }
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            if group.is_empty() {
+                None
+            } else {
+                show_error!(
+                    "{}",
+                    translate!("install-error-option-unsupported", "option" => "--group")
+                );
+                return Err(1.into());
+            }
         }
     };
 
@@ -600,9 +663,16 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     while trimmed_bytes.ends_with(b"/") {
                         trimmed_bytes = &trimmed_bytes[..trimmed_bytes.len() - 1];
                     }
-                    let trimmed_os_str = std::ffi::OsStr::from_bytes(trimmed_bytes);
-                    to_create_owned = PathBuf::from(trimmed_os_str);
-                    to_create_owned.as_path()
+                    match os_str_from_bytes(trimmed_bytes) {
+                        Ok(trimmed_os_str) => {
+                            to_create_owned = match trimmed_os_str {
+                                Cow::Borrowed(s) => PathBuf::from(s),
+                                Cow::Owned(os_string) => PathBuf::from(os_string),
+                            };
+                            to_create_owned.as_path()
+                        }
+                        Err(_) => to_create,
+                    }
                 }
                 _ => to_create,
             };
@@ -726,6 +796,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
 /// If the owner or group are invalid or copy system call fails, we print a verbose error and
 /// return an empty error value.
 ///
+#[cfg(unix)]
 fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
     // GNU coreutils doesn't print chown operations during install with verbose flag.
     let verbosity = Verbosity {
@@ -754,6 +825,11 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
         Err(e) => return Err(InstallError::ChownFailed(path.to_path_buf(), e).into()),
     }
 
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn chown_optional_user_group(_path: &Path, _b: &Behavior) -> UResult<()> {
     Ok(())
 }
 
@@ -841,22 +917,29 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         }
     }
 
-    let ft = match metadata(from) {
-        Ok(ft) => ft.file_type(),
-        Err(err) => {
-            return Err(
-                InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into(),
-            );
-        }
-    };
-
-    // Stream-based copying to get around the limitations of std::fs::copy
     #[cfg(unix)]
-    if ft.is_char_device() || ft.is_block_device() || ft.is_fifo() {
-        let mut handle = File::open(from)?;
-        let mut dest = File::create(to)?;
-        copy_stream(&mut handle, &mut dest)?;
-        return Ok(());
+    {
+        let file_type = match metadata(from) {
+            Ok(meta) => meta.file_type(),
+            Err(err) => {
+                return Err(
+                    InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into(),
+                );
+            }
+        };
+
+        // Stream-based copying to get around the limitations of std::fs::copy
+        if file_type.is_char_device() || file_type.is_block_device() || file_type.is_fifo() {
+            let mut handle = File::open(from)?;
+            let mut dest = File::create(to)?;
+            copy_stream(&mut handle, &mut dest)?;
+            return Ok(());
+        }
+    }
+
+    #[cfg(not(unix))]
+    if let Err(err) = metadata(from) {
+        return Err(InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into());
     }
 
     copy_normal_file(from, to)?;
@@ -864,6 +947,7 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     Ok(())
 }
 
+#[cfg(not(windows))]
 /// Strip a file using an external program.
 ///
 /// # Parameters
@@ -1029,6 +1113,7 @@ fn get_context_for_selinux(b: &Behavior) -> Option<&String> {
 
 /// Check if a file needs to be copied due to ownership differences when no explicit group is specified.
 /// Returns true if the destination file's ownership would differ from what it should be after installation.
+#[cfg(unix)]
 fn needs_copy_for_ownership(to: &Path, to_meta: &fs::Metadata) -> bool {
     use std::os::unix::fs::MetadataExt;
 
@@ -1067,6 +1152,7 @@ fn needs_copy_for_ownership(to: &Path, to_meta: &fs::Metadata) -> bool {
 ///
 /// Crashes the program if a nonexistent owner or group is specified in _b_.
 ///
+#[cfg(unix)]
 fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     // Attempt to retrieve metadata for the source file.
     // If this fails, assume the file needs to be copied.
@@ -1141,6 +1227,37 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     }
 
     // Check if the contents of the source and destination files differ.
+    if !diff(&from.to_string_lossy(), &to.to_string_lossy()) {
+        return true;
+    }
+
+    false
+}
+
+#[cfg(not(unix))]
+fn need_copy(from: &Path, to: &Path, _b: &Behavior) -> bool {
+    let Ok(from_meta) = metadata(from) else {
+        return true;
+    };
+
+    let Ok(to_meta) = metadata(to) else {
+        return true;
+    };
+
+    if let Ok(to_symlink_meta) = fs::symlink_metadata(to) {
+        if to_symlink_meta.file_type().is_symlink() {
+            return true;
+        }
+    }
+
+    if !from_meta.is_file() || !to_meta.is_file() {
+        return true;
+    }
+
+    if from_meta.len() != to_meta.len() {
+        return true;
+    }
+
     if !diff(&from.to_string_lossy(), &to.to_string_lossy()) {
         return true;
     }
