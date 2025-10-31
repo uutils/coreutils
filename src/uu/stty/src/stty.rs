@@ -1314,6 +1314,7 @@ mod tests {
 
     #[test]
     fn test_cc_to_index_invalid() {
+        // spell-checker:ignore notachar
         assert_eq!(cc_to_index("notachar"), None);
         assert_eq!(cc_to_index(""), None);
         assert_eq!(cc_to_index("INTR"), None); // case sensitive
@@ -1357,6 +1358,7 @@ mod tests {
     fn test_parse_u8_or_err_overflow() {
         // Test that overflow values return an error
         // Note: In test environment, translate!() returns the key, not the translated string
+        // spell-checker:ignore Valeur
         let err = parse_u8_or_err("256").unwrap_err();
         assert!(
             err.contains("value-too-large")
@@ -1373,6 +1375,7 @@ mod tests {
     fn test_parse_u8_or_err_invalid() {
         // Test that invalid values return an error
         // Note: In test environment, translate!() returns the key, not the translated string
+        // spell-checker:ignore entier invalide
         let err = parse_u8_or_err("-1").unwrap_err();
         assert!(
             err.contains("invalid-integer-argument")

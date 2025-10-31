@@ -1273,6 +1273,7 @@ fn invalid_time_value() {
 #[test]
 fn invalid_baud_rate() {
     // Test invalid baud rate for ispeed (non-numeric string)
+    // spell-checker:ignore notabaud
     new_ucmd!()
         .args(&["ispeed", "notabaud"])
         .fails()
@@ -1313,6 +1314,7 @@ fn control_char_decimal_overflow() {
         .fails()
         .stderr_contains("Value too large");
 
+    // spell-checker:ignore susp
     new_ucmd!()
         .args(&["susp", "1000"])
         .fails()
