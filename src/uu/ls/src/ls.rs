@@ -2344,7 +2344,7 @@ fn recurse_directories(
     state: &mut ListState,
     dired: &mut DiredOutput,
 ) -> UResult<()> {
-    let mut entries_stack: Vec<PathData> = Vec::with_capacity(64);
+    let mut entries_stack: Vec<PathData> = Vec::with_capacity(1024);
 
     enter_directory(
         path_data,
