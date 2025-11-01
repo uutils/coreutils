@@ -67,35 +67,35 @@ impl CpuFeatures {
 // CPU feature detection functions
 // These use cpufeatures crate for cross-platform detection
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_arch = "x86_64", not(target_os = "android")))]
 fn has_avx512() -> bool {
     cpufeatures::new!(cpuid_avx512, "avx512f", "avx512bw");
     cpuid_avx512::get()
 }
 
-#[cfg(not(target_arch = "x86_64"))]
+#[cfg(not(all(target_arch = "x86_64", not(target_os = "android"))))]
 fn has_avx512() -> bool {
     false
 }
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_arch = "x86_64", not(target_os = "android")))]
 fn has_avx2() -> bool {
     cpufeatures::new!(cpuid_avx2, "avx2");
     cpuid_avx2::get()
 }
 
-#[cfg(not(target_arch = "x86_64"))]
+#[cfg(not(all(target_arch = "x86_64", not(target_os = "android"))))]
 fn has_avx2() -> bool {
     false
 }
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_arch = "x86_64", not(target_os = "android")))]
 fn has_pclmul() -> bool {
     cpufeatures::new!(cpuid_pclmul, "pclmulqdq");
     cpuid_pclmul::get()
 }
 
-#[cfg(not(target_arch = "x86_64"))]
+#[cfg(not(all(target_arch = "x86_64", not(target_os = "android"))))]
 fn has_pclmul() -> bool {
     false
 }
