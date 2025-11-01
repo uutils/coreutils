@@ -5,8 +5,11 @@
 
 // spell-checker:ignore (ToDO) fname, algo
 
+mod hardware;
+
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
+use hardware::CpuFeatures;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufReader, Read, Write, stdin, stdout};
@@ -177,20 +180,11 @@ fn print_untagged_checksum(
     Ok(())
 }
 
-fn print_debug_info(filename: &OsStr, algo_name: &str) {
-    let file_display = if filename == OsStr::new("-") {
-        "standard input".to_string()
-    } else {
-        filename.to_string_lossy().to_string()
-    };
-    eprintln!(
-        "{}",
-        translate!(
-            "cksum-debug-algorithm",
-            "file" => file_display,
-            "algorithm" => algo_name.to_uppercase()
-        )
-    );
+/// Print CPU hardware capability detection information to stderr
+/// This matches GNU cksum's --debug behavior
+fn print_cpu_debug_info() {
+    let features = CpuFeatures::detect();
+    features.print_debug();
 }
 
 /// Calculate checksum
@@ -204,6 +198,11 @@ where
     I: Iterator<Item = &'a OsStr>,
 {
     let mut files = files.peekable();
+
+    // Print CPU debug info once at startup if --debug flag is set
+    if options.debug {
+        print_cpu_debug_info();
+    }
 
     while let Some(filename) = files.next() {
         // Check that in raw mode, we are not provided with several files.
@@ -236,10 +235,6 @@ where
             };
             Box::new(file_buf) as Box<dyn Read>
         });
-
-        if options.debug {
-            print_debug_info(filename, options.algo_name);
-        }
 
         let (sum_hex, sz) =
             digest_reader(&mut options.digest, &mut file, false, options.output_bits)

@@ -2748,15 +2748,17 @@ mod format_mix {
 
 #[test]
 fn test_debug_flag() {
-    // Test with default CRC algorithm
+    // Test with default CRC algorithm - should output CPU feature detection
     new_ucmd!()
         .arg("--debug")
         .arg("lorem_ipsum.txt")
         .succeeds()
         .stdout_is_fixture("crc_single_file.expected")
-        .stderr_contains("lorem_ipsum.txt: CRC");
+        .stderr_contains("cksum: avx512 support")
+        .stderr_contains("cksum: avx2 support")
+        .stderr_contains("cksum: pclmul support");
 
-    // Test with MD5 algorithm
+    // Test with MD5 algorithm - CPU detection should be same regardless of algorithm
     new_ucmd!()
         .arg("--debug")
         .arg("-a")
@@ -2764,36 +2766,43 @@ fn test_debug_flag() {
         .arg("lorem_ipsum.txt")
         .succeeds()
         .stdout_is_fixture("md5_single_file.expected")
-        .stderr_contains("lorem_ipsum.txt: MD5");
+        .stderr_contains("cksum: avx512 support")
+        .stderr_contains("cksum: avx2 support")
+        .stderr_contains("cksum: pclmul support");
 
-    // Test with stdin
+    // Test with stdin - CPU detection should appear once
     new_ucmd!()
         .arg("--debug")
         .pipe_in("test")
         .succeeds()
-        .stderr_contains("standard input: CRC");
+        .stderr_contains("cksum: avx512 support")
+        .stderr_contains("cksum: avx2 support")
+        .stderr_contains("cksum: pclmul support");
 
-    // Test with multiple files
+    // Test with multiple files - CPU detection should appear once, not per file
     new_ucmd!()
         .arg("--debug")
         .arg("lorem_ipsum.txt")
         .arg("alice_in_wonderland.txt")
         .succeeds()
         .stdout_is_fixture("crc_multiple_files.expected")
-        .stderr_contains("lorem_ipsum.txt: CRC")
-        .stderr_contains("alice_in_wonderland.txt: CRC");
+        .stderr_contains("cksum: avx512 support")
+        .stderr_contains("cksum: avx2 support")
+        .stderr_contains("cksum: pclmul support");
 }
 
 #[test]
 fn test_debug_with_algorithms() {
-    // Test with SHA256
+    // Test with SHA256 - CPU detection should be same regardless of algorithm
     new_ucmd!()
         .arg("--debug")
         .arg("-a")
         .arg("sha256")
         .arg("lorem_ipsum.txt")
         .succeeds()
-        .stderr_contains("lorem_ipsum.txt: SHA256");
+        .stderr_contains("cksum: avx512 support")
+        .stderr_contains("cksum: avx2 support")
+        .stderr_contains("cksum: pclmul support");
 
     // Test with BLAKE2b default length
     new_ucmd!()
@@ -2802,7 +2811,9 @@ fn test_debug_with_algorithms() {
         .arg("blake2b")
         .arg("lorem_ipsum.txt")
         .succeeds()
-        .stderr_contains("lorem_ipsum.txt: BLAKE2B");
+        .stderr_contains("cksum: avx512 support")
+        .stderr_contains("cksum: avx2 support")
+        .stderr_contains("cksum: pclmul support");
 
     // Test with BLAKE2b custom length
     new_ucmd!()
@@ -2813,7 +2824,9 @@ fn test_debug_with_algorithms() {
         .arg("256")
         .arg("lorem_ipsum.txt")
         .succeeds()
-        .stderr_contains("lorem_ipsum.txt: BLAKE2B");
+        .stderr_contains("cksum: avx512 support")
+        .stderr_contains("cksum: avx2 support")
+        .stderr_contains("cksum: pclmul support");
 
     // Test with SHA1
     new_ucmd!()
@@ -2822,5 +2835,7 @@ fn test_debug_with_algorithms() {
         .arg("sha1")
         .arg("lorem_ipsum.txt")
         .succeeds()
-        .stderr_contains("lorem_ipsum.txt: SHA1");
+        .stderr_contains("cksum: avx512 support")
+        .stderr_contains("cksum: avx2 support")
+        .stderr_contains("cksum: pclmul support");
 }
