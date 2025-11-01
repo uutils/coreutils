@@ -19,6 +19,8 @@ codegen
 colorizable
 colorize
 coprime
+cpuid
+cpufeatures
 consts
 conv
 cyclomatic
@@ -107,6 +109,8 @@ noxfer
 ofile
 oflag
 oflags
+pclmul
+pclmulqdq
 peekable
 performant
 precompiled
@@ -154,6 +158,8 @@ unprefixed
 unportable
 unsync
 urand
+vmull
+vpclmulqdq
 whitespace
 wordlist
 wordlists

@@ -23,6 +23,9 @@ uucore = { workspace = true, features = ["checksum", "encoding", "sum"] }
 hex = { workspace = true }
 fluent = { workspace = true }
 
+[target.'cfg(all(any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "loongarch64", target_arch = "x86"), not(target_os = "android")))'.dependencies]
+cpufeatures = { workspace = true }
+
 [dev-dependencies]
 divan = { workspace = true }
 tempfile = { workspace = true }
