@@ -24,6 +24,7 @@ jobs:
       matrix:
         benchmark-target:
           - { package: uu_base64 }
+          - { package: uu_cksum }
           - { package: uu_cp }
           - { package: uu_cut }
           - { package: uu_du }
