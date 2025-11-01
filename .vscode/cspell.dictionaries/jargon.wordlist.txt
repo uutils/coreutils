@@ -19,6 +19,9 @@ codegen
 colorizable
 colorize
 coprime
+cpufeatures
+cpuid
+vpclmulqdq
 consts
 conv
 cyclomatic
@@ -108,6 +111,8 @@ ofile
 oflag
 oflags
 peekable
+pclmul
+pclmulqdq
 performant
 precompiled
 precompute
@@ -131,6 +136,7 @@ shortcode
 shortcodes
 siginfo
 sigusr
+ssse
 strcasecmp
 subcommand
 subexpression
@@ -154,6 +160,7 @@ unprefixed
 unportable
 unsync
 urand
+vmull
 whitespace
 wordlist
 wordlists
