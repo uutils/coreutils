@@ -421,7 +421,7 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
             file.seek(SeekFrom::Start(i as u64)).unwrap();
         }
         FilterMode::Lines(Signum::MinusZero, _) => {
-            return;
+            file.seek(SeekFrom::End(0)).unwrap();
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
             file.seek(SeekFrom::End(-(*count as i64))).unwrap();
@@ -433,7 +433,7 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
             file.seek(SeekFrom::Start(*count - 1)).unwrap();
         }
         FilterMode::Bytes(Signum::MinusZero) => {
-            return;
+            file.seek(SeekFrom::End(0)).unwrap();
         }
         _ => {}
     }
@@ -470,6 +470,11 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
             let mut chunks = chunks::BytesChunkBuffer::new(*count);
+            chunks.fill(reader)?;
+            chunks.print(&mut writer)?;
+        }
+        FilterMode::Lines(Signum::MinusZero, sep) => {
+            let mut chunks = chunks::LinesChunkBuffer::new(*sep, 0);
             chunks.fill(reader)?;
             chunks.print(&mut writer)?;
         }
