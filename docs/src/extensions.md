@@ -195,7 +195,7 @@ Similar to the proc-ps implementation and unlike GNU/Coreutils, `uptime` provide
 
 ## `base32/base64/basenc`
 
-Just like on macOS, `base32/base64/basenc` provides `-D` to decode data.
+Just like on macOS, `base32/base64/basenc` provides `-D` to decode data and `-o` to output to a file.
 
 ## `shred`
 

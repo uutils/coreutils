@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, ErrorKind, Read, Seek};
+use std::io::{self, BufWriter, ErrorKind, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::encoding::{
@@ -34,6 +34,7 @@ pub struct Config {
     pub ignore_garbage: bool,
     pub wrap_cols: Option<usize>,
     pub to_read: Option<PathBuf>,
+    pub output_file: Option<PathBuf>,
 }
 
 pub mod options {
@@ -41,6 +42,7 @@ pub mod options {
     pub static WRAP: &str = "wrap";
     pub static IGNORE_GARBAGE: &str = "ignore-garbage";
     pub static FILE: &str = "file";
+    pub static OUTPUT_FILE: &str = "output_file";
 }
 
 impl Config {
@@ -86,11 +88,17 @@ impl Config {
             })
             .transpose()?;
 
+        let output_file = match options.get_one::<OsString>(options::OUTPUT_FILE) {
+            Some(value) if value != "-" => Some(Path::new(value).to_owned()),
+            _ => None,
+        };
+
         Ok(Self {
             decode: options.get_flag(options::DECODE),
             ignore_garbage: options.get_flag(options::IGNORE_GARBAGE),
             wrap_cols,
             to_read,
+            output_file,
         })
     }
 }
@@ -137,6 +145,14 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
                 .value_name("COLS")
                 .help(translate!("base-common-help-wrap", "default" => WRAP_DEFAULT))
                 .overrides_with(options::WRAP),
+        )
+        .arg(
+            Arg::new(options::OUTPUT_FILE)
+                .short('o')
+                .long(options::OUTPUT_FILE)
+                .help(translate!("base-common-help-output-file"))
+                .value_parser(clap::value_parser!(OsString))
+                .value_hint(clap::ValueHint::FilePath),
         )
         // "multiple" arguments are used to check whether there is more than one
         // file passed in.
@@ -194,7 +210,10 @@ pub fn handle_input<R: Read + Seek>(input: &mut R, format: Format, config: Confi
         get_supports_fast_decode_and_encode(format, config.decode, has_padding);
 
     let supports_fast_decode_and_encode_ref = supports_fast_decode_and_encode.as_ref();
-    let mut stdout_lock = io::stdout().lock();
+    let mut stdout_lock: Box<dyn Write> = match &config.output_file {
+        Some(path) => Box::new(BufWriter::new(File::create(path)?)),
+        None => Box::new(io::stdout().lock()),
+    };
     if config.decode {
         fast_decode::fast_decode(
             read,
