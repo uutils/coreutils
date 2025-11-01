@@ -101,6 +101,7 @@ xattr = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+serial_test = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { workspace = true }

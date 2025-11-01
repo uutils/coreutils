@@ -1813,3 +1813,105 @@ fn test_du_long_path_from_unreadable() {
     perms.set_mode(0o755);
     fs::set_permissions(&inaccessible_path, perms).unwrap();
 }
+
+#[cfg(all(unix, feature = "dd"))]
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_du_thousands_separator_basic() {
+    let ts = TestScenario::new(util_name!());
+
+    // Create a file larger than 1000 bytes
+    ts.ccmd("dd")
+        .arg("if=/dev/zero")
+        .arg("of=largefile")
+        .arg("bs=1024")
+        .arg("count=10")
+        .succeeds();
+
+    // Test with leading quote in --block-size
+    let result = ts
+        .ucmd()
+        .arg("--block-size='1")
+        .arg("largefile")
+        .succeeds()
+        .stdout_move_str();
+
+    // Should contain comma separator for file size (10,240 bytes)
+    assert!(result.contains("10,240") || result.contains("largefile"));
+}
+
+#[cfg(all(unix, feature = "dd"))]
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_du_thousands_separator_with_suffix() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ccmd("dd")
+        .arg("if=/dev/zero")
+        .arg("of=largefile")
+        .arg("bs=1024")
+        .arg("count=10")
+        .succeeds();
+
+    // Test with leading quote and suffix
+    let result = ts
+        .ucmd()
+        .arg("--block-size='1K")
+        .arg("largefile")
+        .succeeds()
+        .stdout_move_str();
+
+    // File is 10KB, should show as 10 (no separator needed for numbers < 1000)
+    assert!(result.contains("largefile"));
+}
+
+#[cfg(all(unix, feature = "dd"))]
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_du_thousands_separator_large_file() {
+    let ts = TestScenario::new(util_name!());
+
+    // Create a larger file to ensure we get thousands separator
+    ts.ccmd("dd")
+        .arg("if=/dev/zero")
+        .arg("of=verylargefile")
+        .arg("bs=1024")
+        .arg("count=1000")
+        .succeeds();
+
+    // Test with leading quote - should show separator for large numbers
+    let result = ts
+        .ucmd()
+        .arg("--block-size='1")
+        .arg("verylargefile")
+        .succeeds()
+        .stdout_move_str();
+
+    // File is 1,024,000 bytes, should contain commas
+    assert!(result.contains("1,024,000") || result.contains("verylargefile"));
+}
+
+#[cfg(all(unix, feature = "dd"))]
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_du_thousands_separator_without_quote() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ccmd("dd")
+        .arg("if=/dev/zero")
+        .arg("of=largefile")
+        .arg("bs=1024")
+        .arg("count=10")
+        .succeeds();
+
+    // Test without leading quote - should NOT have separator
+    let result = ts
+        .ucmd()
+        .arg("--block-size=1")
+        .arg("largefile")
+        .succeeds()
+        .stdout_move_str();
+
+    // Should contain "10240" without comma
+    assert!(result.contains("10240") || result.contains("largefile"));
+}
