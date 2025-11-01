@@ -69,7 +69,8 @@ impl CpuFeatures {
 
 #[cfg(target_arch = "x86_64")]
 fn has_avx512() -> bool {
-    cpufeatures::has_avx512f() && cpufeatures::has_avx512bw()
+    cpufeatures::new!(cpuid_avx512, "avx512f", "avx512bw");
+    cpuid_avx512::get()
 }
 
 #[cfg(not(target_arch = "x86_64"))]
@@ -79,7 +80,8 @@ fn has_avx512() -> bool {
 
 #[cfg(target_arch = "x86_64")]
 fn has_avx2() -> bool {
-    cpufeatures::has_avx2()
+    cpufeatures::new!(cpuid_avx2, "avx2");
+    cpuid_avx2::get()
 }
 
 #[cfg(not(target_arch = "x86_64"))]
@@ -89,7 +91,8 @@ fn has_avx2() -> bool {
 
 #[cfg(target_arch = "x86_64")]
 fn has_pclmul() -> bool {
-    cpufeatures::has_pclmul()
+    cpufeatures::new!(cpuid_pclmul, "pclmulqdq");
+    cpuid_pclmul::get()
 }
 
 #[cfg(not(target_arch = "x86_64"))]
@@ -117,11 +120,11 @@ mod tests {
     #[test]
     fn test_cpu_features_detection() {
         let features = CpuFeatures::detect();
-        // Features should be valid booleans
-        assert!(features.avx512 || !features.avx512);
-        assert!(features.avx2 || !features.avx2);
-        assert!(features.pclmul || !features.pclmul);
-        assert!(features.vmull || !features.vmull);
+        // Features should be valid booleans - just verify they can be detected
+        let _ = features.avx512;
+        let _ = features.avx2;
+        let _ = features.pclmul;
+        let _ = features.vmull;
     }
 
     #[test]
