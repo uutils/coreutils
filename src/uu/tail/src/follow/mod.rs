@@ -6,4 +6,5 @@
 mod files;
 mod watch;
 
+pub use files::NonSeekableReader;
 pub use watch::{Observer, follow};
