@@ -32,7 +32,7 @@ fn run_child(mode: String) -> ! {
             process::exit(0);
         }
         "long-sleep" => {
-            std::thread::sleep(Duration::from_secs(2));
+            std::thread::sleep(Duration::from_millis(200));
             process::exit(0);
         }
         "ignore-term" => {
@@ -89,20 +89,16 @@ mod unix {
     /// Benchmark the fast path where the command exits immediately.
     #[divan::bench]
     fn timeout_quick_exit(bencher: Bencher) {
-        bench_timeout_with_mode(bencher, &["0.1"], "quick-exit");
+        bench_timeout_with_mode(bencher, &["0.02"], "quick-exit");
     }
 
     /// Benchmark a command that runs longer than the threshold and receives the default signal.
     #[divan::bench]
     fn timeout_enforced(bencher: Bencher) {
-        bench_timeout_with_mode(bencher, &["0.05"], "long-sleep");
+        bench_timeout_with_mode(bencher, &["0.02"], "long-sleep");
     }
 
-    /// Benchmark the `-k/--kill-after` flow where the child ignores SIGTERM.
-    #[divan::bench]
-    fn timeout_kill_after(bencher: Bencher) {
-        bench_timeout_with_mode(bencher, &["-k", "0.1", "0.05"], "ignore-term");
-    }
+
 
     pub fn run() {
         divan::main();
