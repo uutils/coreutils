@@ -45,7 +45,7 @@ crates is as follows:
 - `Cargo.toml`
 - `src/main.rs`: contains only a single macro call
 - `src/<util name>.rs`: the actual code for the utility
-- `<util name>.md`: the documentation for the utility
+- `src/uu/<util name>/README.md`: the documentation for the utility
 
 We have separated repositories for crates that we maintain but also publish for
 use by others:
