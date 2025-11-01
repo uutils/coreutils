@@ -1945,7 +1945,7 @@ fn test_o_direct_various_block_sizes() {
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_o_direct_with_conv_flags() {
-    // Test O_DIRECT with various conversion flags
+    // Test O_DIRECT with sync conversion flag
     let (at, mut ucmd) = at_and_ucmd!();
     let input_file = "test_input_conv.bin";
     let output_file = "test_output_conv.bin";
@@ -1956,21 +1956,21 @@ fn test_o_direct_with_conv_flags() {
     let input_data: Vec<u8> = (0..input_size).map(|i| (i % 256) as u8).collect();
     at.write_bytes(input_file, &input_data);
 
-    // Run dd with O_DIRECT and conv=notrunc
+    // Run dd with O_DIRECT and conv=sync
     ucmd.args(&[
         format!("if={}", at.plus(input_file).display()),
         format!("of={}", at.plus(output_file).display()),
         format!("bs={block_size}"),
         "oflag=direct".to_string(),
-        "conv=notrunc".to_string(),
+        "conv=sync".to_string(),
         "status=none".to_string(),
     ])
     .succeeds();
 
-    // Verify output matches input
+    // Verify output matches input (conv=sync may pad, so just check it's at least as large)
     let output_data = at.read_bytes(output_file);
-    assert_eq!(output_data.len(), input_size);
-    assert_eq!(output_data, input_data);
+    assert!(output_data.len() >= input_size);
+    assert_eq!(&output_data[..input_size], &input_data[..]);
 
     // Clean up
     at.remove(input_file);
