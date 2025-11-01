@@ -98,8 +98,6 @@ mod unix {
         bench_timeout_with_mode(bencher, &["0.02"], "long-sleep");
     }
 
-
-
     pub fn run() {
         divan::main();
     }
