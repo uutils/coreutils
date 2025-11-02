@@ -171,7 +171,28 @@ fn parse_military_timezone_with_offset(s: &str) -> Option<i32> {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let args: Vec<std::ffi::OsString> = args.collect();
+    let matches = match uu_app().try_get_matches_from(&args) {
+        Ok(matches) => matches,
+        Err(e) => {
+            match e.kind() {
+                clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => {
+                    return Err(e.into());
+                }
+                _ => {
+                    // Convert unknown options to be treated as invalid date format
+                    // This ensures consistent exit status 1 instead of clap's exit status 77
+                    if let Some(arg) = args.get(1) {
+                        return Err(USimpleError::new(
+                            1,
+                            translate!("date-error-invalid-date", "date" => arg.to_string_lossy()),
+                        ));
+                    }
+                    return Err(USimpleError::new(1, e.to_string()));
+                }
+            }
+        }
+    };
 
     // Check for extra operands (multiple positional arguments)
     if let Some(formats) = matches.get_many::<String>(OPT_FORMAT) {
@@ -527,7 +548,7 @@ pub fn uu_app() -> Command {
                 .help(translate!("date-help-universal"))
                 .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(OPT_FORMAT).num_args(0..))
+        .arg(Arg::new(OPT_FORMAT).num_args(0..).trailing_var_arg(true))
 }
 
 /// Return the appropriate format string for the given settings.
