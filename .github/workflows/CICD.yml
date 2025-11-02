@@ -590,7 +590,8 @@ jobs:
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,test_risky_names", use-cross: use-cross }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,uudoc"   , use-cross: no, workspace-tests: true }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl , use-cross: use-cross }
-          - { os: ubuntu-latest  , target: x86_64-unknown-redox        , features: feat_os_unix_redox     , use-cross: redoxer , skip-tests: true }
+          # broken by network error
+          # - { os: ubuntu-latest  , target: x86_64-unknown-redox        , features: feat_os_unix_redox     , use-cross: redoxer , skip-tests: true }
           - { os: ubuntu-latest  , target: wasm32-unknown-unknown      , default-features: false, features: uucore/format, skip-tests: true, skip-package: true, skip-publish: true }
           - { os: macos-latest   , target: aarch64-apple-darwin        , features: feat_os_macos, workspace-tests: true } # M1 CPU
           # PR #7964: Mac should still build even if the feature is not enabled

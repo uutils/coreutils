@@ -32,7 +32,7 @@ fn version_non_digit_cmp(a: &[u8], b: &[u8]) -> Ordering {
     }
 }
 
-/// Remove file endings matching the regex (\.[A-Za-z~][A-Za-z0-9~]*)*$
+/// Remove file endings matching the regex `(\.[A-Za-z~][A-Za-z0-9~]*)*$`
 fn remove_file_ending(a: &[u8]) -> &[u8] {
     let mut ending_start = None;
     let mut prev_was_dot = false;
