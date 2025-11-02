@@ -79,8 +79,7 @@ jobs:
       matrix:
         test-target:
           - { name: fuzz_test, should_pass: true }
-          # https://github.com/uutils/coreutils/issues/5311
-          - { name: fuzz_date, should_pass: false }
+          - { name: fuzz_date, should_pass: true }
           - { name: fuzz_expr, should_pass: true }
           - { name: fuzz_printf, should_pass: true }
           - { name: fuzz_echo, should_pass: true }
