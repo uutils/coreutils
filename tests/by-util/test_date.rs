@@ -25,6 +25,14 @@ fn test_empty_arguments() {
 }
 
 #[test]
+fn test_extra_operands() {
+    new_ucmd!()
+        .args(&["test", "extra"])
+        .fails_with_code(1)
+        .stderr_contains("extra operand 'extra'");
+}
+
+#[test]
 fn test_date_email() {
     for param in ["--rfc-email", "--rfc-e", "-R", "--rfc-2822", "--rfc-822"] {
         new_ucmd!().arg(param).succeeds();
