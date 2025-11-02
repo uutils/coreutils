@@ -171,6 +171,17 @@ fn parse_military_timezone_with_offset(s: &str) -> Option<i32> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
+    // Check for extra operands (multiple positional arguments)
+    if let Some(formats) = matches.get_many::<String>(OPT_FORMAT) {
+        let format_args: Vec<&String> = formats.collect();
+        if format_args.len() > 1 {
+            return Err(USimpleError::new(
+                1,
+                translate!("date-error-extra-operand", "operand" => format_args[1]),
+            ));
+        }
+    }
+
     let format = if let Some(form) = matches.get_one::<String>(OPT_FORMAT) {
         if !form.starts_with('+') {
             return Err(USimpleError::new(
@@ -515,7 +526,7 @@ pub fn uu_app() -> Command {
                 .help(translate!("date-help-universal"))
                 .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(OPT_FORMAT))
+        .arg(Arg::new(OPT_FORMAT).num_args(0..))
 }
 
 /// Return the appropriate format string for the given settings.
