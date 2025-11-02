@@ -1941,4 +1941,3 @@ fn test_o_direct_various_block_sizes() {
         ts.fixtures.remove(&output_file);
     }
 }
-
