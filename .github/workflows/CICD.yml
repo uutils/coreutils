@@ -122,7 +122,7 @@ jobs:
     - name: Install/setup prerequisites
       shell: bash
       run: |
-        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
+        sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu libselinux1-dev
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -269,6 +269,8 @@ jobs:
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
+      with:
+        target: aarch64-unknown-linux-gnu
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Install/setup prerequisites
@@ -287,7 +289,10 @@ jobs:
         if [[ -d target ]]; then
           mv -T target target.cache
         fi
-        # Actually do the build
+        # Check that we don't cross-build uudoc
+        # also do not try to generate manpages for part of hashsum
+        make install-manpages PREFIX=/tmp/usr UTILS=true RUSTC_ARCH="--target aarch64-unknown-linux-gnu"
+        # build (host)
         make build
         echo "Check that target directory will be ignored by backup tools"
         test -f target/CACHEDIR.TAG
@@ -309,7 +314,7 @@ jobs:
         ! test -f /tmp/usr/local/share/man/man1/whoami.1
         # Check that the completion is not present
         ! test -f /tmp/usr/local/share/zsh/site-functions/_install
-        ! test -f /tmp/usr/local/share/bash-completion/completions/head
+        ! test -f /tmp/usr/local/share/bash-completion/completions/head.bash
         ! test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
       env:
         RUST_BACKTRACE: "1"
@@ -324,7 +329,7 @@ jobs:
         test -f /tmp/usr/local/share/man/man1/md5sum.1
         # Check that the completion is present
         test -f /tmp/usr/local/share/zsh/site-functions/_b2sum
-        test -f /tmp/usr/local/share/bash-completion/completions/head
+        test -f /tmp/usr/local/share/bash-completion/completions/head.bash
         test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
       env:
         RUST_BACKTRACE: "1"
@@ -339,7 +344,7 @@ jobs:
         ! test -f /tmp/usr/local/share/man/man1/whoami.1
         # Check that the completion is not present
         ! test -f /tmp/usr/local/share/zsh/site-functions/_install
-        ! test -f /tmp/usr/local/share/bash-completion/completions/head
+        ! test -f /tmp/usr/local/share/bash-completion/completions/head.bash
         ! test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
     - name: "`make install MULTICALL=n`"
       shell: bash
@@ -549,12 +554,12 @@ jobs:
         previous_multisize=$(cat dl/size-result.json | jq -r '.[] | .multisize')
         check 'multicall binary' "$multisize" "$previous_multisize" 'size-result.json'
     - name: Upload the individual size result
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: individual-size-result
         path: individual-size-result.json
     - name: Upload the size result
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: size-result
         path: size-result.json
@@ -585,7 +590,8 @@ jobs:
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,test_risky_names", use-cross: use-cross }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,uudoc"   , use-cross: no, workspace-tests: true }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl , use-cross: use-cross }
-          - { os: ubuntu-latest  , target: x86_64-unknown-redox        , features: feat_os_unix_redox     , use-cross: redoxer , skip-tests: true }
+          # broken by network error
+          # - { os: ubuntu-latest  , target: x86_64-unknown-redox        , features: feat_os_unix_redox     , use-cross: redoxer , skip-tests: true }
           - { os: ubuntu-latest  , target: wasm32-unknown-unknown      , default-features: false, features: uucore/format, skip-tests: true, skip-package: true, skip-publish: true }
           - { os: macos-latest   , target: aarch64-apple-darwin        , features: feat_os_macos, workspace-tests: true } # M1 CPU
           # PR #7964: Mac should still build even if the feature is not enabled
@@ -845,7 +851,7 @@ jobs:
       env:
         RUST_BACKTRACE: "1"
     - name: Archive executable artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: ${{ env.PROJECT_NAME }}-${{ matrix.job.target }}${{ steps.vars.outputs.ARTIFACTS_SUFFIX }}
         path: target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}
@@ -961,17 +967,17 @@ jobs:
           HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
           echo "HASH=${HASH}" >> $GITHUB_OUTPUT
     - name: Reserve SHA1/ID of 'test-summary'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: "${{ steps.summary.outputs.HASH }}"
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Reserve test results summary
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: busybox-test-summary
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Upload json results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: busybox-result.json
         path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
@@ -1054,17 +1060,17 @@ jobs:
         HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
           echo "HASH=${HASH}" >> $GITHUB_OUTPUT
     - name: Reserve SHA1/ID of 'test-summary'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: "${{ steps.summary.outputs.HASH }}"
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Reserve test results summary
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: toybox-test-summary
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Upload json results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: toybox-result.json
         path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
@@ -1264,8 +1270,6 @@ jobs:
         key: lima-${{ steps.lima-actions-setup.outputs.version }}
     - name: Start Fedora VM with SELinux
       run: limactl start --plain --name=default --cpus=4 --disk=30 --memory=4 --network=lima:user-v2 template://fedora
-    - name: Setup SSH
-      uses: lima-vm/lima-actions/ssh@v1
     - run: rsync -v -a -e ssh . lima-default:~/work/
     - name: Setup Rust and other build deps in VM
       run: |

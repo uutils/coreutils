@@ -43,12 +43,16 @@ packages.
 
 `mv` can display a progress bar when the `-g`/`--progress` flag is set.
 
-## `hashsum`
+## `rm`
+
+`rm` can display a progress bar when the `-g`/`--progress` flag is set.
+
+## `hashsum` (deprecated)
 
 This utility does not exist in GNU coreutils. `hashsum` is a utility that
 supports computing the checksums with several algorithms. The flags and options
 are identical to the `*sum` family of utils (`sha1sum`, `sha256sum`, `b2sum`,
-etc.).
+etc.). This utility will be removed in the future and it is advised to use `cksum --untagged` instead.
 
 ## `b3sum`
 

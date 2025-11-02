@@ -27,13 +27,11 @@ macos = ["feat_os_macos"]
 unix = ["feat_os_unix"]
 windows = ["feat_os_windows"]
 ## project-specific feature shortcodes
-nightly = []
-test_unimplemented = []
 expensive_tests = []
 # "test_risky_names" == enable tests that create problematic file names (would make a network share inaccessible to Windows, breaks SVN on Mac OS, etc.)
 test_risky_names = []
 # * only build `uudoc` when `--feature uudoc` is activated
-uudoc = ["zip", "dep:fluent-syntax"]
+uudoc = ["clap_complete", "clap_mangen", "fluent-syntax", "zip"]
 ## features
 ## Optional feature for stdbuf
 # "feat_external_libstdbuf" == use an external libstdbuf.so for stdbuf instead of embedding it
@@ -316,7 +314,7 @@ compare = "0.1.0"
 crossterm = "0.29.0"
 ctor = "0.6.0"
 ctrlc = { version = "3.4.7", features = ["termination"] }
-divan = { package = "codspeed-divan-compat", version = "*" }
+divan = { package = "codspeed-divan-compat", version = "4.0.5" }
 dns-lookup = { version = "3.0.0" }
 exacl = "0.12.0"
 file_diff = "1.0.0"
@@ -340,8 +338,8 @@ jiff = { version = "0.2.10", default-features = false, features = [
   "tz-system",
 ] }
 libc = "0.2.172"
-linux-raw-sys = "0.11"
-lscolors = { version = "0.20.0", default-features = false, features = [
+linux-raw-sys = "0.12"
+lscolors = { version = "0.21.0", default-features = false, features = [
   "gnu_legacy",
 ] }
 memchr = "2.7.2"
@@ -354,10 +352,11 @@ num-prime = "0.4.4"
 num-traits = "0.2.19"
 number_prefix = "0.4"
 onig = { version = "~6.5.1", default-features = false }
-parse_datetime = "0.11.0"
+parse_datetime = "0.13.0"
 phf = "0.13.1"
 phf_codegen = "0.13.1"
 platform-info = "2.0.3"
+procfs = "0.18"
 rand = { version = "0.9.0", features = ["small_rng"] }
 rand_core = "0.9.0"
 rayon = "1.10"
@@ -409,14 +408,14 @@ uutests = { version = "0.3.0", package = "uutests", path = "tests/uutests" }
 
 [dependencies]
 clap.workspace = true
-uucore.workspace = true
-clap_complete.workspace = true
-clap_mangen.workspace = true
+clap_complete = { workspace = true, optional = true }
+clap_mangen = { workspace = true, optional = true }
+fluent-syntax = { workspace = true, optional = true }
 phf.workspace = true
 selinux = { workspace = true, optional = true }
 textwrap.workspace = true
+uucore.workspace = true
 zip = { workspace = true, optional = true }
-fluent-syntax = { workspace = true, optional = true }
 
 
 # * uutils
@@ -605,10 +604,8 @@ codegen-units = 1
 
 # A release-like profile that is as small as possible.
 [profile.release-small]
-inherits = "release"
+inherits = "release-fast"
 opt-level = "z"
-panic = "abort"
-codegen-units = 1
 strip = true
 
 # A release-like profile with debug info, useful for profiling.
