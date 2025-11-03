@@ -13,11 +13,9 @@ use std::io::{BufReader, Read, Write, stdin, stdout};
 use std::iter;
 use std::path::Path;
 use uucore::checksum::{
-    ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC,
-    ALGORITHM_OPTIONS_CRC32B, ALGORITHM_OPTIONS_SYSV, AlgoKind, ChecksumError, ChecksumOptions,
-    ChecksumVerbose, HashAlgorithm, LEGACY_ALGORITHMS, SUPPORTED_ALGORITHMS,
-    calculate_blake2b_length_str, detect_algo, digest_reader, perform_checksum_validation,
-    sanitize_sha2_sha3_length_str,
+    AlgoKind, ChecksumError, ChecksumOptions, ChecksumVerbose, HashAlgorithm, SUPPORTED_ALGORITHMS,
+    SizedAlgoKind, calculate_blake2b_length_str, detect_algo, digest_reader,
+    perform_checksum_validation, sanitize_sha2_sha3_length_str,
 };
 use uucore::translate;
 
@@ -31,10 +29,9 @@ use uucore::{
 };
 
 struct Options {
-    algo_name: &'static str,
+    algo_kind: SizedAlgoKind,
     digest: Box<dyn Digest + 'static>,
     output_bits: usize,
-    length: Option<usize>,
     output_format: OutputFormat,
     line_ending: LineEnding,
 }
@@ -108,16 +105,16 @@ fn print_legacy_checksum(
     sum: &str,
     size: usize,
 ) -> UResult<()> {
-    debug_assert!(LEGACY_ALGORITHMS.contains(&options.algo_name));
+    debug_assert!(options.algo_kind.is_legacy());
 
     // Print the sum
-    match options.algo_name {
-        ALGORITHM_OPTIONS_SYSV => print!(
+    match options.algo_kind {
+        SizedAlgoKind::Sysv => print!(
             "{} {}",
             sum.parse::<u16>().unwrap(),
             size.div_ceil(options.output_bits),
         ),
-        ALGORITHM_OPTIONS_BSD => {
+        SizedAlgoKind::Bsd => {
             // The BSD checksum output is 5 digit integer
             let bsd_width = 5;
             print!(
@@ -126,7 +123,7 @@ fn print_legacy_checksum(
                 size.div_ceil(options.output_bits),
             );
         }
-        ALGORITHM_OPTIONS_CRC | ALGORITHM_OPTIONS_CRC32B => {
+        SizedAlgoKind::Crc | SizedAlgoKind::Crc32b => {
             print!("{sum} {size}");
         }
         _ => unreachable!("Not a legacy algorithm"),
@@ -143,15 +140,7 @@ fn print_legacy_checksum(
 
 fn print_tagged_checksum(options: &Options, filename: &OsStr, sum: &String) -> UResult<()> {
     // Print algo name and opening parenthesis.
-    print!(
-        "{} (",
-        match (options.algo_name, options.length) {
-            // Multiply the length by 8, as we want to print the length in bits.
-            (ALGORITHM_OPTIONS_BLAKE2B, Some(l)) => format!("BLAKE2b-{}", l * 8),
-            (ALGORITHM_OPTIONS_BLAKE2B, None) => "BLAKE2b".into(),
-            (name, _) => name.to_ascii_uppercase(),
-        }
-    );
+    print!("{} (", options.algo_kind.to_tag());
 
     // Print filename
     let _dropped_result = stdout().write_all(os_str_as_bytes(filename)?);
@@ -235,11 +224,11 @@ where
 
         match options.output_format {
             OutputFormat::Raw => {
-                let bytes = match options.algo_name {
-                    ALGORITHM_OPTIONS_CRC | ALGORITHM_OPTIONS_CRC32B => {
+                let bytes = match options.algo_kind {
+                    SizedAlgoKind::Crc | SizedAlgoKind::Crc32b => {
                         sum_hex.parse::<u32>().unwrap().to_be_bytes().to_vec()
                     }
-                    ALGORITHM_OPTIONS_SYSV | ALGORITHM_OPTIONS_BSD => {
+                    SizedAlgoKind::Sysv | SizedAlgoKind::Bsd => {
                         sum_hex.parse::<u16>().unwrap().to_be_bytes().to_vec()
                     }
                     _ => hex::decode(sum_hex).unwrap(),
@@ -343,7 +332,7 @@ fn figure_out_output_format(
     }
 
     // Then, if the algo is legacy, takes precedence over the rest
-    if LEGACY_ALGORITHMS.contains(&algo.name) {
+    if algo.kind.is_legacy() {
         return OutputFormat::Legacy;
     }
 
@@ -465,10 +454,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     );
 
     let opts = Options {
-        algo_name: algo.name,
+        algo_kind: algo.kind,
         digest: (algo.create_fn)(),
         output_bits: algo.bits,
-        length,
         output_format,
         line_ending,
     };

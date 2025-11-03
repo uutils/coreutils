@@ -72,13 +72,6 @@ pub const SUPPORTED_ALGORITHMS: [&str; 17] = [
     ALGORITHM_OPTIONS_SHAKE256,
 ];
 
-pub const LEGACY_ALGORITHMS: [&str; 4] = [
-    ALGORITHM_OPTIONS_SYSV,
-    ALGORITHM_OPTIONS_BSD,
-    ALGORITHM_OPTIONS_CRC,
-    ALGORITHM_OPTIONS_CRC32B,
-];
-
 /// Represents an algorithm kind. In some cases, it is not sufficient by itself
 /// to know which algorithm to use exactly, because it lacks a digest length,
 /// which is why [`SizedAlgoKind`] exists.
@@ -212,8 +205,127 @@ impl AlgoKind {
     }
 }
 
+/// Holds a length for a SHA2 of SHA3 algorithm kind.
+#[derive(Debug, Clone, Copy)]
+pub enum ShaLength {
+    Len224,
+    Len256,
+    Len384,
+    Len512,
+}
+
+impl ShaLength {
+    pub fn as_usize(self) -> usize {
+        match self {
+            Self::Len224 => 224,
+            Self::Len256 => 256,
+            Self::Len384 => 384,
+            Self::Len512 => 512,
+        }
+    }
+}
+
+impl TryFrom<usize> for ShaLength {
+    type Error = ChecksumError;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        use ShaLength::*;
+        match value {
+            224 => Ok(Len224),
+            256 => Ok(Len256),
+            384 => Ok(Len384),
+            512 => Ok(Len512),
+            _ => Err(ChecksumError::InvalidLengthForSha(value.to_string())),
+        }
+    }
+}
+
+/// Represents an actual determined algorithm.
+#[derive(Debug, Clone, Copy)]
+pub enum SizedAlgoKind {
+    Sysv,
+    Bsd,
+    Crc,
+    Crc32b,
+    Md5,
+    Sm3,
+    Sha1,
+    Blake3,
+    Sha2(ShaLength),
+    Sha3(ShaLength),
+    Blake2b(Option<usize>),
+    Shake128(usize),
+    Shake256(usize),
+}
+
+impl SizedAlgoKind {
+    pub fn from_unsized(kind: AlgoKind, length: Option<usize>) -> UResult<Self> {
+        use AlgoKind as ak;
+        match (kind, length) {
+            (
+                ak::Sysv
+                | ak::Bsd
+                | ak::Crc
+                | ak::Crc32b
+                | ak::Md5
+                | ak::Sm3
+                | ak::Sha1
+                | ak::Blake3
+                | ak::Sha224
+                | ak::Sha256
+                | ak::Sha384
+                | ak::Sha512,
+                Some(_),
+            ) => Err(ChecksumError::LengthOnlyForBlake2bSha2Sha3.into()),
+
+            (ak::Sysv, _) => Ok(Self::Sysv),
+            (ak::Bsd, _) => Ok(Self::Bsd),
+            (ak::Crc, _) => Ok(Self::Crc),
+            (ak::Crc32b, _) => Ok(Self::Crc32b),
+            (ak::Md5, _) => Ok(Self::Md5),
+            (ak::Sm3, _) => Ok(Self::Sm3),
+            (ak::Sha1, _) => Ok(Self::Sha1),
+            (ak::Blake3, _) => Ok(Self::Blake3),
+
+            (ak::Shake128, Some(l)) => Ok(Self::Shake128(l)),
+            (ak::Shake256, Some(l)) => Ok(Self::Shake256(l)),
+            (ak::Sha2, Some(l)) => Ok(Self::Sha2(ShaLength::try_from(l)?)),
+            (ak::Sha3, Some(l)) => Ok(Self::Sha3(ShaLength::try_from(l)?)),
+            (ak::Blake2b, Some(l)) => Ok(Self::Blake2b(calculate_blake2b_length(l)?)),
+
+            (ak::Sha224, None) => Ok(Self::Sha2(ShaLength::Len224)),
+            (ak::Sha256, None) => Ok(Self::Sha2(ShaLength::Len256)),
+            (ak::Sha384, None) => Ok(Self::Sha2(ShaLength::Len384)),
+            (ak::Sha512, None) => Ok(Self::Sha2(ShaLength::Len512)),
+            (_, None) => Err(ChecksumError::LengthRequired(kind.to_uppercase().into()).into()),
+        }
+    }
+
+    pub fn to_tag(&self) -> String {
+        use SizedAlgoKind::*;
+        match self {
+            Md5 => "MD5".into(),
+            Sm3 => "SM3".into(),
+            Sha1 => "SHA1".into(),
+            Blake3 => "BLAKE3".into(),
+            Sha2(len) => format!("SHA{}", len.as_usize()),
+            Sha3(len) => format!("SHA3-{}", len.as_usize()),
+            Blake2b(Some(len)) => format!("BLAKE2b-{}", len * 8),
+            Blake2b(None) => "BLAKE2b".into(),
+            Shake128(_) => "SHAKE128".into(),
+            Shake256(_) => "SHAKE256".into(),
+            Sysv | Bsd | Crc | Crc32b => panic!("Should not be used for tagging"),
+        }
+    }
+
+    pub fn is_legacy(&self) -> bool {
+        use SizedAlgoKind::*;
+        matches!(self, Sysv | Bsd | Crc | Crc32b)
+    }
+}
+
 pub struct HashAlgorithm {
-    pub name: &'static str,
+    pub kind: SizedAlgoKind,
     pub create_fn: Box<dyn Fn() -> Box<dyn Digest + 'static>>,
     pub bits: usize,
 }
@@ -399,57 +511,53 @@ impl UError for ChecksumError {
 ///
 /// Returns a `UResult` with an `HashAlgorithm` or an `Err` if an unsupported
 /// output size is provided.
-pub fn create_sha3(bits: usize) -> UResult<HashAlgorithm> {
-    match bits {
-        224 => Ok(HashAlgorithm {
-            name: "SHA3-224",
+pub fn create_sha3(len: ShaLength) -> UResult<HashAlgorithm> {
+    match len {
+        ShaLength::Len224 => Ok(HashAlgorithm {
+            kind: SizedAlgoKind::Sha3(ShaLength::Len224),
             create_fn: Box::new(|| Box::new(Sha3_224::new())),
             bits: 224,
         }),
-        256 => Ok(HashAlgorithm {
-            name: "SHA3-256",
+        ShaLength::Len256 => Ok(HashAlgorithm {
+            kind: SizedAlgoKind::Sha3(ShaLength::Len256),
             create_fn: Box::new(|| Box::new(Sha3_256::new())),
             bits: 256,
         }),
-        384 => Ok(HashAlgorithm {
-            name: "SHA3-384",
+        ShaLength::Len384 => Ok(HashAlgorithm {
+            kind: SizedAlgoKind::Sha3(ShaLength::Len384),
             create_fn: Box::new(|| Box::new(Sha3_384::new())),
             bits: 384,
         }),
-        512 => Ok(HashAlgorithm {
-            name: "SHA3-512",
+        ShaLength::Len512 => Ok(HashAlgorithm {
+            kind: SizedAlgoKind::Sha3(ShaLength::Len512),
             create_fn: Box::new(|| Box::new(Sha3_512::new())),
             bits: 512,
         }),
-
-        _ => Err(ChecksumError::InvalidLengthForSha("SHA3".into()).into()),
     }
 }
 
-pub fn create_sha2(bits: usize) -> UResult<HashAlgorithm> {
-    match bits {
-        224 => Ok(HashAlgorithm {
-            name: "SHA224",
+pub fn create_sha2(len: ShaLength) -> UResult<HashAlgorithm> {
+    match len {
+        ShaLength::Len224 => Ok(HashAlgorithm {
+            kind: SizedAlgoKind::Sha2(ShaLength::Len224),
             create_fn: Box::new(|| Box::new(Sha224::new())),
             bits: 224,
         }),
-        256 => Ok(HashAlgorithm {
-            name: "SHA256",
+        ShaLength::Len256 => Ok(HashAlgorithm {
+            kind: SizedAlgoKind::Sha2(ShaLength::Len256),
             create_fn: Box::new(|| Box::new(Sha256::new())),
             bits: 256,
         }),
-        384 => Ok(HashAlgorithm {
-            name: "SHA384",
+        ShaLength::Len384 => Ok(HashAlgorithm {
+            kind: SizedAlgoKind::Sha2(ShaLength::Len384),
             create_fn: Box::new(|| Box::new(Sha384::new())),
             bits: 384,
         }),
-        512 => Ok(HashAlgorithm {
-            name: "SHA512",
+        ShaLength::Len512 => Ok(HashAlgorithm {
+            kind: SizedAlgoKind::Sha2(ShaLength::Len512),
             create_fn: Box::new(|| Box::new(Sha512::new())),
             bits: 512,
         }),
-
-        _ => Err(ChecksumError::InvalidLengthForSha("SHA2".into()).into()),
     }
 }
 
@@ -540,63 +648,63 @@ fn print_file_report<W: Write>(
 pub fn detect_algo(algo: AlgoKind, length: Option<usize>) -> UResult<HashAlgorithm> {
     match algo {
         AlgoKind::Sysv => Ok(HashAlgorithm {
-            name: ALGORITHM_OPTIONS_SYSV,
+            kind: SizedAlgoKind::Sysv,
             create_fn: Box::new(|| Box::new(SysV::new())),
             bits: 512,
         }),
         AlgoKind::Bsd => Ok(HashAlgorithm {
-            name: ALGORITHM_OPTIONS_BSD,
+            kind: SizedAlgoKind::Bsd,
             create_fn: Box::new(|| Box::new(Bsd::new())),
             bits: 1024,
         }),
         AlgoKind::Crc => Ok(HashAlgorithm {
-            name: ALGORITHM_OPTIONS_CRC,
+            kind: SizedAlgoKind::Crc,
             create_fn: Box::new(|| Box::new(Crc::new())),
             bits: 256,
         }),
         AlgoKind::Crc32b => Ok(HashAlgorithm {
-            name: ALGORITHM_OPTIONS_CRC32B,
+            kind: SizedAlgoKind::Crc32b,
             create_fn: Box::new(|| Box::new(CRC32B::new())),
             bits: 32,
         }),
         AlgoKind::Md5 => Ok(HashAlgorithm {
-            name: ALGORITHM_OPTIONS_MD5,
+            kind: SizedAlgoKind::Md5,
             create_fn: Box::new(|| Box::new(Md5::new())),
             bits: 128,
         }),
         AlgoKind::Sha1 => Ok(HashAlgorithm {
-            name: ALGORITHM_OPTIONS_SHA1,
+            kind: SizedAlgoKind::Sha1,
             create_fn: Box::new(|| Box::new(Sha1::new())),
             bits: 160,
         }),
-        AlgoKind::Sha224 => Ok(create_sha2(224)?),
-        AlgoKind::Sha256 => Ok(create_sha2(256)?),
-        AlgoKind::Sha384 => Ok(create_sha2(384)?),
-        AlgoKind::Sha512 => Ok(create_sha2(512)?),
+        AlgoKind::Sha224 => Ok(create_sha2(ShaLength::Len224)?),
+        AlgoKind::Sha256 => Ok(create_sha2(ShaLength::Len256)?),
+        AlgoKind::Sha384 => Ok(create_sha2(ShaLength::Len384)?),
+        AlgoKind::Sha512 => Ok(create_sha2(ShaLength::Len512)?),
         AlgoKind::Blake2b => {
             // Set default length to 512 if None
             let bits = length.unwrap_or(512);
             if bits == 512 {
                 Ok(HashAlgorithm {
-                    name: ALGORITHM_OPTIONS_BLAKE2B,
+                    kind: SizedAlgoKind::Blake2b(None),
                     create_fn: Box::new(move || Box::new(Blake2b::new())),
                     bits: 512,
                 })
             } else {
                 Ok(HashAlgorithm {
-                    name: ALGORITHM_OPTIONS_BLAKE2B,
+                    kind: SizedAlgoKind::Blake2b(Some(bits)),
                     create_fn: Box::new(move || Box::new(Blake2b::with_output_bytes(bits))),
                     bits,
                 })
             }
         }
         AlgoKind::Blake3 => Ok(HashAlgorithm {
-            name: ALGORITHM_OPTIONS_BLAKE3,
+            kind: SizedAlgoKind::Blake3,
             create_fn: Box::new(|| Box::new(Blake3::new())),
             bits: 256,
         }),
         AlgoKind::Sm3 => Ok(HashAlgorithm {
-            name: ALGORITHM_OPTIONS_SM3,
+            kind: SizedAlgoKind::Sm3,
             create_fn: Box::new(|| Box::new(Sm3::new())),
             bits: 512,
         }),
@@ -605,7 +713,7 @@ pub fn detect_algo(algo: AlgoKind, length: Option<usize>) -> UResult<HashAlgorit
                 algo.to_uppercase().to_string(),
             ))?;
             Ok(HashAlgorithm {
-                name: ALGORITHM_OPTIONS_SHAKE128,
+                kind: SizedAlgoKind::Shake128(bits),
                 create_fn: Box::new(|| Box::new(Shake128::new())),
                 bits,
             })
@@ -615,7 +723,7 @@ pub fn detect_algo(algo: AlgoKind, length: Option<usize>) -> UResult<HashAlgorit
                 algo.to_uppercase().to_string(),
             ))?;
             Ok(HashAlgorithm {
-                name: ALGORITHM_OPTIONS_SHAKE256,
+                kind: SizedAlgoKind::Shake256(bits),
                 create_fn: Box::new(|| Box::new(Shake256::new())),
                 bits,
             })
@@ -1406,9 +1514,12 @@ pub fn calculate_blake2b_length_str(length: &str) -> UResult<Option<usize>> {
     }
 }
 
-pub fn validate_sha2_sha3_length(algo_name: AlgoKind, length: Option<usize>) -> UResult<usize> {
+pub fn validate_sha2_sha3_length(algo_name: AlgoKind, length: Option<usize>) -> UResult<ShaLength> {
     match length {
-        Some(len @ (224 | 256 | 384 | 512)) => Ok(len),
+        Some(224) => Ok(ShaLength::Len224),
+        Some(256) => Ok(ShaLength::Len256),
+        Some(384) => Ok(ShaLength::Len384),
+        Some(512) => Ok(ShaLength::Len512),
         Some(len) => {
             show_error!("{}", ChecksumError::InvalidLength(len.to_string()));
             Err(ChecksumError::InvalidLengthForSha(algo_name.to_uppercase().into()).into())

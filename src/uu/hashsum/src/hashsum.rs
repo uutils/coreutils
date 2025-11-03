@@ -15,7 +15,6 @@ use std::io::{BufReader, Read, stdin};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
-use uucore::checksum::ChecksumOptions;
 use uucore::checksum::ChecksumVerbose;
 use uucore::checksum::calculate_blake2b_length;
 use uucore::checksum::detect_algo;
@@ -23,6 +22,7 @@ use uucore::checksum::digest_reader;
 use uucore::checksum::escape_filename;
 use uucore::checksum::perform_checksum_validation;
 use uucore::checksum::{AlgoKind, ChecksumError};
+use uucore::checksum::{ChecksumOptions, SizedAlgoKind};
 use uucore::error::{UResult, strip_errno};
 use uucore::format_usage;
 use uucore::sum::Digest;
@@ -33,7 +33,7 @@ const NAME: &str = "hashsum";
 const READ_BUFFER_SIZE: usize = 32 * 1024;
 
 struct Options<'a> {
-    algoname: &'static str,
+    algo: SizedAlgoKind,
     digest: Box<dyn Digest + 'static>,
     binary: bool,
     binary_name: &'a str,
@@ -246,7 +246,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     let algo = detect_algo(algo_kind, length)?;
 
     let opts = Options {
-        algoname: algo.name,
+        algo: algo.kind,
         digest: (algo.create_fn)(),
         output_bits: algo.bits,
         binary,
@@ -549,22 +549,10 @@ where
 
         let (escaped_filename, prefix) = escape_filename(filename);
         if options.tag {
-            if options.algoname == "blake2b" {
-                if options.digest.output_bits() == 512 {
-                    println!("BLAKE2b ({escaped_filename}) = {sum}");
-                } else {
-                    // special case for BLAKE2b with non-default output length
-                    println!(
-                        "BLAKE2b-{} ({escaped_filename}) = {sum}",
-                        options.digest.output_bits()
-                    );
-                }
-            } else {
-                println!(
-                    "{prefix}{} ({escaped_filename}) = {sum}",
-                    options.algoname.to_ascii_uppercase()
-                );
-            }
+            println!(
+                "{prefix}{} ({escaped_filename}) = {sum}",
+                options.algo.to_tag()
+            );
         } else if options.nonames {
             println!("{sum}");
         } else if options.zero {
