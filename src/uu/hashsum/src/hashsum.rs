@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) algo, algoname, regexes, nread, nonames
+// spell-checker:ignore (ToDO) algo, algoname, bitlen, regexes, nread, nonames
 
 use clap::ArgAction;
 use clap::builder::ValueParser;
@@ -44,7 +44,6 @@ struct Options<'a> {
     //quiet: bool,
     //strict: bool,
     //warn: bool,
-    output_bits: usize,
     zero: bool,
     //ignore_missing: bool,
 }
@@ -248,7 +247,6 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     let opts = Options {
         algo: algo.kind,
         digest: (algo.create_fn)(),
-        output_bits: algo.bits,
         binary,
         binary_name: &binary_name,
         tag: matches.get_flag("tag"),
@@ -532,7 +530,7 @@ where
             &mut options.digest,
             &mut file,
             options.binary,
-            options.output_bits,
+            options.algo.bitlen(),
         ) {
             Ok((sum, _)) => sum,
             Err(e) => {

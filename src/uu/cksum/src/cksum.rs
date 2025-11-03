@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) fname, algo
+// spell-checker:ignore (ToDO) fname, algo, bitlen
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
@@ -31,7 +31,6 @@ use uucore::{
 struct Options {
     algo_kind: SizedAlgoKind,
     digest: Box<dyn Digest + 'static>,
-    output_bits: usize,
     output_format: OutputFormat,
     line_ending: LineEnding,
 }
@@ -112,7 +111,7 @@ fn print_legacy_checksum(
         SizedAlgoKind::Sysv => print!(
             "{} {}",
             sum.parse::<u16>().unwrap(),
-            size.div_ceil(options.output_bits),
+            size.div_ceil(options.algo_kind.bitlen()),
         ),
         SizedAlgoKind::Bsd => {
             // The BSD checksum output is 5 digit integer
@@ -120,7 +119,7 @@ fn print_legacy_checksum(
             print!(
                 "{:0bsd_width$} {:bsd_width$}",
                 sum.parse::<u16>().unwrap(),
-                size.div_ceil(options.output_bits),
+                size.div_ceil(options.algo_kind.bitlen()),
             );
         }
         SizedAlgoKind::Crc | SizedAlgoKind::Crc32b => {
@@ -209,9 +208,13 @@ where
             Box::new(file_buf) as Box<dyn Read>
         });
 
-        let (sum_hex, sz) =
-            digest_reader(&mut options.digest, &mut file, false, options.output_bits)
-                .map_err_context(|| translate!("cksum-error-failed-to-read-input"))?;
+        let (sum_hex, sz) = digest_reader(
+            &mut options.digest,
+            &mut file,
+            false,
+            options.algo_kind.bitlen(),
+        )
+        .map_err_context(|| translate!("cksum-error-failed-to-read-input"))?;
 
         // Encodes the sum if df is Base64, leaves as-is otherwise.
         let encode_sum = |sum: String, df: DigestFormat| {
@@ -456,7 +459,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let opts = Options {
         algo_kind: algo.kind,
         digest: (algo.create_fn)(),
-        output_bits: algo.bits,
         output_format,
         line_ending,
     };
