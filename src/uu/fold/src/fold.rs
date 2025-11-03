@@ -297,13 +297,102 @@ fn emit_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
         ctx.writer.write_all(&ctx.output[..consume])?;
     }
     ctx.writer.write_all(&[NL])?;
-    ctx.output.drain(..consume);
+
+    if consume < ctx.output.len() {
+        let remainder = ctx.output.split_off(consume);
+        *ctx.output = remainder;
+    } else {
+        ctx.output.clear();
+    }
+
     *ctx.col_count = compute_col_count(ctx.output, ctx.mode);
-    *ctx.last_space = None;
+
+    if ctx.spaces {
+        *ctx.last_space = ctx
+            .output
+            .iter()
+            .rposition(|b| b.is_ascii_whitespace() && *b != CR);
+    } else {
+        *ctx.last_space = None;
+    }
+    Ok(())
+}
+
+fn process_ascii_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) -> UResult<()> {
+    for &byte in line {
+        if byte == NL {
+            *ctx.last_space = None;
+            emit_output(ctx)?;
+            break;
+        }
+
+        if *ctx.col_count >= ctx.width {
+            emit_output(ctx)?;
+        }
+
+        if byte == CR {
+            ctx.output.push(byte);
+            *ctx.col_count = 0;
+            continue;
+        }
+
+        if byte == 0x08 {
+            ctx.output.push(byte);
+            *ctx.col_count = ctx.col_count.saturating_sub(1);
+            continue;
+        }
+
+        if ctx.mode == WidthMode::Columns && byte == TAB {
+            loop {
+                let next_stop = next_tab_stop(*ctx.col_count);
+                if next_stop > ctx.width && !ctx.output.is_empty() {
+                    emit_output(ctx)?;
+                    continue;
+                }
+                *ctx.col_count = next_stop;
+                break;
+            }
+            if ctx.spaces {
+                *ctx.last_space = Some(ctx.output.len());
+            } else {
+                *ctx.last_space = None;
+            }
+            ctx.output.push(byte);
+            continue;
+        }
+
+        let added = match ctx.mode {
+            WidthMode::Columns => match byte {
+                0x00..=0x08 | 0x0B..=0x0C | 0x0E..=0x1F | 0x7F => 0,
+                _ => 1,
+            },
+            WidthMode::Characters => 1,
+        };
+
+        if ctx.mode == WidthMode::Columns
+            && added > 0
+            && *ctx.col_count + added > ctx.width
+            && !ctx.output.is_empty()
+        {
+            emit_output(ctx)?;
+        }
+
+        if ctx.spaces && byte.is_ascii_whitespace() && byte != CR {
+            *ctx.last_space = Some(ctx.output.len());
+        }
+
+        ctx.output.push(byte);
+        *ctx.col_count = ctx.col_count.saturating_add(added);
+    }
+
     Ok(())
 }
 
 fn process_utf8_line<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> UResult<()> {
+    if line.is_ascii() {
+        return process_ascii_line(line.as_bytes(), ctx);
+    }
+
     let line_bytes = line.as_bytes();
     let mut iter = line.char_indices().peekable();
 
