@@ -2859,6 +2859,97 @@ mod gnu_cksum_c {
     }
 }
 
+#[test]
+fn test_sha3_with_length() {
+    // Test SHA3-224
+    new_ucmd!()
+        .arg("-a")
+        .arg("sha3")
+        .arg("--length")
+        .arg("224")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_contains("SHA3-224 (lorem_ipsum.txt) = ");
+
+    // Test SHA3-256
+    new_ucmd!()
+        .arg("-a")
+        .arg("sha3")
+        .arg("--length")
+        .arg("256")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_contains("SHA3-256 (lorem_ipsum.txt) = ");
+
+    // Test SHA3-384
+    new_ucmd!()
+        .arg("-a")
+        .arg("sha3")
+        .arg("--length")
+        .arg("384")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_contains("SHA3-384 (lorem_ipsum.txt) = ");
+
+    // Test SHA3-512
+    new_ucmd!()
+        .arg("-a")
+        .arg("sha3")
+        .arg("--length")
+        .arg("512")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_contains("SHA3-512 (lorem_ipsum.txt) = ");
+}
+
+#[test]
+fn test_sha3_invalid_length() {
+    // Test SHA3 with invalid length (not 224, 256, 384, or 512)
+    new_ucmd!()
+        .arg("-a")
+        .arg("sha3")
+        .arg("--length")
+        .arg("128")
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .stderr_contains("digest length for 'SHA3' must be 224, 256, 384, or 512");
+
+    // Test SHA3 without length
+    new_ucmd!()
+        .arg("-a")
+        .arg("sha3")
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .stderr_contains("--algorithm=sha3 requires specifying --length 224, 256, 384, or 512");
+}
+
+#[test]
+fn test_sha3_base64_output() {
+    // Test SHA3 with base64 output format
+    new_ucmd!()
+        .arg("--base64")
+        .arg("-a")
+        .arg("sha3")
+        .arg("--length")
+        .arg("256")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_contains("SHA3-256 (lorem_ipsum.txt) = ");
+}
+
+#[test]
+fn test_sha3_untagged() {
+    // Test SHA3 with untagged output
+    new_ucmd!()
+        .arg("--untagged")
+        .arg("-a")
+        .arg("sha3")
+        .arg("--length")
+        .arg("256")
+        .arg("lorem_ipsum.txt")
+        .succeeds();
+}
+
 /// The tests in this module check the behavior of cksum when given different
 /// checksum formats and algorithms in the same file, while specifying an
 /// algorithm on CLI or not.
