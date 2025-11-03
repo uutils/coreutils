@@ -9,6 +9,7 @@ use clap::{Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::path::Path;
+use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
@@ -21,9 +22,16 @@ const TAB: u8 = b'\t';
 
 mod options {
     pub const BYTES: &str = "bytes";
+    pub const CHARACTERS: &str = "characters";
     pub const SPACES: &str = "spaces";
     pub const WIDTH: &str = "width";
     pub const FILE: &str = "file";
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum WidthMode {
+    Columns,
+    Characters,
 }
 
 #[uucore::main]
@@ -34,6 +42,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let bytes = matches.get_flag(options::BYTES);
+    let characters = matches.get_flag(options::CHARACTERS);
     let spaces = matches.get_flag(options::SPACES);
     let poss_width = match matches.get_one::<String>(options::WIDTH) {
         Some(v) => Some(v.clone()),
@@ -55,7 +64,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => vec!["-".to_owned()],
     };
 
-    fold(&files, bytes, spaces, width)
+    fold(&files, bytes, characters, spaces, width)
 }
 
 pub fn uu_app() -> Command {
@@ -70,6 +79,13 @@ pub fn uu_app() -> Command {
                 .long(options::BYTES)
                 .short('b')
                 .help(translate!("fold-bytes-help"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::CHARACTERS)
+                .long(options::CHARACTERS)
+                .help(translate!("fold-characters-help"))
+                .conflicts_with(options::BYTES)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -107,7 +123,13 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
     (args.to_vec(), None)
 }
 
-fn fold(filenames: &[String], bytes: bool, spaces: bool, width: usize) -> UResult<()> {
+fn fold(
+    filenames: &[String],
+    bytes: bool,
+    characters: bool,
+    spaces: bool,
+    width: usize,
+) -> UResult<()> {
     let mut output = BufWriter::new(stdout());
 
     for filename in filenames {
@@ -125,7 +147,12 @@ fn fold(filenames: &[String], bytes: bool, spaces: bool, width: usize) -> UResul
         if bytes {
             fold_file_bytewise(buffer, spaces, width, &mut output)?;
         } else {
-            fold_file(buffer, spaces, width, &mut output)?;
+            let mode = if characters {
+                WidthMode::Characters
+            } else {
+                WidthMode::Columns
+            };
+            fold_file(buffer, spaces, width, mode, &mut output)?;
         }
     }
 
@@ -213,6 +240,193 @@ fn fold_file_bytewise<T: Read, W: Write>(
     Ok(())
 }
 
+fn next_tab_stop(col_count: usize) -> usize {
+    col_count + TAB_WIDTH - col_count % TAB_WIDTH
+}
+
+fn compute_col_count(buffer: &[u8], mode: WidthMode) -> usize {
+    match mode {
+        WidthMode::Characters => std::str::from_utf8(buffer)
+            .map(|s| s.chars().count())
+            .unwrap_or(buffer.len()),
+        WidthMode::Columns => {
+            if let Ok(s) = std::str::from_utf8(buffer) {
+                let mut width = 0;
+                for ch in s.chars() {
+                    match ch {
+                        '\r' => width = 0,
+                        '\t' => width = next_tab_stop(width),
+                        '\x08' => width = width.saturating_sub(1),
+                        _ => width += UnicodeWidthChar::width(ch).unwrap_or(0),
+                    }
+                }
+                width
+            } else {
+                let mut width = 0;
+                for &byte in buffer {
+                    match byte {
+                        CR => width = 0,
+                        TAB => width = next_tab_stop(width),
+                        0x08 => width = width.saturating_sub(1),
+                        _ => width += 1,
+                    }
+                }
+                width
+            }
+        }
+    }
+}
+
+fn emit_output<W: Write>(
+    writer: &mut W,
+    output: &mut Vec<u8>,
+    last_space: &mut Option<usize>,
+    col_count: &mut usize,
+    mode: WidthMode,
+) -> UResult<()> {
+    let consume = match *last_space {
+        Some(index) => index + 1,
+        None => output.len(),
+    };
+
+    if consume > 0 {
+        writer.write_all(&output[..consume])?;
+    }
+    writer.write_all(&[NL])?;
+    output.drain(..consume);
+    *col_count = compute_col_count(output, mode);
+    *last_space = None;
+    Ok(())
+}
+
+fn process_utf8_line<W: Write>(
+    line_str: &str,
+    line_bytes: &[u8],
+    spaces: bool,
+    width: usize,
+    mode: WidthMode,
+    writer: &mut W,
+    output: &mut Vec<u8>,
+    col_count: &mut usize,
+    last_space: &mut Option<usize>,
+) -> UResult<()> {
+    let mut iter = line_str.char_indices().peekable();
+
+    while let Some((byte_idx, ch)) = iter.next() {
+        let next_idx = iter.peek().map(|(idx, _)| *idx).unwrap_or(line_bytes.len());
+
+        if ch == '\n' {
+            *last_space = None;
+            emit_output(writer, output, last_space, col_count, mode)?;
+            break;
+        }
+
+        if *col_count >= width {
+            emit_output(writer, output, last_space, col_count, mode)?;
+        }
+
+        if ch == '\r' {
+            output.extend_from_slice(&line_bytes[byte_idx..next_idx]);
+            *col_count = 0;
+            continue;
+        }
+
+        if ch == '\x08' {
+            output.extend_from_slice(&line_bytes[byte_idx..next_idx]);
+            *col_count = col_count.saturating_sub(1);
+            continue;
+        }
+
+        if mode == WidthMode::Columns && ch == '\t' {
+            loop {
+                let next_stop = next_tab_stop(*col_count);
+                if next_stop > width && !output.is_empty() {
+                    emit_output(writer, output, last_space, col_count, mode)?;
+                    continue;
+                }
+                *col_count = next_stop;
+                break;
+            }
+            if spaces {
+                *last_space = Some(output.len());
+            } else {
+                *last_space = None;
+            }
+            output.extend_from_slice(&line_bytes[byte_idx..next_idx]);
+            continue;
+        }
+
+        let added = match mode {
+            WidthMode::Columns => UnicodeWidthChar::width(ch).unwrap_or(0),
+            WidthMode::Characters => 1,
+        };
+
+        if mode == WidthMode::Columns
+            && added > 0
+            && *col_count + added > width
+            && !output.is_empty()
+        {
+            emit_output(writer, output, last_space, col_count, mode)?;
+        }
+
+        if spaces && ch.is_ascii_whitespace() {
+            *last_space = Some(output.len());
+        }
+
+        output.extend_from_slice(&line_bytes[byte_idx..next_idx]);
+        *col_count = (*col_count).saturating_add(added);
+    }
+
+    Ok(())
+}
+
+fn process_non_utf8_line<W: Write>(
+    line: &[u8],
+    spaces: bool,
+    width: usize,
+    mode: WidthMode,
+    writer: &mut W,
+    output: &mut Vec<u8>,
+    col_count: &mut usize,
+    last_space: &mut Option<usize>,
+) -> UResult<()> {
+    for &byte in line {
+        if byte == NL {
+            *last_space = None;
+            emit_output(writer, output, last_space, col_count, mode)?;
+            break;
+        }
+
+        if *col_count >= width {
+            emit_output(writer, output, last_space, col_count, mode)?;
+        }
+
+        match byte {
+            CR => *col_count = 0,
+            TAB => {
+                let next_stop = next_tab_stop(*col_count);
+                if next_stop > width && !output.is_empty() {
+                    emit_output(writer, output, last_space, col_count, mode)?;
+                }
+                *col_count = next_stop;
+                *last_space = if spaces { Some(output.len()) } else { None };
+                output.push(byte);
+                continue;
+            }
+            0x08 => *col_count = col_count.saturating_sub(1),
+            _ if spaces && byte.is_ascii_whitespace() => {
+                *last_space = Some(output.len());
+                *col_count = (*col_count).saturating_add(1);
+            }
+            _ => *col_count = (*col_count).saturating_add(1),
+        }
+
+        output.push(byte);
+    }
+
+    Ok(())
+}
+
 /// Fold `file` to fit `width` (number of columns).
 ///
 /// By default `fold` treats tab, backspace, and carriage return specially:
@@ -226,36 +440,13 @@ fn fold_file<T: Read, W: Write>(
     mut file: BufReader<T>,
     spaces: bool,
     width: usize,
+    mode: WidthMode,
     writer: &mut W,
 ) -> UResult<()> {
     let mut line = Vec::new();
     let mut output = Vec::new();
     let mut col_count = 0;
     let mut last_space = None;
-
-    /// Print the output line, resetting the column and character counts.
-    ///
-    /// If `spaces` is `true`, print the output line up to the last
-    /// encountered whitespace character (inclusive) and set the remaining
-    /// characters as the start of the next line.
-    macro_rules! emit_output {
-        () => {
-            let consume = match last_space {
-                Some(i) => i + 1,
-                None => output.len(),
-            };
-
-            writer.write_all(&output[..consume])?;
-            writer.write_all(&[NL])?;
-            output.drain(..consume);
-
-            // we know there are no tabs left in output, so each char counts
-            // as 1 column
-            col_count = output.len();
-
-            last_space = None;
-        };
-    }
 
     loop {
         if file
@@ -266,50 +457,37 @@ fn fold_file<T: Read, W: Write>(
             break;
         }
 
-        for ch in &line {
-            if *ch == NL {
-                // make sure to _not_ split output at whitespace, since we
-                // know the entire output will fit
-                last_space = None;
-                emit_output!();
-                break;
-            }
-
-            if col_count >= width {
-                emit_output!();
-            }
-
-            match *ch {
-                CR => col_count = 0,
-                TAB => {
-                    let next_tab_stop = col_count + TAB_WIDTH - col_count % TAB_WIDTH;
-
-                    if next_tab_stop > width && !output.is_empty() {
-                        emit_output!();
-                    }
-
-                    col_count = next_tab_stop;
-                    last_space = if spaces { Some(output.len()) } else { None };
-                }
-                0x08 => {
-                    col_count = col_count.saturating_sub(1);
-                }
-                _ if spaces && ch.is_ascii_whitespace() => {
-                    last_space = Some(output.len());
-                    col_count += 1;
-                }
-                _ => col_count += 1,
-            }
-
-            output.push(*ch);
+        if let Ok(line_str) = std::str::from_utf8(&line) {
+            process_utf8_line(
+                line_str,
+                &line,
+                spaces,
+                width,
+                mode,
+                writer,
+                &mut output,
+                &mut col_count,
+                &mut last_space,
+            )?;
+        } else {
+            process_non_utf8_line(
+                &line,
+                spaces,
+                width,
+                mode,
+                writer,
+                &mut output,
+                &mut col_count,
+                &mut last_space,
+            )?;
         }
 
-        if !output.is_empty() {
-            writer.write_all(&output)?;
-            output.truncate(0);
-        }
+        line.clear();
+    }
 
-        line.truncate(0);
+    if !output.is_empty() {
+        writer.write_all(&output)?;
+        output.clear();
     }
 
     Ok(())
