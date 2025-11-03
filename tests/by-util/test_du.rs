@@ -22,9 +22,9 @@ const SUB_DIR: &str = "subdir/deeper";
 const SUB_DEEPER_DIR: &str = "subdir/deeper/deeper_dir";
 const SUB_DIR_LINKS: &str = "subdir/links";
 const SUB_DIR_LINKS_DEEPER_SYM_DIR: &str = "subdir/links/deeper_dir";
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(all(not(target_os = "android"), not(target_os = "openbsd")))]
 const SUB_FILE: &str = "subdir/links/subwords.txt";
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(all(not(target_os = "android"), not(target_os = "openbsd")))]
 const SUB_LINK: &str = "subdir/links/sublink.txt";
 
 #[test]
