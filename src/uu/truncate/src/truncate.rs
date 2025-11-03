@@ -145,6 +145,7 @@ pub fn uu_app() -> Command {
                 .long(options::SIZE)
                 .required_unless_present(options::REFERENCE)
                 .help(translate!("truncate-help-size"))
+                .allow_hyphen_values(true)
                 .value_name("SIZE"),
         )
         .arg(
