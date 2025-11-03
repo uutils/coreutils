@@ -8,6 +8,7 @@ advapi32-sys
 aho-corasick
 backtrace
 blake2b_simd
+cpufeatures
 
 # * uutils project
 uutils
@@ -363,6 +364,12 @@ getcwd
 # * other
 weblate
 algs
+
+# * CPU features and instructions
+cpuid
+pclmul
+pclmulqdq
+vmull
 
 # translation tests
 CLICOLOR
