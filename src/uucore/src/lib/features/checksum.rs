@@ -301,7 +301,7 @@ impl SizedAlgoKind {
         }
     }
 
-    pub fn to_tag(&self) -> String {
+    pub fn to_tag(self) -> String {
         use SizedAlgoKind::*;
         match self {
             Md5 => "MD5".into(),
@@ -318,6 +318,24 @@ impl SizedAlgoKind {
         }
     }
 
+    pub fn bitlen(&self) -> usize {
+        use SizedAlgoKind::*;
+        match self {
+            Sysv => 512,
+            Bsd => 1024,
+            Crc => 256,
+            Crc32b => 32,
+            Md5 => 128,
+            Sm3 => 512,
+            Sha1 => 160,
+            Blake3 => 256,
+            Sha2(len) => len.as_usize(),
+            Sha3(len) => len.as_usize(),
+            Blake2b(len) => len.unwrap_or(512),
+            Shake128(len) => *len,
+            Shake256(len) => *len,
+        }
+    }
     pub fn is_legacy(&self) -> bool {
         use SizedAlgoKind::*;
         matches!(self, Sysv | Bsd | Crc | Crc32b)
@@ -327,7 +345,6 @@ impl SizedAlgoKind {
 pub struct HashAlgorithm {
     pub kind: SizedAlgoKind,
     pub create_fn: Box<dyn Fn() -> Box<dyn Digest + 'static>>,
-    pub bits: usize,
 }
 
 /// This structure holds the count of checksum test lines' outcomes.
@@ -516,22 +533,18 @@ pub fn create_sha3(len: ShaLength) -> UResult<HashAlgorithm> {
         ShaLength::Len224 => Ok(HashAlgorithm {
             kind: SizedAlgoKind::Sha3(ShaLength::Len224),
             create_fn: Box::new(|| Box::new(Sha3_224::new())),
-            bits: 224,
         }),
         ShaLength::Len256 => Ok(HashAlgorithm {
             kind: SizedAlgoKind::Sha3(ShaLength::Len256),
             create_fn: Box::new(|| Box::new(Sha3_256::new())),
-            bits: 256,
         }),
         ShaLength::Len384 => Ok(HashAlgorithm {
             kind: SizedAlgoKind::Sha3(ShaLength::Len384),
             create_fn: Box::new(|| Box::new(Sha3_384::new())),
-            bits: 384,
         }),
         ShaLength::Len512 => Ok(HashAlgorithm {
             kind: SizedAlgoKind::Sha3(ShaLength::Len512),
             create_fn: Box::new(|| Box::new(Sha3_512::new())),
-            bits: 512,
         }),
     }
 }
@@ -541,22 +554,18 @@ pub fn create_sha2(len: ShaLength) -> UResult<HashAlgorithm> {
         ShaLength::Len224 => Ok(HashAlgorithm {
             kind: SizedAlgoKind::Sha2(ShaLength::Len224),
             create_fn: Box::new(|| Box::new(Sha224::new())),
-            bits: 224,
         }),
         ShaLength::Len256 => Ok(HashAlgorithm {
             kind: SizedAlgoKind::Sha2(ShaLength::Len256),
             create_fn: Box::new(|| Box::new(Sha256::new())),
-            bits: 256,
         }),
         ShaLength::Len384 => Ok(HashAlgorithm {
             kind: SizedAlgoKind::Sha2(ShaLength::Len384),
             create_fn: Box::new(|| Box::new(Sha384::new())),
-            bits: 384,
         }),
         ShaLength::Len512 => Ok(HashAlgorithm {
             kind: SizedAlgoKind::Sha2(ShaLength::Len512),
             create_fn: Box::new(|| Box::new(Sha512::new())),
-            bits: 512,
         }),
     }
 }
@@ -650,32 +659,26 @@ pub fn detect_algo(algo: AlgoKind, length: Option<usize>) -> UResult<HashAlgorit
         AlgoKind::Sysv => Ok(HashAlgorithm {
             kind: SizedAlgoKind::Sysv,
             create_fn: Box::new(|| Box::new(SysV::new())),
-            bits: 512,
         }),
         AlgoKind::Bsd => Ok(HashAlgorithm {
             kind: SizedAlgoKind::Bsd,
             create_fn: Box::new(|| Box::new(Bsd::new())),
-            bits: 1024,
         }),
         AlgoKind::Crc => Ok(HashAlgorithm {
             kind: SizedAlgoKind::Crc,
             create_fn: Box::new(|| Box::new(Crc::new())),
-            bits: 256,
         }),
         AlgoKind::Crc32b => Ok(HashAlgorithm {
             kind: SizedAlgoKind::Crc32b,
             create_fn: Box::new(|| Box::new(CRC32B::new())),
-            bits: 32,
         }),
         AlgoKind::Md5 => Ok(HashAlgorithm {
             kind: SizedAlgoKind::Md5,
             create_fn: Box::new(|| Box::new(Md5::new())),
-            bits: 128,
         }),
         AlgoKind::Sha1 => Ok(HashAlgorithm {
             kind: SizedAlgoKind::Sha1,
             create_fn: Box::new(|| Box::new(Sha1::new())),
-            bits: 160,
         }),
         AlgoKind::Sha224 => Ok(create_sha2(ShaLength::Len224)?),
         AlgoKind::Sha256 => Ok(create_sha2(ShaLength::Len256)?),
@@ -688,25 +691,21 @@ pub fn detect_algo(algo: AlgoKind, length: Option<usize>) -> UResult<HashAlgorit
                 Ok(HashAlgorithm {
                     kind: SizedAlgoKind::Blake2b(None),
                     create_fn: Box::new(move || Box::new(Blake2b::new())),
-                    bits: 512,
                 })
             } else {
                 Ok(HashAlgorithm {
                     kind: SizedAlgoKind::Blake2b(Some(bits)),
                     create_fn: Box::new(move || Box::new(Blake2b::with_output_bytes(bits))),
-                    bits,
                 })
             }
         }
         AlgoKind::Blake3 => Ok(HashAlgorithm {
             kind: SizedAlgoKind::Blake3,
             create_fn: Box::new(|| Box::new(Blake3::new())),
-            bits: 256,
         }),
         AlgoKind::Sm3 => Ok(HashAlgorithm {
             kind: SizedAlgoKind::Sm3,
             create_fn: Box::new(|| Box::new(Sm3::new())),
-            bits: 512,
         }),
         AlgoKind::Shake128 => {
             let bits = length.ok_or(ChecksumError::LengthRequired(
@@ -715,7 +714,6 @@ pub fn detect_algo(algo: AlgoKind, length: Option<usize>) -> UResult<HashAlgorit
             Ok(HashAlgorithm {
                 kind: SizedAlgoKind::Shake128(bits),
                 create_fn: Box::new(|| Box::new(Shake128::new())),
-                bits,
             })
         }
         AlgoKind::Shake256 => {
@@ -725,7 +723,6 @@ pub fn detect_algo(algo: AlgoKind, length: Option<usize>) -> UResult<HashAlgorit
             Ok(HashAlgorithm {
                 kind: SizedAlgoKind::Shake256(bits),
                 create_fn: Box::new(|| Box::new(Shake256::new())),
-                bits,
             })
         }
         AlgoKind::Sha2 => {
@@ -735,13 +732,7 @@ pub fn detect_algo(algo: AlgoKind, length: Option<usize>) -> UResult<HashAlgorit
         AlgoKind::Sha3 => {
             let len = validate_sha2_sha3_length(algo, length)?;
             create_sha3(len)
-        } // TODO: `hashsum` specific, to remove once hashsum is removed.
-          // algo @ ("sha3-224" | "sha3-256" | "sha3-384" | "sha3-512") => {
-          //     let bits: usize = algo.strip_prefix("sha3-").unwrap().parse().unwrap();
-          //     create_sha3(bits)
-          // }
-
-          // algo => Err(ChecksumError::UnknownAlgorithm(algo.into()).into()),
+        }
     }
 }
 
@@ -1158,8 +1149,13 @@ fn compute_and_check_digest_from_file(
     // Read the file and calculate the checksum
     let create_fn = &mut algo.create_fn;
     let mut digest = create_fn();
-    let (calculated_checksum, _) =
-        digest_reader(&mut digest, &mut file_reader, opts.binary, algo.bits).unwrap();
+    let (calculated_checksum, _) = digest_reader(
+        &mut digest,
+        &mut file_reader,
+        opts.binary,
+        algo.kind.bitlen(),
+    )
+    .unwrap();
 
     // Do the checksum validation
     let checksum_correct = expected_checksum == calculated_checksum;
