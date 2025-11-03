@@ -5,8 +5,11 @@
 
 // spell-checker:ignore (ToDO) fname, algo
 
+mod hardware;
+
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
+use hardware::CpuFeatures;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufReader, Read, Write, stdin, stdout};
@@ -37,6 +40,7 @@ struct Options {
     length: Option<usize>,
     output_format: OutputFormat,
     line_ending: LineEnding,
+    debug: bool,
 }
 
 /// Reading mode used to compute digest.
@@ -176,6 +180,13 @@ fn print_untagged_checksum(
     Ok(())
 }
 
+/// Print CPU hardware capability detection information to stderr
+/// This matches GNU cksum's --debug behavior
+fn print_cpu_debug_info() {
+    let features = CpuFeatures::detect();
+    features.print_debug();
+}
+
 /// Calculate checksum
 ///
 /// # Arguments
@@ -187,6 +198,12 @@ where
     I: Iterator<Item = &'a OsStr>,
 {
     let mut files = files.peekable();
+
+    // Print CPU debug info once at startup if --debug flag is set
+    #[cfg(not(target_os = "android"))]
+    if options.debug {
+        print_cpu_debug_info();
+    }
 
     while let Some(filename) = files.next() {
         // Check that in raw mode, we are not provided with several files.
@@ -285,6 +302,7 @@ mod options {
     pub const IGNORE_MISSING: &str = "ignore-missing";
     pub const QUIET: &str = "quiet";
     pub const ZERO: &str = "zero";
+    pub const DEBUG: &str = "debug";
 }
 
 /// cksum has a bunch of legacy behavior. We handle this in this function to
@@ -470,6 +488,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         length,
         output_format,
         line_ending,
+        debug: matches.get_flag(options::DEBUG),
     };
 
     cksum(opts, files)?;
@@ -598,6 +617,12 @@ pub fn uu_app() -> Command {
                 .long(options::ZERO)
                 .short('z')
                 .help(translate!("cksum-help-zero"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::DEBUG)
+                .long(options::DEBUG)
+                .help(translate!("cksum-help-debug"))
                 .action(ArgAction::SetTrue),
         )
         .after_help(translate!("cksum-after-help"))
