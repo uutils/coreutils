@@ -4318,7 +4318,6 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "crc-fast",
- "crc32fast",
  "data-encoding",
  "data-encoding-macro",
  "digest",
