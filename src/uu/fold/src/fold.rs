@@ -310,7 +310,7 @@ fn emit_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
 
     if ctx.spaces {
         *ctx.last_space = last_space.and_then(|idx| {
-            if idx + 1 <= consume {
+            if idx < consume {
                 None
             } else {
                 Some(idx - consume)
