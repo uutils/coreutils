@@ -253,15 +253,16 @@ pub enum SizedAlgoKind {
     Blake3,
     Sha2(ShaLength),
     Sha3(ShaLength),
+    // Note: we store Blake2b's length as BYTES.
     Blake2b(Option<usize>),
     Shake128(usize),
     Shake256(usize),
 }
 
 impl SizedAlgoKind {
-    pub fn from_unsized(kind: AlgoKind, length: Option<usize>) -> UResult<Self> {
+    pub fn from_unsized(kind: AlgoKind, byte_length: Option<usize>) -> UResult<Self> {
         use AlgoKind as ak;
-        match (kind, length) {
+        match (kind, byte_length) {
             (
                 ak::Sysv
                 | ak::Bsd
@@ -291,7 +292,13 @@ impl SizedAlgoKind {
             (ak::Shake256, Some(l)) => Ok(Self::Shake256(l)),
             (ak::Sha2, Some(l)) => Ok(Self::Sha2(ShaLength::try_from(l)?)),
             (ak::Sha3, Some(l)) => Ok(Self::Sha3(ShaLength::try_from(l)?)),
-            (ak::Blake2b, Some(l)) => Ok(Self::Blake2b(calculate_blake2b_length(l)?)),
+            (algo @ (ak::Sha2 | ak::Sha3), None) => {
+                Err(ChecksumError::LengthRequiredForSha(algo.to_lowercase().into()).into())
+            }
+            // [`calculate_blake2b_length`] expects a length in bits but we
+            // have a length in bytes.
+            (ak::Blake2b, Some(l)) => Ok(Self::Blake2b(calculate_blake2b_length(8 * l)?)),
+            (ak::Blake2b, None) => Ok(Self::Blake2b(None)),
 
             (ak::Sha224, None) => Ok(Self::Sha2(ShaLength::Len224)),
             (ak::Sha256, None) => Ok(Self::Sha2(ShaLength::Len256)),
@@ -310,11 +317,37 @@ impl SizedAlgoKind {
             Blake3 => "BLAKE3".into(),
             Sha2(len) => format!("SHA{}", len.as_usize()),
             Sha3(len) => format!("SHA3-{}", len.as_usize()),
-            Blake2b(Some(len)) => format!("BLAKE2b-{}", len * 8),
+            Blake2b(Some(byte_len)) => format!("BLAKE2b-{}", byte_len * 8),
             Blake2b(None) => "BLAKE2b".into(),
             Shake128(_) => "SHAKE128".into(),
             Shake256(_) => "SHAKE256".into(),
             Sysv | Bsd | Crc | Crc32b => panic!("Should not be used for tagging"),
+        }
+    }
+
+    pub fn create_digest(&self) -> Box<dyn Digest + 'static> {
+        use ShaLength::*;
+        match self {
+            Self::Sysv => Box::new(SysV::new()),
+            Self::Bsd => Box::new(Bsd::new()),
+            Self::Crc => Box::new(Crc::new()),
+            Self::Crc32b => Box::new(CRC32B::new()),
+            Self::Md5 => Box::new(Md5::new()),
+            Self::Sm3 => Box::new(Sm3::new()),
+            Self::Sha1 => Box::new(Sha1::new()),
+            Self::Blake3 => Box::new(Blake3::new()),
+            Self::Sha2(Len224) => Box::new(Sha224::new()),
+            Self::Sha2(Len256) => Box::new(Sha256::new()),
+            Self::Sha2(Len384) => Box::new(Sha384::new()),
+            Self::Sha2(Len512) => Box::new(Sha512::new()),
+            Self::Sha3(Len224) => Box::new(Sha3_224::new()),
+            Self::Sha3(Len256) => Box::new(Sha3_256::new()),
+            Self::Sha3(Len384) => Box::new(Sha3_384::new()),
+            Self::Sha3(Len512) => Box::new(Sha3_512::new()),
+            Self::Blake2b(Some(byte_len)) => Box::new(Blake2b::with_output_bytes(*byte_len)),
+            Self::Blake2b(None) => Box::new(Blake2b::new()),
+            Self::Shake128(_) => Box::new(Shake128::new()),
+            Self::Shake256(_) => Box::new(Shake256::new()),
         }
     }
 
@@ -340,11 +373,6 @@ impl SizedAlgoKind {
         use SizedAlgoKind::*;
         matches!(self, Sysv | Bsd | Crc | Crc32b)
     }
-}
-
-pub struct HashAlgorithm {
-    pub kind: SizedAlgoKind,
-    pub create_fn: Box<dyn Fn() -> Box<dyn Digest + 'static>>,
 }
 
 /// This structure holds the count of checksum test lines' outcomes.
@@ -522,54 +550,6 @@ impl UError for ChecksumError {
     }
 }
 
-/// Creates a SHA3 hasher instance based on the specified bits argument.
-///
-/// # Returns
-///
-/// Returns a `UResult` with an `HashAlgorithm` or an `Err` if an unsupported
-/// output size is provided.
-pub fn create_sha3(len: ShaLength) -> UResult<HashAlgorithm> {
-    match len {
-        ShaLength::Len224 => Ok(HashAlgorithm {
-            kind: SizedAlgoKind::Sha3(ShaLength::Len224),
-            create_fn: Box::new(|| Box::new(Sha3_224::new())),
-        }),
-        ShaLength::Len256 => Ok(HashAlgorithm {
-            kind: SizedAlgoKind::Sha3(ShaLength::Len256),
-            create_fn: Box::new(|| Box::new(Sha3_256::new())),
-        }),
-        ShaLength::Len384 => Ok(HashAlgorithm {
-            kind: SizedAlgoKind::Sha3(ShaLength::Len384),
-            create_fn: Box::new(|| Box::new(Sha3_384::new())),
-        }),
-        ShaLength::Len512 => Ok(HashAlgorithm {
-            kind: SizedAlgoKind::Sha3(ShaLength::Len512),
-            create_fn: Box::new(|| Box::new(Sha3_512::new())),
-        }),
-    }
-}
-
-pub fn create_sha2(len: ShaLength) -> UResult<HashAlgorithm> {
-    match len {
-        ShaLength::Len224 => Ok(HashAlgorithm {
-            kind: SizedAlgoKind::Sha2(ShaLength::Len224),
-            create_fn: Box::new(|| Box::new(Sha224::new())),
-        }),
-        ShaLength::Len256 => Ok(HashAlgorithm {
-            kind: SizedAlgoKind::Sha2(ShaLength::Len256),
-            create_fn: Box::new(|| Box::new(Sha256::new())),
-        }),
-        ShaLength::Len384 => Ok(HashAlgorithm {
-            kind: SizedAlgoKind::Sha2(ShaLength::Len384),
-            create_fn: Box::new(|| Box::new(Sha384::new())),
-        }),
-        ShaLength::Len512 => Ok(HashAlgorithm {
-            kind: SizedAlgoKind::Sha2(ShaLength::Len512),
-            create_fn: Box::new(|| Box::new(Sha512::new())),
-        }),
-    }
-}
-
 #[allow(clippy::comparison_chain)]
 fn print_cksum_report(res: &ChecksumResult) {
     if res.bad_format == 1 {
@@ -651,88 +631,6 @@ fn print_file_report<W: Write>(
         let _ = write!(w, "{prefix}");
         let _ = w.write_all(filename);
         let _ = writeln!(w, ": {result}");
-    }
-}
-
-pub fn detect_algo(algo: AlgoKind, length: Option<usize>) -> UResult<HashAlgorithm> {
-    match algo {
-        AlgoKind::Sysv => Ok(HashAlgorithm {
-            kind: SizedAlgoKind::Sysv,
-            create_fn: Box::new(|| Box::new(SysV::new())),
-        }),
-        AlgoKind::Bsd => Ok(HashAlgorithm {
-            kind: SizedAlgoKind::Bsd,
-            create_fn: Box::new(|| Box::new(Bsd::new())),
-        }),
-        AlgoKind::Crc => Ok(HashAlgorithm {
-            kind: SizedAlgoKind::Crc,
-            create_fn: Box::new(|| Box::new(Crc::new())),
-        }),
-        AlgoKind::Crc32b => Ok(HashAlgorithm {
-            kind: SizedAlgoKind::Crc32b,
-            create_fn: Box::new(|| Box::new(CRC32B::new())),
-        }),
-        AlgoKind::Md5 => Ok(HashAlgorithm {
-            kind: SizedAlgoKind::Md5,
-            create_fn: Box::new(|| Box::new(Md5::new())),
-        }),
-        AlgoKind::Sha1 => Ok(HashAlgorithm {
-            kind: SizedAlgoKind::Sha1,
-            create_fn: Box::new(|| Box::new(Sha1::new())),
-        }),
-        AlgoKind::Sha224 => Ok(create_sha2(ShaLength::Len224)?),
-        AlgoKind::Sha256 => Ok(create_sha2(ShaLength::Len256)?),
-        AlgoKind::Sha384 => Ok(create_sha2(ShaLength::Len384)?),
-        AlgoKind::Sha512 => Ok(create_sha2(ShaLength::Len512)?),
-        AlgoKind::Blake2b => {
-            // Set default length to 512 if None
-            let bits = length.unwrap_or(512);
-            if bits == 512 {
-                Ok(HashAlgorithm {
-                    kind: SizedAlgoKind::Blake2b(None),
-                    create_fn: Box::new(move || Box::new(Blake2b::new())),
-                })
-            } else {
-                Ok(HashAlgorithm {
-                    kind: SizedAlgoKind::Blake2b(Some(bits)),
-                    create_fn: Box::new(move || Box::new(Blake2b::with_output_bytes(bits))),
-                })
-            }
-        }
-        AlgoKind::Blake3 => Ok(HashAlgorithm {
-            kind: SizedAlgoKind::Blake3,
-            create_fn: Box::new(|| Box::new(Blake3::new())),
-        }),
-        AlgoKind::Sm3 => Ok(HashAlgorithm {
-            kind: SizedAlgoKind::Sm3,
-            create_fn: Box::new(|| Box::new(Sm3::new())),
-        }),
-        AlgoKind::Shake128 => {
-            let bits = length.ok_or(ChecksumError::LengthRequired(
-                algo.to_uppercase().to_string(),
-            ))?;
-            Ok(HashAlgorithm {
-                kind: SizedAlgoKind::Shake128(bits),
-                create_fn: Box::new(|| Box::new(Shake128::new())),
-            })
-        }
-        AlgoKind::Shake256 => {
-            let bits = length.ok_or(ChecksumError::LengthRequired(
-                algo.to_uppercase().to_string(),
-            ))?;
-            Ok(HashAlgorithm {
-                kind: SizedAlgoKind::Shake256(bits),
-                create_fn: Box::new(|| Box::new(Shake256::new())),
-            })
-        }
-        AlgoKind::Sha2 => {
-            let len = validate_sha2_sha3_length(algo, length)?;
-            create_sha2(len)
-        }
-        AlgoKind::Sha3 => {
-            let len = validate_sha2_sha3_length(algo, length)?;
-            create_sha3(len)
-        }
     }
 }
 
@@ -1136,7 +1034,7 @@ fn identify_algo_name_and_length(
 fn compute_and_check_digest_from_file(
     filename: &[u8],
     expected_checksum: &str,
-    mut algo: HashAlgorithm,
+    algo: SizedAlgoKind,
     opts: ChecksumOptions,
 ) -> Result<(), LineCheckError> {
     let (filename_to_check_unescaped, prefix) = unescape_filename(filename);
@@ -1147,15 +1045,9 @@ fn compute_and_check_digest_from_file(
     let mut file_reader = BufReader::new(file_to_check);
 
     // Read the file and calculate the checksum
-    let create_fn = &mut algo.create_fn;
-    let mut digest = create_fn();
-    let (calculated_checksum, _) = digest_reader(
-        &mut digest,
-        &mut file_reader,
-        opts.binary,
-        algo.kind.bitlen(),
-    )
-    .unwrap();
+    let mut digest = algo.create_digest();
+    let (calculated_checksum, _) =
+        digest_reader(&mut digest, &mut file_reader, opts.binary, algo.bitlen()).unwrap();
 
     // Do the checksum validation
     let checksum_correct = expected_checksum == calculated_checksum;
@@ -1196,7 +1088,7 @@ fn process_algo_based_line(
     let expected_checksum = get_expected_digest_as_hex_string(line_info, digest_char_length_hint)
         .ok_or(LineCheckError::ImproperlyFormatted)?;
 
-    let algo = detect_algo(algo_kind, algo_byte_len)?;
+    let algo = SizedAlgoKind::from_unsized(algo_kind, algo_byte_len)?;
 
     compute_and_check_digest_from_file(filename_to_check, &expected_checksum, algo, opts)
 }
@@ -1237,7 +1129,7 @@ fn process_non_algo_based_line(
         _ => (cli_algo_kind, cli_algo_length),
     };
 
-    let algo = detect_algo(algo_kind, algo_byte_len)?;
+    let algo = SizedAlgoKind::from_unsized(algo_kind, algo_byte_len)?;
 
     compute_and_check_digest_from_file(filename_to_check, &expected_checksum, algo, opts)
 }
@@ -1475,29 +1367,29 @@ pub fn digest_reader<T: Read>(
 }
 
 /// Calculates the length of the digest.
-pub fn calculate_blake2b_length(length: usize) -> UResult<Option<usize>> {
-    calculate_blake2b_length_str(length.to_string().as_str())
+pub fn calculate_blake2b_length(bit_length: usize) -> UResult<Option<usize>> {
+    calculate_blake2b_length_str(bit_length.to_string().as_str())
 }
 
 /// Calculates the length of the digest.
-pub fn calculate_blake2b_length_str(length: &str) -> UResult<Option<usize>> {
+pub fn calculate_blake2b_length_str(bit_length: &str) -> UResult<Option<usize>> {
     // Blake2b's length is parsed in an u64.
-    match length.parse::<usize>() {
+    match bit_length.parse::<usize>() {
         Ok(0) => Ok(None),
 
         // Error cases
         Ok(n) if n > 512 => {
-            show_error!("{}", ChecksumError::InvalidLength(length.into()));
+            show_error!("{}", ChecksumError::InvalidLength(bit_length.into()));
             Err(ChecksumError::LengthTooBigForBlake("BLAKE2b".into()).into())
         }
         Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
-            show_error!("{}", ChecksumError::InvalidLength(length.into()));
+            show_error!("{}", ChecksumError::InvalidLength(bit_length.into()));
             Err(ChecksumError::LengthTooBigForBlake("BLAKE2b".into()).into())
         }
-        Err(_) => Err(ChecksumError::InvalidLength(length.into()).into()),
+        Err(_) => Err(ChecksumError::InvalidLength(bit_length.into()).into()),
 
         Ok(n) if n % 8 != 0 => {
-            show_error!("{}", ChecksumError::InvalidLength(length.into()));
+            show_error!("{}", ChecksumError::InvalidLength(bit_length.into()));
             Err(ChecksumError::LengthNotMultipleOf8.into())
         }
 
@@ -1636,98 +1528,6 @@ mod tests {
         assert_eq!(calculate_blake2b_length(256).unwrap(), Some(32));
     }
 
-    // #[test]
-    // fn test_detect_algo() {
-    //     assert_eq!(
-    //         detect_algo(ALGORITHM_OPTIONS_SYSV, None).unwrap().name,
-    //         ALGORITHM_OPTIONS_SYSV
-    //     );
-    //     assert_eq!(
-    //         detect_algo(ALGORITHM_OPTIONS_BSD, None).unwrap().name,
-    //         ALGORITHM_OPTIONS_BSD
-    //     );
-    //     assert_eq!(
-    //         detect_algo(ALGORITHM_OPTIONS_CRC, None).unwrap().name,
-    //         ALGORITHM_OPTIONS_CRC
-    //     );
-    //     assert_eq!(
-    //         detect_algo(ALGORITHM_OPTIONS_MD5, None).unwrap().name,
-    //         ALGORITHM_OPTIONS_MD5
-    //     );
-    //     assert_eq!(
-    //         detect_algo(ALGORITHM_OPTIONS_SHA1, None).unwrap().name,
-    //         ALGORITHM_OPTIONS_SHA1
-    //     );
-    //     assert_eq!(
-    //         detect_algo(ALGORITHM_OPTIONS_SHA224, None).unwrap().name,
-    //         ALGORITHM_OPTIONS_SHA224.to_ascii_uppercase()
-    //     );
-    //     assert_eq!(
-    //         detect_algo(ALGORITHM_OPTIONS_SHA256, None).unwrap().name,
-    //         ALGORITHM_OPTIONS_SHA256.to_ascii_uppercase()
-    //     );
-    //     assert_eq!(
-    //         detect_algo(ALGORITHM_OPTIONS_SHA384, None).unwrap().name,
-    //         ALGORITHM_OPTIONS_SHA384.to_ascii_uppercase()
-    //     );
-    //     assert_eq!(
-    //         detect_algo(ALGORITHM_OPTIONS_SHA512, None).unwrap().name,
-    //         ALGORITHM_OPTIONS_SHA512.to_ascii_uppercase()
-    //     );
-    //     assert_eq!(
-    //         detect_algo(ALGORITHM_OPTIONS_BLAKE2B, None).unwrap().name,
-    //         ALGORITHM_OPTIONS_BLAKE2B
-    //     );
-    //     assert_eq!(
-    //         detect_algo(ALGORITHM_OPTIONS_BLAKE3, None).unwrap().name,
-    //         ALGORITHM_OPTIONS_BLAKE3
-    //     );
-    //     assert_eq!(
-    //         detect_algo(ALGORITHM_OPTIONS_SM3, None).unwrap().name,
-    //         ALGORITHM_OPTIONS_SM3
-    //     );
-    //     assert_eq!(
-    //         detect_algo(ALGORITHM_OPTIONS_SHAKE128, Some(128))
-    //             .unwrap()
-    //             .name,
-    //         ALGORITHM_OPTIONS_SHAKE128
-    //     );
-    //     assert_eq!(
-    //         detect_algo(ALGORITHM_OPTIONS_SHAKE256, Some(256))
-    //             .unwrap()
-    //             .name,
-    //         ALGORITHM_OPTIONS_SHAKE256
-    //     );
-
-    //     // Older versions of checksum used to detect the "sha3" prefix, but not
-    //     // anymore.
-    //     assert!(detect_algo("sha3_224", Some(224)).is_err());
-    //     assert!(detect_algo("sha3_256", Some(256)).is_err());
-    //     assert!(detect_algo("sha3_384", Some(384)).is_err());
-    //     assert!(detect_algo("sha3_512", Some(512)).is_err());
-
-    //     let sha3_224 = detect_algo("sha3", Some(224)).unwrap();
-    //     assert_eq!(sha3_224.name, "SHA3-224");
-    //     assert_eq!(sha3_224.bits, 224);
-    //     let sha3_256 = detect_algo("sha3", Some(256)).unwrap();
-    //     assert_eq!(sha3_256.name, "SHA3-256");
-    //     assert_eq!(sha3_256.bits, 256);
-    //     let sha3_384 = detect_algo("sha3", Some(384)).unwrap();
-    //     assert_eq!(sha3_384.name, "SHA3-384");
-    //     assert_eq!(sha3_384.bits, 384);
-    //     let sha3_512 = detect_algo("sha3", Some(512)).unwrap();
-    //     assert_eq!(sha3_512.name, "SHA3-512");
-    //     assert_eq!(sha3_512.bits, 512);
-
-    //     assert!(detect_algo("sha3", None).is_err());
-
-    //     assert_eq!(detect_algo("sha2", Some(224)).unwrap().name, "SHA224");
-    //     assert_eq!(detect_algo("sha2", Some(256)).unwrap().name, "SHA256");
-    //     assert_eq!(detect_algo("sha2", Some(384)).unwrap().name, "SHA384");
-    //     assert_eq!(detect_algo("sha2", Some(512)).unwrap().name, "SHA512");
-
-    //     assert!(detect_algo("sha2", None).is_err());
-    // }
     #[test]
     fn test_algo_based_parser() {
         #[allow(clippy::type_complexity)]
