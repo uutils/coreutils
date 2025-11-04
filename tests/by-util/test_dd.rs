@@ -1795,11 +1795,11 @@ fn test_no_dropped_writes() {
 
     let mut reader_command = Command::new(get_tests_binary());
     let child = reader_command
-        .args(&[
+        .args([
             "dd",
             "if=/dev/urandom",
-            &format!("bs={}", BLK_SIZE),
-            &format!("count={}", COUNT),
+            &format!("bs={BLK_SIZE}"),
+            &format!("count={COUNT}"),
         ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -1810,12 +1810,13 @@ fn test_no_dropped_writes() {
     let output = child.wait_with_output().unwrap();
     assert_eq!(output.stdout.len(), NUM_BYTES);
     assert!(
-        str::from_utf8(&output.stderr)
+        std::str::from_utf8(&output.stderr)
             .unwrap()
-            .contains(&format!("{} bytes", NUM_BYTES))
+            .contains(&format!("{NUM_BYTES} bytes"))
     );
 }
 
+#[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_oflag_direct_partial_block() {
     // Test for issue #9003: dd should handle partial blocks with oflag=direct
