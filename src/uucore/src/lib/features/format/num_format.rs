@@ -276,7 +276,7 @@ impl Formatter<&ExtendedBigDecimal> for Float {
                 // Pad non-finite numbers with spaces, not zeros.
                 if alignment == NumberAlignment::RightZero {
                     alignment = NumberAlignment::RightSpace;
-                };
+                }
                 format_float_non_finite(&abs, self.case)
             }
         };
@@ -519,7 +519,7 @@ fn format_float_shortest(
             output.push_str(first_digits);
             output.push('.');
             output.push_str(remaining_digits);
-        };
+        }
 
         if force_decimal == ForceDecimal::No {
             strip_fractional_zeroes_and_dot(&mut output);
@@ -636,7 +636,7 @@ fn format_float_hexadecimal(
         }
     } else {
         frac2 <<= wanted_bits - bits;
-    };
+    }
 
     // Convert "XXX" to "X.XX": that divides by 16^precision = 2^(4*precision), so add that to the exponent.
     let mut digits = frac2.to_str_radix(16);
