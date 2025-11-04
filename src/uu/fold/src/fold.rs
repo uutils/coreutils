@@ -298,9 +298,10 @@ fn emit_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
     }
     ctx.writer.write_all(&[NL])?;
 
+    let last_space = *ctx.last_space;
+
     if consume < ctx.output.len() {
-        let remainder = ctx.output.split_off(consume);
-        *ctx.output = remainder;
+        ctx.output.drain(..consume);
     } else {
         ctx.output.clear();
     }
@@ -308,10 +309,8 @@ fn emit_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
     *ctx.col_count = compute_col_count(ctx.output, ctx.mode);
 
     if ctx.spaces {
-        *ctx.last_space = ctx
-            .output
-            .iter()
-            .rposition(|b| b.is_ascii_whitespace() && *b != CR);
+        *ctx.last_space = last_space
+            .and_then(|idx| if idx + 1 <= consume { None } else { Some(idx - consume) });
     } else {
         *ctx.last_space = None;
     }
