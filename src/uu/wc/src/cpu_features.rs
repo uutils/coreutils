@@ -80,16 +80,7 @@ fn parse_disabled_features(tunables: &str) -> Vec<String> {
 
 fn detect_available_features() -> Vec<&'static str> {
     let mut features = Vec::new();
-    #[cfg(target_arch = "x86")]
-    {
-        if std::arch::is_x86_feature_detected!("avx2") {
-            features.push("AVX2");
-        }
-        if std::arch::is_x86_feature_detected!("sse2") {
-            features.push("SSE2");
-        }
-    }
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64")]
     {
         if std::arch::is_x86_feature_detected!("avx2") {
             features.push("AVX2");
