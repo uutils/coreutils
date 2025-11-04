@@ -23,6 +23,11 @@ use crate::error::TacError;
 
 use uucore::translate;
 
+#[cfg(unix)]
+use nix::fcntl::{FcntlArg, fcntl};
+#[cfg(unix)]
+use std::os::fd::AsFd;
+
 mod options {
     pub static BEFORE: &str = "before";
     pub static REGEX: &str = "regex";
@@ -237,6 +242,12 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
         let buf;
 
         let data: &[u8] = if filename == "-" {
+            if let Err(e) = ensure_stdin_open() {
+                let e: Box<dyn UError> = TacError::ReadError(OsString::from("stdin"), e).into();
+                show!(e);
+                continue;
+            }
+
             if let Some(mmap1) = try_mmap_stdin() {
                 mmap = mmap1;
                 &mmap
@@ -311,4 +322,16 @@ fn try_mmap_path(path: &Path) -> Option<Mmap> {
     let mmap = unsafe { Mmap::map(&file).ok()? };
 
     Some(mmap)
+}
+
+fn ensure_stdin_open() -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        let stdin_handle = stdin();
+        let borrowed_fd = stdin_handle.as_fd();
+        if let Err(errno) = fcntl(borrowed_fd, FcntlArg::F_GETFL) {
+            return Err(std::io::Error::from_raw_os_error(errno as i32));
+        }
+    }
+    Ok(())
 }
