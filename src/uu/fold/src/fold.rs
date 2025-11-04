@@ -309,8 +309,13 @@ fn emit_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
     *ctx.col_count = compute_col_count(ctx.output, ctx.mode);
 
     if ctx.spaces {
-        *ctx.last_space = last_space
-            .and_then(|idx| if idx + 1 <= consume { None } else { Some(idx - consume) });
+        *ctx.last_space = last_space.and_then(|idx| {
+            if idx + 1 <= consume {
+                None
+            } else {
+                Some(idx - consume)
+            }
+        });
     } else {
         *ctx.last_space = None;
     }
