@@ -130,7 +130,7 @@ fn print_legacy_checksum(
             print!("{sum} {size}");
         }
         _ => unreachable!("Not a legacy algorithm"),
-    };
+    }
 
     // Print the filename after a space if not stdin
     if filename != "-" {
