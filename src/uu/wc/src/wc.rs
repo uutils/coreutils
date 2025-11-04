@@ -828,17 +828,7 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
 
     if settings.debug {
         let policy = cpu_features::simd_policy();
-        if !policy.env_allows_simd() {
-            let disabled = policy.disabled_features();
-            if disabled.is_empty() {
-                eprintln!("wc: debug: hardware support disabled by environment");
-            } else {
-                eprintln!(
-                    "wc: debug: hardware support disabled by GLIBC_TUNABLES ({})",
-                    disabled.join(", ")
-                );
-            }
-        } else {
+        if policy.env_allows_simd() {
             let available = policy.available_features();
             if available.is_empty() {
                 eprintln!("wc: debug: hardware support unavailable on this CPU");
@@ -846,6 +836,16 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
                 eprintln!(
                     "wc: debug: using hardware support (features: {})",
                     available.join(", ")
+                );
+            }
+        } else {
+            let disabled = policy.disabled_features();
+            if disabled.is_empty() {
+                eprintln!("wc: debug: hardware support disabled by environment");
+            } else {
+                eprintln!(
+                    "wc: debug: hardware support disabled by GLIBC_TUNABLES ({})",
+                    disabled.join(", ")
                 );
             }
         }
