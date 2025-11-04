@@ -7,6 +7,7 @@
 
 mod count_fast;
 mod countable;
+mod cpu_features;
 mod utf8;
 mod word_count;
 
@@ -49,6 +50,7 @@ struct Settings<'a> {
     show_lines: bool,
     show_words: bool,
     show_max_line_length: bool,
+    debug: bool,
     files0_from: Option<Input<'a>>,
     total_when: TotalWhen,
 }
@@ -62,6 +64,7 @@ impl Default for Settings<'_> {
             show_lines: true,
             show_words: true,
             show_max_line_length: false,
+            debug: false,
             files0_from: None,
             total_when: TotalWhen::default(),
         }
@@ -85,6 +88,7 @@ impl<'a> Settings<'a> {
             show_lines: matches.get_flag(options::LINES),
             show_words: matches.get_flag(options::WORDS),
             show_max_line_length: matches.get_flag(options::MAX_LINE_LENGTH),
+            debug: matches.get_flag(options::DEBUG),
             files0_from,
             total_when,
         };
@@ -95,6 +99,7 @@ impl<'a> Settings<'a> {
             Self {
                 files0_from: settings.files0_from,
                 total_when,
+                debug: settings.debug,
                 ..Default::default()
             }
         }
@@ -122,6 +127,7 @@ mod options {
     pub static MAX_LINE_LENGTH: &str = "max-line-length";
     pub static TOTAL: &str = "total";
     pub static WORDS: &str = "words";
+    pub static DEBUG: &str = "debug";
 }
 static ARG_FILES: &str = "files";
 static STDIN_REPR: &str = "-";
@@ -444,6 +450,12 @@ pub fn uu_app() -> Command {
                 .long(options::WORDS)
                 .help(translate!("wc-help-words"))
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::DEBUG)
+                .long(options::DEBUG)
+                .action(ArgAction::SetTrue)
+                .hide(true),
         )
         .arg(
             Arg::new(ARG_FILES)
@@ -813,6 +825,31 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
         TotalWhen::Only => (1, false),
         _ => (compute_number_width(inputs, settings), true),
     };
+
+    if settings.debug {
+        let policy = cpu_features::simd_policy();
+        if !policy.env_allows_simd() {
+            let disabled = policy.disabled_features();
+            if disabled.is_empty() {
+                eprintln!("wc: debug: hardware support disabled by environment");
+            } else {
+                eprintln!(
+                    "wc: debug: hardware support disabled by GLIBC_TUNABLES ({})",
+                    disabled.join(", ")
+                );
+            }
+        } else {
+            let available = policy.available_features();
+            if available.is_empty() {
+                eprintln!("wc: debug: hardware support unavailable on this CPU");
+            } else {
+                eprintln!(
+                    "wc: debug: using hardware support (features: {})",
+                    available.join(", ")
+                );
+            }
+        }
+    }
 
     for maybe_input in inputs.try_iter(settings)? {
         num_inputs += 1;
