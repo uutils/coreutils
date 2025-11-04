@@ -3336,11 +3336,13 @@ name = "uu_dd"
 version = "0.3.0"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "gcd",
  "libc",
  "nix",
  "signal-hook",
+ "tempfile",
  "thiserror 2.0.17",
  "uucore",
 ]
