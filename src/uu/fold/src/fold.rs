@@ -323,70 +323,103 @@ fn emit_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
 }
 
 fn process_ascii_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) -> UResult<()> {
-    for &byte in line {
-        if byte == NL {
-            *ctx.last_space = None;
-            emit_output(ctx)?;
-            break;
-        }
+    let mut idx = 0;
+    let len = line.len();
 
-        if *ctx.col_count >= ctx.width {
-            emit_output(ctx)?;
-        }
-
-        if byte == CR {
-            ctx.output.push(byte);
-            *ctx.col_count = 0;
-            continue;
-        }
-
-        if byte == 0x08 {
-            ctx.output.push(byte);
-            *ctx.col_count = ctx.col_count.saturating_sub(1);
-            continue;
-        }
-
-        if ctx.mode == WidthMode::Columns && byte == TAB {
-            loop {
-                let next_stop = next_tab_stop(*ctx.col_count);
-                if next_stop > ctx.width && !ctx.output.is_empty() {
-                    emit_output(ctx)?;
-                    continue;
-                }
-                *ctx.col_count = next_stop;
+    while idx < len {
+        match line[idx] {
+            NL => {
+                *ctx.last_space = None;
+                emit_output(ctx)?;
                 break;
             }
-            if ctx.spaces {
-                *ctx.last_space = Some(ctx.output.len());
-            } else {
-                *ctx.last_space = None;
+            CR => {
+                ctx.output.push(CR);
+                *ctx.col_count = 0;
+                idx += 1;
             }
-            ctx.output.push(byte);
+            0x08 => {
+                ctx.output.push(0x08);
+                *ctx.col_count = ctx.col_count.saturating_sub(1);
+                idx += 1;
+            }
+            TAB if ctx.mode == WidthMode::Columns => {
+                loop {
+                    let next_stop = next_tab_stop(*ctx.col_count);
+                    if next_stop > ctx.width && !ctx.output.is_empty() {
+                        emit_output(ctx)?;
+                        continue;
+                    }
+                    *ctx.col_count = next_stop;
+                    break;
+                }
+                if ctx.spaces {
+                    *ctx.last_space = Some(ctx.output.len());
+                } else {
+                    *ctx.last_space = None;
+                }
+                ctx.output.push(TAB);
+                idx += 1;
+            }
+            0x00..=0x07 | 0x0B..=0x0C | 0x0E..=0x1F | 0x7F => {
+                ctx.output.push(line[idx]);
+                if ctx.spaces && line[idx].is_ascii_whitespace() && line[idx] != CR {
+                    *ctx.last_space = Some(ctx.output.len() - 1);
+                } else if !ctx.spaces {
+                    *ctx.last_space = None;
+                }
+                idx += 1;
+            }
+            _ => {
+                let start = idx;
+                while idx < len
+                    && !matches!(
+                        line[idx],
+                        NL | CR | TAB | 0x08 | 0x00..=0x07 | 0x0B..=0x0C | 0x0E..=0x1F | 0x7F
+                    )
+                {
+                    idx += 1;
+                }
+                push_ascii_segment(&line[start..idx], ctx)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn push_ascii_segment<W: Write>(segment: &[u8], ctx: &mut FoldContext<'_, W>) -> UResult<()> {
+    if segment.is_empty() {
+        return Ok(());
+    }
+
+    let mut remaining = segment;
+
+    while !remaining.is_empty() {
+        if *ctx.col_count >= ctx.width {
+            emit_output(ctx)?;
             continue;
         }
 
-        let added = match ctx.mode {
-            WidthMode::Columns => match byte {
-                0x00..=0x08 | 0x0B..=0x0C | 0x0E..=0x1F | 0x7F => 0,
-                _ => 1,
-            },
-            WidthMode::Characters => 1,
-        };
+        let available = ctx.width - *ctx.col_count;
+        let take = remaining.len().min(available);
+        let base_len = ctx.output.len();
 
-        if ctx.mode == WidthMode::Columns
-            && added > 0
-            && *ctx.col_count + added > ctx.width
-            && !ctx.output.is_empty()
-        {
-            emit_output(ctx)?;
+        ctx.output.extend_from_slice(&remaining[..take]);
+        *ctx.col_count += take;
+
+        if ctx.spaces {
+            if let Some(pos) = remaining[..take]
+                .iter()
+                .rposition(|b| b.is_ascii_whitespace() && *b != CR)
+            {
+                *ctx.last_space = Some(base_len + pos);
+            }
+        } else {
+            *ctx.last_space = None;
         }
 
-        if ctx.spaces && byte.is_ascii_whitespace() && byte != CR {
-            *ctx.last_space = Some(ctx.output.len());
-        }
-
-        ctx.output.push(byte);
-        *ctx.col_count = ctx.col_count.saturating_add(added);
+        remaining = &remaining[take..];
     }
 
     Ok(())
