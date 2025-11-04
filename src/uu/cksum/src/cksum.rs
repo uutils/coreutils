@@ -13,9 +13,9 @@ use std::io::{BufReader, Read, Write, stdin, stdout};
 use std::iter;
 use std::path::Path;
 use uucore::checksum::{
-    AlgoKind, ChecksumError, ChecksumOptions, ChecksumVerbose, HashAlgorithm, SUPPORTED_ALGORITHMS,
-    SizedAlgoKind, calculate_blake2b_length_str, detect_algo, digest_reader,
-    perform_checksum_validation, sanitize_sha2_sha3_length_str,
+    AlgoKind, ChecksumError, ChecksumOptions, ChecksumVerbose, SUPPORTED_ALGORITHMS, SizedAlgoKind,
+    calculate_blake2b_length_str, digest_reader, perform_checksum_validation,
+    sanitize_sha2_sha3_length_str,
 };
 use uucore::translate;
 
@@ -323,7 +323,7 @@ fn handle_tag_text_binary_flags<S: AsRef<OsStr>>(
 
 /// Use already-processed arguments to decide the output format.
 fn figure_out_output_format(
-    algo: &HashAlgorithm,
+    algo: SizedAlgoKind,
     tag: bool,
     binary: bool,
     raw: bool,
@@ -335,7 +335,7 @@ fn figure_out_output_format(
     }
 
     // Then, if the algo is legacy, takes precedence over the rest
-    if algo.kind.is_legacy() {
+    if algo.is_legacy() {
         return OutputFormat::Legacy;
     }
 
@@ -445,11 +445,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let (tag, binary) = handle_tag_text_binary_flags(std::env::args_os())?;
 
-    let algo = detect_algo(algo_kind, length)?;
+    let algo = SizedAlgoKind::from_unsized(algo_kind, length)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
     let output_format = figure_out_output_format(
-        &algo,
+        algo,
         tag,
         binary,
         matches.get_flag(options::RAW),
@@ -457,8 +457,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     );
 
     let opts = Options {
-        algo_kind: algo.kind,
-        digest: (algo.create_fn)(),
+        algo_kind: algo,
+        digest: algo.create_digest(),
         output_format,
         line_ending,
     };

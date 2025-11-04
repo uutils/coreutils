@@ -17,7 +17,6 @@ use std::num::ParseIntError;
 use std::path::Path;
 use uucore::checksum::ChecksumVerbose;
 use uucore::checksum::calculate_blake2b_length;
-use uucore::checksum::detect_algo;
 use uucore::checksum::digest_reader;
 use uucore::checksum::escape_filename;
 use uucore::checksum::perform_checksum_validation;
@@ -242,11 +241,11 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         .unwrap_or(&false);
     let zero = matches.get_flag("zero");
 
-    let algo = detect_algo(algo_kind, length)?;
+    let algo = SizedAlgoKind::from_unsized(algo_kind, length)?;
 
     let opts = Options {
-        algo: algo.kind,
-        digest: (algo.create_fn)(),
+        algo,
+        digest: algo.create_digest(),
         binary,
         binary_name: &binary_name,
         tag: matches.get_flag("tag"),
