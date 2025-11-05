@@ -1444,3 +1444,19 @@ fn test_date_locale_fr_french() {
         "Output should include timezone information, got: {stdout}"
     );
 }
+
+#[test]
+fn test_date_31st_parsing_issue_9138() {
+    // Regression test for issue #9138: parsing dates on the 31st of any month fails
+    // due to jiff's Offset::Display producing ±HHMM instead of RFC 3339 ±HH:MM
+    let scene = TestScenario::new(util_name!());
+
+    // Test with a date on the 31st that would trigger the offset formatting issue
+    scene
+        .ucmd()
+        .env("TZ", "America/New_York")
+        .arg("-d")
+        .arg("2024-01-31 12:00:00")
+        .succeeds()
+        .stdout_contains("Wed Jan 31 12:00:00 EST 2024");
+}
