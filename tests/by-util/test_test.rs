@@ -1017,3 +1017,78 @@ fn test_string_lt_gt_operator() {
         .fails_with_code(1)
         .no_output();
 }
+
+#[test]
+#[cfg(unix)]
+fn test_permission_with_supplementary_group() {
+    // Test that permission checks (-r, -w, -x) correctly consider supplementary groups,
+    // not just the primary group (egid). See #9147
+    //
+    // This test requires:
+    // - Running as a non-root user
+    // - User must have at least one supplementary group
+    // - sudo access to create test files/dirs with specific ownership
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+
+    // Must be run as non-root user (otherwise owner permissions would apply)
+    if scene.cmd("whoami").run().stdout_str().trim() == "root" {
+        return;
+    }
+
+    // Get user's supplementary groups
+    let groups_output = match Command::new("id").arg("-nG").output() {
+        Ok(output) => output,
+        Err(_) => return,
+    };
+
+    let groups_str = String::from_utf8_lossy(&groups_output.stdout);
+    let groups: Vec<&str> = groups_str.trim().split_whitespace().collect();
+
+    // Need at least 2 groups (primary + at least one supplementary)
+    if groups.len() < 2 {
+        return;
+    }
+
+    let supplementary_group = groups[1];
+    let test_path = scene.fixtures.plus("test_supp_group_dir");
+    let test_path_str = test_path.to_str().unwrap();
+
+    // Try to create directory with root owner and supplementary group, mode 750
+    let install_result = scene
+        .cmd("sudo")
+        .args(&[
+            "-E",
+            "--non-interactive",
+            "install",
+            "-d",
+            "-m",
+            "750",
+            "-o",
+            "root",
+            "-g",
+            supplementary_group,
+            test_path_str,
+        ])
+        .run();
+
+    if !install_result.succeeded() {
+        return;
+    }
+
+    // Test that -r correctly detects directory as readable (via supplementary group)
+    scene.ucmd().args(&["-r", test_path_str]).succeeds();
+
+    // Test that -x correctly detects directory as executable (via supplementary group)
+    scene.ucmd().args(&["-x", test_path_str]).succeeds();
+
+    // Test that -w correctly detects directory as NOT writable (group has r-x, not w)
+    scene.ucmd().args(&["!", "-w", test_path_str]).succeeds();
+
+    // Clean up
+    let _ = scene
+        .cmd("sudo")
+        .args(&["-E", "--non-interactive", "rm", "-rf", test_path_str])
+        .run();
+}
