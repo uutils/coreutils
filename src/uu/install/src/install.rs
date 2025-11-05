@@ -507,8 +507,11 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                 }
             }
 
-            if mode::chmod(path, b.mode()).is_err() {
-                // Error messages are printed by the mode::chmod function!
+            if let Err(e) = mode::chmod(path, b.mode()) {
+                show_error!(
+                    "{}",
+                    translate!("install-error-chmod-failed", "error" => e.to_string())
+                );
                 uucore::error::set_exit_code(1);
                 continue;
             }
@@ -1038,14 +1041,27 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
-    // Silent the warning as we want to the error message
-    #[allow(clippy::question_mark)]
-    if mode::chmod(to, b.mode()).is_err() {
+    if let Err(e) = mode::chmod(to, b.mode()) {
+        show_error!(
+            "{}",
+            translate!("install-error-chmod-failed", "error" => e.to_string())
+        );
         return Err(InstallError::ChmodFailed(to.to_path_buf()).into());
     }
 
     if !b.unprivileged {
         chown_optional_user_group(to, b)?;
+    }
+
+    // On Unix systems, chown strips the setuid/setgid/sticky bits for security reasons.
+    // Re-apply chmod after chown to restore these bits.
+    #[cfg(unix)]
+    if let Err(e) = mode::chmod(to, b.mode()) {
+        show_error!(
+            "{}",
+            translate!("install-error-chmod-failed", "error" => e.to_string())
+        );
+        return Err(InstallError::ChmodFailed(to.to_path_buf()).into());
     }
 
     Ok(())
