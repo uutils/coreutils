@@ -40,6 +40,8 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
+      with:
+        disable_annotations: true
     - name: Prepare, build and test
       uses: vmactions/freebsd-vm@v1.2.5
       with:
@@ -134,6 +136,8 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
+      with:
+        disable_annotations: true
     - name: Prepare, build and test
       uses: vmactions/freebsd-vm@v1.2.5
       with:
