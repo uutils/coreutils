@@ -62,6 +62,8 @@ fn gen_coreutils_app<T: Args>(util_map: &UtilityMap<T>) -> clap::Command {
 
 /// Generate the manpage for the utility in the first parameter
 fn gen_manpage<T: Args>(args: impl Iterator<Item = OsString>, util_map: &UtilityMap<T>) -> ! {
+    uucore::set_utility_is_second_arg();
+
     let all_utilities = validation::get_all_utilities(util_map);
 
     let matches = Command::new("manpage")
