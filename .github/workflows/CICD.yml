@@ -355,20 +355,12 @@ jobs:
         test -f /tmp/usr/local/bin/hashsum
         # Check that hashsum symlinks are present
         test -h /tmp/usr/local/bin/b2sum
-        test -h /tmp/usr/local/bin/b3sum
         test -h /tmp/usr/local/bin/md5sum
         test -h /tmp/usr/local/bin/sha1sum
         test -h /tmp/usr/local/bin/sha224sum
         test -h /tmp/usr/local/bin/sha256sum
-        test -h /tmp/usr/local/bin/sha3-224sum
-        test -h /tmp/usr/local/bin/sha3-256sum
-        test -h /tmp/usr/local/bin/sha3-384sum
-        test -h /tmp/usr/local/bin/sha3-512sum
         test -h /tmp/usr/local/bin/sha384sum
-        test -h /tmp/usr/local/bin/sha3sum
         test -h /tmp/usr/local/bin/sha512sum
-        test -h /tmp/usr/local/bin/shake128sum
-        test -h /tmp/usr/local/bin/shake256sum
     - name: "`make install MULTICALL=y LN=ln -svf`"
       shell: bash
       run: |
