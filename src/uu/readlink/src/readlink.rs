@@ -40,7 +40,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         || matches.get_flag(OPT_CANONICALIZE_EXISTING)
         || matches.get_flag(OPT_CANONICALIZE_MISSING)
     {
-        ResolveMode::Logical
+        ResolveMode::Physical
     } else {
         ResolveMode::None
     };
