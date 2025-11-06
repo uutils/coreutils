@@ -2445,7 +2445,11 @@ fn test_install_special_mode_bits_setuid() {
     let permissions = at.metadata(dest).permissions();
     let mode = PermissionsExt::mode(&permissions);
     // Check that setuid bit is set
-    assert_eq!(mode & (S_ISUID as u32), S_ISUID as u32, "setuid bit should be set");
+    assert_eq!(
+        mode & (S_ISUID as u32),
+        S_ISUID as u32,
+        "setuid bit should be set"
+    );
     // Check that regular permissions are correct
     assert_eq!(mode & 0o0777, 0o0755, "regular permissions should be 755");
 }
@@ -2471,7 +2475,11 @@ fn test_install_special_mode_bits_setgid() {
     let permissions = at.metadata(dest).permissions();
     let mode = PermissionsExt::mode(&permissions);
     // Check that setgid bit is set
-    assert_eq!(mode & (S_ISGID as u32), S_ISGID as u32, "setgid bit should be set");
+    assert_eq!(
+        mode & (S_ISGID as u32),
+        S_ISGID as u32,
+        "setgid bit should be set"
+    );
     // Check that regular permissions are correct
     assert_eq!(mode & 0o0777, 0o0755, "regular permissions should be 755");
 }
@@ -2560,13 +2568,17 @@ fn test_install_special_mode_bits_with_chown() {
 fn test_install_special_mode_bits_combinations() {
     // Test various combinations of special bits
     let test_cases = [
-    (0o4755u32, S_ISUID as u32, "setuid only"),
-    (0o2755u32, S_ISGID as u32, "setgid only"),
-    (0o1755u32, S_ISVTX as u32, "sticky only"),
-    (0o6755u32, (S_ISUID | S_ISGID) as u32, "setuid + setgid"),
-    (0o5755u32, (S_ISUID | S_ISVTX) as u32, "setuid + sticky"),
-    (0o3755u32, (S_ISGID | S_ISVTX) as u32, "setgid + sticky"),
-    (0o7755u32, (S_ISUID | S_ISGID | S_ISVTX) as u32, "all special bits"),
+        (0o4755u32, S_ISUID as u32, "setuid only"),
+        (0o2755u32, S_ISGID as u32, "setgid only"),
+        (0o1755u32, S_ISVTX as u32, "sticky only"),
+        (0o6755u32, (S_ISUID | S_ISGID) as u32, "setuid + setgid"),
+        (0o5755u32, (S_ISUID | S_ISVTX) as u32, "setuid + sticky"),
+        (0o3755u32, (S_ISGID | S_ISVTX) as u32, "setgid + sticky"),
+        (
+            0o7755u32,
+            (S_ISUID | S_ISGID | S_ISVTX) as u32,
+            "all special bits",
+        ),
     ];
 
     for (mode, expected_bits, description) in test_cases {
