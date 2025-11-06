@@ -494,12 +494,12 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
             }
 
             if let Err(e) = mode::chmod(path, b.mode()) {
-                show_error!(
-                    "{}",
-                    translate!("install-error-chmod-failed", "error" => e.to_string())
-                );
-                uucore::error::set_exit_code(1);
-                continue;
+                    show_error!(
+                "{}",
+            translate!("install-error-chmod-failed", "error" => e.to_string())
+            );
+            uucore::error::set_exit_code(1);
+                    continue;
             }
 
             show_if_err!(chown_optional_user_group(path, b));
@@ -921,11 +921,11 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
 ///
 fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
     if let Err(e) = mode::chmod(to, b.mode()) {
-        show_error!(
-            "{}",
-            translate!("install-error-chmod-failed", "error" => e.to_string())
-        );
-        return Err(InstallError::ChmodFailed(to.to_path_buf()).into());
+show_error!(
+    "{}",
+translate!("install-error-chmod-failed", "error" => e.to_string())
+);
+return Err(InstallError::ChmodFailed(to.to_path_buf()).into());
     }
 
     chown_optional_user_group(to, b)?;
@@ -934,11 +934,11 @@ fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
     // Re-apply chmod after chown to restore these bits.
     #[cfg(unix)]
     if let Err(e) = mode::chmod(to, b.mode()) {
-        show_error!(
-            "{}",
-            translate!("install-error-chmod-failed", "error" => e.to_string())
-        );
-        return Err(InstallError::ChmodFailed(to.to_path_buf()).into());
+show_error!(
+    "{}",
+translate!("install-error-chmod-failed", "error" => e.to_string())
+);
+return Err(InstallError::ChmodFailed(to.to_path_buf()).into());
     }
 
     Ok(())

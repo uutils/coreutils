@@ -26,18 +26,18 @@ pub fn parse(mode_string: &str, considering_dir: bool, umask: u32) -> Result<u32
 ///
 #[cfg(any(unix, target_os = "redox"))]
 pub fn chmod(path: &Path, mode: u32) -> Result<(), std::io::Error> {
-    use std::ffi::CString;
-    use uucore::libc;
+use std::ffi::CString;
+use uucore::libc;
 
     let c_path = CString::new(path.as_os_str().as_bytes())
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
 
     // Use libc::chmod directly to properly handle all mode bits including special bits
-    if unsafe { libc::chmod(c_path.as_ptr(), mode as libc::mode_t) } != 0 {
-        Err(std::io::Error::last_os_error())
-    } else {
-        Ok(())
-    }
+if unsafe { libc::chmod(c_path.as_ptr(), mode as libc::mode_t) } != 0 {
+    Err(std::io::Error::last_os_error())
+} else {
+    Ok(())
+}
 }
 
 /// chmod a file or directory on Windows.
@@ -46,6 +46,6 @@ pub fn chmod(path: &Path, mode: u32) -> Result<(), std::io::Error> {
 ///
 #[cfg(windows)]
 pub fn chmod(path: &Path, mode: u32) -> Result<(), std::io::Error> {
-    // chmod on Windows only sets the readonly flag, which isn't even honored on directories
-    Ok(())
+// chmod on Windows only sets the readonly flag, which isn't even honored on directories
+Ok(())
 }

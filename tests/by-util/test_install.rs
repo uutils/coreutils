@@ -25,25 +25,6 @@ use uutests::util_name;
 #[cfg(unix)]
 use libc::{S_ISGID, S_ISUID, S_ISVTX};
 
-#[cfg(unix)]
-fn can_set_special_bits() -> bool {
-    use std::fs;
-    use std::os::unix::fs::PermissionsExt;
-
-    let test_file = std::env::temp_dir().join("test_special_bits_permission");
-    fs::write(&test_file, "test").ok();
-    let result = fs::set_permissions(&test_file, fs::Permissions::from_mode(0o7000));
-    let special_result = fs::set_permissions(&test_file, fs::Permissions::from_mode(0o4700));
-    let _ = fs::remove_file(&test_file);
-
-    result.is_ok() && special_result.is_ok()
-}
-
-#[cfg(not(unix))]
-fn can_set_special_bits() -> bool {
-    false
-}
-
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
@@ -2444,51 +2425,110 @@ fn test_install_non_utf8_paths() {
 }
 
 #[test]
-#[allow(clippy::unnecessary_cast, clippy::useless_conversion)]
-fn test_install_special_mode_bits() {
-    // Test basic special bits (setuid, setgid) that work without elevated permissions
+fn test_install_special_mode_bits_setuid() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
+    let source = "source_file";
+    let dest = "dest_file";
 
-    // Test setuid (4755)
-    at.touch("source_setuid");
+    at.touch(source);
+
     scene
         .ucmd()
         .arg("-m")
         .arg("4755")
-        .arg("source_setuid")
-        .arg("dest_setuid")
+        .arg(source)
+        .arg(dest)
         .succeeds();
-    assert!(at.file_exists("dest_setuid"));
-    let mode = PermissionsExt::mode(&at.metadata("dest_setuid").permissions());
-    assert_eq!(
-        mode & (S_ISUID as u32),
-        (S_ISUID as u32),
-        "setuid bit should be set"
-    );
-    assert_eq!(mode & 0o0777, 0o0755, "regular permissions should be 755");
 
-    // Test setgid (2755)
-    at.touch("source_setgid");
-    scene
-        .ucmd()
-        .arg("-m")
-        .arg("2755")
-        .arg("source_setgid")
-        .arg("dest_setgid")
-        .succeeds();
-    assert!(at.file_exists("dest_setgid"));
-    let mode = PermissionsExt::mode(&at.metadata("dest_setgid").permissions());
-    assert_eq!(
-        mode & (S_ISGID as u32),
-        (S_ISGID as u32),
-        "setgid bit should be set"
-    );
+    assert!(at.file_exists(dest));
+    let permissions = at.metadata(dest).permissions();
+    let mode = PermissionsExt::mode(&permissions);
+    // Check that setuid bit is set
+    assert_eq!(mode & (S_ISUID as u32), S_ISUID as u32, "setuid bit should be set");
+    // Check that regular permissions are correct
     assert_eq!(mode & 0o0777, 0o0755, "regular permissions should be 755");
 }
 
 #[test]
-#[allow(clippy::unnecessary_cast, clippy::useless_conversion)]
+fn test_install_special_mode_bits_setgid() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let source = "source_file";
+    let dest = "dest_file";
+
+    at.touch(source);
+
+    scene
+        .ucmd()
+        .arg("-m")
+        .arg("2755")
+        .arg(source)
+        .arg(dest)
+        .succeeds();
+
+    assert!(at.file_exists(dest));
+    let permissions = at.metadata(dest).permissions();
+    let mode = PermissionsExt::mode(&permissions);
+    // Check that setgid bit is set
+    assert_eq!(mode & (S_ISGID as u32), S_ISGID as u32, "setgid bit should be set");
+    // Check that regular permissions are correct
+    assert_eq!(mode & 0o0777, 0o0755, "regular permissions should be 755");
+}
+
+#[test]
+fn test_install_special_mode_bits_sticky() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let source = "source_file";
+    let dest = "dest_file";
+
+    at.touch(source);
+
+    scene
+        .ucmd()
+        .arg("-m")
+        .arg("1755")
+        .arg(source)
+        .arg(dest)
+        .succeeds();
+
+    assert!(at.file_exists(dest));
+    let permissions = at.metadata(dest).permissions();
+    let mode = PermissionsExt::mode(&permissions);
+    // Check that sticky bit (1000) is set
+    assert_eq!(mode & 0o1000, 0o1000, "sticky bit should be set");
+    // Check that regular permissions are correct
+    assert_eq!(mode & 0o0777, 0o0755, "regular permissions should be 755");
+}
+
+#[test]
+fn test_install_special_mode_bits_all() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let source = "source_file";
+    let dest = "dest_file";
+
+    at.touch(source);
+
+    scene
+        .ucmd()
+        .arg("-m")
+        .arg("7755")
+        .arg(source)
+        .arg(dest)
+        .succeeds();
+
+    assert!(at.file_exists(dest));
+    let permissions = at.metadata(dest).permissions();
+    let mode = PermissionsExt::mode(&permissions);
+    // Check that all special bits are set
+    assert_eq!(mode & 0o7000, 0o7000, "all special bits should be set");
+    // Check that regular permissions are correct
+    assert_eq!(mode & 0o0777, 0o0755, "regular permissions should be 755");
+}
+
+#[test]
 fn test_install_special_mode_bits_with_chown() {
     // Test that special bits are preserved when chown is called
     // This is the core fix for issue #9134
@@ -2508,7 +2548,7 @@ fn test_install_special_mode_bits_with_chown() {
         // Check that setuid bit is preserved after chown
         assert_eq!(
             mode & (S_ISUID as u32),
-            (S_ISUID as u32),
+            S_ISUID as u32,
             "setuid bit should be preserved after chown (issue #9134)"
         );
     } else {
@@ -2517,68 +2557,47 @@ fn test_install_special_mode_bits_with_chown() {
 }
 
 #[test]
-#[allow(clippy::unnecessary_cast, clippy::useless_conversion)]
 fn test_install_special_mode_bits_combinations() {
-    if !can_set_special_bits() {
-        println!("Test skipped; insufficient permissions to set special bits");
-        return;
-    }
-
-    // Reuse single TestScenario for all test cases to reduce memory overhead
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
     // Test various combinations of special bits
     let test_cases = [
-        (0o4755u32, (S_ISUID as u32), "setuid only"),
-        (0o2755u32, (S_ISGID as u32), "setgid only"),
-        (0o1755u32, (S_ISVTX as u32), "sticky only"),
-        (
-            0o6755u32,
-            (S_ISUID as u32) | (S_ISGID as u32),
-            "setuid + setgid",
-        ),
-        (
-            0o5755u32,
-            (S_ISUID as u32) | (S_ISVTX as u32),
-            "setuid + sticky",
-        ),
-        (
-            0o3755u32,
-            (S_ISGID as u32) | (S_ISVTX as u32),
-            "setgid + sticky",
-        ),
-        (
-            0o7755u32,
-            (S_ISUID as u32) | (S_ISGID as u32) | (S_ISVTX as u32),
-            "all special bits",
-        ),
+    (0o4755u32, S_ISUID as u32, "setuid only"),
+    (0o2755u32, S_ISGID as u32, "setgid only"),
+    (0o1755u32, S_ISVTX as u32, "sticky only"),
+    (0o6755u32, (S_ISUID | S_ISGID) as u32, "setuid + setgid"),
+    (0o5755u32, (S_ISUID | S_ISVTX) as u32, "setuid + sticky"),
+    (0o3755u32, (S_ISGID | S_ISVTX) as u32, "setgid + sticky"),
+    (0o7755u32, (S_ISUID | S_ISGID | S_ISVTX) as u32, "all special bits"),
     ];
 
     for (mode, expected_bits, description) in test_cases {
-        let source = format!("source_{mode:04o}");
-        let dest = format!("dest_{mode:04o}");
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let source = format!("source_{:04o}", mode);
+        let dest = format!("dest_{:04o}", mode);
 
         at.touch(&source);
 
         scene
             .ucmd()
             .arg("-m")
-            .arg(format!("{mode:o}"))
+            .arg(format!("{:o}", mode))
             .arg(&source)
             .arg(&dest)
             .succeeds();
 
         assert!(
             at.file_exists(&dest),
-            "Failed to create dest for {description}"
+            "Failed to create dest for {}",
+            description
         );
         let permissions = at.metadata(&dest).permissions();
         let actual_mode = PermissionsExt::mode(&permissions);
         assert_eq!(
             actual_mode & 0o7000,
             expected_bits,
-            "Special bits mismatch for {description}: expected 0o{expected_bits:04o}, got 0o{:04o}",
+            "Special bits mismatch for {}: expected 0o{:04o}, got 0o{:04o}",
+            description,
+            expected_bits,
             actual_mode & 0o7000
         );
     }
