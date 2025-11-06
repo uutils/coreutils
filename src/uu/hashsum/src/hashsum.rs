@@ -5,47 +5,26 @@
 
 // spell-checker:ignore (ToDO) algo, algoname, bitlen, regexes, nread, nonames
 
-use clap::ArgAction;
-use clap::builder::ValueParser;
-use clap::value_parser;
-use clap::{Arg, ArgMatches, Command};
 use std::ffi::{OsStr, OsString};
-use std::fs::File;
-use std::io::{BufReader, Read, stdin};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
 
+use clap::builder::ValueParser;
+use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
+
+use uucore::checksum::compute::{
+    ChecksumComputeOptions, figure_out_output_format, perform_checksum_computation,
+};
 use uucore::checksum::validate::{
     ChecksumValidateOptions, ChecksumVerbose, perform_checksum_validation,
 };
-use uucore::checksum::{
-    AlgoKind, ChecksumError, SizedAlgoKind, calculate_blake2b_length, digest_reader,
-    escape_filename,
-};
-use uucore::error::{UResult, strip_errno};
-use uucore::sum::Digest;
+use uucore::checksum::{AlgoKind, ChecksumError, SizedAlgoKind, calculate_blake2b_length};
+use uucore::error::UResult;
+use uucore::line_ending::LineEnding;
 use uucore::{format_usage, translate};
 
 const NAME: &str = "hashsum";
-// Using the same read buffer size as GNU
-const READ_BUFFER_SIZE: usize = 32 * 1024;
-
-struct Options<'a> {
-    algo: SizedAlgoKind,
-    digest: Box<dyn Digest + 'static>,
-    binary: bool,
-    binary_name: &'a str,
-    //check: bool,
-    tag: bool,
-    nonames: bool,
-    //status: bool,
-    //quiet: bool,
-    //strict: bool,
-    //warn: bool,
-    zero: bool,
-    //ignore_missing: bool,
-}
 
 /// Creates a hasher instance based on the command-line flags.
 ///
@@ -186,9 +165,9 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     };
     let check = matches.get_flag("check");
     let status = matches.get_flag("status");
-    let quiet = matches.get_flag("quiet") || status;
+    let quiet = matches.get_flag("quiet");
     let strict = matches.get_flag("strict");
-    let warn = matches.get_flag("warn") && !status;
+    let warn = matches.get_flag("warn");
     let ignore_missing = matches.get_flag("ignore-missing");
 
     if ignore_missing && !check {
@@ -232,33 +211,36 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         return Err(ChecksumError::StrictNotCheck.into());
     }
 
-    let nonames = *matches
+    let no_names = *matches
         .try_get_one("no-names")
         .unwrap_or(None)
         .unwrap_or(&false);
-    let zero = matches.get_flag("zero");
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag("zero"));
 
     let algo = SizedAlgoKind::from_unsized(algo_kind, length)?;
 
-    let opts = Options {
-        algo,
-        digest: algo.create_digest(),
-        binary,
-        binary_name: &binary_name,
-        tag: matches.get_flag("tag"),
-        nonames,
-        //status,
-        //quiet,
-        //warn,
-        zero,
-        //ignore_missing,
+    let opts = ChecksumComputeOptions {
+        algo_kind: algo,
+        output_format: figure_out_output_format(
+            algo,
+            matches.get_flag(options::TAG),
+            binary,
+            /* raw */ false,
+            /* base64: */ false,
+        ),
+        line_ending,
+        no_names,
     };
 
+    let files = matches.get_many::<OsString>(options::FILE).map_or_else(
+        // No files given, read from stdin.
+        || Box::new(iter::once(OsStr::new("-"))) as Box<dyn Iterator<Item = &OsStr>>,
+        // At least one file given, read from them.
+        |files| Box::new(files.map(OsStr::new)) as Box<dyn Iterator<Item = &OsStr>>,
+    );
+
     // Show the hashsum of the input
-    match matches.get_many::<OsString>(options::FILE) {
-        Some(files) => hashsum(opts, files.map(|f| f.as_os_str())),
-        None => hashsum(opts, iter::once(OsStr::new("-"))),
-    }
+    perform_checksum_computation(opts, files)
 }
 
 mod options {
@@ -488,76 +470,4 @@ fn uu_app(binary_name: &str) -> (Command, bool) {
     };
 
     (command, is_hashsum_bin)
-}
-
-#[allow(clippy::cognitive_complexity)]
-fn hashsum<'a, I>(mut options: Options, files: I) -> UResult<()>
-where
-    I: Iterator<Item = &'a OsStr>,
-{
-    let binary_marker = if options.binary { "*" } else { " " };
-    let mut err_found = None;
-    for filename in files {
-        let filename = Path::new(filename);
-
-        let mut file = BufReader::with_capacity(
-            READ_BUFFER_SIZE,
-            if filename == OsStr::new("-") {
-                Box::new(stdin()) as Box<dyn Read>
-            } else {
-                let file_buf = match File::open(filename) {
-                    Ok(f) => f,
-                    Err(e) => {
-                        eprintln!(
-                            "{}: {}: {}",
-                            options.binary_name,
-                            filename.to_string_lossy(),
-                            strip_errno(&e)
-                        );
-                        err_found = Some(ChecksumError::Io(e));
-                        continue;
-                    }
-                };
-                Box::new(file_buf) as Box<dyn Read>
-            },
-        );
-
-        let sum = match digest_reader(
-            &mut options.digest,
-            &mut file,
-            options.binary,
-            options.algo.bitlen(),
-        ) {
-            Ok((sum, _)) => sum,
-            Err(e) => {
-                eprintln!(
-                    "{}: {}: {}",
-                    options.binary_name,
-                    filename.to_string_lossy(),
-                    strip_errno(&e)
-                );
-                err_found = Some(ChecksumError::Io(e));
-                continue;
-            }
-        };
-
-        let (escaped_filename, prefix) = escape_filename(filename);
-        if options.tag {
-            println!(
-                "{prefix}{} ({escaped_filename}) = {sum}",
-                options.algo.to_tag()
-            );
-        } else if options.nonames {
-            println!("{sum}");
-        } else if options.zero {
-            // with zero, we don't escape the filename
-            print!("{sum} {binary_marker}{}\0", filename.display());
-        } else {
-            println!("{prefix}{sum} {binary_marker}{escaped_filename}");
-        }
-    }
-    match err_found {
-        None => Ok(()),
-        Some(e) => Err(Box::new(e)),
-    }
 }

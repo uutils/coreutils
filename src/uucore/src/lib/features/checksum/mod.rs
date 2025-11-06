@@ -2,24 +2,22 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore anotherfile invalidchecksum JWZG FFFD xffname prefixfilename bytelen bitlen hexdigit rsplit
+
+// spell-checker:ignore bitlen
+
+use std::ffi::OsStr;
+use std::io::{self, Read};
+use std::num::IntErrorKind;
 
 use os_display::Quotable;
-use std::{
-    io::{self, Read},
-    num::IntErrorKind,
-    path::Path,
-};
-
-use crate::{
-    error::{UError, UResult},
-    show_error,
-    sum::{
-        Blake2b, Blake3, Bsd, CRC32B, Crc, Digest, DigestWriter, Md5, Sha1, Sha3_224, Sha3_256,
-        Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256, Sm3, SysV,
-    },
-};
 use thiserror::Error;
+
+use crate::error::{UError, UResult};
+use crate::show_error;
+use crate::sum::{
+    Blake2b, Blake3, Bsd, CRC32B, Crc, Digest, DigestWriter, Md5, Sha1, Sha3_224, Sha3_256,
+    Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256, Sm3, SysV,
+};
 
 pub mod compute;
 pub mod validate;
@@ -553,8 +551,8 @@ pub fn unescape_filename(filename: &[u8]) -> (Vec<u8>, &'static str) {
     (unescaped, prefix)
 }
 
-pub fn escape_filename(filename: &Path) -> (String, &'static str) {
-    let original = filename.as_os_str().to_string_lossy();
+pub fn escape_filename(filename: &OsStr) -> (String, &'static str) {
+    let original = filename.to_string_lossy();
     let escaped = original
         .replace('\\', "\\\\")
         .replace('\n', "\\n")
@@ -587,19 +585,19 @@ mod tests {
 
     #[test]
     fn test_escape_filename() {
-        let (escaped, prefix) = escape_filename(Path::new("testfile.txt"));
+        let (escaped, prefix) = escape_filename(OsStr::new("testfile.txt"));
         assert_eq!(escaped, "testfile.txt");
         assert_eq!(prefix, "");
 
-        let (escaped, prefix) = escape_filename(Path::new("test\nfile.txt"));
+        let (escaped, prefix) = escape_filename(OsStr::new("test\nfile.txt"));
         assert_eq!(escaped, "test\\nfile.txt");
         assert_eq!(prefix, "\\");
 
-        let (escaped, prefix) = escape_filename(Path::new("test\rfile.txt"));
+        let (escaped, prefix) = escape_filename(OsStr::new("test\rfile.txt"));
         assert_eq!(escaped, "test\\rfile.txt");
         assert_eq!(prefix, "\\");
 
-        let (escaped, prefix) = escape_filename(Path::new("test\\file.txt"));
+        let (escaped, prefix) = escape_filename(OsStr::new("test\\file.txt"));
         assert_eq!(escaped, "test\\\\file.txt");
         assert_eq!(prefix, "\\");
     }

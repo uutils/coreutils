@@ -1,17 +1,36 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+// spell-checker:ignore bitlen
+
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
 use std::path::Path;
 
-use crate::checksum::{ChecksumError, SizedAlgoKind, digest_reader};
+use crate::checksum::{ChecksumError, SizedAlgoKind, digest_reader, escape_filename};
 use crate::error::{FromIo, UResult, USimpleError};
 use crate::line_ending::LineEnding;
-use crate::{encoding, os_str_as_bytes, show, translate};
+use crate::{encoding, show, translate};
+
+/// Use the same buffer size as GNU when reading a file to create a checksum
+/// from it: 32 KiB.
+const READ_BUFFER_SIZE: usize = 32 * 1024;
 
 pub struct ChecksumComputeOptions {
+    /// Which algorithm to use to compute the digest.
     pub algo_kind: SizedAlgoKind,
+
+    /// Printing format to use for each checksum.
     pub output_format: OutputFormat,
+
+    /// Whether to finish lines with '\n' or '\0'.
     pub line_ending: LineEnding,
+
+    /// (non-GNU option) Do not print file names
+    pub no_names: bool,
 }
 
 /// Reading mode used to compute digest.
@@ -77,6 +96,43 @@ impl OutputFormat {
     }
 }
 
+/// Use already-processed arguments to decide the output format.
+pub fn figure_out_output_format(
+    algo: SizedAlgoKind,
+    tag: bool,
+    binary: bool,
+    raw: bool,
+    base64: bool,
+) -> OutputFormat {
+    // Raw output format takes precedence over anything else.
+    if raw {
+        return OutputFormat::Raw;
+    }
+
+    // Then, if the algo is legacy, takes precedence over the rest
+    if algo.is_legacy() {
+        return OutputFormat::Legacy;
+    }
+
+    let digest_format = if base64 {
+        DigestFormat::Base64
+    } else {
+        DigestFormat::Hexadecimal
+    };
+
+    // After that, decide between tagged and untagged output
+    if tag {
+        OutputFormat::Tagged(digest_format)
+    } else {
+        let reading_mode = if binary {
+            ReadingMode::Binary
+        } else {
+            ReadingMode::Text
+        };
+        OutputFormat::Untagged(digest_format, reading_mode)
+    }
+}
+
 fn print_legacy_checksum(
     options: &ChecksumComputeOptions,
     filename: &OsStr,
@@ -84,6 +140,14 @@ fn print_legacy_checksum(
     size: usize,
 ) -> UResult<()> {
     debug_assert!(options.algo_kind.is_legacy());
+
+    let (escaped_filename, prefix) = if options.line_ending == LineEnding::Nul {
+        (filename.to_string_lossy().to_string(), "")
+    } else {
+        escape_filename(filename)
+    };
+
+    print!("{prefix}");
 
     // Print the sum
     match options.algo_kind {
@@ -108,9 +172,9 @@ fn print_legacy_checksum(
     }
 
     // Print the filename after a space if not stdin
-    if filename != "-" {
+    if escaped_filename != "-" {
         print!(" ");
-        let _dropped_result = io::stdout().write_all(os_str_as_bytes(filename)?);
+        let _dropped_result = io::stdout().write_all(escaped_filename.as_bytes());
     }
 
     Ok(())
@@ -121,11 +185,17 @@ fn print_tagged_checksum(
     filename: &OsStr,
     sum: &String,
 ) -> UResult<()> {
+    let (escaped_filename, prefix) = if options.line_ending == LineEnding::Nul {
+        (filename.to_string_lossy().to_string(), "")
+    } else {
+        escape_filename(filename)
+    };
+
     // Print algo name and opening parenthesis.
-    print!("{} (", options.algo_kind.to_tag());
+    print!("{prefix}{} (", options.algo_kind.to_tag());
 
     // Print filename
-    let _dropped_result = io::stdout().write_all(os_str_as_bytes(filename)?);
+    let _dropped_result = io::stdout().write_all(escaped_filename.as_bytes());
 
     // Print closing parenthesis and sum
     print!(") = {sum}");
@@ -134,15 +204,28 @@ fn print_tagged_checksum(
 }
 
 fn print_untagged_checksum(
+    options: &ChecksumComputeOptions,
     filename: &OsStr,
     sum: &String,
     reading_mode: ReadingMode,
 ) -> UResult<()> {
+    // early check for the "no-names" option
+    if options.no_names {
+        print!("{sum}");
+        return Ok(());
+    }
+
+    let (escaped_filename, prefix) = if options.line_ending == LineEnding::Nul {
+        (filename.to_string_lossy().to_string(), "")
+    } else {
+        escape_filename(filename)
+    };
+
     // Print checksum and reading mode flag
-    print!("{sum} {}", reading_mode.as_char());
+    print!("{prefix}{sum} {}", reading_mode.as_char());
 
     // Print filename
-    let _dropped_result = io::stdout().write_all(os_str_as_bytes(filename)?);
+    let _dropped_result = io::stdout().write_all(escaped_filename.as_bytes());
 
     Ok(())
 }
@@ -171,25 +254,30 @@ where
         if filepath.is_dir() {
             show!(USimpleError::new(
                 1,
-                translate!("cksum-error-is-directory", "file" => filepath.display())
+                // TODO: Rework translation, which is broken since this code moved to uucore
+                // translate!("cksum-error-is-directory", "file" => filepath.display())
+                format!("{}: Is a directory", filepath.display())
             ));
             continue;
         }
 
         // Handle the file input
-        let mut file = BufReader::new(if filename == "-" {
-            stdin_buf = io::stdin();
-            Box::new(stdin_buf) as Box<dyn Read>
-        } else {
-            file_buf = match File::open(filepath) {
-                Ok(file) => file,
-                Err(err) => {
-                    show!(err.map_err_context(|| filepath.to_string_lossy().to_string()));
-                    continue;
-                }
-            };
-            Box::new(file_buf) as Box<dyn Read>
-        });
+        let mut file = BufReader::with_capacity(
+            READ_BUFFER_SIZE,
+            if filename == "-" {
+                stdin_buf = io::stdin();
+                Box::new(stdin_buf) as Box<dyn Read>
+            } else {
+                file_buf = match File::open(filepath) {
+                    Ok(file) => file,
+                    Err(err) => {
+                        show!(err.map_err_context(|| filepath.to_string_lossy().into()));
+                        continue;
+                    }
+                };
+                Box::new(file_buf) as Box<dyn Read>
+            },
+        );
 
         let mut digest = options.algo_kind.create_digest();
 
@@ -233,6 +321,7 @@ where
             }
             OutputFormat::Untagged(digest_format, reading_mode) => {
                 print_untagged_checksum(
+                    &options,
                     filename,
                     &encode_sum(sum_hex, digest_format),
                     reading_mode,

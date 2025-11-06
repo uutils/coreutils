@@ -10,7 +10,7 @@ use clap::{Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
 use std::iter;
 use uucore::checksum::compute::{
-    ChecksumComputeOptions, DigestFormat, OutputFormat, ReadingMode, perform_checksum_computation,
+    ChecksumComputeOptions, figure_out_output_format, perform_checksum_computation,
 };
 use uucore::checksum::validate::{
     ChecksumValidateOptions, ChecksumVerbose, perform_checksum_validation,
@@ -82,43 +82,6 @@ fn handle_tag_text_binary_flags<S: AsRef<OsStr>>(
     }
 
     Ok((tag, binary))
-}
-
-/// Use already-processed arguments to decide the output format.
-fn figure_out_output_format(
-    algo: SizedAlgoKind,
-    tag: bool,
-    binary: bool,
-    raw: bool,
-    base64: bool,
-) -> OutputFormat {
-    // Raw output format takes precedence over anything else.
-    if raw {
-        return OutputFormat::Raw;
-    }
-
-    // Then, if the algo is legacy, takes precedence over the rest
-    if algo.is_legacy() {
-        return OutputFormat::Legacy;
-    }
-
-    let digest_format = if base64 {
-        DigestFormat::Base64
-    } else {
-        DigestFormat::Hexadecimal
-    };
-
-    // After that, decide between tagged and untagged output
-    if tag {
-        OutputFormat::Tagged(digest_format)
-    } else {
-        let reading_mode = if binary {
-            ReadingMode::Binary
-        } else {
-            ReadingMode::Text
-        };
-        OutputFormat::Untagged(digest_format, reading_mode)
-    }
 }
 
 /// Sanitize the `--length` argument depending on `--algorithm` and `--length`.
@@ -222,6 +185,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         algo_kind: algo,
         output_format,
         line_ending,
+        no_names: false,
     };
 
     perform_checksum_computation(opts, files)?;
