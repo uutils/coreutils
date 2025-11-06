@@ -21,6 +21,7 @@ use crate::{
 };
 use thiserror::Error;
 
+pub mod compute;
 pub mod validate;
 
 pub const ALGORITHM_OPTIONS_SYSV: &str = "sysv";
