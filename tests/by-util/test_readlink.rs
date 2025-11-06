@@ -61,6 +61,19 @@ fn test_canonicalize_missing() {
 }
 
 #[test]
+fn test_canonicalize_resolve_physical() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("other");
+    at.mkdir("directory");
+    at.symlink_file("other", "directory/link");
+    let actual = ucmd.arg("-f").arg("directory/link/..").succeeds().stdout_move_str();
+    let expect = at.root_dir_resolved() + "\n";
+    println!("actual: {actual:?}");
+    println!("expect: {expect:?}");
+    assert_eq!(actual, expect);
+}
+
+#[test]
 fn test_long_redirection_to_current_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     // Create a 256-character path to current directory
