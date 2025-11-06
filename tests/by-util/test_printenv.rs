@@ -21,8 +21,7 @@ fn test_get_var() {
         .env("FOO", "BAR")
         .arg("KEY")
         .succeeds()
-        .stdout_contains("VALUE\n")
-        .stdout_does_not_contain("BAR");
+        .stdout_is("VALUE\n");
 }
 
 #[test]
@@ -40,8 +39,8 @@ fn test_silent_error_equal_var() {
         .arg("KEY")
         .arg("a=b")
         .fails_with_code(1)
-        .stdout_contains("VALUE\n")
-        .stdout_does_not_contain("c");
+        .stdout_is("VALUE\n")
+        .no_stderr();
 }
 
 #[test]
@@ -52,7 +51,8 @@ fn test_silent_error_not_present() {
         .arg("FOO")
         .arg("KEY")
         .fails_with_code(1)
-        .stdout_contains("VALUE\n");
+        .stdout_is("VALUE\n")
+        .no_stderr();
 }
 
 #[test]
@@ -69,32 +69,24 @@ fn test_invalid_option_exit_code() {
 
 #[test]
 fn test_null_separator() {
-    // printenv should use \x00 as separator
-    new_ucmd!()
-        .env("HOME", "FOO")
-        .env("KEY", "VALUE")
-        .arg("-0")
-        .succeeds()
-        .stdout_contains("HOME=FOO\x00")
-        .stdout_contains("KEY=VALUE\x00");
+    // printenv should use \x00 as separator if null option is provided
+    for null_opt in ["-0", "--null"] {
+        new_ucmd!()
+            .env("HOME", "FOO")
+            .env("KEY", "VALUE")
+            .arg(null_opt)
+            .succeeds()
+            .stdout_contains("HOME=FOO\x00")
+            .stdout_contains("KEY=VALUE\x00");
 
-    new_ucmd!()
-        .env("HOME", "FOO")
-        .env("KEY", "VALUE")
-        .arg("--null")
-        .succeeds()
-        .stdout_contains("HOME=FOO\x00")
-        .stdout_contains("KEY=VALUE\x00");
-
-    new_ucmd!()
-        .env("HOME", "FOO")
-        .env("KEY", "VALUE")
-        .env("FOO", "BAR")
-        .arg("-0")
-        .arg("HOME")
-        .arg("KEY")
-        .succeeds()
-        .stdout_contains("FOO\x00")
-        .stdout_contains("VALUE\x00")
-        .stdout_does_not_contain("BAR");
+        new_ucmd!()
+            .env("HOME", "FOO")
+            .env("KEY", "VALUE")
+            .env("FOO", "BAR")
+            .arg(null_opt)
+            .arg("HOME")
+            .arg("KEY")
+            .succeeds()
+            .stdout_is("FOO\x00VALUE\x00");
+    }
 }
