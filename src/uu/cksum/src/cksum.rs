@@ -186,6 +186,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         digest: algo.create_digest(),
         output_format,
         line_ending,
+        binary: false,
         no_names: false,
     };
 
