@@ -644,8 +644,16 @@ fn compute_and_check_digest_from_file(
 
     // Read the file and calculate the checksum
     let mut digest = algo.create_digest();
-    let (calculated_checksum, _) =
-        digest_reader(&mut digest, &mut file_reader, false, algo.bitlen()).unwrap();
+
+    // TODO: improve function signature to use ReadingMode instead of binary bool
+    // Set binary to false because --binary is not supported with --check
+    let (calculated_checksum, _) = digest_reader(
+        &mut digest,
+        &mut file_reader,
+        /* binary */ false,
+        algo.bitlen(),
+    )
+    .unwrap();
 
     // Do the checksum validation
     let checksum_correct = expected_checksum == calculated_checksum;

@@ -229,6 +229,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
             /* base64: */ false,
         ),
         line_ending,
+        binary,
         no_names,
     };
 

@@ -29,6 +29,9 @@ pub struct ChecksumComputeOptions {
     /// Whether to finish lines with '\n' or '\0'.
     pub line_ending: LineEnding,
 
+    /// On windows, open files as binary instead of text
+    pub binary: bool,
+
     /// (non-GNU option) Do not print file names
     pub no_names: bool,
 }
@@ -284,7 +287,7 @@ where
         let (sum_hex, sz) = digest_reader(
             &mut digest,
             &mut file,
-            false,
+            options.binary,
             options.algo_kind.bitlen(),
         )
         .map_err_context(|| translate!("cksum-error-failed-to-read-input"))?;

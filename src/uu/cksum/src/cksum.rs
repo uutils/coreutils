@@ -185,6 +185,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         algo_kind: algo,
         output_format,
         line_ending,
+        binary: false,
         no_names: false,
     };
 
