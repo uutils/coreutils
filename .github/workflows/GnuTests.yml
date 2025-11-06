@@ -197,7 +197,7 @@ jobs:
         path: ~/.cache/lima
         key: lima-${{ steps.lima-actions-setup.outputs.version }}
     - name: Start Fedora VM with SELinux
-      run: limactl start --plain --name=default --cpus=4 --disk=40 --memory=8 --network=lima:user-v2 template://fedora
+      run: limactl start --plain --name=default --cpus=4 --disk=40 --memory=8 --network=lima:user-v2 template:fedora
     - name: Verify SELinux Status and Configuration
       run: |
         lima getenforce
