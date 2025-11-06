@@ -15,17 +15,17 @@ use std::io::{BufReader, Read, stdin};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
-use uucore::checksum::ChecksumVerbose;
-use uucore::checksum::calculate_blake2b_length;
-use uucore::checksum::digest_reader;
-use uucore::checksum::escape_filename;
-use uucore::checksum::perform_checksum_validation;
-use uucore::checksum::{AlgoKind, ChecksumError};
-use uucore::checksum::{ChecksumOptions, SizedAlgoKind};
+
+use uucore::checksum::validate::{
+    ChecksumValidateOptions, ChecksumVerbose, perform_checksum_validation,
+};
+use uucore::checksum::{
+    AlgoKind, ChecksumError, SizedAlgoKind, calculate_blake2b_length, digest_reader,
+    escape_filename,
+};
 use uucore::error::{UResult, strip_errno};
-use uucore::format_usage;
 use uucore::sum::Digest;
-use uucore::translate;
+use uucore::{format_usage, translate};
 
 const NAME: &str = "hashsum";
 // Using the same read buffer size as GNU
@@ -200,16 +200,14 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         // on Windows, allow --binary/--text to be used with --check
         // and keep the behavior of defaulting to binary
         #[cfg(not(windows))]
-        let binary = {
+        {
             let text_flag = matches.get_flag("text");
             let binary_flag = matches.get_flag("binary");
 
             if binary_flag || text_flag {
                 return Err(ChecksumError::BinaryTextConflict.into());
             }
-
-            false
-        };
+        }
 
         // Execute the checksum validation based on the presence of files or the use of stdin
         // Determine the source of input: a list of files or stdin.
@@ -220,8 +218,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
 
         let verbose = ChecksumVerbose::new(status, quiet, warn);
 
-        let opts = ChecksumOptions {
-            binary,
+        let opts = ChecksumValidateOptions {
             ignore_missing,
             strict,
             verbose,

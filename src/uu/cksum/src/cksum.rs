@@ -12,10 +12,10 @@ use std::fs::File;
 use std::io::{BufReader, Read, Write, stdin, stdout};
 use std::iter;
 use std::path::Path;
+use uucore::checksum::validate::{ChecksumOptions, ChecksumVerbose, perform_checksum_validation};
 use uucore::checksum::{
-    AlgoKind, ChecksumError, ChecksumOptions, ChecksumVerbose, SUPPORTED_ALGORITHMS, SizedAlgoKind,
-    calculate_blake2b_length_str, digest_reader, perform_checksum_validation,
-    sanitize_sha2_sha3_length_str,
+    AlgoKind, ChecksumError, SUPPORTED_ALGORITHMS, SizedAlgoKind, calculate_blake2b_length_str,
+    digest_reader, sanitize_sha2_sha3_length_str,
 };
 use uucore::translate;
 
@@ -428,8 +428,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // Execute the checksum validation based on the presence of files or the use of stdin
 
         let verbose = ChecksumVerbose::new(status, quiet, warn);
-        let opts = ChecksumOptions {
-            binary: binary_flag,
+        let opts = ChecksumValidateOptions {
             ignore_missing,
             strict,
             verbose,
