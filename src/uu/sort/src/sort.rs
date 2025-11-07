@@ -321,7 +321,10 @@ impl GlobalSettings {
     /// Precompute some data needed for sorting.
     /// This function **must** be called before starting to sort, and `GlobalSettings` may not be altered
     /// afterwards.
-    fn init_precomputed(&mut self) {
+    ///
+    /// When i18n-collator is enabled, `disable_fast_lexicographic` should be set to true if we're
+    /// in a UTF-8 locale (to force locale-aware collation instead of byte comparison).
+    fn init_precomputed(&mut self, disable_fast_lexicographic: bool) {
         self.precomputed.needs_tokens = self.selectors.iter().any(|s| s.needs_tokens);
         self.precomputed.selections_per_line =
             self.selectors.iter().filter(|s| s.needs_selection).count();
@@ -336,24 +339,15 @@ impl GlobalSettings {
             .filter(|s| matches!(s.settings.mode, SortMode::GeneralNumeric))
             .count();
 
-        self.precomputed.fast_lexicographic = self.can_use_fast_lexicographic();
+        self.precomputed.fast_lexicographic = !disable_fast_lexicographic && self.can_use_fast_lexicographic();
         self.precomputed.fast_ascii_insensitive = self.can_use_fast_ascii_insensitive();
     }
 
     /// Returns true when the fast lexicographic path can be used safely.
+    /// Note: When i18n-collator is enabled, the caller must have already determined
+    /// whether locale-aware collation is needed (via checking if we're in a UTF-8 locale).
+    /// This check is performed in uumain() before init_precomputed() is called.
     fn can_use_fast_lexicographic(&self) -> bool {
-        // When i18n-collator is enabled, check if we need locale-aware collation.
-        // If we're in a UTF-8 locale, we must use locale_cmp instead of byte comparison.
-        #[cfg(feature = "i18n-collator")]
-        {
-            use uucore::i18n::{get_locale_encoding, UEncoding};
-
-            if get_locale_encoding() == UEncoding::Utf8 {
-                // UTF-8 locale requires locale-aware collation
-                return false;
-            }
-        }
-
         self.mode == SortMode::Default
             && !self.ignore_case
             && !self.dictionary_order
@@ -1763,20 +1757,6 @@ fn emit_debug_warnings(
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // Initialize locale collator if feature is enabled
-    #[cfg(feature = "i18n-collator")]
-    {
-        use uucore::i18n::collator::{AlternateHandling, CollatorOptions};
-
-        // Initialize ICU collator with Shifted mode to match GNU sort behavior
-        let mut opts = CollatorOptions::default();
-        opts.alternate_handling = Some(AlternateHandling::Shifted);
-
-        if !try_init_collator(opts) {
-            eprintln!("sort: warning: Failed to initialize locale collator");
-        }
-    }
-
     let mut settings = GlobalSettings::default();
 
     let (processed_args, mut legacy_warnings) = preprocess_legacy_args(args);
@@ -2094,7 +2074,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         emit_debug_warnings(&settings, &global_flags, &legacy_warnings);
     }
 
-    settings.init_precomputed();
+    // Check if we need locale-aware collation and initialize collator if needed
+    // This MUST happen before init_precomputed() to avoid the performance regression
+    #[cfg(feature = "i18n-collator")]
+    let needs_locale_collation = {
+        use uucore::i18n::{get_locale_encoding, UEncoding};
+        use uucore::i18n::collator::{AlternateHandling, CollatorOptions};
+
+        let is_utf8_locale = get_locale_encoding() == UEncoding::Utf8;
+
+        if is_utf8_locale {
+            // Initialize ICU collator with Shifted mode to match GNU sort behavior
+            let mut opts = CollatorOptions::default();
+            opts.alternate_handling = Some(AlternateHandling::Shifted);
+
+            if !try_init_collator(opts) {
+                eprintln!("sort: warning: Failed to initialize locale collator");
+            }
+        }
+
+        is_utf8_locale
+    };
+
+    #[cfg(not(feature = "i18n-collator"))]
+    let needs_locale_collation = false;
+
+    settings.init_precomputed(needs_locale_collation);
 
     let result = exec(&mut files, &settings, output, &mut tmp_dir);
     // Wait here if `SIGINT` was received,
