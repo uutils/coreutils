@@ -45,10 +45,13 @@ fn print_factors_str(
         }
         // use num_prime's factorize128 algorithm for u128 integers
         else if x <= BigUint::from_u128(u128::MAX).unwrap() {
-            // if it's a u128 integer, BigUint will have two u64 digits
-            // in its Vec<u64>, which index 0 is treated as u64::MAX
-            let big_uint_u64s = x.clone().to_u64_digits();
-            let x = u64::MAX as u128 + big_uint_u64s[1] as u128;
+            let rx = num_str.trim().parse::<u128>();
+            let Ok(x) = rx else {
+                // return Ok(). it's non-fatal and we should try the next number.
+                show_warning!("{}: {}", num_str.maybe_quote(), rx.unwrap_err());
+                set_exit_code(1);
+                return Ok(());
+            };
             let prime_factors = num_prime::nt_funcs::factorize128(x);
             write_result_u128(w, &x, prime_factors, print_exponents)
                 .map_err_context(|| translate!("factor-error-write-error"))?;
