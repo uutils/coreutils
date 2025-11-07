@@ -132,6 +132,17 @@ fn gen_completions<T: Args>(args: impl Iterator<Item = OsString>, util_map: &Uti
     process::exit(0);
 }
 
+/// print tldr error
+fn print_tldr_error() {
+    eprintln!("Warning: No tldr archive found, so the documentation will not include examples.");
+    eprintln!(
+        "To include examples in the documentation, download the tldr archive and put it in the docs/ folder."
+    );
+    eprintln!();
+    eprintln!("  curl https://tldr.sh/assets/tldr.zip -o docs/tldr.zip");
+    eprintln!();
+}
+
 /// # Errors
 /// Returns an error if the writer fails.
 #[allow(clippy::too_many_lines)]
@@ -142,23 +153,15 @@ fn main() -> io::Result<()> {
         .ok()
         .and_then(|f| ZipArchive::new(f).ok());
 
-    if tldr_zip.is_none() {
-        eprintln!(
-            "Warning: No tldr archive found, so the documentation will not include examples."
-        );
-        eprintln!(
-            "To include examples in the documentation, download the tldr archive and put it in the docs/ folder."
-        );
-        eprintln!();
-        eprintln!("  curl https://tldr.sh/assets/tldr.zip -o docs/tldr.zip");
-        eprintln!();
-    }
     // Check for manpage/completion commands first
     if args.len() > 1 {
         let command = args.get(1).and_then(|s| s.to_str()).unwrap_or_default();
         match command {
             "manpage" => {
                 let args_iter = args.into_iter().skip(2);
+                if tldr_zip.is_none() {
+                    print_tldr_error();
+                }
                 gen_manpage(
                     &mut tldr_zip,
                     args_iter,
@@ -180,7 +183,9 @@ fn main() -> io::Result<()> {
             }
         }
     }
-
+    if tldr_zip.is_none() {
+        print_tldr_error();
+    }
     let utils = util_map::<Box<dyn Iterator<Item = OsString>>>();
     match std::fs::create_dir("docs/src/utils/") {
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
@@ -567,6 +572,7 @@ fn write_zip_examples(
     }
 }
 
+/// Format examples using std::fmt::Write
 fn format_examples(content: String, output_markdown: bool) -> Result<String, std::fmt::Error> {
     use std::fmt::Write;
     let mut s = String::new();

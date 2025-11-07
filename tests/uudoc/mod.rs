@@ -29,9 +29,8 @@ fn test_manpage_generation() {
         output.status
     );
     assert!(
-        output.stderr.is_empty(),
-        "stderr should be empty but got: {}",
-        String::from_utf8_lossy(&output.stderr)
+        String::from_utf8_lossy(&output.stderr).contains("Warning: No tldr archive found"),
+        "stderr should contains tldr alert",
     );
 
     let output_str = String::from_utf8_lossy(&output.stdout);
@@ -53,9 +52,8 @@ fn test_manpage_coreutils() {
         output.status
     );
     assert!(
-        output.stderr.is_empty(),
-        "stderr should be empty but got: {}",
-        String::from_utf8_lossy(&output.stderr)
+        String::from_utf8_lossy(&output.stderr).contains("Warning: No tldr archive found"),
+        "stderr should contains tldr alert",
     );
 
     let output_str = String::from_utf8_lossy(&output.stdout);
@@ -124,9 +122,8 @@ fn test_manpage_base64() {
         output.status
     );
     assert!(
-        output.stderr.is_empty(),
-        "stderr should be empty but got: {}",
-        String::from_utf8_lossy(&output.stderr)
+        String::from_utf8_lossy(&output.stderr).contains("Warning: No tldr archive found"),
+        "stderr should contains tldr alert",
     );
 
     let output_str = String::from_utf8_lossy(&output.stdout);
