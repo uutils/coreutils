@@ -561,13 +561,9 @@ fn write_zip_examples(
     };
 
     match format_examples(content, output_markdown) {
-        Err(e) => Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!(
-                "Failed to format the tldr examples of {name}: {}",
-                e.to_string()
-            ),
-        )),
+        Err(e) => Err(std::io::Error::other(format!(
+            "Failed to format the tldr examples of {name}: {e}"
+        ))),
         Ok(s) => Ok(s),
     }
 }
