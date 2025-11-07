@@ -10,7 +10,7 @@
 use libc::{gid_t, pid_t, uid_t};
 #[cfg(not(target_os = "redox"))]
 use nix::errno::Errno;
-use nix::sys::signal::{SigSet, Signal, sigprocmask, SigmaskHow};
+use nix::sys::signal::{SigSet, Signal};
 use std::io;
 use std::process::Child;
 use std::process::ExitStatus;
@@ -171,8 +171,10 @@ impl ChildExt for Child {
                 let signal = Signal::try_from(sig).ok();
 
                 // Check if SIGTERM was received (external termination request)
-                if signal == Some(Signal::SIGTERM) && signaled.is_some() {
-                    signaled.unwrap().store(true, atomic::Ordering::Relaxed);
+                if signal == Some(Signal::SIGTERM) {
+                    if let Some(flag) = signaled {
+                        flag.store(true, atomic::Ordering::Relaxed);
+                    }
                     return Ok(None); // Indicate timeout/termination
                 }
 
@@ -193,10 +195,7 @@ impl ChildExt for Child {
                 }
             }
             // Shouldn't happen
-            _ => Err(io::Error::new(
-                io::ErrorKind::Other,
-                "unexpected sigtimedwait return value",
-            )),
+            _ => Err(io::Error::other("unexpected sigtimedwait return value")),
         }
     }
 }

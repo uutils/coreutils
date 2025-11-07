@@ -388,7 +388,7 @@ fn timeout(
                 unblock_set.add(Signal::SIGTERM);
                 unblock_set.add(Signal::SIGCHLD);
                 sigprocmask(SigmaskHow::SIG_UNBLOCK, Some(&unblock_set), None)
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                    .map_err(std::io::Error::other)?;
                 Ok(())
             })
             .spawn()
