@@ -8,11 +8,13 @@ mod status;
 
 use crate::status::ExitStatus;
 use clap::{Arg, ArgAction, Command};
-use std::io::ErrorKind;
+use nix::errno::Errno;
+use nix::sys::signal::{SigSet, Signal, sigprocmask, SigmaskHow};
+use std::io::{self, ErrorKind};
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
 use std::sync::atomic::{self, AtomicBool};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parser::parse_time;
@@ -176,33 +178,9 @@ pub fn uu_app() -> Command {
         .after_help(translate!("timeout-after-help"))
 }
 
-/// Remove pre-existing SIGCHLD handlers that would make waiting for the child's exit code fail.
-fn unblock_sigchld() {
-    unsafe {
-        nix::sys::signal::signal(
-            nix::sys::signal::Signal::SIGCHLD,
-            nix::sys::signal::SigHandler::SigDfl,
-        )
-        .unwrap();
-    }
-}
-
 /// We should terminate child process when receiving TERM signal.
+/// This is now handled by sigtimedwait() in wait_or_timeout().
 static SIGNALED: AtomicBool = AtomicBool::new(false);
-
-fn catch_sigterm() {
-    use nix::sys::signal;
-
-    extern "C" fn handle_sigterm(signal: libc::c_int) {
-        let signal = signal::Signal::try_from(signal).unwrap();
-        if signal == signal::Signal::SIGTERM {
-            SIGNALED.store(true, atomic::Ordering::Relaxed);
-        }
-    }
-
-    let handler = signal::SigHandler::Handler(handle_sigterm);
-    unsafe { signal::signal(signal::Signal::SIGTERM, handler) }.unwrap();
-}
 
 /// Report that a signal is being sent if the verbose flag is set.
 fn report_if_verbose(signal: usize, cmd: &str, verbose: bool) {
@@ -227,6 +205,74 @@ fn send_signal(process: &mut Child, signal: usize, foreground: bool) {
         let continued_signal = signal_by_name_or_value("CONT").unwrap();
         if signal != kill_signal && signal != continued_signal {
             _ = process.send_signal_group(continued_signal);
+        }
+    }
+}
+
+/// Wait for one of the specified signals to be delivered, with optional timeout.
+///
+/// This function uses `sigtimedwait()` to efficiently wait for signals without polling.
+/// It handles EINTR by retrying the wait.
+///
+/// # Arguments
+/// * `signals` - Signals to wait for (typically SIGCHLD and SIGTERM)
+/// * `until` - Optional deadline (absolute time)
+///
+/// # Returns
+/// * `Ok(Some(signal))` - A signal was received
+/// * `Ok(None)` - Timeout expired
+/// * `Err(e)` - An error occurred
+fn wait_for_signal(signals: &[Signal], until: Option<Instant>) -> io::Result<Option<Signal>> {
+    // Create signal set from the provided signals
+    let mut sigset = SigSet::empty();
+    for &sig in signals {
+        sigset.add(sig);
+    }
+
+    // Retry on EINTR, recalculating timeout each iteration
+    loop {
+        // Calculate remaining timeout
+        let timeout = if let Some(deadline) = until {
+            deadline.saturating_duration_since(Instant::now())
+        } else {
+            Duration::MAX
+        };
+
+        // Convert to timespec, handling overflow
+        let timeout_spec = if timeout.as_secs() > libc::time_t::MAX as u64 {
+            libc::timespec {
+                tv_sec: libc::time_t::MAX,
+                tv_nsec: 0,
+            }
+        } else {
+            libc::timespec {
+                tv_sec: timeout.as_secs() as libc::time_t,
+                tv_nsec: timeout.subsec_nanos() as libc::c_long,
+            }
+        };
+
+        let result = unsafe {
+            libc::sigtimedwait(
+                sigset.as_ref() as *const libc::sigset_t,
+                std::ptr::null_mut(), // We don't need siginfo
+                &timeout_spec as *const libc::timespec,
+            )
+        };
+
+        if result < 0 {
+            match Errno::last() {
+                // Timeout elapsed with no signal received
+                Errno::EAGAIN => return Ok(None),
+                // The wait was interrupted by a signal not in our set - retry with recalculated timeout
+                Errno::EINTR => continue,
+                // Some other error
+                err => return Err(io::Error::from(err)),
+            }
+        } else {
+            // Signal received - convert signal number to Signal enum
+            return Signal::try_from(result)
+                .map(Some)
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e));
         }
     }
 }
@@ -321,6 +367,14 @@ fn timeout(
     #[cfg(unix)]
     enable_pipe_errors()?;
 
+    // Block signals before spawning child - will be handled by sigtimedwait()
+    let mut sigset = SigSet::empty();
+    sigset.add(Signal::SIGCHLD);
+    sigset.add(Signal::SIGTERM);
+    let mut old_sigset = SigSet::empty();
+    sigprocmask(SigmaskHow::SIG_BLOCK, Some(&sigset), Some(&mut old_sigset))
+        .map_err(|e| USimpleError::new(ExitStatus::TimeoutFailed.into(), e.to_string()))?;
+
     let process = &mut process::Command::new(&cmd[0])
         .args(&cmd[1..])
         .stdin(Stdio::inherit())
@@ -328,6 +382,9 @@ fn timeout(
         .stderr(Stdio::inherit())
         .spawn()
         .map_err(|err| {
+            // Restore signal mask before returning error
+            let _ = sigprocmask(SigmaskHow::SIG_SETMASK, Some(&old_sigset), None);
+
             let status_code = if err.kind() == ErrorKind::NotFound {
                 // FIXME: not sure which to use
                 127
@@ -340,42 +397,92 @@ fn timeout(
                 translate!("timeout-error-failed-to-execute-process", "error" => err),
             )
         })?;
-    unblock_sigchld();
-    catch_sigterm();
-    // Wait for the child process for the specified time period.
+
+    // Wait for the child process for the specified time period using sigtimedwait.
+    // This approach eliminates the 100ms polling delay and provides precise, efficient waiting.
     //
-    // If the process exits within the specified time period (the
-    // `Ok(Some(_))` arm), then return the appropriate status code.
-    //
-    // If the process does not exit within that time (the `Ok(None)`
-    // arm) and `kill_after` is specified, then try sending `SIGKILL`.
-    //
-    // TODO The structure of this block is extremely similar to the
-    // structure of `wait_or_kill_process()`. They can probably be
-    // refactored into some common function.
-    match process.wait_or_timeout(duration, Some(&SIGNALED)) {
-        Ok(Some(status)) => Err(status
+    // The loop combines try_wait() with wait_for_signal() to handle race conditions:
+    // - try_wait() checks if the child has already exited
+    // - wait_for_signal() suspends until SIGCHLD, SIGTERM, or timeout
+    // - On SIGCHLD, we loop back to try_wait() to reap the child
+    // - On SIGTERM, we mark SIGNALED and break out (treat as timeout)
+    // - On timeout, we break out and send the termination signal
+
+    // .try_wait() doesn't drop stdin, so we do it manually
+    drop(process.stdin.take());
+
+    let deadline = Instant::now() + duration;
+    let wait_result: Option<std::process::ExitStatus> = loop {
+        // Wait for signals with timeout
+        // If child has already exited, SIGCHLD will be delivered immediately
+        let signal_result = wait_for_signal(&[Signal::SIGCHLD, Signal::SIGTERM], Some(deadline));
+        match signal_result {
+            Ok(Some(Signal::SIGCHLD)) => {
+                // Child state changed, reap it
+                match process.wait() {
+                    Ok(status) => break Some(status),
+                    Err(e) => {
+                        // Restore mask before returning error
+                        let _ = sigprocmask(SigmaskHow::SIG_SETMASK, Some(&old_sigset), None);
+                        return Err(e.into());
+                    }
+                }
+            }
+            Ok(Some(Signal::SIGTERM)) => {
+                // External termination request
+                SIGNALED.store(true, atomic::Ordering::Relaxed);
+                break None; // Treat as timeout
+            }
+            Ok(None) => {
+                // Timeout expired
+                break None;
+            }
+            Ok(Some(sig)) => {
+                // Unexpected signal (shouldn't happen since we only wait for SIGCHLD/SIGTERM)
+                let _ = sigprocmask(SigmaskHow::SIG_SETMASK, Some(&old_sigset), None);
+                return Err(USimpleError::new(
+                    ExitStatus::TimeoutFailed.into(),
+                    format!("Unexpected signal received: {:?}", sig),
+                ));
+            }
+            Err(e) => {
+                // wait_for_signal failed
+                let _ = sigprocmask(SigmaskHow::SIG_SETMASK, Some(&old_sigset), None);
+                return Err(e.into());
+            }
+        }
+    };
+
+    let result = match wait_result {
+        Some(status) => Err(status
             .code()
             .unwrap_or_else(|| preserve_signal_info(status.signal().unwrap()))
             .into()),
-        Ok(None) => {
+        None => {
             report_if_verbose(signal, &cmd[0], verbose);
             send_signal(process, signal, foreground);
             match kill_after {
                 None => {
-                    let status = process.wait()?;
-                    if SIGNALED.load(atomic::Ordering::Relaxed) {
-                        Err(ExitStatus::Terminated.into())
-                    } else if preserve_status {
-                        if let Some(ec) = status.code() {
-                            Err(ec.into())
-                        } else if let Some(sc) = status.signal() {
-                            Err(ExitStatus::SignalSent(sc.try_into().unwrap()).into())
-                        } else {
-                            Err(ExitStatus::CommandTimedOut.into())
+                    match process.wait() {
+                        Ok(status) => {
+                            if SIGNALED.load(atomic::Ordering::Relaxed) {
+                                Err(ExitStatus::Terminated.into())
+                            } else if preserve_status {
+                                if let Some(ec) = status.code() {
+                                    Err(ec.into())
+                                } else if let Some(sc) = status.signal() {
+                                    Err(ExitStatus::SignalSent(sc.try_into().unwrap()).into())
+                                } else {
+                                    Err(ExitStatus::CommandTimedOut.into())
+                                }
+                            } else {
+                                Err(ExitStatus::CommandTimedOut.into())
+                            }
                         }
-                    } else {
-                        Err(ExitStatus::CommandTimedOut.into())
+                        Err(e) => {
+                            let _ = sigprocmask(SigmaskHow::SIG_SETMASK, Some(&old_sigset), None);
+                            return Err(e.into());
+                        }
                     }
                 }
                 Some(kill_after) => {
@@ -396,11 +503,11 @@ fn timeout(
                 }
             }
         }
-        Err(_) => {
-            // We're going to return ERR_EXIT_STATUS regardless of
-            // whether `send_signal()` succeeds or fails
-            send_signal(process, signal, foreground);
-            Err(ExitStatus::TimeoutFailed.into())
-        }
-    }
+    };
+
+    // Restore the original signal mask before returning
+    // This is CRITICAL - without this, signals stay blocked across invocations!
+    let _ = sigprocmask(SigmaskHow::SIG_SETMASK, Some(&old_sigset), None);
+
+    result
 }
