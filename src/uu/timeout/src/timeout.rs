@@ -9,7 +9,7 @@ mod status;
 use crate::status::ExitStatus;
 use clap::{Arg, ArgAction, Command};
 use nix::errno::Errno;
-use nix::sys::signal::{SigSet, Signal, sigprocmask, SigmaskHow};
+use nix::sys::signal::{SigSet, SigmaskHow, Signal, sigprocmask};
 use std::io::{self, ErrorKind};
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::{self, Child, Stdio};
@@ -393,22 +393,22 @@ fn timeout(
             })
             .spawn()
     }
-        .map_err(|err| {
-            // Restore signal mask before returning error
-            let _ = sigprocmask(SigmaskHow::SIG_SETMASK, Some(&old_sigset), None);
+    .map_err(|err| {
+        // Restore signal mask before returning error
+        let _ = sigprocmask(SigmaskHow::SIG_SETMASK, Some(&old_sigset), None);
 
-            let status_code = if err.kind() == ErrorKind::NotFound {
-                // FIXME: not sure which to use
-                127
-            } else {
-                // FIXME: this may not be 100% correct...
-                126
-            };
-            USimpleError::new(
-                status_code,
-                translate!("timeout-error-failed-to-execute-process", "error" => err),
-            )
-        })?;
+        let status_code = if err.kind() == ErrorKind::NotFound {
+            // FIXME: not sure which to use
+            127
+        } else {
+            // FIXME: this may not be 100% correct...
+            126
+        };
+        USimpleError::new(
+            status_code,
+            translate!("timeout-error-failed-to-execute-process", "error" => err),
+        )
+    })?;
 
     // Wait for the child process for the specified time period using sigtimedwait.
     // This approach eliminates the 100ms polling delay and provides precise, efficient waiting.
@@ -425,9 +425,9 @@ fn timeout(
 
     // Handle zero timeout - run command without any timeout
     if duration == Duration::ZERO {
-        let exit_status = process.wait().map_err(|e| {
-            USimpleError::new(ExitStatus::TimeoutFailed.into(), e.to_string())
-        })?;
+        let exit_status = process
+            .wait()
+            .map_err(|e| USimpleError::new(ExitStatus::TimeoutFailed.into(), e.to_string()))?;
 
         // Restore signal mask
         sigprocmask(SigmaskHow::SIG_SETMASK, Some(&old_sigset), None)
