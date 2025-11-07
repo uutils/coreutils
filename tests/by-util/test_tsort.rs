@@ -103,7 +103,7 @@ fn test_cycle() {
     new_ucmd!()
         .pipe_in("a b b c c d c b")
         .fails_with_code(1)
-        .stdout_is("a\nc\nd\nb\n")
+        .stdout_is("a\nb\nc\nd\n")
         .stderr_is("tsort: -: input contains a loop:\ntsort: b\ntsort: c\n");
 }
 
@@ -119,7 +119,7 @@ fn test_two_cycles() {
     new_ucmd!()
         .pipe_in("a b b c c b b d d b")
         .fails_with_code(1)
-        .stdout_is("a\nc\nd\nb\n")
+        .stdout_is("a\nb\nc\nd\n")
         .stderr_is("tsort: -: input contains a loop:\ntsort: b\ntsort: c\ntsort: -: input contains a loop:\ntsort: b\ntsort: d\n");
 }
 
