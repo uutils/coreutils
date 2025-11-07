@@ -209,9 +209,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         padding,
     );
 
+    let sigpipe_ignored = sigpipe_is_ignored();
     match result {
         Ok(()) => Ok(()),
-        Err(err) if err.kind() == ErrorKind::BrokenPipe => Ok(()),
+        Err(err) if err.kind() == ErrorKind::BrokenPipe && !sigpipe_ignored => Ok(()),
         Err(err) => Err(err.map_err_context(|| "write error".into())),
     }
 }
@@ -325,6 +326,38 @@ fn fast_print_seq(
     stdout.write_all(terminator.as_encoded_bytes())?;
     stdout.flush()?;
     Ok(())
+}
+
+#[cfg(unix)]
+fn sigpipe_is_ignored() -> bool {
+    use nix::libc;
+    use std::{env, mem::MaybeUninit, ptr};
+
+    const DETECT_ENV: &str = "RUST_SIGPIPE";
+    const DETECT_ENV_VALUE: &str = "inherit";
+
+    let detection_enabled = env::var_os(DETECT_ENV).is_some_and(|value| {
+        value
+            .to_string_lossy()
+            .eq_ignore_ascii_case(DETECT_ENV_VALUE)
+    });
+
+    if !detection_enabled {
+        return false;
+    }
+
+    unsafe {
+        let mut current = MaybeUninit::<libc::sigaction>::uninit();
+        if libc::sigaction(libc::SIGPIPE, ptr::null(), current.as_mut_ptr()) != 0 {
+            return false;
+        }
+        current.assume_init().sa_sigaction == libc::SIG_IGN
+    }
+}
+
+#[cfg(not(unix))]
+const fn sigpipe_is_ignored() -> bool {
+    false
 }
 
 fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> bool {
