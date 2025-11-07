@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime serde bincode gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs
+# spell-checker:ignore (libs) bigdecimal datetime serde bincode gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs debuginfo
 
 [package]
 name = "coreutils"
@@ -611,6 +611,7 @@ strip = true
 [profile.profiling]
 inherits = "release"
 debug = true
+split-debuginfo = "unpacked"
 
 [lints]
 workspace = true
