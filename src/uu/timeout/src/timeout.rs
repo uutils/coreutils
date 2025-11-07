@@ -11,7 +11,7 @@ use clap::{Arg, ArgAction, Command};
 use nix::errno::Errno;
 use nix::sys::signal::{SigSet, Signal, sigprocmask, SigmaskHow};
 use std::io::{self, ErrorKind};
-use std::os::unix::process::ExitStatusExt;
+use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::{self, Child, Stdio};
 use std::sync::atomic::{self, AtomicBool};
 use std::time::{Duration, Instant};
@@ -375,12 +375,24 @@ fn timeout(
     sigprocmask(SigmaskHow::SIG_BLOCK, Some(&sigset), Some(&mut old_sigset))
         .map_err(|e| USimpleError::new(ExitStatus::TimeoutFailed.into(), e.to_string()))?;
 
-    let process = &mut process::Command::new(&cmd[0])
-        .args(&cmd[1..])
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
+    let process = &mut unsafe {
+        process::Command::new(&cmd[0])
+            .args(&cmd[1..])
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .pre_exec(|| {
+                // Unblock signals that were blocked in parent for sigtimedwait
+                // Child needs to receive these signals normally
+                let mut unblock_set = SigSet::empty();
+                unblock_set.add(Signal::SIGTERM);
+                unblock_set.add(Signal::SIGCHLD);
+                sigprocmask(SigmaskHow::SIG_UNBLOCK, Some(&unblock_set), None)
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                Ok(())
+            })
+            .spawn()
+    }
         .map_err(|err| {
             // Restore signal mask before returning error
             let _ = sigprocmask(SigmaskHow::SIG_SETMASK, Some(&old_sigset), None);
@@ -411,7 +423,26 @@ fn timeout(
     // .try_wait() doesn't drop stdin, so we do it manually
     drop(process.stdin.take());
 
-    let deadline = Instant::now() + duration;
+    // Handle zero timeout - run command without any timeout
+    if duration == Duration::ZERO {
+        let exit_status = process.wait().map_err(|e| {
+            USimpleError::new(ExitStatus::TimeoutFailed.into(), e.to_string())
+        })?;
+
+        // Restore signal mask
+        sigprocmask(SigmaskHow::SIG_SETMASK, Some(&old_sigset), None)
+            .map_err(|e| USimpleError::new(ExitStatus::TimeoutFailed.into(), e.to_string()))?;
+
+        return match exit_status.code() {
+            Some(0) => Ok(()),
+            Some(code) => Err(code.into()),
+            None => Err(ExitStatus::Terminated.into()),
+        };
+    }
+
+    let deadline = Instant::now()
+        .checked_add(duration)
+        .unwrap_or_else(|| Instant::now() + Duration::from_secs(86400 * 365 * 100));
     let wait_result: Option<std::process::ExitStatus> = loop {
         // Wait for signals with timeout
         // If child has already exited, SIGCHLD will be delivered immediately
@@ -468,12 +499,14 @@ fn timeout(
                             if SIGNALED.load(atomic::Ordering::Relaxed) {
                                 Err(ExitStatus::Terminated.into())
                             } else if preserve_status {
-                                if let Some(ec) = status.code() {
-                                    Err(ec.into())
-                                } else if let Some(sc) = status.signal() {
-                                    Err(ExitStatus::SignalSent(sc.try_into().unwrap()).into())
+                                // When preserve_status is true and timeout occurred:
+                                // Special case: SIGCONT doesn't kill, so if it was sent and process
+                                // completed successfully, return 0.
+                                // All other signals: return 128+signal we sent (not child's status)
+                                if signal == libc::SIGCONT.try_into().unwrap() && status.success() {
+                                    Ok(())
                                 } else {
-                                    Err(ExitStatus::CommandTimedOut.into())
+                                    Err(ExitStatus::SignalSent(signal).into())
                                 }
                             } else {
                                 Err(ExitStatus::CommandTimedOut.into())

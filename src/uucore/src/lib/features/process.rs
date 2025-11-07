@@ -4,19 +4,19 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (vars) cvar exitstatus cmdline kworker getsid getpid
-// spell-checker:ignore (sys/unix) WIFSIGNALED ESRCH
+// spell-checker:ignore (sys/unix) WIFSIGNALED ESRCH sigtimedwait timespec
 // spell-checker:ignore pgrep pwait snice getpgrp
 
 use libc::{gid_t, pid_t, uid_t};
 #[cfg(not(target_os = "redox"))]
 use nix::errno::Errno;
+use nix::sys::signal::{SigSet, Signal, sigprocmask, SigmaskHow};
 use std::io;
 use std::process::Child;
 use std::process::ExitStatus;
 use std::sync::atomic;
 use std::sync::atomic::AtomicBool;
-use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 // SAFETY: These functions always succeed and return simple integers.
 
@@ -111,7 +111,9 @@ impl ChildExt for Child {
         if unsafe { libc::signal(signal as i32, libc::SIG_IGN) } == usize::MAX {
             return Err(io::Error::last_os_error());
         }
-        if unsafe { libc::kill(0, signal as i32) } == 0 {
+        // Send to our own process group (which the child inherits)
+        // After calling setpgid(0, 0), our PGID equals our PID
+        if unsafe { libc::kill(-libc::getpid(), signal as i32) } == 0 {
             Ok(())
         } else {
             Err(io::Error::last_os_error())
@@ -126,28 +128,76 @@ impl ChildExt for Child {
         if timeout == Duration::from_micros(0) {
             return self.wait().map(Some);
         }
+
         // .try_wait() doesn't drop stdin, so we do it manually
         drop(self.stdin.take());
 
-        let start = Instant::now();
-        loop {
-            if let Some(status) = self.try_wait()? {
-                return Ok(Some(status));
-            }
+        // Use sigtimedwait for efficient, precise waiting
+        // This suspends the process until either:
+        // - SIGCHLD is received (child exited/stopped/continued)
+        // - The timeout expires
+        // - SIGTERM is received (if signaled parameter is provided)
+        //
+        // NOTE: Signals must be blocked by the caller BEFORE spawning the child
+        // to avoid race conditions. We assume SIGCHLD/SIGTERM are already blocked.
 
-            if start.elapsed() >= timeout
-                || signaled.is_some_and(|signaled| signaled.load(atomic::Ordering::Relaxed))
-            {
-                break;
-            }
-
-            // XXX: this is kinda gross, but it's cleaner than starting a thread just to wait
-            //      (which was the previous solution).  We might want to use a different duration
-            //      here as well
-            thread::sleep(Duration::from_millis(100));
+        // Create signal set for signals we want to wait for
+        let mut sigset = SigSet::empty();
+        sigset.add(Signal::SIGCHLD);
+        if signaled.is_some() {
+            sigset.add(Signal::SIGTERM);
         }
 
-        Ok(None)
+        // Convert Duration to timespec for sigtimedwait
+        let timeout_spec = libc::timespec {
+            tv_sec: timeout.as_secs() as libc::time_t,
+            tv_nsec: timeout.subsec_nanos() as libc::c_long,
+        };
+
+        // Wait for signals with timeout
+        let result = unsafe {
+            let mut siginfo: libc::siginfo_t = std::mem::zeroed();
+            let ret = libc::sigtimedwait(
+                &sigset.as_ref() as *const _ as *const libc::sigset_t,
+                &mut siginfo as *mut libc::siginfo_t,
+                &timeout_spec as *const libc::timespec,
+            );
+            (ret, siginfo)
+        };
+
+        match result.0 {
+            // Signal received
+            sig if sig > 0 => {
+                let signal = Signal::try_from(sig).ok();
+
+                // Check if SIGTERM was received (external termination request)
+                if signal == Some(Signal::SIGTERM) && signaled.is_some() {
+                    signaled.unwrap().store(true, atomic::Ordering::Relaxed);
+                    return Ok(None); // Indicate timeout/termination
+                }
+
+                // SIGCHLD received - child has changed state (exited, stopped, or continued)
+                // Use blocking wait() since we know the child has changed state
+                // This ensures we properly reap the child after receiving SIGCHLD
+                self.wait().map(Some)
+            }
+            // Timeout expired (EAGAIN or ETIMEDOUT)
+            -1 => {
+                let err = Errno::last();
+                if err == Errno::EAGAIN || err == Errno::ETIMEDOUT {
+                    // Timeout reached, child still running
+                    Ok(None)
+                } else {
+                    // Some other error
+                    Err(io::Error::last_os_error())
+                }
+            }
+            // Shouldn't happen
+            _ => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "unexpected sigtimedwait return value",
+            )),
+        }
     }
 }
 
