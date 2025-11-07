@@ -3450,6 +3450,7 @@ name = "uu_factor"
 version = "0.3.0"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "num-bigint",
  "num-prime",
