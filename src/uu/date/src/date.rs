@@ -460,6 +460,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_RFC_EMAIL)
                 .alias(OPT_RFC_2822)
                 .alias(OPT_RFC_822)
+                .overrides_with(OPT_RFC_EMAIL)
                 .help(translate!("date-help-rfc-email"))
                 .action(ArgAction::SetTrue),
         )
@@ -510,6 +511,8 @@ pub fn uu_app() -> Command {
                 .short('u')
                 .long(OPT_UNIVERSAL)
                 .visible_alias(OPT_UNIVERSAL_2)
+                .alias("uct")
+                .overrides_with(OPT_UNIVERSAL)
                 .help(translate!("date-help-universal"))
                 .action(ArgAction::SetTrue),
         )
