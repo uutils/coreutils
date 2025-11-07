@@ -544,7 +544,6 @@ fn write_zip_examples(
     name: &str,
     output_markdown: bool,
 ) -> io::Result<String> {
-    let mut w = io::BufWriter::new(Vec::new());
     let content = if let Some(f) = get_zip_content(archive, &format!("pages/common/{name}.md")) {
         f
     } else if let Some(f) = get_zip_content(archive, &format!("pages/linux/{name}.md")) {
@@ -552,38 +551,53 @@ fn write_zip_examples(
     } else {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
-            "Could not find tldr examples",
+            format!("Could not find tldr examples for {name}"),
         ));
     };
 
-    writeln!(w)?;
-    writeln!(w, "Examples")?;
-    writeln!(w)?;
+    match format_examples(content, output_markdown) {
+        Err(e) => Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!(
+                "Failed to format the tldr examples of {name}: {}",
+                e.to_string()
+            ),
+        )),
+        Ok(s) => Ok(s),
+    }
+}
+
+fn format_examples(content: String, output_markdown: bool) -> Result<String, std::fmt::Error> {
+    use std::fmt::Write;
+    let mut s = String::new();
+    writeln!(s)?;
+    writeln!(s, "Examples")?;
+    writeln!(s)?;
     for line in content.lines().skip_while(|l| !l.starts_with('-')) {
         if let Some(l) = line.strip_prefix("- ") {
-            writeln!(w, "{l}")?;
+            writeln!(s, "{l}")?;
         } else if line.starts_with('`') {
             if output_markdown {
-                writeln!(w, "```shell\n{}\n```", line.trim_matches('`'))?;
+                writeln!(s, "```shell\n{}\n```", line.trim_matches('`'))?;
             } else {
-                writeln!(w, "{}", line.trim_matches('`'))?;
+                writeln!(s, "{}", line.trim_matches('`'))?;
             }
         } else if line.is_empty() {
-            writeln!(w)?;
+            writeln!(s)?;
         } else {
             // println!("Not sure what to do with this line:");
             // println!("{line}");
         }
     }
-    writeln!(w)?;
+    writeln!(s)?;
     writeln!(
-        w,
+        s,
         "> The examples are provided by the [tldr-pages project](https://tldr.sh) under the [CC BY 4.0 License](https://github.com/tldr-pages/tldr/blob/main/LICENSE.md)."
     )?;
-    writeln!(w, ">")?;
+    writeln!(s, ">")?;
     writeln!(
-        w,
+        s,
         "> Please note that, as uutils is a work in progress, some examples might fail."
     )?;
-    Ok(String::from_utf8(w.into_inner().unwrap()).unwrap())
+    Ok(s)
 }
