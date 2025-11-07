@@ -45,13 +45,10 @@ fn print_factors_str(
         }
         // use num_prime's factorize128 algorithm for u128 integers
         else if x <= BigUint::from_u128(u128::MAX).unwrap() {
-            let rx = num_str.trim().parse::<u128>();
-            let Ok(x) = rx else {
-                // return Ok(). it's non-fatal and we should try the next number.
-                show_warning!("{}: {}", num_str.maybe_quote(), rx.unwrap_err());
-                set_exit_code(1);
-                return Ok(());
-            };
+            // if it's a u128 integer, BigUint will have two u64 digits
+            // in its Vec<u64>, which index 0 is treated as u64::MAX
+            let big_uint_u64s = x.clone().to_u64_digits();
+            let x = u64::MAX as u128 + big_uint_u64s[1] as u128;
             let prime_factors = num_prime::nt_funcs::factorize128(x);
             write_result_u128(w, &x, prime_factors, print_exponents)
                 .map_err_context(|| translate!("factor-error-write-error"))?;
@@ -65,12 +62,12 @@ fn print_factors_str(
                     translate!("factor-error-factorization-incomplete"),
                 ));
             }
-            write_result_biguint(w, &x, prime_factors, print_exponents)
+            write_result_big_uint(w, &x, prime_factors, print_exponents)
                 .map_err_context(|| translate!("factor-error-write-error"))?;
         }
     } else {
         let empty_primes: BTreeMap<BigUint, usize> = BTreeMap::new();
-        write_result_biguint(w, &x, empty_primes, print_exponents)
+        write_result_big_uint(w, &x, empty_primes, print_exponents)
             .map_err_context(|| translate!("factor-error-write-error"))?;
     }
 
@@ -124,7 +121,7 @@ fn write_result_u128(
 }
 
 /// Writing out the prime factors for BigUint integers
-fn write_result_biguint(
+fn write_result_big_uint(
     w: &mut io::BufWriter<impl Write>,
     x: &BigUint,
     factorization: BTreeMap<BigUint, usize>,
