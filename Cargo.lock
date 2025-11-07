@@ -437,27 +437,27 @@ dependencies = [
 
 [[package]]
 name = "codspeed"
-version = "4.0.5"
+version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe68fdd3fe25bc26de0230718d74eb150f09f70be3141c61ea7f9b00812054aa"
+checksum = "c3b847e05a34be5c38f3f2a5052178a3bd32e6b5702f3ea775efde95c483a539"
 dependencies = [
  "anyhow",
  "cc",
  "colored",
+ "getrandom 0.2.16",
  "glob",
  "libc",
  "nix",
  "serde",
  "serde_json",
  "statrs",
- "uuid",
 ]
 
 [[package]]
 name = "codspeed-divan-compat"
-version = "4.0.5"
+version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3423b17bf22fb889322e1cc28efcbab40cde5542c4dba64df51a60e7f534778e"
+checksum = "f0f0e9fe5eaa39995ec35e46407f7154346cc25bd1300c64c21636f3d00cb2cc"
 dependencies = [
  "clap",
  "codspeed",
@@ -468,9 +468,9 @@ dependencies = [
 
 [[package]]
 name = "codspeed-divan-compat-macros"
-version = "4.0.5"
+version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93e373516c58af1c344bfe013b6c9831ce6a08bb59709ab3fa6fe5c9b0e904ff"
+checksum = "88c8babf2a40fd2206a2e030cf020d0d58144cd56e1dc408bfba02cdefb08b4f"
 dependencies = [
  "divan-macros",
  "itertools 0.14.0",
@@ -482,9 +482,9 @@ dependencies = [
 
 [[package]]
 name = "codspeed-divan-compat-walltime"
-version = "4.0.5"
+version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dec8839347bcdbe521a18960614fb413a91e15e73f8543b5e0656b3780dbe43e"
+checksum = "7f26092328e12a36704ffc552f379c6405dd94d3149970b79b22d371717c2aae"
 dependencies = [
  "cfg-if",
  "clap",
@@ -1666,7 +1666,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde_core",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4376,7 +4376,6 @@ version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3cf4199d1e5d15ddd86a694e4d0dffa9c323ce759fea589f00fef9d81cc1931d"
 dependencies = [
- "getrandom 0.3.3",
  "js-sys",
  "wasm-bindgen",
 ]
