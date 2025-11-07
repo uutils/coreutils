@@ -398,7 +398,7 @@ impl Spec {
                             // TODO: This should break the _entire execution_ of printf
                             break;
                         }
-                    };
+                    }
                 }
                 writer.write_all(&parsed).map_err(FormatError::IoError)
             }
@@ -550,6 +550,10 @@ fn write_padded(
     left: bool,
 ) -> Result<(), FormatError> {
     let padlen = width.saturating_sub(text.len());
+
+    // Check if the padding length is too large for formatting
+    super::check_width(padlen).map_err(FormatError::IoError)?;
+
     if left {
         writer.write_all(text)?;
         write!(writer, "{: <padlen$}", "")

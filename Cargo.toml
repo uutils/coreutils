@@ -320,7 +320,7 @@ compare = "0.1.0"
 crossterm = "0.29.0"
 ctor = "0.6.0"
 ctrlc = { version = "3.4.7", features = ["termination"] }
-divan = { package = "codspeed-divan-compat", version = "*" }
+divan = { package = "codspeed-divan-compat", version = "4.0.5" }
 dns-lookup = { version = "3.0.0" }
 exacl = "0.12.0"
 file_diff = "1.0.0"
@@ -344,7 +344,7 @@ jiff = { version = "0.2.10", default-features = false, features = [
   "tz-system",
 ] }
 libc = "0.2.172"
-linux-raw-sys = "0.11"
+linux-raw-sys = "0.12"
 lscolors = { version = "0.21.0", default-features = false, features = [
   "gnu_legacy",
 ] }
@@ -358,7 +358,7 @@ num-prime = "0.4.4"
 num-traits = "0.2.19"
 number_prefix = "0.4"
 onig = { version = "~6.5.1", default-features = false }
-parse_datetime = "0.11.0"
+parse_datetime = "0.13.0"
 phf = "0.13.1"
 phf_codegen = "0.13.1"
 platform-info = "2.0.3"
@@ -396,7 +396,6 @@ sha3 = "0.10.8"
 blake2b_simd = "1.0.2"
 blake3 = "1.5.1"
 sm3 = "0.4.2"
-crc32fast = "1.4.2"
 crc-fast = "1.5.0"
 digest = "0.10.7"
 
@@ -682,7 +681,6 @@ enum_glob_use = "allow"
 ptr_cast_constness = "allow"
 borrow_as_ptr = "allow"
 ptr_as_ptr = "allow"
-unnecessary_semicolon = "allow"
 needless_raw_string_hashes = "allow"
 unreadable_literal = "allow"
 unnested_or_patterns = "allow"
