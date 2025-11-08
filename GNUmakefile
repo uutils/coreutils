@@ -22,12 +22,10 @@ ifeq ($(PROFILE),release)
 	PROFILE_CMD = --release
 endif
 
-RM := rm -rf
-
 # Binaries
 CARGO  ?= cargo
 CARGOFLAGS ?=
-RUSTC_ARCH ?= # should be empty except for cross-build, not --target $(shell rustc -vV | sed -n 's/host: //p')
+RUSTC_ARCH ?= # should be empty except for cross-build, not --target $(shell rustc --print host-tuple)
 
 # Install directories
 PREFIX ?= /usr/local
@@ -201,20 +199,12 @@ SELINUX_PROGS := \
 
 HASHSUM_PROGS := \
 	b2sum \
-	b3sum \
 	md5sum \
 	sha1sum \
 	sha224sum \
 	sha256sum \
-	sha3-224sum \
-	sha3-256sum \
-	sha3-384sum \
-	sha3-512sum \
 	sha384sum \
-	sha3sum \
-	sha512sum \
-	shake128sum \
-	shake256sum
+	sha512sum
 
 $(info Detected OS = $(OS))
 
@@ -340,7 +330,6 @@ endif
 
 all: build
 
-do_install = $(INSTALL) ${1}
 use_default := 1
 
 build-pkgs:
@@ -386,12 +375,11 @@ busybox-src:
 
 # This is a busybox-specific config file their test suite wants to parse.
 $(BUILDDIR)/.config: $(BASEDIR)/.busybox-config
-	cp $< $@
+	$(INSTALL) -m 644 $< $@
 
 # Test under the busybox test suite
 $(BUILDDIR)/busybox: busybox-src build-coreutils $(BUILDDIR)/.config
-	cp "$(BUILDDIR)/coreutils" "$(BUILDDIR)/busybox"
-	chmod +x $@
+	$(INSTALL) -m 755 "$(BUILDDIR)/coreutils" "$(BUILDDIR)/busybox"
 
 prepare-busytest: $(BUILDDIR)/busybox
 	# disable inapplicable tests
@@ -432,7 +420,7 @@ install-completions: build-uudoc
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d
 	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS) , \
 		$(BUILDDIR)/uudoc completion $(prog) zsh > $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(PROG_PREFIX)$(prog) $(newline) \
-		$(BUILDDIR)/uudoc completion $(prog) bash > $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX)$(prog) $(newline) \
+		$(BUILDDIR)/uudoc completion $(prog) bash > $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX)$(prog).bash $(newline) \
 		$(BUILDDIR)/uudoc completion $(prog) fish > $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX)$(prog).fish $(newline) \
 	)
 else
@@ -445,7 +433,7 @@ locales:
 	@if [ -d "$(BASEDIR)/src/uucore/locales" ]; then \
 		mkdir -p "$(BUILDDIR)/locales/uucore"; \
 		for locale_file in "$(BASEDIR)"/src/uucore/locales/*.ftl; do \
-			$(INSTALL) -m 644 -v "$$locale_file" "$(BUILDDIR)/locales/uucore/"; \
+			$(INSTALL) -m 644 "$$locale_file" "$(BUILDDIR)/locales/uucore/"; \
 		done; \
 	fi; \
 	# Copy utility-specific locales
@@ -454,7 +442,7 @@ locales:
 			mkdir -p "$(BUILDDIR)/locales/$$prog"; \
 			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
 				if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
-					$(INSTALL) -m 644 -v "$$locale_file" "$(BUILDDIR)/locales/$$prog/"; \
+					$(INSTALL) -m 644 "$$locale_file" "$(BUILDDIR)/locales/$$prog/"; \
 				fi; \
 			done; \
 		fi; \
@@ -467,12 +455,13 @@ install-locales:
 			mkdir -p "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog"; \
 			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
 				if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
-					$(INSTALL) -m 644 -v "$$locale_file" "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog/"; \
+					$(INSTALL) -m 644 "$$locale_file" "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog/"; \
 				fi; \
 			done; \
 		fi; \
 	done
 else
+locales:
 install-locales:
 endif
 
@@ -504,7 +493,7 @@ endif
 uninstall:
 ifneq ($(OS),Windows_NT)
 	rm -f $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf*
-	-rmdir $(DESTDIR)$(LIBSTDBUF_DIR) 2>/dev/null || true
+	-rm -d $(DESTDIR)$(LIBSTDBUF_DIR) 2>/dev/null || true
 endif
 ifeq (${MULTICALL}, y)
 	rm -f $(addprefix $(INSTALLDIR_BIN)/,$(PROG_PREFIX)coreutils)
@@ -512,7 +501,7 @@ endif
 	rm -f $(addprefix $(INSTALLDIR_BIN)/$(PROG_PREFIX),$(PROGS))
 	rm -f $(INSTALLDIR_BIN)/$(PROG_PREFIX)[
 	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(PROG_PREFIX),$(PROGS))
-	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX),$(PROGS))
+	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX),$(PROGS).bash)
 	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX),$(addsuffix .fish,$(PROGS)))
 	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/man/man1/$(PROG_PREFIX),$(addsuffix .1,$(PROGS)))
 

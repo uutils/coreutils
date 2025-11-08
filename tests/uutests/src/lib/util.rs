@@ -1672,7 +1672,7 @@ impl UCommand {
 
     /// Set if process should be run in a simulated terminal
     ///
-    /// This is useful to test behavior that is only active if e.g. [`stdout.is_terminal()`] is [`true`].
+    /// This is useful to test behavior that is only active if e.g. `stdout.is_terminal()` is `true`.
     /// This function uses default terminal size and attaches stdin, stdout and stderr to that terminal.
     /// For more control over the terminal simulation, use `terminal_sim_stdio`
     /// (unix: pty, windows: `ConPTY`[not yet supported])
@@ -1693,7 +1693,7 @@ impl UCommand {
 
     /// Allows to simulate a terminal use-case with specific properties.
     ///
-    /// This is useful to test behavior that is only active if e.g. [`stdout.is_terminal()`] is [`true`].
+    /// This is useful to test behavior that is only active if e.g. `stdout.is_terminal()` is `true`.
     /// This function allows to set a specific size and to attach the terminal to only parts of the in/out.
     #[cfg(unix)]
     pub fn terminal_sim_stdio(&mut self, config: TerminalSimulation) -> &mut Self {

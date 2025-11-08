@@ -686,6 +686,54 @@ fn is_sparse(buf: &[u8]) -> bool {
     buf.iter().all(|&e| e == 0u8)
 }
 
+/// Handle O_DIRECT write errors by temporarily removing the flag and retrying.
+/// This follows GNU dd behavior for partial block writes with O_DIRECT.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn handle_o_direct_write(f: &mut File, buf: &[u8], original_error: io::Error) -> io::Result<usize> {
+    use nix::fcntl::{FcntlArg, OFlag, fcntl};
+
+    // Get current flags using nix
+    let oflags = match fcntl(&mut *f, FcntlArg::F_GETFL) {
+        Ok(flags) => OFlag::from_bits_retain(flags),
+        Err(_) => return Err(original_error),
+    };
+
+    // If O_DIRECT is set, try removing it temporarily
+    if oflags.contains(OFlag::O_DIRECT) {
+        let flags_without_direct = oflags - OFlag::O_DIRECT;
+
+        // Remove O_DIRECT flag using nix
+        if fcntl(&mut *f, FcntlArg::F_SETFL(flags_without_direct)).is_err() {
+            return Err(original_error);
+        }
+
+        // Retry the write without O_DIRECT
+        let write_result = f.write(buf);
+
+        // Restore O_DIRECT flag using nix (GNU doesn't restore it, but we'll be safer)
+        // Log any restoration errors without failing the operation
+        if let Err(os_err) = fcntl(&mut *f, FcntlArg::F_SETFL(oflags)) {
+            // Just log the error, don't fail the whole operation
+            show_error!("Failed to restore O_DIRECT flag: {}", os_err);
+        }
+
+        write_result
+    } else {
+        // O_DIRECT wasn't set, return original error
+        Err(original_error)
+    }
+}
+
+/// Stub for non-Linux platforms - just return the original error.
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn handle_o_direct_write(
+    _f: &mut File,
+    _buf: &[u8],
+    original_error: io::Error,
+) -> io::Result<usize> {
+    Err(original_error)
+}
+
 impl Write for Dest {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match self {
@@ -697,7 +745,21 @@ impl Write for Dest {
                 f.seek(SeekFrom::Current(seek_amt))?;
                 Ok(buf.len())
             }
-            Self::File(f, _) => f.write(buf),
+            Self::File(f, _) => {
+                // Try the write first
+                match f.write(buf) {
+                    Ok(len) => Ok(len),
+                    Err(e)
+                        if e.kind() == io::ErrorKind::InvalidInput
+                            && e.raw_os_error() == Some(libc::EINVAL) =>
+                    {
+                        // This might be an O_DIRECT alignment issue.
+                        // Try removing O_DIRECT temporarily and retry.
+                        handle_o_direct_write(f, buf, e)
+                    }
+                    Err(e) => Err(e),
+                }
+            }
             Self::Stdout(stdout) => stdout.write(buf),
             #[cfg(unix)]
             Self::Fifo(f) => f.write(buf),

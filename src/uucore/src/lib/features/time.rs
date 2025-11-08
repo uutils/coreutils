@@ -81,7 +81,7 @@ pub fn format_system_time<W: Write>(
                     }
                     out.write_fmt(format_args!("{secs}.{nsecs:09}"))?;
                 }
-            };
+            }
             Ok(())
         }
     }

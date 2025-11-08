@@ -24,18 +24,29 @@ pub fn is_unsafe_overwrite<I: AsFd, O: AsFd>(input: &I, output: &O) -> bool {
     let Ok(output_info) = FileInformation::from_file(output) else {
         return false;
     };
-    if input_info != output_info || output_info.file_size() == 0 {
+    if input_info != output_info {
         return false;
     }
-    if is_appending(output) {
-        return true;
+    let file_size = output_info.file_size();
+    if file_size == 0 {
+        return false;
     }
     // `lseek` returns an error if the file descriptor is closed or it refers to
     // a non-seekable resource (e.g., pipe, socket, or some devices).
-    let Ok(input_pos) = lseek(input.as_fd(), 0, Whence::SeekCur) else {
+    let input_pos = lseek(input.as_fd(), 0, Whence::SeekCur);
+    let output_pos = lseek(output.as_fd(), 0, Whence::SeekCur);
+    if is_appending(output) {
+        if let Ok(pos) = input_pos {
+            if pos >= 0 && (pos as u64) >= file_size {
+                return false;
+            }
+        }
+        return true;
+    }
+    let Ok(input_pos) = input_pos else {
         return false;
     };
-    let Ok(output_pos) = lseek(output.as_fd(), 0, Whence::SeekCur) else {
+    let Ok(output_pos) = output_pos else {
         return false;
     };
     input_pos < output_pos

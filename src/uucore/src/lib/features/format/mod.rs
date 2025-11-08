@@ -113,7 +113,7 @@ impl Display for FormatError {
             Self::InvalidPrecision(precision) => write!(f, "invalid precision: '{precision}'"),
             // TODO: Error message below needs some work
             Self::WrongSpecType => write!(f, "wrong % directive type was given"),
-            Self::IoError(_) => write!(f, "io error"),
+            Self::IoError(_) => write!(f, "write error"),
             Self::NoMoreArguments => write!(f, "no more arguments"),
             Self::InvalidArgument(_) => write!(f, "invalid argument"),
             Self::MissingHex => write!(f, "missing hexadecimal number in escape"),
@@ -124,6 +124,25 @@ impl Display for FormatError {
             ),
             Self::InvalidEncoding(no) => no.fmt(f),
         }
+    }
+}
+
+/// Maximum width for formatting to prevent memory allocation panics.
+/// Rust's formatter will panic when trying to allocate memory for very large widths.
+/// This limit is somewhat arbitrary but should be well above any practical use case
+/// while still preventing formatter panics.
+const MAX_FORMAT_WIDTH: usize = 1_000_000;
+
+/// Check if a width is too large for formatting.
+/// Returns an error if the width exceeds MAX_FORMAT_WIDTH.
+fn check_width(width: usize) -> std::io::Result<()> {
+    if width > MAX_FORMAT_WIDTH {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::OutOfMemory,
+            "formatting width too large",
+        ))
+    } else {
+        Ok(())
     }
 }
 
@@ -173,7 +192,7 @@ impl<C: FormatChar> FormatItem<C> {
         match self {
             Self::Spec(spec) => spec.write(writer, args)?,
             Self::Char(c) => return c.write(writer).map_err(FormatError::IoError),
-        };
+        }
         Ok(ControlFlow::Continue(()))
     }
 }

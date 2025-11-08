@@ -101,7 +101,7 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
     if matches.get_flag("sha3") {
         match matches.get_one::<usize>("bits") {
             Some(bits) => set_or_err(create_sha3(*bits)?)?,
-            None => return Err(ChecksumError::BitsRequiredForSha3.into()),
+            None => return Err(ChecksumError::LengthRequired("SHA3".into()).into()),
         }
     }
     if matches.get_flag("sha3-224") {
@@ -139,7 +139,7 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
                 create_fn: Box::new(|| Box::new(Shake128::new())),
                 bits: *bits,
             })?,
-            None => return Err(ChecksumError::BitsRequiredForShake128.into()),
+            None => return Err(ChecksumError::LengthRequired("SHAKE128".into()).into()),
         }
     }
     if matches.get_flag("shake256") {
@@ -149,7 +149,7 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
                 create_fn: Box::new(|| Box::new(Shake256::new())),
                 bits: *bits,
             })?,
-            None => return Err(ChecksumError::BitsRequiredForShake256.into()),
+            None => return Err(ChecksumError::LengthRequired("SHAKE256".into()).into()),
         }
     }
 
@@ -507,15 +507,6 @@ fn uu_app(binary_name: &str) -> (Command, bool) {
         }
         // b2sum supports the md5sum options plus -l/--length.
         "b2sum" => (uu_app_length(), false),
-        // These have never been part of GNU Coreutils, but can function with the same
-        // options as md5sum.
-        "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum" => (uu_app_common(), false),
-        // These have never been part of GNU Coreutils, and require an additional --bits
-        // option to specify their output size.
-        "sha3sum" | "shake128sum" | "shake256sum" => (uu_app_bits(), false),
-        // b3sum has never been part of GNU Coreutils, and has a --no-names option in
-        // addition to the b2sum options.
-        "b3sum" => (uu_app_b3sum(), false),
         // We're probably just being called as `hashsum`, so give them everything.
         _ => (uu_app_custom(), true),
     };
