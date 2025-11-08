@@ -334,6 +334,9 @@ fn fast_print_seq(
 static SIGPIPE_WAS_IGNORED: AtomicBool = AtomicBool::new(false);
 
 #[cfg(unix)]
+/// # Safety
+/// This function runs once at process initialization and only observes the
+/// current `SIGPIPE` handler, so there are no extra safety requirements for callers.
 unsafe extern "C" fn capture_sigpipe_state() {
     use nix::libc;
     use std::{mem::MaybeUninit, ptr};
