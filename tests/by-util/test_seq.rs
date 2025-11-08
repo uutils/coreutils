@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 // spell-checker:ignore lmnop xlmnop
 use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
@@ -180,6 +182,28 @@ fn test_width_invalid_float() {
         .fails()
         .no_stdout()
         .usage_error("invalid floating point argument: '1e2.3'");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_sigpipe_ignored_reports_write_error() {
+    let scene = TestScenario::new(util_name!());
+    let seq_bin = scene.bin_path.clone().into_os_string();
+    let script =
+        "trap '' PIPE; { \"$SEQ_BIN\" seq inf 2>err; echo $? >code; } | head -n1";
+    let result = scene
+        .cmd_shell(script)
+        .env("SEQ_BIN", &seq_bin)
+        .succeeds();
+
+    assert_eq!(result.stdout_str(), "1\n");
+
+    let err_contents = scene.fixtures.read("err");
+    assert!(
+        err_contents.contains("seq: write error: Broken pipe"),
+        "stderr missing write error message: {err_contents:?}"
+    );
+    assert_eq!(scene.fixtures.read("code"), "1\n");
 }
 
 // ---- Tests for the big integer based path ----
