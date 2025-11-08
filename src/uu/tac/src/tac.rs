@@ -9,11 +9,14 @@ mod error;
 use clap::{Arg, ArgAction, Command};
 use memchr::memmem;
 use memmap2::Mmap;
-use std::ffi::{CString, OsString};
+#[cfg(unix)]
+use std::ffi::CString;
+use std::ffi::OsString;
 use std::io::{BufWriter, Read, Write, stdin, stdout};
+#[cfg(unix)]
+use std::mem::MaybeUninit;
 use std::{
     fs::{File, read},
-    mem::MaybeUninit,
     path::Path,
 };
 use uucore::error::UError;
