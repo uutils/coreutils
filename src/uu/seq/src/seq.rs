@@ -343,8 +343,7 @@ unsafe extern "C" fn capture_sigpipe_state() {
 
     let mut current = MaybeUninit::<libc::sigaction>::uninit();
     if unsafe { libc::sigaction(libc::SIGPIPE, ptr::null(), current.as_mut_ptr()) } == 0 {
-        let ignored =
-            unsafe { current.assume_init() }.sa_sigaction == libc::SIG_IGN;
+        let ignored = unsafe { current.assume_init() }.sa_sigaction == libc::SIG_IGN;
         SIGPIPE_WAS_IGNORED.store(ignored, Ordering::Relaxed);
     }
 }
