@@ -25,7 +25,7 @@ endif
 # Binaries
 CARGO  ?= cargo
 CARGOFLAGS ?=
-RUSTC_ARCH ?= # should be empty except for cross-build, not --target $(shell rustc -vV | sed -n 's/host: //p')
+RUSTC_ARCH ?= # should be empty except for cross-build, not --target $(shell rustc --print host-tuple)
 
 # Install directories
 PREFIX ?= /usr/local
