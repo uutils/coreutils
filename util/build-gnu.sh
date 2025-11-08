@@ -105,12 +105,7 @@ echo "UU_BUILD_DIR='${UU_BUILD_DIR}'"
 
 cd "${path_UUTILS}" && echo "[ pwd:'${PWD}' ]"
 
-# Check for SELinux support
-if [ "$(uname)" == "Linux" ]; then
-    # Only attempt to enable SELinux features on Linux
-    export SELINUX_ENABLED=1
-    CARGO_FEATURE_FLAGS="${CARGO_FEATURE_FLAGS} selinux"
-fi
+[ "$SELINUX_ENABLED" -eq 1 ] && CARGO_FEATURE_FLAGS="${CARGO_FEATURE_FLAGS} selinux"
 
 # Trim leading whitespace from feature flags
 CARGO_FEATURE_FLAGS="$(echo "${CARGO_FEATURE_FLAGS}" | sed -e 's/^[[:space:]]*//')"
@@ -133,8 +128,6 @@ else
     quilt push -a || { echo "Failed to apply patches"; exit 1; }
 fi
 cd -
-# Add missing SELINUX_PROGS for tests
-cargo build --profile="${UU_MAKE_PROFILE}" -p uu_runcon #-p uu_chcon
 # Pass the feature flags to make, which will pass them to cargo
 "${MAKE}" PROFILE="${UU_MAKE_PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
 touch g
