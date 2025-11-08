@@ -134,7 +134,7 @@ else
 fi
 cd -
 # Add missing SELINUX_PROGS for tests
-cargo build --profile="${UU_MAKE_PROFILE}" -p uu_runcon -p uu_chcon
+cargo build --profile="${UU_MAKE_PROFILE}" -p uu_runcon #-p uu_chcon
 # Pass the feature flags to make, which will pass them to cargo
 "${MAKE}" PROFILE="${UU_MAKE_PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
 touch g
