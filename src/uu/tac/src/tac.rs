@@ -263,13 +263,10 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
             }
         } else {
             let path = Path::new(filename);
-            let metadata = match path.metadata() {
-                Ok(metadata) => metadata,
-                Err(_) => {
-                    let e: Box<dyn UError> = TacError::FileNotFound(filename.clone()).into();
-                    show!(e);
-                    continue;
-                }
+            let Ok(metadata) = path.metadata() else {
+                let e: Box<dyn UError> = TacError::FileNotFound(filename.clone()).into();
+                show!(e);
+                continue;
             };
 
             if metadata.is_dir() {
