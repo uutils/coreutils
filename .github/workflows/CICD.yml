@@ -303,11 +303,12 @@ jobs:
       run: make nextest PROFILE=ci CARGOFLAGS="--hide-progress-bar"
       env:
         RUST_BACKTRACE: "1"
-    - name: "`make install PROFILE=release-fast COMPLETIONS=n MANPAGES=n`"
+
+    - name: "`make install PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n`"
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/ make PROFILE=release-fast COMPLETIONS=n MANPAGES=n install
+        DESTDIR=/tmp/ make PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n install
         # Check that utils are built with given profile
         test -f target/release-fast/ln
         # Check that the utils are present
