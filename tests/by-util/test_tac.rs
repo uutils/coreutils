@@ -351,18 +351,11 @@ fn test_fifo_argument() {
     let child = scene.ucmd().arg("fifo_input").run_no_wait();
 
     let writer = thread::spawn(move || {
-        let mut pipe = OpenOptions::new()
-            .write(true)
-            .open(fifo_path)
-            .unwrap();
+        let mut pipe = OpenOptions::new().write(true).open(fifo_path).unwrap();
         pipe.write_all(b"line1\nline2\n").unwrap();
     });
 
-    child
-        .wait()
-        .unwrap()
-        .success()
-        .stdout_is("line2\nline1\n");
+    child.wait().unwrap().success().stdout_is("line2\nline1\n");
 
     writer.join().unwrap();
 }
