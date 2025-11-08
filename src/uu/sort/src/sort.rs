@@ -2485,12 +2485,10 @@ fn compare_by<'a>(
                 // Use locale-aware comparison if feature is enabled and no custom flags are set
                 #[cfg(feature = "i18n-collator")]
                 {
-                    if !(settings.ignore_case
+                    if settings.ignore_case
                         || settings.dictionary_order
-                        || settings.ignore_non_printing)
+                        || settings.ignore_non_printing
                     {
-                        locale_cmp(a_str, b_str)
-                    } else {
                         custom_str_cmp(
                             a_str,
                             b_str,
@@ -2498,6 +2496,8 @@ fn compare_by<'a>(
                             settings.dictionary_order,
                             settings.ignore_case,
                         )
+                    } else {
+                        locale_cmp(a_str, b_str)
                     }
                 }
                 #[cfg(not(feature = "i18n-collator"))]
