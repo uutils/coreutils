@@ -9,7 +9,7 @@ mod error;
 use clap::{Arg, ArgAction, Command};
 use memchr::memmem;
 use memmap2::Mmap;
-use std::ffi::{CStr, OsString};
+use std::ffi::{CString, OsString};
 use std::io::{BufWriter, Read, Write, stdin, stdout};
 use std::{
     fs::{File, read},
@@ -23,9 +23,6 @@ use uucore::{format_usage, show};
 use crate::error::TacError;
 
 use uucore::translate;
-
-#[cfg(unix)]
-use libc;
 
 mod options {
     pub static BEFORE: &str = "before";
@@ -367,7 +364,7 @@ fn fstat_fd(fd: libc::c_int) -> std::io::Result<libc::stat> {
 
 #[cfg(unix)]
 fn stat_dev_null() -> std::io::Result<libc::stat> {
-    let dev_null = CStr::from_bytes_with_nul(b"/dev/null\0").expect("static string");
+    let dev_null = CString::new("/dev/null").expect("static literal without interior NUL");
     let fd = unsafe { libc::open(dev_null.as_ptr(), libc::O_RDONLY) };
     if fd == -1 {
         return Err(std::io::Error::last_os_error());
