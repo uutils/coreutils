@@ -4,9 +4,9 @@ use rayon::prelude::*;
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 
-use crate::{du_regular, FileInfo, Stat, StatPrintInfo, TraversalOptions};
+use crate::{FileInfo, Stat, StatPrintInfo, TraversalOptions, du_regular};
 use uucore::error::UResult;
 
 /// Minimum number of subdirectories to enable parallel processing
@@ -38,35 +38,16 @@ pub fn du_parallel(
             .collect(),
         Err(_) => {
             // Can't read directory, fall back to sequential
-            return du_regular(
-                init_stat,
-                options,
-                depth,
-                seen_inodes,
-                print_tx,
-                None,
-                None,
-            );
+            return du_regular(init_stat, options, depth, seen_inodes, print_tx, None, None);
         }
     };
 
     // Count directories
-    let dir_count = entries
-        .iter()
-        .filter(|p| p.is_dir())
-        .count();
+    let dir_count = entries.iter().filter(|p| p.is_dir()).count();
 
     // If too few directories, use sequential processing
     if dir_count < PARALLEL_THRESHOLD {
-        return du_regular(
-            init_stat,
-            options,
-            depth,
-            seen_inodes,
-            print_tx,
-            None,
-            None,
-        );
+        return du_regular(init_stat, options, depth, seen_inodes, print_tx, None, None);
     }
 
     // Parallel processing for many directories
