@@ -24,8 +24,6 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use custom_str_cmp::custom_str_cmp;
 
-#[cfg(feature = "i18n-collator")]
-use uucore::i18n::collator::{locale_cmp, try_init_collator};
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
@@ -51,6 +49,8 @@ use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::format_usage;
 use uucore::i18n::decimal::locale_decimal_separator;
+#[cfg(feature = "i18n-collator")]
+use uucore::i18n::collator::{locale_cmp, try_init_collator};
 use uucore::line_ending::LineEnding;
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
@@ -339,7 +339,8 @@ impl GlobalSettings {
             .filter(|s| matches!(s.settings.mode, SortMode::GeneralNumeric))
             .count();
 
-        self.precomputed.fast_lexicographic = !disable_fast_lexicographic && self.can_use_fast_lexicographic();
+        self.precomputed.fast_lexicographic =
+            !disable_fast_lexicographic && self.can_use_fast_lexicographic();
         self.precomputed.fast_ascii_insensitive = self.can_use_fast_ascii_insensitive();
     }
 
@@ -2078,8 +2079,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // This MUST happen before init_precomputed() to avoid the performance regression
     #[cfg(feature = "i18n-collator")]
     let needs_locale_collation = {
-        use uucore::i18n::{get_locale_encoding, UEncoding};
         use uucore::i18n::collator::{AlternateHandling, CollatorOptions};
+        use uucore::i18n::{UEncoding, get_locale_encoding};
 
         let is_utf8_locale = get_locale_encoding() == UEncoding::Utf8;
 
