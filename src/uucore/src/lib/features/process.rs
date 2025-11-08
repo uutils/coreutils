@@ -18,6 +18,12 @@ use std::sync::atomic;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
+#[cfg(target_os = "macos")]
+use std::time::Instant;
+
+#[cfg(target_os = "macos")]
+use nix::sys::event::{EventFilter, EventFlag, FilterFlag, KEvent, Kqueue};
+
 // SAFETY: These functions always succeed and return simple integers.
 
 /// `geteuid()` returns the effective user ID of the calling process.
@@ -120,6 +126,7 @@ impl ChildExt for Child {
         }
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn wait_or_timeout(
         &mut self,
         timeout: Duration,
@@ -196,6 +203,100 @@ impl ChildExt for Child {
             }
             // Shouldn't happen
             _ => Err(io::Error::other("unexpected sigtimedwait return value")),
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn wait_or_timeout(
+        &mut self,
+        timeout: Duration,
+        signaled: Option<&AtomicBool>,
+    ) -> io::Result<Option<ExitStatus>> {
+        // macOS implementation using kqueue for efficient signal monitoring
+        if timeout == Duration::from_micros(0) {
+            return self.wait().map(Some);
+        }
+
+        // .try_wait() doesn't drop stdin, so we do it manually
+        drop(self.stdin.take());
+
+        // Create kqueue for signal monitoring
+        let kq = Kqueue::new().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+
+        // Create events for signals we want to monitor
+        let mut changelist = Vec::with_capacity(2);
+
+        // Always monitor SIGCHLD
+        changelist.push(KEvent::new(
+            Signal::SIGCHLD as usize,
+            EventFilter::EVFILT_SIGNAL,
+            EventFlag::EV_ADD | EventFlag::EV_ONESHOT,
+            FilterFlag::empty(),
+            0,
+            0,
+        ));
+
+        // Optionally monitor SIGTERM
+        if signaled.is_some() {
+            changelist.push(KEvent::new(
+                Signal::SIGTERM as usize,
+                EventFilter::EVFILT_SIGNAL,
+                EventFlag::EV_ADD | EventFlag::EV_ONESHOT,
+                FilterFlag::empty(),
+                0,
+                0,
+            ));
+        }
+
+        // Calculate timeout
+        let deadline = Instant::now() + timeout;
+        let timeout_spec = Some(libc::timespec {
+            tv_sec: timeout.as_secs() as libc::time_t,
+            tv_nsec: timeout.subsec_nanos() as libc::c_long,
+        });
+
+        // Wait for signal events
+        let mut eventlist = vec![KEvent::new(
+            0,
+            EventFilter::EVFILT_SIGNAL,
+            EventFlag::empty(),
+            FilterFlag::empty(),
+            0,
+            0,
+        )];
+
+        match kq.kevent(&changelist, &mut eventlist, timeout_spec) {
+            Ok(n) if n > 0 => {
+                // Signal received - check which one
+                let sig_num = eventlist[0].ident() as i32;
+                let signal = Signal::try_from(sig_num).ok();
+
+                // Check if SIGTERM was received
+                if signal == Some(Signal::SIGTERM) {
+                    if let Some(flag) = signaled {
+                        flag.store(true, atomic::Ordering::Relaxed);
+                    }
+                    return Ok(None);
+                }
+
+                // SIGCHLD received - reap the child
+                self.wait().map(Some)
+            }
+            Ok(_) => {
+                // Timeout expired
+                Ok(None)
+            }
+            Err(Errno::EINTR) => {
+                // Interrupted - check if we still have time and retry
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                if remaining > Duration::ZERO {
+                    // Recursively retry with remaining time
+                    self.wait_or_timeout(remaining, signaled)
+                } else {
+                    Ok(None)
+                }
+            }
+            Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
         }
     }
 }
