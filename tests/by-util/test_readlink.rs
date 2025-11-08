@@ -103,6 +103,7 @@ fn test_symlink_to_itself_verbose() {
 }
 
 #[test]
+#[cfg(not(windows))]
 fn test_posixly_correct_regular_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

@@ -95,7 +95,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
                 let path = p.to_string_lossy().into_owned();
                 let message = if err.raw_os_error() == Some(EINVAL) {
-                    format!("{path}: Invalid argument")
+                    translate!("readlink-error-invalid-argument", "path" => path.clone())
                 } else {
                     err.map_err_context(|| path.clone()).to_string()
                 };
