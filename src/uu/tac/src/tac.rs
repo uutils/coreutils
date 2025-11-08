@@ -9,10 +9,11 @@ mod error;
 use clap::{Arg, ArgAction, Command};
 use memchr::memmem;
 use memmap2::Mmap;
-use std::ffi::OsString;
+use std::ffi::{CStr, OsString};
 use std::io::{BufWriter, Read, Write, stdin, stdout};
 use std::{
     fs::{File, read},
+    mem::MaybeUninit,
     path::Path,
 };
 use uucore::error::UError;
@@ -24,9 +25,7 @@ use crate::error::TacError;
 use uucore::translate;
 
 #[cfg(unix)]
-use nix::fcntl::{FcntlArg, fcntl};
-#[cfg(unix)]
-use std::os::fd::AsFd;
+use libc;
 
 mod options {
     pub static BEFORE: &str = "before";
@@ -335,13 +334,56 @@ fn try_mmap_path(path: &Path) -> Option<Mmap> {
     Some(mmap)
 }
 
+#[cfg(unix)]
+fn stdin_closed_or_reopened_null() -> std::io::Result<bool> {
+    let flags = unsafe { libc::fcntl(libc::STDIN_FILENO, libc::F_GETFL) };
+    if flags == -1 {
+        return Ok(true);
+    }
+    stdin_is_reopened_dev_null(flags)
+}
+
+#[cfg(unix)]
+fn stdin_is_reopened_dev_null(flags: libc::c_int) -> std::io::Result<bool> {
+    if flags & libc::O_ACCMODE != libc::O_RDWR {
+        return Ok(false);
+    }
+
+    let stdin_stat = fstat_fd(libc::STDIN_FILENO)?;
+    let dev_null_stat = stat_dev_null()?;
+
+    Ok(stdin_stat.st_dev == dev_null_stat.st_dev && stdin_stat.st_ino == dev_null_stat.st_ino)
+}
+
+#[cfg(unix)]
+fn fstat_fd(fd: libc::c_int) -> std::io::Result<libc::stat> {
+    let mut stat = MaybeUninit::<libc::stat>::uninit();
+    if unsafe { libc::fstat(fd, stat.as_mut_ptr()) } == -1 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(unsafe { stat.assume_init() })
+    }
+}
+
+#[cfg(unix)]
+fn stat_dev_null() -> std::io::Result<libc::stat> {
+    let dev_null = CStr::from_bytes_with_nul(b"/dev/null\0").expect("static string");
+    let fd = unsafe { libc::open(dev_null.as_ptr(), libc::O_RDONLY) };
+    if fd == -1 {
+        return Err(std::io::Error::last_os_error());
+    }
+    let stat = fstat_fd(fd);
+    unsafe {
+        libc::close(fd);
+    }
+    stat
+}
+
 fn ensure_stdin_open() -> std::io::Result<()> {
     #[cfg(unix)]
     {
-        let stdin_handle = stdin();
-        let borrowed_fd = stdin_handle.as_fd();
-        if let Err(errno) = fcntl(borrowed_fd, FcntlArg::F_GETFL) {
-            return Err(std::io::Error::from_raw_os_error(errno as i32));
+        if stdin_closed_or_reopened_null()? {
+            return Err(std::io::Error::from_raw_os_error(libc::EBADF));
         }
     }
     Ok(())
