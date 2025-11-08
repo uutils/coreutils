@@ -71,7 +71,7 @@ fn factor_single_big_uint(bencher: Bencher) {
 fn factor_multiple_big_uint(bencher: Bencher) {
     // max u128 value is 340_282_366_920_938_463_463_374_607_431_768_211_455
     bencher
-        .with_inputs(|| (768_211_456_u64, 768_261_456_u64))
+        .with_inputs(|| (768_211_456_u64, 768_211_481_u64))
         .bench_values(|(start_big_uint, end_big_uint)| {
             for digit in start_big_uint..=end_big_uint {
                 let big_uint_str = format!("340282366920938463463374607431768211456{digit}");
