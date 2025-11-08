@@ -292,8 +292,13 @@ pub fn du_parallel_cached(
     // Cache miss - perform full parallel traversal
     let result = du_parallel::du_parallel(init_stat, options, depth, seen_inodes, print_tx)?;
 
-    // Update cache with computed size
-    update_cache(result.path.clone(), result.size);
+    // Update cache with the actual disk usage (blocks * 512)
+    // Note: result.size is apparent size, but du displays blocks * 512 by default
+    let disk_usage = result.blocks * 512;
+    if std::env::var("DU_CACHE_DEBUG").is_ok() {
+        eprintln!("[CACHE STORE] size={} blocks={} disk_usage={}", result.size, result.blocks, disk_usage);
+    }
+    update_cache(result.path.clone(), disk_usage);
 
     // Save cache to disk for persistence across runs
     // Ignore errors (e.g., permission denied when running as root)
