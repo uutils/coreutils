@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore fstatat openat dirfd
 
+mod du_cached;
 mod du_parallel;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
@@ -1154,13 +1155,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     seen_inodes.insert(inode);
                 }
 
-                // Try parallel processing first, falls back to sequential if threshold not met
-                let stat = du_parallel::du_parallel(
+                // Use cached parallel processing for massive speedup on repeated scans
+                // Set DU_CACHE=0 to disable caching
+                let cache_config = du_cached::CacheConfig {
+                    enabled: env::var("DU_CACHE").map(|v| v != "0").unwrap_or(true),
+                    max_entries: 100_000,
+                };
+
+                let stat = du_cached::du_parallel_cached(
                     stat,
                     &traversal_options,
                     0,
                     &mut seen_inodes,
                     &print_tx,
+                    &cache_config,
                 )
                 .map_err(|e| USimpleError::new(1, e.to_string()))?;
 
