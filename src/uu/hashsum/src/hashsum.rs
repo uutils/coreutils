@@ -507,15 +507,6 @@ fn uu_app(binary_name: &str) -> (Command, bool) {
         }
         // b2sum supports the md5sum options plus -l/--length.
         "b2sum" => (uu_app_length(), false),
-        // These have never been part of GNU Coreutils, but can function with the same
-        // options as md5sum.
-        "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum" => (uu_app_common(), false),
-        // These have never been part of GNU Coreutils, and require an additional --bits
-        // option to specify their output size.
-        "sha3sum" | "shake128sum" | "shake256sum" => (uu_app_bits(), false),
-        // b3sum has never been part of GNU Coreutils, and has a --no-names option in
-        // addition to the b2sum options.
-        "b3sum" => (uu_app_b3sum(), false),
         // We're probably just being called as `hashsum`, so give them everything.
         _ => (uu_app_custom(), true),
     };
