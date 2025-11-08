@@ -25,7 +25,7 @@ fn remove_file(path: &Path) {
 }
 
 /// Benchmark basic dd copy with default settings
-#[divan::bench(args = [16])]
+#[divan::bench(args = [32])]
 fn dd_copy_default(bencher: Bencher, size_mb: usize) {
     let temp_dir = TempDir::new().unwrap();
     let input = temp_dir.path().join("input.bin");
@@ -50,7 +50,7 @@ fn dd_copy_default(bencher: Bencher, size_mb: usize) {
 }
 
 /// Benchmark dd copy with 4KB block size (common page size)
-#[divan::bench(args = [16])]
+#[divan::bench(args = [24])]
 fn dd_copy_4k_blocks(bencher: Bencher, size_mb: usize) {
     let temp_dir = TempDir::new().unwrap();
     let input = temp_dir.path().join("input.bin");
@@ -76,7 +76,7 @@ fn dd_copy_4k_blocks(bencher: Bencher, size_mb: usize) {
 }
 
 /// Benchmark dd copy with 64KB block size
-#[divan::bench(args = [16])]
+#[divan::bench(args = [64])]
 fn dd_copy_64k_blocks(bencher: Bencher, size_mb: usize) {
     let temp_dir = TempDir::new().unwrap();
     let input = temp_dir.path().join("input.bin");
@@ -102,7 +102,7 @@ fn dd_copy_64k_blocks(bencher: Bencher, size_mb: usize) {
 }
 
 /// Benchmark dd copy with 1MB block size
-#[divan::bench(args = [16])]
+#[divan::bench(args = [128])]
 fn dd_copy_1m_blocks(bencher: Bencher, size_mb: usize) {
     let temp_dir = TempDir::new().unwrap();
     let input = temp_dir.path().join("input.bin");
@@ -128,7 +128,7 @@ fn dd_copy_1m_blocks(bencher: Bencher, size_mb: usize) {
 }
 
 /// Benchmark dd copy with separate input and output block sizes
-#[divan::bench(args = [16])]
+#[divan::bench(args = [48])]
 fn dd_copy_separate_blocks(bencher: Bencher, size_mb: usize) {
     let temp_dir = TempDir::new().unwrap();
     let input = temp_dir.path().join("input.bin");
@@ -155,7 +155,7 @@ fn dd_copy_separate_blocks(bencher: Bencher, size_mb: usize) {
 }
 
 /// Benchmark dd with count limit (partial copy)
-#[divan::bench(args = [16])]
+#[divan::bench(args = [32])]
 fn dd_copy_partial(bencher: Bencher, size_mb: usize) {
     let temp_dir = TempDir::new().unwrap();
     let input = temp_dir.path().join("input.bin");
@@ -182,7 +182,7 @@ fn dd_copy_partial(bencher: Bencher, size_mb: usize) {
 }
 
 /// Benchmark dd with skip (seeking in input)
-#[divan::bench(args = [16])]
+#[divan::bench(args = [48])]
 fn dd_copy_with_skip(bencher: Bencher, size_mb: usize) {
     let temp_dir = TempDir::new().unwrap();
     let input = temp_dir.path().join("input.bin");
@@ -209,7 +209,7 @@ fn dd_copy_with_skip(bencher: Bencher, size_mb: usize) {
 }
 
 /// Benchmark dd with seek (seeking in output)
-#[divan::bench(args = [16])]
+#[divan::bench(args = [48])]
 fn dd_copy_with_seek(bencher: Bencher, size_mb: usize) {
     let temp_dir = TempDir::new().unwrap();
     let input = temp_dir.path().join("input.bin");
@@ -236,7 +236,7 @@ fn dd_copy_with_seek(bencher: Bencher, size_mb: usize) {
 }
 
 /// Benchmark dd with different block sizes for comparison
-#[divan::bench(args = [16])]
+#[divan::bench(args = [32])]
 fn dd_copy_8k_blocks(bencher: Bencher, size_mb: usize) {
     let temp_dir = TempDir::new().unwrap();
     let input = temp_dir.path().join("input.bin");
