@@ -335,3 +335,34 @@ fn test_failed_write_is_reported() {
         .fails()
         .stderr_is("tac: failed to write to stdout: No space left on device (os error 28)\n");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_fifo_argument() {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    use std::thread;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkfifo("fifo_input");
+    let fifo_path = at.plus("fifo_input");
+
+    let child = scene.ucmd().arg("fifo_input").run_no_wait();
+
+    let writer = thread::spawn(move || {
+        let mut pipe = OpenOptions::new()
+            .write(true)
+            .open(fifo_path)
+            .unwrap();
+        pipe.write_all(b"line1\nline2\n").unwrap();
+    });
+
+    child
+        .wait()
+        .unwrap()
+        .success()
+        .stdout_is("line2\nline1\n");
+
+    writer.join().unwrap();
+}

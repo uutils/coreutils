@@ -263,21 +263,31 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
             }
         } else {
             let path = Path::new(filename);
-            if path.is_dir() {
+            let metadata = match path.metadata() {
+                Ok(metadata) => metadata,
+                Err(_) => {
+                    let e: Box<dyn UError> = TacError::FileNotFound(filename.clone()).into();
+                    show!(e);
+                    continue;
+                }
+            };
+
+            if metadata.is_dir() {
                 let e: Box<dyn UError> = TacError::InvalidArgument(filename.clone()).into();
                 show!(e);
                 continue;
             }
 
-            if path.metadata().is_err() {
-                let e: Box<dyn UError> = TacError::FileNotFound(filename.clone()).into();
-                show!(e);
-                continue;
+            let mut maybe_data: Option<&[u8]> = None;
+            if metadata.is_file() {
+                if let Some(mmap1) = try_mmap_path(path) {
+                    mmap = mmap1;
+                    maybe_data = Some(&mmap[..]);
+                }
             }
 
-            if let Some(mmap1) = try_mmap_path(path) {
-                mmap = mmap1;
-                &mmap
+            if let Some(data_slice) = maybe_data {
+                data_slice
             } else {
                 match read(path) {
                     Ok(buf1) => {
