@@ -22,6 +22,7 @@ cksum-help-raw = emit a raw binary digest, not hexadecimal
 cksum-help-strict = exit non-zero for improperly formatted checksum lines
 cksum-help-check = read hashsums from the FILEs and check them
 cksum-help-base64 = emit a base64 digest, not hexadecimal
+cksum-help-debug = indicate which implementation is used
 cksum-help-warn = warn about improperly formatted checksum lines
 cksum-help-status = don't output anything, status code shows success
 cksum-help-quiet = don't print OK for each successfully verified file

@@ -22,6 +22,7 @@ cksum-help-raw = émettre un condensé binaire brut, pas hexadécimal
 cksum-help-strict = sortir avec un code non-zéro pour les lignes de somme de contrôle mal formatées
 cksum-help-check = lire les sommes de hachage des FICHIERs et les vérifier
 cksum-help-base64 = émettre un condensé base64, pas hexadécimal
+cksum-help-debug = indiquer quelle implémentation est utilisée
 cksum-help-warn = avertir des lignes de somme de contrôle mal formatées
 cksum-help-status = ne rien afficher, le code de statut indique le succès
 cksum-help-quiet = ne pas afficher OK pour chaque fichier vérifié avec succès

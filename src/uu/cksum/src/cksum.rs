@@ -3,10 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) fname, algo
+// spell-checker:ignore (ToDO) fname, algo, hwcaps, pclmul, vmull, pmull, vpclmulqdq, pclmulqdq, tunables, behaviour
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
+use std::collections::HashSet;
+use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufReader, Read, Write, stdin, stdout};
@@ -37,6 +39,7 @@ struct Options {
     length: Option<usize>,
     output_format: OutputFormat,
     line_ending: LineEnding,
+    debug: bool,
 }
 
 /// Reading mode used to compute digest.
@@ -188,6 +191,8 @@ where
 {
     let mut files = files.peekable();
 
+    emit_crc_debug_info(&options);
+
     while let Some(filename) = files.next() {
         // Check that in raw mode, we are not provided with several files.
         if options.output_format.is_raw() && files.peek().is_some() {
@@ -268,6 +273,160 @@ where
     Ok(())
 }
 
+fn log_debug_message(feature: &str, status: Option<bool>) {
+    match status {
+        Some(true) => eprintln!("cksum: using {feature} hardware support"),
+        Some(false) => eprintln!("cksum: {feature} support not detected"),
+        None => {}
+    }
+}
+
+/// Emit GNU-compatible hardware selection messages for `cksum --debug`.
+///
+/// GNU cksum prints which SIMD/SW implementation it picked whenever `--debug` is present.
+/// The upstream tests rely on that output to ensure every hardware-specific path can be
+/// exercised (including cases where GLIBC_TUNABLES forces a feature off).  We mirror that
+/// behaviour here by checking both `std::arch` feature flags and the `glibc.cpu.hwcaps`
+/// overrides, but only for the legacy CRC algorithms where multiple implementations exist.
+fn emit_crc_debug_info(options: &Options) {
+    if !options.debug {
+        return;
+    }
+
+    if options.algo_name != ALGORITHM_OPTIONS_CRC && options.algo_name != ALGORITHM_OPTIONS_CRC32B {
+        return;
+    }
+
+    let disabled_caps = glibc_disabled_hwcaps();
+
+    log_debug_message("avx512", detect_avx512(&disabled_caps));
+    log_debug_message("avx2", detect_avx2(&disabled_caps));
+    log_debug_message("pclmul", detect_pclmul(&disabled_caps));
+
+    if options.algo_name == ALGORITHM_OPTIONS_CRC {
+        log_debug_message("vmull", detect_vmull(&disabled_caps));
+    }
+}
+
+fn detect_avx512(disabled_caps: &HashSet<String>) -> Option<bool> {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        if disabled_caps.contains("AVX512F")
+            || disabled_caps.contains("AVX512BW")
+            || disabled_caps.contains("VPCLMULQDQ")
+        {
+            return Some(false);
+        }
+
+        Some(
+            std::arch::is_x86_feature_detected!("avx512f")
+                && std::arch::is_x86_feature_detected!("avx512bw")
+                && std::arch::is_x86_feature_detected!("vpclmulqdq"),
+        )
+    }
+
+    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+    {
+        let _ = disabled_caps;
+        None
+    }
+}
+
+fn detect_avx2(disabled_caps: &HashSet<String>) -> Option<bool> {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        if disabled_caps.contains("AVX2") || disabled_caps.contains("VPCLMULQDQ") {
+            return Some(false);
+        }
+
+        Some(
+            std::arch::is_x86_feature_detected!("avx2")
+                && std::arch::is_x86_feature_detected!("vpclmulqdq"),
+        )
+    }
+
+    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+    {
+        let _ = disabled_caps;
+        None
+    }
+}
+
+fn detect_pclmul(disabled_caps: &HashSet<String>) -> Option<bool> {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        if disabled_caps.contains("AVX")
+            || disabled_caps.contains("PCLMUL")
+            || disabled_caps.contains("PCLMULQDQ")
+        {
+            return Some(false);
+        }
+
+        Some(
+            std::arch::is_x86_feature_detected!("avx")
+                && std::arch::is_x86_feature_detected!("pclmulqdq"),
+        )
+    }
+
+    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+    {
+        let _ = disabled_caps;
+        None
+    }
+}
+
+fn detect_vmull(disabled_caps: &HashSet<String>) -> Option<bool> {
+    #[cfg(target_arch = "aarch64")]
+    {
+        if disabled_caps.contains("PMULL") {
+            return Some(false);
+        }
+
+        Some(std::arch::is_aarch64_feature_detected!("pmull"))
+    }
+
+    #[cfg(not(target_arch = "aarch64"))]
+    {
+        let _ = disabled_caps;
+        None
+    }
+}
+
+fn glibc_disabled_hwcaps() -> HashSet<String> {
+    env::var("GLIBC_TUNABLES")
+        .ok()
+        .map(|value| parse_disabled_hwcaps(&value))
+        .unwrap_or_default()
+}
+
+fn parse_disabled_hwcaps(tunables: &str) -> HashSet<String> {
+    let mut disabled = HashSet::new();
+
+    for entry in tunables.split(':') {
+        let trimmed = entry.trim();
+        let Some(value) = trimmed.strip_prefix("glibc.cpu.hwcaps=") else {
+            continue;
+        };
+
+        for token in value.split(',') {
+            let token = token.trim();
+            if token.is_empty() {
+                continue;
+            }
+
+            if let Some(feature) = token.strip_prefix('-') {
+                let feature = feature.trim();
+
+                if !feature.is_empty() {
+                    disabled.insert(feature.to_ascii_uppercase());
+                }
+            }
+        }
+    }
+
+    disabled
+}
+
 mod options {
     pub const ALGORITHM: &str = "algorithm";
     pub const FILE: &str = "file";
@@ -285,6 +444,7 @@ mod options {
     pub const IGNORE_MISSING: &str = "ignore-missing";
     pub const QUIET: &str = "quiet";
     pub const ZERO: &str = "zero";
+    pub const DEBUG: &str = "debug";
 }
 
 /// cksum has a bunch of legacy behavior. We handle this in this function to
@@ -395,6 +555,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let check = matches.get_flag(options::CHECK);
+    let debug_flag = matches.get_flag(options::DEBUG);
 
     let algo_cli = matches
         .get_one::<String>(options::ALGORITHM)
@@ -470,6 +631,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         length,
         output_format,
         line_ending,
+        debug: debug_flag,
     };
 
     cksum(opts, files)?;
@@ -550,6 +712,12 @@ pub fn uu_app() -> Command {
                 .conflicts_with(options::RAW),
         )
         .arg(
+            Arg::new(options::DEBUG)
+                .long(options::DEBUG)
+                .help(translate!("cksum-help-debug"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new(options::TEXT)
                 .long(options::TEXT)
                 .short('t')
@@ -601,4 +769,25 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .after_help(translate!("cksum-after-help"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_disabled_hwcaps;
+
+    #[test]
+    fn parse_disabled_hwcaps_picks_up_multiple_features() {
+        let caps = parse_disabled_hwcaps("glibc.cpu.hwcaps=-AVX2,-PMULL,");
+        assert!(caps.contains("AVX2"));
+        assert!(caps.contains("PMULL"));
+    }
+
+    #[test]
+    fn parse_disabled_hwcaps_ignores_other_entries() {
+        let caps =
+            parse_disabled_hwcaps("glibc.malloc.trim=0:glibc.cpu.hwcaps=-AVX512F,-VPCLMULQDQ");
+        assert!(caps.contains("AVX512F"));
+        assert!(caps.contains("VPCLMULQDQ"));
+        assert!(!caps.contains("MALLOC"));
+    }
 }

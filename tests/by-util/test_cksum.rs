@@ -22,6 +22,11 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_debug_flag_is_accepted() {
+    new_ucmd!().arg("--debug").arg("lorem_ipsum.txt").succeeds();
+}
+
+#[test]
 fn test_single_file() {
     new_ucmd!()
         .arg("lorem_ipsum.txt")
