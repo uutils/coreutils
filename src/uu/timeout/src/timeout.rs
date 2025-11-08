@@ -11,6 +11,9 @@ use clap::{Arg, ArgAction, Command};
 use nix::errno::Errno;
 use nix::sys::signal::{SigSet, SigmaskHow, Signal, sigprocmask};
 use std::io::{self, ErrorKind};
+
+#[cfg(target_os = "macos")]
+use nix::sys::event::{EventFilter, EventFlag, FilterFlag, KEvent, Kqueue};
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::{self, Child, Stdio};
 use std::sync::atomic::{self, AtomicBool};
@@ -211,8 +214,11 @@ fn send_signal(process: &mut Child, signal: usize, foreground: bool) {
 
 /// Wait for one of the specified signals to be delivered, with optional timeout.
 ///
-/// This function uses `sigtimedwait()` to efficiently wait for signals without polling.
-/// It handles EINTR by retrying the wait.
+/// This function uses platform-specific mechanisms for efficient signal waiting:
+/// - Linux/FreeBSD: `sigtimedwait()` for direct signal waiting
+/// - macOS: `kqueue` with EVFILT_SIGNAL for event-driven signal monitoring
+///
+/// Both approaches avoid polling and provide sub-millisecond precision.
 ///
 /// # Arguments
 /// * `signals` - Signals to wait for (typically SIGCHLD and SIGTERM)
@@ -222,7 +228,9 @@ fn send_signal(process: &mut Child, signal: usize, foreground: bool) {
 /// * `Ok(Some(signal))` - A signal was received
 /// * `Ok(None)` - Timeout expired
 /// * `Err(e)` - An error occurred
+#[cfg(not(target_os = "macos"))]
 fn wait_for_signal(signals: &[Signal], until: Option<Instant>) -> io::Result<Option<Signal>> {
+    // Linux/FreeBSD: Use sigtimedwait() for efficient signal waiting
     // Create signal set from the provided signals
     let mut sigset = SigSet::empty();
     for &sig in signals {
@@ -253,9 +261,9 @@ fn wait_for_signal(signals: &[Signal], until: Option<Instant>) -> io::Result<Opt
 
         let result = unsafe {
             libc::sigtimedwait(
-                sigset.as_ref() as *const libc::sigset_t,
+                std::ptr::from_ref(sigset.as_ref()),
                 std::ptr::null_mut(), // We don't need siginfo
-                &timeout_spec as *const libc::timespec,
+                std::ptr::from_ref(&timeout_spec),
             )
         };
 
@@ -268,12 +276,74 @@ fn wait_for_signal(signals: &[Signal], until: Option<Instant>) -> io::Result<Opt
                 // Some other error
                 err => return Err(io::Error::from(err)),
             }
-        } else {
-            // Signal received - convert signal number to Signal enum
-            return Signal::try_from(result)
-                .map(Some)
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e));
         }
+        // Signal received - convert signal number to Signal enum
+        return Signal::try_from(result).map(Some).map_err(io::Error::other);
+    }
+}
+
+/// macOS implementation using kqueue with EVFILT_SIGNAL
+///
+/// kqueue is the native BSD/macOS mechanism for event notification, providing
+/// efficient signal monitoring without polling. This is equivalent in performance
+/// to sigtimedwait() on Linux.
+#[cfg(target_os = "macos")]
+fn wait_for_signal(signals: &[Signal], until: Option<Instant>) -> io::Result<Option<Signal>> {
+    // Create a kqueue for signal monitoring
+    let kq = Kqueue::new().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+
+    // Create events for each signal we want to monitor
+    let mut changelist = Vec::with_capacity(signals.len());
+    for &sig in signals {
+        let event = KEvent::new(
+            sig as usize,
+            EventFilter::EVFILT_SIGNAL,
+            EventFlag::EV_ADD | EventFlag::EV_ONESHOT,
+            FilterFlag::empty(),
+            0,
+            0,
+        );
+        changelist.push(event);
+    }
+
+    // Calculate timeout
+    let timeout = if let Some(deadline) = until {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        Some(libc::timespec {
+            tv_sec: remaining.as_secs() as libc::time_t,
+            tv_nsec: remaining.subsec_nanos() as libc::c_long,
+        })
+    } else {
+        None
+    };
+
+    // Wait for signal events
+    let mut eventlist = vec![KEvent::new(
+        0,
+        EventFilter::EVFILT_SIGNAL,
+        EventFlag::empty(),
+        FilterFlag::empty(),
+        0,
+        0,
+    )];
+
+    match kq.kevent(&changelist, &mut eventlist, timeout) {
+        Ok(n) if n > 0 => {
+            // Signal received - extract signal number from event
+            let sig_num = eventlist[0].ident() as i32;
+            Signal::try_from(sig_num)
+                .map(Some)
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
+        }
+        Ok(_) => {
+            // Timeout expired with no events
+            Ok(None)
+        }
+        Err(Errno::EINTR) => {
+            // Interrupted - retry
+            wait_for_signal(signals, until)
+        }
+        Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
     }
 }
 
@@ -443,44 +513,43 @@ fn timeout(
     let deadline = Instant::now()
         .checked_add(duration)
         .unwrap_or_else(|| Instant::now() + Duration::from_secs(86400 * 365 * 100));
-    let wait_result: Option<std::process::ExitStatus> = loop {
-        // Wait for signals with timeout
-        // If child has already exited, SIGCHLD will be delivered immediately
-        let signal_result = wait_for_signal(&[Signal::SIGCHLD, Signal::SIGTERM], Some(deadline));
-        match signal_result {
-            Ok(Some(Signal::SIGCHLD)) => {
-                // Child state changed, reap it
-                match process.wait() {
-                    Ok(status) => break Some(status),
-                    Err(e) => {
-                        // Restore mask before returning error
-                        let _ = sigprocmask(SigmaskHow::SIG_SETMASK, Some(&old_sigset), None);
-                        return Err(e.into());
-                    }
+
+    // Wait for signals with timeout
+    // If child has already exited, SIGCHLD will be delivered immediately
+    let signal_result = wait_for_signal(&[Signal::SIGCHLD, Signal::SIGTERM], Some(deadline));
+    let wait_result: Option<std::process::ExitStatus> = match signal_result {
+        Ok(Some(Signal::SIGCHLD)) => {
+            // Child state changed, reap it
+            match process.wait() {
+                Ok(status) => Some(status),
+                Err(e) => {
+                    // Restore mask before returning error
+                    let _ = sigprocmask(SigmaskHow::SIG_SETMASK, Some(&old_sigset), None);
+                    return Err(e.into());
                 }
             }
-            Ok(Some(Signal::SIGTERM)) => {
-                // External termination request
-                SIGNALED.store(true, atomic::Ordering::Relaxed);
-                break None; // Treat as timeout
-            }
-            Ok(None) => {
-                // Timeout expired
-                break None;
-            }
-            Ok(Some(sig)) => {
-                // Unexpected signal (shouldn't happen since we only wait for SIGCHLD/SIGTERM)
-                let _ = sigprocmask(SigmaskHow::SIG_SETMASK, Some(&old_sigset), None);
-                return Err(USimpleError::new(
-                    ExitStatus::TimeoutFailed.into(),
-                    format!("Unexpected signal received: {:?}", sig),
-                ));
-            }
-            Err(e) => {
-                // wait_for_signal failed
-                let _ = sigprocmask(SigmaskHow::SIG_SETMASK, Some(&old_sigset), None);
-                return Err(e.into());
-            }
+        }
+        Ok(Some(Signal::SIGTERM)) => {
+            // External termination request
+            SIGNALED.store(true, atomic::Ordering::Relaxed);
+            None // Treat as timeout
+        }
+        Ok(None) => {
+            // Timeout expired
+            None
+        }
+        Ok(Some(sig)) => {
+            // Unexpected signal (shouldn't happen since we only wait for SIGCHLD/SIGTERM)
+            let _ = sigprocmask(SigmaskHow::SIG_SETMASK, Some(&old_sigset), None);
+            return Err(USimpleError::new(
+                ExitStatus::TimeoutFailed.into(),
+                format!("Unexpected signal received: {sig:?}"),
+            ));
+        }
+        Err(e) => {
+            // wait_for_signal failed
+            let _ = sigprocmask(SigmaskHow::SIG_SETMASK, Some(&old_sigset), None);
+            return Err(e.into());
         }
     };
 

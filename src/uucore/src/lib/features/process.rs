@@ -158,9 +158,9 @@ impl ChildExt for Child {
         let result = unsafe {
             let mut siginfo: libc::siginfo_t = std::mem::zeroed();
             let ret = libc::sigtimedwait(
-                &sigset.as_ref() as *const _ as *const libc::sigset_t,
-                &mut siginfo as *mut libc::siginfo_t,
-                &timeout_spec as *const libc::timespec,
+                std::ptr::from_ref(sigset.as_ref()),
+                std::ptr::from_mut(&mut siginfo),
+                std::ptr::from_ref(&timeout_spec),
             );
             (ret, siginfo)
         };
