@@ -279,6 +279,9 @@ pub fn du_parallel_cached(
         }
         let mut cached_stat = init_stat;
         cached_stat.size = cached_size;
+        // Also update blocks for correct display (du shows blocks by default, not size)
+        // blocks are in 512-byte units
+        cached_stat.blocks = cached_size / 512;
         return Ok(cached_stat);
     }
 
