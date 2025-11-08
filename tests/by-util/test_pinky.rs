@@ -5,9 +5,11 @@
 
 #[cfg(not(target_os = "openbsd"))]
 use uucore::entries::{Locate, Passwd};
+use uutests::new_ucmd;
 #[cfg(not(target_os = "openbsd"))]
 use uutests::util::{TestScenario, expected_result};
-use uutests::{new_ucmd, unwrap_or_return, util_name};
+#[cfg(not(target_os = "openbsd"))]
+use uutests::{unwrap_or_return, util_name};
 
 #[test]
 fn test_invalid_arg() {
