@@ -276,7 +276,11 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
             }
 
             let mut maybe_data: Option<&[u8]> = None;
-            if metadata.is_file() {
+            // Avoid mmap when the reported size is zero; procfs/sysfs files often
+            // claim length 0 while still producing data, and mapping them would
+            // yield an empty buffer (GNU tac-2-nonseekable).
+            let should_mmap = metadata.is_file() && metadata.len() > 0;
+            if should_mmap {
                 if let Some(mmap1) = try_mmap_path(path) {
                     mmap = mmap1;
                     maybe_data = Some(&mmap[..]);
