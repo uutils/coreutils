@@ -103,6 +103,20 @@ fn test_symlink_to_itself_verbose() {
 }
 
 #[test]
+fn test_posixly_correct_regular_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("regfile");
+    scene
+        .ucmd()
+        .env("POSIXLY_CORRECT", "1")
+        .arg("regfile")
+        .fails_with_code(1)
+        .stderr_contains("Invalid argument")
+        .no_stdout();
+}
+
+#[test]
 fn test_trailing_slash_regular_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
