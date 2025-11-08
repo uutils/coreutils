@@ -5,6 +5,8 @@
 // spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat biguint
 use std::ffi::{OsStr, OsString};
 use std::io::{BufWriter, ErrorKind, Write, stdout};
+#[cfg(unix)]
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use clap::{Arg, ArgAction, Command};
 use num_bigint::BigUint;
@@ -329,30 +331,34 @@ fn fast_print_seq(
 }
 
 #[cfg(unix)]
-fn sigpipe_is_ignored() -> bool {
+static SIGPIPE_WAS_IGNORED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(unix)]
+unsafe extern "C" fn capture_sigpipe_state() {
     use nix::libc;
-    use std::{env, mem::MaybeUninit, ptr};
+    use std::{mem::MaybeUninit, ptr};
 
-    const DETECT_ENV: &str = "RUST_SIGPIPE";
-    const DETECT_ENV_VALUE: &str = "inherit";
-
-    let detection_enabled = env::var_os(DETECT_ENV).is_some_and(|value| {
-        value
-            .to_string_lossy()
-            .eq_ignore_ascii_case(DETECT_ENV_VALUE)
-    });
-
-    if !detection_enabled {
-        return false;
+    let mut current = MaybeUninit::<libc::sigaction>::uninit();
+    if unsafe { libc::sigaction(libc::SIGPIPE, ptr::null(), current.as_mut_ptr()) } == 0 {
+        let ignored =
+            unsafe { current.assume_init() }.sa_sigaction == libc::SIG_IGN;
+        SIGPIPE_WAS_IGNORED.store(ignored, Ordering::Relaxed);
     }
+}
 
-    unsafe {
-        let mut current = MaybeUninit::<libc::sigaction>::uninit();
-        if libc::sigaction(libc::SIGPIPE, ptr::null(), current.as_mut_ptr()) != 0 {
-            return false;
-        }
-        current.assume_init().sa_sigaction == libc::SIG_IGN
-    }
+#[cfg(all(unix, not(target_os = "macos")))]
+#[used]
+#[unsafe(link_section = ".init_array")]
+static CAPTURE_SIGPIPE_STATE: unsafe extern "C" fn() = capture_sigpipe_state;
+
+#[cfg(all(unix, target_os = "macos"))]
+#[used]
+#[unsafe(link_section = "__DATA,__mod_init_func")]
+static CAPTURE_SIGPIPE_STATE_APPLE: unsafe extern "C" fn() = capture_sigpipe_state;
+
+#[cfg(unix)]
+fn sigpipe_is_ignored() -> bool {
+    SIGPIPE_WAS_IGNORED.load(Ordering::Relaxed)
 }
 
 #[cfg(not(unix))]
