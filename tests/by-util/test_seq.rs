@@ -191,10 +191,8 @@ fn test_width_invalid_float() {
 fn test_sigpipe_ignored_reports_write_error() {
     let scene = TestScenario::new(util_name!());
     let seq_bin = scene.bin_path.clone().into_os_string();
-    let script = concat!(
-        "trap '' PIPE; ",
-        "{ \"$SEQ_BIN\" seq inf 2>err; echo $? >code; } | head -n1",
-    );
+    let script =
+        "trap '' PIPE; { \"$SEQ_BIN\" seq inf 2>err; echo $? >code; } | head -n1";
     let result = scene
         .cmd_shell(script)
         .env("SEQ_BIN", &seq_bin)
