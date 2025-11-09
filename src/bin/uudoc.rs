@@ -290,7 +290,6 @@ fn main() -> io::Result<()> {
 
     println!("Writing to utils");
     for (&name, (_, command)) in utils {
-        let mut usage_name = name.to_string();
         let name = match name {
             "[" => {
                 continue;
@@ -299,9 +298,9 @@ fn main() -> io::Result<()> {
             | "sha3sum" | "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum"
             | "shake128sum" | "shake256sum" | "b2sum" | "b3sum" => {
                 // These use the hashsum
-                usage_name = "hashsum".to_string();
+                "hashsum"
             }
-            _ => {}
+            n => n
         };
         let p = format!("docs/src/utils/{name}.md");
 
