@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker: ignore (encodings) lsbf msbf
+// spell-checker: ignore autopad MFRGG MFRGGZDF abcdeabc baddecode
 
 use uutests::{at_and_ucmd, new_ucmd};
 
@@ -110,6 +111,61 @@ fn test_base32hex_decode() {
         .pipe_in("DPKM6P9UC9GN6P9V") // spell-checker:disable-line
         .succeeds()
         .stdout_only("nice>base?");
+}
+
+#[test]
+fn test_base32_autopad_short_quantum() {
+    new_ucmd!()
+        .args(&["--base32", "--decode"])
+        .pipe_in("MFRGG")
+        .succeeds()
+        .stdout_only("abc");
+}
+
+#[test]
+fn test_base32_autopad_multiline_stream() {
+    new_ucmd!()
+        .args(&["--base32", "--decode"])
+        .pipe_in("MFRGGZDF\nMFRGG")
+        .succeeds()
+        .stdout_only("abcdeabc");
+}
+
+#[test]
+fn test_base32_baddecode_keeps_prefix() {
+    let result = new_ucmd!()
+        .args(&["--base32", "--decode"])
+        .pipe_in("MFRGGZDF=")
+        .fails();
+    result.stdout_is("abcde");
+    assert!(
+        result
+            .stderr_str()
+            .starts_with("basenc: error: invalid input")
+    );
+}
+
+#[test]
+fn test_base32hex_autopad_short_quantum() {
+    new_ucmd!()
+        .args(&["--base32hex", "--decode"])
+        .pipe_in("C5H66")
+        .succeeds()
+        .stdout_only("abc");
+}
+
+#[test]
+fn test_base32hex_rejects_trailing_garbage() {
+    let result = new_ucmd!()
+        .args(&["--base32hex", "-d"])
+        .pipe_in("VNC0FKD5W")
+        .fails();
+    result.stdout_is("");
+    assert!(
+        result
+            .stderr_str()
+            .starts_with("basenc: error: invalid input")
+    );
 }
 
 #[test]
