@@ -300,7 +300,7 @@ fn main() -> io::Result<()> {
                 // These use the hashsum
                 "hashsum"
             }
-            n => n
+            n => n,
         };
         let p = format!("docs/src/utils/{name}.md");
 
