@@ -20,6 +20,7 @@ fn factor_multiple_u64s(bencher: Bencher, start_num: u64) {
         });
 }
 
+/* Too much variance
 /// Benchmark multiple u128 digits
 #[divan::bench(args = [(18446744073709551616)])]
 fn factor_multiple_u128s(bencher: Bencher, start_num: u128) {
@@ -34,7 +35,9 @@ fn factor_multiple_u128s(bencher: Bencher, start_num: u128) {
             }
         });
 }
+*/
 
+/* Too much variance
 /// Benchmark multiple > u128::MAX digits
 #[divan::bench]
 fn factor_multiple_big_uint(bencher: Bencher) {
@@ -50,6 +53,7 @@ fn factor_multiple_big_uint(bencher: Bencher) {
             }
         });
 }
+*/
 
 fn main() {
     divan::main();
