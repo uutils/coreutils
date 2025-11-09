@@ -22,6 +22,26 @@ pub struct Base64SimdWrapper {
 }
 
 impl Base64SimdWrapper {
+    fn decode_with_standard(input: &[u8], output: &mut Vec<u8>) -> Result<(), ()> {
+        match base64_simd::STANDARD.decode_to_vec(input) {
+            Ok(decoded_bytes) => {
+                output.extend_from_slice(&decoded_bytes);
+                Ok(())
+            }
+            Err(_) => Err(()),
+        }
+    }
+
+    fn decode_with_no_pad(input: &[u8], output: &mut Vec<u8>) -> Result<(), ()> {
+        match base64_simd::STANDARD_NO_PAD.decode_to_vec(input) {
+            Ok(decoded_bytes) => {
+                output.extend_from_slice(&decoded_bytes);
+                Ok(())
+            }
+            Err(_) => Err(()),
+        }
+    }
+
     pub fn new(
         use_padding: bool,
         valid_decoding_multiple: usize,
@@ -47,22 +67,64 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
     }
 
     fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
-        let decoded = if self.use_padding {
-            base64_simd::STANDARD.decode_to_vec(input)
+        let original_len = output.len();
+
+        let decode_result = if self.use_padding {
+            // GNU coreutils keeps decoding even when '=' appears before the true end
+            // of the stream (e.g. concatenated padded chunks). Mirror that logic
+            // by splitting at each '='-containing quantum, decoding those 4-byte
+            // groups with the padded variant, then letting the remainder fall back
+            // to whichever alphabet fits.
+            let mut start = 0usize;
+            while start < input.len() {
+                let remaining = &input[start..];
+
+                if remaining.is_empty() {
+                    break;
+                }
+
+                if let Some(eq_rel_idx) = remaining.iter().position(|&b| b == b'=') {
+                    let blocks = (eq_rel_idx / 4) + 1;
+                    let segment_len = blocks * 4;
+
+                    if segment_len > remaining.len() {
+                        return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                    }
+
+                    if Self::decode_with_standard(&remaining[..segment_len], output).is_err() {
+                        return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                    }
+
+                    start += segment_len;
+                } else {
+                    // If there are no more '=' bytes the tail might still be padded
+                    // (len % 4 == 0) or purposely unpadded (GNU --ignore-garbage or
+                    // concatenated streams), so select the matching alphabet.
+                    let decoder = if remaining.len() % 4 == 0 {
+                        Self::decode_with_standard
+                    } else {
+                        Self::decode_with_no_pad
+                    };
+
+                    if decoder(remaining, output).is_err() {
+                        return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                    }
+
+                    break;
+                }
+            }
+
+            Ok(())
         } else {
-            base64_simd::STANDARD_NO_PAD.decode_to_vec(input)
+            Self::decode_with_no_pad(input, output)
+                .map_err(|_| USimpleError::new(1, "error: invalid input".to_owned()))
         };
 
-        match decoded {
-            Ok(decoded_bytes) => {
-                output.extend_from_slice(&decoded_bytes);
-                Ok(())
-            }
-            Err(_) => {
-                // Restore original length on error
-                output.truncate(output.len());
-                Err(USimpleError::new(1, "error: invalid input".to_owned()))
-            }
+        if let Err(err) = decode_result {
+            output.truncate(original_len);
+            Err(err)
+        } else {
+            Ok(())
         }
     }
 

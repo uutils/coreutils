@@ -2,6 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore unpadded, QUJD
+
 #[cfg(target_os = "linux")]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -106,6 +109,33 @@ fn test_decode_repeat_flags() {
         .pipe_in(input)
         .succeeds()
         .stdout_only("hello, world!");
+}
+
+#[test]
+fn test_decode_padded_block_followed_by_unpadded_tail() {
+    new_ucmd!()
+        .arg("--decode")
+        .pipe_in("MTIzNA==MTIzNA")
+        .succeeds()
+        .stdout_only("12341234");
+}
+
+#[test]
+fn test_decode_padded_block_followed_by_aligned_tail() {
+    new_ucmd!()
+        .arg("--decode")
+        .pipe_in("MTIzNA==QUJD")
+        .succeeds()
+        .stdout_only("1234ABC");
+}
+
+#[test]
+fn test_decode_unpadded_stream_without_equals() {
+    new_ucmd!()
+        .arg("--decode")
+        .pipe_in("MTIzNA")
+        .succeeds()
+        .stdout_only("1234");
 }
 
 #[test]
