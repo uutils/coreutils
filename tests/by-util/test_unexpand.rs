@@ -2,11 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+//
 // spell-checker:ignore contenta
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
+
+use uutests::{at_and_ucmd, new_ucmd};
 
 #[test]
 fn test_invalid_arg() {
@@ -93,6 +92,24 @@ fn unexpand_first_only_1() {
         .pipe_in("        A     B")
         .succeeds()
         .stdout_is("\t\t  A     B");
+}
+
+#[test]
+fn unexpand_first_only_2() {
+    new_ucmd!()
+        .args(&["-t3", "-f"])
+        .pipe_in("        A     B")
+        .succeeds()
+        .stdout_is("\t\t  A     B");
+}
+
+#[test]
+fn unexpand_first_only_3() {
+    new_ucmd!()
+        .args(&["-f", "-t8"])
+        .pipe_in("        A     B")
+        .succeeds()
+        .stdout_is("\tA     B");
 }
 
 #[test]
@@ -264,4 +281,17 @@ fn test_one_nonexisting_file() {
         .arg("asdf.txt")
         .fails()
         .stderr_contains("asdf.txt: No such file or directory");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_non_utf8_filename() {
+    use std::os::unix::ffi::OsStringExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    std::fs::write(at.plus(&filename), b"        a\n").unwrap();
+
+    ucmd.arg(&filename).succeeds().stdout_is("\ta\n");
 }

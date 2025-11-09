@@ -23,11 +23,21 @@ uucore = { workspace = true, features = ["parser", "pipes", "quoting-style"] }
 bytecount = { workspace = true, features = ["runtime-dispatch-simd"] }
 thiserror = { workspace = true }
 unicode-width = { workspace = true }
+fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true }
 libc = { workspace = true }
 
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
 [[bin]]
 name = "wc"
 path = "src/main.rs"
+
+[[bench]]
+name = "wc_bench"
+harness = false

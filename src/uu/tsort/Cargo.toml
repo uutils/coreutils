@@ -21,7 +21,17 @@ path = "src/tsort.rs"
 clap = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "tsort"
 path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "tsort_bench"
+harness = false

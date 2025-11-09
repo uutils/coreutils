@@ -13,13 +13,10 @@ use std::io::{BufRead, BufReader, BufWriter, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::format_usage;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::posix::{OBSOLETE, posix_version};
-use uucore::{format_usage, help_about, help_section, help_usage};
-
-const ABOUT: &str = help_about!("uniq.md");
-const USAGE: &str = help_usage!("uniq.md");
-const AFTER_HELP: &str = help_section!("after help", "uniq.md");
+use uucore::translate;
 
 pub mod options {
     pub static ALL_REPEATED: &str = "all-repeated";
@@ -45,6 +42,8 @@ enum Delimiters {
     None,
 }
 
+const OUTPUT_BUFFER_CAPACITY: usize = 128 * 1024;
+
 struct Uniq {
     repeats_only: bool,
     uniques_only: bool,
@@ -58,51 +57,70 @@ struct Uniq {
     zero_terminated: bool,
 }
 
+#[derive(Default)]
+struct LineMeta {
+    key_start: usize,
+    key_end: usize,
+    lowercase: Vec<u8>,
+    use_lowercase: bool,
+}
+
 macro_rules! write_line_terminator {
     ($writer:expr, $line_terminator:expr) => {
         $writer
             .write_all(&[$line_terminator])
-            .map_err_context(|| "Could not write line terminator".to_string())
+            .map_err_context(|| translate!("uniq-error-write-line-terminator"))
     };
 }
 
 impl Uniq {
-    pub fn print_uniq(&self, reader: impl BufRead, mut writer: impl Write) -> UResult<()> {
+    pub fn print_uniq(&self, mut reader: impl BufRead, mut writer: impl Write) -> UResult<()> {
         let mut first_line_printed = false;
         let mut group_count = 1;
         let line_terminator = self.get_line_terminator();
-        let mut lines = reader.split(line_terminator);
-        let mut line = match lines.next() {
-            Some(l) => l?,
-            None => return Ok(()),
-        };
-
         let writer = &mut writer;
 
-        // compare current `line` with consecutive lines (`next_line`) of the input
-        // and if needed, print `line` based on the command line options provided
-        for next_line in lines {
-            let next_line = next_line?;
-            if self.cmp_keys(&line, &next_line) {
+        let mut current_buf = Vec::with_capacity(1024);
+        if !Self::read_line(&mut reader, &mut current_buf, line_terminator)? {
+            return Ok(());
+        }
+        let mut current_meta = LineMeta::default();
+        self.build_meta(&current_buf, &mut current_meta);
+
+        let mut next_buf = Vec::with_capacity(1024);
+        let mut next_meta = LineMeta::default();
+
+        loop {
+            if !Self::read_line(&mut reader, &mut next_buf, line_terminator)? {
+                break;
+            }
+
+            self.build_meta(&next_buf, &mut next_meta);
+
+            if self.keys_differ(&current_buf, &current_meta, &next_buf, &next_meta) {
                 if (group_count == 1 && !self.repeats_only)
                     || (group_count > 1 && !self.uniques_only)
                 {
-                    self.print_line(writer, &line, group_count, first_line_printed)?;
+                    self.print_line(writer, &current_buf, group_count, first_line_printed)?;
                     first_line_printed = true;
                 }
-                line = next_line;
+                std::mem::swap(&mut current_buf, &mut next_buf);
+                std::mem::swap(&mut current_meta, &mut next_meta);
                 group_count = 1;
             } else {
                 if self.all_repeated {
-                    self.print_line(writer, &line, group_count, first_line_printed)?;
+                    self.print_line(writer, &current_buf, group_count, first_line_printed)?;
                     first_line_printed = true;
-                    line = next_line;
+                    std::mem::swap(&mut current_buf, &mut next_buf);
+                    std::mem::swap(&mut current_meta, &mut next_meta);
                 }
                 group_count += 1;
             }
+            next_buf.clear();
         }
+
         if (group_count == 1 && !self.repeats_only) || (group_count > 1 && !self.uniques_only) {
-            self.print_line(writer, &line, group_count, first_line_printed)?;
+            self.print_line(writer, &current_buf, group_count, first_line_printed)?;
             first_line_printed = true;
         }
         if (self.delimiters == Delimiters::Append || self.delimiters == Delimiters::Both)
@@ -110,83 +128,140 @@ impl Uniq {
         {
             write_line_terminator!(writer, line_terminator)?;
         }
-        writer.flush().map_err_context(|| "write error".into())?;
+        writer
+            .flush()
+            .map_err_context(|| translate!("uniq-error-write-error"))?;
         Ok(())
-    }
-
-    fn skip_fields(&self, line: &[u8]) -> Vec<u8> {
-        if let Some(skip_fields) = self.skip_fields {
-            let mut line = line.iter();
-            let mut line_after_skipped_field: Vec<u8>;
-            for _ in 0..skip_fields {
-                if line.all(|u| u.is_ascii_whitespace()) {
-                    return Vec::new();
-                }
-                line_after_skipped_field = line
-                    .by_ref()
-                    .skip_while(|u| !u.is_ascii_whitespace())
-                    .copied()
-                    .collect::<Vec<u8>>();
-
-                if line_after_skipped_field.is_empty() {
-                    return Vec::new();
-                }
-                line = line_after_skipped_field.iter();
-            }
-            line.copied().collect::<Vec<u8>>()
-        } else {
-            line.to_vec()
-        }
     }
 
     fn get_line_terminator(&self) -> u8 {
         if self.zero_terminated { 0 } else { b'\n' }
     }
 
-    fn cmp_keys(&self, first: &[u8], second: &[u8]) -> bool {
-        self.cmp_key(first, |first_iter| {
-            self.cmp_key(second, |second_iter| first_iter.ne(second_iter))
-        })
+    fn keys_differ(
+        &self,
+        first_line: &[u8],
+        first_meta: &LineMeta,
+        second_line: &[u8],
+        second_meta: &LineMeta,
+    ) -> bool {
+        let first_slice = &first_line[first_meta.key_start..first_meta.key_end];
+        let second_slice = &second_line[second_meta.key_start..second_meta.key_end];
+
+        if !self.ignore_case {
+            return first_slice != second_slice;
+        }
+
+        let first_cmp = if first_meta.use_lowercase {
+            first_meta.lowercase.as_slice()
+        } else {
+            first_slice
+        };
+        let second_cmp = if second_meta.use_lowercase {
+            second_meta.lowercase.as_slice()
+        } else {
+            second_slice
+        };
+
+        first_cmp != second_cmp
     }
 
-    fn cmp_key<F>(&self, line: &[u8], mut closure: F) -> bool
-    where
-        F: FnMut(&mut dyn Iterator<Item = char>) -> bool,
-    {
-        let fields_to_check = self.skip_fields(line);
-
-        // Skip self.slice_start bytes (if -s was used).
-        // self.slice_start is how many characters to skip, but historically
-        // uniq’s `-s N` means “skip N *bytes*,” so do that literally:
-        let skip_bytes = self.slice_start.unwrap_or(0);
-        let fields_to_check = if skip_bytes < fields_to_check.len() {
-            &fields_to_check[skip_bytes..]
-        } else {
-            // If skipping beyond end-of-line, leftover is empty => effectively ""
-            &[]
-        };
-
-        // Convert the leftover bytes to UTF-8 for character-based -w
-        // If invalid UTF-8, just compare them as individual bytes (fallback).
-        let Ok(string_after_skip) = std::str::from_utf8(fields_to_check) else {
-            // Fallback: if invalid UTF-8, treat them as single-byte “chars”
-            return closure(&mut fields_to_check.iter().map(|&b| b as char));
-        };
-
-        let total_chars = string_after_skip.chars().count();
-
-        // `-w N` => Compare no more than N characters
-        let slice_stop = self.slice_stop.unwrap_or(total_chars);
-        let slice_start = slice_stop.min(total_chars);
-
-        let mut iter = string_after_skip.chars().take(slice_start);
-
-        if self.ignore_case {
-            // We can do ASCII-lowercase or full Unicode-lowercase. For minimal changes, do ASCII:
-            closure(&mut iter.map(|c| c.to_ascii_lowercase()))
-        } else {
-            closure(&mut iter)
+    fn key_bounds(&self, line: &[u8]) -> (usize, usize) {
+        let mut start = self.skip_fields_offset(line);
+        if let Some(skip_bytes) = self.slice_start {
+            start = start.saturating_add(skip_bytes).min(line.len());
         }
+
+        let end = self.key_end_index(line, start);
+        (start, end)
+    }
+
+    fn skip_fields_offset(&self, line: &[u8]) -> usize {
+        if let Some(skip_fields) = self.skip_fields {
+            let mut idx = 0;
+            for _ in 0..skip_fields {
+                while idx < line.len() && line[idx].is_ascii_whitespace() {
+                    idx += 1;
+                }
+                if idx >= line.len() {
+                    return line.len();
+                }
+                while idx < line.len() && !line[idx].is_ascii_whitespace() {
+                    idx += 1;
+                }
+                if idx >= line.len() {
+                    return line.len();
+                }
+            }
+            idx
+        } else {
+            0
+        }
+    }
+
+    fn key_end_index(&self, line: &[u8], key_start: usize) -> usize {
+        let remainder = &line[key_start..];
+        match self.slice_stop {
+            None => line.len(),
+            Some(limit) => {
+                if remainder.is_empty() {
+                    return key_start;
+                }
+                if let Ok(valid) = std::str::from_utf8(remainder) {
+                    let prefix_len = Self::char_prefix_len(valid, limit);
+                    key_start + prefix_len
+                } else {
+                    key_start + remainder.len().min(limit)
+                }
+            }
+        }
+    }
+
+    fn char_prefix_len(text: &str, limit: usize) -> usize {
+        for (count, (idx, _)) in text.char_indices().enumerate() {
+            if count == limit {
+                return idx;
+            }
+        }
+        text.len()
+    }
+
+    fn build_meta(&self, line: &[u8], meta: &mut LineMeta) {
+        let (key_start, key_end) = self.key_bounds(line);
+        meta.key_start = key_start;
+        meta.key_end = key_end;
+
+        if self.ignore_case && key_start < key_end {
+            let slice = &line[key_start..key_end];
+            if slice.iter().any(|b| b.is_ascii_uppercase()) {
+                meta.lowercase.clear();
+                meta.lowercase.reserve(slice.len());
+                meta.lowercase
+                    .extend(slice.iter().map(|b| b.to_ascii_lowercase()));
+                meta.use_lowercase = true;
+                return;
+            }
+        }
+
+        meta.use_lowercase = false;
+    }
+
+    fn read_line(
+        reader: &mut impl BufRead,
+        buffer: &mut Vec<u8>,
+        line_terminator: u8,
+    ) -> UResult<bool> {
+        buffer.clear();
+        let bytes_read = reader
+            .read_until(line_terminator, buffer)
+            .map_err_context(|| translate!("uniq-error-read-error"))?;
+        if bytes_read == 0 {
+            return Ok(false);
+        }
+        if buffer.last().is_some_and(|last| *last == line_terminator) {
+            buffer.pop();
+        }
+        Ok(true)
     }
 
     fn should_print_delimiter(&self, group_count: usize, first_line_printed: bool) -> bool {
@@ -215,21 +290,58 @@ impl Uniq {
             write_line_terminator!(writer, line_terminator)?;
         }
 
+        let mut count_buf = [0u8; Self::COUNT_PREFIX_BUF_SIZE];
+
         if self.show_counts {
-            let prefix = format!("{count:7} ");
-            let out = prefix
-                .as_bytes()
-                .iter()
-                .chain(line.iter())
-                .copied()
-                .collect::<Vec<u8>>();
-            writer.write_all(out.as_slice())
-        } else {
-            writer.write_all(line)
+            // Call the associated function (no &self) after the refactor above.
+            let prefix = Self::build_count_prefix(count, &mut count_buf);
+            writer
+                .write_all(prefix)
+                .map_err_context(|| translate!("uniq-error-write-error"))?;
         }
-        .map_err_context(|| "write error".to_string())?;
+
+        writer
+            .write_all(line)
+            .map_err_context(|| translate!("uniq-error-write-error"))?;
 
         write_line_terminator!(writer, line_terminator)
+    }
+
+    const COUNT_PREFIX_WIDTH: usize = 7;
+    const COUNT_PREFIX_BUF_SIZE: usize = 32;
+
+    // This function does not use `self`, so make it an associated function.
+    // Also remove needless explicit lifetimes to satisfy clippy::needless-lifetimes.
+    fn build_count_prefix(count: usize, buf: &mut [u8; Self::COUNT_PREFIX_BUF_SIZE]) -> &[u8] {
+        let mut digits_buf = [0u8; 20];
+        let mut value = count;
+        let mut idx = digits_buf.len();
+
+        if value == 0 {
+            idx -= 1;
+            digits_buf[idx] = b'0';
+        } else {
+            while value > 0 {
+                idx -= 1;
+                digits_buf[idx] = b'0' + (value % 10) as u8;
+                value /= 10;
+            }
+        }
+
+        let digits = &digits_buf[idx..];
+        let width = Self::COUNT_PREFIX_WIDTH;
+
+        if digits.len() <= width {
+            let pad = width - digits.len();
+            buf[..pad].fill(b' ');
+            buf[pad..pad + digits.len()].copy_from_slice(digits);
+            buf[width] = b' ';
+            &buf[..=width]
+        } else {
+            buf[..digits.len()].copy_from_slice(digits);
+            buf[digits.len()] = b' ';
+            &buf[..=digits.len()]
+        }
     }
 }
 
@@ -241,7 +353,7 @@ fn opt_parsed(opt_name: &str, matches: &ArgMatches) -> UResult<Option<usize>> {
                 IntErrorKind::PosOverflow => Ok(Some(usize::MAX)),
                 _ => Err(USimpleError::new(
                     1,
-                    format!("Invalid argument for {opt_name}: {}", arg_str.maybe_quote()),
+                    translate!("uniq-error-invalid-argument", "opt_name" => opt_name, "arg" => arg_str.maybe_quote()),
                 )),
             },
         },
@@ -505,17 +617,17 @@ fn handle_extract_obs_skip_chars(
     }
 }
 
-/// Maps Clap errors to USimpleError and overrides 3 specific ones
+/// Maps Clap errors to [`USimpleError`] and overrides 3 specific ones
 /// to meet requirements of GNU tests for `uniq`.
 /// Unfortunately these overrides are necessary, since several GNU tests
 /// for `uniq` hardcode and require the exact wording of the error message
 /// and it is not compatible with how Clap formats and displays those error messages.
 fn map_clap_errors(clap_error: Error) -> Box<dyn UError> {
-    let footer = "Try 'uniq --help' for more information.";
-    let override_arg_conflict =
-        "--group is mutually exclusive with -c/-d/-D/-u\n".to_string() + footer;
-    let override_group_badoption = "invalid argument 'badoption' for '--group'\nValid arguments are:\n  - 'prepend'\n  - 'append'\n  - 'separate'\n  - 'both'\n".to_string() + footer;
-    let override_all_repeated_badoption = "invalid argument 'badoption' for '--all-repeated'\nValid arguments are:\n  - 'none'\n  - 'prepend'\n  - 'separate'\n".to_string() + footer;
+    let footer = translate!("uniq-error-try-help");
+    let override_arg_conflict = translate!("uniq-error-group-mutually-exclusive") + "\n" + &footer;
+    let override_group_badoption = translate!("uniq-error-group-badoption") + "\n" + &footer;
+    let override_all_repeated_badoption =
+        translate!("uniq-error-all-repeated-badoption") + "\n" + &footer;
 
     let error_message = match clap_error.kind() {
         ErrorKind::ArgumentConflict => override_arg_conflict,
@@ -548,9 +660,18 @@ fn map_clap_errors(clap_error: Error) -> Box<dyn UError> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, skip_fields_old, skip_chars_old) = handle_obsolete(args);
 
-    let matches = uu_app()
-        .try_get_matches_from(args)
-        .map_err(map_clap_errors)?;
+    let matches = match uu_app().try_get_matches_from(args) {
+        Ok(matches) => matches,
+        Err(clap_error) => {
+            if clap_error.exit_code() == 0 {
+                // Let caller handle help/version
+                return Err(map_clap_errors(clap_error));
+            }
+            // Use ErrorFormatter directly to handle error
+            let formatter = uucore::clap_localization::ErrorFormatter::new(uucore::util_name());
+            formatter.print_error_and_exit_with_callback(&clap_error, 1, || {});
+        }
+    };
 
     let files = matches.get_many::<OsString>(ARG_FILES);
 
@@ -580,7 +701,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if uniq.show_counts && uniq.all_repeated {
         return Err(USimpleError::new(
             1,
-            "printing all duplicated lines and repeat counts is meaningless\nTry 'uniq --help' for more information.",
+            translate!("uniq-error-counts-and-repeated-meaningless"),
         ));
     }
 
@@ -591,22 +712,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(translate!("uniq-about"))
+        .override_usage(format_usage(&translate!("uniq-usage")))
         .infer_long_args(true)
-        .after_help(AFTER_HELP)
+        .after_help(translate!("uniq-after-help"));
+    uucore::clap_localization::configure_localized_command(cmd)
         .arg(
             Arg::new(options::ALL_REPEATED)
                 .short('D')
                 .long(options::ALL_REPEATED)
-                .value_parser(ShortcutValueParser::new([
-                    "none",
-                    "prepend",
-                    "separate"
-                ]))
-                .help("print all duplicate lines. Delimiting is done with blank lines. [default: none]")
+                .value_parser(ShortcutValueParser::new(["none", "prepend", "separate"]))
+                .help(translate!("uniq-help-all-repeated"))
                 .value_name("delimit-method")
                 .num_args(0..=1)
                 .default_missing_value("none")
@@ -616,12 +734,9 @@ pub fn uu_app() -> Command {
             Arg::new(options::GROUP)
                 .long(options::GROUP)
                 .value_parser(ShortcutValueParser::new([
-                    "separate",
-                    "prepend",
-                    "append",
-                    "both",
+                    "separate", "prepend", "append", "both",
                 ]))
-                .help("show all items, separating groups with an empty line. [default: separate]")
+                .help(translate!("uniq-help-group"))
                 .value_name("group-method")
                 .num_args(0..=1)
                 .default_missing_value("separate")
@@ -630,63 +745,63 @@ pub fn uu_app() -> Command {
                     options::REPEATED,
                     options::ALL_REPEATED,
                     options::UNIQUE,
-                    options::COUNT
+                    options::COUNT,
                 ]),
         )
         .arg(
             Arg::new(options::CHECK_CHARS)
                 .short('w')
                 .long(options::CHECK_CHARS)
-                .help("compare no more than N characters in lines")
+                .help(translate!("uniq-help-check-chars"))
                 .value_name("N"),
         )
         .arg(
             Arg::new(options::COUNT)
                 .short('c')
                 .long(options::COUNT)
-                .help("prefix lines by the number of occurrences")
+                .help(translate!("uniq-help-count"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::IGNORE_CASE)
                 .short('i')
                 .long(options::IGNORE_CASE)
-                .help("ignore differences in case when comparing")
+                .help(translate!("uniq-help-ignore-case"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::REPEATED)
                 .short('d')
                 .long(options::REPEATED)
-                .help("only print duplicate lines")
+                .help(translate!("uniq-help-repeated"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SKIP_CHARS)
                 .short('s')
                 .long(options::SKIP_CHARS)
-                .help("avoid comparing the first N characters")
+                .help(translate!("uniq-help-skip-chars"))
                 .value_name("N"),
         )
         .arg(
             Arg::new(options::SKIP_FIELDS)
                 .short('f')
                 .long(options::SKIP_FIELDS)
-                .help("avoid comparing the first N fields")
+                .help(translate!("uniq-help-skip-fields"))
                 .value_name("N"),
         )
         .arg(
             Arg::new(options::UNIQUE)
                 .short('u')
                 .long(options::UNIQUE)
-                .help("only print unique lines")
+                .help(translate!("uniq-help-unique"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ZERO_TERMINATED)
                 .short('z')
                 .long(options::ZERO_TERMINATED)
-                .help("end lines with 0 byte, not newline")
+                .help(translate!("uniq-help-zero-terminated"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -723,8 +838,9 @@ fn get_delimiter(matches: &ArgMatches) -> Delimiters {
 fn open_input_file(in_file_name: Option<&OsStr>) -> UResult<Box<dyn BufRead>> {
     Ok(match in_file_name {
         Some(path) if path != "-" => {
-            let in_file = File::open(path)
-                .map_err_context(|| format!("Could not open {}", path.maybe_quote()))?;
+            let in_file = File::open(path).map_err_context(
+                || translate!("uniq-error-could-not-open", "path" => path.maybe_quote()),
+            )?;
             Box::new(BufReader::new(in_file))
         }
         _ => Box::new(stdin().lock()),
@@ -735,10 +851,14 @@ fn open_input_file(in_file_name: Option<&OsStr>) -> UResult<Box<dyn BufRead>> {
 fn open_output_file(out_file_name: Option<&OsStr>) -> UResult<Box<dyn Write>> {
     Ok(match out_file_name {
         Some(path) if path != "-" => {
-            let out_file = File::create(path)
-                .map_err_context(|| format!("Could not open {}", path.maybe_quote()))?;
-            Box::new(BufWriter::new(out_file))
+            let out_file = File::create(path).map_err_context(
+                || translate!("uniq-error-could-not-open", "path" => path.maybe_quote()),
+            )?;
+            Box::new(BufWriter::with_capacity(OUTPUT_BUFFER_CAPACITY, out_file))
         }
-        _ => Box::new(stdout().lock()),
+        _ => Box::new(BufWriter::with_capacity(
+            OUTPUT_BUFFER_CAPACITY,
+            stdout().lock(),
+        )),
     })
 }

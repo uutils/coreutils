@@ -13,6 +13,7 @@ use std::io::{Seek, SeekFrom};
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
 use uucore::error::UResult;
+use uucore::translate;
 
 #[derive(Debug, Clone)]
 pub enum InputKind {
@@ -55,7 +56,7 @@ impl Input {
         let kind = string.into();
         let display_name = match kind {
             InputKind::File(_) => string.to_string_lossy().to_string(),
-            InputKind::Stdin => text::STDIN_HEADER.to_string(),
+            InputKind::Stdin => translate!("tail-stdin-header"),
         };
 
         Self { kind, display_name }
@@ -106,7 +107,7 @@ impl Default for Input {
     fn default() -> Self {
         Self {
             kind: InputKind::Stdin,
-            display_name: String::from(text::STDIN_HEADER),
+            display_name: translate!("tail-stdin-header"),
         }
     }
 }
@@ -157,7 +158,6 @@ impl FileExtTail for File {
 pub trait MetadataExtTail {
     fn is_tailable(&self) -> bool;
     fn got_truncated(&self, other: &Metadata) -> UResult<bool>;
-    fn get_block_size(&self) -> u64;
     fn file_id_eq(&self, other: &Metadata) -> bool;
 }
 
@@ -177,17 +177,6 @@ impl MetadataExtTail for Metadata {
     /// Return true if the file was modified and is now shorter
     fn got_truncated(&self, other: &Metadata) -> UResult<bool> {
         Ok(other.len() < self.len() && other.modified()? != self.modified()?)
-    }
-
-    fn get_block_size(&self) -> u64 {
-        #[cfg(unix)]
-        {
-            self.blocks()
-        }
-        #[cfg(not(unix))]
-        {
-            self.len()
-        }
     }
 
     fn file_id_eq(&self, _other: &Metadata) -> bool {
@@ -221,7 +210,7 @@ impl PathExtTail for Path {
     fn is_stdin(&self) -> bool {
         self.eq(Self::new(text::DASH))
             || self.eq(Self::new(text::DEV_STDIN))
-            || self.eq(Self::new(text::STDIN_HEADER))
+            || self.eq(Self::new(&translate!("tail-stdin-header")))
     }
 
     /// Return true if `path` does not have an existing parent directory

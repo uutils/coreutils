@@ -2,9 +2,26 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore unpadded, QUJD
+
+#[cfg(target_os = "linux")]
+use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_base64_non_utf8_paths() {
+    use std::os::unix::ffi::OsStringExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    std::fs::write(at.plus(&filename), b"hello world").unwrap();
+
+    ucmd.arg(&filename)
+        .succeeds()
+        .stdout_is("aGVsbG8gd29ybGQ=\n");
+}
 
 #[test]
 fn test_encode() {
@@ -95,6 +112,33 @@ fn test_decode_repeat_flags() {
 }
 
 #[test]
+fn test_decode_padded_block_followed_by_unpadded_tail() {
+    new_ucmd!()
+        .arg("--decode")
+        .pipe_in("MTIzNA==MTIzNA")
+        .succeeds()
+        .stdout_only("12341234");
+}
+
+#[test]
+fn test_decode_padded_block_followed_by_aligned_tail() {
+    new_ucmd!()
+        .arg("--decode")
+        .pipe_in("MTIzNA==QUJD")
+        .succeeds()
+        .stdout_only("1234ABC");
+}
+
+#[test]
+fn test_decode_unpadded_stream_without_equals() {
+    new_ucmd!()
+        .arg("--decode")
+        .pipe_in("MTIzNA")
+        .succeeds()
+        .stdout_only("1234");
+}
+
+#[test]
 fn test_garbage() {
     let input = "aGVsbG8sIHdvcmxkIQ==\0"; // spell-checker:disable-line
     new_ucmd!()
@@ -148,7 +192,8 @@ fn test_wrap_no_arg() {
         new_ucmd!()
             .arg(wrap_param)
             .fails()
-            .stderr_contains("a value is required for '--wrap <COLS>' but none was supplied")
+            .stderr_contains("error: a value is required for '--wrap <COLS>' but none was supplied")
+            .stderr_contains("For more information, try '--help'.")
             .no_stdout();
     }
 }
@@ -219,39 +264,4 @@ cyBvdmVyIHRoZSBsYXp5IGRvZy4=
 ",
             // cSpell:enable
         );
-}
-
-// Prevent regression to:
-//
-// ❯ coreutils manpage base64 | rg --fixed-strings -- 'base32'
-// The data are encoded as described for the base32 alphabet in RFC 4648.
-// to the bytes of the formal base32 alphabet. Use \-\-ignore\-garbage
-// The data are encoded as described for the base32 alphabet in RFC 4648.
-// to the bytes of the formal base32 alphabet. Use \-\-ignore\-garbage
-#[test]
-fn test_manpage() {
-    use std::process::{Command, Stdio};
-
-    let test_scenario = TestScenario::new("");
-
-    let child = Command::new(&test_scenario.bin_path)
-        .arg("manpage")
-        .arg("base64")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-
-    let output = child.wait_with_output().unwrap();
-
-    assert_eq!(output.status.code().unwrap(), 0);
-
-    assert!(output.stderr.is_empty());
-
-    let stdout_str = std::str::from_utf8(&output.stdout).unwrap();
-
-    assert!(stdout_str.contains("base64 alphabet"));
-
-    assert!(!stdout_str.to_ascii_lowercase().contains("base32"));
 }

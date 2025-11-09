@@ -17,14 +17,19 @@ use nom::{
 };
 use std::{
     char,
-    collections::{HashMap, HashSet},
     error::Error,
     fmt::{Debug, Display},
     io::{BufRead, Write},
-    ops::Not,
 };
 use uucore::error::{FromIo, UError, UResult};
+use uucore::translate;
+
 use uucore::show_warning;
+
+/// Common trait for operations that can process chunks of data
+pub trait ChunkProcessor {
+    fn process_chunk(&self, input: &[u8], output: &mut Vec<u8>);
+}
 
 #[derive(Debug, Clone)]
 pub enum BadSequence {
@@ -45,44 +50,58 @@ pub enum BadSequence {
 impl Display for BadSequence {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::MissingCharClassName => write!(f, "missing character class name '[::]'"),
+            Self::MissingCharClassName => {
+                write!(f, "{}", translate!("tr-error-missing-char-class-name"))
+            }
             Self::MissingEquivalentClassChar => {
-                write!(f, "missing equivalence class character '[==]'")
+                write!(
+                    f,
+                    "{}",
+                    translate!("tr-error-missing-equivalence-class-char")
+                )
             }
             Self::MultipleCharRepeatInSet2 => {
-                write!(f, "only one [c*] repeat construct may appear in string2")
+                write!(f, "{}", translate!("tr-error-multiple-char-repeat-in-set2"))
             }
             Self::CharRepeatInSet1 => {
-                write!(f, "the [c*] repeat construct may not appear in string1")
+                write!(f, "{}", translate!("tr-error-char-repeat-in-set1"))
             }
             Self::InvalidRepeatCount(count) => {
-                write!(f, "invalid repeat count '{count}' in [c*n] construct")
+                write!(
+                    f,
+                    "{}",
+                    translate!("tr-error-invalid-repeat-count", "count" => format!("'{count}'"))
+                )
             }
             Self::EmptySet2WhenNotTruncatingSet1 => {
-                write!(f, "when not truncating set1, string2 must be non-empty")
+                write!(
+                    f,
+                    "{}",
+                    translate!("tr-error-empty-set2-when-not-truncating")
+                )
             }
             Self::ClassExceptLowerUpperInSet2 => {
                 write!(
                     f,
-                    "when translating, the only character classes that may appear in set2 are 'upper' and 'lower'"
+                    "{}",
+                    translate!("tr-error-class-except-lower-upper-in-set2")
                 )
             }
             Self::ClassInSet2NotMatchedBySet1 => {
-                write!(
-                    f,
-                    "when translating, every 'upper'/'lower' in set2 must be matched by a 'upper'/'lower' in the same position in set1"
-                )
+                write!(f, "{}", translate!("tr-error-class-in-set2-not-matched"))
             }
             Self::Set1LongerSet2EndsInClass => {
                 write!(
                     f,
-                    "when translating with string1 longer than string2,\nthe latter string must not end with a character class"
+                    "{}",
+                    translate!("tr-error-set1-longer-set2-ends-in-class")
                 )
             }
             Self::ComplementMoreThanOneUniqueInSet2 => {
                 write!(
                     f,
-                    "when translating with complemented character classes,\nstring2 must map all characters in the domain to one"
+                    "{}",
+                    translate!("tr-error-complement-more-than-one-unique")
                 )
             }
             Self::BackwardsRange { end, start } => {
@@ -94,17 +113,16 @@ impl Display for BadSequence {
                         }
                     }
                 }
-
                 write!(
                     f,
-                    "range-endpoints of '{}-{}' are in reverse collating sequence order",
-                    end_or_start_to_string(start),
-                    end_or_start_to_string(end)
+                    "{}",
+                    translate!("tr-error-backwards-range", "start" => end_or_start_to_string(start), "end" => end_or_start_to_string(end))
                 )
             }
             Self::MultipleCharInEquivalence(s) => write!(
                 f,
-                "{s}: equivalence class operand must be a single character"
+                "{}",
+                translate!("tr-error-multiple-char-in-equivalence", "chars" => s.clone())
             ),
         }
     }
@@ -364,11 +382,15 @@ impl Sequence {
                     let origin_octal: &str = std::str::from_utf8(input).unwrap();
                     let actual_octal_tail: &str = std::str::from_utf8(&input[0..2]).unwrap();
                     let outstand_char: char = char::from_u32(input[2] as u32).unwrap();
-                    show_warning!("the ambiguous octal escape \\{origin_octal} is being\n        interpreted as the 2-byte sequence \\0{actual_octal_tail}, {outstand_char}");
+                    show_warning!(
+                        "{}",
+                        translate!("tr-warning-ambiguous-octal-escape", "origin_octal" => origin_octal, "actual_octal_tail" => actual_octal_tail, "outstand_char" => outstand_char)
+                    );
                 }
                 result
             },
-        ).parse(input)
+        )
+        .parse(input)
     }
 
     fn parse_octal_two_digits(input: &[u8]) -> IResult<&[u8], u8> {
@@ -537,7 +559,7 @@ impl Sequence {
 pub trait SymbolTranslator {
     fn translate(&mut self, current: u8) -> Option<u8>;
 
-    /// Takes two SymbolTranslators and creates a new SymbolTranslator over both in sequence.
+    /// Takes two [`SymbolTranslator`]s and creates a new [`SymbolTranslator`] over both in sequence.
     ///
     /// This behaves pretty much identical to [`Iterator::chain`].
     fn chain<T>(self, other: T) -> ChainedSymbolTranslator<Self, T>
@@ -564,42 +586,79 @@ impl<A: SymbolTranslator, B: SymbolTranslator> SymbolTranslator for ChainedSymbo
     }
 }
 
+/// Convert a set of bytes to a 256-element bitmap for O(1) lookup
+fn set_to_bitmap(set: &[u8]) -> [bool; 256] {
+    let mut bitmap = [false; 256];
+    for &byte in set {
+        bitmap[byte as usize] = true;
+    }
+    bitmap
+}
+
 #[derive(Debug)]
 pub struct DeleteOperation {
-    set: Vec<u8>,
+    pub(crate) delete_table: [bool; 256],
 }
 
 impl DeleteOperation {
     pub fn new(set: Vec<u8>) -> Self {
-        Self { set }
+        Self {
+            delete_table: set_to_bitmap(&set),
+        }
     }
 }
 
 impl SymbolTranslator for DeleteOperation {
     fn translate(&mut self, current: u8) -> Option<u8> {
-        // keep if not present in the set
-        self.set.contains(&current).not().then_some(current)
+        // keep if not present in the delete set
+        (!self.delete_table[current as usize]).then_some(current)
+    }
+}
+
+impl ChunkProcessor for DeleteOperation {
+    fn process_chunk(&self, input: &[u8], output: &mut Vec<u8>) {
+        use crate::simd::{find_single_change, process_single_delete};
+
+        // Check if this is single character deletion
+        if let Some((delete_char, _)) =
+            find_single_change(&self.delete_table, |_, &should_delete| should_delete)
+        {
+            process_single_delete(input, output, delete_char);
+        } else {
+            // Standard deletion
+            output.extend(
+                input
+                    .iter()
+                    .filter(|&&b| !self.delete_table[b as usize])
+                    .copied(),
+            );
+        }
     }
 }
 
 #[derive(Debug)]
 pub struct TranslateOperation {
-    translation_map: HashMap<u8, u8>,
+    pub(crate) translation_table: [u8; 256],
 }
 
 impl TranslateOperation {
     pub fn new(set1: Vec<u8>, set2: Vec<u8>) -> Result<Self, BadSequence> {
+        // Initialize translation table with identity mapping
+        let mut translation_table = std::array::from_fn(|i| i as u8);
+
         if let Some(fallback) = set2.last().copied() {
-            Ok(Self {
-                translation_map: set1
-                    .into_iter()
-                    .zip(set2.into_iter().chain(std::iter::repeat(fallback)))
-                    .collect::<HashMap<_, _>>(),
-            })
+            // Apply translations from set1 to set2
+            for (from, to) in set1
+                .into_iter()
+                .zip(set2.into_iter().chain(std::iter::repeat(fallback)))
+            {
+                translation_table[from as usize] = to;
+            }
+
+            Ok(Self { translation_table })
         } else if set1.is_empty() && set2.is_empty() {
-            Ok(Self {
-                translation_map: HashMap::new(),
-            })
+            // Identity mapping for empty sets
+            Ok(Self { translation_table })
         } else {
             Err(BadSequence::EmptySet2WhenNotTruncatingSet1)
         }
@@ -608,25 +667,37 @@ impl TranslateOperation {
 
 impl SymbolTranslator for TranslateOperation {
     fn translate(&mut self, current: u8) -> Option<u8> {
-        Some(
-            self.translation_map
-                .get(&current)
-                .copied()
-                .unwrap_or(current),
-        )
+        Some(self.translation_table[current as usize])
+    }
+}
+
+impl ChunkProcessor for TranslateOperation {
+    fn process_chunk(&self, input: &[u8], output: &mut Vec<u8>) {
+        use crate::simd::{find_single_change, process_single_char_replace};
+
+        // Check if this is a simple single-character translation
+        if let Some((source, target)) =
+            find_single_change(&self.translation_table, |i, &val| val != i as u8)
+        {
+            // Use SIMD-optimized single character replacement
+            process_single_char_replace(input, output, source, target);
+        } else {
+            // Standard translation using table lookup
+            output.extend(input.iter().map(|&b| self.translation_table[b as usize]));
+        }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct SqueezeOperation {
-    set1: HashSet<u8>,
+    squeeze_table: [bool; 256],
     previous: Option<u8>,
 }
 
 impl SqueezeOperation {
     pub fn new(set1: Vec<u8>) -> Self {
         Self {
-            set1: set1.into_iter().collect(),
+            squeeze_table: set_to_bitmap(&set1),
             previous: None,
         }
     }
@@ -634,7 +705,7 @@ impl SqueezeOperation {
 
 impl SymbolTranslator for SqueezeOperation {
     fn translate(&mut self, current: u8) -> Option<u8> {
-        let next = if self.set1.contains(&current) {
+        let next = if self.squeeze_table[current as usize] {
             match self.previous {
                 Some(v) if v == current => None,
                 _ => Some(current),
@@ -653,24 +724,48 @@ where
     R: BufRead,
     W: Write,
 {
-    let mut buf = Vec::new();
-    let mut output_buf = Vec::new();
+    const BUFFER_SIZE: usize = 32768; // Large buffer for better throughput
+    let mut buf = [0; BUFFER_SIZE];
+    let mut output_buf = Vec::with_capacity(BUFFER_SIZE);
 
-    while let Ok(length) = input.read_until(b'\n', &mut buf) {
-        if length == 0 {
-            break; // EOF reached
+    loop {
+        let length = match input.read(&mut buf[..]) {
+            Ok(0) => break, // EOF reached
+            Ok(len) => len,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e.map_err_context(|| translate!("tr-error-read-error"))),
+        };
+
+        // Process the buffer and collect translated chars to output
+        output_buf.clear();
+        for &byte in &buf[..length] {
+            if let Some(translated) = translator.translate(byte) {
+                output_buf.push(translated);
+            }
         }
 
-        let filtered = buf.iter().filter_map(|&c| translator.translate(c));
-        output_buf.extend(filtered);
-
-        output
-            .write_all(&output_buf)
-            .map_err_context(|| "write error".into())?;
-
-        buf.clear();
-        output_buf.clear();
+        if !output_buf.is_empty() {
+            crate::simd::write_output(output, &output_buf)?;
+        }
     }
 
     Ok(())
+}
+
+/// Platform-specific flush operation
+#[inline]
+pub fn flush_output<W: Write>(output: &mut W) -> UResult<()> {
+    #[cfg(not(target_os = "windows"))]
+    return output
+        .flush()
+        .map_err_context(|| translate!("tr-error-write-error"));
+
+    #[cfg(target_os = "windows")]
+    match output.flush() {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
+            std::process::exit(13);
+        }
+        Err(err) => Err(err.map_err_context(|| translate!("tr-error-write-error"))),
+    }
 }

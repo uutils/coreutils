@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 use super::options;
 use clap::ArgMatches;
+use uucore::translate;
 
 /// Abstraction for getopts
 pub trait CommandLineOpts {
@@ -122,7 +123,7 @@ pub fn parse_inputs_traditional(input_strings: &[&str]) -> Result<CommandLineInp
                     m,
                     None,
                 ))),
-                _ => Err(format!("invalid offset: {}", input_strings[1])),
+                _ => Err(translate!("od-error-invalid-offset", "offset" => input_strings[1])),
             }
         }
         3 => {
@@ -134,14 +135,15 @@ pub fn parse_inputs_traditional(input_strings: &[&str]) -> Result<CommandLineInp
                     n,
                     Some(m),
                 ))),
-                (Err(_), _) => Err(format!("invalid offset: {}", input_strings[1])),
-                (_, Err(_)) => Err(format!("invalid label: {}", input_strings[2])),
+                (Err(_), _) => {
+                    Err(translate!("od-error-invalid-offset", "offset" => input_strings[1]))
+                }
+                (_, Err(_)) => {
+                    Err(translate!("od-error-invalid-label", "label" => input_strings[2]))
+                }
             }
         }
-        _ => Err(format!(
-            "too many inputs after --traditional: {}",
-            input_strings[3]
-        )),
+        _ => Err(translate!("od-error-too-many-inputs", "input" => input_strings[3])),
     }
 }
 
@@ -171,7 +173,7 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, &'static str> {
     }
     match u64::from_str_radix(&s[start..len], radix) {
         Ok(i) => Ok(i * multiply),
-        Err(_) => Err("parse failed"),
+        Err(_) => Err(translate!("od-error-parse-failed").leak()),
     }
 }
 

@@ -5,7 +5,9 @@
 
 //! Utilities for parsing numbers in various formats
 
-// spell-checker:ignore powf copysign prec inity infinit infs bigdecimal extendedbigdecimal biguint underflowed
+// spell-checker:ignore powf copysign prec ilog inity infinit infs bigdecimal extendedbigdecimal biguint underflowed muls
+
+use std::num::NonZeroU64;
 
 use bigdecimal::{
     BigDecimal, Context,
@@ -65,16 +67,41 @@ impl Base {
         &self,
         str: &'a str,
         digits: Option<BigUint>,
-    ) -> (Option<BigUint>, u64, &'a str) {
+    ) -> (Option<BigUint>, i64, &'a str) {
         let mut digits: Option<BigUint> = digits;
-        let mut count: u64 = 0;
+        let mut count: i64 = 0;
         let mut rest = str;
+
+        // Doing operations on BigUint is really expensive, so we do as much as we
+        // can on u64, then add them to the BigUint.
+        let mut digits_tmp: u64 = 0;
+        let mut count_tmp: i64 = 0;
+        let mut mul_tmp: u64 = 1;
         while let Some(d) = rest.chars().next().and_then(|c| self.digit(c)) {
-            (digits, count) = (
-                Some(digits.unwrap_or_default() * *self as u8 + d),
-                count + 1,
+            (digits_tmp, count_tmp, mul_tmp) = (
+                digits_tmp * *self as u64 + d,
+                count_tmp + 1,
+                mul_tmp * *self as u64,
             );
             rest = &rest[1..];
+            // In base 16, we parse 4 bits at a time, so we can parse 16 digits at most in a u64.
+            if count_tmp >= 15 {
+                // Accumulate what we have so far
+                (digits, count) = (
+                    Some(digits.unwrap_or_default() * mul_tmp + digits_tmp),
+                    count + count_tmp,
+                );
+                // Reset state
+                (digits_tmp, count_tmp, mul_tmp) = (0, 0, 1);
+            }
+        }
+
+        // Accumulate the leftovers (if any)
+        if mul_tmp > 1 {
+            (digits, count) = (
+                Some(digits.unwrap_or_default() * mul_tmp + digits_tmp),
+                count + count_tmp,
+            );
         }
         (digits, count, rest)
     }
@@ -82,12 +109,12 @@ impl Base {
 
 /// Type returned if a number could not be parsed in its entirety
 #[derive(Debug, PartialEq)]
-pub enum ExtendedParserError<'a, T> {
+pub enum ExtendedParserError<T> {
     /// The input as a whole makes no sense
     NotNumeric,
     /// The beginning of the input made sense and has been parsed,
     /// while the remaining doesn't.
-    PartialMatch(T, &'a str),
+    PartialMatch(T, String),
     /// The value has overflowed the type storage. The returned value
     /// is saturated (e.g. positive or negative infinity, or min/max
     /// value for the integer type).
@@ -97,11 +124,11 @@ pub enum ExtendedParserError<'a, T> {
     Underflow(T),
 }
 
-impl<'a, T> ExtendedParserError<'a, T>
+impl<T> ExtendedParserError<T>
 where
     T: Zero,
 {
-    // Extract the value out of an error, if possible.
+    /// Extract the value out of an error, if possible.
     fn extract(self) -> T {
         match self {
             Self::NotNumeric => T::zero(),
@@ -111,17 +138,17 @@ where
         }
     }
 
-    // Map an error to another, using the provided conversion function.
-    // The error (self) takes precedence over errors happening during the
-    // conversion.
+    /// Map an error to another, using the provided conversion function.
+    /// The error (self) takes precedence over errors happening during the
+    /// conversion.
     fn map<U>(
         self,
-        f: impl FnOnce(T) -> Result<U, ExtendedParserError<'a, U>>,
-    ) -> ExtendedParserError<'a, U>
+        f: impl FnOnce(T) -> Result<U, ExtendedParserError<U>>,
+    ) -> ExtendedParserError<U>
     where
         U: Zero,
     {
-        fn extract<U>(v: Result<U, ExtendedParserError<'_, U>>) -> U
+        fn extract<U>(v: Result<U, ExtendedParserError<U>>) -> U
         where
             U: Zero,
         {
@@ -129,12 +156,10 @@ where
         }
 
         match self {
-            ExtendedParserError::NotNumeric => ExtendedParserError::NotNumeric,
-            ExtendedParserError::PartialMatch(v, rest) => {
-                ExtendedParserError::PartialMatch(extract(f(v)), rest)
-            }
-            ExtendedParserError::Overflow(v) => ExtendedParserError::Overflow(extract(f(v))),
-            ExtendedParserError::Underflow(v) => ExtendedParserError::Underflow(extract(f(v))),
+            Self::NotNumeric => ExtendedParserError::NotNumeric,
+            Self::PartialMatch(v, rest) => ExtendedParserError::PartialMatch(extract(f(v)), rest),
+            Self::Overflow(v) => ExtendedParserError::Overflow(extract(f(v))),
+            Self::Underflow(v) => ExtendedParserError::Underflow(extract(f(v))),
         }
     }
 }
@@ -145,15 +170,15 @@ where
 /// and `f64` float, where octal and binary formats are not allowed.
 pub trait ExtendedParser {
     // We pick a hopefully different name for our parser, to avoid clash with standard traits.
-    fn extended_parse(input: &str) -> Result<Self, ExtendedParserError<'_, Self>>
+    fn extended_parse(input: &str) -> Result<Self, ExtendedParserError<Self>>
     where
         Self: Sized;
 }
 
 impl ExtendedParser for i64 {
     /// Parse a number as i64. No fractional part is allowed.
-    fn extended_parse(input: &str) -> Result<i64, ExtendedParserError<'_, i64>> {
-        fn into_i64<'a>(ebd: ExtendedBigDecimal) -> Result<i64, ExtendedParserError<'a, i64>> {
+    fn extended_parse(input: &str) -> Result<Self, ExtendedParserError<Self>> {
+        fn into_i64(ebd: ExtendedBigDecimal) -> Result<i64, ExtendedParserError<i64>> {
             match ebd {
                 ExtendedBigDecimal::BigDecimal(bd) => {
                     let (digits, scale) = bd.into_bigint_and_scale();
@@ -187,8 +212,8 @@ impl ExtendedParser for i64 {
 
 impl ExtendedParser for u64 {
     /// Parse a number as u64. No fractional part is allowed.
-    fn extended_parse(input: &str) -> Result<u64, ExtendedParserError<'_, u64>> {
-        fn into_u64<'a>(ebd: ExtendedBigDecimal) -> Result<u64, ExtendedParserError<'a, u64>> {
+    fn extended_parse(input: &str) -> Result<Self, ExtendedParserError<Self>> {
+        fn into_u64(ebd: ExtendedBigDecimal) -> Result<u64, ExtendedParserError<u64>> {
             match ebd {
                 ExtendedBigDecimal::BigDecimal(bd) => {
                     let (digits, scale) = bd.into_bigint_and_scale();
@@ -224,8 +249,8 @@ impl ExtendedParser for u64 {
 
 impl ExtendedParser for f64 {
     /// Parse a number as f64
-    fn extended_parse(input: &str) -> Result<f64, ExtendedParserError<'_, f64>> {
-        fn into_f64<'a>(ebd: ExtendedBigDecimal) -> Result<f64, ExtendedParserError<'a, f64>> {
+    fn extended_parse(input: &str) -> Result<Self, ExtendedParserError<Self>> {
+        fn into_f64(ebd: ExtendedBigDecimal) -> Result<f64, ExtendedParserError<f64>> {
             // TODO: _Some_ of this is generic, so this should probably be implemented as an ExtendedBigDecimal trait (ToPrimitive).
             let v = match ebd {
                 ExtendedBigDecimal::BigDecimal(bd) => {
@@ -256,14 +281,12 @@ impl ExtendedParser for f64 {
 
 impl ExtendedParser for ExtendedBigDecimal {
     /// Parse a number as an ExtendedBigDecimal
-    fn extended_parse(
-        input: &str,
-    ) -> Result<ExtendedBigDecimal, ExtendedParserError<'_, ExtendedBigDecimal>> {
+    fn extended_parse(input: &str) -> Result<Self, ExtendedParserError<Self>> {
         parse(input, ParseTarget::Decimal, &[])
     }
 }
 
-fn parse_digits(base: Base, str: &str, fractional: bool) -> (Option<BigUint>, u64, &str) {
+fn parse_digits(base: Base, str: &str, fractional: bool) -> (Option<BigUint>, i64, &str) {
     // Parse the integral part of the number
     let (digits, rest) = base.parse_digits(str);
 
@@ -307,7 +330,7 @@ fn parse_exponent(base: Base, str: &str) -> (Option<BigInt>, &str) {
     (None, str)
 }
 
-// Parse a multiplier from allowed suffixes (e.g. s/m/h).
+/// Parse a multiplier from allowed suffixes (e.g. s/m/h).
 fn parse_suffix_multiplier<'a>(str: &'a str, allowed_suffixes: &[(char, u32)]) -> (u32, &'a str) {
     if let Some(ch) = str.chars().next() {
         if let Some(mul) = allowed_suffixes
@@ -322,11 +345,11 @@ fn parse_suffix_multiplier<'a>(str: &'a str, allowed_suffixes: &[(char, u32)]) -
     (1, str)
 }
 
-fn parse_special_value<'a>(
-    input: &'a str,
+fn parse_special_value(
+    input: &str,
     negative: bool,
     allowed_suffixes: &[(char, u32)],
-) -> Result<ExtendedBigDecimal, ExtendedParserError<'a, ExtendedBigDecimal>> {
+) -> Result<ExtendedBigDecimal, ExtendedParserError<ExtendedBigDecimal>> {
     let input_lc = input.to_ascii_lowercase();
 
     // Array of ("String to match", return value when sign positive, when sign negative)
@@ -336,7 +359,7 @@ fn parse_special_value<'a>(
         ("nan", ExtendedBigDecimal::Nan),
     ];
 
-    for (str, ebd) in MATCH_TABLE.iter() {
+    for (str, ebd) in MATCH_TABLE {
         if input_lc.starts_with(str) {
             let mut special = ebd.clone();
             if negative {
@@ -349,7 +372,7 @@ fn parse_special_value<'a>(
             return if rest.is_empty() {
                 Ok(special)
             } else {
-                Err(ExtendedParserError::PartialMatch(special, rest))
+                Err(ExtendedParserError::PartialMatch(special, rest.to_string()))
             };
         }
     }
@@ -357,9 +380,9 @@ fn parse_special_value<'a>(
     Err(ExtendedParserError::NotNumeric)
 }
 
-// Underflow/Overflow errors always contain 0 or infinity.
-// overflow: true for overflow, false for underflow.
-fn make_error<'a>(overflow: bool, negative: bool) -> ExtendedParserError<'a, ExtendedBigDecimal> {
+/// Underflow/Overflow errors always contain 0 or infinity.
+/// overflow: true for overflow, false for underflow.
+fn make_error(overflow: bool, negative: bool) -> ExtendedParserError<ExtendedBigDecimal> {
     let mut v = if overflow {
         ExtendedBigDecimal::Infinity
     } else {
@@ -377,38 +400,77 @@ fn make_error<'a>(overflow: bool, negative: bool) -> ExtendedParserError<'a, Ext
 
 /// Compute bd**exp using exponentiation by squaring algorithm, while maintaining the
 /// precision specified in ctx (the number of digits would otherwise explode).
-// TODO: We do lose a little bit of precision, and the last digits may not be correct.
-// TODO: Upstream this to bigdecimal-rs.
-fn pow_with_context(bd: BigDecimal, exp: u32, ctx: &bigdecimal::Context) -> BigDecimal {
+///
+/// Algorithm comes from <https://en.wikipedia.org/wiki/Exponentiation_by_squaring>
+///
+/// TODO: Still pending discussion in <https://github.com/akubera/bigdecimal-rs/issues/147>,
+/// we do lose a little bit of precision, and the last digits may not be correct.
+/// Note: This has been copied from the latest revision in <https://github.com/akubera/bigdecimal-rs/pull/148>,
+/// so it's using minimum Rust version of `bigdecimal-rs`.
+fn pow_with_context(bd: &BigDecimal, exp: i64, ctx: &Context) -> BigDecimal {
     if exp == 0 {
         return 1.into();
     }
 
-    fn trim_precision(bd: BigDecimal, ctx: &bigdecimal::Context) -> BigDecimal {
-        if bd.digits() > ctx.precision().get() {
-            bd.with_precision_round(ctx.precision(), ctx.rounding_mode())
+    // When performing a multiplication between 2 numbers, we may lose up to 2 digits
+    // of precision.
+    // "Proof": https://github.com/akubera/bigdecimal-rs/issues/147#issuecomment-2793431202
+    const MARGIN_PER_MUL: u64 = 2;
+    // When doing many multiplication, we still introduce additional errors, add 1 more digit
+    // per 10 multiplications.
+    const MUL_PER_MARGIN_EXTRA: u64 = 10;
+
+    fn trim_precision(bd: BigDecimal, ctx: &Context, margin: u64) -> BigDecimal {
+        let prec = ctx.precision().get() + margin;
+        if bd.digits() > prec {
+            bd.with_precision_round(NonZeroU64::new(prec).unwrap(), ctx.rounding_mode())
         } else {
             bd
         }
     }
 
-    let bd = trim_precision(bd, ctx);
-    let ret = if exp % 2 == 0 {
-        pow_with_context(bd.square(), exp / 2, ctx)
+    // Count the number of multiplications we're going to perform, one per "1" binary digit
+    // in exp, and the number of times we can divide exp by 2.
+    let mut n = exp.unsigned_abs();
+    // Note: 63 - n.leading_zeros() == n.ilog2, but that's only available in recent Rust versions.
+    let muls = (n.count_ones() + (63 - n.leading_zeros()) - 1) as u64;
+    // Note: div_ceil would be nice to use here, but only available in recent Rust versions.
+    // (see note above about minimum Rust version in use)
+    let margin_extra = (muls + MUL_PER_MARGIN_EXTRA / 2) / MUL_PER_MARGIN_EXTRA;
+    let mut margin = margin_extra + MARGIN_PER_MUL * muls;
+
+    let mut bd_y: BigDecimal = 1.into();
+    let mut bd_x = if exp >= 0 {
+        bd.clone()
     } else {
-        &bd * pow_with_context(bd.square(), (exp - 1) / 2, ctx)
+        bd.inverse_with_context(&ctx.with_precision(
+            NonZeroU64::new(ctx.precision().get() + margin + MARGIN_PER_MUL).unwrap(),
+        ))
     };
-    trim_precision(ret, ctx)
+
+    while n > 1 {
+        if n % 2 == 1 {
+            bd_y = trim_precision(&bd_x * bd_y, ctx, margin);
+            margin -= MARGIN_PER_MUL;
+            n -= 1;
+        }
+        bd_x = trim_precision(bd_x.square(), ctx, margin);
+        margin -= MARGIN_PER_MUL;
+        n /= 2;
+    }
+    debug_assert_eq!(margin, margin_extra);
+
+    trim_precision(bd_x * bd_y, ctx, 0)
 }
 
-// Construct an ExtendedBigDecimal based on parsed data
-fn construct_extended_big_decimal<'a>(
+/// Construct an [`ExtendedBigDecimal`] based on parsed data
+fn construct_extended_big_decimal(
     digits: BigUint,
     negative: bool,
     base: Base,
-    scale: u64,
+    scale: i64,
     exponent: BigInt,
-) -> Result<ExtendedBigDecimal, ExtendedParserError<'a, ExtendedBigDecimal>> {
+) -> Result<ExtendedBigDecimal, ExtendedParserError<ExtendedBigDecimal>> {
     if digits == BigUint::zero() {
         // Return return 0 if the digits are zero. In particular, we do not ever
         // return Overflow/Underflow errors in that case.
@@ -424,16 +486,20 @@ fn construct_extended_big_decimal<'a>(
     let bd = if scale == 0 && exponent.is_zero() {
         BigDecimal::from_bigint(signed_digits, 0)
     } else if base == Base::Decimal {
-        let new_scale = BigInt::from(scale) - exponent;
+        if exponent.is_zero() {
+            // Optimization: Converting scale to Bigint and back is relatively slow.
+            BigDecimal::from_bigint(signed_digits, scale)
+        } else {
+            let new_scale = -exponent + scale;
 
-        // BigDecimal "only" supports i64 scale.
-        // Note that new_scale is a negative exponent: large value causes an underflow, small value an overflow.
-        if new_scale > i64::MAX.into() {
-            return Err(make_error(false, negative));
-        } else if new_scale < i64::MIN.into() {
-            return Err(make_error(true, negative));
+            // BigDecimal "only" supports i64 scale.
+            // Note that new_scale is a negative exponent: large positive value causes an underflow, large negative values an overflow.
+            if let Some(new_scale) = new_scale.to_i64() {
+                BigDecimal::from_bigint(signed_digits, new_scale)
+            } else {
+                return Err(make_error(new_scale.is_negative(), negative));
+            }
         }
-        BigDecimal::from_bigint(signed_digits, new_scale.to_i64().unwrap())
     } else if base == Base::Hexadecimal {
         // pow "only" supports u32 values, just error out if given more than 2**32 fractional digits.
         if scale > u32::MAX.into() {
@@ -444,22 +510,17 @@ fn construct_extended_big_decimal<'a>(
         let bd = BigDecimal::from_bigint(signed_digits, 0)
             / BigDecimal::from_bigint(BigInt::from(16).pow(scale as u32), 0);
 
-        let abs_exponent = exponent.abs();
-        // Again, pow "only" supports u32 values. Just overflow/underflow if the value provided
-        // is > 2**32 or < 2**-32.
-        if abs_exponent > u32::MAX.into() {
+        // pow_with_context "only" supports i64 values. Just overflow/underflow if the value provided
+        // is > 2**64 or < 2**-64.
+        let Some(exponent) = exponent.to_i64() else {
             return Err(make_error(exponent.is_positive(), negative));
-        }
+        };
 
         // Confusingly, exponent is in base 2 for hex floating point numbers.
+        let base: BigDecimal = 2.into();
         // Note: We cannot overflow/underflow BigDecimal here, as we will not be able to reach the
         // maximum/minimum scale (i64 range).
-        let base: BigDecimal = if !exponent.is_negative() {
-            2.into()
-        } else {
-            BigDecimal::from(2).inverse()
-        };
-        let pow2 = pow_with_context(base, abs_exponent.to_u32().unwrap(), &Context::default());
+        let pow2 = pow_with_context(&base, exponent, &Context::default());
 
         bd * pow2
     } else {
@@ -476,25 +537,13 @@ pub(crate) enum ParseTarget {
     Duration,
 }
 
-pub(crate) fn parse<'a>(
-    input: &'a str,
+pub(crate) fn parse(
+    input: &str,
     target: ParseTarget,
     allowed_suffixes: &[(char, u32)],
-) -> Result<ExtendedBigDecimal, ExtendedParserError<'a, ExtendedBigDecimal>> {
-    // Parse the " and ' prefixes separately
-    if target != ParseTarget::Duration {
-        if let Some(rest) = input.strip_prefix(['\'', '"']) {
-            let mut chars = rest.char_indices().fuse();
-            let v = chars
-                .next()
-                .map(|(_, c)| ExtendedBigDecimal::BigDecimal(u32::from(c).into()));
-            return match (v, chars.next()) {
-                (Some(v), None) => Ok(v),
-                (Some(v), Some((i, _))) => Err(ExtendedParserError::PartialMatch(v, &rest[i..])),
-                (None, _) => Err(ExtendedParserError::NotNumeric),
-            };
-        }
-    }
+) -> Result<ExtendedBigDecimal, ExtendedParserError<ExtendedBigDecimal>> {
+    // Note: literals with ' and " prefixes are parsed earlier on in argument parsing,
+    // before UTF-8 conversion.
 
     let trimmed_input = input.trim_ascii_start();
 
@@ -551,7 +600,7 @@ pub(crate) fn parse<'a>(
             } else {
                 ExtendedBigDecimal::zero()
             };
-            return Err(ExtendedParserError::PartialMatch(ebd, partial));
+            return Err(ExtendedParserError::PartialMatch(ebd, partial.to_string()));
         }
 
         return if target == ParseTarget::Integral {
@@ -570,13 +619,13 @@ pub(crate) fn parse<'a>(
 
     // Return what has been parsed so far. If there are extra characters, mark the
     // parsing as a partial match.
-    if !rest.is_empty() {
+    if rest.is_empty() {
+        ebd_result
+    } else {
         Err(ExtendedParserError::PartialMatch(
             ebd_result.unwrap_or_else(|e| e.extract()),
-            rest,
+            rest.to_string(),
         ))
-    } else {
-        ebd_result
     }
 }
 
@@ -621,14 +670,14 @@ mod tests {
             u64::extended_parse(""),
             Err(ExtendedParserError::NotNumeric)
         ));
-        assert!(matches!(
+        assert_eq!(
             u64::extended_parse("123.15"),
-            Err(ExtendedParserError::PartialMatch(123, ".15"))
-        ));
-        assert!(matches!(
+            Err(ExtendedParserError::PartialMatch(123, ".15".to_string()))
+        );
+        assert_eq!(
             u64::extended_parse("123e10"),
-            Err(ExtendedParserError::PartialMatch(123, "e10"))
-        ));
+            Err(ExtendedParserError::PartialMatch(123, "e10".to_string()))
+        );
     }
 
     #[test]
@@ -642,18 +691,18 @@ mod tests {
         ));
         assert_eq!(Ok(i64::MAX), i64::extended_parse(&format!("{}", i64::MAX)));
         assert_eq!(Ok(i64::MIN), i64::extended_parse(&format!("{}", i64::MIN)));
-        assert!(matches!(
+        assert_eq!(
             i64::extended_parse(&format!("{}", u64::MAX)),
             Err(ExtendedParserError::Overflow(i64::MAX))
-        ));
+        );
         assert!(matches!(
             i64::extended_parse(&format!("{}", i64::MAX as u64 + 1)),
             Err(ExtendedParserError::Overflow(i64::MAX))
         ));
-        assert!(matches!(
+        assert_eq!(
             i64::extended_parse("-123e10"),
-            Err(ExtendedParserError::PartialMatch(-123, "e10"))
-        ));
+            Err(ExtendedParserError::PartialMatch(-123, "e10".to_string()))
+        );
         assert!(matches!(
             i64::extended_parse(&format!("{}", -(u64::MAX as i128))),
             Err(ExtendedParserError::Overflow(i64::MIN))
@@ -705,20 +754,34 @@ mod tests {
             Ok(0.15),
             f64::extended_parse(".150000000000000000000000000231313")
         );
-        assert!(matches!(f64::extended_parse("123.15e"),
-                         Err(ExtendedParserError::PartialMatch(f, "e")) if f == 123.15));
-        assert!(matches!(f64::extended_parse("123.15E"),
-                         Err(ExtendedParserError::PartialMatch(f, "E")) if f == 123.15));
-        assert!(matches!(f64::extended_parse("123.15e-"),
-                         Err(ExtendedParserError::PartialMatch(f, "e-")) if f == 123.15));
-        assert!(matches!(f64::extended_parse("123.15e+"),
-                         Err(ExtendedParserError::PartialMatch(f, "e+")) if f == 123.15));
-        assert!(matches!(f64::extended_parse("123.15e."),
-                         Err(ExtendedParserError::PartialMatch(f, "e.")) if f == 123.15));
-        assert!(matches!(f64::extended_parse("1.2.3"),
-                         Err(ExtendedParserError::PartialMatch(f, ".3")) if f == 1.2));
-        assert!(matches!(f64::extended_parse("123.15p5"),
-                        Err(ExtendedParserError::PartialMatch(f, "p5")) if f == 123.15));
+        assert_eq!(
+            f64::extended_parse("123.15e"),
+            Err(ExtendedParserError::PartialMatch(123.15, "e".to_string()))
+        );
+        assert_eq!(
+            f64::extended_parse("123.15E"),
+            Err(ExtendedParserError::PartialMatch(123.15, "E".to_string()))
+        );
+        assert_eq!(
+            f64::extended_parse("123.15e-"),
+            Err(ExtendedParserError::PartialMatch(123.15, "e-".to_string()))
+        );
+        assert_eq!(
+            f64::extended_parse("123.15e+"),
+            Err(ExtendedParserError::PartialMatch(123.15, "e+".to_string()))
+        );
+        assert_eq!(
+            f64::extended_parse("123.15e."),
+            Err(ExtendedParserError::PartialMatch(123.15, "e.".to_string()))
+        );
+        assert_eq!(
+            f64::extended_parse("1.2.3"),
+            Err(ExtendedParserError::PartialMatch(1.2, ".3".to_string()))
+        );
+        assert_eq!(
+            f64::extended_parse("123.15p5"),
+            Err(ExtendedParserError::PartialMatch(123.15, "p5".to_string()))
+        );
         // Minus zero. 0.0 == -0.0 so we explicitly check the sign.
         assert_eq!(Ok(0.0), f64::extended_parse("-0.0"));
         assert!(f64::extended_parse("-0.0").unwrap().is_sign_negative());
@@ -741,10 +804,20 @@ mod tests {
         assert!(f64::extended_parse("nan").unwrap().is_sign_positive());
         assert!(f64::extended_parse("NAN").unwrap().is_nan());
         assert!(f64::extended_parse("NAN").unwrap().is_sign_positive());
-        assert!(matches!(f64::extended_parse("-infinit"),
-                         Err(ExtendedParserError::PartialMatch(f, "init")) if f == f64::NEG_INFINITY));
-        assert!(matches!(f64::extended_parse("-infinity00"),
-                         Err(ExtendedParserError::PartialMatch(f, "00")) if f == f64::NEG_INFINITY));
+        assert_eq!(
+            f64::extended_parse("-infinit"),
+            Err(ExtendedParserError::PartialMatch(
+                f64::NEG_INFINITY,
+                "init".to_string()
+            ))
+        );
+        assert_eq!(
+            f64::extended_parse("-infinity00"),
+            Err(ExtendedParserError::PartialMatch(
+                f64::NEG_INFINITY,
+                "00".to_string()
+            ))
+        );
         assert!(f64::extended_parse(&format!("{}", u64::MAX)).is_ok());
         assert!(f64::extended_parse(&format!("{}", i64::MIN)).is_ok());
 
@@ -929,14 +1002,22 @@ mod tests {
         // but we can check that the number still gets parsed properly: 0x0.8e5 is 0x8e5 / 16**3
         assert_eq!(Ok(0.555908203125), f64::extended_parse("0x0.8e5"));
 
-        assert!(matches!(f64::extended_parse("0x0.1p"),
-                        Err(ExtendedParserError::PartialMatch(f, "p")) if f == 0.0625));
-        assert!(matches!(f64::extended_parse("0x0.1p-"),
-                        Err(ExtendedParserError::PartialMatch(f, "p-")) if f == 0.0625));
-        assert!(matches!(f64::extended_parse("0x.1p+"),
-                        Err(ExtendedParserError::PartialMatch(f, "p+")) if f == 0.0625));
-        assert!(matches!(f64::extended_parse("0x.1p."),
-                        Err(ExtendedParserError::PartialMatch(f, "p.")) if f == 0.0625));
+        assert_eq!(
+            f64::extended_parse("0x0.1p"),
+            Err(ExtendedParserError::PartialMatch(0.0625, "p".to_string()))
+        );
+        assert_eq!(
+            f64::extended_parse("0x0.1p-"),
+            Err(ExtendedParserError::PartialMatch(0.0625, "p-".to_string()))
+        );
+        assert_eq!(
+            f64::extended_parse("0x.1p+"),
+            Err(ExtendedParserError::PartialMatch(0.0625, "p+".to_string()))
+        );
+        assert_eq!(
+            f64::extended_parse("0x.1p."),
+            Err(ExtendedParserError::PartialMatch(0.0625, "p.".to_string()))
+        );
 
         assert_eq!(
             Ok(ExtendedBigDecimal::BigDecimal(
@@ -960,14 +1041,14 @@ mod tests {
         assert_eq!(
             Ok(ExtendedBigDecimal::BigDecimal(
                 // Wolfram Alpha says 9.8162042336235053508313854078782835648991393286913072670026492205522618203568834202759669215027003865... × 10^903089986
-                BigDecimal::from_str("9.816204233623505350831385407878283564899139328691307267002649220552261820356883420275966921514831318e+903089986").unwrap()
+                BigDecimal::from_str("9.816204233623505350831385407878283564899139328691307267002649220552261820356883420275966921502700387e+903089986").unwrap()
             )),
             ExtendedBigDecimal::extended_parse("0x1p3000000000")
         );
         assert_eq!(
             Ok(ExtendedBigDecimal::BigDecimal(
                 // Wolfram Alpha says 1.3492131462369983551036088935544888715959511045742395978049631768570509541390540646442193112226520316... × 10^-9030900
-                BigDecimal::from_str("1.349213146236998355103608893554488871595951104574239597804963176857050954139054064644219311222656999e-9030900").unwrap()
+                BigDecimal::from_str("1.349213146236998355103608893554488871595951104574239597804963176857050954139054064644219311222652032e-9030900").unwrap()
             )),
             // Couldn't get a answer from Wolfram Alpha for smaller negative exponents
             ExtendedBigDecimal::extended_parse("0x1p-30000000")
@@ -975,61 +1056,79 @@ mod tests {
 
         // ExtendedBigDecimal overflow/underflow
         assert!(matches!(
-            ExtendedBigDecimal::extended_parse(&format!("0x1p{}", u32::MAX as u64 + 1)),
+            ExtendedBigDecimal::extended_parse(&format!("0x1p{}", u64::MAX as u128 + 1)),
             Err(ExtendedParserError::Overflow(ExtendedBigDecimal::Infinity))
         ));
         assert!(matches!(
-            ExtendedBigDecimal::extended_parse(&format!("-0x100P{}", u32::MAX as u64 + 1)),
+            ExtendedBigDecimal::extended_parse(&format!("-0x100P{}", u64::MAX as u128 + 1)),
             Err(ExtendedParserError::Overflow(
                 ExtendedBigDecimal::MinusInfinity
             ))
         ));
         assert!(matches!(
-            ExtendedBigDecimal::extended_parse(&format!("0x1p-{}", u32::MAX as u64 + 1)),
+            ExtendedBigDecimal::extended_parse(&format!("0x1p-{}", u64::MAX as u128 + 1)),
             Err(ExtendedParserError::Underflow(ebd)) if ebd == ExtendedBigDecimal::zero()
         ));
         assert!(matches!(
-            ExtendedBigDecimal::extended_parse(&format!("-0x0.100p-{}", u32::MAX as u64 + 1)),
+            ExtendedBigDecimal::extended_parse(&format!("-0x0.100p-{}", u64::MAX as u128 + 1)),
             Err(ExtendedParserError::Underflow(
                 ExtendedBigDecimal::MinusZero
             ))
         ));
 
         // Not actually hex numbers, but the prefixes look like it.
-        assert!(matches!(f64::extended_parse("0x"),
-            Err(ExtendedParserError::PartialMatch(f, "x")) if f == 0.0));
-        assert!(matches!(f64::extended_parse("0x."),
-            Err(ExtendedParserError::PartialMatch(f, "x.")) if f == 0.0));
-        assert!(matches!(f64::extended_parse("0xp"),
-            Err(ExtendedParserError::PartialMatch(f, "xp")) if f == 0.0));
-        assert!(matches!(f64::extended_parse("0xp-2"),
-            Err(ExtendedParserError::PartialMatch(f, "xp-2")) if f == 0.0));
-        assert!(matches!(f64::extended_parse("0x.p-2"),
-            Err(ExtendedParserError::PartialMatch(f, "x.p-2")) if f == 0.0));
-        assert!(matches!(f64::extended_parse("0X"),
-            Err(ExtendedParserError::PartialMatch(f, "X")) if f == 0.0));
-        assert!(matches!(f64::extended_parse("-0x"),
-            Err(ExtendedParserError::PartialMatch(f, "x")) if f == -0.0));
-        assert!(matches!(f64::extended_parse("+0x"),
-            Err(ExtendedParserError::PartialMatch(f, "x")) if f == 0.0));
-        assert!(matches!(f64::extended_parse("-0x."),
-            Err(ExtendedParserError::PartialMatch(f, "x.")) if f == -0.0));
-        assert!(matches!(
+        assert_eq!(
+            f64::extended_parse("0x"),
+            Err(ExtendedParserError::PartialMatch(0.0, "x".to_string()))
+        );
+        assert_eq!(
+            f64::extended_parse("0x."),
+            Err(ExtendedParserError::PartialMatch(0.0, "x.".to_string()))
+        );
+        assert_eq!(
+            f64::extended_parse("0xp"),
+            Err(ExtendedParserError::PartialMatch(0.0, "xp".to_string()))
+        );
+        assert_eq!(
+            f64::extended_parse("0xp-2"),
+            Err(ExtendedParserError::PartialMatch(0.0, "xp-2".to_string()))
+        );
+        assert_eq!(
+            f64::extended_parse("0x.p-2"),
+            Err(ExtendedParserError::PartialMatch(0.0, "x.p-2".to_string()))
+        );
+        assert_eq!(
+            f64::extended_parse("0X"),
+            Err(ExtendedParserError::PartialMatch(0.0, "X".to_string()))
+        );
+        assert_eq!(
+            f64::extended_parse("-0x"),
+            Err(ExtendedParserError::PartialMatch(0.0, "x".to_string()))
+        );
+        assert_eq!(
+            f64::extended_parse("+0x"),
+            Err(ExtendedParserError::PartialMatch(0.0, "x".to_string()))
+        );
+        assert_eq!(
+            f64::extended_parse("-0x."),
+            Err(ExtendedParserError::PartialMatch(-0.0, "x.".to_string()))
+        );
+        assert_eq!(
             u64::extended_parse("0x"),
-            Err(ExtendedParserError::PartialMatch(0, "x"))
-        ));
-        assert!(matches!(
+            Err(ExtendedParserError::PartialMatch(0, "x".to_string()))
+        );
+        assert_eq!(
             u64::extended_parse("-0x"),
-            Err(ExtendedParserError::PartialMatch(0, "x"))
-        ));
-        assert!(matches!(
+            Err(ExtendedParserError::PartialMatch(0, "x".to_string()))
+        );
+        assert_eq!(
             i64::extended_parse("0x"),
-            Err(ExtendedParserError::PartialMatch(0, "x"))
-        ));
-        assert!(matches!(
+            Err(ExtendedParserError::PartialMatch(0, "x".to_string()))
+        );
+        assert_eq!(
             i64::extended_parse("-0x"),
-            Err(ExtendedParserError::PartialMatch(0, "x"))
-        ));
+            Err(ExtendedParserError::PartialMatch(0, "x".to_string()))
+        );
     }
 
     #[test]
@@ -1040,18 +1139,18 @@ mod tests {
         assert_eq!(Ok(-0o123), i64::extended_parse("-0123"));
         assert_eq!(Ok(0o123), u64::extended_parse("00123"));
         assert_eq!(Ok(0), u64::extended_parse("00"));
-        assert!(matches!(
+        assert_eq!(
             u64::extended_parse("008"),
-            Err(ExtendedParserError::PartialMatch(0, "8"))
-        ));
-        assert!(matches!(
+            Err(ExtendedParserError::PartialMatch(0, "8".to_string()))
+        );
+        assert_eq!(
             u64::extended_parse("08"),
-            Err(ExtendedParserError::PartialMatch(0, "8"))
-        ));
-        assert!(matches!(
+            Err(ExtendedParserError::PartialMatch(0, "8".to_string()))
+        );
+        assert_eq!(
             u64::extended_parse("0."),
-            Err(ExtendedParserError::PartialMatch(0, "."))
-        ));
+            Err(ExtendedParserError::PartialMatch(0, ".".to_string()))
+        );
 
         // No float tests, leading zeros get parsed as decimal anyway.
     }
@@ -1063,51 +1162,62 @@ mod tests {
         assert_eq!(Ok(0b1011), u64::extended_parse("+0b1011"));
         assert_eq!(Ok(-0b1011), i64::extended_parse("-0b1011"));
 
-        assert!(matches!(
+        assert_eq!(
             u64::extended_parse("0b"),
-            Err(ExtendedParserError::PartialMatch(0, "b"))
-        ));
-        assert!(matches!(
+            Err(ExtendedParserError::PartialMatch(0, "b".to_string()))
+        );
+        assert_eq!(
             u64::extended_parse("0b."),
-            Err(ExtendedParserError::PartialMatch(0, "b."))
-        ));
-        assert!(matches!(
+            Err(ExtendedParserError::PartialMatch(0, "b.".to_string()))
+        );
+        assert_eq!(
             u64::extended_parse("-0b"),
-            Err(ExtendedParserError::PartialMatch(0, "b"))
-        ));
-        assert!(matches!(
+            Err(ExtendedParserError::PartialMatch(0, "b".to_string()))
+        );
+        assert_eq!(
             i64::extended_parse("0b"),
-            Err(ExtendedParserError::PartialMatch(0, "b"))
-        ));
-        assert!(matches!(
+            Err(ExtendedParserError::PartialMatch(0, "b".to_string()))
+        );
+        assert_eq!(
             i64::extended_parse("-0b"),
-            Err(ExtendedParserError::PartialMatch(0, "b"))
-        ));
+            Err(ExtendedParserError::PartialMatch(0, "b".to_string()))
+        );
 
         // Binary not allowed for floats
-        assert!(matches!(
+        assert_eq!(
             f64::extended_parse("0b100"),
-            Err(ExtendedParserError::PartialMatch(0f64, "b100"))
-        ));
-        assert!(matches!(
+            Err(ExtendedParserError::PartialMatch(0f64, "b100".to_string()))
+        );
+        assert_eq!(
             f64::extended_parse("0b100.1"),
-            Err(ExtendedParserError::PartialMatch(0f64, "b100.1"))
-        ));
+            Err(ExtendedParserError::PartialMatch(
+                0f64,
+                "b100.1".to_string()
+            ))
+        );
 
-        assert!(match ExtendedBigDecimal::extended_parse("0b100.1") {
-            Err(ExtendedParserError::PartialMatch(ebd, "b100.1")) =>
-                ebd == ExtendedBigDecimal::zero(),
-            _ => false,
-        });
+        assert_eq!(
+            ExtendedBigDecimal::extended_parse("0b100.1"),
+            Err(ExtendedParserError::PartialMatch(
+                ExtendedBigDecimal::zero(),
+                "b100.1".to_string()
+            ))
+        );
 
-        assert!(match ExtendedBigDecimal::extended_parse("0b") {
-            Err(ExtendedParserError::PartialMatch(ebd, "b")) => ebd == ExtendedBigDecimal::zero(),
-            _ => false,
-        });
-        assert!(match ExtendedBigDecimal::extended_parse("0b.") {
-            Err(ExtendedParserError::PartialMatch(ebd, "b.")) => ebd == ExtendedBigDecimal::zero(),
-            _ => false,
-        });
+        assert_eq!(
+            ExtendedBigDecimal::extended_parse("0b"),
+            Err(ExtendedParserError::PartialMatch(
+                ExtendedBigDecimal::zero(),
+                "b".to_string()
+            ))
+        );
+        assert_eq!(
+            ExtendedBigDecimal::extended_parse("0b."),
+            Err(ExtendedParserError::PartialMatch(
+                ExtendedBigDecimal::zero(),
+                "b.".to_string()
+            ))
+        );
     }
 
     #[test]
@@ -1120,15 +1230,15 @@ mod tests {
 
         // Ensure that trailing whitespace is still a partial match
         assert_eq!(
-            Err(ExtendedParserError::PartialMatch(6, " ")),
+            Err(ExtendedParserError::PartialMatch(6, " ".to_string())),
             u64::extended_parse("0x6 ")
         );
         assert_eq!(
-            Err(ExtendedParserError::PartialMatch(7, "\t")),
+            Err(ExtendedParserError::PartialMatch(7, "\t".to_string())),
             u64::extended_parse("0x7\t")
         );
         assert_eq!(
-            Err(ExtendedParserError::PartialMatch(8, "\n")),
+            Err(ExtendedParserError::PartialMatch(8, "\n".to_string())),
             u64::extended_parse("0x8\n")
         );
 

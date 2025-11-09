@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use std::{
+    ffi::OsString,
     fs::File,
     io::{BufRead, BufReader, Stdin, Stdout, Write, stdin, stdout},
     panic::set_hook,
@@ -23,17 +24,67 @@ use crossterm::{
 };
 
 use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::format_usage;
 use uucore::{display::Quotable, show};
-use uucore::{format_usage, help_about, help_usage};
 
-const ABOUT: &str = help_about!("more.md");
-const USAGE: &str = help_usage!("more.md");
+use uucore::translate;
+
+#[derive(Debug)]
+enum MoreError {
+    IsDirectory(String),
+    CannotOpenNoSuchFile(String),
+    CannotOpenIOError(String, std::io::ErrorKind),
+    BadUsage,
+}
+
+impl std::fmt::Display for MoreError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::IsDirectory(path) => {
+                write!(
+                    f,
+                    "{}",
+                    translate!(
+                        "more-error-is-directory",
+                        "path" => path.quote()
+                    )
+                )
+            }
+            Self::CannotOpenNoSuchFile(path) => {
+                write!(
+                    f,
+                    "{}",
+                    translate!(
+                        "more-error-cannot-open-no-such-file",
+                        "path" => path.quote()
+                    )
+                )
+            }
+            Self::CannotOpenIOError(path, error) => {
+                write!(
+                    f,
+                    "{}",
+                    translate!(
+                    "more-error-cannot-open-io-error",
+                    "path" => path.quote(),
+                    "error" => error
+                    )
+                )
+            }
+            Self::BadUsage => {
+                write!(f, "{}", translate!("more-error-bad-usage"))
+            }
+        }
+    }
+}
+
+impl std::error::Error for MoreError {}
+
 const BELL: char = '\x07'; // Printing this character will ring the bell
 
 // The prompt to be displayed at the top of the screen when viewing multiple files,
 // with the file name in the middle
 const MULTI_FILE_TOP_PROMPT: &str = "\r::::::::::::::\n\r{}\n\r::::::::::::::\n";
-const HELP_MESSAGE: &str = "[Press space to continue, 'q' to quit.]";
 
 pub mod options {
     pub const SILENT: &str = "silent";
@@ -101,25 +152,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         print!("\r");
         println!("{panic_info}");
     }));
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let mut options = Options::from(&matches);
-    if let Some(files) = matches.get_many::<String>(options::FILES) {
+    if let Some(files) = matches.get_many::<OsString>(options::FILES) {
         let length = files.len();
 
-        let mut files_iter = files.map(|s| s.as_str()).peekable();
-        while let (Some(file), next_file) = (files_iter.next(), files_iter.peek()) {
-            let file = Path::new(file);
+        let mut files_iter = files.peekable();
+        while let (Some(file_os), next_file) = (files_iter.next(), files_iter.peek()) {
+            let file = Path::new(file_os);
             if file.is_dir() {
                 show!(UUsageError::new(
                     0,
-                    format!("{} is a directory.", file.quote()),
+                    MoreError::IsDirectory(file.to_string_lossy().to_string()).to_string(),
                 ));
                 continue;
             }
             if !file.exists() {
                 show!(USimpleError::new(
                     0,
-                    format!("cannot open {}: No such file or directory", file.quote()),
+                    MoreError::CannotOpenNoSuchFile(file.to_string_lossy().to_string()).to_string(),
                 ));
                 continue;
             }
@@ -127,17 +178,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Err(why) => {
                     show!(USimpleError::new(
                         0,
-                        format!("cannot open {}: {}", file.quote(), why.kind()),
+                        MoreError::CannotOpenIOError(
+                            file.to_string_lossy().to_string(),
+                            why.kind()
+                        )
+                        .to_string(),
                     ));
                     continue;
                 }
                 Ok(opened_file) => opened_file,
             };
+            let next_file_str = next_file.map(|f| f.to_string_lossy().into_owned());
             more(
                 InputType::File(BufReader::new(opened_file)),
                 length > 1,
-                file.to_str(),
-                next_file.copied(),
+                Some(&file.to_string_lossy()),
+                next_file_str.as_deref(),
                 &mut options,
             )?;
         }
@@ -145,7 +201,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let stdin = stdin();
         if stdin.is_tty() {
             // stdin is not a pipe
-            return Err(UUsageError::new(1, "bad usage"));
+            return Err(UUsageError::new(1, MoreError::BadUsage.to_string()));
         }
         more(InputType::Stdin(stdin), false, None, None, &mut options)?;
     }
@@ -155,58 +211,59 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(translate!("more-about"))
+        .override_usage(format_usage(&translate!("more-usage")))
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .infer_long_args(true)
         .arg(
             Arg::new(options::SILENT)
                 .short('d')
                 .long(options::SILENT)
                 .action(ArgAction::SetTrue)
-                .help("Display help instead of ringing bell when an illegal key is pressed"),
+                .help(translate!("more-help-silent")),
         )
         .arg(
             Arg::new(options::LOGICAL)
                 .short('l')
                 .long(options::LOGICAL)
                 .action(ArgAction::SetTrue)
-                .help("Do not pause after any line containing a ^L (form feed)"),
+                .help(translate!("more-help-logical")),
         )
         .arg(
             Arg::new(options::EXIT_ON_EOF)
                 .short('e')
                 .long(options::EXIT_ON_EOF)
                 .action(ArgAction::SetTrue)
-                .help("Exit on End-Of-File"),
+                .help(translate!("more-help-exit-on-eof")),
         )
         .arg(
             Arg::new(options::NO_PAUSE)
                 .short('f')
                 .long(options::NO_PAUSE)
                 .action(ArgAction::SetTrue)
-                .help("Count logical lines, rather than screen lines"),
+                .help(translate!("more-help-no-pause")),
         )
         .arg(
             Arg::new(options::PRINT_OVER)
                 .short('p')
                 .long(options::PRINT_OVER)
                 .action(ArgAction::SetTrue)
-                .help("Do not scroll, clear screen and display text"),
+                .help(translate!("more-help-print-over")),
         )
         .arg(
             Arg::new(options::CLEAN_PRINT)
                 .short('c')
                 .long(options::CLEAN_PRINT)
                 .action(ArgAction::SetTrue)
-                .help("Do not scroll, display text and clean line ends"),
+                .help(translate!("more-help-clean-print")),
         )
         .arg(
             Arg::new(options::SQUEEZE)
                 .short('s')
                 .long(options::SQUEEZE)
                 .action(ArgAction::SetTrue)
-                .help("Squeeze multiple blank lines into one"),
+                .help(translate!("more-help-squeeze")),
         )
         .arg(
             Arg::new(options::PLAIN)
@@ -214,7 +271,7 @@ pub fn uu_app() -> Command {
                 .long(options::PLAIN)
                 .action(ArgAction::SetTrue)
                 .hide(true)
-                .help("Suppress underlining"),
+                .help(translate!("more-help-plain")),
         )
         .arg(
             Arg::new(options::LINES)
@@ -223,14 +280,14 @@ pub fn uu_app() -> Command {
                 .value_name("number")
                 .num_args(1)
                 .value_parser(value_parser!(u16).range(0..))
-                .help("The number of lines per screen full"),
+                .help(translate!("more-help-lines")),
         )
         .arg(
             Arg::new(options::NUMBER)
                 .long(options::NUMBER)
                 .num_args(1)
                 .value_parser(value_parser!(u16).range(0..))
-                .help("Same as --lines option argument"),
+                .help(translate!("more-help-number")),
         )
         .arg(
             Arg::new(options::FROM_LINE)
@@ -239,7 +296,7 @@ pub fn uu_app() -> Command {
                 .num_args(1)
                 .value_name("number")
                 .value_parser(value_parser!(usize))
-                .help("Start displaying each file at line number"),
+                .help(translate!("more-help-from-line")),
         )
         .arg(
             Arg::new(options::PATTERN)
@@ -248,14 +305,15 @@ pub fn uu_app() -> Command {
                 .allow_hyphen_values(true)
                 .required(false)
                 .value_name("pattern")
-                .help("The string to be searched in each file before starting to display it"),
+                .help(translate!("more-help-pattern")),
         )
         .arg(
             Arg::new(options::FILES)
                 .required(false)
                 .action(ArgAction::Append)
-                .help("Path to the files to be read")
-                .value_hint(clap::ValueHint::FilePath),
+                .help(translate!("more-help-files"))
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
 }
 
@@ -267,15 +325,15 @@ enum InputType {
 impl InputType {
     fn read_line(&mut self, buf: &mut String) -> std::io::Result<usize> {
         match self {
-            InputType::File(reader) => reader.read_line(buf),
-            InputType::Stdin(stdin) => stdin.read_line(buf),
+            Self::File(reader) => reader.read_line(buf),
+            Self::Stdin(stdin) => stdin.read_line(buf),
         }
     }
 
     fn len(&self) -> std::io::Result<Option<u64>> {
         let len = match self {
-            InputType::File(reader) => Some(reader.get_ref().metadata()?.len()),
-            InputType::Stdin(_) => None,
+            Self::File(reader) => Some(reader.get_ref().metadata()?.len()),
+            Self::Stdin(_) => None,
         };
         Ok(len)
     }
@@ -455,9 +513,13 @@ impl<'a> Pager<'a> {
         if !self.read_until_line(self.upper_mark)? {
             write!(
                 self.stdout,
-                "\r{}Cannot seek to line number {} (press RETURN){}",
+                "\r{}{} ({}){}",
                 Attribute::Reverse,
-                self.upper_mark + 1,
+                translate!(
+                    "more-error-cannot-seek-to-line",
+                    "line" => (self.upper_mark + 1)
+                ),
+                translate!("more-press-return"),
                 Attribute::Reset,
             )?;
             self.stdout.flush()?;
@@ -509,15 +571,17 @@ impl<'a> Pager<'a> {
     fn handle_pattern_search(&mut self) -> UResult<()> {
         if self.pattern.is_none() {
             return Ok(());
-        };
+        }
         match self.search_pattern_in_file() {
             Some(line) => self.upper_mark = line,
             None => {
                 self.pattern = None;
                 write!(
                     self.stdout,
-                    "\r{}Pattern not found (press RETURN){}",
+                    "\r{}{} ({}){}",
                     Attribute::Reverse,
+                    translate!("more-error-pattern-not-found"),
+                    translate!("more-press-return"),
                     Attribute::Reset,
                 )?;
                 self.stdout.flush()?;
@@ -706,7 +770,7 @@ impl<'a> Pager<'a> {
     fn page_resize(&mut self, _col: u16, row: u16, option_line: Option<u16>) {
         if option_line.is_none() {
             self.content_rows = row.saturating_sub(1) as usize;
-        };
+        }
     }
 
     fn draw(&mut self, wrong_key: Option<char>) -> UResult<()> {
@@ -745,8 +809,8 @@ impl<'a> Pager<'a> {
                     pattern,
                     &format!("{}{pattern}{}", Attribute::Reverse, Attribute::Reset),
                 );
-            };
-            self.stdout.write_all(format!("\r{}\n", line).as_bytes())?;
+            }
+            self.stdout.write_all(format!("\r{line}\n").as_bytes())?;
             lines_printed += 1;
             index += 1;
         }
@@ -793,7 +857,7 @@ impl<'a> Pager<'a> {
                 if percentage >= 100 {
                     " (END)".to_string()
                 } else {
-                    format!(" ({}%)", percentage)
+                    format!(" ({percentage}%)")
                 }
             }
         } else {
@@ -808,9 +872,13 @@ impl<'a> Pager<'a> {
         // - In normal mode: ring bell (BELL char) on wrong key or show basic prompt
         let banner = match (self.silent, wrong_key) {
             (true, Some(key)) => format!(
-                "{status}[Unknown key: '{key}'. Press 'h' for instructions. (unimplemented)]"
+                "{status}[{}]",
+                translate!(
+                    "more-error-unknown-key",
+                    "key" => key,
+                )
             ),
-            (true, None) => format!("{status}{HELP_MESSAGE}"),
+            (true, None) => format!("{status}{}", translate!("more-help-message")),
             (false, Some(_)) => format!("{status}{BELL}"),
             (false, None) => status,
         };
@@ -839,7 +907,7 @@ mod tests {
         type Target = Vec<u8>;
         fn deref(&self) -> &Vec<u8> {
             match self {
-                OutputType::Test(buf) => buf,
+                Self::Test(buf) => buf,
                 _ => unreachable!(),
             }
         }
@@ -848,7 +916,7 @@ mod tests {
     impl DerefMut for OutputType {
         fn deref_mut(&mut self) -> &mut Vec<u8> {
             match self {
-                OutputType::Test(buf) => buf,
+                Self::Test(buf) => buf,
                 _ => unreachable!(),
             }
         }
@@ -1008,7 +1076,7 @@ mod tests {
             .build();
         pager.draw_status_bar(None);
         let stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(stdout.contains(HELP_MESSAGE));
+        assert!(stdout.contains(&translate!("more-help-message")));
     }
 
     #[test]
@@ -1081,7 +1149,10 @@ mod tests {
         assert!(pager.handle_from_line().is_ok());
         assert_eq!(pager.upper_mark, 0);
         let stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(stdout.contains("Cannot seek to line number 100"));
+        assert!(stdout.contains(&translate!(
+            "more-error-cannot-seek-to-line",
+            "line" => "100"
+        )));
     }
 
     #[test]
@@ -1102,7 +1173,7 @@ mod tests {
         let mut pager = TestPagerBuilder::new(content).pattern("qux").build();
         assert!(pager.handle_pattern_search().is_ok());
         let stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(stdout.contains("Pattern not found"));
+        assert!(stdout.contains(&translate!("more-error-pattern-not-found")));
         assert_eq!(pager.pattern, None);
         assert_eq!(pager.upper_mark, 0);
     }
@@ -1112,11 +1183,14 @@ mod tests {
         let mut pager = TestPagerBuilder::default().silent().build();
         pager.draw_status_bar(Some('x'));
         let stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(stdout.contains("Unknown key: 'x'"));
+        assert!(stdout.contains(&translate!(
+            "more-error-unknown-key",
+            "key" => "x"
+        )));
 
         pager = TestPagerBuilder::default().build();
         pager.draw_status_bar(Some('x'));
         let stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(stdout.contains(BELL));
+        assert!(stdout.contains(&BELL.to_string()));
     }
 }

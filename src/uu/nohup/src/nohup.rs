@@ -16,12 +16,10 @@ use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{UClapError, UError, UResult, set_exit_code};
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
+use uucore::error::{UError, UResult, set_exit_code};
+use uucore::translate;
+use uucore::{format_usage, show_error};
 
-const ABOUT: &str = help_about!("nohup.md");
-const AFTER_HELP: &str = help_section!("after help", "nohup.md");
-const USAGE: &str = help_usage!("nohup.md");
 static NOHUP_OUT: &str = "nohup.out";
 // exit codes that match the GNU implementation
 static EXIT_CANCELED: i32 = 125;
@@ -35,20 +33,16 @@ mod options {
 
 #[derive(Debug, Error)]
 enum NohupError {
-    #[error("Cannot detach from console")]
+    #[error("{}", translate!("nohup-error-cannot-detach"))]
     CannotDetach,
 
-    #[error("Cannot replace {name}: {err}", name = .0, err = .1)]
+    #[error("{}", translate!("nohup-error-cannot-replace", "name" => (*_0), "err" => _1))]
     CannotReplace(&'static str, #[source] Error),
 
-    #[error("failed to open {path}: {err}", path = NOHUP_OUT.quote(), err = .1)]
+    #[error("{}", translate!("nohup-error-open-failed", "path" => NOHUP_OUT.quote(), "err" => _1))]
     OpenFailed(i32, #[source] Error),
 
-    #[error("failed to open {first_path}: {first_err}\nfailed to open {second_path}: {second_err}",
-            first_path = NOHUP_OUT.quote(),
-            first_err = .1,
-            second_path = .2.quote(),
-            second_err = .3)]
+    #[error("{}", translate!("nohup-error-open-failed-both", "first_path" => NOHUP_OUT.quote(), "first_err" => _1, "second_path" => _2.quote(), "second_err" => _3))]
     OpenFailed2(i32, #[source] Error, String, Error),
 }
 
@@ -63,7 +57,8 @@ impl UError for NohupError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
+    let matches =
+        uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
     replace_fds()?;
 
@@ -71,7 +66,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if unsafe { !_vprocmgr_detach_from_console(0).is_null() } {
         return Err(NohupError::CannotDetach.into());
-    };
+    }
 
     let cstrs: Vec<CString> = matches
         .get_many::<String>(options::CMD)
@@ -92,9 +87,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("nohup-about"))
+        .after_help(translate!("nohup-after-help"))
+        .override_usage(format_usage(&translate!("nohup-usage")))
         .arg(
             Arg::new(options::CMD)
                 .hide(true)
@@ -143,15 +139,14 @@ fn find_stdout() -> UResult<File> {
     {
         Ok(t) => {
             show_error!(
-                "ignoring input and appending output to {}",
-                NOHUP_OUT.quote()
+                "{}",
+                translate!("nohup-ignoring-input-appending-output", "path" => NOHUP_OUT.quote())
             );
             Ok(t)
         }
         Err(e1) => {
-            let home = match env::var("HOME") {
-                Err(_) => return Err(NohupError::OpenFailed(internal_failure_code, e1).into()),
-                Ok(h) => h,
+            let Ok(home) = env::var("HOME") else {
+                return Err(NohupError::OpenFailed(internal_failure_code, e1).into());
             };
             let mut homeout = PathBuf::from(home);
             homeout.push(NOHUP_OUT);
@@ -159,8 +154,8 @@ fn find_stdout() -> UResult<File> {
             match OpenOptions::new().create(true).append(true).open(&homeout) {
                 Ok(t) => {
                     show_error!(
-                        "ignoring input and appending output to {}",
-                        homeout_str.quote()
+                        "{}",
+                        translate!("nohup-ignoring-input-appending-output", "path" => homeout_str.quote())
                     );
                     Ok(t)
                 }

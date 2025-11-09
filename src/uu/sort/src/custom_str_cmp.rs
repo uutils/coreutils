@@ -9,7 +9,7 @@
 
 use std::cmp::Ordering;
 
-fn filter_char(c: char, ignore_non_printing: bool, ignore_non_dictionary: bool) -> bool {
+fn filter_char(c: u8, ignore_non_printing: bool, ignore_non_dictionary: bool) -> bool {
     if ignore_non_dictionary && !(c.is_ascii_alphanumeric() || c.is_ascii_whitespace()) {
         return false;
     }
@@ -19,7 +19,7 @@ fn filter_char(c: char, ignore_non_printing: bool, ignore_non_dictionary: bool) 
     true
 }
 
-fn cmp_chars(a: char, b: char, ignore_case: bool) -> Ordering {
+fn cmp_chars(a: u8, b: u8, ignore_case: bool) -> Ordering {
     if ignore_case {
         a.to_ascii_uppercase().cmp(&b.to_ascii_uppercase())
     } else {
@@ -28,8 +28,8 @@ fn cmp_chars(a: char, b: char, ignore_case: bool) -> Ordering {
 }
 
 pub fn custom_str_cmp(
-    a: &str,
-    b: &str,
+    a: &[u8],
+    b: &[u8],
     ignore_non_printing: bool,
     ignore_non_dictionary: bool,
     ignore_case: bool,
@@ -39,11 +39,11 @@ pub fn custom_str_cmp(
         return a.cmp(b);
     }
     let mut a_chars = a
-        .chars()
-        .filter(|&c| filter_char(c, ignore_non_printing, ignore_non_dictionary));
+        .iter()
+        .filter(|&&c| filter_char(c, ignore_non_printing, ignore_non_dictionary));
     let mut b_chars = b
-        .chars()
-        .filter(|&c| filter_char(c, ignore_non_printing, ignore_non_dictionary));
+        .iter()
+        .filter(|&&c| filter_char(c, ignore_non_printing, ignore_non_dictionary));
     loop {
         let a_char = a_chars.next();
         let b_char = b_chars.next();
@@ -52,7 +52,7 @@ pub fn custom_str_cmp(
             (Some(_), None) => return Ordering::Greater,
             (None, Some(_)) => return Ordering::Less,
             (Some(a_char), Some(b_char)) => {
-                let ordering = cmp_chars(a_char, b_char, ignore_case);
+                let ordering = cmp_chars(*a_char, *b_char, ignore_case);
                 if ordering != Ordering::Equal {
                     return ordering;
                 }

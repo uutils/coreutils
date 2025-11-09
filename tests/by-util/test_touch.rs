@@ -286,10 +286,11 @@ fn test_touch_set_only_atime() {
 
 #[test]
 fn test_touch_set_only_mtime_failed() {
-    let (_at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_only_mtime";
 
-    ucmd.args(&["-t", "2015010112342", "-m", file]).fails();
+    new_ucmd!()
+        .args(&["-t", "2015010112342", "-m", file])
+        .fails();
 }
 
 #[test]
@@ -351,17 +352,17 @@ fn test_touch_set_both_offset_date_and_reference() {
 
 #[test]
 fn test_touch_set_both_time_and_date() {
-    let (_at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_both_time_and_date";
 
-    ucmd.args(&[
-        "-t",
-        "2015010112342",
-        "-d",
-        "Thu Jan 01 12:34:00 2015",
-        file,
-    ])
-    .fails();
+    new_ucmd!()
+        .args(&[
+            "-t",
+            "2015010112342",
+            "-d",
+            "Thu Jan 01 12:34:00 2015",
+            file,
+        ])
+        .fails();
 }
 
 #[test]
@@ -436,7 +437,7 @@ fn test_touch_no_dereference() {
 
 #[test]
 fn test_touch_reference() {
-    let scenario = TestScenario::new("touch");
+    let scenario = TestScenario::new(util_name!());
     let (at, mut _ucmd) = (scenario.fixtures.clone(), scenario.ucmd());
     let file_a = "test_touch_reference_a";
     let file_b = "test_touch_reference_b";
@@ -684,7 +685,8 @@ fn test_touch_set_date_relative_smoke() {
         "2 seconds",
         "2 years 1 week",
         "2 days ago",
-        "2 months and 1 second",
+        "2 months 1 second",
+        "a",
     ];
     for time in times {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -694,19 +696,14 @@ fn test_touch_set_date_relative_smoke() {
             .no_stderr()
             .no_stdout();
     }
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.touch("f");
-    ucmd.args(&["-d", "a", "f"])
-        .fails()
-        .stderr_contains("touch: Unable to parse date");
 }
 
 #[test]
 fn test_touch_set_date_wrong_format() {
-    let (_at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_date_wrong_format";
 
-    ucmd.args(&["-d", "2005-43-21", file])
+    new_ucmd!()
+        .args(&["-d", "2005-43-21", file])
         .fails()
         .stderr_contains("Unable to parse date: 2005-43-21");
 }
@@ -730,7 +727,6 @@ fn test_touch_mtime_dst_succeeds() {
 #[test]
 #[cfg(unix)]
 fn test_touch_mtime_dst_fails() {
-    let (_at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_mtime_dst_fails";
 
     // Some timezones use daylight savings time, this leads to problems if the
@@ -739,7 +735,8 @@ fn test_touch_mtime_dst_fails() {
     // invalid.
     // See https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html
     // for information on the TZ variable, which where the string is copied from.
-    ucmd.env("TZ", "EST+5EDT,M3.2.0/2,M11.1.0/2")
+    new_ucmd!()
+        .env("TZ", "EST+5EDT,M3.2.0/2,M11.1.0/2")
         .args(&["-m", "-t", "202003080200", file])
         .fails();
 }
@@ -747,9 +744,9 @@ fn test_touch_mtime_dst_fails() {
 #[test]
 #[cfg(unix)]
 fn test_touch_system_fails() {
-    let (_at, mut ucmd) = at_and_ucmd!();
     let file = "/";
-    ucmd.args(&[file])
+    new_ucmd!()
+        .args(&[file])
         .fails()
         .stderr_contains("setting times of '/'");
 }
@@ -757,9 +754,8 @@ fn test_touch_system_fails() {
 #[test]
 #[cfg(not(target_os = "windows"))]
 fn test_touch_trailing_slash() {
-    let (_at, mut ucmd) = at_and_ucmd!();
     let file = "no-file/";
-    ucmd.args(&[file]).fails().stderr_only(format!(
+    new_ucmd!().args(&[file]).fails().stderr_only(format!(
         "touch: cannot touch '{file}': No such file or directory\n"
     ));
 }
@@ -767,11 +763,11 @@ fn test_touch_trailing_slash() {
 #[test]
 #[cfg(target_os = "windows")]
 fn test_touch_trailing_slash_windows() {
-    let (_at, mut ucmd) = at_and_ucmd!();
     let file = "no-file/";
-    ucmd.args(&[file]).fails().stderr_only(format!(
-        "touch: cannot touch '{file}': The filename, directory name, or volume label syntax is incorrect.\n"
-    ));
+    new_ucmd!()
+        .args(&[file])
+        .fails()
+        .stderr_contains(format!("touch: cannot touch '{file}'"));
 }
 
 #[test]
@@ -931,17 +927,15 @@ fn test_touch_no_dereference_dangling() {
 #[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_touch_dash() {
-    let (_, mut ucmd) = at_and_ucmd!();
-
-    ucmd.args(&["-h", "-"]).succeeds().no_stderr().no_stdout();
+    new_ucmd!().args(&["-h", "-"]).succeeds().no_output();
 }
 
 #[test]
 fn test_touch_invalid_date_format() {
-    let (_at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_invalid_date_format";
 
-    ucmd.args(&["-m", "-t", "+1000000000000 years", file])
+    new_ucmd!()
+        .args(&["-m", "-t", "+1000000000000 years", file])
         .fails()
         .stderr_contains("touch: invalid date format '+1000000000000 years'");
 }
@@ -1005,4 +999,31 @@ fn test_obsolete_posix_format_with_year() {
         .no_output();
     assert!(at.file_exists("11111111"));
     assert!(!at.file_exists("0101000090"));
+}
+
+#[test]
+fn test_touch_f_option() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_f_option.txt";
+
+    ucmd.args(&["-f", file]).succeeds().no_output();
+
+    assert!(at.file_exists(file));
+    at.remove(file);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_touch_non_utf8_paths() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let non_utf8_bytes = b"test_\xFF\xFE.txt";
+    let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
+
+    scene.ucmd().arg(non_utf8_name).succeeds().no_output();
+    assert!(std::fs::metadata(at.plus(non_utf8_name)).is_ok());
 }

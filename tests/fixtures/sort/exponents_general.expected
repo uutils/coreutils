@@ -8,11 +8,11 @@
 
  	 -12e-5555.5
 0b10 // binary not supported
-0x10 // hexadecimal not supported, but it should be
 55e-20
 55e-20.10
 5.5.5.5
 10E
+0x10
 64e+
 99e-
 1000EDKLD

@@ -11,8 +11,7 @@ use uu_wc::uumain;
 use rand::Rng;
 use std::ffi::OsString;
 
-mod fuzz_common;
-use crate::fuzz_common::{
+use uufuzz::{
     CommandResult, compare_result, generate_and_run_uumain, generate_random_string, run_gnu_cmd,
 };
 static CMD_PATH: &str = "wc";
@@ -50,7 +49,7 @@ fn generate_wc_args() -> String {
     args.join(" ")
 }
 
-// Function to generate a random string of lines, including invalid ones
+/// Function to generate a random string of lines, including invalid ones
 fn generate_random_lines(count: usize) -> String {
     let mut rng = rand::rng();
     let mut lines = Vec::new();

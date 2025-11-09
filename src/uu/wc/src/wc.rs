@@ -24,10 +24,11 @@ use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
+use uucore::translate;
 
 use uucore::{
     error::{FromIo, UError, UResult},
-    format_usage, help_about, help_usage,
+    format_usage,
     parser::shortcut_value_parser::ShortcutValueParser,
     quoting_style::{self, QuotingStyle},
     show,
@@ -113,9 +114,6 @@ impl<'a> Settings<'a> {
     }
 }
 
-const ABOUT: &str = help_about!("wc.md");
-const USAGE: &str = help_usage!("wc.md");
-
 mod options {
     pub static BYTES: &str = "bytes";
     pub static CHAR: &str = "chars";
@@ -127,17 +125,6 @@ mod options {
 }
 static ARG_FILES: &str = "files";
 static STDIN_REPR: &str = "-";
-
-static QS_ESCAPE: &QuotingStyle = &QuotingStyle::Shell {
-    escape: true,
-    always_quote: false,
-    show_control: false,
-};
-static QS_QUOTE_ESCAPE: &QuotingStyle = &QuotingStyle::Shell {
-    escape: true,
-    always_quote: true,
-    show_control: false,
-};
 
 /// Supported inputs.
 #[derive(Debug)]
@@ -174,8 +161,8 @@ impl<'a> Inputs<'a> {
         }
     }
 
-    // Creates an iterator which yields values borrowed from the command line arguments.
-    // Returns an error if the file specified in --files0-from cannot be opened.
+    /// Creates an iterator which yields values borrowed from the command line arguments.
+    /// Returns an error if the file specified in --files0-from cannot be opened.
     fn try_iter(
         &'a self,
         settings: &'a Settings<'a>,
@@ -210,7 +197,7 @@ impl<'a> Inputs<'a> {
 
 #[derive(Clone, Copy, Debug)]
 enum StdinKind {
-    /// Specified on command-line with "-" (STDIN_REPR)
+    /// Specified on command-line with "-" ([`STDIN_REPR`])
     Explicit,
     /// Implied by the lack of any arguments
     Implicit,
@@ -246,7 +233,7 @@ impl<'a, T: AsRef<Path> + ?Sized> From<&'a T> for Input<'a> {
 }
 
 impl<'a> Input<'a> {
-    /// Translates Path(Cow::Owned(_)) to Path(Cow::Borrowed(_)).
+    /// Translates `Path(Cow::Owned(_))` to `Path(Cow::Borrowed(_))`.
     fn as_borrowed(&'a self) -> Self {
         match self {
             Self::Path(p) => Self::Path(Cow::Borrowed(p.borrow())),
@@ -255,12 +242,15 @@ impl<'a> Input<'a> {
     }
 
     /// Converts input to title that appears in stats.
-    fn to_title(&self) -> Option<Cow<OsStr>> {
+    fn to_title(&self) -> Option<Cow<'_, OsStr>> {
         match self {
             Self::Path(path) => {
                 let path = path.as_os_str();
                 if path.to_string_lossy().contains('\n') {
-                    Some(Cow::Owned(quoting_style::escape_name(path, QS_ESCAPE)))
+                    Some(Cow::Owned(quoting_style::locale_aware_escape_name(
+                        path,
+                        QuotingStyle::SHELL_ESCAPE,
+                    )))
                 } else {
                     Some(Cow::Borrowed(path))
                 }
@@ -274,13 +264,13 @@ impl<'a> Input<'a> {
     fn path_display(&self) -> String {
         match self {
             Self::Path(path) => escape_name_wrapper(path.as_os_str()),
-            Self::Stdin(_) => String::from("standard input"),
+            Self::Stdin(_) => translate!("wc-standard-input"),
         }
     }
 
     /// When given --files0-from, we may be given a path or stdin. Either may be a stream or
     /// a regular file. If given a file less than 10 MiB, it will be consumed and turned into
-    /// a Vec of Input::Paths which can be scanned to determine the widths of the columns that
+    /// a Vec of [`Input::Path`] which can be scanned to determine the widths of the columns that
     /// will ultimately be printed.
     fn try_as_files0(&self) -> UResult<Option<Vec<Input<'static>>>> {
         match self {
@@ -309,8 +299,8 @@ fn is_stdin_small_file() -> bool {
 }
 
 #[cfg(not(unix))]
-// Windows presents a piped stdin as a "normal file" with a length equal to however many bytes
-// have been buffered at the time it's checked. To be safe, we must never assume it's a file.
+/// Windows presents a piped stdin as a "normal file" with a length equal to however many bytes
+/// have been buffered at the time it's checked. To be safe, we must never assume it's a file.
 fn is_stdin_small_file() -> bool {
     false
 }
@@ -349,13 +339,13 @@ impl TotalWhen {
 
 #[derive(Debug, Error)]
 enum WcError {
-    #[error("extra operand '{extra}'\nfile operands cannot be combined with --files0-from")]
+    #[error("{}", translate!("wc-error-files-disabled", "extra" => extra))]
     FilesDisabled { extra: Cow<'static, str> },
-    #[error("when reading file names from stdin, no file name of '-' allowed")]
+    #[error("{}", translate!("wc-error-stdin-repr-not-allowed"))]
     StdinReprNotAllowed,
-    #[error("invalid zero-length file name")]
+    #[error("{}", translate!("wc-error-zero-length-filename"))]
     ZeroLengthFileName,
-    #[error("{path}:{idx}: invalid zero-length file name")]
+    #[error("{}", translate!("wc-error-zero-length-filename-ctx", "path" => path, "idx" => idx))]
     ZeroLengthFileNameCtx { path: Cow<'static, str>, idx: usize },
 }
 
@@ -386,7 +376,7 @@ impl UError for WcError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let settings = Settings::new(&matches);
     let inputs = Inputs::new(&matches)?;
@@ -397,33 +387,30 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("wc-about"))
+        .override_usage(format_usage(&translate!("wc-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
             Arg::new(options::BYTES)
                 .short('c')
                 .long(options::BYTES)
-                .help("print the byte counts")
+                .help(translate!("wc-help-bytes"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CHAR)
                 .short('m')
                 .long(options::CHAR)
-                .help("print the character counts")
+                .help(translate!("wc-help-chars"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILES0_FROM)
                 .long(options::FILES0_FROM)
                 .value_name("F")
-                .help(concat!(
-                    "read input from the files specified by\n",
-                    "  NUL-terminated names in file F;\n",
-                    "  If F is - then read names from standard input"
-                ))
+                .help(translate!("wc-help-files0-from"))
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -431,14 +418,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::LINES)
                 .short('l')
                 .long(options::LINES)
-                .help("print the newline counts")
+                .help(translate!("wc-help-lines"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::MAX_LINE_LENGTH)
                 .short('L')
                 .long(options::MAX_LINE_LENGTH)
-                .help("print the length of the longest line")
+                .help(translate!("wc-help-max-line-length"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -449,16 +436,13 @@ pub fn uu_app() -> Command {
                 ]))
                 .value_name("WHEN")
                 .hide_possible_values(true)
-                .help(concat!(
-                    "when to print a line with total counts;\n",
-                    "  WHEN can be: auto, always, only, never"
-                )),
+                .help(translate!("wc-help-total")),
         )
         .arg(
             Arg::new(options::WORDS)
                 .short('w')
                 .long(options::WORDS)
-                .help("print the word counts")
+                .help(translate!("wc-help-words"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -673,11 +657,11 @@ enum CountResult {
     Failure(io::Error),
 }
 
-/// If we fail opening a file, we only show the error. If we fail reading the
+/// If we fail to open a file, we only show the error. If we fail reading the
 /// file, we show a count for what we managed to read.
 ///
 /// Therefore, the reading implementations always return a total and sometimes
-/// return an error: (WordCount, Option<io::Error>).
+/// return an error: ([`WordCount`], `Option<io::Error>`).
 fn word_count_from_input(input: &Input<'_>, settings: &Settings) -> CountResult {
     let (total, maybe_err) = match input {
         Input::Stdin(_) => word_count_from_reader(io::stdin().lock(), settings),
@@ -750,7 +734,7 @@ fn compute_number_width(inputs: &Inputs, settings: &Settings) -> usize {
 
 type InputIterItem<'a> = Result<Input<'a>, Box<dyn UError>>;
 
-/// To be used with `--files0-from=-`, this applies a filter on the results of files0_iter to
+/// To be used with `--files0-from=-`, this applies a filter on the results of [`files0_iter`] to
 /// translate '-' into the appropriate error.
 fn files0_iter_stdin<'a>() -> impl Iterator<Item = InputIterItem<'a>> {
     files0_iter(io::stdin().lock(), STDIN_REPR.into()).map(|i| match i {
@@ -763,11 +747,13 @@ fn files0_iter_file<'a>(path: &Path) -> UResult<impl Iterator<Item = InputIterIt
     match File::open(path) {
         Ok(f) => Ok(files0_iter(f, path.into())),
         Err(e) => Err(e.map_err_context(|| {
-            format!(
-                "cannot open {} for reading",
-                quoting_style::escape_name(path.as_os_str(), QS_QUOTE_ESCAPE)
-                    .into_string()
-                    .expect("All escaped names with the escaping option return valid strings.")
+            translate!("wc-error-cannot-open-for-reading",
+                "path" => quoting_style::locale_aware_escape_name(
+                    path.as_os_str(),
+                    QuotingStyle::SHELL_ESCAPE_QUOTE,
+                )
+                .into_string()
+                .expect("All escaped names with the escaping option return valid strings.")
             )
         })),
     }
@@ -798,9 +784,9 @@ fn files0_iter<'a>(
                         Ok(Input::Path(PathBuf::from(s).into()))
                     }
                 }
-                Err(e) => Err(e
-                    .map_err_context(|| format!("{}: read error", escape_name_wrapper(&err_path)))
-                    as Box<dyn UError>),
+                Err(e) => Err(e.map_err_context(
+                    || translate!("wc-error-read-error", "path" => escape_name_wrapper(&err_path)),
+                ) as Box<dyn UError>),
             }),
     );
     // Loop until there is an error; yield that error and then nothing else.
@@ -814,7 +800,7 @@ fn files0_iter<'a>(
 }
 
 fn escape_name_wrapper(name: &OsStr) -> String {
-    quoting_style::escape_name(name, QS_ESCAPE)
+    quoting_style::locale_aware_escape_name(name, QuotingStyle::SHELL_ESCAPE)
         .into_string()
         .expect("All escaped names with the escaping option return valid strings.")
 }
@@ -856,18 +842,16 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
             let maybe_title_str = maybe_title.as_deref();
             if let Err(err) = print_stats(settings, &word_count, maybe_title_str, number_width) {
                 let title = maybe_title_str.unwrap_or(OsStr::new("<stdin>"));
-                show!(err.map_err_context(|| format!(
-                    "failed to print result for {}",
-                    title.to_string_lossy()
-                )));
+                show!(err.map_err_context(|| translate!("wc-error-failed-to-print-result", "title" => title.to_string_lossy())));
             }
         }
     }
 
     if settings.total_when.is_total_row_visible(num_inputs) {
-        let title = are_stats_visible.then_some(OsStr::new("total"));
+        let wc_total_msg = translate!("wc-total");
+        let title = are_stats_visible.then_some(OsStr::new(&wc_total_msg));
         if let Err(err) = print_stats(settings, &total_word_count, title, number_width) {
-            show!(err.map_err_context(|| "failed to print total".into()));
+            show!(err.map_err_context(|| translate!("wc-error-failed-to-print-total")));
         }
     }
 

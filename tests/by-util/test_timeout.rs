@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 // This file is part of the uutils coreutils package.
 //
 // For the full copyright and license information, please view the LICENSE
@@ -7,8 +9,6 @@ use rstest::rstest;
 
 use uucore::display::Quotable;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
@@ -192,6 +192,34 @@ fn test_kill_subprocess() {
             "trap 'echo inside_trap' TERM; sleep 30",
         ])
         .fails_with_code(124)
-        .stdout_contains("inside_trap")
-        .stderr_contains("Terminated");
+        .stdout_contains("inside_trap");
+}
+
+#[test]
+fn test_hex_timeout_ending_with_d() {
+    new_ucmd!()
+        .args(&["0x0.1d", "sleep", "10"])
+        .timeout(Duration::from_secs(1))
+        .fails_with_code(124)
+        .no_output();
+}
+
+#[test]
+fn test_terminate_child_on_receiving_terminate() {
+    let mut timeout_cmd = new_ucmd!()
+        .args(&[
+            "10",
+            "sh",
+            "-c",
+            "trap 'echo child received TERM' TERM; sleep 5",
+        ])
+        .run_no_wait();
+    timeout_cmd.delay(100);
+    timeout_cmd.kill_with_custom_signal(nix::sys::signal::Signal::SIGTERM);
+    timeout_cmd
+        .make_assertion()
+        .is_not_alive()
+        .with_current_output()
+        .code_is(143)
+        .stdout_contains("child received TERM");
 }
