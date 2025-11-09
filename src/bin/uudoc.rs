@@ -294,9 +294,7 @@ fn main() -> io::Result<()> {
             "[" => {
                 continue;
             }
-            "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum"
-            | "sha3sum" | "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum"
-            | "shake128sum" | "shake256sum" | "b2sum" | "b3sum" => {
+            name if is_hashsum_family(name) => {
                 // These use the hashsum
                 "hashsum"
             }
@@ -357,10 +355,18 @@ fn fix_usage(name: &str, usage: String) -> String {
                 .collect::<Vec<_>>()
                 .join("\n");
         }
+        "hashsum" => usage,
+        name if is_hashsum_family(name) => usage.replace("--<digest> ", ""),
+        _ => usage,
+    }
+}
+
+fn is_hashsum_family(name: &str) {
+    match name {
         "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum"
         | "sha3sum" | "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum"
-        | "shake128sum" | "shake256sum" | "b2sum" | "b3sum" => usage.replace("--<digest> ", ""),
-        _ => usage,
+        | "shake128sum" | "shake256sum" | "b2sum" | "b3sum" => true,
+        _ => false,
     }
 }
 
