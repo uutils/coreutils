@@ -1341,30 +1341,41 @@ pub struct TestScenario {
 }
 
 impl TestScenario {
+    /// Using a standard fixture
     pub fn new<T>(util_name: T) -> Self
     where
         T: AsRef<str>,
     {
-        let tmpd = Rc::new(TempDir::new().unwrap());
-        println!("bin: {:?}", get_tests_binary!());
-        let ts = Self {
-            bin_path: PathBuf::from(get_tests_binary!()),
-            util_name: util_name.as_ref().into(),
-            fixtures: AtPath::new(tmpd.as_ref().path()),
-            tmpd,
-            #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
-            tmp_fs_mountpoint: None,
-        };
+        let ts = Self::new_fresh(&util_name);
+
         let mut fixture_path_builder = env::current_dir().unwrap();
         fixture_path_builder.push(TESTS_DIR);
         fixture_path_builder.push(FIXTURES_DIR);
         fixture_path_builder.push(util_name.as_ref());
+
         if let Ok(m) = fs::metadata(&fixture_path_builder) {
             if m.is_dir() {
                 recursive_copy(&fixture_path_builder, &ts.fixtures.subdir).unwrap();
             }
         }
         ts
+    }
+
+    /// Using an empty fixture
+    pub fn new_fresh<T>(util_name: T) -> Self
+    where
+        T: AsRef<str>,
+    {
+        let tmpd = Rc::new(TempDir::new().unwrap());
+        println!("bin: {:?}", get_tests_binary!());
+        Self {
+            bin_path: PathBuf::from(get_tests_binary!()),
+            util_name: util_name.as_ref().into(),
+            fixtures: AtPath::new(tmpd.as_ref().path()),
+            tmpd,
+            #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+            tmp_fs_mountpoint: None,
+        }
     }
 
     /// Returns builder for invoking the target uutils binary. Paths given are

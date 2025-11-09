@@ -1574,6 +1574,73 @@ fn test_du_inodes_total_text() {
 }
 
 #[test]
+fn test_du_summary_total_mega_duplicates() {
+    let ts = TestScenario::new_fresh(util_name!());
+    let at = &ts.fixtures;
+
+    ts.cmd("dd")
+        .args(&["if=/dev/urandom", "of=file1", "bs=1M", "count=3"])
+        .succeeds();
+    at.mkdir("dir1");
+    ts.cmd("dd")
+        .args(&["if=/dev/urandom", "of=dir1/file1", "bs=1M", "count=5"])
+        .succeeds();
+    at.mkdir("dir2");
+    ts.cmd("dd")
+        .args(&["if=/dev/urandom", "of=dir2/file1", "bs=1M", "count=7"])
+        .succeeds();
+
+    let result = ts.ucmd().args(&["-smc", "dir1", "."]).succeeds();
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        let result_reference = unwrap_or_return!(expected_result(&ts, &["-smc", "dir1", "."]));
+        if result_reference.succeeded() {
+            assert_eq!(result.stdout_str(), result_reference.stdout_str());
+            return;
+        }
+    }
+
+    du_summary_total_mega_duplicates(result.stdout_str());
+}
+
+#[cfg(target_vendor = "apple")]
+fn du_summary_total_mega_duplicates(s: &str) {
+    // TODO: Please update the expected string
+    panic!();
+}
+
+#[cfg(target_os = "windows")]
+fn du_summary_total_mega_duplicates(s: &str) {
+    // TODO: Please update the expected string
+    panic!();
+}
+
+#[cfg(target_os = "freebsd")]
+fn du_summary_total_mega_duplicates(s: &str) {
+    // TODO: Please update the expected string
+    panic!();
+}
+
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "freebsd")
+))]
+fn du_summary_total_mega_duplicates(s: &str) {
+    // MS-WSL GNU/linux has altered expected output
+    if uucore::os::is_wsl_1() {
+        // TODO: Please update the expected string
+        panic!();
+    } else {
+        assert_eq!(s, "5\tdir1\n10\t.\n15\ttotal\n");
+    }
+}
+
+#[test]
+fn test_du_total_duplicates() {}
+
+#[test]
 fn test_du_threshold_no_suggested_values() {
     // tested by tests/du/threshold
     let ts = TestScenario::new(util_name!());
