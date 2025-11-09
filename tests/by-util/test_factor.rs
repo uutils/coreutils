@@ -1651,3 +1651,62 @@ fn succeeds_with_numbers_larger_than_u256() {
                 269984665640564039457584007913129639936: 2^256\n",
         );
 }
+
+// Tests for large number factorization (> 128 bits)
+#[test]
+fn test_128_bit_boundary() {
+    new_ucmd!()
+        .arg("340282366920938463463374607431768211455")
+        .succeeds()
+        .stdout_contains("340282366920938463463374607431768211455:");
+
+    new_ucmd!()
+        .arg("-h")
+        .arg("340282366920938463463374607431768211456")
+        .succeeds()
+        .stdout_is("340282366920938463463374607431768211456: 2^128\n");
+}
+
+// Test at 2^128 + 1 separately since it takes a very long time to factor
+#[test]
+#[ignore = "Skip by default as it takes too long"]
+fn test_2_128_plus_1() {
+    new_ucmd!()
+        .timeout(Duration::from_secs(600))
+        .arg("340282366920938463463374607431768211457")
+        .succeeds()
+        .stdout_contains("340282366920938463463374607431768211457:");
+}
+
+// Consolidated test for large number factorization: covers composites, primes, and issue #9177
+#[test]
+fn test_large_numbers_over_u128() {
+    new_ucmd!()
+        .timeout(Duration::from_secs(120))
+        .arg("1208925819614629174706175")
+        .succeeds()
+        .stdout_contains("1208925819614629174706175:");
+
+    new_ucmd!()
+        .arg("57896044618658097711785492504343953926634992332820282019728792003956564819949")
+        .succeeds()
+        .stdout_contains(
+            "57896044618658097711785492504343953926634992332820282019728792003956564819949:",
+        );
+}
+
+// Regression test for issue #9177: large composites with medium-sized prime factors
+#[test]
+#[ignore = "Skip by default as it takes too long"]
+fn test_trial_division_large_composite() {
+    new_ucmd!()
+        .timeout(Duration::from_secs(300))
+        .arg("340282366920938463463374607431768211456768211458")
+        .succeeds()
+        .stdout_contains("340282366920938463463374607431768211456768211458:")
+        .stdout_contains("2")
+        .stdout_contains("11")
+        .stdout_contains("2875070119")
+        .stdout_contains("2895113854549549")
+        .stdout_contains("168931247951478372779");
+}

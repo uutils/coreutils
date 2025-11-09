@@ -109,6 +109,8 @@ skip = [
   { name = "zerocopy-derive", version = "0.7.35" },
   # rustix
   { name = "linux-raw-sys", version = "0.11.0" },
+  # lru (via num-prime), indexmap
+  { name = "hashbrown", version = "0.15.5" },
 ]
 # spell-checker: enable
 
