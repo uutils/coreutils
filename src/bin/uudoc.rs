@@ -83,6 +83,8 @@ fn gen_manpage<T: Args>(
     } else {
         validation::setup_localization_or_exit(utility);
         let mut cmd = util_map.get(utility).unwrap().1();
+        cmd.set_bin_name(utility.clone());
+        let mut cmd = cmd.display_name(utility);
         if let Some(zip) = tldr {
             if let Ok(examples) = write_zip_examples(zip, utility, false) {
                 cmd = cmd.after_help(examples);
