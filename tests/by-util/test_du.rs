@@ -69,7 +69,11 @@ fn du_basics(s: &str) {
     assert_eq!(s, answer);
 }
 
-#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "openbsd")
+))]
 fn du_basics(s: &str) {
     let answer = concat!(
         "8\t./subdir/deeper/deeper_dir\n",
@@ -119,7 +123,8 @@ fn du_basics_subdir(s: &str) {
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "windows"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 fn du_basics_subdir(s: &str) {
     // MS-WSL linux has altered expected output
@@ -447,7 +452,8 @@ fn du_d_flag(s: &str) {
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "windows"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 fn du_d_flag(s: &str) {
     // MS-WSL linux has altered expected output
@@ -520,7 +526,8 @@ fn du_dereference(s: &str) {
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "windows"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 fn du_dereference(s: &str) {
     // MS-WSL linux has altered expected output
