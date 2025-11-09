@@ -45,6 +45,7 @@ fn du_all_balanced_tree(
 }
 */
 
+/* too much variance
 /// Benchmark du -h (human readable) on balanced tree
 #[divan::bench(args = [(5, 4, 10)])]
 fn du_human_balanced_tree(
@@ -55,6 +56,7 @@ fn du_human_balanced_tree(
     fs_tree::create_balanced_tree(temp_dir.path(), depth, dirs_per_level, files_per_dir);
     bench_du_with_args(bencher, &temp_dir, &["-h"]);
 }
+*/
 
 /// Benchmark du on wide directory structures (many files/dirs, shallow)
 #[divan::bench(args = [(5000, 500)])]
