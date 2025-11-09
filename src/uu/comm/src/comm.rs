@@ -8,11 +8,9 @@
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::{File, metadata};
-use std::io::{self, BufRead, BufReader, Read, StdinLock, stdin};
-use std::path::Path;
+use std::io::{self, BufRead, BufReader, StdinLock, stdin};
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
-use uucore::fs::paths_refer_to_same_file;
 use uucore::line_ending::LineEnding;
 use uucore::translate;
 
@@ -47,10 +45,23 @@ impl FileNumber {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+enum CheckOrder {
+    /// Never check if lines are ordered (this is the behavior of `--nocheck-order`).
+    Never,
+    /// Always check if lines are ordered, and exit immediately with an error if lines are not
+    /// ordered (this is the behavior of `--check-order`).
+    Always,
+    /// Check whether lines are ordered only when the two files have different contents (this is
+    /// the default behavior when neither `--check-order` nor `--nocheck-order` is specified).
+    IfFilesDiffer,
+}
+
 struct OrderChecker {
     last_line: Vec<u8>,
     file_num: FileNumber,
-    check_order: bool,
+    check_order: CheckOrder,
+    files_differ: bool,
     has_error: bool,
 }
 
@@ -96,19 +107,26 @@ impl LineReader {
 }
 
 impl OrderChecker {
-    fn new(file_num: FileNumber, check_order: bool) -> Self {
+    fn new(file_num: FileNumber, check_order: CheckOrder) -> Self {
         Self {
             last_line: Vec::new(),
             file_num,
             check_order,
+            files_differ: false,
             has_error: false,
         }
     }
 
-    fn verify_order(&mut self, current_line: &[u8]) -> bool {
-        if self.last_line.is_empty() {
+    fn verify_order(&mut self, current_line: &[u8]) -> Result<(), ()> {
+        let should_check_order = match self.check_order {
+            CheckOrder::Never => false,
+            CheckOrder::Always => true,
+            CheckOrder::IfFilesDiffer => self.files_differ,
+        };
+
+        if !should_check_order || self.last_line.is_empty() {
             self.last_line = current_line.to_vec();
-            return true;
+            return Ok(());
         }
 
         let is_ordered = *current_line >= *self.last_line;
@@ -121,59 +139,15 @@ impl OrderChecker {
         }
 
         self.last_line = current_line.to_vec();
-        is_ordered || !self.check_order
-    }
-}
-
-// Check if two files are identical by comparing their contents
-pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
-    // First compare file sizes
-    let metadata1 = metadata(path1)?;
-    let metadata2 = metadata(path2)?;
-
-    if metadata1.len() != metadata2.len() {
-        return Ok(false);
-    }
-
-    let file1 = File::open(path1)?;
-    let file2 = File::open(path2)?;
-
-    let mut reader1 = BufReader::new(file1);
-    let mut reader2 = BufReader::new(file2);
-
-    let mut buffer1 = [0; 8192];
-    let mut buffer2 = [0; 8192];
-
-    loop {
-        // Read from first file with EINTR retry handling
-        // This loop retries the read operation if it's interrupted by signals (e.g., SIGUSR1)
-        // instead of failing, which is the POSIX-compliant way to handle interrupted I/O
-        let bytes1 = loop {
-            match reader1.read(&mut buffer1) {
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
-                result => break result?,
+        match self.check_order {
+            CheckOrder::Always => {
+                if is_ordered {
+                    Ok(())
+                } else {
+                    Err(())
+                }
             }
-        };
-
-        // Read from second file with EINTR retry handling
-        // Same retry logic as above for the second file to ensure consistent behavior
-        let bytes2 = loop {
-            match reader2.read(&mut buffer2) {
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
-                result => break result?,
-            }
-        };
-
-        if bytes1 != bytes2 {
-            return Ok(false);
-        }
-
-        if bytes1 == 0 {
-            return Ok(true);
-        }
-
-        if buffer1[..bytes1] != buffer2[..bytes2] {
-            return Ok(false);
+            _ => Ok(()),
         }
     }
 }
@@ -194,21 +168,13 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
     let mut total_col_2 = 0;
     let mut total_col_3 = 0;
 
-    let check_order = opts.get_flag(options::CHECK_ORDER);
-    let no_check_order = opts.get_flag(options::NO_CHECK_ORDER);
-
-    // Determine if we should perform order checking
-    let should_check_order = !no_check_order
-        && (check_order
-            || if let (Some(file1), Some(file2)) = (
-                opts.get_one::<OsString>(options::FILE_1),
-                opts.get_one::<OsString>(options::FILE_2),
-            ) {
-                !(paths_refer_to_same_file(file1.as_os_str(), file2.as_os_str(), true)
-                    || are_files_identical(Path::new(file1), Path::new(file2)).unwrap_or(false))
-            } else {
-                true
-            });
+    let check_order = if opts.get_flag(options::CHECK_ORDER) {
+        CheckOrder::Always
+    } else if opts.get_flag(options::NO_CHECK_ORDER) {
+        CheckOrder::Never
+    } else {
+        CheckOrder::IfFilesDiffer
+    };
 
     let mut checker1 = OrderChecker::new(FileNumber::One, check_order);
     let mut checker2 = OrderChecker::new(FileNumber::Two, check_order);
@@ -229,7 +195,9 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
 
         match ord {
             Ordering::Less => {
-                if should_check_order && !checker1.verify_order(ra) {
+                checker1.files_differ = true;
+                checker2.files_differ = true;
+                if checker1.verify_order(ra).is_err() {
                     break;
                 }
                 if !opts.get_flag(options::COLUMN_1) {
@@ -240,7 +208,9 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
                 total_col_1 += 1;
             }
             Ordering::Greater => {
-                if should_check_order && !checker2.verify_order(rb) {
+                checker1.files_differ = true;
+                checker2.files_differ = true;
+                if checker2.verify_order(rb).is_err() {
                     break;
                 }
                 if !opts.get_flag(options::COLUMN_2) {
@@ -251,8 +221,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
                 total_col_2 += 1;
             }
             Ordering::Equal => {
-                if should_check_order && (!checker1.verify_order(ra) || !checker2.verify_order(rb))
-                {
+                if checker1.verify_order(ra).is_err() || checker2.verify_order(rb).is_err() {
                     break;
                 }
                 if !opts.get_flag(options::COLUMN_3) {
@@ -267,7 +236,10 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
         }
 
         // Track if we've seen any order errors
-        if (checker1.has_error || checker2.has_error) && !input_error && !check_order {
+        if (checker1.has_error || checker2.has_error)
+            && !input_error
+            && check_order != CheckOrder::Always
+        {
             input_error = true;
         }
     }
@@ -280,7 +252,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
         );
     }
 
-    if should_check_order && (checker1.has_error || checker2.has_error) {
+    if check_order != CheckOrder::Never && (checker1.has_error || checker2.has_error) {
         // Print the input error message once at the end
         if input_error {
             eprintln!("{}", translate!("comm-error-input-not-sorted"));
