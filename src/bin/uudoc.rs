@@ -361,7 +361,7 @@ fn fix_usage(name: &str, usage: String) -> String {
     }
 }
 
-fn is_hashsum_family(name: &str) {
+fn is_hashsum_family(name: &str) -> bool {
     match name {
         "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum"
         | "sha3sum" | "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum"
