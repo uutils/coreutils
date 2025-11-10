@@ -404,7 +404,9 @@ pub mod fast_encode {
         let mut encoded_buffer = VecDeque::<u8>::new();
         // End of buffers
 
-        let mut read_buffer = vec![0u8; encode_in_chunks_of_size];
+        const READ_BUFFER_MAX: usize = 128 * 1024;
+        let read_buffer_size = encode_in_chunks_of_size.clamp(1, READ_BUFFER_MAX);
+        let mut read_buffer = vec![0u8; read_buffer_size];
 
         loop {
             let read_bytes = loop {
