@@ -156,13 +156,24 @@ fn test_trailing_dot_edge_cases() {
     new_ucmd!()
         .arg("/home/dos//.")
         .succeeds()
-        .stdout_is("/home/dos/\n");
+        .stdout_is("/home/dos\n");
 
     // Path with . in middle (should use normal logic)
     new_ucmd!()
         .arg("/path/./to/file")
         .succeeds()
         .stdout_is("/path/./to\n");
+
+    new_ucmd!().arg("///").succeeds().stdout_is("/\n");
+    new_ucmd!().arg("///.///").succeeds().stdout_is("/\n");
+    new_ucmd!()
+        .arg("hello///.///")
+        .succeeds()
+        .stdout_is("hello\n");
+    new_ucmd!()
+        .arg("///foo///.///.///")
+        .succeeds()
+        .stdout_is("///foo///.\n");
 }
 
 #[test]
