@@ -105,12 +105,8 @@ echo "UU_BUILD_DIR='${UU_BUILD_DIR}'"
 
 cd "${path_UUTILS}" && echo "[ pwd:'${PWD}' ]"
 
-# Check for SELinux support
-if [ "$(uname)" == "Linux" ]; then
-    # Only attempt to enable SELinux features on Linux
-    export SELINUX_ENABLED=1
-    CARGO_FEATURE_FLAGS="${CARGO_FEATURE_FLAGS} selinux"
-fi
+export SELINUX_ENABLED # Run this script with=1 for testing SELinux
+[ "${SELINUX_ENABLED}" = 1 ] && CARGO_FEATURE_FLAGS="${CARGO_FEATURE_FLAGS} selinux"
 
 # Trim leading whitespace from feature flags
 CARGO_FEATURE_FLAGS="$(echo "${CARGO_FEATURE_FLAGS}" | sed -e 's/^[[:space:]]*//')"
