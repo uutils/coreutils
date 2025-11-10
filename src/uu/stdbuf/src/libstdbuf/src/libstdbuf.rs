@@ -27,7 +27,15 @@ pub unsafe extern "C" fn __stdbuf_get_stdin() -> *mut FILE {
         unsafe { __stdinp() }
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
+    #[cfg(target_os = "openbsd")]
+    {
+        unsafe extern "C" {
+            static mut __stdin: *mut FILE;
+        }
+        unsafe { __stdin }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd")))]
     {
         unsafe extern "C" {
             static mut stdin: *mut FILE;
@@ -48,7 +56,15 @@ pub unsafe extern "C" fn __stdbuf_get_stdout() -> *mut FILE {
         unsafe { __stdoutp() }
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
+    #[cfg(target_os = "openbsd")]
+    {
+        unsafe extern "C" {
+            static mut __stdout: *mut FILE;
+        }
+        unsafe { __stdout }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd")))]
     {
         unsafe extern "C" {
             static mut stdout: *mut FILE;
@@ -69,7 +85,15 @@ pub unsafe extern "C" fn __stdbuf_get_stderr() -> *mut FILE {
         unsafe { __stderrp() }
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
+    #[cfg(target_os = "openbsd")]
+    {
+        unsafe extern "C" {
+            static mut __stderr: *mut FILE;
+        }
+        unsafe { __stderr }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd")))]
     {
         unsafe extern "C" {
             static mut stderr: *mut FILE;
