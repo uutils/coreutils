@@ -40,8 +40,10 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
+      with:
+        disable_annotations: true
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.2.4
+      uses: vmactions/freebsd-vm@v1.2.5
       with:
         usesh: true
         sync: rsync
@@ -134,8 +136,10 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
+      with:
+        disable_annotations: true
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.2.4
+      uses: vmactions/freebsd-vm@v1.2.5
       with:
         usesh: true
         sync: rsync
@@ -196,7 +200,7 @@ jobs:
           if (test -z "\$FAULT"); then cargo nextest run --hide-progress-bar --profile ci --features '${{ matrix.job.features }}' || FAULT=1 ; fi
           # There is no systemd-logind on FreeBSD, so test all features except feat_systemd_logind ( https://github.com/rust-lang/cargo/issues/3126#issuecomment-2523441905 )
           if (test -z "\$FAULT"); then
-            UUCORE_FEATURES=\$(cargo metadata --format-version=1 --no-deps -p uucore | jq -r '.packages[] | select(.name == "uucore") | .features | keys | .[]' | grep -v "feat_systemd_logind" | paste -s -d "," -)
+            UUCORE_FEATURES=\$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "uucore") | .features | keys | .[]' | grep -v "feat_systemd_logind" | paste -s -d "," -)
             cargo nextest run --hide-progress-bar --profile ci --features "\$UUCORE_FEATURES" -p uucore || FAULT=1
           fi
           # Test building with make

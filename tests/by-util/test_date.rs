@@ -288,15 +288,14 @@ fn test_date_set_mac_unavailable() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
-/// TODO: expected to fail currently; change to `succeeds()` when required.
 fn test_date_set_valid_2() {
     if geteuid() == 0 {
-        let result = new_ucmd!()
+        new_ucmd!()
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01 AWST") // spell-checker:disable-line
-            .fails();
-        result.no_stdout();
-        assert!(result.stderr_str().starts_with("date: invalid date "));
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
     }
 }
 
@@ -370,29 +369,27 @@ fn test_date_for_file_mtime() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
-/// TODO: expected to fail currently; change to `succeeds()` when required.
 fn test_date_set_valid_3() {
     if geteuid() == 0 {
-        let result = new_ucmd!()
+        new_ucmd!()
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01") // Local timezone
-            .fails();
-        result.no_stdout();
-        assert!(result.stderr_str().starts_with("date: invalid date "));
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
     }
 }
 
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
-/// TODO: expected to fail currently; change to `succeeds()` when required.
 fn test_date_set_valid_4() {
     if geteuid() == 0 {
-        let result = new_ucmd!()
+        new_ucmd!()
             .arg("--set")
             .arg("2020-03-11 21:45:00") // Local timezone
-            .fails();
-        result.no_stdout();
-        assert!(result.stderr_str().starts_with("date: invalid date "));
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
     }
 }
 
@@ -663,7 +660,7 @@ fn test_date_tz_various_formats() {
         "-0800 -08:00 -08:00:00 -08 PST\n",
     );
     // Half-hour timezone
-    test_tz("Asia/Kolkata", JAN2, "+0530 +05:30 +05:30:00 +05:30 IST\n");
+    test_tz("Asia/Kolkata", JAN2, "+0530 +05:30 +05:30:00 +05:30 IST\n"); // spell-checker:disable-line
     test_tz("Europe/Berlin", JAN2, "+0100 +01:00 +01:00:00 +01 CET\n");
     test_tz(
         "Australia/Sydney",
@@ -834,4 +831,221 @@ fn test_date_numeric_d_invalid_numbers() {
         .arg("+%F %T %Z")
         .fails()
         .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_date_tz_abbreviation_utc_gmt() {
+    // Test UTC and GMT timezone abbreviations
+    new_ucmd!()
+        .arg("-d")
+        .arg("2021-03-20 14:53:01 UTC")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds();
+
+    new_ucmd!()
+        .arg("-d")
+        .arg("2021-03-20 14:53:01 GMT")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds();
+}
+
+#[test]
+fn test_date_tz_abbreviation_us_timezones() {
+    // Test US timezone abbreviations (uutils supports, GNU also supports these)
+    let us_zones = vec![
+        ("PST", "2021-03-20 14:53:01 PST"),
+        ("PDT", "2021-03-20 14:53:01 PDT"),
+        ("MST", "2021-03-20 14:53:01 MST"),
+        ("MDT", "2021-03-20 14:53:01 MDT"),
+        ("CST", "2021-03-20 14:53:01 CST"),
+        ("CDT", "2021-03-20 14:53:01 CDT"),
+        ("EST", "2021-03-20 14:53:01 EST"),
+        ("EDT", "2021-03-20 14:53:01 EDT"),
+    ];
+
+    for (_tz_name, date_str) in us_zones {
+        new_ucmd!()
+            .arg("-d")
+            .arg(date_str)
+            .arg("+%Y-%m-%d %H:%M:%S")
+            .succeeds()
+            .no_stderr();
+    }
+}
+
+#[test]
+fn test_date_tz_abbreviation_australian_timezones() {
+    // Test Australian timezone abbreviations (uutils supports, GNU does NOT)
+    // This demonstrates uutils date going beyond GNU capabilities
+    let au_zones = vec![
+        ("AWST", "2021-03-20 14:53:01 AWST"), // Western Australia // spell-checker:disable-line
+        ("ACST", "2021-03-20 14:53:01 ACST"), // Central Australia (Standard) // spell-checker:disable-line
+        ("ACDT", "2021-03-20 14:53:01 ACDT"), // Central Australia (Daylight) // spell-checker:disable-line
+        ("AEST", "2021-03-20 14:53:01 AEST"), // Eastern Australia (Standard)
+        ("AEDT", "2021-03-20 14:53:01 AEDT"), // Eastern Australia (Daylight)
+    ];
+
+    for (_tz_name, date_str) in au_zones {
+        new_ucmd!()
+            .arg("-d")
+            .arg(date_str)
+            .arg("+%Y-%m-%d %H:%M:%S")
+            .succeeds()
+            .no_stderr();
+    }
+}
+
+#[test]
+fn test_date_tz_abbreviation_dst_handling() {
+    // Test that timezone abbreviations correctly handle DST
+    // PST is UTC-8, PDT is UTC-7
+    // March 20, 2021 was during PDT period in Pacific timezone
+
+    new_ucmd!()
+        .arg("-d")
+        .arg("2021-03-20 14:53:01 PST")
+        .arg("+%z")
+        .succeeds()
+        .no_stderr();
+
+    new_ucmd!()
+        .arg("-d")
+        .arg("2021-03-20 14:53:01 PDT")
+        .arg("+%z")
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
+fn test_date_tz_abbreviation_with_day_of_week() {
+    // Test timezone abbreviations with full date format including day of week
+    new_ucmd!()
+        .arg("-d")
+        .arg("Sat 20 Mar 2021 14:53:01 AWST") // spell-checker:disable-line
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds()
+        .no_stderr();
+
+    new_ucmd!()
+        .arg("-d")
+        .arg("Sat 20 Mar 2021 14:53:01 EST")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
+fn test_date_tz_abbreviation_unknown() {
+    // Test that unknown timezone abbreviations fall back gracefully
+    // XYZ is not a valid timezone abbreviation
+    new_ucmd!()
+        .arg("-d")
+        .arg("2021-03-20 14:53:01 XYZ")
+        .fails()
+        .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_date_military_timezone_j_variations() {
+    // Test multiple variations of 'J' input (case insensitive, with whitespace)
+    // All should produce midnight (00:00:00)
+    let test_cases = vec!["J", "j", " J ", " j ", "\tJ\t"];
+
+    for input in test_cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg("+%T")
+            .succeeds()
+            .stdout_is("00:00:00\n");
+    }
+
+    // Test with -u flag to verify UTC behavior
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("J")
+        .arg("+%T %Z")
+        .succeeds()
+        .stdout_contains("00:00:00")
+        .stdout_contains("UTC");
+}
+
+#[test]
+fn test_date_empty_string() {
+    // Empty string should be treated as midnight today
+    new_ucmd!()
+        .env("TZ", "UTC+1")
+        .arg("-d")
+        .arg("")
+        .succeeds()
+        .stdout_contains("00:00:00");
+}
+
+#[test]
+fn test_date_empty_string_variations() {
+    // Test multiple variations of empty/whitespace strings
+    // All should produce midnight (00:00:00)
+    let test_cases = vec!["", " ", "  ", "\t", "\n", " \t ", "\t\n\t"];
+
+    for input in test_cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg("+%T")
+            .succeeds()
+            .stdout_is("00:00:00\n");
+    }
+
+    // Test with -u flag to verify UTC behavior
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("")
+        .arg("+%T %Z")
+        .succeeds()
+        .stdout_contains("00:00:00")
+        .stdout_contains("UTC");
+}
+
+#[test]
+fn test_date_relative_m9() {
+    // Military timezone "m9" should be parsed as noon + 9 hours = 21:00 UTC
+    // When displayed in TZ=UTC+9 (which is UTC-9), this shows as 12:00 local time
+    new_ucmd!()
+        .env("TZ", "UTC+9")
+        .arg("-d")
+        .arg("m9")
+        .succeeds()
+        .stdout_contains("12:00:00");
+}
+
+#[test]
+fn test_date_military_timezone_with_offset_variations() {
+    // Test various military timezone + offset combinations
+    // Format: single letter (a-z except j) optionally followed by 1-2 digits
+
+    // Test cases: (input, expected_time_utc)
+    let test_cases = vec![
+        ("a", "23:00:00"),  // A = UTC+1, midnight in UTC+1 = 23:00 UTC
+        ("m", "12:00:00"),  // M = UTC+12, midnight in UTC+12 = 12:00 UTC
+        ("z", "00:00:00"),  // Z = UTC+0, midnight in UTC+0 = 00:00 UTC
+        ("m9", "21:00:00"), // M + 9 hours = 12 + 9 = 21:00 UTC
+        ("a5", "04:00:00"), // A + 5 hours = 23 + 5 = 04:00 UTC (next day)
+        ("z3", "03:00:00"), // Z + 3 hours = 00 + 3 = 03:00 UTC
+        ("M", "12:00:00"),  // Uppercase should work too
+        ("A5", "04:00:00"), // Uppercase with offset
+    ];
+
+    for (input, expected) in test_cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg("+%T")
+            .succeeds()
+            .stdout_is(format!("{expected}\n"));
+    }
 }

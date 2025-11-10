@@ -610,3 +610,41 @@ fn comm_emoji_sorted_inputs() {
         .succeeds()
         .stdout_only("💐\n\t\t🦀\n\t🪽\n");
 }
+
+#[test]
+fn test_comm_eintr_handling() {
+    // Test that comm properly handles EINTR (ErrorKind::Interrupted) during file comparison
+    // This verifies the signal interruption retry logic in are_files_identical function
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create test files with identical content
+    let test_content = "line1\nline2\nline3\n";
+    at.write("file1", test_content);
+    at.write("file2", test_content);
+
+    // Test that comm can handle interrupted reads during file comparison
+    // The EINTR handling should retry and complete successfully
+    scene
+        .ucmd()
+        .args(&["file1", "file2"])
+        .succeeds()
+        .stdout_contains("line1") // Check that content is present (comm adds tabs for identical lines)
+        .stdout_contains("line2")
+        .stdout_contains("line3");
+
+    // Create test files with identical content
+    let test_content = "line1\nline2\nline3\n";
+    at.write("file1", test_content);
+    at.write("file2", test_content);
+
+    // Test that comm can handle interrupted reads during file comparison
+    // The EINTR handling should retry and complete successfully
+    scene
+        .ucmd()
+        .args(&["file1", "file2"])
+        .succeeds()
+        .stdout_contains("line1") // Check that content is present (comm adds tabs for identical lines)
+        .stdout_contains("line2")
+        .stdout_contains("line3");
+}

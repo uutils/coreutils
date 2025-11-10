@@ -12,6 +12,7 @@ use std::{
     fmt::Display,
     fs::File,
     io::{self, BufReader, Read, Write, stdin},
+    num::IntErrorKind,
     path::Path,
     str,
 };
@@ -35,6 +36,7 @@ pub const ALGORITHM_OPTIONS_CRC: &str = "crc";
 pub const ALGORITHM_OPTIONS_CRC32B: &str = "crc32b";
 pub const ALGORITHM_OPTIONS_MD5: &str = "md5";
 pub const ALGORITHM_OPTIONS_SHA1: &str = "sha1";
+pub const ALGORITHM_OPTIONS_SHA2: &str = "sha2";
 pub const ALGORITHM_OPTIONS_SHA3: &str = "sha3";
 
 pub const ALGORITHM_OPTIONS_SHA224: &str = "sha224";
@@ -47,23 +49,32 @@ pub const ALGORITHM_OPTIONS_SM3: &str = "sm3";
 pub const ALGORITHM_OPTIONS_SHAKE128: &str = "shake128";
 pub const ALGORITHM_OPTIONS_SHAKE256: &str = "shake256";
 
-pub const SUPPORTED_ALGORITHMS: [&str; 16] = [
+pub const SUPPORTED_ALGORITHMS: [&str; 17] = [
     ALGORITHM_OPTIONS_SYSV,
     ALGORITHM_OPTIONS_BSD,
     ALGORITHM_OPTIONS_CRC,
     ALGORITHM_OPTIONS_CRC32B,
     ALGORITHM_OPTIONS_MD5,
     ALGORITHM_OPTIONS_SHA1,
+    ALGORITHM_OPTIONS_SHA2,
     ALGORITHM_OPTIONS_SHA3,
+    ALGORITHM_OPTIONS_BLAKE2B,
+    ALGORITHM_OPTIONS_SM3,
+    // Extra algorithms that are not valid `cksum --algorithm`
     ALGORITHM_OPTIONS_SHA224,
     ALGORITHM_OPTIONS_SHA256,
     ALGORITHM_OPTIONS_SHA384,
     ALGORITHM_OPTIONS_SHA512,
-    ALGORITHM_OPTIONS_BLAKE2B,
     ALGORITHM_OPTIONS_BLAKE3,
-    ALGORITHM_OPTIONS_SM3,
     ALGORITHM_OPTIONS_SHAKE128,
     ALGORITHM_OPTIONS_SHAKE256,
+];
+
+pub const LEGACY_ALGORITHMS: [&str; 4] = [
+    ALGORITHM_OPTIONS_SYSV,
+    ALGORITHM_OPTIONS_BSD,
+    ALGORITHM_OPTIONS_CRC,
+    ALGORITHM_OPTIONS_CRC32B,
 ];
 
 pub struct HashAlgorithm {
@@ -208,28 +219,28 @@ pub enum ChecksumError {
     StrictNotCheck,
     #[error("the --quiet option is meaningful only when verifying checksums")]
     QuietNotCheck,
-    #[error("Invalid output size for SHA3 (expected 224, 256, 384, or 512)")]
-    InvalidOutputSizeForSha3,
-    #[error("--bits required for SHA3")]
-    BitsRequiredForSha3,
-    #[error("--bits required for SHAKE128")]
-    BitsRequiredForShake128,
-    #[error("--bits required for SHAKE256")]
-    BitsRequiredForShake256,
-    #[error("unknown algorithm: clap should have prevented this case")]
-    UnknownAlgorithm,
-    #[error("length is not a multiple of 8")]
-    InvalidLength,
-    #[error("--length is only supported with --algorithm=blake2b")]
-    LengthOnlyForBlake2b,
+    #[error("--length required for {}", .0.quote())]
+    LengthRequired(String),
+    #[error("invalid length: {}", .0.quote())]
+    InvalidLength(String),
+    #[error("digest length for {} must be 224, 256, 384, or 512", .0.quote())]
+    InvalidLengthForSha(String),
+    #[error("--algorithm={0} requires specifying --length 224, 256, 384, or 512")]
+    LengthRequiredForSha(String),
+    #[error("--length is only supported with --algorithm blake2b, sha2, or sha3")]
+    LengthOnlyForBlake2bSha2Sha3,
     #[error("the --binary and --text options are meaningless when verifying checksums")]
     BinaryTextConflict,
+    #[error("--text mode is only supported with --untagged")]
+    TextWithoutUntagged,
     #[error("--check is not supported with --algorithm={{bsd,sysv,crc,crc32b}}")]
     AlgorithmNotSupportedWithCheck,
     #[error("You cannot combine multiple hash algorithms!")]
     CombineMultipleAlgorithms,
     #[error("Needs an algorithm to hash with.\nUse --help for more information.")]
     NeedAlgorithmToHash,
+    #[error("unknown algorithm: {0}: clap should have prevented this case")]
+    UnknownAlgorithm(String),
     #[error("")]
     Io(#[from] io::Error),
 }
@@ -249,27 +260,54 @@ impl UError for ChecksumError {
 pub fn create_sha3(bits: usize) -> UResult<HashAlgorithm> {
     match bits {
         224 => Ok(HashAlgorithm {
-            name: "SHA3_224",
+            name: "SHA3-224",
             create_fn: Box::new(|| Box::new(Sha3_224::new())),
             bits: 224,
         }),
         256 => Ok(HashAlgorithm {
-            name: "SHA3_256",
+            name: "SHA3-256",
             create_fn: Box::new(|| Box::new(Sha3_256::new())),
             bits: 256,
         }),
         384 => Ok(HashAlgorithm {
-            name: "SHA3_384",
+            name: "SHA3-384",
             create_fn: Box::new(|| Box::new(Sha3_384::new())),
             bits: 384,
         }),
         512 => Ok(HashAlgorithm {
-            name: "SHA3_512",
+            name: "SHA3-512",
             create_fn: Box::new(|| Box::new(Sha3_512::new())),
             bits: 512,
         }),
 
-        _ => Err(ChecksumError::InvalidOutputSizeForSha3.into()),
+        _ => Err(ChecksumError::InvalidLengthForSha("SHA3".into()).into()),
+    }
+}
+
+pub fn create_sha2(bits: usize) -> UResult<HashAlgorithm> {
+    match bits {
+        224 => Ok(HashAlgorithm {
+            name: "SHA224",
+            create_fn: Box::new(|| Box::new(Sha224::new())),
+            bits: 224,
+        }),
+        256 => Ok(HashAlgorithm {
+            name: "SHA256",
+            create_fn: Box::new(|| Box::new(Sha256::new())),
+            bits: 256,
+        }),
+        384 => Ok(HashAlgorithm {
+            name: "SHA384",
+            create_fn: Box::new(|| Box::new(Sha384::new())),
+            bits: 384,
+        }),
+        512 => Ok(HashAlgorithm {
+            name: "SHA512",
+            create_fn: Box::new(|| Box::new(Sha512::new())),
+            bits: 512,
+        }),
+
+        _ => Err(ChecksumError::InvalidLengthForSha("SHA2".into()).into()),
     }
 }
 
@@ -389,26 +427,10 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
             create_fn: Box::new(|| Box::new(Sha1::new())),
             bits: 160,
         }),
-        ALGORITHM_OPTIONS_SHA224 | "sha224sum" => Ok(HashAlgorithm {
-            name: ALGORITHM_OPTIONS_SHA224,
-            create_fn: Box::new(|| Box::new(Sha224::new())),
-            bits: 224,
-        }),
-        ALGORITHM_OPTIONS_SHA256 | "sha256sum" => Ok(HashAlgorithm {
-            name: ALGORITHM_OPTIONS_SHA256,
-            create_fn: Box::new(|| Box::new(Sha256::new())),
-            bits: 256,
-        }),
-        ALGORITHM_OPTIONS_SHA384 | "sha384sum" => Ok(HashAlgorithm {
-            name: ALGORITHM_OPTIONS_SHA384,
-            create_fn: Box::new(|| Box::new(Sha384::new())),
-            bits: 384,
-        }),
-        ALGORITHM_OPTIONS_SHA512 | "sha512sum" => Ok(HashAlgorithm {
-            name: ALGORITHM_OPTIONS_SHA512,
-            create_fn: Box::new(|| Box::new(Sha512::new())),
-            bits: 512,
-        }),
+        ALGORITHM_OPTIONS_SHA224 | "sha224sum" => Ok(create_sha2(224)?),
+        ALGORITHM_OPTIONS_SHA256 | "sha256sum" => Ok(create_sha2(256)?),
+        ALGORITHM_OPTIONS_SHA384 | "sha384sum" => Ok(create_sha2(384)?),
+        ALGORITHM_OPTIONS_SHA512 | "sha512sum" => Ok(create_sha2(512)?),
         ALGORITHM_OPTIONS_BLAKE2B | "b2sum" => {
             // Set default length to 512 if None
             let bits = length.unwrap_or(512);
@@ -436,28 +458,38 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
             create_fn: Box::new(|| Box::new(Sm3::new())),
             bits: 512,
         }),
-        ALGORITHM_OPTIONS_SHAKE128 | "shake128sum" => {
-            let bits = length.ok_or(ChecksumError::BitsRequiredForShake128)?;
+        algo @ (ALGORITHM_OPTIONS_SHAKE128 | "shake128sum") => {
+            let bits = length.ok_or(ChecksumError::LengthRequired(algo.to_ascii_uppercase()))?;
             Ok(HashAlgorithm {
                 name: ALGORITHM_OPTIONS_SHAKE128,
                 create_fn: Box::new(|| Box::new(Shake128::new())),
                 bits,
             })
         }
-        ALGORITHM_OPTIONS_SHAKE256 | "shake256sum" => {
-            let bits = length.ok_or(ChecksumError::BitsRequiredForShake256)?;
+        algo @ (ALGORITHM_OPTIONS_SHAKE256 | "shake256sum") => {
+            let bits = length.ok_or(ChecksumError::LengthRequired(algo.to_ascii_uppercase()))?;
             Ok(HashAlgorithm {
                 name: ALGORITHM_OPTIONS_SHAKE256,
                 create_fn: Box::new(|| Box::new(Shake256::new())),
                 bits,
             })
         }
-        _ if algo.starts_with("sha3") => {
-            let bits = length.ok_or(ChecksumError::BitsRequiredForSha3)?;
+        algo @ ALGORITHM_OPTIONS_SHA2 => {
+            let bits = validate_sha2_sha3_length(algo, length)?;
+            create_sha2(bits)
+        }
+        algo @ ALGORITHM_OPTIONS_SHA3 => {
+            let bits = validate_sha2_sha3_length(algo, length)?;
             create_sha3(bits)
         }
 
-        _ => Err(ChecksumError::UnknownAlgorithm.into()),
+        // TODO: `hashsum` specific, to remove once hashsum is removed.
+        algo @ ("sha3-224" | "sha3-256" | "sha3-384" | "sha3-512") => {
+            let bits: usize = algo.strip_prefix("sha3-").unwrap().parse().unwrap();
+            create_sha3(bits)
+        }
+
+        algo => Err(ChecksumError::UnknownAlgorithm(algo.into()).into()),
     }
 }
 
@@ -808,23 +840,41 @@ fn identify_algo_name_and_length(
     last_algo: &mut Option<String>,
 ) -> Result<(String, Option<usize>), LineCheckError> {
     let algo_from_line = line_info.algo_name.clone().unwrap_or_default();
-    let algorithm = algo_from_line.to_lowercase();
+    let line_algo = algo_from_line.to_lowercase();
     *last_algo = Some(algo_from_line);
 
-    // check if we are called with XXXsum (example: md5sum) but we detected a different algo parsing the file
-    // (for example SHA1 (f) = d...)
+    // check if we are called with XXXsum (example: md5sum) but we detected a
+    // different algo parsing the file (for example SHA1 (f) = d...)
+    //
     // Also handle the case cksum -s sm3 but the file contains other formats
-    if algo_name_input.is_some() && algo_name_input != Some(&algorithm) {
-        return Err(LineCheckError::ImproperlyFormatted);
+    if let Some(algo_name_input) = algo_name_input {
+        match (algo_name_input, line_algo.as_str()) {
+            (l, r) if l == r => (),
+            // Edge case for SHA2, which matches SHA(224|256|384|512)
+            (
+                ALGORITHM_OPTIONS_SHA2,
+                ALGORITHM_OPTIONS_SHA224
+                | ALGORITHM_OPTIONS_SHA256
+                | ALGORITHM_OPTIONS_SHA384
+                | ALGORITHM_OPTIONS_SHA512,
+            ) => (),
+            _ => return Err(LineCheckError::ImproperlyFormatted),
+        }
     }
 
-    if !SUPPORTED_ALGORITHMS.contains(&algorithm.as_str()) {
+    if !SUPPORTED_ALGORITHMS.contains(&line_algo.as_str()) {
         // Not supported algo, leave early
         return Err(LineCheckError::ImproperlyFormatted);
     }
 
     let bytes = if let Some(bitlen) = line_info.algo_bit_len {
-        if algorithm != ALGORITHM_OPTIONS_BLAKE2B || bitlen % 8 != 0 {
+        match line_algo.as_str() {
+            ALGORITHM_OPTIONS_BLAKE2B if bitlen % 8 == 0 => Some(bitlen / 8),
+            ALGORITHM_OPTIONS_SHA2 | ALGORITHM_OPTIONS_SHA3
+                if [224, 256, 384, 512].contains(&bitlen) =>
+            {
+                Some(bitlen)
+            }
             // Either
             //  the algo based line is provided with a bit length
             //  with an algorithm that does not support it (only Blake2B does).
@@ -833,17 +883,16 @@ fn identify_algo_name_and_length(
             //          ^ This is illegal
             // OR
             //  the given length is wrong because it's not a multiple of 8.
-            return Err(LineCheckError::ImproperlyFormatted);
+            _ => return Err(LineCheckError::ImproperlyFormatted),
         }
-        Some(bitlen / 8)
-    } else if algorithm == ALGORITHM_OPTIONS_BLAKE2B {
+    } else if line_algo == ALGORITHM_OPTIONS_BLAKE2B {
         // Default length with BLAKE2b,
         Some(64)
     } else {
         None
     };
 
-    Ok((algorithm, bytes))
+    Ok((line_algo, bytes))
 }
 
 /// Given a filename and an algorithm, compute the digest and compare it with
@@ -930,15 +979,24 @@ fn process_non_algo_based_line(
     let expected_checksum = get_expected_digest_as_hex_string(line_info, None)
         .ok_or(LineCheckError::ImproperlyFormatted)?;
 
-    // When a specific algorithm name is input, use it and use the provided bits
-    // except when dealing with blake2b, where we will detect the length
-    let (algo_name, algo_byte_len) = if cli_algo_name == ALGORITHM_OPTIONS_BLAKE2B {
-        // division by 2 converts the length of the Blake2b checksum from hexadecimal
-        // characters to bytes, as each byte is represented by two hexadecimal characters.
-        let length = Some(expected_checksum.len() / 2);
-        (ALGORITHM_OPTIONS_BLAKE2B.to_string(), length)
-    } else {
-        (cli_algo_name.to_lowercase(), cli_algo_length)
+    // When a specific algorithm name is input, use it and use the provided
+    // bits except when dealing with blake2b, sha2 and sha3, where we will
+    // detect the length.
+    let (algo_name, algo_byte_len) = match cli_algo_name {
+        ALGORITHM_OPTIONS_BLAKE2B => {
+            // division by 2 converts the length of the Blake2b checksum from
+            // hexadecimal characters to bytes, as each byte is represented by
+            // two hexadecimal characters.
+            (
+                ALGORITHM_OPTIONS_BLAKE2B.to_string(),
+                Some(expected_checksum.len() / 2),
+            )
+        }
+        algo @ (ALGORITHM_OPTIONS_SHA2 | ALGORITHM_OPTIONS_SHA3) => {
+            // multiplication by 4 to get the number of bits
+            (algo.to_string(), Some(expected_checksum.len() * 4))
+        }
+        _ => (cli_algo_name.to_lowercase(), cli_algo_length),
     };
 
     let algo = detect_algo(&algo_name, algo_byte_len)?;
@@ -1067,7 +1125,7 @@ fn process_checksum_file(
             Err(CantOpenFile | FileIsDirectory) => res.failed_open_file += 1,
             Err(FileNotFound) if !opts.ignore_missing => res.failed_open_file += 1,
             _ => (),
-        };
+        }
     }
 
     // not a single line correctly formatted found
@@ -1115,9 +1173,7 @@ fn process_checksum_file(
     Ok(())
 }
 
-/***
- * Do the checksum validation (can be strict or not)
-*/
+/// Do the checksum validation (can be strict or not)
 pub fn perform_checksum_validation<'a, I>(
     files: I,
     algo_name_input: Option<&str>,
@@ -1182,21 +1238,29 @@ pub fn digest_reader<T: Read>(
 
 /// Calculates the length of the digest.
 pub fn calculate_blake2b_length(length: usize) -> UResult<Option<usize>> {
-    match length {
-        0 => Ok(None),
-        n if n % 8 != 0 => {
-            show_error!("invalid length: \u{2018}{length}\u{2019}");
+    calculate_blake2b_length_str(length.to_string().as_str())
+}
+
+/// Calculates the length of the digest.
+pub fn calculate_blake2b_length_str(length: &str) -> UResult<Option<usize>> {
+    match length.parse() {
+        Ok(0) => Ok(None),
+        Ok(n) if n % 8 != 0 => {
+            show_error!("{}", ChecksumError::InvalidLength(length.into()));
             Err(io::Error::new(io::ErrorKind::InvalidInput, "length is not a multiple of 8").into())
         }
-        n if n > 512 => {
-            show_error!("invalid length: \u{2018}{length}\u{2019}");
+        Ok(n) if n > 512 => {
+            show_error!("{}", ChecksumError::InvalidLength(length.into()));
             Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "maximum digest length for \u{2018}BLAKE2b\u{2019} is 512 bits",
+                format!(
+                    "maximum digest length for {} is 512 bits",
+                    "BLAKE2b".quote()
+                ),
             )
             .into())
         }
-        n => {
+        Ok(n) => {
             // Divide by 8, as our blake2b implementation expects bytes instead of bits.
             if n == 512 {
                 // When length is 512, it is blake2b's default.
@@ -1206,6 +1270,43 @@ pub fn calculate_blake2b_length(length: usize) -> UResult<Option<usize>> {
                 Ok(Some(n / 8))
             }
         }
+        Err(_) => Err(ChecksumError::InvalidLength(length.into()).into()),
+    }
+}
+
+pub fn validate_sha2_sha3_length(algo_name: &str, length: Option<usize>) -> UResult<usize> {
+    match length {
+        Some(len @ (224 | 256 | 384 | 512)) => Ok(len),
+        Some(len) => {
+            show_error!("{}", ChecksumError::InvalidLength(len.to_string()));
+            Err(ChecksumError::InvalidLengthForSha(algo_name.to_ascii_uppercase()).into())
+        }
+        None => Err(ChecksumError::LengthRequiredForSha(algo_name.into()).into()),
+    }
+}
+
+pub fn sanitize_sha2_sha3_length_str(algo_name: &str, length: &str) -> UResult<usize> {
+    // There is a difference in the errors sent when the length is not a number
+    // vs. its an invalid number.
+    //
+    // When inputting an invalid number, an extra error message it printed to
+    // remind of the accepted inputs.
+    let len = match length.parse::<usize>() {
+        Ok(l) => l,
+        // Note: Positive overflow while parsing counts as an invalid number,
+        // but a number still.
+        Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
+            show_error!("{}", ChecksumError::InvalidLength(length.into()));
+            return Err(ChecksumError::InvalidLengthForSha(algo_name.to_ascii_uppercase()).into());
+        }
+        Err(_) => return Err(ChecksumError::InvalidLength(length.into()).into()),
+    };
+
+    if [224, 256, 384, 512].contains(&len) {
+        Ok(len)
+    } else {
+        show_error!("{}", ChecksumError::InvalidLength(length.into()));
+        Err(ChecksumError::InvalidLengthForSha(algo_name.to_ascii_uppercase()).into())
     }
 }
 
@@ -1320,19 +1421,19 @@ mod tests {
         );
         assert_eq!(
             detect_algo(ALGORITHM_OPTIONS_SHA224, None).unwrap().name,
-            ALGORITHM_OPTIONS_SHA224
+            ALGORITHM_OPTIONS_SHA224.to_ascii_uppercase()
         );
         assert_eq!(
             detect_algo(ALGORITHM_OPTIONS_SHA256, None).unwrap().name,
-            ALGORITHM_OPTIONS_SHA256
+            ALGORITHM_OPTIONS_SHA256.to_ascii_uppercase()
         );
         assert_eq!(
             detect_algo(ALGORITHM_OPTIONS_SHA384, None).unwrap().name,
-            ALGORITHM_OPTIONS_SHA384
+            ALGORITHM_OPTIONS_SHA384.to_ascii_uppercase()
         );
         assert_eq!(
             detect_algo(ALGORITHM_OPTIONS_SHA512, None).unwrap().name,
-            ALGORITHM_OPTIONS_SHA512
+            ALGORITHM_OPTIONS_SHA512.to_ascii_uppercase()
         );
         assert_eq!(
             detect_algo(ALGORITHM_OPTIONS_BLAKE2B, None).unwrap().name,
@@ -1358,12 +1459,35 @@ mod tests {
                 .name,
             ALGORITHM_OPTIONS_SHAKE256
         );
-        assert_eq!(detect_algo("sha3_224", Some(224)).unwrap().name, "SHA3_224");
-        assert_eq!(detect_algo("sha3_256", Some(256)).unwrap().name, "SHA3_256");
-        assert_eq!(detect_algo("sha3_384", Some(384)).unwrap().name, "SHA3_384");
-        assert_eq!(detect_algo("sha3_512", Some(512)).unwrap().name, "SHA3_512");
 
-        assert!(detect_algo("sha3_512", None).is_err());
+        // Older versions of checksum used to detect the "sha3" prefix, but not
+        // anymore.
+        assert!(detect_algo("sha3_224", Some(224)).is_err());
+        assert!(detect_algo("sha3_256", Some(256)).is_err());
+        assert!(detect_algo("sha3_384", Some(384)).is_err());
+        assert!(detect_algo("sha3_512", Some(512)).is_err());
+
+        let sha3_224 = detect_algo("sha3", Some(224)).unwrap();
+        assert_eq!(sha3_224.name, "SHA3-224");
+        assert_eq!(sha3_224.bits, 224);
+        let sha3_256 = detect_algo("sha3", Some(256)).unwrap();
+        assert_eq!(sha3_256.name, "SHA3-256");
+        assert_eq!(sha3_256.bits, 256);
+        let sha3_384 = detect_algo("sha3", Some(384)).unwrap();
+        assert_eq!(sha3_384.name, "SHA3-384");
+        assert_eq!(sha3_384.bits, 384);
+        let sha3_512 = detect_algo("sha3", Some(512)).unwrap();
+        assert_eq!(sha3_512.name, "SHA3-512");
+        assert_eq!(sha3_512.bits, 512);
+
+        assert!(detect_algo("sha3", None).is_err());
+
+        assert_eq!(detect_algo("sha2", Some(224)).unwrap().name, "SHA224");
+        assert_eq!(detect_algo("sha2", Some(256)).unwrap().name, "SHA256");
+        assert_eq!(detect_algo("sha2", Some(384)).unwrap().name, "SHA384");
+        assert_eq!(detect_algo("sha2", Some(512)).unwrap().name, "SHA512");
+
+        assert!(detect_algo("sha2", None).is_err());
     }
 
     #[test]

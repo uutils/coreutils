@@ -107,6 +107,8 @@ skip = [
   { name = "zerocopy", version = "0.7.35" },
   # zerocopy
   { name = "zerocopy-derive", version = "0.7.35" },
+  # rustix
+  { name = "linux-raw-sys", version = "0.11.0" },
 ]
 # spell-checker: enable
 
