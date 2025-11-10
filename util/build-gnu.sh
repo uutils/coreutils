@@ -105,6 +105,7 @@ echo "UU_BUILD_DIR='${UU_BUILD_DIR}'"
 
 cd "${path_UUTILS}" && echo "[ pwd:'${PWD}' ]"
 
+export SELINUX_ENABLED # Run this script with=1 for testing SELinux
 [ "$SELINUX_ENABLED" -eq 1 ] && CARGO_FEATURE_FLAGS="${CARGO_FEATURE_FLAGS} selinux"
 
 # Trim leading whitespace from feature flags
