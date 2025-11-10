@@ -79,10 +79,6 @@ fn print_factors_str(
         }
         // For numbers greater than u128::MAX, use recursive factorization
         else {
-            show_warning!(
-                "Number {num_str} exceeds u128 limits. Using recursive factorization (may be slow)."
-            );
-
             let factors = factor_large_number_recursive(&x);
             write_result_big_uint(w, &x, factors, print_exponents)
                 .map_err_context(|| translate!("factor-error-write-error"))?;
