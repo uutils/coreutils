@@ -25,6 +25,17 @@ fn test_date_email() {
 }
 
 #[test]
+fn test_date_email_multiple_aliases() {
+    // Test that multiple RFC email aliases can be used together
+    // This matches GNU behavior where all aliases map to the same option
+    new_ucmd!()
+        .arg("--rfc-email")
+        .arg("--rfc-822")
+        .arg("--rfc-2822")
+        .succeeds();
+}
+
+#[test]
 fn test_date_rfc_3339() {
     let scene = TestScenario::new(util_name!());
 
@@ -141,9 +152,20 @@ fn test_date_rfc_8601_date() {
 
 #[test]
 fn test_date_utc() {
-    for param in ["--universal", "--utc", "--uni", "--u"] {
+    for param in ["--universal", "--utc", "--uct", "--uni", "--u"] {
         new_ucmd!().arg(param).succeeds();
     }
+}
+
+#[test]
+fn test_date_utc_multiple_aliases() {
+    // Test that multiple UTC aliases can be used together
+    // This matches GNU behavior where all aliases map to the same option
+    new_ucmd!()
+        .arg("--uct")
+        .arg("--utc")
+        .arg("--universal")
+        .succeeds();
 }
 
 #[test]

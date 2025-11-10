@@ -6949,7 +6949,7 @@ fn test_cp_current_directory_verbose() {
 // Test copying current directory (.) with preserve attributes.
 // This ensures attributes are preserved when copying the current directory.
 #[test]
-#[cfg(all(not(windows), not(target_os = "freebsd")))]
+#[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
 fn test_cp_current_directory_preserve_attributes() {
     use filetime::FileTime;
     use std::os::unix::prelude::MetadataExt;

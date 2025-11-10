@@ -213,9 +213,8 @@ pub fn get_nusers() -> usize {
 pub fn get_nusers(file: &str) -> usize {
     use utmp_classic::{UtmpEntry, parse_from_path};
 
-    let entries = match parse_from_path(file) {
-        Ok(e) => e,
-        Err(_) => return 0,
+    let Ok(entries) = parse_from_path(file) else {
+        return 0;
     };
 
     if entries.is_empty() {
