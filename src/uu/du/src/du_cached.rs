@@ -426,7 +426,7 @@ mod tests {
 
         // Add some entries
         for i in 0..10 {
-            let path = PathBuf::from(format!("/tmp/test_{}", i));
+            let path = PathBuf::from(format!("/tmp/test_{i}"));
             update_cache(path, i * 1024);
         }
 
