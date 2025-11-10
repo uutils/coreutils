@@ -3,7 +3,7 @@ test-usage = test EXPRESSION
   test
   {"[ EXPRESSION ]"}
   {"[ ]"}
-  {"[ OPTION ]"}
+  {"[ OPTION"}
 test-after-help = Exit with the status determined by EXPRESSION.
 
   An omitted EXPRESSION defaults to false.

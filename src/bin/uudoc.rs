@@ -291,20 +291,27 @@ fn main() -> io::Result<()> {
     }
 
     println!("Writing to utils");
+    let hashsum_cmd = utils
+        .iter()
+        .find(|n| *n.0 == "hashsum")
+        .unwrap()
+        .clone()
+        .1
+        .1;
     for (&name, (_, command)) in utils {
-        let name = match name {
+        let (utils_name, usage_name, command) = match name {
             "[" => {
                 continue;
             }
             name if is_hashsum_family(name) => {
                 // These use the hashsum
-                "hashsum"
+                ("hashsum", name, &hashsum_cmd)
             }
-            n => n,
+            n => (n, n, command),
         };
-        let p = format!("docs/src/utils/{name}.md");
+        let p = format!("docs/src/utils/{usage_name}.md");
 
-        let fluent = File::open(format!("src/uu/{name}/locales/en-US.ftl"))
+        let fluent = File::open(format!("src/uu/{utils_name}/locales/en-US.ftl"))
             .and_then(|mut f: File| {
                 let mut s = String::new();
                 f.read_to_string(&mut s)?;
@@ -316,35 +323,27 @@ fn main() -> io::Result<()> {
             MDWriter {
                 w: Box::new(f),
                 command: command(),
-                name,
+                name: usage_name,
                 tldr_zip: &mut tldr_zip,
                 utils_per_platform: &utils_per_platform,
                 fluent,
+                fluent_key: utils_name.to_string(),
             }
             .markdown()?;
             println!("Wrote to '{p}'");
         } else {
             println!("Error writing to {p}");
         }
-        writeln!(summary, "* [{name}](utils/{name}.md)")?;
+        writeln!(summary, "* [{usage_name}](utils/{usage_name}.md)")?;
     }
     Ok(())
-}
-
-struct MDWriter<'a, 'b> {
-    w: Box<dyn Write>,
-    command: Command,
-    name: &'a str,
-    tldr_zip: &'b mut Option<ZipArchive<File>>,
-    utils_per_platform: &'b HashMap<&'b str, Vec<String>>,
-    fluent: Option<String>,
 }
 
 fn fix_usage(name: &str, usage: String) -> String {
     match name {
         "test" => {
             // replace to [ but not the first two line
-            return usage
+            usage
                 .lines()
                 .enumerate()
                 .map(|(i, l)| {
@@ -355,21 +354,45 @@ fn fix_usage(name: &str, usage: String) -> String {
                     }
                 })
                 .collect::<Vec<_>>()
-                .join("\n");
+                .join("\n")
         }
         "hashsum" => usage,
-        name if is_hashsum_family(name) => usage.replace("--<digest> ", ""),
+        name if is_hashsum_family(name) => {
+            usage.replace("--<digest> ", "").replace("hashsum", name)
+        }
         _ => usage,
     }
 }
 
 fn is_hashsum_family(name: &str) -> bool {
-    match name {
-        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum"
-        | "sha3sum" | "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum"
-        | "shake128sum" | "shake256sum" | "b2sum" | "b3sum" => true,
-        _ => false,
-    }
+    matches!(
+        name,
+        "md5sum"
+            | "sha1sum"
+            | "sha224sum"
+            | "sha256sum"
+            | "sha384sum"
+            | "sha512sum"
+            | "sha3sum"
+            | "sha3-224sum"
+            | "sha3-256sum"
+            | "sha3-384sum"
+            | "sha3-512sum"
+            | "shake128sum"
+            | "shake256sum"
+            | "b2sum"
+            | "b3sum"
+    )
+}
+
+struct MDWriter<'a, 'b> {
+    w: Box<dyn Write>,
+    command: Command,
+    name: &'a str,
+    tldr_zip: &'b mut Option<ZipArchive<File>>,
+    utils_per_platform: &'b HashMap<&'b str, Vec<String>>,
+    fluent: Option<String>,
+    fluent_key: String,
 }
 
 impl MDWriter<'_, '_> {
@@ -389,7 +412,6 @@ impl MDWriter<'_, '_> {
     fn extract_fluent_value(&self, key: &str) -> Option<String> {
         let content = self.fluent.as_ref()?;
         let resource = parser::parse(content.clone()).ok()?;
-
         for entry in resource.body {
             if let Entry::Message(Message {
                 id,
@@ -400,8 +422,19 @@ impl MDWriter<'_, '_> {
                 if id.name == key {
                     // Simple text extraction - just concatenate text elements
                     let mut result = String::new();
+                    use fluent_syntax::ast::{
+                        Expression, InlineExpression,
+                        PatternElement::{Placeable, TextElement},
+                    };
                     for element in elements {
-                        if let fluent_syntax::ast::PatternElement::TextElement { value } = element {
+                        if let TextElement { ref value } = element {
+                            result.push_str(&value);
+                        }
+                        if let Placeable {
+                            expression:
+                                Expression::Inline(InlineExpression::StringLiteral { ref value }),
+                        } = element
+                        {
                             result.push_str(&value);
                         }
                     }
@@ -460,7 +493,7 @@ impl MDWriter<'_, '_> {
     /// # Errors
     /// Returns an error if the writer fails.
     fn usage(&mut self) -> io::Result<()> {
-        if let Some(usage) = self.extract_fluent_value(&format!("{}-usage", self.name)) {
+        if let Some(usage) = self.extract_fluent_value(&format!("{}-usage", self.fluent_key)) {
             let usage = fix_usage(self.name, usage);
             writeln!(self.w, "\n```")?;
             writeln!(self.w, "{usage}")?;
@@ -473,7 +506,7 @@ impl MDWriter<'_, '_> {
     /// # Errors
     /// Returns an error if the writer fails.
     fn about(&mut self) -> io::Result<()> {
-        if let Some(about) = self.extract_fluent_value(&format!("{}-about", self.name)) {
+        if let Some(about) = self.extract_fluent_value(&format!("{}-about", self.fluent_key)) {
             writeln!(self.w, "{about}")
         } else {
             Ok(())
@@ -483,7 +516,9 @@ impl MDWriter<'_, '_> {
     /// # Errors
     /// Returns an error if the writer fails.
     fn after_help(&mut self) -> io::Result<()> {
-        if let Some(after_help) = self.extract_fluent_value(&format!("{}-after-help", self.name)) {
+        if let Some(after_help) =
+            self.extract_fluent_value(&format!("{}-after-help", self.fluent_key))
+        {
             writeln!(self.w, "\n\n{after_help}")
         } else {
             Ok(())
@@ -554,7 +589,7 @@ impl MDWriter<'_, '_> {
             writeln!(self.w, "</dt>")?;
             let help_text = arg.get_help().unwrap_or_default().to_string();
             // Try to resolve Fluent key if it looks like one, otherwise use as-is
-            let resolved_help = if help_text.starts_with(&format!("{}-help-", self.name)) {
+            let resolved_help = if help_text.starts_with(&format!("{}-help-", self.fluent_key)) {
                 self.extract_fluent_value(&help_text).unwrap_or(help_text)
             } else {
                 help_text

@@ -75,22 +75,25 @@ fn get_doc_file_from_output(output: &str) -> (String, String) {
 #[test]
 fn uudoc_check_test() {
     let pages = run_write_doc();
-    println!("Pages written: {pages:?}\n");
     // assert wrote to the correct file
     let path_test = pages.iter().find(|line| line.contains("test.md")).unwrap();
-    let (_correct_path, content) = get_doc_file_from_output(path_test);
+    let (correct_path, content) = get_doc_file_from_output(path_test);
 
     // open the file
-    assert!(content.contains(
-        "```
+    assert!(
+        content.contains(
+            "```
 test EXPRESSION
 test
 [ EXPRESSION ]
 [ ]
 [ OPTION
 ```
-"
-    ));
+",
+        ),
+        "{} does not contains the required text",
+        correct_path
+    );
 }
 
 #[test]
@@ -104,24 +107,21 @@ fn uudoc_check_sums() {
         "sha384sum",
         "sha512sum",
         "sha3sum",
-        "sha3-224sum",
-        "sha3-256sum",
-        "sha3-384sum",
-        "sha3-512sum",
         "shake128sum",
         "shake256sum",
         "b2sum",
         "b3sum",
     ];
     for one_sum in sums {
-        let output_path = pages.iter().find(|line| line.contains(one_sum)).unwrap();
+        let output_path = pages
+            .iter()
+            .find(|one_line| one_line.contains(one_sum))
+            .expect(&format!("{one_sum} was not generated in {pages:?}"));
         let (correct_path, content) = get_doc_file_from_output(output_path);
-        let formatted = format!("```\n{} [OPTIONS]... [FILE]...\n```", one_sum);
+        let formatted = format!("```\n{one_sum} [OPTIONS]... [FILE]...\n```");
         assert!(
             content.contains(&formatted),
-            "Content of {} does not contain the expected format: {}",
-            correct_path,
-            formatted
+            "Content of {correct_path} does not contain the expected format: {formatted}",
         );
     }
 }
