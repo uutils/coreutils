@@ -12,15 +12,15 @@ use memmap2::Mmap;
 #[cfg(unix)]
 use nix::{
     errno::Errno,
-    fcntl::{FcntlArg, OFlag, fcntl, open},
-    sys::stat::Mode,
+    fcntl::{fcntl, open, FcntlArg, OFlag},
+    sys::stat::{FileStat, Mode},
 };
 #[cfg(unix)]
 use std::ffi::CString;
 use std::ffi::OsString;
 use std::io::{BufWriter, Read, Write, stdin, stdout};
 #[cfg(unix)]
-use std::os::fd::{AsFd, BorrowedFd};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 use std::{
     fs::{File, read},
     path::Path,
@@ -342,32 +342,32 @@ fn try_mmap_path(path: &Path) -> Option<Mmap> {
 
 #[cfg(unix)]
 fn stdin_closed_or_reopened_null() -> std::io::Result<bool> {
-    let stdin_fd = unsafe { BorrowedFd::borrow_raw(libc::STDIN_FILENO) };
+    let stdin_fd = unsafe { BorrowedFd::borrow_raw(stdin().as_raw_fd()) };
     match fcntl(stdin_fd, FcntlArg::F_GETFL) {
-        Ok(flags) => stdin_is_reopened_dev_null(flags),
+        Ok(flags) => stdin_is_reopened_dev_null(OFlag::from_bits_truncate(flags)),
         Err(_) => Ok(true),
     }
 }
 
 #[cfg(unix)]
-fn stdin_is_reopened_dev_null(flags: libc::c_int) -> std::io::Result<bool> {
-    if flags & libc::O_ACCMODE != libc::O_RDWR {
+fn stdin_is_reopened_dev_null(flags: OFlag) -> std::io::Result<bool> {
+    if flags & OFlag::O_ACCMODE != OFlag::O_RDWR {
         return Ok(false);
     }
 
-    let stdin_stat = fstat_fd(unsafe { BorrowedFd::borrow_raw(libc::STDIN_FILENO) })?;
+    let stdin_stat = fstat_fd(unsafe { BorrowedFd::borrow_raw(stdin().as_raw_fd()) })?;
     let dev_null_stat = stat_dev_null()?;
 
     Ok(stdin_stat.st_dev == dev_null_stat.st_dev && stdin_stat.st_ino == dev_null_stat.st_ino)
 }
 
 #[cfg(unix)]
-fn fstat_fd(fd: BorrowedFd<'_>) -> std::io::Result<libc::stat> {
+fn fstat_fd(fd: BorrowedFd<'_>) -> std::io::Result<FileStat> {
     nix::sys::stat::fstat(fd).map_err(nix_error_to_io)
 }
 
 #[cfg(unix)]
-fn stat_dev_null() -> std::io::Result<libc::stat> {
+fn stat_dev_null() -> std::io::Result<FileStat> {
     let dev_null = CString::new("/dev/null").expect("static literal without interior NUL");
     let fd = open(dev_null.as_c_str(), OFlag::O_RDONLY, Mode::empty()).map_err(nix_error_to_io)?;
     fstat_fd(fd.as_fd())
@@ -377,7 +377,7 @@ fn ensure_stdin_open() -> std::io::Result<()> {
     #[cfg(unix)]
     {
         if stdin_closed_or_reopened_null()? {
-            return Err(std::io::Error::from_raw_os_error(libc::EBADF));
+            return Err(nix_error_to_io(Errno::EBADF));
         }
     }
     Ok(())

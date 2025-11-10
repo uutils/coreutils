@@ -27,7 +27,6 @@ clap = { workspace = true }
 uucore = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
-libc = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["fs"] }
