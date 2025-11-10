@@ -18,6 +18,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, mpsc};
 use std::time::SystemTime;
 use uucore::error::UResult;
+
+#[cfg(target_os = "linux")]
 use uucore::safe_traversal::DirFd;
 
 /// Global cache of directory sizes with mtime-based invalidation
