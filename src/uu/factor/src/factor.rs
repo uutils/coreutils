@@ -157,7 +157,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     set_exit_code(1);
                     show_error!(
                         "{}",
-                        translate!("factor-error-reading-input ", "error" => e)
+                        translate!("factor-error-reading-input", "error" => e)
                     );
                     return Ok(());
                 }
@@ -176,8 +176,8 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
-        .about(translate!("factor-about "))
-        .override_usage(format_usage(&translate!("factor-usage ")))
+        .about(translate!("factor-about"))
+        .override_usage(format_usage(&translate!("factor-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .args_override_self(true)
@@ -186,13 +186,13 @@ pub fn uu_app() -> Command {
             Arg::new(options::EXPONENTS)
                 .short('h')
                 .long(options::EXPONENTS)
-                .help(translate!("factor-help-exponents "))
+                .help(translate!("factor-help-exponents"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help(translate!("factor-help-help "))
+                .help(translate!("factor-help-help"))
                 .action(ArgAction::Help),
         )
 }

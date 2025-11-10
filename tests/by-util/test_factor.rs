@@ -1669,11 +1669,10 @@ fn test_128_bit_boundary() {
 
 // Test at 2^128 + 1 separately since it takes a very long time to factor
 #[test]
-#[ignore = "Skip by default as it takes too long"]
 fn test_2_128_plus_1() {
     new_ucmd!()
         .timeout(Duration::from_secs(600))
-        .arg("340282366920938463463374607431768211457")
+        .arg("340282366920938463374607431768211457")
         .succeeds()
         .stdout_contains("340282366920938463463374607431768211457:");
 }
@@ -1697,7 +1696,6 @@ fn test_large_numbers_over_u128() {
 
 // Regression test for issue #9177: large composites with medium-sized prime factors
 #[test]
-#[ignore = "Skip by default as it takes too long"]
 fn test_trial_division_large_composite() {
     new_ucmd!()
         .timeout(Duration::from_secs(300))
