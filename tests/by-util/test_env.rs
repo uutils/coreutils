@@ -6,6 +6,8 @@
 #![allow(clippy::missing_errors_doc)]
 
 #[cfg(unix)]
+use nix::libc;
+#[cfg(unix)]
 use nix::sys::signal::Signal;
 #[cfg(feature = "echo")]
 use regex::Regex;
@@ -14,6 +16,8 @@ use std::path::Path;
 #[cfg(unix)]
 use std::process::Command;
 use tempfile::tempdir;
+#[cfg(unix)]
+use uutests::util::PATH;
 use uutests::new_ucmd;
 #[cfg(unix)]
 use uutests::util::TerminalSimulation;
@@ -29,13 +33,13 @@ struct Target {
 #[cfg(unix)]
 impl Target {
     fn new(signals: &[&str]) -> Self {
-        let mut child = new_ucmd!()
-            .args(&[
-                format!("--ignore-signal={}", signals.join(",")).as_str(),
-                "sleep",
-                "1000",
-            ])
-            .run_no_wait();
+        let mut cmd = new_ucmd!();
+        if signals.is_empty() {
+            cmd.arg("--ignore-signal");
+        } else {
+            cmd.arg(format!("--ignore-signal={}", signals.join(",")));
+        }
+        let mut child = cmd.args(&["sleep", "1000"]).run_no_wait();
         child.delay(500);
         Self { child }
     }
@@ -934,6 +938,89 @@ fn test_env_arg_ignore_signal_empty() {
         .succeeds()
         .no_stderr()
         .stdout_contains("hello");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_arg_ignore_signal_all_signals() {
+    let mut target = Target::new(&[]);
+    target.send_signal(Signal::SIGINT);
+    assert!(target.is_alive());
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_default_signal_pipe() {
+    let ts = TestScenario::new(util_name!());
+    run_sigpipe_script(&ts, &["--default-signal=PIPE"]);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_default_signal_all_signals() {
+    let ts = TestScenario::new(util_name!());
+    run_sigpipe_script(&ts, &["--default-signal"]);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_block_signal_flag() {
+    new_ucmd!()
+        .env("PATH", PATH)
+        .args(&["--block-signal", "true"])
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_list_signal_handling_reports_ignore() {
+    let result = new_ucmd!()
+        .env("PATH", PATH)
+        .args(&["--ignore-signal=INT", "--list-signal-handling", "true"])
+        .succeeds();
+    let stderr = result.stderr_str();
+    assert!(
+        stderr.contains("INT") && stderr.contains("IGNORE"),
+        "unexpected signal listing: {stderr}"
+    );
+}
+
+#[cfg(unix)]
+fn run_sigpipe_script(ts: &TestScenario, extra_args: &[&str]) {
+    let shell = env::var("SHELL").unwrap_or_else(|_| String::from("sh"));
+    let _guard = SigpipeGuard::new();
+    let mut cmd = ts.ucmd();
+    cmd.env("PATH", PATH);
+    cmd.args(extra_args);
+    cmd.arg(shell);
+    cmd.arg("-c");
+    cmd.arg("trap - PIPE; seq 999999 2>err | head -n1 > out");
+    cmd.succeeds();
+    assert_eq!(ts.fixtures.read("out"), "999999\n");
+    assert_eq!(ts.fixtures.read("err"), "");
+}
+
+#[cfg(unix)]
+struct SigpipeGuard {
+    previous: libc::sighandler_t,
+}
+
+#[cfg(unix)]
+impl SigpipeGuard {
+    fn new() -> Self {
+        let previous = unsafe { libc::signal(libc::SIGPIPE, libc::SIG_IGN) };
+        Self { previous }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for SigpipeGuard {
+    fn drop(&mut self) {
+        unsafe {
+            libc::signal(libc::SIGPIPE, self.previous);
+        }
+    }
 }
 
 #[test]

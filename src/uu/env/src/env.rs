@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction
+// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask
 
 pub mod native_int_str;
 pub mod split_iterator;
@@ -20,8 +20,13 @@ use native_int_str::{
 #[cfg(unix)]
 use nix::libc;
 #[cfg(unix)]
-use nix::sys::signal::{SigHandler::SigIgn, Signal, signal};
+use nix::sys::signal::{
+    SigHandler::{SigDfl, SigIgn},
+    SigSet, SigmaskHow, Signal, signal, sigprocmask,
+};
 use std::borrow::Cow;
+#[cfg(unix)]
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Write};
@@ -34,7 +39,7 @@ use uucore::display::{OsWrite, Quotable};
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
 #[cfg(unix)]
-use uucore::signals::signal_by_name_or_value;
+use uucore::signals::{ALL_SIGNALS, signal_by_name_or_value, signal_name_by_value};
 use uucore::translate;
 use uucore::{format_usage, show_warning};
 
@@ -84,6 +89,9 @@ mod options {
     pub const SPLIT_STRING: &str = "split-string";
     pub const ARGV0: &str = "argv0";
     pub const IGNORE_SIGNAL: &str = "ignore-signal";
+    pub const DEFAULT_SIGNAL: &str = "default-signal";
+    pub const BLOCK_SIGNAL: &str = "block-signal";
+    pub const LIST_SIGNAL_HANDLING: &str = "list-signal-handling";
 }
 
 struct Options<'a> {
@@ -96,7 +104,13 @@ struct Options<'a> {
     program: Vec<&'a OsStr>,
     argv0: Option<&'a OsStr>,
     #[cfg(unix)]
-    ignore_signal: Vec<usize>,
+    ignore_signal: SignalRequest,
+    #[cfg(unix)]
+    default_signal: SignalRequest,
+    #[cfg(unix)]
+    block_signal: SignalRequest,
+    #[cfg(unix)]
+    list_signal_handling: bool,
 }
 
 /// print `name=value` env pairs on screen
@@ -159,23 +173,17 @@ fn parse_signal_value(signal_name: &str) -> UResult<usize> {
 }
 
 #[cfg(unix)]
-fn parse_signal_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> {
+fn parse_signal_opt(target: &mut SignalRequest, opt: &OsStr) -> UResult<()> {
     if opt.is_empty() {
         return Ok(());
     }
-    let signals: Vec<&'a OsStr> = opt
+
+    for sig in opt
         .as_bytes()
         .split(|&b| b == b',')
+        .filter(|chunk| !chunk.is_empty())
         .map(OsStr::from_bytes)
-        .collect();
-
-    let mut sig_vec = Vec::with_capacity(signals.len());
-    for sig in signals {
-        if !sig.is_empty() {
-            sig_vec.push(sig);
-        }
-    }
-    for sig in sig_vec {
+    {
         let Some(sig_str) = sig.to_str() else {
             return Err(USimpleError::new(
                 1,
@@ -183,12 +191,114 @@ fn parse_signal_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> {
             ));
         };
         let sig_val = parse_signal_value(sig_str)?;
-        if !opts.ignore_signal.contains(&sig_val) {
-            opts.ignore_signal.push(sig_val);
-        }
+        target.signals.insert(sig_val);
     }
 
     Ok(())
+}
+
+#[cfg(unix)]
+#[derive(Default)]
+struct SignalRequest {
+    apply_all: bool,
+    signals: BTreeSet<usize>,
+}
+
+#[cfg(unix)]
+impl SignalRequest {
+    fn is_empty(&self) -> bool {
+        !self.apply_all && self.signals.is_empty()
+    }
+
+    fn for_each_signal<F>(&self, mut f: F) -> UResult<()>
+    where
+        F: FnMut(usize, bool) -> UResult<()>,
+    {
+        if self.is_empty() {
+            return Ok(());
+        }
+        for &sig in &self.signals {
+            f(sig, true)?;
+        }
+        if self.apply_all {
+            for sig_value in 1..ALL_SIGNALS.len() {
+                if self.signals.contains(&sig_value) {
+                    continue;
+                }
+                f(sig_value, false)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(unix)]
+#[derive(Copy, Clone)]
+enum SignalActionKind {
+    Default,
+    Ignore,
+    Block,
+}
+
+#[cfg(unix)]
+#[derive(Copy, Clone)]
+struct SignalActionRecord {
+    kind: SignalActionKind,
+    explicit: bool,
+}
+
+#[cfg(unix)]
+#[derive(Default)]
+struct SignalActionLog {
+    records: BTreeMap<usize, SignalActionRecord>,
+}
+
+#[cfg(unix)]
+impl SignalActionLog {
+    fn record(&mut self, sig_value: usize, kind: SignalActionKind, explicit: bool) {
+        self.records
+            .entry(sig_value)
+            .and_modify(|entry| {
+                entry.kind = kind;
+                if explicit {
+                    entry.explicit = true;
+                }
+            })
+            .or_insert(SignalActionRecord { kind, explicit });
+    }
+}
+
+#[cfg(unix)]
+fn build_signal_request(matches: &clap::ArgMatches, option: &str) -> UResult<SignalRequest> {
+    let mut request = SignalRequest::default();
+    let mut provided_values = 0usize;
+
+    if let Some(iter) = matches.get_many::<OsString>(option) {
+        for opt in iter {
+            provided_values += 1;
+            parse_signal_opt(&mut request, opt)?;
+        }
+    }
+
+    let occurrences = matches.get_count(option) as usize;
+    if occurrences > provided_values {
+        request.apply_all = true;
+    }
+
+    Ok(request)
+}
+
+#[cfg(unix)]
+fn signal_from_value(sig_value: usize) -> UResult<Signal> {
+    Signal::try_from(sig_value as i32).map_err(|_| {
+        USimpleError::new(
+            125,
+            translate!(
+                "env-error-invalid-signal",
+                "signal" => sig_value.to_string().quote()
+            ),
+        )
+    })
 }
 
 fn load_config_file(opts: &mut Options) -> UResult<()> {
@@ -310,9 +420,37 @@ pub fn uu_app() -> Command {
             Arg::new(options::IGNORE_SIGNAL)
                 .long(options::IGNORE_SIGNAL)
                 .value_name("SIG")
+                .num_args(0..=1)
+                .require_equals(true)
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
                 .help(translate!("env-help-ignore-signal")),
+        )
+        .arg(
+            Arg::new(options::DEFAULT_SIGNAL)
+                .long(options::DEFAULT_SIGNAL)
+                .value_name("SIG")
+                .num_args(0..=1)
+                .require_equals(true)
+                .action(ArgAction::Append)
+                .value_parser(ValueParser::os_string())
+                .help(translate!("env-help-default-signal")),
+        )
+        .arg(
+            Arg::new(options::BLOCK_SIGNAL)
+                .long(options::BLOCK_SIGNAL)
+                .value_name("SIG")
+                .num_args(0..=1)
+                .require_equals(true)
+                .action(ArgAction::Append)
+                .value_parser(ValueParser::os_string())
+                .help(translate!("env-help-block-signal")),
+        )
+        .arg(
+            Arg::new(options::LIST_SIGNAL_HANDLING)
+                .long(options::LIST_SIGNAL_HANDLING)
+                .action(ArgAction::SetTrue)
+                .help(translate!("env-help-list-signal-handling")),
         )
 }
 
@@ -416,7 +554,6 @@ impl EnvAppData {
             options::ARGV0,
             options::CHDIR,
             options::FILE,
-            options::IGNORE_SIGNAL,
             options::UNSET,
         ];
         let short_flags_with_args = ['a', 'C', 'f', 'u'];
@@ -548,7 +685,15 @@ impl EnvAppData {
         apply_specified_env_vars(&opts);
 
         #[cfg(unix)]
-        apply_ignore_signal(&opts)?;
+        {
+            let mut signal_action_log = SignalActionLog::default();
+            apply_default_signal(&opts.default_signal, &mut signal_action_log)?;
+            apply_ignore_signal(&opts.ignore_signal, &mut signal_action_log)?;
+            apply_block_signal(&opts.block_signal, &mut signal_action_log)?;
+            if opts.list_signal_handling {
+                list_signal_handling(&signal_action_log);
+            }
+        }
 
         if opts.program.is_empty() {
             // no program provided, so just dump all env vars to stdout
@@ -698,6 +843,15 @@ fn make_options(matches: &clap::ArgMatches) -> UResult<Options<'_>> {
     };
     let argv0 = matches.get_one::<OsString>("argv0").map(|s| s.as_os_str());
 
+    #[cfg(unix)]
+    let ignore_signal = build_signal_request(matches, options::IGNORE_SIGNAL)?;
+    #[cfg(unix)]
+    let default_signal = build_signal_request(matches, options::DEFAULT_SIGNAL)?;
+    #[cfg(unix)]
+    let block_signal = build_signal_request(matches, options::BLOCK_SIGNAL)?;
+    #[cfg(unix)]
+    let list_signal_handling = matches.get_flag(options::LIST_SIGNAL_HANDLING);
+
     let mut opts = Options {
         ignore_env,
         line_ending,
@@ -708,15 +862,14 @@ fn make_options(matches: &clap::ArgMatches) -> UResult<Options<'_>> {
         program: vec![],
         argv0,
         #[cfg(unix)]
-        ignore_signal: vec![],
+        ignore_signal,
+        #[cfg(unix)]
+        default_signal,
+        #[cfg(unix)]
+        block_signal,
+        #[cfg(unix)]
+        list_signal_handling,
     };
-
-    #[cfg(unix)]
-    if let Some(iter) = matches.get_many::<OsString>("ignore-signal") {
-        for opt in iter {
-            parse_signal_opt(&mut opts, opt)?;
-        }
-    }
 
     let mut begin_prog_opts = false;
     if let Some(mut iter) = matches.get_many::<OsString>("vars") {
@@ -823,15 +976,33 @@ fn apply_specified_env_vars(opts: &Options<'_>) {
 }
 
 #[cfg(unix)]
-fn apply_ignore_signal(opts: &Options<'_>) -> UResult<()> {
-    for &sig_value in &opts.ignore_signal {
-        let sig: Signal = (sig_value as i32)
-            .try_into()
-            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+fn apply_default_signal(request: &SignalRequest, log: &mut SignalActionLog) -> UResult<()> {
+    request.for_each_signal(|sig_value, explicit| {
+        let sig = signal_from_value(sig_value)?;
+        reset_signal(sig)?;
+        log.record(sig_value, SignalActionKind::Default, explicit);
+        Ok(())
+    })
+}
 
+#[cfg(unix)]
+fn apply_ignore_signal(request: &SignalRequest, log: &mut SignalActionLog) -> UResult<()> {
+    request.for_each_signal(|sig_value, explicit| {
+        let sig = signal_from_value(sig_value)?;
         ignore_signal(sig)?;
-    }
-    Ok(())
+        log.record(sig_value, SignalActionKind::Ignore, explicit);
+        Ok(())
+    })
+}
+
+#[cfg(unix)]
+fn apply_block_signal(request: &SignalRequest, log: &mut SignalActionLog) -> UResult<()> {
+    request.for_each_signal(|sig_value, explicit| {
+        let sig = signal_from_value(sig_value)?;
+        block_signal(sig)?;
+        log.record(sig_value, SignalActionKind::Block, explicit);
+        Ok(())
+    })
 }
 
 #[cfg(unix)]
@@ -845,6 +1016,51 @@ fn ignore_signal(sig: Signal) -> UResult<()> {
         ));
     }
     Ok(())
+}
+
+#[cfg(unix)]
+fn reset_signal(sig: Signal) -> UResult<()> {
+    let result = unsafe { signal(sig, SigDfl) };
+    if let Err(err) = result {
+        return Err(USimpleError::new(
+            125,
+            translate!("env-error-failed-set-signal-action", "signal" => (sig as i32), "error" => err.desc()),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn block_signal(sig: Signal) -> UResult<()> {
+    let mut set = SigSet::empty();
+    set.add(sig);
+    if let Err(err) = sigprocmask(SigmaskHow::SIG_BLOCK, Some(&set), None) {
+        return Err(USimpleError::new(
+            125,
+            translate!(
+                "env-error-failed-set-signal-action",
+                "signal" => (sig as i32),
+                "error" => err.desc()
+            ),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn list_signal_handling(log: &SignalActionLog) {
+    for (&sig_value, record) in &log.records {
+        if !record.explicit {
+            continue;
+        }
+        let action = match record.kind {
+            SignalActionKind::Default => "DEFAULT",
+            SignalActionKind::Ignore => "IGNORE",
+            SignalActionKind::Block => "BLOCK",
+        };
+        let signal_name = signal_name_by_value(sig_value).unwrap_or("?");
+        eprintln!("{:<10} ({}): {}", signal_name, sig_value as i32, action);
+    }
 }
 
 #[uucore::main]
