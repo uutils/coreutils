@@ -291,7 +291,7 @@ fn main() -> io::Result<()> {
     }
 
     println!("Writing to utils");
-    let hashsum_cmd = (*utils.iter().find(|n| *n.0 == "hashsum").unwrap()).1.1;
+    let hashsum_cmd = utils.iter().find(|n| *n.0 == "hashsum").unwrap().1.1;
     for (&name, (_, command)) in utils {
         let (utils_name, usage_name, command) = match name {
             "[" => {
