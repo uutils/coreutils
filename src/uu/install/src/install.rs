@@ -21,7 +21,7 @@ use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fmt::Debug;
 use std::fs::{self, metadata};
-use std::path::{MAIN_SEPARATOR, Path, PathBuf};
+use std::path::{Path, PathBuf};
 #[cfg(not(windows))]
 use std::process;
 use thiserror::Error;
