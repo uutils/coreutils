@@ -151,10 +151,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
                 Err(e) => {
                     set_exit_code(1);
-                    show_error!(
-                        "{}",
-                        translate!("factor-error-reading-input", "error" => e)
-                    );
+                    show_error!("{}", translate!("factor-error-reading-input", "error" => e));
                     return Ok(());
                 }
             }
