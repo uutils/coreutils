@@ -72,10 +72,6 @@ jobs:
         git submodule sync --recursive
         git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
         git submodule update --init --recursive --depth 1
-        # Backport auto-skip for SELinux progs
-        # Drop this at coreutils 9.9
-        curl https://github.com/coreutils/coreutils/commit/8ba47d09a33f0740e071a8394f3504e0fb57948e.patch -o skip-selinux.patch
-        patch -Np1 -i skip-selinux.patch
       working-directory: gnu
 
     #### Build environment setup without libselinux
