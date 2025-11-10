@@ -1123,13 +1123,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     }
                 }
 
-                match safe_du(
+                // Use cached safe_du for performance
+                let cache_config = du_cached::CacheConfig {
+                    enabled: env::var("DU_CACHE").map(|v| v != "0").unwrap_or(true),
+                    max_entries: 100_000,
+                    summarize,
+                };
+
+                match du_cached::safe_du_cached(
                     &path,
                     &traversal_options,
                     0,
                     &mut seen_inodes,
                     &print_tx,
                     None,
+                    &cache_config,
                 ) {
                     Ok(stat) => {
                         print_tx

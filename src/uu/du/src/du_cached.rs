@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, mpsc};
 use std::time::SystemTime;
 use uucore::error::UResult;
+use uucore::safe_traversal::DirFd;
 
 /// Global cache of directory sizes with mtime-based invalidation
 /// Structure: PathBuf -> (size, mtime)
@@ -253,6 +254,62 @@ pub fn get_cache_stats() -> CacheStats {
     }
 }
 
+/// Cached version of safe_du traversal (Linux-specific)
+#[cfg(target_os = "linux")]
+pub fn safe_du_cached(
+    path: &Path,
+    options: &TraversalOptions,
+    depth: usize,
+    seen_inodes: &mut HashSet<FileInfo>,
+    print_tx: &mpsc::Sender<UResult<crate::StatPrintInfo>>,
+    parent_fd: Option<&DirFd>,
+    config: &CacheConfig,
+) -> Result<Stat, Box<mpsc::SendError<UResult<crate::StatPrintInfo>>>> {
+    use crate::safe_du;
+
+    if !config.enabled {
+        return safe_du(path, options, depth, seen_inodes, print_tx, parent_fd);
+    }
+
+    // Try cache lookup ONLY at depth 0 when in summarize mode (-s flag)
+    // Skip caching for symlinks as their behavior depends on dereference mode
+    if depth == 0 && config.summarize {
+        let is_symlink = std::fs::symlink_metadata(path)
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(false);
+
+        if !is_symlink {
+            if let Some(cached_size) = check_cache(path) {
+                // Cache hit! Need to reconstruct a Stat
+                if let Ok(stat) = crate::Stat::new(path, None, options) {
+                    let mut cached_stat = stat;
+                    cached_stat.size = cached_size;
+                    cached_stat.blocks = cached_size / 512;
+                    return Ok(cached_stat);
+                }
+            }
+        }
+    }
+
+    // Cache miss - perform full safe traversal
+    let result = safe_du(path, options, depth, seen_inodes, print_tx, parent_fd)?;
+
+    // Update cache (skip symlinks as their behavior depends on dereference mode)
+    if depth == 0 && config.summarize {
+        let is_symlink = std::fs::symlink_metadata(&result.path)
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(false);
+
+        if !is_symlink {
+            let disk_usage = result.blocks * 512;
+            update_cache(result.path.clone(), disk_usage);
+            let _ = save_cache_to_disk();
+        }
+    }
+
+    Ok(result)
+}
+
 /// Cached version of parallel du traversal
 ///
 /// This function wraps du_parallel with an mtime-based cache.
@@ -271,22 +328,32 @@ pub fn du_parallel_cached(
         return du_parallel::du_parallel(init_stat, options, depth, seen_inodes, print_tx);
     }
 
-    // Try cache lookup first (read-optimized fast path)
-    if let Some(cached_size) = check_cache(&init_stat.path) {
-        // Cache hit! Return immediately with cached size
-        if std::env::var("DU_CACHE_DEBUG").is_ok() {
-            eprintln!(
-                "[CACHE HIT] {}: {} bytes",
-                init_stat.path.display(),
-                cached_size
-            );
+    // Try cache lookup ONLY at depth 0 when in summarize mode (-s flag)
+    // Without -s, we must traverse to print all subdirectories
+    // Skip caching for symlinks as their behavior depends on dereference mode
+    if depth == 0 && config.summarize {
+        let is_symlink = std::fs::symlink_metadata(&init_stat.path)
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(false);
+
+        if !is_symlink {
+            if let Some(cached_size) = check_cache(&init_stat.path) {
+                // Cache hit! Return immediately with cached size
+                if std::env::var("DU_CACHE_DEBUG").is_ok() {
+                    eprintln!(
+                        "[CACHE HIT] {}: {} bytes",
+                        init_stat.path.display(),
+                        cached_size
+                    );
+                }
+                let mut cached_stat = init_stat;
+                cached_stat.size = cached_size;
+                // Also update blocks for correct display (du shows blocks by default, not size)
+                // blocks are in 512-byte units
+                cached_stat.blocks = cached_size / 512;
+                return Ok(cached_stat);
+            }
         }
-        let mut cached_stat = init_stat;
-        cached_stat.size = cached_size;
-        // Also update blocks for correct display (du shows blocks by default, not size)
-        // blocks are in 512-byte units
-        cached_stat.blocks = cached_size / 512;
-        return Ok(cached_stat);
     }
 
     if std::env::var("DU_CACHE_DEBUG").is_ok() {
@@ -298,15 +365,24 @@ pub fn du_parallel_cached(
 
     // Update cache with the actual disk usage (blocks * 512)
     // Note: result.size is apparent size, but du displays blocks * 512 by default
-    let disk_usage = result.blocks * 512;
-    if std::env::var("DU_CACHE_DEBUG").is_ok() {
-        eprintln!("[CACHE STORE] size={} blocks={} disk_usage={}", result.size, result.blocks, disk_usage);
-    }
-    update_cache(result.path.clone(), disk_usage);
+    // Only cache at depth 0 in summarize mode (skip symlinks as their behavior depends on dereference mode)
+    if depth == 0 && config.summarize {
+        let is_symlink = std::fs::symlink_metadata(&result.path)
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(false);
 
-    // Save cache to disk for persistence across runs
-    // Ignore errors (e.g., permission denied when running as root)
-    let _ = save_cache_to_disk();
+        if !is_symlink {
+            let disk_usage = result.blocks * 512;
+            if std::env::var("DU_CACHE_DEBUG").is_ok() {
+                eprintln!("[CACHE STORE] size={} blocks={} disk_usage={}", result.size, result.blocks, disk_usage);
+            }
+            update_cache(result.path.clone(), disk_usage);
+
+            // Save cache to disk for persistence across runs
+            // Ignore errors (e.g., permission denied when running as root)
+            let _ = save_cache_to_disk();
+        }
+    }
 
     Ok(result)
 }
