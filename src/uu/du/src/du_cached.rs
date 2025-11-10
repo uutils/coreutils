@@ -118,6 +118,9 @@ pub struct CacheConfig {
     #[allow(dead_code)]
     pub max_entries: usize,
     pub enabled: bool,
+    /// Whether we're in summarize mode (-s flag)
+    /// When true, we can safely use cache at depth 0
+    pub summarize: bool,
 }
 
 impl Default for CacheConfig {
@@ -125,6 +128,7 @@ impl Default for CacheConfig {
         Self {
             max_entries: 100_000,
             enabled: true,
+            summarize: false,
         }
     }
 }

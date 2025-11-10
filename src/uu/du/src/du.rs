@@ -1160,6 +1160,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let cache_config = du_cached::CacheConfig {
                     enabled: env::var("DU_CACHE").map(|v| v != "0").unwrap_or(true),
                     max_entries: 100_000,
+                    summarize,
                 };
 
                 let stat = du_cached::du_parallel_cached(
