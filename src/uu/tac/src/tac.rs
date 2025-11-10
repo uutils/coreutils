@@ -12,7 +12,7 @@ use memmap2::Mmap;
 #[cfg(unix)]
 use nix::{
     errno::Errno,
-    fcntl::{fcntl, open, FcntlArg, OFlag},
+    fcntl::{FcntlArg, OFlag, fcntl, open},
     sys::stat::{FileStat, Mode},
 };
 #[cfg(unix)]
