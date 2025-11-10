@@ -15,7 +15,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-use std::collections::HashMap;
+use fnv::FnvHashMap as HashMap;
 use std::collections::HashSet;
 use std::env;
 use std::ffi::OsString;
@@ -966,7 +966,7 @@ fn rename_dir_fallback(
     };
 
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    let xattrs = fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| HashMap::new());
+    let xattrs = fsxattr::retrieve_xattrs(from, false).unwrap_or_else(|_| HashMap::default());
 
     // Use directory copying (with or without hardlink support)
     let result = copy_dir_contents(
