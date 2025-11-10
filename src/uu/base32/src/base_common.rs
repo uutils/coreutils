@@ -414,7 +414,7 @@ pub mod fast_encode {
                     Ok(count) => break count,
                     Err(err) if err.kind() == ErrorKind::Interrupted => continue,
                     Err(err) => {
-                        return Err(USimpleError::new(1, super::format_read_error(err.kind())))
+                        return Err(USimpleError::new(1, super::format_read_error(err.kind())));
                     }
                 }
             };
@@ -452,10 +452,8 @@ pub mod fast_encode {
         // Cleanup
         // Encode any remaining bytes (less than `encode_in_chunks_of_size`) exactly once so padding is only applied at EOF
         if !pending_buffer.is_empty() {
-            supports_fast_decode_and_encode.encode_to_vec_deque(
-                pending_buffer.make_contiguous(),
-                &mut encoded_buffer,
-            )?;
+            supports_fast_decode_and_encode
+                .encode_to_vec_deque(pending_buffer.make_contiguous(), &mut encoded_buffer)?;
         }
 
         // `is_cleanup` triggers special cleanup-only logic
@@ -575,7 +573,7 @@ pub mod fast_decode {
                     Ok(count) => break count,
                     Err(err) if err.kind() == ErrorKind::Interrupted => continue,
                     Err(err) => {
-                        return Err(USimpleError::new(1, super::format_read_error(err.kind())))
+                        return Err(USimpleError::new(1, super::format_read_error(err.kind())));
                     }
                 }
             };
