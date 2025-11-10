@@ -91,8 +91,7 @@ test
 ```
 ",
         ),
-        "{} does not contains the required text",
-        correct_path
+        "{correct_path} does not contains the required text"
     );
 }
 
@@ -116,7 +115,7 @@ fn uudoc_check_sums() {
         let output_path = pages
             .iter()
             .find(|one_line| one_line.contains(one_sum))
-            .expect(&format!("{one_sum} was not generated in {pages:?}"));
+            .unwrap();
         let (correct_path, content) = get_doc_file_from_output(output_path);
         let formatted = format!("```\n{one_sum} [OPTIONS]... [FILE]...\n```");
         assert!(

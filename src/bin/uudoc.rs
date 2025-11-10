@@ -291,13 +291,7 @@ fn main() -> io::Result<()> {
     }
 
     println!("Writing to utils");
-    let hashsum_cmd = utils
-        .iter()
-        .find(|n| *n.0 == "hashsum")
-        .unwrap()
-        .clone()
-        .1
-        .1;
+    let hashsum_cmd = (*utils.iter().find(|n| *n.0 == "hashsum").unwrap()).1.1;
     for (&name, (_, command)) in utils {
         let (utils_name, usage_name, command) = match name {
             "[" => {
@@ -428,14 +422,14 @@ impl MDWriter<'_, '_> {
                     };
                     for element in elements {
                         if let TextElement { ref value } = element {
-                            result.push_str(&value);
+                            result.push_str(value);
                         }
                         if let Placeable {
                             expression:
                                 Expression::Inline(InlineExpression::StringLiteral { ref value }),
                         } = element
                         {
-                            result.push_str(&value);
+                            result.push_str(value);
                         }
                     }
                     return Some(result);
