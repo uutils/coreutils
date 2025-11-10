@@ -1,4 +1,4 @@
-// spell-checker:ignore mpsc
+// spell-checker:ignore mpsc ahash systime mtimes
 //! High-performance cached disk usage calculator
 //!
 //! This module implements an mtime-based caching strategy based on

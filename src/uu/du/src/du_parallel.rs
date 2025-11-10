@@ -1,5 +1,5 @@
 // Parallel directory traversal implementation for du
-// spell-checker:ignore mpsc
+// spell-checker:ignore mpsc hashset
 
 use rayon::prelude::*;
 use std::collections::HashSet;
