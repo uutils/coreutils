@@ -65,7 +65,7 @@ impl TryFrom<PathBuf> for Teletype {
                 .parse::<u64>()
                 .map_err(|_| ())
                 .map(Teletype::Pts);
-        };
+        }
 
         // Considering this format: **/**/ttyS** then **/**/tty**
         let path = value.to_str().ok_or(())?;

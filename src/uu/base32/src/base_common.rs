@@ -171,18 +171,16 @@ pub fn get_input(config: &Config) -> UResult<Box<dyn ReadSeek>> {
     }
 }
 
-/// Determines if the input buffer ends with padding ('=') after trimming trailing whitespace.
+/// Determines if the input buffer contains any padding ('=') ignoring trailing whitespace.
 fn read_and_has_padding<R: Read>(input: &mut R) -> UResult<(bool, Vec<u8>)> {
     let mut buf = Vec::new();
     input
         .read_to_end(&mut buf)
         .map_err(|err| USimpleError::new(1, format_read_error(err.kind())))?;
 
-    // Reverse iterator and skip trailing whitespace without extra collections
-    let has_padding = buf
-        .iter()
-        .rfind(|&&byte| !byte.is_ascii_whitespace())
-        .is_some_and(|&byte| byte == b'=');
+    // Treat the stream as padded if any '=' exists (GNU coreutils continues decoding
+    // even when padding bytes are followed by more data).
+    let has_padding = buf.contains(&b'=');
 
     Ok((has_padding, buf))
 }
@@ -665,6 +663,8 @@ mod tests {
             ("aGVsbG8sIHdvcmxkIQ== \n", true),
             ("aGVsbG8sIHdvcmxkIQ=", true),
             ("aGVsbG8sIHdvcmxkIQ= ", true),
+            ("MTIzNA==MTIzNA", true),
+            ("MTIzNA==\nMTIzNA", true),
             ("aGVsbG8sIHdvcmxkIQ \n", false),
             ("aGVsbG8sIHdvcmxkIQ", false),
         ];

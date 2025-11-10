@@ -1142,14 +1142,6 @@ fn test_help_shows_correct_utility_name() {
         .stdout_contains("Usage: b2sum")
         .stdout_does_not_contain("Usage: hashsum");
 
-    // Test b3sum
-    scene
-        .ccmd("b3sum")
-        .arg("--help")
-        .succeeds()
-        .stdout_contains("Usage: b3sum")
-        .stdout_does_not_contain("Usage: hashsum");
-
     // Test that generic hashsum still shows the correct usage
     scene
         .ccmd("hashsum")

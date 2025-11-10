@@ -1125,7 +1125,7 @@ fn process_checksum_file(
             Err(CantOpenFile | FileIsDirectory) => res.failed_open_file += 1,
             Err(FileNotFound) if !opts.ignore_missing => res.failed_open_file += 1,
             _ => (),
-        };
+        }
     }
 
     // not a single line correctly formatted found
