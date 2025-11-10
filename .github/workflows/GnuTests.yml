@@ -29,7 +29,6 @@ env:
   TEST_ROOT_FULL_SUMMARY_FILE: 'gnu-root-full-result.json'
   TEST_SELINUX_FULL_SUMMARY_FILE: 'selinux-gnu-full-result.json'
   TEST_SELINUX_ROOT_FULL_SUMMARY_FILE: 'selinux-root-gnu-full-result.json'
-  REPO_GNU_REF: "v9.8"
 
 jobs:
   native:
@@ -42,6 +41,16 @@ jobs:
       with:
         path: 'uutils'
         persist-credentials: false
+    - name: Extract GNU version from build-gnu.sh
+      id: gnu-version
+      run: |
+        GNU_VERSION=$(grep '^release_tag_GNU=' uutils/util/build-gnu.sh | cut -d'"' -f2)
+        if [ -z "$GNU_VERSION" ]; then
+          echo "Error: Failed to extract GNU version from build-gnu.sh"
+          exit 1
+        fi
+        echo "REPO_GNU_REF=${GNU_VERSION}" >> $GITHUB_ENV
+        echo "Extracted GNU version: ${GNU_VERSION}"
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
@@ -171,6 +180,16 @@ jobs:
       with:
         path: 'uutils'
         persist-credentials: false
+    - name: Extract GNU version from build-gnu.sh
+      id: gnu-version-selinux
+      run: |
+        GNU_VERSION=$(grep '^release_tag_GNU=' uutils/util/build-gnu.sh | cut -d'"' -f2)
+        if [ -z "$GNU_VERSION" ]; then
+          echo "Error: Failed to extract GNU version from build-gnu.sh"
+          exit 1
+        fi
+        echo "REPO_GNU_REF=${GNU_VERSION}" >> $GITHUB_ENV
+        echo "Extracted GNU version: ${GNU_VERSION}"
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
