@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, ErrorKind, Read, Seek};
+use std::io::{self, ErrorKind, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::encoding::{
@@ -193,7 +193,7 @@ pub fn handle_input<R: Read + Seek>(input: &mut R, format: Format, config: Confi
 
     let supports_fast_decode_and_encode_ref = supports_fast_decode_and_encode.as_ref();
     let mut stdout_lock = io::stdout().lock();
-    if config.decode {
+    let result = if config.decode {
         fast_decode::fast_decode(
             read,
             &mut stdout_lock,
@@ -207,6 +207,14 @@ pub fn handle_input<R: Read + Seek>(input: &mut R, format: Format, config: Confi
             supports_fast_decode_and_encode_ref,
             config.wrap_cols,
         )
+    };
+
+    // Ensure any pending stdout buffer is flushed even if decoding failed; GNU basenc
+    // keeps already-decoded bytes visible before reporting the error.
+    match (result, stdout_lock.flush()) {
+        (res, Ok(())) => res,
+        (Ok(_), Err(err)) => Err(err.into()),
+        (Err(original), Err(_)) => Err(original),
     }
 }
 
@@ -531,6 +539,7 @@ pub mod fast_decode {
     fn write_to_output(decoded_buffer: &mut Vec<u8>, output: &mut dyn Write) -> io::Result<()> {
         // Write all data in `decoded_buffer` to `output`
         output.write_all(decoded_buffer.as_slice())?;
+        output.flush()?;
 
         decoded_buffer.clear();
 
@@ -545,6 +554,8 @@ pub mod fast_decode {
         decoded_buffer: &mut Vec<u8>,
         output: &mut dyn Write,
     ) -> UResult<()> {
+        // While at least one full decode block is buffered, keep draining
+        // it and never yield more than block_limit per chunk.
         while buffer.len() >= valid_multiple {
             let take = buffer.len().min(block_limit);
             let aligned_take = take - (take % valid_multiple);
@@ -583,16 +594,6 @@ pub mod fast_decode {
 
         assert!(decode_in_chunks_of_size > 0);
         assert!(valid_multiple > 0);
-
-        if !ignore_garbage {
-            // Match GNU basenc: fail fast when any non alphabet/non newline slips through without -i.
-            if input
-                .iter()
-                .any(|&byte| byte != b'\n' && byte != b'\r' && !alphabet_table[usize::from(byte)])
-            {
-                return Err(USimpleError::new(1, "error: invalid input".to_owned()));
-            }
-        }
 
         // Start of buffers
 
@@ -650,11 +651,22 @@ pub mod fast_decode {
         }
 
         if !buffer.is_empty() {
-            let padded = supports_fast_decode_and_encode.pad_remainder(&buffer);
-            let final_chunk = padded.as_deref().unwrap_or(&buffer);
+            let mut owned_chunk: Option<Vec<u8>> = None;
+            let mut had_invalid_tail = false;
+
+            if let Some(pad_result) = supports_fast_decode_and_encode.pad_remainder(&buffer) {
+                had_invalid_tail = pad_result.had_invalid_tail;
+                owned_chunk = Some(pad_result.chunk);
+            }
+
+            let final_chunk = owned_chunk.as_deref().unwrap_or(&buffer);
 
             supports_fast_decode_and_encode.decode_into_vec(final_chunk, &mut decoded_buffer)?;
             write_to_output(&mut decoded_buffer, output)?;
+
+            if had_invalid_tail {
+                return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+            }
         }
 
         Ok(())

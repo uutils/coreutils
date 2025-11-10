@@ -214,6 +214,11 @@ impl EncodingWrapper {
     }
 }
 
+pub struct PadResult {
+    pub chunk: Vec<u8>,
+    pub had_invalid_tail: bool,
+}
+
 pub trait SupportsFastDecodeAndEncode {
     /// Returns the list of characters used by this encoding
     fn alphabet(&self) -> &'static [u8];
@@ -255,7 +260,7 @@ pub trait SupportsFastDecodeAndEncode {
 
     /// Gives encoding-specific logic a chance to pad a trailing, non-empty remainder
     /// before the final decode attempt. The default implementation opts out.
-    fn pad_remainder(&self, _remainder: &[u8]) -> Option<Vec<u8>> {
+    fn pad_remainder(&self, _remainder: &[u8]) -> Option<PadResult> {
         None
     }
 }
@@ -561,21 +566,33 @@ impl SupportsFastDecodeAndEncode for Base32Wrapper {
         self.inner.valid_decoding_multiple()
     }
 
-    fn pad_remainder(&self, remainder: &[u8]) -> Option<Vec<u8>> {
+    fn pad_remainder(&self, remainder: &[u8]) -> Option<PadResult> {
         if remainder.is_empty() || remainder.contains(&b'=') {
             return None;
         }
 
         const VALID_REMAINDERS: [usize; 4] = [2, 4, 5, 7];
 
-        if !VALID_REMAINDERS.contains(&remainder.len()) {
+        let mut len = remainder.len();
+        let mut trimmed = false;
+
+        while len > 0 && !VALID_REMAINDERS.contains(&len) {
+            len -= 1;
+            trimmed = true;
+        }
+
+        if len == 0 {
             return None;
         }
 
-        let mut padded = remainder.to_vec();
-        let missing = self.valid_decoding_multiple() - remainder.len();
+        let mut padded = remainder[..len].to_vec();
+        let missing = self.valid_decoding_multiple() - padded.len();
         padded.extend(std::iter::repeat_n(b'=', missing));
-        Some(padded)
+
+        Some(PadResult {
+            chunk: padded,
+            had_invalid_tail: trimmed,
+        })
     }
 
     fn supports_partial_decode(&self) -> bool {
