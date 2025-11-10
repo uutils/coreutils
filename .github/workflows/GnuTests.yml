@@ -167,9 +167,6 @@ jobs:
     name: Run GNU tests (SELinux)
     runs-on: ubuntu-24.04
     steps:
-    - name: Install libselinux
-      shell: bash
-      run: sudo apt-get install -y libselinux1-dev
     #### Get the code, setup cache
     - name: Checkout code (uutils)
       uses: actions/checkout@v5
