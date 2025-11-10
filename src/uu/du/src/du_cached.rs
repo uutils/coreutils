@@ -374,7 +374,10 @@ pub fn du_parallel_cached(
         if !is_symlink {
             let disk_usage = result.blocks * 512;
             if std::env::var("DU_CACHE_DEBUG").is_ok() {
-                eprintln!("[CACHE STORE] size={} blocks={} disk_usage={}", result.size, result.blocks, disk_usage);
+                eprintln!(
+                    "[CACHE STORE] size={} blocks={} disk_usage={}",
+                    result.size, result.blocks, disk_usage
+                );
             }
             update_cache(result.path.clone(), disk_usage);
 
