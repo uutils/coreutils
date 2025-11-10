@@ -70,7 +70,7 @@ fi
 
 ###
 
-release_tag_GNU="v9.8"
+release_tag_GNU="v9.9"
 
 # check if the GNU coreutils has been cloned, if not print instructions
 # note: the ${path_GNU} might already exist, so we check for the .git directory
