@@ -654,7 +654,7 @@ mod tests {
         chunk: usize,
     }
 
-    impl<'a> Read for ChunkedReader<'a> {
+    impl Read for ChunkedReader<'_> {
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             if self.pos >= self.data.len() {
                 return Ok(0);
