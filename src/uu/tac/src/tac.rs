@@ -10,11 +10,17 @@ use clap::{Arg, ArgAction, Command};
 use memchr::memmem;
 use memmap2::Mmap;
 #[cfg(unix)]
+use nix::{
+    errno::Errno,
+    fcntl::{FcntlArg, OFlag, fcntl, open},
+    sys::stat::Mode,
+};
+#[cfg(unix)]
 use std::ffi::CString;
 use std::ffi::OsString;
 use std::io::{BufWriter, Read, Write, stdin, stdout};
 #[cfg(unix)]
-use std::mem::MaybeUninit;
+use std::os::fd::{AsFd, BorrowedFd};
 use std::{
     fs::{File, read},
     path::Path,
@@ -336,11 +342,11 @@ fn try_mmap_path(path: &Path) -> Option<Mmap> {
 
 #[cfg(unix)]
 fn stdin_closed_or_reopened_null() -> std::io::Result<bool> {
-    let flags = unsafe { libc::fcntl(libc::STDIN_FILENO, libc::F_GETFL) };
-    if flags == -1 {
-        return Ok(true);
+    let stdin_fd = unsafe { BorrowedFd::borrow_raw(libc::STDIN_FILENO) };
+    match fcntl(stdin_fd, FcntlArg::F_GETFL) {
+        Ok(flags) => stdin_is_reopened_dev_null(flags),
+        Err(_) => Ok(true),
     }
-    stdin_is_reopened_dev_null(flags)
 }
 
 #[cfg(unix)]
@@ -349,34 +355,22 @@ fn stdin_is_reopened_dev_null(flags: libc::c_int) -> std::io::Result<bool> {
         return Ok(false);
     }
 
-    let stdin_stat = fstat_fd(libc::STDIN_FILENO)?;
+    let stdin_stat = fstat_fd(unsafe { BorrowedFd::borrow_raw(libc::STDIN_FILENO) })?;
     let dev_null_stat = stat_dev_null()?;
 
     Ok(stdin_stat.st_dev == dev_null_stat.st_dev && stdin_stat.st_ino == dev_null_stat.st_ino)
 }
 
 #[cfg(unix)]
-fn fstat_fd(fd: libc::c_int) -> std::io::Result<libc::stat> {
-    let mut stat = MaybeUninit::<libc::stat>::uninit();
-    if unsafe { libc::fstat(fd, stat.as_mut_ptr()) } == -1 {
-        Err(std::io::Error::last_os_error())
-    } else {
-        Ok(unsafe { stat.assume_init() })
-    }
+fn fstat_fd(fd: BorrowedFd<'_>) -> std::io::Result<libc::stat> {
+    nix::sys::stat::fstat(fd).map_err(nix_error_to_io)
 }
 
 #[cfg(unix)]
 fn stat_dev_null() -> std::io::Result<libc::stat> {
     let dev_null = CString::new("/dev/null").expect("static literal without interior NUL");
-    let fd = unsafe { libc::open(dev_null.as_ptr(), libc::O_RDONLY) };
-    if fd == -1 {
-        return Err(std::io::Error::last_os_error());
-    }
-    let stat = fstat_fd(fd);
-    unsafe {
-        libc::close(fd);
-    }
-    stat
+    let fd = open(dev_null.as_c_str(), OFlag::O_RDONLY, Mode::empty()).map_err(nix_error_to_io)?;
+    fstat_fd(fd.as_fd())
 }
 
 fn ensure_stdin_open() -> std::io::Result<()> {
@@ -387,4 +381,9 @@ fn ensure_stdin_open() -> std::io::Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(unix)]
+fn nix_error_to_io(errno: Errno) -> std::io::Error {
+    std::io::Error::from_raw_os_error(errno as i32)
 }

@@ -29,6 +29,9 @@ thiserror = { workspace = true }
 fluent = { workspace = true }
 libc = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["fs"] }
+
 [[bin]]
 name = "tac"
 path = "src/main.rs"
