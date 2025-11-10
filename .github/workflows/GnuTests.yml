@@ -259,7 +259,7 @@ jobs:
         # Find and list all tests that require SELinux
         lima bash -c "cd ~/work/gnu/ && grep -l 'require_selinux_' -r tests/ > ~/work/uutils/selinux-tests.txt"
         # Since we don't have runcon buildable without libselinux, we move some tests.
-        cat tests/runcon/runcon-no-reorder >> ~/work/uutils/selinux-tests.txt
+        echo tests/runcon/runcon-no-reorder >> ~/work/uutils/selinux-tests.txt
         lima bash -c "cd ~/work/uutils/ && cat selinux-tests.txt"
 
         # Count the tests
