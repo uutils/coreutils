@@ -43,7 +43,7 @@ pub mod options {
     pub static FILE: &str = "file";
 }
 
-/// `Read` + `Seek` を必要とする場面が多いためのトレイトエイリアス。
+/// Trait alias for situations where both `Read` and `Seek` are frequently required.
 pub trait ReadSeek: Read + Seek {}
 
 impl<T: Read + Seek> ReadSeek for T {}
@@ -173,7 +173,7 @@ pub fn get_input(config: &Config) -> UResult<Box<dyn ReadSeek>> {
     }
 }
 
-/// 入力データに `=` が含まれているかを調べる（終端の空白も含めて走査する）。
+/// Check whether the input data contains `=` (scanning through trailing whitespace as well).
 #[cfg(test)]
 fn read_and_has_padding<R: Read>(input: &mut R) -> UResult<(bool, Vec<u8>)> {
     let mut buf = Vec::new();
