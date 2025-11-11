@@ -2,7 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-
 // spell-checker:ignore (paths) atim sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist fpath testdir testfile
 // spell-checker:ignore selfref ELOOP smallfile
 
@@ -1763,39 +1762,36 @@ fn test_du_inodes_total_text() {
     assert!(parts[0].parse::<u64>().is_ok());
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_du_summary_total_mega_duplicates() {
-    // TODO: Add checks for non-Linux platforms
     let ts = TestScenario::new_fresh(util_name!());
     let at = &ts.fixtures;
+    const BYTES_PER_MIB: usize = 1024 * 1024;
 
-    ts.cmd("dd")
-        .args(&["if=/dev/urandom", "of=file1", "bs=1M", "count=3"])
-        .succeeds();
+    at.fill_bytes("file1", 3 * BYTES_PER_MIB, true);
+
     at.mkdir("dir1");
-    ts.cmd("dd")
-        .args(&["if=/dev/urandom", "of=dir1/file1", "bs=1M", "count=5"])
-        .succeeds();
     at.mkdir("dir2");
-    ts.cmd("dd")
-        .args(&["if=/dev/urandom", "of=dir2/file1", "bs=1M", "count=7"])
+
+    at.fill_bytes("dir1/file1", 5 * BYTES_PER_MIB, true);
+    at.fill_bytes("dir2/file1", 7 * BYTES_PER_MIB, true);
+
+    let result = ts
+        .ucmd()
+        .args(&["--apparent-size", "-smc", "dir1", "."])
         .succeeds();
 
-    let result = ts.ucmd().args(&["-smc", "dir1", "."]).succeeds();
-
-    let result_reference = unwrap_or_return!(expected_result(&ts, &["-smc", "dir1", "."]));
-    if result_reference.succeeded() {
-        assert_eq!(result.stdout_str(), result_reference.stdout_str());
-        return;
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        let result_ref_res = expected_result(&ts, &["--apparent-size", "-smc", "dir1", "."]);
+        if let Ok(result_ref) = result_ref_res {
+            println!("{}", result_ref.stdout_str());
+            assert_eq!(result.stdout_str(), result_ref.stdout_str());
+            return;
+        }
     }
 
-    du_summary_total_mega_duplicates(result.stdout_str());
-}
-
-fn du_summary_total_mega_duplicates(s: &str) {
-    // TODO: Add checks for non-Linux platforms
-    assert_eq!(s, "5\tdir1\n10\t.\n15\ttotal\n");
+    assert_eq!(result.stdout_str(), "5\tdir1\n10\t.\n15\ttotal\n");
 }
 
 #[test]
