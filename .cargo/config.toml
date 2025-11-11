@@ -1,3 +1,4 @@
+# spell-checker:ignore pack-relative-relocs
 # Note: keep in mind that this file is completely ignored in several use-cases
 # like e.g. out-of-tree builds ( https://github.com/rust-lang/cargo/issues/2930 ).
 # For this reason this file should be avoided as much as possible when there are alternatives.
@@ -6,7 +7,7 @@
 linker = "x86_64-unknown-redox-gcc"
 [target.x86_64-unknown-linux-gnu]
 rustflags = [
-    "-C", "link-arg=-z",
+    #"-C", "link-arg=-z",
     "-C", "link-arg=pack-relative-relocs",
 ]
 [target.aarch64-unknown-linux-gnu]
