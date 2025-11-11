@@ -129,6 +129,7 @@ else
     quilt push -a || { echo "Failed to apply patches"; exit 1; }
 fi
 cd -
+
 # Pass the feature flags to make, which will pass them to cargo
 "${MAKE}" PROFILE="${UU_MAKE_PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
 touch g
