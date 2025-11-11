@@ -21,6 +21,7 @@ use nix::pty::OpenptyResult;
 #[cfg(unix)]
 use nix::sys;
 use pretty_assertions::assert_eq;
+use rand::Rng;
 #[cfg(unix)]
 use rlimit::setrlimit;
 use std::borrow::Cow;
@@ -1037,6 +1038,17 @@ impl AtPath {
         log_info("write(default)", self.plus_as_string(name));
         std::fs::write(self.plus(name), contents)
             .unwrap_or_else(|e| panic!("Couldn't write {name}: {e}"));
+    }
+
+    pub fn fill_bytes(&self, name: &str, size_bytes: usize, use_rng: bool) {
+        let mut f = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .append(false)
+            .open(self.plus(name))
+            .unwrap();
+        fill_file_rand(&mut f, size_bytes, use_rng).unwrap();
     }
 
     pub fn append(&self, name: impl AsRef<Path>, contents: &str) {
@@ -2875,6 +2887,44 @@ pub fn vec_of_size(n: usize) -> Vec<u8> {
     let result = vec![b'a'; n];
     assert_eq!(result.len(), n);
     result
+}
+
+pub fn fill_file_rand(
+    file: &mut std::fs::File,
+    size_bytes: usize,
+    use_rng: bool,
+) -> io::Result<()> {
+    const CHUNK_SIZE: usize = 64 * 1024; // 64 kiB
+    let mut writer = BufWriter::new(file);
+    let mut written: usize = 0;
+    let mut to_write_len: usize;
+    let mut tx_buf = [b'a'; CHUNK_SIZE];
+    let mut tx_slice: &mut [u8];
+
+    if use_rng {
+        let mut rng = rand::rng();
+
+        while written < size_bytes {
+            to_write_len = (size_bytes - written).min(CHUNK_SIZE);
+            tx_slice = &mut tx_buf[..to_write_len];
+
+            rng.fill(tx_slice);
+
+            writer.write_all(tx_slice)?;
+            written += to_write_len;
+        }
+    } else {
+        while written < size_bytes {
+            to_write_len = (size_bytes - written).min(CHUNK_SIZE);
+            tx_slice = &mut tx_buf[..to_write_len];
+
+            writer.write_all(tx_slice)?;
+            written += to_write_len;
+        }
+    }
+
+    writer.flush()?;
+    Ok(())
 }
 
 pub fn whoami() -> String {
