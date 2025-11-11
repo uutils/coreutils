@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, ErrorKind, Read};
+use std::io::{self, ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::encoding::{
@@ -479,15 +479,40 @@ pub mod fast_decode {
     };
 
     // Start of helper functions
-    fn alphabet_lookup(alphabet: &[u8]) -> [bool; 256] {
-        // Precompute O(1) membership checks so we can validate every byte before decoding.
-        let mut table = [false; 256];
+    fn alphabet_to_table(alphabet: &[u8], ignore_garbage: bool) -> [bool; 256] {
+        // If `ignore_garbage` is enabled, all characters outside the alphabet are ignored
+        // If it is not enabled, only '\n' and '\r' are ignored
+        if ignore_garbage {
+            // Note: "false" here
+            let mut table = [false; 256];
 
-        for &byte in alphabet {
-            table[usize::from(byte)] = true;
+            // Pass through no characters except those in the alphabet
+            for ue in alphabet {
+                let us = usize::from(*ue);
+
+                // Should not have been set yet
+                assert!(!table[us]);
+
+                table[us] = true;
+            }
+
+            table
+        } else {
+            // Note: "true" here
+            let mut table = [true; 256];
+
+            // Pass through all characters except '\n' and '\r'
+            for ue in [b'\n', b'\r'] {
+                let us = usize::from(ue);
+
+                // Should not have been set yet
+                assert!(table[us]);
+
+                table[us] = false;
+            }
+
+            table
         }
-
-        table
     }
 
     fn decode_in_chunks_to_buffer(
@@ -508,39 +533,6 @@ pub mod fast_decode {
 
         Ok(())
     }
-
-    fn flush_ready_chunks(
-        buffer: &mut Vec<u8>,
-        block_limit: usize,
-        valid_multiple: usize,
-        supports_fast_decode_and_encode: &dyn SupportsFastDecodeAndEncode,
-        decoded_buffer: &mut Vec<u8>,
-        output: &mut dyn Write,
-    ) -> UResult<()> {
-        // While at least one full decode block is buffered, keep draining
-        // it and never yield more than block_limit per chunk.
-        while buffer.len() >= valid_multiple {
-            let take = buffer.len().min(block_limit);
-            let aligned_take = take - (take % valid_multiple);
-
-            if aligned_take < valid_multiple {
-                break;
-            }
-
-            decode_in_chunks_to_buffer(
-                supports_fast_decode_and_encode,
-                &buffer[..aligned_take],
-                decoded_buffer,
-            )?;
-
-            write_to_output(decoded_buffer, output)?;
-
-            buffer.drain(..aligned_take);
-        }
-
-        Ok(())
-    }
-    // End of helper functions
 
     pub fn fast_decode(
         input: &mut dyn Read,

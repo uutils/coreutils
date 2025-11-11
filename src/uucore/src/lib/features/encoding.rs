@@ -21,26 +21,6 @@ pub struct Base64SimdWrapper {
 }
 
 impl Base64SimdWrapper {
-    fn decode_with_standard(input: &[u8], output: &mut Vec<u8>) -> Result<(), ()> {
-        match base64_simd::STANDARD.decode_to_vec(input) {
-            Ok(decoded_bytes) => {
-                output.extend_from_slice(&decoded_bytes);
-                Ok(())
-            }
-            Err(_) => Err(()),
-        }
-    }
-
-    fn decode_with_no_pad(input: &[u8], output: &mut Vec<u8>) -> Result<(), ()> {
-        match base64_simd::STANDARD_NO_PAD.decode_to_vec(input) {
-            Ok(decoded_bytes) => {
-                output.extend_from_slice(&decoded_bytes);
-                Ok(())
-            }
-            Err(_) => Err(()),
-        }
-    }
-
     pub fn new(
         valid_decoding_multiple: usize,
         unpadded_multiple: usize,
@@ -552,36 +532,11 @@ impl SupportsFastDecodeAndEncode for Base32Wrapper {
         self.inner.valid_decoding_multiple()
     }
 
-    fn pad_remainder(&self, remainder: &[u8]) -> Option<PadResult> {
-        if remainder.is_empty() || remainder.contains(&b'=') {
-            return None;
-        }
-
-        const VALID_REMAINDERS: [usize; 4] = [2, 4, 5, 7];
-
-        let mut len = remainder.len();
-        let mut trimmed = false;
-
-        while len > 0 && !VALID_REMAINDERS.contains(&len) {
-            len -= 1;
-            trimmed = true;
-        }
-
-        if len == 0 {
-            return None;
-        }
-
-        let mut padded = remainder[..len].to_vec();
-        let missing = self.valid_decoding_multiple() - padded.len();
-        padded.extend(std::iter::repeat_n(b'=', missing));
-
-        Some(PadResult {
-            chunk: padded,
-            had_invalid_tail: trimmed,
-        })
+    fn should_buffer_decoding(&self) -> bool {
+        true
     }
 
-    fn supports_partial_decode(&self) -> bool {
+    fn should_buffer_encoding(&self) -> bool {
         true
     }
 }
