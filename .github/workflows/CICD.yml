@@ -310,7 +310,7 @@ jobs:
         set -x
         DESTDIR=/tmp/ make PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n install
         # Check that utils are built with given profile
-        test -f target/release-fast/ln
+        ./target/release-fast/true
         # Check that the utils are present
         test -f /tmp/usr/local/bin/tty
         # Check that the manpage is not present
