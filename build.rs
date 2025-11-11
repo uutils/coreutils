@@ -85,7 +85,11 @@ pub fn main() {
                 phf_map.entry("sha256sum", map_value.clone());
                 phf_map.entry("sha384sum", map_value.clone());
                 phf_map.entry("sha512sum", map_value.clone());
+                phf_map.entry("sha3sum", map_value.clone());
+                phf_map.entry("shake128sum", map_value.clone());
+                phf_map.entry("shake256sum", map_value.clone());
                 phf_map.entry("b2sum", map_value.clone());
+                phf_map.entry("b3sum", map_value.clone());
             }
             _ => {
                 phf_map.entry(krate, map_value.clone());
