@@ -1,9 +1,11 @@
 // spell-checker:ignore mpsc ahash systime mtimes
-//! High-performance cached disk usage calculator
+//! High-performance cached disk usage calculator (opt-in feature)
 //!
-//! This module implements an mtime-based caching strategy based on
-//! another of my personal code scanning projects. Speedup on repeated scans by
-//! caching directory sizes and invalidating based on directory modification times.
+//! This module implements an mtime-based caching strategy that provides massive speedups
+//! on repeated scans by caching directory sizes and invalidating based on directory modification times.
+//!
+//! **Usage**: Set `DU_ENABLE_CACHE=1` environment variable to enable caching.
+//! Caching is disabled by default to ensure compatibility with all use cases.
 
 #![allow(clippy::non_std_lazy_statics)]
 

@@ -1123,9 +1123,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     }
                 }
 
-                // Use cached safe_du for performance
+                // Use cached safe_du for performance (opt-in via DU_ENABLE_CACHE=1)
                 let cache_config = du_cached::CacheConfig {
-                    enabled: env::var("DU_CACHE").map(|v| v != "0").unwrap_or(true),
+                    enabled: env::var("DU_ENABLE_CACHE")
+                        .map(|v| v == "1")
+                        .unwrap_or(false),
                     max_entries: 100_000,
                     summarize,
                 };
@@ -1163,10 +1165,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     seen_inodes.insert(inode);
                 }
 
-                // Use cached parallel processing for massive speedup on repeated scans
-                // Set DU_CACHE=0 to disable caching
+                // Use cached parallel processing for massive speedup on repeated scans (opt-in via DU_ENABLE_CACHE=1)
                 let cache_config = du_cached::CacheConfig {
-                    enabled: env::var("DU_CACHE").map(|v| v != "0").unwrap_or(true),
+                    enabled: env::var("DU_ENABLE_CACHE")
+                        .map(|v| v == "1")
+                        .unwrap_or(false),
                     max_entries: 100_000,
                     summarize,
                 };
