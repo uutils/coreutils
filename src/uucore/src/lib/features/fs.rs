@@ -147,6 +147,8 @@ impl FileInformation {
                 not(target_pointer_width = "64")
             )
         ))]
+        #[allow(clippy::useless_conversion)]
+        // st_nlink is u16 on macOS but u64 on Linux aarch64
         return self.0.st_nlink.into();
         #[cfg(target_os = "aix")]
         return self.0.st_nlink.try_into().unwrap();
@@ -166,6 +168,7 @@ impl FileInformation {
             target_os = "netbsd",
             not(target_pointer_width = "64")
         ))]
+        #[allow(clippy::useless_conversion)] // st_ino types vary by platform
         return self.0.st_ino.into();
     }
 }
