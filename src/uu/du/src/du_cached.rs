@@ -52,11 +52,36 @@ fn tuple_to_systime((secs, nanos): (u64, u32)) -> SystemTime {
 
 /// Get path to cache file
 fn get_cache_path() -> Option<PathBuf> {
-    dirs::cache_dir().map(|mut p| {
-        p.push("uutils");
-        p.push("du_cache.bin");
-        p
-    })
+    // Use XDG_CACHE_HOME on Linux/Unix, or fallback to $HOME/.cache
+    #[cfg(unix)]
+    {
+        if let Ok(cache_home) = std::env::var("XDG_CACHE_HOME") {
+            let mut p = PathBuf::from(cache_home);
+            p.push("uutils");
+            p.push("du_cache.bin");
+            return Some(p);
+        }
+    }
+
+    // Fallback: use home directory + .cache (Unix) or AppData\Local (Windows)
+    std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok()
+        .map(|home| {
+            let mut p = PathBuf::from(home);
+            #[cfg(unix)]
+            {
+                p.push(".cache");
+            }
+            #[cfg(windows)]
+            {
+                p.push("AppData");
+                p.push("Local");
+            }
+            p.push("uutils");
+            p.push("du_cache.bin");
+            p
+        })
 }
 
 /// Load cache from disk

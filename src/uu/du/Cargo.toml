@@ -36,7 +36,6 @@ parking_lot = "0.12"
 ahash = "0.8"
 lazy_static = "1.4"
 bincode = "1.3"
-dirs = "5.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true, features = [
