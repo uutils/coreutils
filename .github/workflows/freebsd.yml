@@ -205,7 +205,6 @@ jobs:
           fi
           # Test building with make
           if (test -z "\$FAULT"); then make || FAULT=1 ; fi
-
           # Clean to avoid to rsync back the files
           cargo clean
           if (test -n "\$FAULT"); then exit 1 ; fi
