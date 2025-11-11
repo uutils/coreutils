@@ -244,7 +244,7 @@ jobs:
     ### Build
     - name: Build binaries
       run: |
-        lima bash -c "cd ~/work/uutils/ && bash util/build-gnu.sh --release-build"
+        lima bash -c "cd ~/work/uutils/ && SELINUX_ENABLED=1 bash util/build-gnu.sh --release-build"
 
     ### Run tests as user
     - name: Generate SELinux tests list
