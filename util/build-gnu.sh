@@ -136,14 +136,11 @@ cd -
 for binary in $(${UU_BUILD_DIR}/coreutils --list); do
     (cd ${UU_BUILD_DIR} && ln -vf coreutils "$binary")
 done
-# The GNU tests rename this script before running, to avoid confusion with the make target
-ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall"
+ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
 touch g
 echo "stat with selinux support"
 ./target/debug/stat -c%C g || true
 rm g
-
-
 
 ##
 
