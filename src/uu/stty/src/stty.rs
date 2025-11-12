@@ -733,10 +733,10 @@ fn parse_save_format(s: &str) -> Result<Termios, Box<dyn UError>> {
         })
     }
 
-    let iflags_bits = parse_hex_u32(parts[0], s)? as u64;
-    let oflags_bits = parse_hex_u32(parts[1], s)? as u64;
-    let cflags_bits = parse_hex_u32(parts[2], s)? as u64;
-    let lflags_bits = parse_hex_u32(parts[3], s)? as u64;
+    let iflags_bits = parse_hex_u32(parts[0], s)?;
+    let oflags_bits = parse_hex_u32(parts[1], s)?;
+    let cflags_bits = parse_hex_u32(parts[2], s)?;
+    let lflags_bits = parse_hex_u32(parts[3], s)?;
 
     // Remaining segments are control_chars.
     let cc_hex = &parts[4..];
