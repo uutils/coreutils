@@ -136,7 +136,7 @@ cd -
 for binary in $(${UU_BUILD_DIR}/coreutils --list); do
     (cd ${UU_BUILD_DIR} && ln -vf coreutils "$binary")
 done
-ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
+echo -e '#!/bin/sh\nexec $(dirname $0)/install "$@"' > "${UU_BUILD_DIR}/ginstall" && chmod +x "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
 touch g
 echo "stat with selinux support"
 ./target/debug/stat -c%C g || true
