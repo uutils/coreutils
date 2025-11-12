@@ -12,10 +12,11 @@ use file_diff::diff;
 use filetime::{FileTime, set_file_times};
 #[cfg(feature = "selinux")]
 use selinux::SecurityContext;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Debug;
 use std::fs::File;
 use std::fs::{self, metadata};
+use std::io;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process;
 use thiserror::Error;
@@ -37,9 +38,14 @@ use uucore::translate;
 use uucore::{format_usage, show, show_error, show_if_err};
 
 #[cfg(unix)]
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
-#[cfg(unix)]
-use std::os::unix::prelude::OsStrExt;
+use std::os::{
+    fd::{AsFd, BorrowedFd},
+    unix::{
+        fs::{FileTypeExt, MetadataExt},
+        io::OwnedFd,
+        prelude::OsStrExt,
+    },
+};
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
@@ -471,7 +477,7 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                 // target directory. All created ancestor directories will have
                 // the default mode. Hence it is safe to use fs::create_dir_all
                 // and then only modify the target's dir mode.
-                if let Err(e) = fs::create_dir_all(path_to_create.as_path())
+                if let Err(e) = create_dir_all_for_install(path_to_create.as_path())
                     .map_err_context(|| translate!("install-error-create-dir-failed", "path" => path_to_create.as_path().quote()))
                 {
                     show!(e);
@@ -515,6 +521,83 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
         // this return.
         Ok(())
     }
+}
+
+#[cfg(unix)]
+fn create_dir_all_for_install(path: &Path) -> io::Result<()> {
+    use nix::errno::Errno;
+    use nix::fcntl::{OFlag, open, openat};
+    use nix::sys::stat::{Mode, mkdirat};
+    use std::path::Component;
+
+    fn errno_to_io(err: Errno) -> io::Error {
+        io::Error::from_raw_os_error(err as i32)
+    }
+
+    let mut components = path.components().peekable();
+    let mut current_fd: Option<OwnedFd> = None;
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn dir_open_flags() -> OFlag {
+        OFlag::O_PATH | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    fn dir_open_flags() -> OFlag {
+        OFlag::O_DIRECTORY | OFlag::O_RDONLY | OFlag::O_CLOEXEC
+    }
+
+    let dir_open_flags = dir_open_flags();
+
+    if path.is_absolute() {
+        let fd = open(Path::new("/"), dir_open_flags, Mode::empty()).map_err(errno_to_io)?;
+        current_fd = Some(fd);
+        while let Some(Component::RootDir) = components.peek() {
+            components.next();
+        }
+    }
+
+    for component in components {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if let Some(fd) = current_fd.take() {
+                    let parent_fd =
+                        openat(fd.as_fd(), OsStr::new(".."), dir_open_flags, Mode::empty())
+                            .map_err(errno_to_io)?;
+                    current_fd = Some(parent_fd);
+                }
+            }
+            Component::Normal(name) => {
+                let mode = Mode::from_bits_truncate(0o777);
+
+                let base_fd = current_fd
+                    .as_ref()
+                    .map(|fd| fd.as_fd())
+                    .unwrap_or_else(|| unsafe { BorrowedFd::borrow_raw(uucore::libc::AT_FDCWD) });
+
+                if let Err(err) = mkdirat(base_fd, name, mode) {
+                    if err == Errno::ENOSYS {
+                        return fs::create_dir_all(path);
+                    }
+                    if err != Errno::EEXIST && err != Errno::EACCES && err != Errno::EPERM {
+                        return Err(errno_to_io(err));
+                    }
+                }
+
+                let open_result = openat(base_fd, name, dir_open_flags, Mode::empty());
+                let new_fd = open_result.map_err(errno_to_io)?;
+                current_fd = Some(new_fd);
+            }
+            Component::RootDir | Component::Prefix(_) => {}
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn create_dir_all_for_install(path: &Path) -> io::Result<()> {
+    fs::create_dir_all(path)
 }
 
 /// Test if the path is a new file path that can be
