@@ -43,8 +43,8 @@ impl Base64SimdWrapper {
     }
 
     pub fn new(
-        use_padding: bool,
         valid_decoding_multiple: usize,
+        use_padding: bool,
         unpadded_multiple: usize,
         alphabet: &'static [u8],
     ) -> Self {
