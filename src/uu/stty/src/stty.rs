@@ -211,7 +211,7 @@ impl<'a> Options<'a> {
             },
             settings: matches
                 .get_many::<String>(options::SETTINGS)
-                .map(|v| v.map(|s| s.as_ref()).collect()),
+                .map(|v| v.map(|s| s.as_str()).collect()),
         })
     }
 }
@@ -276,7 +276,7 @@ fn stty(opts: &Options) -> UResult<()> {
         if let Some((first, rest)) = args.split_first() {
             if let Ok(termios) = parse_save_format(first) {
                 restored_from_save = Some(termios);
-                settings_iter = Box::new(rest.iter().map(|s| s.as_str()));
+                settings_iter = Box::new(rest.iter().copied());
             } else {
                 settings_iter = Box::new(args.iter().map(|s| s.as_str()));
             }
@@ -448,8 +448,8 @@ fn stty(opts: &Options) -> UResult<()> {
     Ok(())
 }
 
-fn missing_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
-    Err::<T, Box<dyn UError>>(USimpleError::new(
+fn missing_arg<T>(arg: &str) -> Result<T, USimpleError> {
+    Err::<T, USimpleError>(USimpleError::new(
         1,
         translate!(
             "stty-error-missing-argument",
@@ -458,8 +458,8 @@ fn missing_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
     ))
 }
 
-fn invalid_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
-    Err::<T, Box<dyn UError>>(USimpleError::new(
+fn invalid_arg<T>(arg: &str) -> Result<T, USimpleError> {
+    Err::<T, USimpleError>(USimpleError::new(
         1,
         translate!(
             "stty-error-invalid-argument",
@@ -468,8 +468,8 @@ fn invalid_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
     ))
 }
 
-fn invalid_integer_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
-    Err::<T, Box<dyn UError>>(USimpleError::new(
+fn invalid_integer_arg<T>(arg: &str) -> Result<T, USimpleError> {
+    Err::<T, USimpleError>(USimpleError::new(
         1,
         translate!(
             "stty-error-invalid-integer-argument",
@@ -719,7 +719,7 @@ fn print_in_save_format(termios: &Termios) {
 
 //// GNU stty -g compatibility: restore Termios from the colon-separated hexadecimal representation
 /// produced by print_in_save_format.
-fn parse_save_format(s: &str) -> Result<Termios, Box<dyn UError>> {
+fn parse_save_format(s: &str) -> Result<Termios, USimpleError> {
     // Expect four flag values + a variable-length sequence of cc_t values (at least one).
     let parts: Vec<&str> = s.split(':').collect();
     if parts.len() < 5 {
@@ -729,20 +729,19 @@ fn parse_save_format(s: &str) -> Result<Termios, Box<dyn UError>> {
                 "stty-error-invalid-argument",
                 "arg" => s.to_string()
             ),
-        )
-        .into());
+        ));
     }
 
     // Parse a hex string into u32 (shared helper).
-    fn parse_hex_u32(x: &str, original: &str) -> Result<u32, Box<dyn UError>> {
+    fn parse_hex_u32(x: &str, original: &str) -> Result<u32, USimpleError> {
         u32::from_str_radix(x, 16).map_err(|_| {
-            Box::new(USimpleError::new(
+            USimpleError::new(
                 1,
                 translate!(
                     "stty-error-invalid-argument",
                     "arg" => original.to_string()
                 ),
-            )) as Box<dyn UError>
+            )
         })
     }
 
@@ -756,17 +755,13 @@ fn parse_save_format(s: &str) -> Result<Termios, Box<dyn UError>> {
 
     // Obtain the original termios and overwrite specific fields on top of it to preserve
     // platform-dependent fields.
-    let mut termios = tcgetattr(std::io::stdout().as_fd()).map_err(|_| {
-        Box::new(USimpleError::new(
-            1,
-            translate!("stty-error-io"),
-        )) as Box<dyn UError>
-    })?;
+    let mut termios = tcgetattr(std::io::stdout().as_fd())
+        .map_err(|_| USimpleError::new(1, translate!("stty-error-io")))?;
 
-    termios.input_flags = InputFlags::from_bits_truncate(iflags_bits);
-    termios.output_flags = OutputFlags::from_bits_truncate(oflags_bits);
-    termios.control_flags = ControlFlags::from_bits_truncate(cflags_bits);
-    termios.local_flags = LocalFlags::from_bits_truncate(lflags_bits);
+    termios.input_flags = InputFlags::from_bits_truncate(iflags_bits.into());
+    termios.output_flags = OutputFlags::from_bits_truncate(oflags_bits.into());
+    termios.control_flags = ControlFlags::from_bits_truncate(cflags_bits.into());
+    termios.local_flags = LocalFlags::from_bits_truncate(lflags_bits.into());
 
     // The length of control_chars depends on the runtime environment; fill only up to the
     // length of the local array.
@@ -776,13 +771,13 @@ fn parse_save_format(s: &str) -> Result<Termios, Box<dyn UError>> {
             break;
         }
         let val = u32::from_str_radix(hex, 16).map_err(|_| {
-            Box::new(USimpleError::new(
+            USimpleError::new(
                 1,
                 translate!(
                     "stty-error-invalid-argument",
                     "arg" => s.to_string()
                 ),
-            )) as Box<dyn UError>
+            )
         })?;
         termios.control_chars[i] = (val & 0xff) as u8;
     }
