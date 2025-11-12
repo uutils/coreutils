@@ -317,8 +317,6 @@ endif
 
 all: build
 
-use_default := 1
-
 build-pkgs:
 ifneq (${MULTICALL}, y)
 ifdef BUILD_SPEC_FEATURE
