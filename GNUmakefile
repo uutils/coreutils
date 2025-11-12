@@ -6,7 +6,6 @@ MULTICALL       ?= n
 COMPLETIONS     ?= y
 MANPAGES        ?= y
 LOCALES         ?= y
-INSTALL         ?= install
 ifneq (,$(filter install, $(MAKECMDGOALS)))
 override PROFILE:=release
 endif
@@ -23,6 +22,7 @@ ifeq ($(PROFILE),release)
 endif
 
 # Binaries
+INSTALL ?= $(shell command -v install)
 CARGO  ?= cargo
 CARGOFLAGS ?=
 RUSTC_ARCH ?= # should be empty except for cross-build, not --target $(shell rustc --print host-tuple)
@@ -71,7 +71,7 @@ OS ?= $(shell uname -s)
 # Windows does not allow symlink by default.
 # Allow to override LN for AppArmor.
 ifeq ($(OS),Windows_NT)
-	LN ?= ln -f
+	LN ?= $(shell command -v ln) -f
 endif
 LN ?= ln -sf
 
