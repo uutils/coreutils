@@ -75,19 +75,6 @@ ifeq ($(OS),Windows_NT)
 endif
 LN ?= ln -sf
 
-ifdef SELINUX_ENABLED
-	override SELINUX_ENABLED := 0
-# Now check if we should enable it (only on non-Windows)
-	ifneq ($(OS),Windows_NT)
-		ifeq ($(shell if [ -x /sbin/selinuxenabled ] && /sbin/selinuxenabled 2>/dev/null; then echo 0; else echo 1; fi),0)
-			override SELINUX_ENABLED := 1
-$(info /sbin/selinuxenabled successful)
-	    else
-$(info SELINUX_ENABLED=1 but /sbin/selinuxenabled failed)
-		endif
-	endif
-endif
-
 # Possible programs
 PROGS       := \
 	arch \
@@ -208,8 +195,8 @@ HASHSUM_PROGS := \
 
 $(info Detected OS = $(OS))
 
-# Don't build the SELinux programs on macOS (Darwin) and FreeBSD
-ifeq ($(filter $(OS),Darwin FreeBSD),$(OS))
+# Build the SELinux programs only on Linux
+ifeq ($(filter $(OS),Linux),)
 	SELINUX_PROGS :=
 endif
 
@@ -330,8 +317,6 @@ endif
 
 all: build
 
-use_default := 1
-
 build-pkgs:
 ifneq (${MULTICALL}, y)
 ifdef BUILD_SPEC_FEATURE
@@ -349,7 +334,7 @@ build: build-coreutils build-pkgs locales
 $(foreach test,$(UTILS),$(eval $(call TEST_BUSYBOX,$(test))))
 
 test:
-	${CARGO} test ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
+	${CARGO} test ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" $(PROFILE_CMD) --no-default-features $(TEST_NO_FAIL_FAST)
 
 nextest:
 	${CARGO} nextest run ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
