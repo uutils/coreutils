@@ -412,12 +412,12 @@ fn stty(opts: &Options) -> UResult<()> {
                     // combination setting
                     } else if let Some(combo) = string_to_combo(arg) {
                         valid_args.append(&mut combo_to_flags(combo));
-                        } else {
-                            return missing_arg(arg);
-                        }
+                    } else {
+                        return missing_arg(arg);
                     }
                 }
             }
+        }
 
         // TODO: Figure out the right error message for when tcgetattr fails
         let mut termios = if let Some(restored) = restored_from_save {
