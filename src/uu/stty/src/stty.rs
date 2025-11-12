@@ -213,7 +213,7 @@ impl<'a> Options<'a> {
             },
             settings: matches
                 .get_many::<String>(options::SETTINGS)
-                .map(|v| v.map(|s| s.as_ref()).collect()),
+                .map(|v| v.map(String::as_str).collect()),
         })
     }
 }
@@ -430,7 +430,13 @@ fn stty(opts: &Options) -> UResult<()> {
                     // combination setting
                     } else if let Some(combo) = string_to_combo(arg) {
                         valid_args.append(&mut combo_to_flags(combo));
+                    } else if arg.starts_with('-') {
+                        // For unknown options beginning with '-', treat them as invalid arguments.
+                        return invalid_arg(arg);
                     } else {
+                        // For bare words that are not recognized as flags, baud rates,
+                        // control chars, or combinations, treat them as invalid arguments
+                        // to match project test expectations.
                         return invalid_arg(arg);
                     }
                 }
@@ -465,27 +471,21 @@ fn stty(opts: &Options) -> UResult<()> {
 
 // The GNU implementation adds the --help message when the args are incorrectly formatted
 fn missing_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
-    Err(UUsageError::new(
+    Err(USimpleError::new(
         1,
-        translate!(
-            "stty-error-missing-argument",
-            "arg" => *arg
-        ),
+        translate!("stty-error-missing-argument", "arg" => arg.to_string()),
     ))
 }
 
 fn invalid_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
-    Err(UUsageError::new(
+    Err(USimpleError::new(
         1,
-        translate!(
-            "stty-error-invalid-argument",
-            "arg" => *arg
-        ),
+        translate!("stty-error-invalid-argument", "arg" => arg.to_string()),
     ))
 }
 
 fn invalid_integer_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
-    Err(UUsageError::new(
+    Err(USimpleError::new(
         1,
         translate!(
             "stty-error-invalid-integer-argument",
@@ -842,26 +842,16 @@ fn parse_save_format(s: &str, termios: &mut Termios) -> Result<(), Box<dyn UErro
     if parts.len() != expected_parts {
         return Err(UUsageError::new(
             1,
-            translate!(
-                "stty-error-invalid-argument",
-                "arg" => s.to_string()
-            ),
-        )
-        .into());
+            translate!("stty-error-invalid-argument", "arg" => s.to_string()),
+        ));
     }
 
     // Parse a hex string into tcflag_t (shared helper) to match the underlying bitflag type.
-    fn parse_hex_tcflag(
-        x: &str,
-        original: &str,
-    ) -> Result<nix::libc::tcflag_t, Box<dyn UError>> {
+    fn parse_hex_tcflag(x: &str, original: &str) -> Result<nix::libc::tcflag_t, Box<dyn UError>> {
         nix::libc::tcflag_t::from_str_radix(x, 16).map_err(|_| {
             UUsageError::new(
                 1,
-                translate!(
-                    "stty-error-invalid-argument",
-                    "arg" => original.to_string()
-                ),
+                translate!("stty-error-invalid-argument", "arg" => original.to_string()),
             )
         })
     }
@@ -879,14 +869,17 @@ fn parse_save_format(s: &str, termios: &mut Termios) -> Result<(), Box<dyn UErro
     termios.control_flags = ControlFlags::from_bits_truncate(cflags_bits);
     termios.local_flags = LocalFlags::from_bits_truncate(lflags_bits);
 
+    // The length of control_chars depends on the runtime environment; fill only up to the
+    // length of the local array.
+    let max_cc = termios.control_chars.len();
     for (i, &hex) in cc_hex.iter().enumerate() {
+        if i >= max_cc {
+            break;
+        }
         let val = u32::from_str_radix(hex, 16).map_err(|_| {
             UUsageError::new(
                 1,
-                translate!(
-                    "stty-error-invalid-argument",
-                    "arg" => s.to_string()
-                ),
+                translate!("stty-error-invalid-argument", "arg" => s.to_string()),
             )
         })?;
         if val > u8::MAX as u32 {
