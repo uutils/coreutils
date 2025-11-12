@@ -244,6 +244,29 @@ fn test_install_mode_symbolic() {
 }
 
 #[test]
+fn test_install_mode_symbolic_ignore_umask() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "target_dir";
+    let file = "source_file";
+    let mode_arg = "--mode=+w";
+
+    at.touch(file);
+    at.mkdir(dir);
+    ucmd.arg(file)
+        .arg(dir)
+        .arg(mode_arg)
+        .umask(0o022)
+        .succeeds()
+        .no_stderr();
+
+    let dest_file = &format!("{dir}/{file}");
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(dest_file));
+    let permissions = at.metadata(dest_file).permissions();
+    assert_eq!(0o100_222_u32, PermissionsExt::mode(&permissions));
+}
+
+#[test]
 fn test_install_mode_failing() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "target_dir";
