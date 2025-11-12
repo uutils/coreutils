@@ -74,7 +74,7 @@ jobs:
         git submodule update --init --recursive --depth 1
       working-directory: gnu
 
-    #### Build environment setup without libselinux
+    #### Build environment setup
     - name: Install dependencies
       shell: bash
       run: |
