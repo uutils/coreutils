@@ -139,7 +139,7 @@ done
 echo -e '#!/bin/sh\nexec $(dirname $0)/install "$@"' > "${UU_BUILD_DIR}/ginstall" && chmod +x "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
 touch g
 echo "stat with selinux support"
-./target/debug/stat -c%C g || true
+${UU_BUILD_DIR}/stat -c%C g || true
 rm g
 
 ##
