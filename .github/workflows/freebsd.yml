@@ -160,7 +160,6 @@ jobs:
           WORKSPACE="${WORKSPACE_PARENT}/${REPO_NAME}"
           #
           pw adduser -n ${TEST_USER} -d /root/ -g wheel -c "Coreutils user to build" -w random
-          # chown -R ${TEST_USER}:wheel /root/ "${WORKSPACE_PARENT}"/
           chown -R ${TEST_USER}:wheel /root/ "${WORKSPACE_PARENT}"/
           whoami
           #
