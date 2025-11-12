@@ -267,9 +267,25 @@ fn stty(opts: &Options) -> UResult<()> {
     let mut set_arg = SetArg::TCSADRAIN;
     let mut valid_args: Vec<ArgOptions> = Vec::new();
 
+    // GNU compatible: If the first argument is a -g save format (hexadecimal colon-separated),
+    // restore termios from it before applying the remaining arguments.
+    let mut restored_from_save: Option<Termios> = None;
+    let mut settings_iter: Box<dyn Iterator<Item = &str>> = Box::new([].iter().copied());
+
     if let Some(args) = &opts.settings {
-        let mut args_iter = args.iter();
-        while let Some(&arg) = args_iter.next() {
+        if let Some((first, rest)) = args.split_first() {
+            if let Ok(termios) = parse_save_format(first) {
+                restored_from_save = Some(termios);
+                settings_iter = Box::new(rest.iter().map(|s| s.as_str()));
+            } else {
+                settings_iter = Box::new(args.iter().map(|s| s.as_str()));
+            }
+        }
+    }
+
+    if restored_from_save.is_some() || opts.settings.is_some() {
+        let mut args_iter = settings_iter;
+        while let Some(arg) = args_iter.next() {
             match arg {
                 "ispeed" | "ospeed" => match args_iter.next() {
                     Some(speed) => {
@@ -404,7 +420,11 @@ fn stty(opts: &Options) -> UResult<()> {
         }
 
         // TODO: Figure out the right error message for when tcgetattr fails
-        let mut termios = tcgetattr(opts.file.as_fd())?;
+        let mut termios = if let Some(restored) = restored_from_save {
+            restored
+        } else {
+            tcgetattr(opts.file.as_fd())?
+        };
 
         // iterate over valid_args, match on the arg type, do the matching apply function
         for arg in &valid_args {
@@ -695,6 +715,79 @@ fn print_in_save_format(termios: &Termios) {
         print!(":{cc:x}");
     }
     println!();
+}
+
+//// GNU stty -g compatibility: restore Termios from the colon-separated hexadecimal representation
+/// produced by print_in_save_format.
+fn parse_save_format(s: &str) -> Result<Termios, Box<dyn UError>> {
+    // Expect four flag values + a variable-length sequence of cc_t values (at least one).
+    let parts: Vec<&str> = s.split(':').collect();
+    if parts.len() < 5 {
+        return Err(USimpleError::new(
+            1,
+            translate!(
+                "stty-error-invalid-argument",
+                "arg" => s.to_string()
+            ),
+        )
+        .into());
+    }
+
+    // Parse a hex string into u32 (shared helper).
+    fn parse_hex_u32(x: &str, original: &str) -> Result<u32, Box<dyn UError>> {
+        u32::from_str_radix(x, 16).map_err(|_| {
+            Box::new(USimpleError::new(
+                1,
+                translate!(
+                    "stty-error-invalid-argument",
+                    "arg" => original.to_string()
+                ),
+            )) as Box<dyn UError>
+        })
+    }
+
+    let iflags_bits = parse_hex_u32(parts[0], s)?;
+    let oflags_bits = parse_hex_u32(parts[1], s)?;
+    let cflags_bits = parse_hex_u32(parts[2], s)?;
+    let lflags_bits = parse_hex_u32(parts[3], s)?;
+
+    // Remaining segments are control_chars.
+    let cc_hex = &parts[4..];
+
+    // Obtain the original termios and overwrite specific fields on top of it to preserve
+    // platform-dependent fields.
+    let mut termios = tcgetattr(std::io::stdout().as_fd()).map_err(|_| {
+        Box::new(USimpleError::new(
+            1,
+            translate!("stty-error-io"),
+        )) as Box<dyn UError>
+    })?;
+
+    termios.input_flags = InputFlags::from_bits_truncate(iflags_bits);
+    termios.output_flags = OutputFlags::from_bits_truncate(oflags_bits);
+    termios.control_flags = ControlFlags::from_bits_truncate(cflags_bits);
+    termios.local_flags = LocalFlags::from_bits_truncate(lflags_bits);
+
+    // The length of control_chars depends on the runtime environment; fill only up to the
+    // length of the local array.
+    let max_cc = termios.control_chars.len();
+    for (i, &hex) in cc_hex.iter().enumerate() {
+        if i >= max_cc {
+            break;
+        }
+        let val = u32::from_str_radix(hex, 16).map_err(|_| {
+            Box::new(USimpleError::new(
+                1,
+                translate!(
+                    "stty-error-invalid-argument",
+                    "arg" => s.to_string()
+                ),
+            )) as Box<dyn UError>
+        })?;
+        termios.control_chars[i] = (val & 0xff) as u8;
+    }
+
+    Ok(termios)
 }
 
 fn print_settings(termios: &Termios, opts: &Options) -> nix::Result<()> {
