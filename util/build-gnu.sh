@@ -139,7 +139,7 @@ ln ${UU_BUILD_DIR}/install ${UU_BUILD_DIR}/ginstall
 chcon -t bin_t "${UU_BUILD_DIR}/coreutils" || :
 for binary in $(${UU_BUILD_DIR}/coreutils --list); do
     (cd ${UU_BUILD_DIR} && cp -v --remove-destination coreutils "$binary")
-    restorecon "${UU_BUILD_DIR}/${binary}" 2>/dev/null || true
+    chcon -t bin_t "${UU_BUILD_DIR}/${binary}" || :
 done
 touch g
 echo "stat with selinux support"
