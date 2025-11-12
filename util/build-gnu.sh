@@ -134,7 +134,7 @@ cd -
 "${MAKE}" MULTICALL=y PROFILE="${UU_MAKE_PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
 # copy binaries
 for binary in $(${UU_BUILD_DIR}/coreutils --list); do
-    (cd ${UU_BUILD_DIR} && cp -vf coreutils "$binary")
+    (cd ${UU_BUILD_DIR} && cp -v --remove-destination coreutils "$binary")
 done
 echo -e '#!/bin/sh\nexec $(dirname $0)/install "$@"' > "${UU_BUILD_DIR}/ginstall" && chmod +x "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
 touch g
