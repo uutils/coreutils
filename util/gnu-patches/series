@@ -11,3 +11,4 @@ tests_tsort.patch
 tests_du_move_dir_while_traversing.patch
 test_mkdir_restorecon.patch
 error_msg_uniq.diff
+runcon-no-reorder.patch
