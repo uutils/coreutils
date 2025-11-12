@@ -746,10 +746,10 @@ fn parse_save_format(s: &str) -> Result<Termios, Box<dyn UError>> {
     let mut termios = tcgetattr(std::io::stdout().as_fd())
         .map_err(|_| USimpleError::new(1, translate!("stty-error-io")))?;
 
-    termios.input_flags = InputFlags::from_bits_truncate(iflags_bits);
-    termios.output_flags = OutputFlags::from_bits_truncate(oflags_bits);
-    termios.control_flags = ControlFlags::from_bits_truncate(cflags_bits);
-    termios.local_flags = LocalFlags::from_bits_truncate(lflags_bits);
+    termios.input_flags = InputFlags::from_bits_truncate(iflags_bits.into());
+    termios.output_flags = OutputFlags::from_bits_truncate(oflags_bits.into());
+    termios.control_flags = ControlFlags::from_bits_truncate(cflags_bits.into());
+    termios.local_flags = LocalFlags::from_bits_truncate(lflags_bits.into());
 
     // The length of control_chars depends on the runtime environment; fill only up to the
     // length of the local array.
