@@ -577,28 +577,19 @@ fn fold_file<T: Read, W: Write>(
             break;
         }
 
-        if let Ok(line_str) = std::str::from_utf8(&line) {
-            let mut ctx = FoldContext {
-                spaces,
-                width,
-                mode,
-                writer,
-                output: &mut output,
-                col_count: &mut col_count,
-                last_space: &mut last_space,
-            };
-            process_utf8_line(line_str, &mut ctx)?;
-        } else {
-            let mut ctx = FoldContext {
-                spaces,
-                width,
-                mode,
-                writer,
-                output: &mut output,
-                col_count: &mut col_count,
-                last_space: &mut last_space,
-            };
-            process_non_utf8_line(&line, &mut ctx)?;
+        let mut ctx = FoldContext {
+            spaces,
+            width,
+            mode,
+            writer,
+            output: &mut output,
+            col_count: &mut col_count,
+            last_space: &mut last_space,
+        };
+
+        match std::str::from_utf8(&line) {
+            Ok(s) => process_utf8_line(s, &mut ctx)?,
+            Err(_) => process_non_utf8_line(&line, &mut ctx)?,
         }
 
         line.clear();
