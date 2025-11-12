@@ -25,7 +25,7 @@ endif
 # Binaries
 CARGO  ?= cargo
 CARGOFLAGS ?=
-RUSTC_ARCH ?= # should be empty except for cross-build, not --target $(shell rustc -vV | sed -n 's/host: //p')
+RUSTC_ARCH ?= # should be empty except for cross-build, not --target $(shell rustc --print host-tuple)
 
 # Install directories
 PREFIX ?= /usr/local
@@ -199,25 +199,17 @@ SELINUX_PROGS := \
 
 HASHSUM_PROGS := \
 	b2sum \
-	b3sum \
 	md5sum \
 	sha1sum \
 	sha224sum \
 	sha256sum \
-	sha3-224sum \
-	sha3-256sum \
-	sha3-384sum \
-	sha3-512sum \
 	sha384sum \
-	sha3sum \
-	sha512sum \
-	shake128sum \
-	shake256sum
+	sha512sum
 
 $(info Detected OS = $(OS))
 
-# Don't build the SELinux programs on macOS (Darwin) and FreeBSD
-ifeq ($(filter $(OS),Darwin FreeBSD),$(OS))
+# Build the SELinux programs only on Linux
+ifeq ($(filter $(OS),Linux),)
 	SELINUX_PROGS :=
 endif
 
@@ -357,7 +349,7 @@ build: build-coreutils build-pkgs locales
 $(foreach test,$(UTILS),$(eval $(call TEST_BUSYBOX,$(test))))
 
 test:
-	${CARGO} test ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
+	${CARGO} test ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" $(PROFILE_CMD) --no-default-features $(TEST_NO_FAIL_FAST)
 
 nextest:
 	${CARGO} nextest run ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
@@ -469,6 +461,7 @@ install-locales:
 		fi; \
 	done
 else
+locales:
 install-locales:
 endif
 
