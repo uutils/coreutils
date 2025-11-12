@@ -132,7 +132,8 @@ cd -
 
 # Pass the feature flags to make, which will pass them to cargo
 # The GNU tests rename install to ginstall to avoid confusion with the make target
-"${MAKE}" UTILS=install PROG_PREFIX=g PROFILE="${UU_MAKE_PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}" 
+"${MAKE}" UTILS=install PROFILE="${UU_MAKE_PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}" 
+cp ${UU_BUILD_DIR}/install ${UU_BUILD_DIR}/ginstall
 "${MAKE}" SKIP_UTILS=install MULTICALL=y PROFILE="${UU_MAKE_PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
 # copy binaries
 for binary in $(${UU_BUILD_DIR}/coreutils --list); do
