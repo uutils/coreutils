@@ -78,9 +78,9 @@ jobs:
     - name: Install dependencies
       shell: bash
       run: |
-        ## Install dependencies
+        ## Install dependencies (without libselinux)
         sudo apt-get update
-        sudo apt-get install -y autoconf autopoint bison texinfo gperf gcc g++ gdb python3-pyinotify jq valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev libselinux1-dev attr quilt
+        sudo apt-get install -y autoconf autopoint bison texinfo gperf gcc g++ gdb python3-pyinotify jq valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev attr quilt
     - name: Add various locales
       shell: bash
       run: |
