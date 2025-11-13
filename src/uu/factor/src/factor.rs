@@ -289,9 +289,9 @@ fn pollard_p_minus_1(n: &BigUint) -> Option<BigUint> {
     None
 }
 
-//// Improved Pollard-rho (Brent variant with batched gcd).
-//// Not equivalent to GNU factor, but aims for better convergence and performance
-//// than a naive implementation.
+/// Improved Pollard-rho (Brent variant with batched gcd).
+/// Not equivalent to GNU factor, but aims for better convergence and performance
+/// than a naive implementation.
 fn pollard_rho(composite: &BigUint) -> Option<BigUint> {
     // NOTE:
     //  - This implementation is inspired by the approach in GNU factor but simplified.
@@ -318,7 +318,7 @@ fn pollard_rho(composite: &BigUint) -> Option<BigUint> {
             .wrapping_add(1442695040888963407);
     }
 
-    let bits = composite.bits() as u64;
+    let bits = composite.bits();
 
     // Search parameters: choose bounds based on bit length.
     // Avoid overly large limits; when exhausted, treat as failure to find a factor.
@@ -402,16 +402,16 @@ fn pollard_rho(composite: &BigUint) -> Option<BigUint> {
 
 /// Recursively factor n and append factors (primes or unfactored composites) to `factors`.
 /// Returns true if full factorization succeeded, false otherwise.
-fn gcd_biguint(a: &BigUint, b: &BigUint) -> BigUint {
+fn gcd_biguint(lhs: &BigUint, rhs: &BigUint) -> BigUint {
     // Standard Euclidean algorithm using owned BigUint values to avoid lifetime issues.
-    let mut x = a.clone();
-    let mut y = b.clone();
-    while !y.is_zero() {
-        let r = &x % &y;
-        x = y;
-        y = r;
+    let mut dividend = lhs.clone();
+    let mut divisor = rhs.clone();
+    while !divisor.is_zero() {
+        let remainder = &dividend % &divisor;
+        dividend = divisor;
+        divisor = remainder;
     }
-    x
+    dividend
 }
 
 fn factor_biguint_recursive(n: &BigUint, factors: &mut Vec<BigUint>) -> bool {
