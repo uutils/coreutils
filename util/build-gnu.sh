@@ -136,12 +136,12 @@ cd -
 ln ${UU_BUILD_DIR}/install ${UU_BUILD_DIR}/ginstall
 "${MAKE}" SKIP_UTILS=install MULTICALL=y PROFILE="${UU_MAKE_PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
 
-[ ${SELINUX_ENABLED} = 1 ] && chcon -t bin_t "${UU_BUILD_DIR}/coreutils"
+[ ${SELINUX_ENABLED} = 1 ] && chcon -t unconfined_t "${UU_BUILD_DIR}/coreutils"
 for binary in $(${UU_BUILD_DIR}/coreutils --list); do
-    (cd ${UU_BUILD_DIR} && cp -v --remove-destination coreutils "$binary")
-    [ ${SELINUX_ENABLED} = 1 ] && chcon -t bin_t "${UU_BUILD_DIR}/${binary}"
+    (cd ${UU_BUILD_DIR} && ln -vf coreutils "$binary")
 done
-[ ${SELINUX_ENABLED} = 1 ] && echo "stat with selinux support" && touch g && ${UU_BUILD_DIR}/stat -c%C g && rm g
+# min test for SELinux
+[ ${SELINUX_ENABLED} = 1 ] && "${UU_MAKE_PROFILE}"/touch g && "${UU_MAKE_PROFILE}"/stat -c%C g && "${UU_MAKE_PROFILE}"/rm g
 
 ##
 
