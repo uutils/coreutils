@@ -350,6 +350,7 @@ notify = { version = "=8.2.0", features = ["macos_kqueue"] }
 num-bigint = "0.4.4"
 num-prime = "0.4.4"
 num-traits = "0.2.19"
+num-integer = "0.1"
 number_prefix = "0.4"
 onig = { version = "~6.5.1", default-features = false }
 parse_datetime = "0.13.0"
