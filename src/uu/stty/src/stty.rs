@@ -412,7 +412,13 @@ fn stty(opts: &Options) -> UResult<()> {
                     // combination setting
                     } else if let Some(combo) = string_to_combo(arg) {
                         valid_args.append(&mut combo_to_flags(combo));
+                    } else if arg.starts_with('-') {
+                        // For unknown options beginning with '-', follow GNU stty:
+                        // treat them as invalid options, not as missing arguments.
+                        return invalid_arg(arg);
                     } else {
+                        // For bare words that are not recognized as flags, baud rates,
+                        // control chars, or combinations, treat them as missing arguments.
                         return missing_arg(arg);
                     }
                 }
