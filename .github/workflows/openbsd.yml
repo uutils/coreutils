@@ -147,6 +147,8 @@ jobs:
           useradd -m -G wheel ${TEST_USER}
           chown -R ${TEST_USER}:wheel /root/ "${WORKSPACE_PARENT}"/
           whoami
+          # Add fake host for reverse DNS lookup (needed for hostname test)
+          printf "10.0.2.15\topenbsd.my.domain openbsd\n" >> /etc/hosts
           #
           # Further work needs to be done in a sudo as we are changing users
           sudo -i -u ${TEST_USER} sh << EOF

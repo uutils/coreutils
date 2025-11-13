@@ -8,21 +8,11 @@
 
 set -e
 
-# Use GNU version for make, nproc, readlink and sed on *BSD
-case "$OSTYPE" in
-    *bsd*)
-        MAKE="gmake"
-        NPROC="gnproc"
-        READLINK="greadlink"
-        SED="gsed"
-        ;;
-    *)
-        MAKE="make"
-        NPROC="nproc"
-        READLINK="readlink"
-        SED="sed"
-        ;;
-esac
+# Use system's GNU version for make, nproc, readlink and sed on *BSD
+MAKE=$(command -v gmake||command -v make)
+NPROC=$(command -v gnproc||command -v nproc)
+READLINK=$(command -v greadlink||command -v readlink)
+SED=$(command -v gsed||command -v sed)
 
 ME="${0}"
 ME_dir="$(dirname -- "$("${READLINK}" -fm -- "${ME}")")"
@@ -49,24 +39,8 @@ path_GNU="$("${READLINK}" -fm -- "${path_GNU:-${path_UUTILS}/../gnu}")"
 
 ###
 
-# On MacOS there is no system /usr/bin/timeout
-# and trying to add it to /usr/bin (with symlink of copy binary) will fail unless system integrity protection is disabled (not ideal)
-# ref: https://support.apple.com/en-us/102149
-# On MacOS the Homebrew coreutils could be installed and then "sudo ln -s /opt/homebrew/bin/timeout /usr/local/bin/timeout"
-# Set to /usr/local/bin/timeout instead if /usr/bin/timeout is not found
-SYSTEM_TIMEOUT="timeout"
-if [ -x /usr/bin/timeout ]; then
-    SYSTEM_TIMEOUT="/usr/bin/timeout"
-elif [ -x /usr/local/bin/timeout ]; then
-    SYSTEM_TIMEOUT="/usr/local/bin/timeout"
-fi
-
-SYSTEM_YES="yes"
-if [ -x /usr/bin/yes ]; then
-    SYSTEM_YES="/usr/bin/yes"
-elif [ -x /usr/local/bin/yes ]; then
-    SYSTEM_YES="/usr/local/bin/yes"
-fi
+SYSTEM_TIMEOUT=$(command -v timeout)
+SYSTEM_YES=$(command -v yes)
 
 ###
 
@@ -132,10 +106,8 @@ cd -
 
 # Pass the feature flags to make, which will pass them to cargo
 "${MAKE}" PROFILE="${UU_MAKE_PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
-touch g
-echo "stat with selinux support"
-./target/debug/stat -c%C g || true
-rm g
+# min test for SELinux
+[ ${SELINUX_ENABLED} = 1 ] && touch g && "${UU_MAKE_PROFILE}"/stat -c%C g && rm g
 
 cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
 # Create *sum binaries
