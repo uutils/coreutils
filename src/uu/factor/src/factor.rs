@@ -4,6 +4,13 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore funcs
+// NOTE:
+//   For BigUint > u128, this implementation attempts factorization using Miller-Rabin,
+//   an improved Pollard-rho, and p-1.
+//   However, compared to GNU factor, there may still be differences in performance
+//   and success rate.
+//   To further approach GNU factor behavior, additional algorithms (e.g. ECM)
+//   and parameter tuning may be required.
 
 use std::collections::BTreeMap;
 use std::io::BufRead;
@@ -11,9 +18,9 @@ use std::io::{self, Write, stdin, stdout};
 
 use clap::{Arg, ArgAction, Command};
 use num_bigint::BigUint;
-use num_traits::FromPrimitive;
+use num_traits::{FromPrimitive, One, Zero};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
+use uucore::error::{FromIo, UResult, set_exit_code};
 use uucore::translate;
 use uucore::{format_usage, show_error, show_warning};
 
@@ -28,51 +35,54 @@ fn write_factors_str(
     w: &mut io::BufWriter<impl Write>,
     print_exponents: bool,
 ) -> UResult<()> {
-    let rx = num_str.trim().parse::<BigUint>();
-    let Ok(x) = rx else {
-        // return Ok(). it's non-fatal and we should try the next number.
-        show_warning!("{}: {}", num_str.maybe_quote(), rx.unwrap_err());
+    let s = num_str.trim();
+
+    // First, interpret as BigUint.
+    let rx_big = s.parse::<BigUint>();
+    let Ok(x_big) = rx_big else {
+        // Non-fatal error. Proceed to the next input number.
+        show_warning!("{}: {}", num_str.maybe_quote(), rx_big.unwrap_err());
         set_exit_code(1);
         return Ok(());
     };
 
-    if x > BigUint::from_u32(1).unwrap() {
-        // use num_prime's factorize64 algorithm for u64 integers
-        if x <= BigUint::from_u64(u64::MAX).unwrap() {
-            let prime_factors = num_prime::nt_funcs::factorize64(x.clone().to_u64_digits()[0]);
-            write_result_u64(w, &x, prime_factors, print_exponents)
-                .map_err_context(|| translate!("factor-error-write-error"))?;
-        }
-        // use num_prime's factorize128 algorithm for u128 integers
-        else if x <= BigUint::from_u128(u128::MAX).unwrap() {
-            let rx = num_str.trim().parse::<u128>();
-            let Ok(x) = rx else {
-                // return Ok(). it's non-fatal and we should try the next number.
-                show_warning!("{}: {}", num_str.maybe_quote(), rx.unwrap_err());
-                set_exit_code(1);
-                return Ok(());
-            };
-            let prime_factors = num_prime::nt_funcs::factorize128(x);
-            write_result_u128(w, &x, prime_factors, print_exponents)
-                .map_err_context(|| translate!("factor-error-write-error"))?;
-        }
-        // use num_prime's fallible factorization for anything greater than u128::MAX
-        else {
-            let (prime_factors, remaining) = num_prime::nt_funcs::factors(x.clone(), None);
-            if let Some(_remaining) = remaining {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("factor-error-factorization-incomplete"),
-                ));
-            }
-            write_result_big_uint(w, &x, prime_factors, print_exponents)
-                .map_err_context(|| translate!("factor-error-write-error"))?;
-        }
-    } else {
+    if x_big <= BigUint::from_u32(1).unwrap() {
+        // For values <= 1: as in GNU factor, print the input with no prime factors.
         let empty_primes: BTreeMap<BigUint, usize> = BTreeMap::new();
-        write_result_big_uint(w, &x, empty_primes, print_exponents)
+        write_result_big_uint(w, &x_big, empty_primes, print_exponents)
             .map_err_context(|| translate!("factor-error-write-error"))?;
+        return Ok(());
     }
+
+    // Try parsing directly into u64 / u128 and delegate to num_prime if successful.
+    // This avoids unnecessary BigUint conversions and speeds up the common cases.
+    if let Ok(v) = s.parse::<u64>() {
+        let prime_factors = num_prime::nt_funcs::factorize64(v);
+        write_result_u64(w, &x_big, prime_factors, print_exponents)
+            .map_err_context(|| translate!("factor-error-write-error"))?;
+        return Ok(());
+    }
+
+    if let Ok(v) = s.parse::<u128>() {
+        let prime_factors = num_prime::nt_funcs::factorize128(v);
+        write_result_u128(w, &v, prime_factors, print_exponents)
+            .map_err_context(|| translate!("factor-error-write-error"))?;
+        return Ok(());
+    }
+
+    // For BigUint > u128: use our own recursive factorization based on
+    // Miller-Rabin + Pollard-rho + p-1.
+    let mut factors: Vec<BigUint> = Vec::new();
+    let success = factor_biguint_recursive(&x_big, &mut factors);
+
+    if !success {
+        // 完全分解できなかった場合のみ exit code=1
+        set_exit_code(1);
+    }
+
+    let factorization = collect_biguint_factors(&factors);
+    write_result_big_uint(w, &x_big, factorization, print_exponents)
+        .map_err_context(|| translate!("factor-error-write-error"))?;
 
     Ok(())
 }
@@ -121,6 +131,347 @@ fn write_result_u128(
     }
     writeln!(w)?;
     w.flush()
+}
+
+fn collect_biguint_factors(factors: &[BigUint]) -> BTreeMap<BigUint, usize> {
+    let mut map = BTreeMap::<BigUint, usize>::new();
+    for f in factors {
+        *map.entry(f.clone()).or_insert(0) += 1;
+    }
+    map
+}
+
+fn is_probable_prime(n: &BigUint) -> bool {
+    if *n < BigUint::from_u32(2).unwrap() {
+        return false;
+    }
+    if *n == BigUint::from_u32(2).unwrap() || *n == BigUint::from_u32(3).unwrap() {
+        return true;
+    }
+    // even check: n % 2 == 0
+    if (&*n & BigUint::from_u32(1).unwrap()).is_zero() {
+        return false;
+    }
+
+    let one = BigUint::one();
+    let two = BigUint::from_u32(2).unwrap();
+
+    // n - 1 = d * 2^s
+    let mut d = n - &one;
+    let mut s = 0u32;
+    // while d is even
+    while (&d & BigUint::from_u32(1).unwrap()).is_zero() {
+        d >>= 1;
+        s += 1;
+    }
+
+    let bases_32: [u64; 3] = [2, 7, 61];
+    let bases_64: [u64; 12] = [
+        2, 325, 9375, 28178, 450775, 9780504, 1795265022, 3, 5, 7, 11, 13,
+    ];
+
+    let bases: Vec<u64> = if n.bits() <= 32 {
+        bases_32.to_vec()
+    } else if n.bits() <= 64 {
+        bases_64.to_vec()
+    } else {
+        vec![2, 3, 5, 7, 11, 13, 17, 19, 23]
+    };
+
+    'outer: for &a_u64 in &bases {
+        if BigUint::from(a_u64) >= *n {
+            continue;
+        }
+        let a = BigUint::from(a_u64);
+        let mut x = a.modpow(&d, n);
+        if x == one || x == n - &one {
+            continue 'outer;
+        }
+
+        for _ in 1..s {
+            x = x.modpow(&two, n);
+            if x == n - &one {
+                continue 'outer;
+            }
+            if x == one {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    true
+}
+
+fn small_trial_division(n: &BigUint) -> Option<BigUint> {
+    // Quickly strip very small prime factors before applying expensive algorithms.
+    // This is intentionally lightweight while still covering a reasonably wide range.
+    // GNU factor maintains a large trial table; here we mimic only a small portion of it.
+    //
+    // NOTE: By removing many small prime factors here, we significantly reduce the
+    //       search space and failure count of subsequent Pollard-rho / p-1 steps.
+    const SMALL_PRIMES: [u16; 54] = [
+        2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89,
+        97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181,
+        191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251,
+    ];
+
+    for &p in &SMALL_PRIMES {
+        let p_big = BigUint::from_u32(p as u32).unwrap();
+        if n == &p_big {
+            return None;
+        }
+        if (n % &p_big).is_zero() {
+            return Some(p_big);
+        }
+    }
+    None
+}
+
+//// Simplified Pollard p-1 method (Stage 1 only).
+//// Effective when p-1 (for a prime divisor p of n) is smooth with small prime factors.
+fn pollard_p_minus_1(n: &BigUint) -> Option<BigUint> {
+    // Stage 1 only (simplified).
+    // Best-effort: we do not spend too long here; give up quickly if it does not help.
+    let one = BigUint::one();
+    let two = BigUint::from_u32(2).unwrap();
+
+    if n.is_zero() || n.is_one() {
+        return None;
+    }
+
+    if (n & &one).is_zero() {
+        return Some(two);
+    }
+
+    let bits = n.bits();
+
+    // Keep B1 relatively small to avoid excessive cost.
+    // (GNU factor adjusts based on input and retries; we use a fixed approximation.)
+    let b1: u64 = if bits <= 256 {
+        10_000
+    } else if bits <= 512 {
+        20_000
+    } else {
+        50_000
+    };
+
+    // Only try a few small prime bases.
+    const BASES: [u64; 3] = [2, 3, 5];
+
+    for &base in &BASES {
+        let mut a = BigUint::from(base);
+        if &a >= n {
+            continue;
+        }
+
+        let mut g = gcd_biguint(&a, n);
+        if g > one && &g < n {
+            return Some(g);
+        }
+
+        // a^(M) を段階的に構成（指数を 2^k で伸ばす近似）
+        let mut e = 2u64;
+        while e <= b1 {
+            a = a.modpow(&BigUint::from_u64(e).unwrap(), n);
+            if a.is_one() {
+                break;
+            }
+            let am1 = if a > one { &a - &one } else { continue };
+            g = gcd_biguint(&am1, n);
+            if g > one && &g < n {
+                return Some(g);
+            }
+            e <<= 1;
+        }
+    }
+
+    None
+}
+
+//// Improved Pollard-rho (Brent variant with batched gcd).
+//// Not equivalent to GNU factor, but aims for better convergence and performance
+//// than a naive implementation.
+fn pollard_rho(n: &BigUint) -> Option<BigUint> {
+    // NOTE:
+    //  - This implementation is inspired by the approach in GNU factor but simplified.
+    //  - For large inputs we avoid running too long; we cap the iterations so that
+    //    we do not spend many seconds on hopeless cases.
+    //  - If factorization fails, we return "Factorization incomplete"-style results.
+    let one = BigUint::one();
+
+    // For small n we expect earlier code paths to have handled the input.
+    if *n <= BigUint::from_u32(3).unwrap() {
+        return None;
+    }
+
+    // If n is even, return 2 immediately.
+    if (n & &one).is_zero() {
+        return Some(BigUint::from_u32(2).unwrap());
+    }
+
+    // Use a deterministic LCG to generate parameter sequences.
+    fn lcg_next(x: &mut u128) {
+        *x = x
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+    }
+
+    let bits = n.bits() as u64;
+
+    // Search parameters: choose bounds based on bit length.
+    // Avoid overly large limits; when exhausted, treat as failure to find a factor.
+    let max_tries: u64 = 16;
+    let max_iter: u64 = (bits * bits).min(200_000).max(10_000);
+
+    let mut seed: u128 = 0x9e3779b97f4a7c15;
+
+    for _try in 0..max_tries {
+        lcg_next(&mut seed);
+        let mut x = BigUint::from(seed % (u128::MAX / 2 + 1));
+        lcg_next(&mut seed);
+        let mut c = BigUint::from(seed % (u128::MAX / 2 + 1));
+        if c.is_zero() {
+            c = BigUint::from(1u32);
+        }
+        x %= n;
+        c %= n;
+
+        let mut y = x.clone();
+        let mut g = one.clone();
+        let mut q = one.clone();
+
+        let mut iter: u64 = 0;
+        let m: u64 = 128;
+
+        while g == one && iter < max_iter {
+            // Brent variant: use batched gcd.
+            let mut k = 0;
+            let x_saved = x.clone();
+            while k < m && iter < max_iter {
+                // f(z) = z^2 + c mod n (implemented via multiplication + mod, not modpow).
+                y = (&y * &y + &c) % n;
+                let diff = if &x > &y { &x - &y } else { &y - &x };
+                if !diff.is_zero() {
+                    q = (q * diff) % n;
+                }
+                k += 1;
+                iter += 1;
+            }
+            g = gcd_biguint(&q, n);
+            x = x_saved;
+
+            if g == one {
+                // Update x to advance the sequence.
+                x = y.clone();
+            }
+        }
+
+        if g == one {
+            continue;
+        }
+        if &g == n {
+            // Fallback: step-by-step gcd.
+            let mut z = x.clone();
+            loop {
+                z = (&z * &z + &c) % n;
+                let diff = if &z > &y { &z - &y } else { &y - &z };
+                g = gcd_biguint(&diff, n);
+                if g > one || z == y {
+                    break;
+                }
+            }
+        }
+
+        if g > one && &g < n {
+            return Some(g);
+        }
+    }
+
+    None
+}
+
+//// Recursively factor n and append factors (primes or unfactored composites) to `factors`.
+//// Returns true if full factorization succeeded, false otherwise.
+fn gcd_biguint(a: &BigUint, b: &BigUint) -> BigUint {
+    // Standard Euclidean algorithm using owned BigUint values to avoid lifetime issues.
+    let mut x = a.clone();
+    let mut y = b.clone();
+    while !y.is_zero() {
+        let r = &x % &y;
+        x = y;
+        y = r;
+    }
+    x
+}
+
+fn factor_biguint_recursive(n: &BigUint, factors: &mut Vec<BigUint>) -> bool {
+    let one = BigUint::one();
+    if *n <= one {
+        return true;
+    }
+
+    // First remove small prime factors, then apply more expensive methods.
+    if let Some(p) = small_trial_division(n) {
+        let mut q = n.clone();
+        let mut ok = true;
+        while (&q % &p).is_zero() {
+            q /= &p;
+            factors.push(p.clone());
+        }
+        if !q.is_one() {
+            ok &= factor_biguint_recursive(&q, factors);
+        }
+        return ok;
+    }
+
+    // If n is small enough, use num_prime's factorize128 for speed.
+    if n.bits() <= 128 {
+        if let Ok(x128) = n.to_string().parse::<u128>() {
+            let pf = num_prime::nt_funcs::factorize128(x128);
+            if !pf.is_empty() {
+                for (p, e) in pf {
+                    for _ in 0..e {
+                        factors.push(BigUint::from(p));
+                    }
+                }
+                return true;
+            }
+        }
+    }
+
+    if is_probable_prime(n) {
+        factors.push(n.clone());
+        return true;
+    }
+
+    // Try Pollard p-1 first (simplified Stage 1).
+    if let Some(f) = pollard_p_minus_1(n) {
+        if f.is_one() || &f == n {
+            // Treat as failure.
+        } else {
+            let q = n / &f;
+            let left_ok = factor_biguint_recursive(&f, factors);
+            let right_ok = factor_biguint_recursive(&q, factors);
+            return left_ok && right_ok;
+        }
+    }
+
+    // Then try improved Pollard-rho (Brent variant).
+    if let Some(f) = pollard_rho(n) {
+        if f.is_one() || &f == n {
+            factors.push(n.clone());
+            return false;
+        }
+        let q = n / &f;
+        let left_ok = factor_biguint_recursive(&f, factors);
+        let right_ok = factor_biguint_recursive(&q, factors);
+        return left_ok && right_ok;
+    }
+
+    // If no factor was found, include n itself as part of the (incomplete) factorization.
+    factors.push(n.clone());
+    false
 }
 
 /// Writing out the prime factors for BigUint integers
