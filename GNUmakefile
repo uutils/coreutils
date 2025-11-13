@@ -345,7 +345,7 @@ test_toybox:
 toybox-src:
 	if [ ! -e "$(TOYBOX_SRC)" ] ; then \
 		mkdir -p "$(TOYBOX_ROOT)" ; \
-		wget "https://github.com/landley/toybox/archive/refs/tags/$(TOYBOX_VER).tar.gz" -P "$(TOYBOX_ROOT)" ; \
+		curl "https://github.com/landley/toybox/archive/refs/tags/$(TOYBOX_VER).tar.gz" -o "$(TOYBOX_ROOT)/$(TOYBOX_VER).tar.gz" ; \
 		tar -C "$(TOYBOX_ROOT)" -xf "$(TOYBOX_ROOT)/$(TOYBOX_VER).tar.gz" ; \
 		sed -i -e "s|TESTDIR=\".*\"|TESTDIR=\"$(BUILDDIR)\"|g" $(TOYBOX_SRC)/scripts/test.sh; \
 		sed -i -e "s/ || exit 1//g" $(TOYBOX_SRC)/scripts/test.sh; \
@@ -354,7 +354,7 @@ toybox-src:
 busybox-src:
 	if [ ! -e "$(BUSYBOX_SRC)" ] ; then \
 		mkdir -p "$(BUSYBOX_ROOT)" ; \
-		wget "https://busybox.net/downloads/busybox-$(BUSYBOX_VER).tar.bz2" -P "$(BUSYBOX_ROOT)" ; \
+		curl "https://busybox.net/downloads/busybox-$(BUSYBOX_VER).tar.bz2" -o "$(BUSYBOX_ROOT)/$(BUSYBOX_VER).tar.bz2" ; \
 		tar -C "$(BUSYBOX_ROOT)" -xf "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.bz2" ; \
 	fi ;
 
