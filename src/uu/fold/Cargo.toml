@@ -21,6 +21,7 @@ path = "src/fold.rs"
 clap = { workspace = true }
 uucore = { workspace = true }
 fluent = { workspace = true }
+unicode-width = { workspace = true }
 
 [dev-dependencies]
 divan = { workspace = true }
