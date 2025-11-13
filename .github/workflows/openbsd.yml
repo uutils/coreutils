@@ -152,6 +152,8 @@ jobs:
           sudo -i -u ${TEST_USER} sh << EOF
           set -e
           whoami
+          # Increase max open files (512 by default)
+          ulimit -n 1024
           # Rust is installed from packages, no need for rustup
           # Set up PATH for cargo
           export PATH="/usr/local/bin:$PATH"
