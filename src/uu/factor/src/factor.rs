@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore funcs
+// spell-checker:ignore funcs biguint modpow unfactored
 // NOTE:
 //   For BigUint > u128, this implementation attempts factorization using Miller-Rabin,
 //   an improved Pollard-rho, and p-1.
