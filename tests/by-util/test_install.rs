@@ -22,6 +22,9 @@ use uutests::new_ucmd;
 use uutests::util::{TestScenario, is_ci, run_ucmd_as_root};
 use uutests::util_name;
 
+#[cfg(unix)]
+use libc::{S_ISGID, S_ISUID, S_ISVTX};
+
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
@@ -2419,4 +2422,271 @@ fn test_install_non_utf8_paths() {
     at.touch(source_file);
 
     ucmd.arg("-D").arg(source_file).arg(&target_path).succeeds();
+}
+
+#[test]
+fn test_install_special_mode_bits_setuid() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let source = "source_file";
+    let dest = "dest_file";
+
+    at.touch(source);
+
+    scene
+        .ucmd()
+        .arg("-m")
+        .arg("4755")
+        .arg(source)
+        .arg(dest)
+        .succeeds();
+
+    assert!(at.file_exists(dest));
+    let permissions = at.metadata(dest).permissions();
+    let mode = PermissionsExt::mode(&permissions);
+    // Check that setuid bit is set
+    #[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "android"))]
+    assert_eq!(
+        mode & (S_ISUID as u32),
+        S_ISUID as u32,
+        "setuid bit should be set"
+    );
+    #[cfg(not(any(target_os = "freebsd", target_os = "macos", target_os = "android")))]
+    assert_eq!(mode & S_ISUID, S_ISUID, "setuid bit should be set");
+    // Check that regular permissions are correct
+    assert_eq!(mode & 0o0777, 0o0755, "regular permissions should be 755");
+}
+
+#[test]
+fn test_install_special_mode_bits_setgid() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let source = "source_file";
+    let dest = "dest_file";
+
+    at.touch(source);
+
+    scene
+        .ucmd()
+        .arg("-m")
+        .arg("2755")
+        .arg(source)
+        .arg(dest)
+        .succeeds();
+
+    assert!(at.file_exists(dest));
+    let permissions = at.metadata(dest).permissions();
+    let mode = PermissionsExt::mode(&permissions);
+    // Check that setgid bit is set
+    #[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "android"))]
+    assert_eq!(
+        mode & (S_ISGID as u32),
+        S_ISGID as u32,
+        "setgid bit should be set"
+    );
+    #[cfg(not(any(target_os = "freebsd", target_os = "macos", target_os = "android")))]
+    assert_eq!(mode & S_ISGID, S_ISGID, "setgid bit should be set");
+    // Check that regular permissions are correct
+    assert_eq!(mode & 0o0777, 0o0755, "regular permissions should be 755");
+}
+
+#[test]
+fn test_install_special_mode_bits_sticky() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let source = "source_file";
+    let dest = "dest_file";
+
+    at.touch(source);
+
+    // Try to run as root first
+    if let Ok(result) = run_ucmd_as_root(&scene, &["-m", "1755", source, dest]) {
+        result.success();
+        assert!(at.file_exists(dest));
+        let permissions = at.metadata(dest).permissions();
+        let mode = PermissionsExt::mode(&permissions);
+        // Check that sticky bit (1000) is set
+        assert_eq!(mode & 0o1000, 0o1000, "sticky bit should be set");
+        // Check that regular permissions are correct
+        assert_eq!(mode & 0o0777, 0o0755, "regular permissions should be 755");
+    } else {
+        // Skip test if not running as root
+        struct SkipTest {}
+        impl Drop for SkipTest {
+            fn drop(&mut self) {
+                println!("Test skipped; requires root user to set sticky bit");
+            }
+        }
+        let _skip = SkipTest {};
+    }
+}
+
+#[test]
+fn test_install_special_mode_bits_all() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let source = "source_file";
+    let dest = "dest_file";
+
+    at.touch(source);
+
+    // Try to run as root first
+    if let Ok(result) = run_ucmd_as_root(&scene, &["-m", "7755", source, dest]) {
+        result.success();
+        assert!(at.file_exists(dest));
+        let permissions = at.metadata(dest).permissions();
+        let mode = PermissionsExt::mode(&permissions);
+        // Check that all special bits are set
+        assert_eq!(mode & 0o7000, 0o7000, "all special bits should be set");
+        // Check that regular permissions are correct
+        assert_eq!(mode & 0o0777, 0o0755, "regular permissions should be 755");
+    } else {
+        // Skip test if not running as root
+        struct SkipTest {}
+        impl Drop for SkipTest {
+            fn drop(&mut self) {
+                println!("Test skipped; requires root user to set all special bits");
+            }
+        }
+        let _skip = SkipTest {};
+    }
+}
+
+#[test]
+fn test_install_special_mode_bits_with_chown() {
+    // Test that special bits are preserved when chown is called
+    // This is the core fix for issue #9134
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let source = "source_file";
+    let dest = "dest_file";
+
+    at.touch(source);
+
+    // Run as root to test chown behavior
+    if let Ok(result) = run_ucmd_as_root(&ts, &["-m", "4755", source, dest]) {
+        result.success();
+        assert!(at.file_exists(dest));
+        let permissions = fs::metadata(at.plus(dest)).unwrap().permissions();
+        let mode = PermissionsExt::mode(&permissions);
+        // Check that setuid bit is preserved after chown
+        #[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "android"))]
+        assert_eq!(
+            mode & (S_ISUID as u32),
+            S_ISUID as u32,
+            "setuid bit should be preserved after chown (issue #9134)"
+        );
+        #[cfg(not(any(target_os = "freebsd", target_os = "macos", target_os = "android")))]
+        assert_eq!(
+            mode & S_ISUID,
+            S_ISUID,
+            "setuid bit should be preserved after chown (issue #9134)"
+        );
+    } else {
+        println!("Test skipped; requires root user");
+    }
+}
+
+#[test]
+fn test_install_special_mode_bits_combinations() {
+    // Test various combinations of special bits
+    #[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "android"))]
+    let test_cases = [
+        (0o4755u32, S_ISUID as u32, "setuid only"),
+        (0o2755u32, S_ISGID as u32, "setgid only"),
+        (0o1755u32, S_ISVTX as u32, "sticky only"),
+        (0o6755u32, (S_ISUID | S_ISGID) as u32, "setuid + setgid"),
+        (0o5755u32, (S_ISUID | S_ISVTX) as u32, "setuid + sticky"),
+        (0o3755u32, (S_ISGID | S_ISVTX) as u32, "setgid + sticky"),
+        (
+            0o7755u32,
+            (S_ISUID | S_ISGID | S_ISVTX) as u32,
+            "all special bits",
+        ),
+    ];
+    #[cfg(not(any(target_os = "freebsd", target_os = "macos", target_os = "android")))]
+    #[allow(clippy::unnecessary_cast)]
+    let test_cases = [
+        (0o4755u32, S_ISUID as u32, "setuid only"),
+        (0o2755u32, S_ISGID as u32, "setgid only"),
+        (0o1755u32, S_ISVTX as u32, "sticky only"),
+        (0o6755u32, (S_ISUID | S_ISGID) as u32, "setuid + setgid"),
+        (0o5755u32, (S_ISUID | S_ISVTX) as u32, "setuid + sticky"),
+        (0o3755u32, (S_ISGID | S_ISVTX) as u32, "setgid + sticky"),
+        (
+            0o7755u32,
+            (S_ISUID | S_ISGID | S_ISVTX) as u32,
+            "all special bits",
+        ),
+    ];
+
+    for (mode, expected_bits, description) in test_cases {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let source = format!("source_{mode:04o}");
+        let dest = format!("dest_{mode:04o}");
+
+        at.touch(&source);
+
+        // Try to run as root first for tests with special bits
+        if mode & 0o7000 != 0 {
+            // This test requires special bits, run as root
+            if let Ok(result) =
+                run_ucmd_as_root(&scene, &["-m", &format!("{mode:o}"), &source, &dest])
+            {
+                result.success();
+                assert!(
+                    at.file_exists(&dest),
+                    "Failed to create dest for {description}"
+                );
+                let permissions = at.metadata(&dest).permissions();
+                let actual_mode = PermissionsExt::mode(&permissions);
+                assert_eq!(
+                    actual_mode & 0o7000,
+                    expected_bits,
+                    "Special bits mismatch for {description}: expected 0o{expected_bits:04o}, got 0o{actual_mode_bits:04o}",
+                    expected_bits = expected_bits,
+                    actual_mode_bits = actual_mode & 0o7000
+                );
+            } else {
+                // Skip this test case if not running as root
+                let description_owned = description.to_string();
+                struct SkipTest {
+                    message: String,
+                }
+                impl Drop for SkipTest {
+                    fn drop(&mut self) {
+                        println!("Test skipped: {} (requires root user)", self.message);
+                    }
+                }
+                let _skip = SkipTest {
+                    message: description_owned,
+                };
+            }
+        } else {
+            // Regular permissions test, can run without root
+            scene
+                .ucmd()
+                .arg("-m")
+                .arg(format!("{mode:o}"))
+                .arg(&source)
+                .arg(&dest)
+                .succeeds();
+
+            assert!(
+                at.file_exists(&dest),
+                "Failed to create dest for {description}"
+            );
+            let permissions = at.metadata(&dest).permissions();
+            let actual_mode = PermissionsExt::mode(&permissions);
+            // For regular permission tests, just check the mode matches
+            assert_eq!(
+                actual_mode & 0o0777,
+                mode & 0o0777,
+                "Permission mismatch for {description}: expected 0o{expected_mode:04o}, got 0o{actual_mode:04o}",
+                expected_mode = mode & 0o0777,
+                actual_mode = actual_mode & 0o0777
+            );
+        }
+    }
 }
