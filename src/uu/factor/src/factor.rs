@@ -270,7 +270,7 @@ fn pollard_p_minus_1(n: &BigUint) -> Option<BigUint> {
             return Some(g);
         }
 
-        // a^(M) を段階的に構成（指数を 2^k で伸ばす近似）
+        // Construct a^(M) step by step (approximating by extending the exponent with 2^k)
         let mut e = 2u64;
         while e <= b1 {
             a = a.modpow(&BigUint::from_u64(e).unwrap(), n);
