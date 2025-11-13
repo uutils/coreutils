@@ -19,7 +19,13 @@ path = "src/df.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["libc", "fsext", "parser", "fs"] }
+uucore = { workspace = true, features = [
+  "libc",
+  "fsext",
+  "parser",
+  "fs",
+  "format",
+] }
 unicode-width = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }

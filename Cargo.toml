@@ -364,6 +364,7 @@ regex = "1.10.4"
 rstest = "0.26.0"
 rust-ini = "0.21.0"
 same-file = "1.0.6"
+serial_test = "3.1"
 self_cell = "1.0.4"
 # FIXME we use the exact version because the new 0.5.3 requires an MSRV of 1.88
 selinux = "=0.5.2"

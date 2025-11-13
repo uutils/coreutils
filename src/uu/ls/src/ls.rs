@@ -60,7 +60,7 @@ use uucore::libc::{dev_t, major, minor};
 use uucore::{
     display::Quotable,
     error::{UError, UResult, set_exit_code},
-    format::human::{SizeFormat, human_readable},
+    format::human::{SizeFormat, format_with_thousands_separator, human_readable},
     format_usage,
     fs::FileInformation,
     fs::display_permissions,
@@ -68,7 +68,7 @@ use uucore::{
     line_ending::LineEnding,
     os_str_as_bytes_lossy,
     parser::parse_glob,
-    parser::parse_size::parse_size_non_zero_u64,
+    parser::parse_size::{extract_thousands_separator_flag, parse_size_non_zero_u64},
     parser::shortcut_value_parser::ShortcutValueParser,
     quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
     show, show_error, show_warning,
@@ -358,6 +358,7 @@ pub struct Config {
     file_size_block_size: u64,
     #[allow(dead_code)]
     block_size: u64, // is never read on Windows
+    use_thousands_separator: bool,
     width: u16,
     // Dir and vdir needs access to this field
     pub quoting_style: QuotingStyle,
@@ -900,9 +901,14 @@ impl Config {
             OsString::from("")
         };
 
+        // Extract thousands separator flag before parsing
+        let raw_block_size_str = raw_block_size.to_string_lossy();
+        let (cleaned_block_size, use_thousands_separator) =
+            extract_thousands_separator_flag(&raw_block_size_str);
+
         let (file_size_block_size, block_size) = if !opt_si && !opt_hr && !raw_block_size.is_empty()
         {
-            match parse_size_non_zero_u64(&raw_block_size.to_string_lossy()) {
+            match parse_size_non_zero_u64(cleaned_block_size) {
                 Ok(size) => match (is_env_var_blocksize, opt_kb) {
                     (true, true) => (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE),
                     (true, false) => (DEFAULT_FILE_SIZE_BLOCK_SIZE, size),
@@ -1153,6 +1159,7 @@ impl Config {
             alloc_size: options.get_flag(options::size::ALLOCATION_SIZE),
             file_size_block_size,
             block_size,
+            use_thousands_separator,
             width,
             quoting_style,
             indicator_style,
@@ -3127,7 +3134,13 @@ fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
 }
 
 fn display_size(size: u64, config: &Config) -> String {
-    human_readable(size, config.size_format)
+    if config.use_thousands_separator {
+        // When thousands separator is requested, format the size directly
+        // (block size has already been applied)
+        format_with_thousands_separator(size)
+    } else {
+        human_readable(size, config.size_format)
+    }
 }
 
 #[cfg(unix)]
