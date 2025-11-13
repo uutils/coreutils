@@ -6044,7 +6044,8 @@ fn test_ls_color_norm() {
         .stdout_contains(expected);
 
     // uncolored ordinary files that do _not_ inherit from NORMAL.
-    let expected = "\x1b[0m\x1b[07mnorm \x1b[0m\x1b[mno_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
+    let expected =
+        "\x1b[0m\x1b[07mnorm \x1b[0mno_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
     scene
         .ucmd()
         .env("LS_COLORS", format!("{colors}:fi="))
@@ -6057,7 +6058,8 @@ fn test_ls_color_norm() {
         .stdout_str_apply(strip)
         .stdout_contains(expected);
 
-    let expected = "\x1b[0m\x1b[07mnorm \x1b[0m\x1b[00mno_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
+    let expected =
+        "\x1b[0m\x1b[07mnorm \x1b[0mno_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
     scene
         .ucmd()
         .env("LS_COLORS", format!("{colors}:fi=0"))
