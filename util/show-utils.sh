@@ -5,14 +5,7 @@
 # spell-checker:ignore (jq) deps startswith
 
 # Use GNU version for realpath on *BSD
-case "$OSTYPE" in
-    *bsd*)
-        REALPATH="grealpath"
-        ;;
-    *)
-        REALPATH="realpath"
-        ;;
-esac
+REALPATH=$(command -v grealpath||command -v realpath)
 
 ME="${0}"
 ME_dir="$(dirname -- "${ME}")"
