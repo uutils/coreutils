@@ -273,7 +273,7 @@ jobs:
         target: aarch64-unknown-linux-gnu
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
-    - name: Install/setup prerequisites (no libselinux)
+    - name: Install/setup prerequisites
       shell: bash
       run: |
         sudo apt-get -y update
