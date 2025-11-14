@@ -131,6 +131,7 @@ fast-inc = []
 fs = ["dunce", "libc", "winapi-util", "windows-sys"]
 fsext = ["libc", "windows-sys"]
 fsxattr = ["xattr"]
+hardware = []
 lines = []
 feat_systemd_logind = ["utmpx", "libc"]
 format = [
