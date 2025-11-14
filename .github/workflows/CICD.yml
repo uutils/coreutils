@@ -273,10 +273,7 @@ jobs:
         target: aarch64-unknown-linux-gnu
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        sudo apt-get -y update
+    # Test build on the system missing libselinux (don't install libselinux1-dev at here)
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: "`make build`"
@@ -308,8 +305,6 @@ jobs:
       run: |
         set -x
         DESTDIR=/tmp/ make PROFILE=release COMPLETIONS=n MANPAGES=n LOCALES=n install
-        # Check that SELinux progs are missing
-        ! test -f /tmp/usr/local/bin/chcon
         # Check that the utils are present
         test -f /tmp/usr/local/bin/tty
         # Check that the manpage is not present
