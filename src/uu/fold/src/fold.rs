@@ -603,8 +603,23 @@ fn fold_file<T: Read, W: Write>(
     }
 
     if !output.is_empty() {
-        writer.write_all(&output)?;
-        output.clear();
+        if col_count >= width {
+            let mut ctx = FoldContext {
+                spaces,
+                width,
+                mode,
+                writer,
+                output: &mut output,
+                col_count: &mut col_count,
+                last_space: &mut last_space,
+            };
+            emit_output(&mut ctx)?;
+        }
+
+        if !output.is_empty() {
+            writer.write_all(&output)?;
+            output.clear();
+        }
     }
 
     Ok(())
