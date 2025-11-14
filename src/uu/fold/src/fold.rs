@@ -368,6 +368,13 @@ fn process_ascii_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) -> UR
                 } else if !ctx.spaces {
                     *ctx.last_space = None;
                 }
+
+                if ctx.mode == WidthMode::Characters {
+                    *ctx.col_count = ctx.col_count.saturating_add(1);
+                    if *ctx.col_count >= ctx.width {
+                        emit_output(ctx)?;
+                    }
+                }
                 idx += 1;
             }
             _ => {
