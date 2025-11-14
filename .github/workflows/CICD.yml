@@ -291,7 +291,7 @@ jobs:
         fi
         # Check that we don't cross-build uudoc
         # also do not try to generate manpages for part of hashsum
-        make install-manpages PREFIX=/tmp/usr UTILS=true RUSTC_ARCH="--target aarch64-unknown-linux-gnu"
+        env CARGO_BUILD_TARGET=aarch64-unknown-linux-gnu make install-manpages PREFIX=/tmp/usr UTILS=true
         # build (host)
         make build
         echo "Check that target directory will be ignored by backup tools"
