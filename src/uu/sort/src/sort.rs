@@ -1687,8 +1687,11 @@ fn compare_by<'a>(
     b_line_data: &LineData<'a>,
 ) -> Ordering {
     if global_settings.mode == SortMode::Default {
-        // Reverse the byte order comparison to match GNU sort behavior for raw bytes
-        let cmp = b.line.cmp(a.line);
+        let cmp = if let (Ok(a_str), Ok(b_str)) = (std::str::from_utf8(a.line), std::str::from_utf8(b.line)) {
+            a_str.cmp(b_str)
+        } else {
+            b.line.cmp(a.line)
+        };
         return if global_settings.reverse {
             cmp.reverse()
         } else {
