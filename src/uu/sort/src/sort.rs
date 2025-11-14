@@ -1686,21 +1686,12 @@ fn compare_by<'a>(
     a_line_data: &LineData<'a>,
     b_line_data: &LineData<'a>,
 ) -> Ordering {
-    if global_settings.mode == SortMode::Default {
+    if global_settings.precomputed.fast_lexicographic {
         let cmp = if let (Ok(a_str), Ok(b_str)) = (std::str::from_utf8(a.line), std::str::from_utf8(b.line)) {
             a_str.cmp(b_str)
         } else {
             b.line.cmp(a.line)
         };
-        return if global_settings.reverse {
-            cmp.reverse()
-        } else {
-            cmp
-        };
-    }
-
-    if global_settings.precomputed.fast_lexicographic {
-        let cmp = b.line.cmp(a.line);
         return if global_settings.reverse {
             cmp.reverse()
         } else {
@@ -1800,7 +1791,13 @@ fn compare_by<'a>(
             }
             SortMode::Month => month_compare(a_str, b_str),
             SortMode::Version => version_cmp(a_str, b_str),
-            SortMode::Default => b_str.cmp(a_str),
+            SortMode::Default => custom_str_cmp(
+                a_str,
+                b_str,
+                settings.ignore_non_printing,
+                settings.dictionary_order,
+                settings.ignore_case,
+            ),
         };
         if cmp != Ordering::Equal {
             return if settings.reverse { cmp.reverse() } else { cmp };
