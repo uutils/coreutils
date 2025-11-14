@@ -1697,7 +1697,7 @@ fn compare_by<'a>(
     }
 
     if global_settings.precomputed.fast_lexicographic {
-        let cmp = a.line.cmp(b.line);
+        let cmp = b.line.cmp(a.line);
         return if global_settings.reverse {
             cmp.reverse()
         } else {
@@ -1797,13 +1797,7 @@ fn compare_by<'a>(
             }
             SortMode::Month => month_compare(a_str, b_str),
             SortMode::Version => version_cmp(a_str, b_str),
-            SortMode::Default => custom_str_cmp(
-                a_str,
-                b_str,
-                settings.ignore_non_printing,
-                settings.dictionary_order,
-                settings.ignore_case,
-            ),
+            SortMode::Default => b_str.cmp(a_str),
         };
         if cmp != Ordering::Equal {
             return if settings.reverse { cmp.reverse() } else { cmp };
