@@ -1686,6 +1686,16 @@ fn compare_by<'a>(
     a_line_data: &LineData<'a>,
     b_line_data: &LineData<'a>,
 ) -> Ordering {
+    if global_settings.mode == SortMode::Default {
+        // Reverse the byte order comparison to match GNU sort behavior for raw bytes
+        let cmp = b.line.cmp(a.line);
+        return if global_settings.reverse {
+            cmp.reverse()
+        } else {
+            cmp
+        };
+    }
+
     if global_settings.precomputed.fast_lexicographic {
         let cmp = a.line.cmp(b.line);
         return if global_settings.reverse {
