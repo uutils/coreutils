@@ -60,6 +60,221 @@ fn test_wide_characters_with_characters_option() {
 }
 
 #[test]
+fn test_multiple_wide_characters_in_column_mode() {
+    let wide = '\u{FF1A}';
+    let mut input = wide.to_string().repeat(50);
+    input.push('\n');
+
+    let mut expected = String::new();
+    for i in 1..=50 {
+        expected.push(wide);
+        if i % 5 == 0 {
+            expected.push('\n');
+        }
+    }
+
+    new_ucmd!()
+        .args(&["-w", "10"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_multiple_wide_characters_in_character_mode() {
+    let wide = '\u{FF1A}';
+    let mut input = wide.to_string().repeat(50);
+    input.push('\n');
+
+    let mut expected = String::new();
+    for i in 1..=50 {
+        expected.push(wide);
+        if i % 10 == 0 {
+            expected.push('\n');
+        }
+    }
+
+    new_ucmd!()
+        .args(&["--characters", "-w", "10"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_unicode_on_reader_buffer_boundary_in_character_mode() {
+    let boundary = buf_reader_capacity().saturating_sub(1);
+    assert!(boundary > 0, "BufReader capacity must be greater than 1");
+
+    let mut input = "a".repeat(boundary);
+    input.push('\u{B250}');
+    input.push_str(&"a".repeat(100));
+    input.push('\n');
+
+    let expected_tail = tail_inclusive(
+        &fold_characters_reference(&input, 80),
+        4,
+    );
+
+    let result = new_ucmd!()
+        .arg("--characters")
+        .pipe_in(input)
+        .succeeds();
+
+    let actual_tail = tail_inclusive(result.stdout_str(), 4);
+
+    assert_eq!(actual_tail, expected_tail);
+}
+
+#[test]
+fn test_fold_preserves_invalid_utf8_sequences() {
+    let bad_input: &[u8] = b"\xC3|\xED\xBA\xAD|\x00|\x89|\xED\xA6\xBF\xED\xBF\xBF\n";
+
+    new_ucmd!()
+        .pipe_in(bad_input.to_vec())
+        .succeeds()
+        .stdout_is_bytes(bad_input);
+}
+
+#[test]
+fn test_fold_preserves_incomplete_utf8_at_eof() {
+    let trailing_byte: &[u8] = b"\xC3";
+
+    new_ucmd!()
+        .pipe_in(trailing_byte.to_vec())
+        .succeeds()
+        .stdout_is_bytes(trailing_byte);
+}
+
+#[test]
+fn test_zero_width_bytes_in_column_mode() {
+    let len = io_buf_size_times_two();
+    let input = vec![0u8; len];
+
+    new_ucmd!()
+        .pipe_in(input.clone())
+        .succeeds()
+        .stdout_is_bytes(input);
+}
+
+#[test]
+fn test_zero_width_bytes_in_character_mode() {
+    let len = io_buf_size_times_two();
+    let input = vec![0u8; len];
+    let expected = fold_characters_reference_bytes(&input, 80);
+
+    new_ucmd!()
+        .args(&["--characters"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes(expected);
+}
+
+#[test]
+fn test_zero_width_spaces_in_column_mode() {
+    let len = io_buf_size_times_two();
+    let input = "\u{200B}".repeat(len);
+
+    new_ucmd!()
+        .pipe_in(input.clone())
+        .succeeds()
+        .stdout_is(&input);
+}
+
+#[test]
+fn test_zero_width_spaces_in_character_mode() {
+    let len = io_buf_size_times_two();
+    let input = "\u{200B}".repeat(len);
+    let expected = fold_characters_reference(&input, 80);
+
+    new_ucmd!()
+        .args(&["--characters"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(&expected);
+}
+
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[test]
+fn test_fold_reports_no_space_left_on_dev_full() {
+    use std::fs::OpenOptions;
+    use std::process::Stdio;
+
+    for &byte in &[b'\n', b'\0', 0xC3u8] {
+        let dev_full = OpenOptions::new()
+            .write(true)
+            .open("/dev/full")
+            .expect("/dev/full must exist on supported targets");
+
+        new_ucmd!()
+            .pipe_in(vec![byte; 1024])
+            .set_stdout(Stdio::from(dev_full))
+            .fails()
+            .stderr_contains("No space left");
+    }
+}
+
+fn buf_reader_capacity() -> usize {
+    std::io::BufReader::new(&b""[..]).capacity()
+}
+
+fn io_buf_size_times_two() -> usize {
+    buf_reader_capacity()
+        .checked_mul(2)
+        .expect("BufReader capacity overflow")
+}
+
+fn fold_characters_reference(input: &str, width: usize) -> String {
+    let mut output = String::with_capacity(input.len());
+    let mut col_count = 0usize;
+
+    for ch in input.chars() {
+        if ch == '\n' {
+            output.push('\n');
+            col_count = 0;
+            continue;
+        }
+
+        if col_count >= width {
+            output.push('\n');
+            col_count = 0;
+        }
+
+        output.push(ch);
+        col_count += 1;
+    }
+
+    output
+}
+
+fn fold_characters_reference_bytes(input: &[u8], width: usize) -> Vec<u8> {
+    let mut output = Vec::with_capacity(input.len() + input.len() / width + 1);
+
+    for chunk in input.chunks(width) {
+        output.extend_from_slice(chunk);
+        if chunk.len() == width {
+            output.push(b'\n');
+        }
+    }
+
+    output
+}
+
+fn tail_inclusive(text: &str, lines: usize) -> String {
+    if lines == 0 {
+        return String::new();
+    }
+
+    let segments: Vec<&str> = text.split_inclusive('\n').collect();
+    if segments.is_empty() {
+        return text.to_owned();
+    }
+
+    let start = segments.len().saturating_sub(lines);
+    segments[start..].concat()
+}
+
+#[test]
 fn test_should_preserve_empty_line_without_final_newline() {
     new_ucmd!()
         .arg("-w2")

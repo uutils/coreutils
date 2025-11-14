@@ -454,12 +454,6 @@ fn push_ascii_segment<W: Write>(segment: &[u8], ctx: &mut FoldContext<'_, W>) ->
 
         remaining = &remaining[take..];
 
-        if ctx.mode == WidthMode::Characters
-            && *ctx.col_count >= ctx.width
-            && !ctx.output.is_empty()
-        {
-            emit_output(ctx)?;
-        }
     }
 
     Ok(())
@@ -537,12 +531,6 @@ fn process_utf8_line<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URes
         push_bytes(ctx, &line_bytes[byte_idx..next_idx])?;
         *ctx.col_count = ctx.col_count.saturating_add(added);
 
-        if ctx.mode == WidthMode::Characters
-            && *ctx.col_count >= ctx.width
-            && !ctx.output.is_empty()
-        {
-            emit_output(ctx)?;
-        }
     }
 
     Ok(())
@@ -585,13 +573,6 @@ fn process_non_utf8_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) ->
         }
 
         push_byte(ctx, byte)?;
-
-        if ctx.mode == WidthMode::Characters
-            && *ctx.col_count >= ctx.width
-            && !ctx.output.is_empty()
-        {
-            emit_output(ctx)?;
-        }
     }
 
     Ok(())
