@@ -56,7 +56,7 @@ To get a file with less artificial contents, download a book from
 Project Gutenberg and concatenate it a lot of times:
 
 ```shell
-wget https://www.gutenberg.org/files/2701/2701-0.txt -O moby.txt
+curl https://www.gutenberg.org/files/2701/2701-0.txt -o moby.txt
 cat moby.txt moby.txt moby.txt moby.txt > moby4.txt
 cat moby4.txt moby4.txt moby4.txt moby4.txt > moby16.txt
 cat moby16.txt moby16.txt moby16.txt moby16.txt > moby64.txt
@@ -65,7 +65,7 @@ cat moby16.txt moby16.txt moby16.txt moby16.txt > moby64.txt
 And get one with lots of unicode too:
 
 ```shell
-wget https://www.gutenberg.org/files/30613/30613-0.txt -O odyssey.txt
+curl https://www.gutenberg.org/files/30613/30613-0.txt -o odyssey.txt
 cat odyssey.txt odyssey.txt odyssey.txt odyssey.txt > odyssey4.txt
 cat odyssey4.txt odyssey4.txt odyssey4.txt odyssey4.txt > odyssey16.txt
 cat odyssey16.txt odyssey16.txt odyssey16.txt odyssey16.txt > odyssey64.txt
