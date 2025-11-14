@@ -42,7 +42,7 @@ PROG_PREFIX ?=
 
 # This won't support any directory with spaces in its name, but you can just
 # make a symlink without spaces that points to the directory.
-# CARGO_BUILD_TARGET should be undefined for not cross-build.
+# CARGO_BUILD_TARGET should be undefined for native (not-cross) build.
 BASEDIR       ?= $(shell pwd)
 ifdef CARGO_TARGET_DIR
 BUILDDIR 	  := $(CARGO_TARGET_DIR)/${PROFILE}
@@ -74,19 +74,6 @@ ifeq ($(OS),Windows_NT)
 	LN ?= ln -f
 endif
 LN ?= ln -sf
-
-ifdef SELINUX_ENABLED
-	override SELINUX_ENABLED := 0
-# Now check if we should enable it (only on non-Windows)
-	ifneq ($(OS),Windows_NT)
-		ifeq ($(shell if [ -x /sbin/selinuxenabled ] && /sbin/selinuxenabled 2>/dev/null; then echo 0; else echo 1; fi),0)
-			override SELINUX_ENABLED := 1
-$(info /sbin/selinuxenabled successful)
-	    else
-$(info SELINUX_ENABLED=1 but /sbin/selinuxenabled failed)
-		endif
-	endif
-endif
 
 # Possible programs
 PROGS       := \
@@ -329,8 +316,6 @@ INSTALLEES  := ${INSTALLEES} coreutils
 endif
 
 all: build
-
-use_default := 1
 
 build-pkgs:
 ifneq (${MULTICALL}, y)
