@@ -76,7 +76,7 @@ fn print_factors_str(
     let success = factor_biguint_recursive(&x_big, &mut factors);
 
     if !success {
-        // 完全分解できなかった場合のみ exit code=1
+        // Only set exit code=1 when complete factorization could not be achieved
         set_exit_code(1);
     }
 
