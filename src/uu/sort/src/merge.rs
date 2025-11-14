@@ -42,9 +42,7 @@ fn merge_chunk_capacity(settings: &GlobalSettings) -> usize {
         .buffer_size
         .checked_div(settings.merge_batch_size.max(1))
         .unwrap_or(0);
-    per_stream_budget
-        .max(MIN_MERGE_CHUNK_CAPACITY)
-        .min(MAX_MERGE_CHUNK_CAPACITY)
+    per_stream_budget.clamp(MIN_MERGE_CHUNK_CAPACITY, MAX_MERGE_CHUNK_CAPACITY)
 }
 
 /// If the output file occurs in the input files as well, copy the contents of the output file
