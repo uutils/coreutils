@@ -19,6 +19,7 @@ const TAB_WIDTH: usize = 8;
 const NL: u8 = b'\n';
 const CR: u8 = b'\r';
 const TAB: u8 = b'\t';
+const STREAMING_FLUSH_THRESHOLD: usize = 8 * 1024;
 
 mod options {
     pub const BYTES: &str = "bytes";
@@ -322,6 +323,31 @@ fn emit_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
     Ok(())
 }
 
+fn maybe_flush_unbroken_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
+    if ctx.spaces || ctx.output.len() < STREAMING_FLUSH_THRESHOLD {
+        return Ok(());
+    }
+
+    if !ctx.output.is_empty() {
+        ctx.writer.write_all(ctx.output)?;
+        ctx.output.clear();
+    }
+    Ok(())
+}
+
+fn push_byte<W: Write>(ctx: &mut FoldContext<'_, W>, byte: u8) -> UResult<()> {
+    ctx.output.push(byte);
+    maybe_flush_unbroken_output(ctx)
+}
+
+fn push_bytes<W: Write>(ctx: &mut FoldContext<'_, W>, bytes: &[u8]) -> UResult<()> {
+    if bytes.is_empty() {
+        return Ok(());
+    }
+    ctx.output.extend_from_slice(bytes);
+    maybe_flush_unbroken_output(ctx)
+}
+
 fn process_ascii_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) -> UResult<()> {
     let mut idx = 0;
     let len = line.len();
@@ -334,12 +360,12 @@ fn process_ascii_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) -> UR
                 break;
             }
             CR => {
-                ctx.output.push(CR);
+                push_byte(ctx, CR)?;
                 *ctx.col_count = 0;
                 idx += 1;
             }
             0x08 => {
-                ctx.output.push(0x08);
+                push_byte(ctx, 0x08)?;
                 *ctx.col_count = ctx.col_count.saturating_sub(1);
                 idx += 1;
             }
@@ -358,11 +384,11 @@ fn process_ascii_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) -> UR
                 } else {
                     *ctx.last_space = None;
                 }
-                ctx.output.push(TAB);
+                push_byte(ctx, TAB)?;
                 idx += 1;
             }
             0x00..=0x07 | 0x0B..=0x0C | 0x0E..=0x1F | 0x7F => {
-                ctx.output.push(line[idx]);
+                push_byte(ctx, line[idx])?;
                 if ctx.spaces && line[idx].is_ascii_whitespace() && line[idx] != CR {
                     *ctx.last_space = Some(ctx.output.len() - 1);
                 } else if !ctx.spaces {
@@ -412,7 +438,7 @@ fn push_ascii_segment<W: Write>(segment: &[u8], ctx: &mut FoldContext<'_, W>) ->
         let take = remaining.len().min(available);
         let base_len = ctx.output.len();
 
-        ctx.output.extend_from_slice(&remaining[..take]);
+        push_bytes(ctx, &remaining[..take])?;
         *ctx.col_count += take;
 
         if ctx.spaces {
@@ -461,15 +487,13 @@ fn process_utf8_line<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URes
         }
 
         if ch == '\r' {
-            ctx.output
-                .extend_from_slice(&line_bytes[byte_idx..next_idx]);
+            push_bytes(ctx, &line_bytes[byte_idx..next_idx])?;
             *ctx.col_count = 0;
             continue;
         }
 
         if ch == '\x08' {
-            ctx.output
-                .extend_from_slice(&line_bytes[byte_idx..next_idx]);
+            push_bytes(ctx, &line_bytes[byte_idx..next_idx])?;
             *ctx.col_count = ctx.col_count.saturating_sub(1);
             continue;
         }
@@ -489,8 +513,7 @@ fn process_utf8_line<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URes
             } else {
                 *ctx.last_space = None;
             }
-            ctx.output
-                .extend_from_slice(&line_bytes[byte_idx..next_idx]);
+            push_bytes(ctx, &line_bytes[byte_idx..next_idx])?;
             continue;
         }
 
@@ -511,8 +534,7 @@ fn process_utf8_line<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URes
             *ctx.last_space = Some(ctx.output.len());
         }
 
-        ctx.output
-            .extend_from_slice(&line_bytes[byte_idx..next_idx]);
+        push_bytes(ctx, &line_bytes[byte_idx..next_idx])?;
         *ctx.col_count = ctx.col_count.saturating_add(added);
 
         if ctx.mode == WidthMode::Characters
@@ -551,7 +573,7 @@ fn process_non_utf8_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) ->
                 } else {
                     None
                 };
-                ctx.output.push(byte);
+                push_byte(ctx, byte)?;
                 continue;
             }
             0x08 => *ctx.col_count = ctx.col_count.saturating_sub(1),
@@ -562,7 +584,7 @@ fn process_non_utf8_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) ->
             _ => *ctx.col_count = ctx.col_count.saturating_add(1),
         }
 
-        ctx.output.push(byte);
+        push_byte(ctx, byte)?;
 
         if ctx.mode == WidthMode::Characters
             && *ctx.col_count >= ctx.width
