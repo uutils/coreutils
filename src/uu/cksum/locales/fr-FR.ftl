@@ -9,7 +9,7 @@ cksum-after-help = DIGEST détermine l'algorithme de condensé et le format de s
   - md5 : (équivalent à md5sum)
   - sha1 : (équivalent à sha1sum)
   - sha2: (équivalent à sha{"{224,256,384,512}"}sum)
-  - sha3 : (disponible uniquement via cksum)
+  - sha3 : (nécessite --length : 224, 256, 384, ou 512)
   - blake2b : (équivalent à b2sum)
   - sm3 : (disponible uniquement via cksum)
 
