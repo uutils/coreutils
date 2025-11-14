@@ -453,7 +453,6 @@ fn push_ascii_segment<W: Write>(segment: &[u8], ctx: &mut FoldContext<'_, W>) ->
         }
 
         remaining = &remaining[take..];
-
     }
 
     Ok(())
@@ -530,7 +529,6 @@ fn process_utf8_line<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URes
 
         push_bytes(ctx, &line_bytes[byte_idx..next_idx])?;
         *ctx.col_count = ctx.col_count.saturating_add(added);
-
     }
 
     Ok(())

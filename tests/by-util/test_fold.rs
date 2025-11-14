@@ -111,15 +111,9 @@ fn test_unicode_on_reader_buffer_boundary_in_character_mode() {
     input.push_str(&"a".repeat(100));
     input.push('\n');
 
-    let expected_tail = tail_inclusive(
-        &fold_characters_reference(&input, 80),
-        4,
-    );
+    let expected_tail = tail_inclusive(&fold_characters_reference(&input, 80), 4);
 
-    let result = new_ucmd!()
-        .arg("--characters")
-        .pipe_in(input)
-        .succeeds();
+    let result = new_ucmd!().arg("--characters").pipe_in(input).succeeds();
 
     let actual_tail = tail_inclusive(result.stdout_str(), 4);
 
