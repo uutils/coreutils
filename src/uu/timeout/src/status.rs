@@ -32,6 +32,7 @@ pub(crate) enum ExitStatus {
     WaitingFailed,
 
     /// When `SIGTERM` signal received.
+    #[allow(dead_code)]
     Terminated,
 }
 
