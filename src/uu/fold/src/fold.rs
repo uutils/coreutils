@@ -427,6 +427,11 @@ fn push_ascii_segment<W: Write>(segment: &[u8], ctx: &mut FoldContext<'_, W>) ->
         }
 
         remaining = &remaining[take..];
+
+        if ctx.mode == WidthMode::Characters && *ctx.col_count >= ctx.width && !ctx.output.is_empty()
+        {
+            emit_output(ctx)?;
+        }
     }
 
     Ok(())
@@ -507,6 +512,11 @@ fn process_utf8_line<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URes
         ctx.output
             .extend_from_slice(&line_bytes[byte_idx..next_idx]);
         *ctx.col_count = ctx.col_count.saturating_add(added);
+
+        if ctx.mode == WidthMode::Characters && *ctx.col_count >= ctx.width && !ctx.output.is_empty()
+        {
+            emit_output(ctx)?;
+        }
     }
 
     Ok(())
@@ -549,6 +559,11 @@ fn process_non_utf8_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) ->
         }
 
         ctx.output.push(byte);
+
+        if ctx.mode == WidthMode::Characters && *ctx.col_count >= ctx.width && !ctx.output.is_empty()
+        {
+            emit_output(ctx)?;
+        }
     }
 
     Ok(())
@@ -603,23 +618,8 @@ fn fold_file<T: Read, W: Write>(
     }
 
     if !output.is_empty() {
-        if col_count >= width {
-            let mut ctx = FoldContext {
-                spaces,
-                width,
-                mode,
-                writer,
-                output: &mut output,
-                col_count: &mut col_count,
-                last_space: &mut last_space,
-            };
-            emit_output(&mut ctx)?;
-        }
-
-        if !output.is_empty() {
-            writer.write_all(&output)?;
-            output.clear();
-        }
+        writer.write_all(&output)?;
+        output.clear();
     }
 
     Ok(())
