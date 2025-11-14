@@ -34,6 +34,19 @@ use crate::{
     tmp_dir::TmpDirWrapper,
 };
 
+const MIN_MERGE_CHUNK_CAPACITY: usize = 8 * 1024;
+const MAX_MERGE_CHUNK_CAPACITY: usize = 2 * 1024 * 1024;
+
+fn merge_chunk_capacity(settings: &GlobalSettings) -> usize {
+    let per_stream_budget = settings
+        .buffer_size
+        .checked_div(settings.merge_batch_size.max(1))
+        .unwrap_or(0);
+    per_stream_budget
+        .max(MIN_MERGE_CHUNK_CAPACITY)
+        .min(MAX_MERGE_CHUNK_CAPACITY)
+}
+
 /// If the output file occurs in the input files as well, copy the contents of the output file
 /// and replace its occurrences in the inputs with that copy.
 fn replace_output_file_in_input_files(
@@ -146,6 +159,7 @@ fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
     settings: &GlobalSettings,
 ) -> UResult<FileMerger<'_>> {
     let (request_sender, request_receiver) = channel();
+    let chunk_capacity = merge_chunk_capacity(settings);
     let mut reader_files = Vec::with_capacity(files.size_hint().0);
     let mut loaded_receivers = Vec::with_capacity(files.size_hint().0);
     for (file_number, file) in files.enumerate() {
@@ -158,14 +172,14 @@ fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
         }));
         // Send the initial chunk to trigger a read for each file
         request_sender
-            .send((file_number, RecycledChunk::new(8 * 1024)))
+            .send((file_number, RecycledChunk::new(chunk_capacity)))
             .unwrap();
     }
 
     // Send the second chunk for each file
     for file_number in 0..reader_files.len() {
         request_sender
-            .send((file_number, RecycledChunk::new(8 * 1024)))
+            .send((file_number, RecycledChunk::new(chunk_capacity)))
             .unwrap();
     }
 
@@ -298,24 +312,26 @@ impl FileMerger<'_> {
                 file_number: file.file_number,
             });
 
-            file.current_chunk.with_dependent(|_, contents| {
-                let current_line = &contents.lines[file.line_idx];
-                if settings.unique {
-                    if let Some(prev) = &prev {
-                        let cmp = compare_by(
-                            &prev.chunk.lines()[prev.line_idx],
-                            current_line,
-                            settings,
-                            prev.chunk.line_data(),
-                            file.current_chunk.line_data(),
-                        );
-                        if cmp == Ordering::Equal {
-                            return Ok(());
+            file.current_chunk
+                .with_dependent(|_, contents| -> std::io::Result<()> {
+                    let current_line = &contents.lines[file.line_idx];
+                    if settings.unique {
+                        if let Some(prev) = &prev {
+                            let cmp = compare_by(
+                                &prev.chunk.lines()[prev.line_idx],
+                                current_line,
+                                settings,
+                                prev.chunk.line_data(),
+                                file.current_chunk.line_data(),
+                            );
+                            if cmp == Ordering::Equal {
+                                return Ok(());
+                            }
                         }
                     }
-                }
-                current_line.print(out, settings)
-            })?;
+                    current_line.print(out, settings)?;
+                    Ok(())
+                })?;
 
             let was_last_line_for_file = file.current_chunk.lines().len() == file.line_idx + 1;
 

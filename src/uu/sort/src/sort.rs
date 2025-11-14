@@ -41,6 +41,7 @@ use std::ops::Range;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
+use std::thread;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
@@ -290,6 +291,7 @@ pub struct GlobalSettings {
     buffer_size_is_explicit: bool,
     compress_prog: Option<String>,
     merge_batch_size: usize,
+    pipeline_depth: usize,
     precomputed: Precomputed,
 }
 
@@ -411,6 +413,7 @@ impl Default for GlobalSettings {
             buffer_size_is_explicit: false,
             compress_prog: None,
             merge_batch_size: default_merge_batch_size(),
+            pipeline_depth: default_pipeline_depth(),
             precomputed: Precomputed::default(),
         }
     }
@@ -498,7 +501,7 @@ enum Selection<'a> {
     Str(&'a [u8]),
 }
 
-type Field = Range<usize>;
+pub(crate) type Field = Range<usize>;
 
 #[derive(Clone, Debug)]
 pub struct Line<'a> {
@@ -547,6 +550,11 @@ impl<'a> Line<'a> {
                     }
                 }
             }
+        }
+        if settings.precomputed.fast_lexicographic {
+            line_data.utf8_cache.push(std::str::from_utf8(line).ok());
+        } else {
+            line_data.utf8_cache.push(None);
         }
         Self { line, index }
     }
@@ -1111,6 +1119,26 @@ fn default_merge_batch_size() -> usize {
     }
 }
 
+const MIN_PIPELINE_DEPTH: usize = 2;
+const MAX_PIPELINE_DEPTH: usize = 8;
+
+fn default_pipeline_depth() -> usize {
+    thread::available_parallelism()
+        .map(|n| n.get().clamp(MIN_PIPELINE_DEPTH, MAX_PIPELINE_DEPTH))
+        .unwrap_or(MIN_PIPELINE_DEPTH)
+}
+
+fn pipeline_depth_from_parallel_arg(arg: Option<&String>) -> usize {
+    if let Some(raw) = arg {
+        if let Ok(parsed) = raw.parse::<usize>() {
+            if parsed > 0 {
+                return parsed.clamp(MIN_PIPELINE_DEPTH, MAX_PIPELINE_DEPTH);
+            }
+        }
+    }
+    default_pipeline_depth()
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -1230,6 +1258,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             env::set_var("RAYON_NUM_THREADS", &settings.threads);
         }
     }
+    settings.pipeline_depth =
+        pipeline_depth_from_parallel_arg(matches.get_one::<String>(options::PARALLEL));
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
         settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|e| {
@@ -1687,12 +1717,11 @@ fn compare_by<'a>(
     b_line_data: &LineData<'a>,
 ) -> Ordering {
     if global_settings.precomputed.fast_lexicographic {
-        let cmp = if let (Ok(a_str), Ok(b_str)) =
-            (std::str::from_utf8(a.line), std::str::from_utf8(b.line))
-        {
-            a_str.cmp(b_str)
-        } else {
-            b.line.cmp(a.line)
+        let a_cached = a_line_data.utf8_cache.get(a.index).and_then(|entry| *entry);
+        let b_cached = b_line_data.utf8_cache.get(b.index).and_then(|entry| *entry);
+        let cmp = match (a_cached, b_cached) {
+            (Some(a_str), Some(b_str)) => a_str.cmp(b_str),
+            _ => b.line.cmp(a.line),
         };
         return if global_settings.reverse {
             cmp.reverse()
