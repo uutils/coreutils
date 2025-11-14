@@ -15,7 +15,7 @@ fn test_hostname() {
 }
 
 // FixME: fails for "MacOS" => "failed to lookup address information"
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos")))]
 #[test]
 fn test_hostname_ip() {
     let result = new_ucmd!().arg("-i").succeeds();

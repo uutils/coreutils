@@ -1,0 +1,14 @@
+--git a/tests/runcon/runcon-no-reorder.sh b/tests/runcon/runcon-no-reorder.sh
+index 2027555..956c51e 100644
+--- a/tests/runcon/runcon-no-reorder.sh
++++ b/tests/runcon/runcon-no-reorder.sh
+@@ -16,6 +16,9 @@
+ # You should have received a copy of the GNU General Public License
+ # along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ 
++# We don't have runcon buildable without libselinux.
++_require_selinux_
++
+ . "${srcdir=.}/tests/init.sh"; path_prepend_ ./src
+ print_ver_ runcon
+ 
