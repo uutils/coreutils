@@ -11,6 +11,13 @@ use std::fs::{self, Metadata};
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 
+/// ANSI CSI (Control Sequence Introducer)
+const ANSI_CSI: &str = "\x1b[";
+const ANSI_SGR_END: &str = "m";
+const ANSI_RESET: &str = "\x1b[0m";
+const ANSI_CLEAR_EOL: &str = "\x1b[K";
+const EMPTY_STYLE: &str = "\x1b[m";
+
 /// We need this struct to be able to store the previous style.
 /// This because we need to check the previous value in case we don't need
 /// the reset
@@ -56,6 +63,9 @@ impl<'a> StyleManager<'a> {
         }
 
         if let Some(path) = path {
+            // Fast-path: apply LS_COLORS raw SGR codes verbatim,
+            // bypassing LsColors fallbacks so the entry from LS_COLORS
+            // is honored exactly as specified.
             if let Some(indicator) = self.indicator_for_raw_code(path) {
                 let should_skip = indicator == Indicator::SymbolicLink
                     && self.ln_color_from_target
@@ -67,9 +77,9 @@ impl<'a> StyleManager<'a> {
                             return self.apply_empty_style(name, wrap);
                         }
                         style_code.push_str(self.reset(!self.initial_reset_is_done));
-                        style_code.push_str("\x1b[");
+                        style_code.push_str(ANSI_CSI);
                         style_code.push_str(&raw);
-                        style_code.push('m');
+                        style_code.push_str(ANSI_SGR_END);
                         applied_raw_code = true;
                         self.current_style = None;
                         force_suffix_reset = true;
@@ -103,7 +113,7 @@ impl<'a> StyleManager<'a> {
         // scroll up in order to print new text in this situation if the clear
         // to eol code is not present the background of the text would stretch
         // till the end of line
-        let clear_to_eol = if wrap { "\x1b[K" } else { "" };
+        let clear_to_eol = if wrap { ANSI_CLEAR_EOL } else { "" };
 
         let mut ret: OsString = style_code.into();
         ret.push(name);
@@ -124,7 +134,7 @@ impl<'a> StyleManager<'a> {
         if self.current_style.is_some() || force {
             self.initial_reset_is_done = true;
             self.current_style = None;
-            return "\x1b[0m";
+            return ANSI_RESET;
         }
         ""
     }
@@ -193,15 +203,15 @@ impl<'a> StyleManager<'a> {
 
             let mut style_code = String::new();
             style_code.push_str(self.reset(!self.initial_reset_is_done));
-            style_code.push_str("\x1b[");
+            style_code.push_str(ANSI_CSI);
             style_code.push_str(&raw);
-            style_code.push('m');
+            style_code.push_str(ANSI_SGR_END);
 
             let mut ret: OsString = style_code.into();
             ret.push(name);
             ret.push(self.reset(true));
             if wrap {
-                ret.push("\x1b[K");
+                ret.push(ANSI_CLEAR_EOL);
             }
             ret
         } else {
@@ -234,13 +244,13 @@ impl<'a> StyleManager<'a> {
     fn apply_empty_style(&mut self, name: OsString, wrap: bool) -> OsString {
         let mut style_code = String::new();
         style_code.push_str(self.reset(!self.initial_reset_is_done));
-        style_code.push_str("\x1b[m");
+        style_code.push_str(EMPTY_STYLE);
 
         let mut ret: OsString = style_code.into();
         ret.push(name);
         ret.push(self.reset(true));
         if wrap {
-            ret.push("\x1b[K");
+            ret.push(ANSI_CLEAR_EOL);
         }
         ret
     }
