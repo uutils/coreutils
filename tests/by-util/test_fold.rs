@@ -42,6 +42,24 @@ fn test_default_wrap_with_newlines() {
 }
 
 #[test]
+fn test_wide_characters_in_column_mode() {
+    new_ucmd!()
+        .args(&["-w", "5"])
+        .pipe_in("\u{B250}\u{B250}\u{B250}\n")
+        .succeeds()
+        .stdout_is("\u{B250}\u{B250}\n\u{B250}\n");
+}
+
+#[test]
+fn test_wide_characters_with_characters_option() {
+    new_ucmd!()
+        .args(&["--characters", "-w", "5"])
+        .pipe_in("\u{B250}\u{B250}\u{B250}\n")
+        .succeeds()
+        .stdout_is("\u{B250}\u{B250}\u{B250}\n");
+}
+
+#[test]
 fn test_should_preserve_empty_line_without_final_newline() {
     new_ucmd!()
         .arg("-w2")
