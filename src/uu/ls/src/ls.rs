@@ -663,43 +663,62 @@ fn extract_hyperlink(options: &clap::ArgMatches) -> bool {
 /// # Returns
 ///
 /// * An option with None if the style string is invalid, or a `QuotingStyle` wrapped in `Some`.
+struct QuotingStyleSpec {
+    style: QuotingStyle,
+    fixed_control: bool,
+    locale: Option<LocaleQuoting>,
+}
+
+impl QuotingStyleSpec {
+    fn new(style: QuotingStyle) -> Self {
+        Self {
+            style,
+            fixed_control: false,
+            locale: None,
+        }
+    }
+
+    fn with_locale(style: QuotingStyle, locale: LocaleQuoting) -> Self {
+        Self {
+            style,
+            fixed_control: true,
+            locale: Some(locale),
+        }
+    }
+}
+
 fn match_quoting_style_name(
     style: &str,
     show_control: bool,
 ) -> Option<(QuotingStyle, Option<LocaleQuoting>)> {
-    let (qs, fixed_control, locale) = match style {
-        "literal" => (
-            QuotingStyle::Literal {
+    let spec = match style {
+        "literal" => QuotingStyleSpec::new(QuotingStyle::Literal {
+            show_control: false,
+        }),
+        "shell" => QuotingStyleSpec::new(QuotingStyle::SHELL),
+        "shell-always" => QuotingStyleSpec::new(QuotingStyle::SHELL_QUOTE),
+        "shell-escape" => QuotingStyleSpec::new(QuotingStyle::SHELL_ESCAPE),
+        "shell-escape-always" => QuotingStyleSpec::new(QuotingStyle::SHELL_ESCAPE_QUOTE),
+        "c" => QuotingStyleSpec::new(QuotingStyle::C_DOUBLE),
+        "escape" => QuotingStyleSpec::new(QuotingStyle::C_NO_QUOTES),
+        "locale" => QuotingStyleSpec {
+            style: QuotingStyle::Literal {
                 show_control: false,
             },
-            false,
-            None,
-        ),
-        "shell" => (QuotingStyle::SHELL, false, None),
-        "shell-always" => (QuotingStyle::SHELL_QUOTE, false, None),
-        "shell-escape" => (QuotingStyle::SHELL_ESCAPE, false, None),
-        "shell-escape-always" => (QuotingStyle::SHELL_ESCAPE_QUOTE, false, None),
-        "c" => (QuotingStyle::C_DOUBLE, false, None),
-        "escape" => (QuotingStyle::C_NO_QUOTES, false, None),
-        "locale" => (
-            QuotingStyle::Literal {
-                show_control: false,
-            },
-            true,
-            Some(LocaleQuoting::Single),
-        ),
-        "clocale" => (QuotingStyle::C_DOUBLE, true, Some(LocaleQuoting::Double)),
+            fixed_control: true,
+            locale: Some(LocaleQuoting::Single),
+        },
+        "clocale" => QuotingStyleSpec::with_locale(QuotingStyle::C_DOUBLE, LocaleQuoting::Double),
         _ => return None,
     };
 
-    Some((
-        if fixed_control {
-            qs
-        } else {
-            qs.show_control(show_control)
-        },
-        locale,
-    ))
+    let style = if spec.fixed_control {
+        spec.style
+    } else {
+        spec.style.show_control(show_control)
+    };
+
+    Some((style, spec.locale))
 }
 
 /// Extracts the quoting style to use based on the options provided.
