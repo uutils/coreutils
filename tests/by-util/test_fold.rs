@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+use unicode_width::UnicodeWidthChar;
 use uutests::new_ucmd;
 
 #[test]
@@ -188,6 +189,52 @@ fn test_zero_width_spaces_in_character_mode() {
         .stdout_is(&expected);
 }
 
+#[test]
+fn test_zero_width_data_line_counts() {
+    let len = io_buf_size_times_two();
+
+    let zero_bytes = vec![0u8; len];
+    let column_bytes = new_ucmd!().pipe_in(zero_bytes.clone()).succeeds();
+    assert_eq!(
+        newline_count(column_bytes.stdout()),
+        0,
+        "fold should not wrap zero-width bytes in column mode",
+    );
+
+    let characters_bytes = new_ucmd!()
+        .args(&["--characters"])
+        .pipe_in(zero_bytes)
+        .succeeds();
+    assert_eq!(
+        newline_count(characters_bytes.stdout()),
+        len / 80,
+        "fold --characters should wrap zero-width bytes every 80 bytes",
+    );
+
+    if UnicodeWidthChar::width('\u{200B}') != Some(0) {
+        eprintln!("skip zero width space checks because width != 0");
+        return;
+    }
+
+    let zero_width_spaces = "\u{200B}".repeat(len);
+    let column_spaces = new_ucmd!().pipe_in(zero_width_spaces.clone()).succeeds();
+    assert_eq!(
+        newline_count(column_spaces.stdout()),
+        0,
+        "fold should keep zero-width spaces on a single line in column mode",
+    );
+
+    let characters_spaces = new_ucmd!()
+        .args(&["--characters"])
+        .pipe_in(zero_width_spaces)
+        .succeeds();
+    assert_eq!(
+        newline_count(characters_spaces.stdout()),
+        len / 80,
+        "fold --characters should wrap zero-width spaces every 80 characters",
+    );
+}
+
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 #[test]
 fn test_fold_reports_no_space_left_on_dev_full() {
@@ -252,6 +299,10 @@ fn fold_characters_reference_bytes(input: &[u8], width: usize) -> Vec<u8> {
     }
 
     output
+}
+
+fn newline_count(bytes: &[u8]) -> usize {
+    bytes.iter().filter(|&&b| b == b'\n').count()
 }
 
 fn tail_inclusive(text: &str, lines: usize) -> String {
