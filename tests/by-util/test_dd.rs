@@ -1837,7 +1837,7 @@ fn test_skip_overflow() {
         .args(&["bs=1", "skip=9223372036854775808", "count=0"])
         .fails()
         .stderr_contains(
-            "dd: invalid number: ‘9223372036854775808’: Value too large for defined data type",
+            "dd: invalid number: ‘9223372036854775808’: Value too large for defined data type\n",
         );
 }
 
@@ -1847,6 +1847,6 @@ fn test_seek_overflow() {
         .args(&["bs=1", "seek=9223372036854775809", "count=0"])
         .fails()
         .stderr_contains(
-            "dd: invalid number: ‘9223372036854775809’: Value too large for defined data type",
+            "dd: invalid number: ‘9223372036854775809’: Value too large for defined data type\n",
         );
 }

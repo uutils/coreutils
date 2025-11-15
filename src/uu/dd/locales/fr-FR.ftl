@@ -142,6 +142,7 @@ dd-error-status-not-recognized = status=NIVEAU non reconnu -> { $level }
 dd-error-unimplemented = fonctionnalité non implémentée sur ce système -> { $feature }
 dd-error-bs-out-of-range = { $param }=N ne peut pas tenir en mémoire
 dd-error-invalid-number = nombre invalide : ‘{ $input }‘
+dd-error-invalid-number-too-large = nombre invalide : { $input }: Valeur trop grande pour le type défini de données
 
 # Progress messages
 dd-progress-records-in = { $complete }+{ $partial } enregistrements en entrée
