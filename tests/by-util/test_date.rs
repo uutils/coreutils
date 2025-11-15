@@ -1071,3 +1071,90 @@ fn test_date_military_timezone_with_offset_variations() {
             .stdout_is(format!("{expected}\n"));
     }
 }
+
+#[test]
+fn test_date_iso8601_with_12hour_time() {
+    // Issue #9253: ISO-8601 style date with 12-hour time should parse correctly
+    // GNU date accepts formats like "2025-01-01 12:00am"
+
+    // Test midnight (12:00am should be 00:00)
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 12:00am")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds()
+        .stdout_is("2025-01-01 00:00:00\n");
+
+    // Test noon (12:00pm should be 12:00)
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 12:00pm")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds()
+        .stdout_is("2025-01-01 12:00:00\n");
+
+    // Test 1:00am
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 1:00am")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds()
+        .stdout_is("2025-01-01 01:00:00\n");
+
+    // Test 11:59pm
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 11:59pm")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds()
+        .stdout_is("2025-01-01 23:59:00\n");
+
+    // Test with seconds
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 3:45:30pm")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds()
+        .stdout_is("2025-01-01 15:45:30\n");
+
+    // Test with a.m./p.m. format
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 8:30a.m.")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds()
+        .stdout_is("2025-01-01 08:30:00\n");
+
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 6:15p.m.")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds()
+        .stdout_is("2025-01-01 18:15:00\n");
+
+    // Ensure existing formats still work
+    // ISO-8601 with 24-hour time
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 00:00")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds()
+        .stdout_is("2025-01-01 00:00:00\n");
+
+    // US format with 12-hour time
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("01/01/2025 12:00am")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds()
+        .stdout_is("2025-01-01 00:00:00\n");
+}
