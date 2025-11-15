@@ -6,8 +6,18 @@
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_tsort_non_utf8_paths() {
+    use std::os::unix::ffi::OsStringExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    std::fs::write(at.plus(&filename), b"a b\nb c\n").unwrap();
+
+    ucmd.arg(&filename).succeeds().stdout_is("a\nb\nc\n");
+}
 
 #[test]
 fn test_invalid_arg() {
@@ -93,7 +103,7 @@ fn test_cycle() {
     new_ucmd!()
         .pipe_in("a b b c c d c b")
         .fails_with_code(1)
-        .stdout_is("a\nc\nd\nb\n")
+        .stdout_is("a\nb\nc\nd\n")
         .stderr_is("tsort: -: input contains a loop:\ntsort: b\ntsort: c\n");
 }
 
@@ -109,6 +119,37 @@ fn test_two_cycles() {
     new_ucmd!()
         .pipe_in("a b b c c b b d d b")
         .fails_with_code(1)
-        .stdout_is("a\nc\nd\nb\n")
+        .stdout_is("a\nb\nc\nd\n")
         .stderr_is("tsort: -: input contains a loop:\ntsort: b\ntsort: c\ntsort: -: input contains a loop:\ntsort: b\ntsort: d\n");
+}
+
+#[test]
+fn test_long_loop_no_stack_overflow() {
+    use std::fmt::Write;
+    const N: usize = 100_000;
+    let mut input = String::new();
+    for v in 0..N {
+        let next = (v + 1) % N;
+        let _ = write!(input, "{v} {next} ");
+    }
+    new_ucmd!()
+        .pipe_in(input)
+        .fails_with_code(1)
+        .stderr_contains("tsort: -: input contains a loop");
+}
+
+#[test]
+fn test_loop_for_iterative_dfs_correctness() {
+    let input = r"
+        A B
+        B C
+        C B
+        C D
+        D A
+    ";
+
+    new_ucmd!()
+        .pipe_in(input)
+        .fails_with_code(1)
+        .stderr_contains("tsort: -: input contains a loop:\ntsort: B\ntsort: C");
 }

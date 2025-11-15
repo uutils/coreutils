@@ -5,8 +5,6 @@
 // spell-checker:ignore aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[cfg(unix)]
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
@@ -1521,7 +1519,7 @@ fn test_multibyte_octal_sequence() {
         .args(&["-d", r"\501"])
         .pipe_in("(1Ł)")
         .succeeds()
-        .stderr_is("tr: warning: the ambiguous octal escape \\501 is being\n        interpreted as the 2-byte sequence \\050, 1\n")
+        .stderr_is("tr: warning: the ambiguous octal escape \\501 is being interpreted as the 2-byte sequence \\050, 1\n")
         .stdout_is("Ł)");
 }
 
@@ -1555,4 +1553,34 @@ fn test_failed_write_is_reported() {
         .set_stdout(std::fs::File::create("/dev/full").unwrap())
         .fails()
         .stderr_is("tr: write error: No space left on device\n");
+}
+
+#[test]
+fn test_broken_pipe_no_error() {
+    new_ucmd!()
+        .args(&["e", "a"])
+        .pipe_in("hello".repeat(100))
+        .run_stdout_starts_with(b"")
+        .fails_silently();
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_stdin_is_socket() {
+    use nix::sys::socket::{AddressFamily, SockFlag, SockType, socketpair};
+    use nix::unistd::write;
+
+    let (fd1, fd2) = socketpair(
+        AddressFamily::Unix,
+        SockType::Stream,
+        None,
+        SockFlag::empty(),
+    )
+    .unwrap();
+    write(fd1, b"::").unwrap();
+    new_ucmd!()
+        .args(&[":", ";"])
+        .set_stdin(fd2)
+        .succeeds()
+        .stdout_is(";;");
 }

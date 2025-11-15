@@ -18,6 +18,7 @@ macro_rules! test_digest {
 
     mod $id {
         use uutests::util::*;
+        use uutests::util_name;
         static DIGEST_ARG: &'static str = concat!("--", stringify!($t));
         static BITS_ARG: &'static str = concat!("--bits=", stringify!($size));
         static EXPECTED_FILE: &'static str = concat!(stringify!($id), ".expected");
@@ -26,21 +27,21 @@ macro_rules! test_digest {
 
         #[test]
         fn test_single_file() {
-            let ts = TestScenario::new("hashsum");
+            let ts = TestScenario::new(util_name!());
             assert_eq!(ts.fixtures.read(EXPECTED_FILE),
                        get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg(INPUT_FILE).succeeds().no_stderr().stdout_str()));
         }
 
         #[test]
         fn test_stdin() {
-            let ts = TestScenario::new("hashsum");
+            let ts = TestScenario::new(util_name!());
             assert_eq!(ts.fixtures.read(EXPECTED_FILE),
                        get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).pipe_in_fixture(INPUT_FILE).succeeds().no_stderr().stdout_str()));
         }
 
         #[test]
         fn test_nonames() {
-            let ts = TestScenario::new("hashsum");
+            let ts = TestScenario::new(util_name!());
             // EXPECTED_FILE has no newline character at the end
             if DIGEST_ARG == "--b3sum" {
                 // Option only available on b3sum
@@ -53,7 +54,7 @@ macro_rules! test_digest {
 
         #[test]
         fn test_check() {
-            let ts = TestScenario::new("hashsum");
+            let ts = TestScenario::new(util_name!());
             println!("File content='{}'", ts.fixtures.read(INPUT_FILE));
             println!("Check file='{}'", ts.fixtures.read(CHECK_FILE));
 
@@ -66,7 +67,7 @@ macro_rules! test_digest {
 
         #[test]
         fn test_zero() {
-            let ts = TestScenario::new("hashsum");
+            let ts = TestScenario::new(util_name!());
             assert_eq!(ts.fixtures.read(EXPECTED_FILE),
                        get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg("--zero").arg(INPUT_FILE).succeeds().no_stderr().stdout_str()));
         }
@@ -76,7 +77,6 @@ macro_rules! test_digest {
         #[test]
         fn test_text_mode() {
             use uutests::new_ucmd;
-            use uutests::util_name;
 
             // TODO Replace this with hard-coded files that store the
             // expected output of text mode on an input file that has
@@ -97,6 +97,27 @@ macro_rules! test_digest {
                 .succeeds()
                 .no_stderr()
                 .stdout_is(std::str::from_utf8(&expected).unwrap());
+        }
+
+        #[test]
+        fn test_missing_file() {
+            let ts = TestScenario::new(util_name!());
+            let at = &ts.fixtures;
+
+            at.write("a", "file1\n");
+            at.write("c", "file3\n");
+
+            #[cfg(unix)]
+            let file_not_found_str = "No such file or directory";
+            #[cfg(not(unix))]
+            let file_not_found_str = "The system cannot find the file specified";
+
+            ts.ucmd()
+                .args(&[DIGEST_ARG, BITS_ARG, "a", "b", "c"])
+                .fails()
+                .stdout_contains("a\n")
+                .stdout_contains("c\n")
+                .stderr_contains(format!("b: {file_not_found_str}"));
         }
     }
     )*)
@@ -852,6 +873,38 @@ fn test_check_directory_error() {
 }
 
 #[test]
+#[cfg(not(windows))]
+fn test_continue_after_directory_error() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("d");
+    at.touch("file");
+    at.touch("no_read_perms");
+    at.set_mode("no_read_perms", 200);
+
+    let (out, err_msg) = (
+        "d41d8cd98f00b204e9800998ecf8427e  file\n",
+        [
+            "md5sum: d: Is a directory",
+            "md5sum: dne: No such file or directory",
+            "md5sum: no_read_perms: Permission denied\n",
+        ]
+        .join("\n"),
+    );
+
+    scene
+        .ccmd("md5sum")
+        .arg("d")
+        .arg("dne")
+        .arg("no_read_perms")
+        .arg("file")
+        .fails()
+        .stdout_is(out)
+        .stderr_is(err_msg);
+}
+
+#[test]
 fn test_check_quiet() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1058,4 +1111,41 @@ fn test_check_sha256_binary() {
         .succeeds()
         .no_stderr()
         .stdout_is("binary.png: OK\n");
+}
+
+#[test]
+fn test_help_shows_correct_utility_name() {
+    // Test that help output shows the actual utility name instead of "hashsum"
+    let scene = TestScenario::new(util_name!());
+
+    // Test md5sum
+    scene
+        .ccmd("md5sum")
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("Usage: md5sum")
+        .stdout_does_not_contain("Usage: hashsum");
+
+    // Test sha256sum
+    scene
+        .ccmd("sha256sum")
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("Usage: sha256sum")
+        .stdout_does_not_contain("Usage: hashsum");
+
+    // Test b2sum
+    scene
+        .ccmd("b2sum")
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("Usage: b2sum")
+        .stdout_does_not_contain("Usage: hashsum");
+
+    // Test that generic hashsum still shows the correct usage
+    scene
+        .ccmd("hashsum")
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("Usage: hashsum --<digest>");
 }

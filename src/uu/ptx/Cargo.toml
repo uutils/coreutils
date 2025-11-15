@@ -22,6 +22,7 @@ clap = { workspace = true }
 regex = { workspace = true }
 uucore = { workspace = true }
 thiserror = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "ptx"

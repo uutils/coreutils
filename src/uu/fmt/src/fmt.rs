@@ -6,20 +6,49 @@
 // spell-checker:ignore (ToDO) PSKIP linebreak ostream parasplit tabwidth xanti xprefix
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
+use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::translate;
+
+use uucore::format_usage;
 
 use linebreak::break_lines;
 use parasplit::ParagraphStream;
+use thiserror::Error;
 
 mod linebreak;
 mod parasplit;
 
-const ABOUT: &str = help_about!("fmt.md");
-const USAGE: &str = help_usage!("fmt.md");
+#[derive(Debug, Error)]
+enum FmtError {
+    #[error("{}", translate!("fmt-error-invalid-goal", "goal" => .0.quote()))]
+    InvalidGoal(String),
+    #[error("{}", translate!("fmt-error-goal-greater-than-width"))]
+    GoalGreaterThanWidth,
+    #[error("{}", translate!("fmt-error-invalid-width", "width" => .0.quote()))]
+    InvalidWidth(String),
+    #[error("{}", translate!("fmt-error-width-out-of-range", "width" => .0))]
+    WidthOutOfRange(usize),
+    #[error("{}", translate!("fmt-error-invalid-tabwidth", "tabwidth" => .0.quote()))]
+    InvalidTabWidth(String),
+    #[error("{}", translate!("fmt-error-first-option-width", "option" => .0))]
+    FirstOptionWidth(char),
+    #[error("{}", translate!("fmt-error-read"))]
+    ReadError,
+    #[error("{}", translate!("fmt-error-invalid-width-malformed", "width" => .0.quote()))]
+    InvalidWidthMalformed(String),
+}
+
+impl From<FmtError> for Box<dyn uucore::error::UError> {
+    fn from(err: FmtError) -> Self {
+        USimpleError::new(1, err.to_string())
+    }
+}
+
 const MAX_WIDTH: usize = 2500;
 const DEFAULT_GOAL: usize = 70;
 const DEFAULT_WIDTH: usize = 75;
@@ -93,10 +122,7 @@ impl FmtOptions {
             match goal_str.parse::<usize>() {
                 Ok(goal) => Some(goal),
                 Err(_) => {
-                    return Err(USimpleError::new(
-                        1,
-                        format!("invalid goal: {}", goal_str.quote()),
-                    ));
+                    return Err(FmtError::InvalidGoal(goal_str.clone()).into());
                 }
             }
         } else {
@@ -106,7 +132,7 @@ impl FmtOptions {
         let (width, goal) = match (width_opt, goal_opt) {
             (Some(w), Some(g)) => {
                 if g > w {
-                    return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));
+                    return Err(FmtError::GoalGreaterThanWidth.into());
                 }
                 (w, g)
             }
@@ -120,7 +146,7 @@ impl FmtOptions {
             }
             (None, Some(g)) => {
                 if g > DEFAULT_WIDTH {
-                    return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));
+                    return Err(FmtError::GoalGreaterThanWidth.into());
                 }
                 let w = (g * 100 / DEFAULT_GOAL_TO_WIDTH_RATIO).max(g + 3);
                 (w, g)
@@ -133,24 +159,18 @@ impl FmtOptions {
         );
 
         if width > MAX_WIDTH {
-            return Err(USimpleError::new(
-                1,
-                format!("invalid width: '{width}': Numerical result out of range"),
-            ));
+            return Err(FmtError::WidthOutOfRange(width).into());
         }
 
         let mut tabwidth = 8;
         if let Some(s) = matches.get_one::<String>(options::TAB_WIDTH) {
             tabwidth = match s.parse::<usize>() {
                 Ok(t) => t,
-                Err(e) => {
-                    return Err(USimpleError::new(
-                        1,
-                        format!("Invalid TABWIDTH specification: {}: {e}", s.quote()),
-                    ));
+                Err(_) => {
+                    return Err(FmtError::InvalidTabWidth(s.clone()).into());
                 }
             };
-        };
+        }
 
         if tabwidth < 1 {
             tabwidth = 1;
@@ -186,24 +206,27 @@ impl FmtOptions {
 ///
 /// A `UResult<()>` indicating success or failure.
 fn process_file(
-    file_name: &str,
+    file_name: &OsString,
     fmt_opts: &FmtOptions,
     ostream: &mut BufWriter<Stdout>,
 ) -> UResult<()> {
-    let mut fp = BufReader::new(match file_name {
-        "-" => Box::new(stdin()) as Box<dyn Read + 'static>,
-        _ => {
-            let f = File::open(file_name)
-                .map_err_context(|| format!("cannot open {} for reading", file_name.quote()))?;
-            if f.metadata()
-                .map_err_context(|| format!("cannot get metadata for {}", file_name.quote()))?
-                .is_dir()
-            {
-                return Err(USimpleError::new(1, "read error".to_string()));
-            }
-
-            Box::new(f) as Box<dyn Read + 'static>
+    let mut fp = BufReader::new(if file_name == "-" {
+        Box::new(stdin()) as Box<dyn Read + 'static>
+    } else {
+        let path = Path::new(file_name);
+        let f = File::open(path).map_err_context(
+            || translate!("fmt-error-cannot-open-for-reading", "file" => path.quote()),
+        )?;
+        if f.metadata()
+            .map_err_context(
+                || translate!("fmt-error-cannot-get-metadata", "file" => path.quote()),
+            )?
+            .is_dir()
+        {
+            return Err(FmtError::ReadError.into());
         }
+
+        Box::new(f) as Box<dyn Read + 'static>
     });
 
     let p_stream = ParagraphStream::new(fmt_opts, &mut fp);
@@ -212,20 +235,20 @@ fn process_file(
             Err(s) => {
                 ostream
                     .write_all(s.as_bytes())
-                    .map_err_context(|| "failed to write output".to_string())?;
+                    .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?;
                 ostream
                     .write_all(b"\n")
-                    .map_err_context(|| "failed to write output".to_string())?;
+                    .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?;
             }
             Ok(para) => break_lines(&para, fmt_opts, ostream)
-                .map_err_context(|| "failed to write output".to_string())?,
+                .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?,
         }
     }
 
     // flush the output after each file
     ostream
         .flush()
-        .map_err_context(|| "failed to write output".to_string())?;
+        .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?;
 
     Ok(())
 }
@@ -236,26 +259,28 @@ fn process_file(
 /// # Returns
 /// A `UResult<()>` with the file names, or an error if one of the file names could not be parsed
 /// (e.g., it is given as a negative number not in the first argument and not after a --
-fn extract_files(matches: &ArgMatches) -> UResult<Vec<String>> {
+fn extract_files(matches: &ArgMatches) -> UResult<Vec<OsString>> {
     let in_first_pos = matches
         .index_of(options::FILES_OR_WIDTH)
         .is_some_and(|x| x == 1);
     let is_neg = |s: &str| s.parse::<isize>().is_ok_and(|w| w < 0);
 
-    let files: UResult<Vec<String>> = matches
-        .get_many::<String>(options::FILES_OR_WIDTH)
+    let files: UResult<Vec<OsString>> = matches
+        .get_many::<OsString>(options::FILES_OR_WIDTH)
         .into_iter()
         .flatten()
         .enumerate()
         .filter_map(|(i, x)| {
-            if is_neg(x) {
+            let x_str = x.to_string_lossy();
+            if is_neg(&x_str) {
                 if in_first_pos && i == 0 {
                     None
                 } else {
-                    let first_num = x.chars().nth(1).expect("a negative number should be at least two characters long");
-                    Some(Err(
-                        UUsageError::new(1, format!("invalid option -- {first_num}; -WIDTH is recognized only when it is the first\noption; use -w N instead"))
-                    ))
+                    let first_num = x_str
+                        .chars()
+                        .nth(1)
+                        .expect("a negative number should be at least two characters long");
+                    Some(Err(FmtError::FirstOptionWidth(first_num).into()))
                 }
             } else {
                 Some(Ok(x.clone()))
@@ -264,7 +289,7 @@ fn extract_files(matches: &ArgMatches) -> UResult<Vec<String>> {
         .collect();
 
     if files.as_ref().is_ok_and(|f| f.is_empty()) {
-        Ok(vec!["-".into()])
+        Ok(vec![OsString::from("-")])
     } else {
         files
     }
@@ -276,16 +301,16 @@ fn extract_width(matches: &ArgMatches) -> UResult<Option<usize>> {
         return if let Ok(width) = width_str.parse::<usize>() {
             Ok(Some(width))
         } else {
-            Err(USimpleError::new(
-                1,
-                format!("invalid width: {}", width_str.quote()),
-            ))
+            Err(FmtError::InvalidWidth(width_str.clone()).into())
         };
     }
 
     if let Some(1) = matches.index_of(options::FILES_OR_WIDTH) {
-        let width_arg = matches.get_one::<String>(options::FILES_OR_WIDTH).unwrap();
-        if let Some(num) = width_arg.strip_prefix('-') {
+        let width_arg = matches
+            .get_one::<OsString>(options::FILES_OR_WIDTH)
+            .unwrap();
+        let width_str = width_arg.to_string_lossy();
+        if let Some(num) = width_str.strip_prefix('-') {
             Ok(num.parse::<usize>().ok())
         } else {
             // will be treated as a file name
@@ -308,17 +333,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             && first_arg.chars().nth(1).is_some_and(|c| c.is_ascii_digit())
             && first_arg.chars().skip(2).any(|c| !c.is_ascii_digit());
         if malformed_number {
-            return Err(USimpleError::new(
-                1,
-                format!(
-                    "invalid width: {}",
-                    first_arg.strip_prefix('-').unwrap().quote()
-                ),
-            ));
+            return Err(FmtError::InvalidWidthMalformed(
+                first_arg.strip_prefix('-').unwrap().to_string(),
+            )
+            .into());
         }
     }
 
-    let matches = uu_app().try_get_matches_from(&args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), &args)?;
 
     let files = extract_files(&matches)?;
 
@@ -336,110 +358,79 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("fmt-about"))
+        .override_usage(format_usage(&translate!("fmt-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
             Arg::new(options::CROWN_MARGIN)
                 .short('c')
                 .long(options::CROWN_MARGIN)
-                .help(
-                    "First and second line of paragraph \
-                    may have different indentations, in which \
-                    case the first line's indentation is preserved, \
-                    and each subsequent line's indentation matches the second line.",
-                )
+                .help(translate!("fmt-crown-margin-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TAGGED_PARAGRAPH)
                 .short('t')
                 .long("tagged-paragraph")
-                .help(
-                    "Like -c, except that the first and second line of a paragraph *must* \
-                    have different indentation or they are treated as separate paragraphs.",
-                )
+                .help(translate!("fmt-tagged-paragraph-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PRESERVE_HEADERS)
                 .short('m')
                 .long("preserve-headers")
-                .help(
-                    "Attempt to detect and preserve mail headers in the input. \
-                    Be careful when combining this flag with -p.",
-                )
+                .help(translate!("fmt-preserve-headers-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SPLIT_ONLY)
                 .short('s')
                 .long("split-only")
-                .help("Split lines only, do not reflow.")
+                .help(translate!("fmt-split-only-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::UNIFORM_SPACING)
                 .short('u')
                 .long("uniform-spacing")
-                .help(
-                    "Insert exactly one \
-                    space between words, and two between sentences. \
-                    Sentence breaks in the input are detected as [?!.] \
-                    followed by two spaces or a newline; other punctuation \
-                    is not interpreted as a sentence break.",
-                )
+                .help(translate!("fmt-uniform-spacing-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PREFIX)
                 .short('p')
                 .long("prefix")
-                .help(
-                    "Reformat only lines \
-                    beginning with PREFIX, reattaching PREFIX to reformatted lines. \
-                    Unless -x is specified, leading whitespace will be ignored \
-                    when matching PREFIX.",
-                )
+                .help(translate!("fmt-prefix-help"))
                 .value_name("PREFIX"),
         )
         .arg(
             Arg::new(options::SKIP_PREFIX)
                 .short('P')
                 .long("skip-prefix")
-                .help(
-                    "Do not reformat lines \
-                    beginning with PSKIP. Unless -X is specified, leading whitespace \
-                    will be ignored when matching PSKIP",
-                )
+                .help(translate!("fmt-skip-prefix-help"))
                 .value_name("PSKIP"),
         )
         .arg(
             Arg::new(options::EXACT_PREFIX)
                 .short('x')
                 .long("exact-prefix")
-                .help(
-                    "PREFIX must match at the \
-                    beginning of the line with no preceding whitespace.",
-                )
+                .help(translate!("fmt-exact-prefix-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::EXACT_SKIP_PREFIX)
                 .short('X')
                 .long("exact-skip-prefix")
-                .help(
-                    "PSKIP must match at the \
-                    beginning of the line with no preceding whitespace.",
-                )
+                .help(translate!("fmt-exact-skip-prefix-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::WIDTH)
                 .short('w')
                 .long("width")
-                .help("Fill output lines up to a maximum of WIDTH columns, default 75. This can be specified as a negative number in the first argument.")
+                .help(translate!("fmt-width-help"))
                 // We must accept invalid values if they are overridden later. This is not supported by clap, so accept all strings instead.
                 .value_name("WIDTH"),
         )
@@ -447,7 +438,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::GOAL)
                 .short('g')
                 .long("goal")
-                .help("Goal width, default of 93% of WIDTH. Must be less than or equal to WIDTH.")
+                .help(translate!("fmt-goal-help"))
                 // We must accept invalid values if they are overridden later. This is not supported by clap, so accept all strings instead.
                 .value_name("GOAL"),
         )
@@ -455,21 +446,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::QUICK)
                 .short('q')
                 .long("quick")
-                .help(
-                    "Break lines more quickly at the \
-            expense of a potentially more ragged appearance.",
-                )
+                .help(translate!("fmt-quick-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TAB_WIDTH)
                 .short('T')
                 .long("tab-width")
-                .help(
-                    "Treat tabs as TABWIDTH spaces for \
-                    determining line length, default 8. Note that this is used only for \
-                    calculating line lengths; tabs are preserved in the output.",
-                )
+                .help(translate!("fmt-tab-width-help"))
                 .value_name("TABWIDTH"),
         )
         .arg(
@@ -477,6 +461,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Append)
                 .value_name("FILES")
                 .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString))
                 .allow_negative_numbers(true),
         )
 }

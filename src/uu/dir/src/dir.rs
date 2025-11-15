@@ -8,13 +8,13 @@ use std::ffi::OsString;
 use std::path::Path;
 use uu_ls::{Config, Format, options};
 use uucore::error::UResult;
-use uucore::quoting_style::{Quotes, QuotingStyle};
+use uucore::quoting_style::QuotingStyle;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let command = uu_app();
 
-    let matches = command.get_matches_from(args);
+    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(command, args, 2)?;
 
     let mut default_quoting_style = false;
     let mut default_format_style = false;
@@ -45,9 +45,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut config = Config::from(&matches)?;
 
     if default_quoting_style {
-        config.quoting_style = QuotingStyle::C {
-            quotes: Quotes::None,
-        };
+        config.quoting_style = QuotingStyle::C_NO_QUOTES;
     }
     if default_format_style {
         config.format = Format::Columns;
@@ -55,8 +53,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let locs = matches
         .get_many::<OsString>(options::PATHS)
-        .map(|v| v.map(Path::new).collect())
-        .unwrap_or_else(|| vec![Path::new(".")]);
+        .map_or_else(|| vec![Path::new(".")], |v| v.map(Path::new).collect());
 
     uu_ls::list(locs, &config)
 }

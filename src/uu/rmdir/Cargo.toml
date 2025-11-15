@@ -21,6 +21,7 @@ path = "src/rmdir.rs"
 clap = { workspace = true }
 uucore = { workspace = true, features = ["fs"] }
 libc = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "rmdir"

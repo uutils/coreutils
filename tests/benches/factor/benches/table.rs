@@ -6,9 +6,14 @@
 // spell-checker:ignore funcs
 
 use array_init::array_init;
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use divan::Bencher;
 
-fn table(c: &mut Criterion) {
+fn main() {
+    divan::main();
+}
+
+#[divan::bench()]
+fn factor_table(bencher: Bencher) {
     #[cfg(target_os = "linux")]
     check_personality();
 
@@ -22,21 +27,17 @@ fn table(c: &mut Criterion) {
         let mut rng = ChaCha8Rng::seed_from_u64(SEED);
 
         std::iter::repeat_with(move || array_init::<_, _, INPUT_SIZE>(|_| rng.next_u64()))
+            .take(10)
+            .collect::<Vec<_>>()
     };
 
-    let mut group = c.benchmark_group("table");
-    group.throughput(Throughput::Elements(INPUT_SIZE as _));
-    for a in inputs.take(10) {
-        let a_str = format!("{a:?}");
-        group.bench_with_input(BenchmarkId::new("factor", &a_str), &a, |b, &a| {
-            b.iter(|| {
-                for n in a {
-                    let _r = num_prime::nt_funcs::factors(n, None);
-                }
-            });
-        });
-    }
-    group.finish();
+    bencher.bench(|| {
+        for a in &inputs {
+            for n in a {
+                divan::black_box(num_prime::nt_funcs::factors(*n, None));
+            }
+        }
+    });
 }
 
 #[cfg(target_os = "linux")]
@@ -54,9 +55,8 @@ fn check_personality() {
     let personality = u64::from_str_radix(&p_string, 16)
         .unwrap_or_else(|_| panic!("Expected a hex value for personality, got '{p_string:?}'"));
     if personality & ADDR_NO_RANDOMIZE == 0 {
-        eprintln!("WARNING: Benchmarking with ASLR enabled (personality is {personality:x}), results might not be reproducible.");
+        eprintln!(
+            "WARNING: Benchmarking with ASLR enabled (personality is {personality:x}), results might not be reproducible."
+        );
     }
 }
-
-criterion_group!(benches, table);
-criterion_main!(benches);

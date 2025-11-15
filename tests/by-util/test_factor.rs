@@ -11,8 +11,6 @@
 )]
 
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 use std::fmt::Write;
 use std::time::{Duration, SystemTime};
@@ -26,6 +24,19 @@ const NUM_TESTS: usize = 100;
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[test]
+fn test_invalid_negative_arg_shows_tip() {
+    // Test that factor shows a tip when given an invalid negative argument
+    // This replicates the GNU test issue where "-1" was interpreted as an invalid option
+    new_ucmd!()
+        .arg("-1")
+        .fails()
+        .code_is(1)
+        .stderr_contains("unexpected argument '-1' found")
+        .stderr_contains("tip: to pass '-1' as a value, use '-- -1'")
+        .stderr_contains("Usage: factor");
 }
 
 #[test]
@@ -51,7 +62,10 @@ fn test_parallel() {
     use sha1::{Digest, Sha1};
     use std::{fs::OpenOptions, time::Duration};
     use tempfile::TempDir;
-    use uutests::util::AtPath;
+    use uutests::{
+        util::{AtPath, TestScenario},
+        util_name,
+    };
     // factor should only flush the buffer at line breaks
     let n_integers = 100_000;
     let mut input_string = String::new();

@@ -3,11 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-use uutests::util::{TestScenario, vec_of_size};
-use uutests::util_name;
+use uutests::util::vec_of_size;
 
 // spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars
 #[test]
@@ -276,13 +275,12 @@ fn test_single_all_counts() {
 #[cfg(unix)]
 #[test]
 fn test_gnu_compatible_quotation() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
+
     at.mkdir("some-dir1");
     at.touch("some-dir1/12\n34.txt");
-    scene
-        .ucmd()
-        .args(&["some-dir1/12\n34.txt"])
+
+    ucmd.args(&["some-dir1/12\n34.txt"])
         .succeeds()
         .stdout_is("0 0 0 'some-dir1/12'$'\\n''34.txt'\n");
 }
@@ -290,27 +288,25 @@ fn test_gnu_compatible_quotation() {
 #[cfg(feature = "test_risky_names")]
 #[test]
 fn test_non_unicode_names() {
-    let scene = TestScenario::new(util_name!());
+    let (at, mut ucmd) = at_and_ucmd!();
+
     let target1 = uucore::os_str_from_bytes(b"some-dir1/1\xC0\n.txt")
         .expect("Only unix platforms can test non-unicode names");
     let target2 = uucore::os_str_from_bytes(b"some-dir1/2\xC0\t.txt")
         .expect("Only unix platforms can test non-unicode names");
-    let at = &scene.fixtures;
+
     at.mkdir("some-dir1");
     at.touch(&target1);
     at.touch(&target2);
-    scene
-        .ucmd()
-        .args(&[target1, target2])
-        .succeeds()
-        .stdout_is_bytes(
-            [
-                b"0 0 0 'some-dir1/1'$'\\300\\n''.txt'\n".to_vec(),
-                b"0 0 0 some-dir1/2\xC0\t.txt\n".to_vec(),
-                b"0 0 0 total\n".to_vec(),
-            ]
-            .concat(),
-        );
+
+    ucmd.args(&[target1, target2]).succeeds().stdout_is_bytes(
+        [
+            b"0 0 0 'some-dir1/1'$'\\300\\n''.txt'\n".to_vec(),
+            b"0 0 0 some-dir1/2\xC0\t.txt\n".to_vec(),
+            b"0 0 0 total\n".to_vec(),
+        ]
+        .concat(),
+    );
 }
 
 #[test]
@@ -470,15 +466,18 @@ fn test_files_from_pseudo_filesystem() {
     assert_ne!(result.stdout_str(), "0 /proc/cpuinfo\n");
 
     // the following block fails on Android with a "Permission denied" error
+    // also skip in case the kernel was not built with profiling support, e.g. WSL
     #[cfg(target_os = "linux")]
     {
         let (at, mut ucmd) = at_and_ucmd!();
-        let result = ucmd.arg("-c").arg("/sys/kernel/profiling").succeeds();
-        let actual = at.read("/sys/kernel/profiling").len();
-        assert_eq!(
-            result.stdout_str(),
-            format!("{actual} /sys/kernel/profiling\n")
-        );
+        if at.file_exists("/sys/kernel/profiling") {
+            let result = ucmd.arg("-c").arg("/sys/kernel/profiling").succeeds();
+            let actual = at.read("/sys/kernel/profiling").len();
+            assert_eq!(
+                result.stdout_str(),
+                format!("{actual} /sys/kernel/profiling\n")
+            );
+        }
     }
 }
 
@@ -545,7 +544,7 @@ fn test_files0_from_with_stdin_in_file() {
 
 #[test]
 fn test_files0_from_with_stdin_try_read_from_stdin() {
-    const MSG: &str = "when reading file names from stdin, no file name of '-' allowed";
+    const MSG: &str = "when reading file names from standard input, no file name of '-' allowed";
     new_ucmd!()
         .args(&["--files0-from=-"])
         .pipe_in("-")
@@ -799,4 +798,13 @@ fn test_args_override() {
         .args(&["--total=always", "--total=never", "alice_in_wonderland.txt"])
         .succeeds()
         .stdout_is("  5  57 302 alice_in_wonderland.txt\n");
+}
+
+#[test]
+fn wc_w_words_with_emoji_separator() {
+    new_ucmd!()
+        .args(&["-w"])
+        .pipe_in("foo 💐 bar\n")
+        .succeeds()
+        .stdout_contains("3");
 }

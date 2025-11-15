@@ -8,13 +8,11 @@ use clap::{Arg, ArgAction, Command};
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, StdoutLock, Write};
-use uucore::error::{UResult, USimpleError};
+use uucore::error::UResult;
 use uucore::format::{FormatChar, OctalParsing, parse_escape_only};
-use uucore::{format_usage, help_about, help_section, help_usage};
+use uucore::{format_usage, os_str_as_bytes};
 
-const ABOUT: &str = help_about!("echo.md");
-const USAGE: &str = help_usage!("echo.md");
-const AFTER_HELP: &str = help_section!("after help", "echo.md");
+use uucore::translate;
 
 mod options {
     pub const STRING: &str = "STRING";
@@ -23,109 +21,160 @@ mod options {
     pub const DISABLE_BACKSLASH_ESCAPE: &str = "disable_backslash_escape";
 }
 
-/// Holds the options for echo command:
-/// -n (disable newline)
-/// -e/-E (escape handling),
-struct EchoOptions {
-    /// -n flag option: if true, output a trailing newline (-n disables it)
-    /// Default: true
+/// Options for the echo command.
+#[derive(Debug, Clone, Copy)]
+struct Options {
+    /// Whether the output should have a trailing newline.
+    ///
+    /// True by default. `-n` disables it.
     pub trailing_newline: bool,
 
-    /// -e enables escape interpretation, -E disables it
-    /// Default: false (escape interpretation disabled)
+    /// Whether given string literals should be parsed for
+    /// escape characters.
+    ///
+    /// False by default, can be enabled with `-e`. Always true if
+    /// `POSIXLY_CORRECT` (cannot be disabled with `-E`).
     pub escape: bool,
 }
 
-/// Checks if an argument is a valid echo flag
-/// Returns true if valid echo flag found
-fn is_echo_flag(arg: &OsString, echo_options: &mut EchoOptions) -> bool {
-    let bytes = arg.as_encoded_bytes();
-    if bytes.first() == Some(&b'-') && arg != "-" {
-        // we initialize our local variables to the "current" options so we don't override
-        // previous found flags
-        let mut escape = echo_options.escape;
-        let mut trailing_newline = echo_options.trailing_newline;
-
-        // Process characters after the '-'
-        for c in &bytes[1..] {
-            match c {
-                b'e' => escape = true,
-                b'E' => escape = false,
-                b'n' => trailing_newline = false,
-                // if there is any char in an argument starting with '-' that doesn't match e/E/n
-                // present means that this argument is not a flag
-                _ => return false,
-            }
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            trailing_newline: true,
+            escape: false,
         }
-
-        // we only override the options with flags being found once we parsed the whole argument
-        echo_options.escape = escape;
-        echo_options.trailing_newline = trailing_newline;
-        return true;
     }
-
-    // argument doesn't start with '-' or is "-" => no flag
-    false
 }
 
-/// Processes command line arguments, separating flags from normal arguments
-/// Returns:
-/// - Vector of non-flag arguments
-/// - trailing_newline: whether to print a trailing newline
-/// - escape: whether to process escape sequences
-fn filter_echo_flags(args: impl uucore::Args) -> (Vec<OsString>, bool, bool) {
-    let mut result = Vec::new();
-    let mut echo_options = EchoOptions {
-        trailing_newline: true,
-        escape: false,
-    };
-    let mut args_iter = args.into_iter();
+impl Options {
+    fn posixly_correct_default() -> Self {
+        Self {
+            trailing_newline: true,
+            escape: true,
+        }
+    }
+}
 
-    // Process arguments until first non-flag is found
-    for arg in &mut args_iter {
-        // we parse flags and store options found in "echo_option". First is_echo_flag
-        // call to return false will break the loop and we will collect the remaining arguments
-        if !is_echo_flag(&arg, &mut echo_options) {
-            // First non-flag argument stops flag processing
-            result.push(arg);
+/// Checks if an argument is a valid echo flag, and if
+/// it is records the changes in [`Options`].
+fn is_flag(arg: &OsStr, options: &mut Options) -> bool {
+    let arg = arg.as_encoded_bytes();
+
+    if arg.first() != Some(&b'-') || arg == b"-" {
+        // Argument doesn't start with '-' or is '-' => not a flag.
+        return false;
+    }
+
+    // We don't modify the given options until after
+    // the loop because there is a chance the flag isn't
+    // valid after all & shouldn't affect the options.
+    let mut options_: Options = *options;
+
+    // Skip the '-' when processing characters.
+    for c in &arg[1..] {
+        match c {
+            b'e' => options_.escape = true,
+            b'E' => options_.escape = false,
+            b'n' => options_.trailing_newline = false,
+
+            // If there is any character in an supposed flag
+            // that is not a valid flag character, it is not
+            // a flag.
+            //
+            // "-eeEnEe" => is a flag.
+            // "-eeBne" => not a flag, short circuit at the B.
+            _ => return false,
+        }
+    }
+
+    // We are now sure that the argument is a
+    // flag, and can apply the modified options.
+    *options = options_;
+    true
+}
+
+/// Processes command line arguments, separating flags from normal arguments.
+///
+/// # Returns
+///
+/// - Vector of non-flag arguments.
+/// - [`Options`], describing how teh arguments should be interpreted.
+fn filter_flags(mut args: impl Iterator<Item = OsString>) -> (Vec<OsString>, Options) {
+    let mut arguments = Vec::with_capacity(args.size_hint().0);
+    let mut options = Options::default();
+
+    // Process arguments until first non-flag is found.
+    for arg in &mut args {
+        // We parse flags and aggregate the options in `options`.
+        // First call to `is_echo_flag` to return false will break the loop.
+        if !is_flag(&arg, &mut options) {
+            // Not a flag. Can break out of flag-processing loop.
+            // Don't forget to push it to the arguments too.
+            arguments.push(arg);
             break;
         }
     }
-    // Collect remaining arguments
-    for arg in args_iter {
-        result.push(arg);
-    }
-    (result, echo_options.trailing_newline, echo_options.escape)
+
+    // Collect remaining non-flag arguments.
+    arguments.extend(args);
+
+    (arguments, options)
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // args[0] is the name of the binary.
+    let args: Vec<OsString> = args.skip(1).collect();
+
     // Check POSIX compatibility mode
+    //
+    // From the GNU manual, on what it should do:
+    //
+    // > If the POSIXLY_CORRECT environment variable is set, then when
+    // > echo’s first argument is not -n it outputs option-like arguments
+    // > instead of treating them as options. For example, echo -ne hello
+    // > outputs ‘-ne hello’ instead of plain ‘hello’. Also backslash
+    // > escapes are always enabled. To echo the string ‘-n’, one of the
+    // > characters can be escaped in either octal or hexadecimal
+    // > representation. For example, echo -e '\x2dn'.
     let is_posixly_correct = env::var_os("POSIXLY_CORRECT").is_some();
 
-    let args_iter = args.skip(1);
-    let (args, trailing_newline, escaped) = if is_posixly_correct {
-        let mut args_iter = args_iter.peekable();
-
-        if args_iter.peek() == Some(&OsString::from("-n")) {
+    let (args, options) = if is_posixly_correct {
+        if args.first().is_some_and(|arg| arg == "-n") {
             // if POSIXLY_CORRECT is set and the first argument is the "-n" flag
-            // we filter flags normally but 'escaped' is activated nonetheless
-            let (args, _, _) = filter_echo_flags(args_iter);
-            (args, false, true)
+            // we filter flags normally but 'escaped' is activated nonetheless.
+            let (args, _) = filter_flags(args.into_iter());
+            (
+                args,
+                Options {
+                    trailing_newline: false,
+                    ..Options::posixly_correct_default()
+                },
+            )
         } else {
             // if POSIXLY_CORRECT is set and the first argument is not the "-n" flag
-            // we just collect all arguments as every argument is considered an argument
-            let args: Vec<OsString> = args_iter.collect();
-            (args, true, true)
+            // we just collect all arguments as no arguments are interpreted as flags.
+            (args, Options::posixly_correct_default())
         }
+    } else if args.len() == 1 && args[0] == "--help" {
+        // If POSIXLY_CORRECT is not set and the first argument
+        // is `--help`, GNU coreutils prints the help message.
+        //
+        // Verify this using:
+        //
+        //   POSIXLY_CORRECT=1 echo --help
+        //                     echo --help
+        uu_app().print_help()?;
+        return Ok(());
+    } else if args.len() == 1 && args[0] == "--version" {
+        print!("{}", uu_app().render_version());
+        return Ok(());
     } else {
         // if POSIXLY_CORRECT is not set we filter the flags normally
-        let (args, trailing_newline, escaped) = filter_echo_flags(args_iter);
-        (args, trailing_newline, escaped)
+        filter_flags(args.into_iter())
     };
 
-    let mut stdout_lock = io::stdout().lock();
-    execute(&mut stdout_lock, args, trailing_newline, escaped)?;
+    execute(&mut io::stdout().lock(), args, options)?;
 
     Ok(())
 }
@@ -141,26 +190,27 @@ pub fn uu_app() -> Command {
         .trailing_var_arg(true)
         .allow_hyphen_values(true)
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
+        .about(translate!("echo-about"))
+        .after_help(translate!("echo-after-help"))
+        .override_usage(format_usage(&translate!("echo-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .arg(
             Arg::new(options::NO_NEWLINE)
                 .short('n')
-                .help("do not output the trailing newline")
+                .help(translate!("echo-help-no-newline"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ENABLE_BACKSLASH_ESCAPE)
                 .short('e')
-                .help("enable interpretation of backslash escapes")
+                .help(translate!("echo-help-enable-escapes"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::DISABLE_BACKSLASH_ESCAPE),
         )
         .arg(
             Arg::new(options::DISABLE_BACKSLASH_ESCAPE)
                 .short('E')
-                .help("disable interpretation of backslash escapes (default)")
+                .help(translate!("echo-help-disable-escapes"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::ENABLE_BACKSLASH_ESCAPE),
         )
@@ -171,54 +221,29 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn execute(
-    stdout_lock: &mut StdoutLock,
-    arguments_after_options: Vec<OsString>,
-    trailing_newline: bool,
-    escaped: bool,
-) -> UResult<()> {
-    for (i, input) in arguments_after_options.into_iter().enumerate() {
-        let Some(bytes) = bytes_from_os_string(input.as_os_str()) else {
-            return Err(USimpleError::new(
-                1,
-                "Non-UTF-8 arguments provided, but this platform does not support them",
-            ));
-        };
+fn execute(stdout: &mut StdoutLock, args: Vec<OsString>, options: Options) -> UResult<()> {
+    for (i, arg) in args.into_iter().enumerate() {
+        let bytes = os_str_as_bytes(&arg)?;
 
+        // Don't print a space before the first argument
         if i > 0 {
-            stdout_lock.write_all(b" ")?;
+            stdout.write_all(b" ")?;
         }
 
-        if escaped {
+        if options.escape {
             for item in parse_escape_only(bytes, OctalParsing::ThreeDigits) {
-                if item.write(&mut *stdout_lock)?.is_break() {
+                if item.write(&mut *stdout)?.is_break() {
                     return Ok(());
                 }
             }
         } else {
-            stdout_lock.write_all(bytes)?;
+            stdout.write_all(bytes)?;
         }
     }
 
-    if trailing_newline {
-        stdout_lock.write_all(b"\n")?;
+    if options.trailing_newline {
+        stdout.write_all(b"\n")?;
     }
 
     Ok(())
-}
-
-fn bytes_from_os_string(input: &OsStr) -> Option<&[u8]> {
-    #[cfg(target_family = "unix")]
-    {
-        use std::os::unix::ffi::OsStrExt;
-
-        Some(input.as_bytes())
-    }
-
-    #[cfg(not(target_family = "unix"))]
-    {
-        // TODO
-        // Verify that this works correctly on these platforms
-        input.to_str().map(|st| st.as_bytes())
-    }
 }

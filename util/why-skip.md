@@ -1,11 +1,5 @@
 # spell-checker:ignore epipe readdir restorecon SIGALRM capget bigtime rootfs enotsup
 
-= trapping SIGPIPE is not supported =
-* tests/tail-2/pipe-f.sh
-* tests/misc/seq-epipe.sh
-* tests/misc/printf-surprise.sh
-* tests/misc/env-signal-handler.sh
-
 = skipped test: breakpoint not hit =
 * tests/tail-2/inotify-race2.sh
 * tail-2/inotify-race.sh

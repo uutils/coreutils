@@ -14,7 +14,7 @@ renaming the executable from `shuf` to `shuf.old`.
 Sample input can be generated using `/dev/random`:
 
 ```shell
-wget -O input.txt https://www.gutenberg.org/files/100/100-0.txt
+curl -o input.txt https://www.gutenberg.org/files/100/100-0.txt
 ```
 
 To avoid distortions from IO, it is recommended to store input data in tmpfs.

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore getloadavg behaviour loadavg uptime upsecs updays upmins uphours boottime nusers utmpxname gettime clockid
+// spell-checker:ignore getloadavg behaviour loadavg uptime upsecs updays upmins uphours boottime nusers utmpxname gettime clockid couldnt
 
 use chrono::{Local, TimeZone, Utc};
 #[cfg(unix)]
@@ -12,28 +12,16 @@ use std::io;
 use thiserror::Error;
 use uucore::error::{UError, UResult};
 use uucore::libc::time_t;
+use uucore::translate;
 use uucore::uptime::*;
 
 use clap::{Arg, ArgAction, Command, ValueHint, builder::ValueParser};
 
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
 
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
 use uucore::utmpx::*;
-
-#[cfg(target_env = "musl")]
-const ABOUT: &str = concat!(
-    help_about!("uptime.md"),
-    "\n\nWarning: When built with musl libc, the `uptime` utility may show '0 users' \n",
-    "due to musl's stub implementation of utmpx functions. Boot time and load averages \n",
-    "are still calculated using alternative mechanisms."
-);
-
-#[cfg(not(target_env = "musl"))]
-const ABOUT: &str = help_about!("uptime.md");
-
-const USAGE: &str = help_usage!("uptime.md");
 
 pub mod options {
     pub static SINCE: &str = "since";
@@ -43,11 +31,11 @@ pub mod options {
 #[derive(Debug, Error)]
 pub enum UptimeError {
     // io::Error wrapper
-    #[error("couldn't get boot time: {0}")]
+    #[error("{}", translate!("uptime-error-io", "error" => format!("{}", .0)))]
     IoErr(#[from] io::Error),
-    #[error("couldn't get boot time: Is a directory")]
+    #[error("{}", translate!("uptime-error-target-is-dir"))]
     TargetIsDir,
-    #[error("couldn't get boot time: Illegal seek")]
+    #[error("{}", translate!("uptime-error-target-is-fifo"))]
     TargetIsFifo,
 }
 
@@ -59,7 +47,7 @@ impl UError for UptimeError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     #[cfg(unix)]
     let file_path = matches.get_one::<OsString>(options::PATH);
@@ -76,22 +64,28 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
+    #[cfg(not(target_env = "musl"))]
+    let about = translate!("uptime-about");
+    #[cfg(target_env = "musl")]
+    let about = translate!("uptime-about") + &translate!("uptime-about-musl-warning");
+
     let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(about)
+        .override_usage(format_usage(&translate!("uptime-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::SINCE)
                 .short('s')
                 .long(options::SINCE)
-                .help("system up since")
+                .help(translate!("uptime-help-since"))
                 .action(ArgAction::SetTrue),
         );
     #[cfg(unix)]
     cmd.arg(
         Arg::new(options::PATH)
-            .help("file to search boot time from")
+            .help(translate!("uptime-help-path"))
             .action(ArgAction::Set)
             .num_args(0..=1)
             .value_parser(ValueParser::os_string())
@@ -137,9 +131,9 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
         let bytes = file_path.as_os_str().as_bytes();
 
         if bytes[bytes.len() - 1] != b'x' {
-            show_error!("couldn't get boot time");
+            show_error!("{}", translate!("uptime-error-couldnt-get-boot-time"));
             print_time();
-            print!("up ???? days ??:??,");
+            print!("{}", translate!("uptime-output-unknown-uptime"));
             print_nusers(Some(0));
             print_loadavg();
             set_exit_code(1);
@@ -149,7 +143,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
 
     if non_fatal_error {
         print_time();
-        print!("up ???? days ??:??,");
+        print!("{}", translate!("uptime-output-unknown-uptime"));
         print_nusers(Some(0));
         print_loadavg();
         return Ok(());
@@ -164,24 +158,24 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
         if let Some(time) = boot_time {
             print_uptime(Some(time))?;
         } else {
-            show_error!("couldn't get boot time");
+            show_error!("{}", translate!("uptime-error-couldnt-get-boot-time"));
             set_exit_code(1);
 
-            print!("up ???? days ??:??,");
+            print!("{}", translate!("uptime-output-unknown-uptime"));
         }
         user_count = count;
     }
 
     #[cfg(target_os = "openbsd")]
     {
-        let upsecs = get_uptime(None);
+        let upsecs = get_uptime(None)?;
         if upsecs >= 0 {
             print_uptime(Some(upsecs))?;
         } else {
-            show_error!("couldn't get boot time");
+            show_error!("{}", translate!("uptime-error-couldnt-get-boot-time"));
             set_exit_code(1);
 
-            print!("up ???? days ??:??,");
+            print!("{}", translate!("uptime-output-unknown-uptime"));
         }
         user_count = get_nusers(file_path.to_str().expect("invalid utmp path file"));
     }
@@ -195,20 +189,17 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
 fn uptime_since() -> UResult<()> {
     #[cfg(unix)]
     #[cfg(not(target_os = "openbsd"))]
-    let (boot_time, _) = process_utmpx(None);
-
-    #[cfg(target_os = "openbsd")]
-    let uptime = get_uptime(None)?;
-    #[cfg(unix)]
-    #[cfg(not(target_os = "openbsd"))]
-    let uptime = get_uptime(boot_time)?;
-    #[cfg(target_os = "windows")]
+    let uptime = {
+        let (boot_time, _) = process_utmpx(None);
+        get_uptime(boot_time)?
+    };
+    #[cfg(any(windows, target_os = "openbsd"))]
     let uptime = get_uptime(None)?;
 
-    let initial_date = Local
+    let since_date = Local
         .timestamp_opt(Utc::now().timestamp() - uptime, 0)
         .unwrap();
-    println!("{}", initial_date.format("%Y-%m-%d %H:%M:%S"));
+    println!("{}", since_date.format("%Y-%m-%d %H:%M:%S"));
 
     Ok(())
 }
@@ -251,7 +242,7 @@ fn process_utmpx(file: Option<&OsString>) -> (Option<time_t>, usize) {
                     boot_time = Some(dt.unix_timestamp() as time_t);
                 }
             }
-            _ => continue,
+            _ => (),
         }
     }
     (boot_time, nusers)

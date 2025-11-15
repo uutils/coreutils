@@ -13,6 +13,8 @@ use nix::errno::Errno;
 use std::io;
 use std::process::Child;
 use std::process::ExitStatus;
+use std::sync::atomic;
+use std::sync::atomic::AtomicBool;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -88,7 +90,11 @@ pub trait ChildExt {
 
     /// Wait for a process to finish or return after the specified duration.
     /// A `timeout` of zero disables the timeout.
-    fn wait_or_timeout(&mut self, timeout: Duration) -> io::Result<Option<ExitStatus>>;
+    fn wait_or_timeout(
+        &mut self,
+        timeout: Duration,
+        signaled: Option<&AtomicBool>,
+    ) -> io::Result<Option<ExitStatus>>;
 }
 
 impl ChildExt for Child {
@@ -102,7 +108,7 @@ impl ChildExt for Child {
 
     fn send_signal_group(&mut self, signal: usize) -> io::Result<()> {
         // Ignore the signal, so we don't go into a signal loop.
-        if unsafe { libc::signal(signal as i32, libc::SIG_IGN) } != 0 {
+        if unsafe { libc::signal(signal as i32, libc::SIG_IGN) } == usize::MAX {
             return Err(io::Error::last_os_error());
         }
         if unsafe { libc::kill(0, signal as i32) } == 0 {
@@ -112,7 +118,11 @@ impl ChildExt for Child {
         }
     }
 
-    fn wait_or_timeout(&mut self, timeout: Duration) -> io::Result<Option<ExitStatus>> {
+    fn wait_or_timeout(
+        &mut self,
+        timeout: Duration,
+        signaled: Option<&AtomicBool>,
+    ) -> io::Result<Option<ExitStatus>> {
         if timeout == Duration::from_micros(0) {
             return self.wait().map(Some);
         }
@@ -125,7 +135,9 @@ impl ChildExt for Child {
                 return Ok(Some(status));
             }
 
-            if start.elapsed() >= timeout {
+            if start.elapsed() >= timeout
+                || signaled.is_some_and(|signaled| signaled.load(atomic::Ordering::Relaxed))
+            {
                 break;
             }
 

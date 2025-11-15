@@ -19,7 +19,8 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use uucore::display::{OsWrite, Quotable};
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
+use uucore::translate;
 
 mod rand_read_adapter;
 
@@ -28,9 +29,6 @@ enum Mode {
     Echo(Vec<OsString>),
     InputRange(RangeInclusive<usize>),
 }
-
-static USAGE: &str = help_usage!("shuf.md");
-static ABOUT: &str = help_about!("shuf.md");
 
 struct Options {
     head_count: usize,
@@ -53,7 +51,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let mode = if matches.get_flag(options::ECHO) {
         Mode::Echo(
@@ -73,9 +71,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if let Some(second_file) = operands.next() {
             return Err(UUsageError::new(
                 1,
-                format!("unexpected argument {} found", second_file.quote()),
+                translate!("shuf-error-unexpected-argument", "arg" => second_file.quote()),
             ));
-        };
+        }
         Mode::Default(file.into())
     };
 
@@ -103,8 +101,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut output = BufWriter::new(match options.output {
         None => Box::new(stdout()) as Box<dyn OsWrite>,
         Some(ref s) => {
-            let file = File::create(s)
-                .map_err_context(|| format!("failed to open {} for writing", s.quote()))?;
+            let file = File::create(s).map_err_context(
+                || translate!("shuf-error-failed-to-open-for-writing", "file" => s.quote()),
+            )?;
             Box::new(file) as Box<dyn OsWrite>
         }
     });
@@ -116,8 +115,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut rng = match options.random_source {
         Some(ref r) => {
-            let file = File::open(r)
-                .map_err_context(|| format!("failed to open random source {}", r.quote()))?;
+            let file = File::open(r).map_err_context(
+                || translate!("shuf-error-failed-to-open-random-source", "file" => r.quote()),
+            )?;
             WrappedRng::RngFile(rand_read_adapter::ReadRng::new(file))
         }
         None => WrappedRng::RngDefault(rand::rng()),
@@ -143,15 +143,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about(ABOUT)
+        .about(translate!("shuf-about"))
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .override_usage(format_usage(&translate!("shuf-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::ECHO)
                 .short('e')
                 .long(options::ECHO)
-                .help("treat each ARG as an input line")
+                .help(translate!("shuf-help-echo"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::ECHO)
                 .conflicts_with(options::INPUT_RANGE),
@@ -161,7 +162,7 @@ pub fn uu_app() -> Command {
                 .short('i')
                 .long(options::INPUT_RANGE)
                 .value_name("LO-HI")
-                .help("treat each number LO through HI as an input line")
+                .help(translate!("shuf-help-input-range"))
                 .value_parser(parse_range)
                 .conflicts_with(options::FILE_OR_ARGS),
         )
@@ -171,7 +172,7 @@ pub fn uu_app() -> Command {
                 .long(options::HEAD_COUNT)
                 .value_name("COUNT")
                 .action(ArgAction::Append)
-                .help("output at most COUNT lines")
+                .help(translate!("shuf-help-head-count"))
                 .value_parser(usize::from_str),
         )
         .arg(
@@ -179,7 +180,7 @@ pub fn uu_app() -> Command {
                 .short('o')
                 .long(options::OUTPUT)
                 .value_name("FILE")
-                .help("write result to FILE instead of standard output")
+                .help(translate!("shuf-help-output"))
                 .value_parser(ValueParser::path_buf())
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -187,7 +188,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::RANDOM_SOURCE)
                 .long(options::RANDOM_SOURCE)
                 .value_name("FILE")
-                .help("get random bytes from FILE")
+                .help(translate!("shuf-help-random-source"))
                 .value_parser(ValueParser::path_buf())
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -195,7 +196,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::REPEAT)
                 .short('r')
                 .long(options::REPEAT)
-                .help("output lines can be repeated")
+                .help(translate!("shuf-help-repeat"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::REPEAT),
         )
@@ -203,7 +204,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::ZERO_TERMINATED)
                 .short('z')
                 .long(options::ZERO_TERMINATED)
-                .help("line delimiter is NUL, not newline")
+                .help(translate!("shuf-help-zero-terminated"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::ZERO_TERMINATED),
         )
@@ -220,7 +221,7 @@ fn read_input_file(filename: &Path) -> UResult<Vec<u8>> {
         let mut data = Vec::new();
         stdin()
             .read_to_end(&mut data)
-            .map_err_context(|| "read error".into())?;
+            .map_err_context(|| translate!("shuf-error-read-error"))?;
         Ok(data)
     } else {
         std::fs::read(filename).map_err_context(|| filename.maybe_quote().to_string())
@@ -252,15 +253,18 @@ trait Shufable {
 
 impl<'a> Shufable for Vec<&'a [u8]> {
     type Item = &'a [u8];
+
     fn is_empty(&self) -> bool {
         (**self).is_empty()
     }
+
     fn choose(&self, rng: &mut WrappedRng) -> Self::Item {
         // Note: "copied()" only copies the reference, not the entire [u8].
         // Returns None if the slice is empty. We checked this before, so
         // this is safe.
         (**self).choose(rng).unwrap()
     }
+
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
@@ -273,12 +277,15 @@ impl<'a> Shufable for Vec<&'a [u8]> {
 
 impl<'a> Shufable for Vec<&'a OsStr> {
     type Item = &'a OsStr;
+
     fn is_empty(&self) -> bool {
         (**self).is_empty()
     }
+
     fn choose(&self, rng: &mut WrappedRng) -> Self::Item {
         (**self).choose(rng).unwrap()
     }
+
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
@@ -290,12 +297,15 @@ impl<'a> Shufable for Vec<&'a OsStr> {
 
 impl Shufable for RangeInclusive<usize> {
     type Item = usize;
+
     fn is_empty(&self) -> bool {
         self.is_empty()
     }
+
     fn choose(&self, rng: &mut WrappedRng) -> usize {
         rng.random_range(self.clone())
     }
+
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
@@ -422,10 +432,14 @@ fn shuf_exec(
     rng: &mut WrappedRng,
     output: &mut BufWriter<Box<dyn OsWrite>>,
 ) -> UResult<()> {
-    let ctx = || "write failed".to_string();
+    let ctx = || translate!("shuf-error-write-failed");
+
     if opts.repeat {
         if input.is_empty() {
-            return Err(USimpleError::new(1, "no lines to repeat"));
+            return Err(USimpleError::new(
+                1,
+                translate!("shuf-error-no-lines-to-repeat"),
+            ));
         }
         for _ in 0..opts.head_count {
             let r = input.choose(rng);
@@ -451,10 +465,10 @@ fn parse_range(input_range: &str) -> Result<RangeInclusive<usize>, String> {
         if begin <= end || begin == end + 1 {
             Ok(begin..=end)
         } else {
-            Err("start exceeds end".into())
+            Err(translate!("shuf-error-start-exceeds-end"))
         }
     } else {
-        Err("missing '-'".into())
+        Err(translate!("shuf-error-missing-dash"))
     }
 }
 

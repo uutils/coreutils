@@ -14,7 +14,6 @@ This file documents why some tests are failing:
 * gnu/tests/du/long-from-unreadable.sh - https://github.com/uutils/coreutils/issues/7217
 * gnu/tests/du/move-dir-while-traversing.sh
 * gnu/tests/expr/expr-multibyte.pl
-* gnu/tests/expr/expr.pl
 * gnu/tests/fmt/goal-option.sh
 * gnu/tests/fmt/non-space.sh
 * gnu/tests/head/head-elide-tail.pl
@@ -27,7 +26,7 @@ This file documents why some tests are failing:
 * gnu/tests/misc/close-stdout.sh
 * gnu/tests/misc/comm.pl
 * gnu/tests/misc/nohup.sh
-* gnu/tests/misc/numfmt.pl - https://github.com/uutils/coreutils/issues/7219 / https://github.com/uutils/coreutils/issues/7221
+* gnu/tests/numfmt/numfmt.pl - https://github.com/uutils/coreutils/issues/7219 / https://github.com/uutils/coreutils/issues/7221
 * gnu/tests/misc/stdbuf.sh - https://github.com/uutils/coreutils/issues/7072
 * gnu/tests/misc/tee.sh - https://github.com/uutils/coreutils/issues/7073
 * gnu/tests/misc/time-style.sh
@@ -39,11 +38,7 @@ This file documents why some tests are failing:
 * gnu/tests/mv/part-hardlink.sh
 * gnu/tests/od/od-N.sh
 * gnu/tests/od/od-float.sh
-* gnu/tests/printf/printf-cov.pl
-* gnu/tests/printf/printf-indexed.sh
-* gnu/tests/printf/printf-mb.sh
 * gnu/tests/printf/printf-quote.sh
-* gnu/tests/printf/printf.sh
 * gnu/tests/ptx/ptx-overrun.sh
 * gnu/tests/ptx/ptx.pl
 * gnu/tests/rm/empty-inacc.sh - https://github.com/uutils/coreutils/issues/7033

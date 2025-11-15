@@ -65,7 +65,7 @@ impl TryFrom<PathBuf> for Teletype {
                 .parse::<u64>()
                 .map_err(|_| ())
                 .map(Teletype::Pts);
-        };
+        }
 
         // Considering this format: **/**/ttyS** then **/**/tty**
         let path = value.to_str().ok_or(())?;
@@ -73,7 +73,7 @@ impl TryFrom<PathBuf> for Teletype {
         let f = |prefix: &str| {
             value
                 .iter()
-                .last()?
+                .next_back()?
                 .to_str()?
                 .strip_prefix(prefix)?
                 .parse::<u64>()

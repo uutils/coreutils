@@ -10,12 +10,10 @@ use std::error::Error;
 use std::ffi::OsString;
 use std::io::{self, Write};
 use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
 #[cfg(unix)]
 use uucore::signals::enable_pipe_errors;
-use uucore::{format_usage, help_about, help_usage};
-
-const ABOUT: &str = help_about!("yes.md");
-const USAGE: &str = help_usage!("yes.md");
+use uucore::translate;
 
 // it's possible that using a smaller or larger buffer might provide better performance on some
 // systems, but honestly this is good enough
@@ -23,7 +21,7 @@ const BUF_SIZE: usize = 16 * 1024;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let mut buffer = Vec::with_capacity(BUF_SIZE);
     args_into_buffer(&mut buffer, matches.get_many::<OsString>("STRING")).unwrap();
@@ -32,15 +30,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     match exec(&buffer) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
-        Err(err) => Err(USimpleError::new(1, format!("standard output: {err}"))),
+        Err(err) => Err(USimpleError::new(
+            1,
+            translate!("yes-error-standard-output", "error" => err),
+        )),
     }
 }
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("yes-about"))
+        .override_usage(format_usage(&translate!("yes-usage")))
         .arg(
             Arg::new("STRING")
                 .value_parser(ValueParser::os_string())
@@ -49,7 +51,7 @@ pub fn uu_app() -> Command {
         .infer_long_args(true)
 }
 
-// Copies words from `i` into `buf`, separated by spaces.
+/// Copies words from `i` into `buf`, separated by spaces.
 fn args_into_buffer<'a>(
     buf: &mut Vec<u8>,
     i: Option<impl Iterator<Item = &'a OsString>>,
@@ -78,7 +80,7 @@ fn args_into_buffer<'a>(
         for part in itertools::intersperse(i.map(|a| a.to_str()), Some(" ")) {
             let bytes = match part {
                 Some(part) => part.as_bytes(),
-                None => return Err("arguments contain invalid UTF-8".into()),
+                None => return Err(translate!("yes-error-invalid-utf8").into()),
             };
             buf.extend_from_slice(bytes);
         }
@@ -89,8 +91,8 @@ fn args_into_buffer<'a>(
     Ok(())
 }
 
-// Assumes buf holds a single output line forged from the command line arguments, copies it
-// repeatedly until the buffer holds as many copies as it can under BUF_SIZE.
+/// Assumes buf holds a single output line forged from the command line arguments, copies it
+/// repeatedly until the buffer holds as many copies as it can under [`BUF_SIZE`].
 fn prepare_buffer(buf: &mut Vec<u8>) {
     if buf.len() * 2 > BUF_SIZE {
         return;

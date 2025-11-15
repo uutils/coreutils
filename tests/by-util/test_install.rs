@@ -2,17 +2,21 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) helloworld nodir objdump n'source
+// spell-checker:ignore (words) helloworld nodir objdump n'source nconfined
 
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
 use std::fs;
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(not(windows))]
 use std::process::Command;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
 use uucore::process::{getegid, geteuid};
+#[cfg(feature = "feat_selinux")]
+use uucore::selinux::get_getfattr_output;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::{TestScenario, is_ci, run_ucmd_as_root};
@@ -68,24 +72,6 @@ fn test_install_failing_not_dir() {
         .arg(file3)
         .fails()
         .stderr_contains("not a directory");
-}
-
-#[test]
-fn test_install_unimplemented_arg() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let dir = "target_dir";
-    let file = "source_file";
-    let context_arg = "--context";
-
-    at.touch(file);
-    at.mkdir(dir);
-    ucmd.arg(context_arg)
-        .arg(file)
-        .arg(dir)
-        .fails()
-        .stderr_contains("Unimplemented");
-
-    assert!(!at.file_exists(format!("{dir}/{file}")));
 }
 
 #[test]
@@ -255,6 +241,29 @@ fn test_install_mode_symbolic() {
     assert!(at.file_exists(dest_file));
     let permissions = at.metadata(dest_file).permissions();
     assert_eq!(0o100_003_u32, PermissionsExt::mode(&permissions));
+}
+
+#[test]
+fn test_install_mode_symbolic_ignore_umask() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "target_dir";
+    let file = "source_file";
+    let mode_arg = "--mode=+w";
+
+    at.touch(file);
+    at.mkdir(dir);
+    ucmd.arg(file)
+        .arg(dir)
+        .arg(mode_arg)
+        .umask(0o022)
+        .succeeds()
+        .no_stderr();
+
+    let dest_file = &format!("{dir}/{file}");
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(dest_file));
+    let permissions = at.metadata(dest_file).permissions();
+    assert_eq!(0o100_222_u32, PermissionsExt::mode(&permissions));
 }
 
 #[test]
@@ -466,6 +475,80 @@ fn test_install_nested_paths_copy_file() {
 }
 
 #[test]
+fn test_multiple_mode_arguments_override_not_error() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir = "source_dir";
+
+    let file = "source_file";
+    let gid = getegid();
+    let uid = geteuid();
+
+    at.touch(file);
+    at.mkdir(dir);
+
+    scene
+        .ucmd()
+        .args(&[
+            file,
+            &format!("{dir}/{file}"),
+            "--owner=invalid_owner",
+            "--owner",
+            &uid.to_string(),
+        ])
+        .succeeds()
+        .no_stderr();
+
+    scene
+        .ucmd()
+        .args(&[
+            file,
+            &format!("{dir}/{file}"),
+            "-o invalid_owner",
+            "-o",
+            &uid.to_string(),
+        ])
+        .succeeds()
+        .no_stderr();
+
+    scene
+        .ucmd()
+        .args(&[file, &format!("{dir}/{file}"), "--mode=999", "--mode=200"])
+        .succeeds()
+        .no_stderr();
+
+    scene
+        .ucmd()
+        .args(&[file, &format!("{dir}/{file}"), "-m 999", "-m 200"])
+        .succeeds()
+        .no_stderr();
+
+    scene
+        .ucmd()
+        .args(&[
+            file,
+            &format!("{dir}/{file}"),
+            "--group=invalid_group",
+            "--group",
+            &gid.to_string(),
+        ])
+        .succeeds()
+        .no_stderr();
+
+    scene
+        .ucmd()
+        .args(&[
+            file,
+            &format!("{dir}/{file}"),
+            "-g invalid_group",
+            "-g",
+            &gid.to_string(),
+        ])
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
 fn test_install_failing_omitting_directory() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -587,7 +670,9 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
         .arg("-m")
         .arg("1644")
         .succeeds()
-        .no_stderr();
+        .stderr_contains(
+            "the --compare (-C) option is ignored when you specify a mode with non-permission bits",
+        );
 
     file2_meta = at.metadata(file2);
     let after_install_sticky = FileTime::from_last_modification_time(&file2_meta);
@@ -633,6 +718,8 @@ fn strip_source_file() -> &'static str {
 
 #[test]
 #[cfg(not(windows))]
+// FIXME test runs in a timeout with macos-latest on x86_64 in the CI
+#[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
 fn test_install_and_strip() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -656,6 +743,8 @@ fn test_install_and_strip() {
 
 #[test]
 #[cfg(not(windows))]
+// FIXME test runs in a timeout with macos-latest on x86_64 in the CI
+#[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
 fn test_install_and_strip_with_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -947,7 +1036,7 @@ fn test_install_creating_leading_dir_fails_on_long_name() {
         .arg(source)
         .arg(at.plus(target.as_str()))
         .fails()
-        .stderr_contains("failed to create");
+        .stderr_contains("cannot create directory");
 }
 
 #[test]
@@ -1460,6 +1549,13 @@ fn test_install_dir_dot() {
         .arg("-v")
         .succeeds()
         .stdout_contains("creating directory 'dir5/cali'");
+    scene
+        .ucmd()
+        .arg("-d")
+        .arg("dir6/./")
+        .arg("-v")
+        .succeeds()
+        .stdout_contains("creating directory 'dir6'");
 
     let at = &scene.fixtures;
 
@@ -1468,6 +1564,7 @@ fn test_install_dir_dot() {
     assert!(at.dir_exists("dir3"));
     assert!(at.dir_exists("dir4/cal"));
     assert!(at.dir_exists("dir5/cali"));
+    assert!(at.dir_exists("dir6"));
 }
 
 #[test]
@@ -1636,6 +1733,193 @@ fn test_install_compare_option() {
         .args(&["-C", "--strip", "--strip-program=echo", first, second])
         .fails_with_code(1)
         .stderr_contains("Options --compare and --strip are mutually exclusive");
+}
+
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_install_compare_basic() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "source_file";
+    let dest = "dest_file";
+
+    at.write(source, "test content");
+
+    // First install should copy
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m644", source, dest])
+        .succeeds()
+        .stdout_contains(format!("'{source}' -> '{dest}'"));
+
+    // Second install with same mode should be no-op (compare works)
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m644", source, dest])
+        .succeeds()
+        .no_stdout();
+
+    // Test that compare works correctly when content actually differs
+    let source2 = "source2";
+    at.write(source2, "different content");
+
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m644", source2, dest])
+        .succeeds()
+        .stdout_contains("removed")
+        .stdout_contains(format!("'{source2}' -> '{dest}'"));
+
+    // Second install should be no-op since content is now identical
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m644", source2, dest])
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
+#[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
+fn test_install_compare_special_mode_bits() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "source_file";
+    let dest = "dest_file";
+
+    at.write(source, "test content");
+
+    // Special mode bits - setgid (tests the core bug fix)
+    // When setgid bit is set, -C should be ignored (always copy)
+    // This tests the bug where b.specified_mode.unwrap_or(0) was used instead of b.mode()
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m2755", source, dest])
+        .succeeds()
+        .stdout_contains(format!("'{source}' -> '{dest}'"));
+
+    // Second install with same setgid mode should ALSO copy (not skip)
+    // because -C option should be ignored when special mode bits are present
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m2755", source, dest])
+        .succeeds()
+        .stdout_contains("removed")
+        .stdout_contains(format!("'{source}' -> '{dest}'"));
+
+    // Special mode bits - setuid
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m4755", source, dest])
+        .succeeds()
+        .stdout_contains("removed")
+        .stdout_contains(format!("'{source}' -> '{dest}'"));
+
+    // Second install with setuid should also copy
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m4755", source, dest])
+        .succeeds()
+        .stdout_contains("removed")
+        .stdout_contains(format!("'{source}' -> '{dest}'"));
+
+    // Special mode bits - sticky bit
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m1755", source, dest])
+        .succeeds()
+        .stdout_contains("removed")
+        .stdout_contains(format!("'{source}' -> '{dest}'"));
+
+    // Second install with sticky bit should also copy
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m1755", source, dest])
+        .succeeds()
+        .stdout_contains("removed")
+        .stdout_contains(format!("'{source}' -> '{dest}'"));
+
+    // Back to normal mode - compare should work again
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m644", source, dest])
+        .succeeds()
+        .stdout_contains("removed")
+        .stdout_contains(format!("'{source}' -> '{dest}'"));
+
+    // Second install with normal mode should be no-op
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m644", source, dest])
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_install_compare_group_ownership() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "source_file";
+    let dest = "dest_file";
+
+    at.write(source, "test content");
+
+    let user_group = std::process::Command::new("id")
+        .arg("-nrg")
+        .output()
+        .map_or_else(
+            |_| "users".to_string(),
+            |output| String::from_utf8_lossy(&output.stdout).trim().to_string(),
+        ); // fallback group name
+
+    // Install with explicit group
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m664", "-g", &user_group, source, dest])
+        .succeeds()
+        .stdout_contains(format!("'{source}' -> '{dest}'"));
+
+    // Install without group - this should detect that no copy is needed
+    // because the file already has the correct group (user's group)
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m664", source, dest])
+        .succeeds()
+        .no_stdout(); // Should be no-op if group ownership logic is correct
+}
+
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_install_compare_symlink_handling() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "source_file";
+    let symlink_dest = "symlink_dest";
+    let target_file = "target_file";
+
+    at.write(source, "test content");
+    at.write(target_file, "test content"); // Same content to test that symlinks are always replaced
+    at.symlink_file(target_file, symlink_dest);
+
+    // Create a symlink as destination pointing to a different file - should always be replaced
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m644", source, symlink_dest])
+        .succeeds()
+        .stdout_contains("removed")
+        .stdout_contains(format!("'{source}' -> '{symlink_dest}'"));
+
+    // Even if content would be the same, symlink destination should be replaced
+    // Now symlink_dest is a regular file, so compare should work normally
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m644", source, symlink_dest])
+        .succeeds()
+        .no_stdout(); // Now it's a regular file, so compare should work
 }
 
 #[test]
@@ -1830,6 +2114,20 @@ fn test_install_no_target_directory_failing_cannot_overwrite() {
 }
 
 #[test]
+fn test_install_no_target_directory_overwrite_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file = "file";
+    let dest = "dest";
+
+    at.touch(file);
+    scene.ucmd().arg("-T").arg(file).arg(dest).succeeds();
+    scene.ucmd().arg("-T").arg(file).arg(dest).succeeds();
+
+    assert!(!at.dir_exists("dir/file"));
+}
+
+#[test]
 fn test_install_no_target_directory_failing_omitting_directory() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1963,4 +2261,185 @@ fn test_install_no_target_basic() {
 
     assert!(at.file_exists(file));
     assert!(at.file_exists(format!("{dir}/{file}")));
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_selinux() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let src = "orig";
+    at.touch(src);
+
+    let dest = "orig.2";
+
+    let args = ["-Z", "--context=unconfined_u:object_r:user_tmp_t:s0"];
+    for arg in args {
+        let result = new_ucmd!()
+            .arg(arg)
+            .arg("-v")
+            .arg(at.plus_as_string(src))
+            .arg(at.plus_as_string(dest))
+            .run();
+
+        // Skip test if SELinux is not enabled
+        if result
+            .stderr_str()
+            .contains("SELinux is not enabled on this system")
+        {
+            println!("Skipping SELinux test: SELinux is not enabled");
+            at.remove(&at.plus_as_string(dest));
+            continue;
+        }
+
+        result.success().stdout_contains("orig' -> '");
+
+        // Try to get SELinux context, skip test if getfattr is not available
+        let context_value =
+            std::panic::catch_unwind(|| get_getfattr_output(&at.plus_as_string(dest)));
+
+        let Ok(context_value) = context_value else {
+            println!("Skipping SELinux test: getfattr not available or failed");
+            at.remove(&at.plus_as_string(dest));
+            continue;
+        };
+
+        assert!(
+            context_value.contains("unconfined_u"),
+            "Expected 'unconfined_u' not found in getfattr output:\n{context_value}"
+        );
+        at.remove(&at.plus_as_string(dest));
+    }
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_selinux_invalid_args() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let src = "orig";
+    at.touch(src);
+    let dest = "orig.2";
+
+    let args = [
+        "--context=a",
+        "--context=unconfined_u:object_r:user_tmp_t:s0:a",
+        "--context=nconfined_u:object_r:user_tmp_t:s0",
+    ];
+    for arg in args {
+        let result = new_ucmd!()
+            .arg(arg)
+            .arg("-v")
+            .arg(at.plus_as_string(src))
+            .arg(at.plus_as_string(dest))
+            .fails();
+
+        let stderr = result.stderr_str();
+        assert!(
+            stderr.contains("failed to set default file creation")
+                || stderr.contains("SELinux is not enabled on this system"),
+            "Expected stderr to contain either 'failed to set default file creation' or 'SELinux is not enabled on this system', but got: '{stderr}'"
+        );
+
+        at.remove(&at.plus_as_string(dest));
+    }
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_selinux_default_context() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let src = "orig";
+    at.touch(src);
+    let dest = "orig.2";
+
+    let result = new_ucmd!()
+        .arg("-Z")
+        .arg("-v")
+        .arg(at.plus_as_string(src))
+        .arg(at.plus_as_string(dest))
+        .run();
+
+    // Skip test if SELinux is not enabled
+    if result
+        .stderr_str()
+        .contains("SELinux is not enabled on this system")
+    {
+        println!("Skipping SELinux default context test: SELinux is not enabled");
+        return;
+    }
+
+    result.success().stdout_contains("orig' -> '");
+    assert!(at.file_exists(dest));
+}
+
+#[test]
+#[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
+fn test_install_compare_with_mode_bits() {
+    let test_cases = [
+        ("4755", "setuid bit", true),
+        ("2755", "setgid bit", true),
+        ("1755", "sticky bit", true),
+        ("7755", "setuid + setgid + sticky bits", true),
+        ("755", "permission-only mode", false),
+    ];
+
+    for (mode, description, should_warn) in test_cases {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let source = format!("source_file_{mode}");
+        let dest = format!("dest_file_{mode}");
+
+        at.write(&source, "test content");
+
+        let mode_arg = format!("--mode={mode}");
+
+        if should_warn {
+            scene.ucmd().args(&["-C", &mode_arg, &source, &dest])
+                .succeeds()
+                .stderr_contains("the --compare (-C) option is ignored when you specify a mode with non-permission bits");
+        } else {
+            scene
+                .ucmd()
+                .args(&["-C", &mode_arg, &source, &dest])
+                .succeeds()
+                .no_stderr();
+
+            // Test second install should be no-op due to -C
+            scene
+                .ucmd()
+                .args(&["-C", &mode_arg, &source, &dest])
+                .succeeds()
+                .no_stderr();
+        }
+
+        assert!(
+            at.file_exists(&dest),
+            "Failed to create dest file for {description}"
+        );
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_non_utf8_paths() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source_filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    let dest_dir = "target_dir";
+
+    std::fs::write(at.plus(&source_filename), b"test content").unwrap();
+    at.mkdir(dest_dir);
+
+    ucmd.arg(&source_filename).arg(dest_dir).succeeds();
+
+    // Test with trailing slash and directory creation (-D flag)
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source_file = "source.txt";
+    let mut target_path = std::ffi::OsString::from_vec(vec![0xFF, 0xFE, b'd', b'i', b'r']);
+    target_path.push("/target.txt");
+
+    at.touch(source_file);
+
+    ucmd.arg("-D").arg(source_file).arg(&target_path).succeeds();
 }

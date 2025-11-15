@@ -16,6 +16,7 @@
 //! [positional notation]: https://en.wikipedia.org/wiki/Positional_notation
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
+use uucore::translate;
 
 /// An overflow due to incrementing a number beyond its representable limit.
 #[derive(Debug)]
@@ -23,7 +24,7 @@ pub struct Overflow;
 
 impl Display for Overflow {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Overflow")
+        write!(f, "{}", translate!("split-error-overflow"))
     }
 }
 
@@ -111,7 +112,7 @@ impl Number {
     ///
     /// If incrementing this number would result in an overflow beyond
     /// the maximum representable number, then return
-    /// [`Err(Overflow)`]. The [`FixedWidthNumber`] overflows, but
+    /// `Err(Overflow)`. The [`FixedWidthNumber`] overflows, but
     /// [`DynamicWidthNumber`] does not.
     ///
     /// The [`DynamicWidthNumber`] follows a non-standard incrementing
@@ -121,7 +122,7 @@ impl Number {
     ///
     /// # Errors
     ///
-    /// This method returns [`Err(Overflow)`] when attempting to
+    /// This method returns `Err(Overflow)` when attempting to
     /// increment beyond the largest representable number.
     ///
     /// # Examples
@@ -211,7 +212,7 @@ impl FixedWidthNumber {
     ///
     /// This method adds one to this number. If incrementing this
     /// number would require more digits than are available with the
-    /// specified width, then this method returns [`Err(Overflow)`].
+    /// specified width, then this method returns `Err(Overflow)`.
     fn increment(&mut self) -> Result<(), Overflow> {
         for i in (0..self.digits.len()).rev() {
             // Increment the current digit.
