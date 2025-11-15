@@ -23,6 +23,7 @@ use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
 use custom_str_cmp::custom_str_cmp;
+
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
 #[cfg(target_os = "linux")]
@@ -47,6 +48,8 @@ use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::format_usage;
+#[cfg(feature = "i18n-collator")]
+use uucore::i18n::collator::locale_cmp;
 use uucore::line_ending::LineEnding;
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
@@ -329,7 +332,10 @@ impl GlobalSettings {
     /// Precompute some data needed for sorting.
     /// This function **must** be called before starting to sort, and `GlobalSettings` may not be altered
     /// afterwards.
-    fn init_precomputed(&mut self) {
+    ///
+    /// When i18n-collator is enabled, `disable_fast_lexicographic` should be set to true if we're
+    /// in a UTF-8 locale (to force locale-aware collation instead of byte comparison).
+    fn init_precomputed(&mut self, disable_fast_lexicographic: bool) {
         self.precomputed.needs_tokens = self.selectors.iter().any(|s| s.needs_tokens);
         self.precomputed.selections_per_line =
             self.selectors.iter().filter(|s| s.needs_selection).count();
@@ -344,11 +350,15 @@ impl GlobalSettings {
             .filter(|s| matches!(s.settings.mode, SortMode::GeneralNumeric))
             .count();
 
-        self.precomputed.fast_lexicographic = self.can_use_fast_lexicographic();
+        self.precomputed.fast_lexicographic =
+            !disable_fast_lexicographic && self.can_use_fast_lexicographic();
         self.precomputed.fast_ascii_insensitive = self.can_use_fast_ascii_insensitive();
     }
 
     /// Returns true when the fast lexicographic path can be used safely.
+    /// Note: When i18n-collator is enabled, the caller must have already determined
+    /// whether locale-aware collation is needed (via checking if we're in a UTF-8 locale).
+    /// This check is performed in uumain() before init_precomputed() is called.
     fn can_use_fast_lexicographic(&self) -> bool {
         self.mode == SortMode::Default
             && !self.ignore_case
@@ -1391,7 +1401,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let output = Output::new(matches.get_one::<OsString>(options::OUTPUT))?;
 
-    settings.init_precomputed();
+    // Initialize locale collation if needed (UTF-8 locales)
+    // This MUST happen before init_precomputed() to avoid the performance regression
+    #[cfg(feature = "i18n-collator")]
+    let needs_locale_collation = uucore::i18n::collator::init_locale_collation();
+
+    #[cfg(not(feature = "i18n-collator"))]
+    let needs_locale_collation = false;
+
+    settings.init_precomputed(needs_locale_collation);
 
     let result = exec(&mut files, &settings, output, &mut tmp_dir);
     // Wait here if `SIGINT` was received,
@@ -1787,13 +1805,36 @@ fn compare_by<'a>(
             }
             SortMode::Month => month_compare(a_str, b_str),
             SortMode::Version => version_cmp(a_str, b_str),
-            SortMode::Default => custom_str_cmp(
-                a_str,
-                b_str,
-                settings.ignore_non_printing,
-                settings.dictionary_order,
-                settings.ignore_case,
-            ),
+            SortMode::Default => {
+                // Use locale-aware comparison if feature is enabled and no custom flags are set
+                #[cfg(feature = "i18n-collator")]
+                {
+                    if settings.ignore_case
+                        || settings.dictionary_order
+                        || settings.ignore_non_printing
+                    {
+                        custom_str_cmp(
+                            a_str,
+                            b_str,
+                            settings.ignore_non_printing,
+                            settings.dictionary_order,
+                            settings.ignore_case,
+                        )
+                    } else {
+                        locale_cmp(a_str, b_str)
+                    }
+                }
+                #[cfg(not(feature = "i18n-collator"))]
+                {
+                    custom_str_cmp(
+                        a_str,
+                        b_str,
+                        settings.ignore_non_printing,
+                        settings.dictionary_order,
+                        settings.ignore_case,
+                    )
+                }
+            }
         };
         if cmp != Ordering::Equal {
             return if settings.reverse { cmp.reverse() } else { cmp };
