@@ -80,7 +80,8 @@ jobs:
       run: |
         ## Install dependencies
         sudo apt-get update
-        sudo apt-get install -y autopoint gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev libselinux1-dev attr quilt
+        ## Check that build-gnu.sh works on the non SELinux system by installing libselinux only on lima
+        sudo apt-get install -y autopoint gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev attr quilt
     - name: Add various locales
       shell: bash
       run: |
