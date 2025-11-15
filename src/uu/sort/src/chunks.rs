@@ -17,7 +17,7 @@ use memchr::memchr_iter;
 use self_cell::self_cell;
 use uucore::error::{UResult, USimpleError};
 
-use crate::{GeneralBigDecimalParseResult, GlobalSettings, Line, numeric_str_cmp::NumInfo};
+use crate::{Field, GeneralBigDecimalParseResult, GlobalSettings, Line, numeric_str_cmp::NumInfo};
 
 self_cell!(
     /// The chunk that is passed around between threads.
@@ -35,6 +35,7 @@ self_cell!(
 pub struct ChunkContents<'a> {
     pub lines: Vec<Line<'a>>,
     pub line_data: LineData<'a>,
+    pub token_buffer: Vec<Field>,
 }
 
 #[derive(Debug)]
@@ -43,6 +44,7 @@ pub struct LineData<'a> {
     pub num_infos: Vec<NumInfo>,
     pub parsed_floats: Vec<GeneralBigDecimalParseResult>,
     pub line_num_floats: Vec<Option<f64>>,
+    pub utf8_cache: Vec<Option<&'a str>>,
 }
 
 impl Chunk {
@@ -54,6 +56,7 @@ impl Chunk {
             contents.line_data.num_infos.clear();
             contents.line_data.parsed_floats.clear();
             contents.line_data.line_num_floats.clear();
+            contents.line_data.utf8_cache.clear();
             let lines = unsafe {
                 // SAFETY: It is safe to (temporarily) transmute to a vector of lines with a longer lifetime,
                 // because the vector is empty.
@@ -70,12 +73,20 @@ impl Chunk {
                     &mut contents.line_data.selections,
                 ))
             };
+            let utf8_cache = unsafe {
+                std::mem::transmute::<Vec<Option<&'_ str>>, Vec<Option<&'static str>>>(
+                    std::mem::take(&mut contents.line_data.utf8_cache),
+                )
+            };
+            let token_buffer = std::mem::take(&mut contents.token_buffer);
             (
                 lines,
                 selections,
                 std::mem::take(&mut contents.line_data.num_infos),
                 std::mem::take(&mut contents.line_data.parsed_floats),
                 std::mem::take(&mut contents.line_data.line_num_floats),
+                utf8_cache,
+                token_buffer,
             )
         });
         RecycledChunk {
@@ -84,6 +95,8 @@ impl Chunk {
             num_infos: recycled_contents.2,
             parsed_floats: recycled_contents.3,
             line_num_floats: recycled_contents.4,
+            utf8_cache: recycled_contents.5,
+            token_buffer: recycled_contents.6,
             buffer: self.into_owner(),
         }
     }
@@ -103,6 +116,8 @@ pub struct RecycledChunk {
     num_infos: Vec<NumInfo>,
     parsed_floats: Vec<GeneralBigDecimalParseResult>,
     line_num_floats: Vec<Option<f64>>,
+    utf8_cache: Vec<Option<&'static str>>,
+    token_buffer: Vec<Field>,
     buffer: Vec<u8>,
 }
 
@@ -114,6 +129,8 @@ impl RecycledChunk {
             num_infos: Vec::new(),
             parsed_floats: Vec::new(),
             line_num_floats: Vec::new(),
+            utf8_cache: Vec::new(),
+            token_buffer: Vec::new(),
             buffer: vec![0; capacity],
         }
     }
@@ -157,13 +174,15 @@ pub fn read<T: Read>(
         num_infos,
         parsed_floats,
         line_num_floats,
+        utf8_cache,
+        token_buffer,
         mut buffer,
     } = recycled_chunk;
     if buffer.len() < carry_over.len() {
         buffer.resize(carry_over.len() + 10 * 1024, 0);
     }
     buffer[..carry_over.len()].copy_from_slice(carry_over);
-    let (read, should_continue) = read_to_buffer(
+    let (read, filled, should_continue) = read_to_buffer(
         file,
         next_files,
         &mut buffer,
@@ -172,7 +191,7 @@ pub fn read<T: Read>(
         separator,
     )?;
     carry_over.clear();
-    carry_over.extend_from_slice(&buffer[read..]);
+    carry_over.extend_from_slice(&buffer[read..filled]);
 
     if read != 0 {
         let payload: UResult<Chunk> = Chunk::try_new(buffer, |buffer| {
@@ -186,15 +205,31 @@ pub fn read<T: Read>(
                 // because it was only temporarily transmuted to a Vec<Line<'static>> to make recycling possible.
                 std::mem::transmute::<Vec<Line<'static>>, Vec<Line<'_>>>(lines)
             };
+            let utf8_cache = unsafe {
+                std::mem::transmute::<Vec<Option<&'static str>>, Vec<Option<&'_ str>>>(utf8_cache)
+            };
+            let mut token_buffer = token_buffer;
             let read = &buffer[..read];
             let mut line_data = LineData {
                 selections,
                 num_infos,
                 parsed_floats,
                 line_num_floats,
+                utf8_cache,
             };
-            parse_lines(read, &mut lines, &mut line_data, separator, settings);
-            Ok(ChunkContents { lines, line_data })
+            parse_lines(
+                read,
+                &mut lines,
+                &mut line_data,
+                separator,
+                settings,
+                &mut token_buffer,
+            );
+            Ok(ChunkContents {
+                lines,
+                line_data,
+                token_buffer,
+            })
         });
         sender.send(payload?).unwrap();
     }
@@ -208,6 +243,7 @@ fn parse_lines<'a>(
     line_data: &mut LineData<'a>,
     separator: u8,
     settings: &GlobalSettings,
+    token_buffer: &mut Vec<Field>,
 ) {
     let read = read.strip_suffix(&[separator]).unwrap_or(read);
 
@@ -216,11 +252,10 @@ fn parse_lines<'a>(
     assert!(line_data.num_infos.is_empty());
     assert!(line_data.parsed_floats.is_empty());
     assert!(line_data.line_num_floats.is_empty());
-    let mut token_buffer = vec![];
     lines.extend(
         read.split(|&c| c == separator)
             .enumerate()
-            .map(|(index, line)| Line::create(line, index, line_data, &mut token_buffer, settings)),
+            .map(|(index, line)| Line::create(line, index, line_data, token_buffer, settings)),
     );
 }
 
@@ -257,11 +292,12 @@ fn read_to_buffer<T: Read>(
     max_buffer_size: Option<usize>,
     start_offset: usize,
     separator: u8,
-) -> UResult<(usize, bool)> {
+) -> UResult<(usize, usize, bool)> {
     let mut read_target = &mut buffer[start_offset..];
     let mut last_file_empty = true;
     let mut newline_search_offset = 0;
     let mut found_newline = false;
+    let mut filled_total = start_offset;
     loop {
         match file.read(read_target) {
             Ok(0) => {
@@ -289,7 +325,7 @@ fn read_to_buffer<T: Read>(
                         if found_newline || sep_iter.next().is_some() {
                             // We read enough lines.
                             // We want to include the separator here, because it shouldn't be carried over.
-                            return Ok((last_line_end + 1, true));
+                            return Ok((last_line_end + 1, filled_total, true));
                         }
                         found_newline = true;
                     }
@@ -309,6 +345,7 @@ fn read_to_buffer<T: Read>(
                             // The file did not end with a separator. We have to insert one.
                             buffer[read_len] = separator;
                             leftover_len -= 1;
+                            filled_total += 1;
                         }
                         let read_len = buffer.len() - leftover_len;
                         read_target = &mut buffer[read_len..];
@@ -320,13 +357,14 @@ fn read_to_buffer<T: Read>(
                     } else {
                         // This was the last file.
                         let read_len = buffer.len() - leftover_len;
-                        return Ok((read_len, false));
+                        return Ok((read_len, filled_total, false));
                     }
                 }
             }
             Ok(n) => {
                 read_target = &mut read_target[n..];
                 last_file_empty = false;
+                filled_total += n;
             }
             Err(e) if e.kind() == ErrorKind::Interrupted => {
                 // retry

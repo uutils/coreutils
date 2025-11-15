@@ -195,15 +195,16 @@ fn read_write_loop<I: WriteableTmpFile>(
     let mut file = files.next().unwrap()?;
 
     let mut carry_over = vec![];
+    let initial_capacity = if START_BUFFER_SIZE < buffer_size {
+        START_BUFFER_SIZE
+    } else {
+        buffer_size
+    };
     // kick things off with two reads
     for _ in 0..2 {
         let should_continue = chunks::read(
             &sender,
-            RecycledChunk::new(if START_BUFFER_SIZE < buffer_size {
-                START_BUFFER_SIZE
-            } else {
-                buffer_size
-            }),
+            RecycledChunk::new(initial_capacity),
             Some(buffer_size),
             &mut carry_over,
             &mut file,
