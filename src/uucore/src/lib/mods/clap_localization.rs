@@ -204,12 +204,12 @@ impl<'a> ErrorFormatter<'a> {
             if value.is_empty() {
                 // Value required but not provided
                 let error_word = translate!("common-error");
-                let error_line = translate!(
-                    "clap-error-value-required",
-                    "error_word" => self.color_mgr.colorize(&error_word, Color::Red),
-                    "option" => self.color_mgr.colorize(&option, Color::Green)
+                eprintln!(
+                    "{}",
+                    translate!("clap-error-value-required",
+                        "error_word" => self.color_mgr.colorize(&error_word, Color::Red),
+                        "option" => self.color_mgr.colorize(&option, Color::Green))
                 );
-                self.print_prefixed_error(&error_line);
             } else {
                 // Invalid value provided
                 let error_word = translate!("common-error");
@@ -222,9 +222,9 @@ impl<'a> ErrorFormatter<'a> {
                 // Include validation error if present
                 match err.source() {
                     Some(source) if matches!(err.kind(), ErrorKind::ValueValidation) => {
-                        self.print_prefixed_error(&format!("{error_msg}: {source}"));
+                        eprintln!("{error_msg}: {source}");
                     }
-                    _ => self.print_prefixed_error(&error_msg),
+                    _ => eprintln!("{error_msg}"),
                 }
             }
 
@@ -279,10 +279,13 @@ impl<'a> ErrorFormatter<'a> {
                     .starts_with("error: the following required arguments were not provided:") =>
             {
                 let error_word = translate!("common-error");
-                self.print_prefixed_error(&translate!(
-                    "clap-error-missing-required-arguments",
-                    "error_word" => self.color_mgr.colorize(&error_word, Color::Red)
-                ));
+                eprintln!(
+                    "{}",
+                    translate!(
+                        "clap-error-missing-required-arguments",
+                        "error_word" => self.color_mgr.colorize(&error_word, Color::Red)
+                    )
+                );
 
                 // Print the missing arguments
                 for line in lines.iter().skip(1) {
@@ -341,11 +344,10 @@ impl<'a> ErrorFormatter<'a> {
         F: FnOnce(),
     {
         let error_word = translate!("common-error");
-        let message_line = format!(
+        eprintln!(
             "{}: {message}",
             self.color_mgr.colorize(&error_word, Color::Red)
         );
-        self.print_prefixed_error(&message_line);
         callback();
         std::process::exit(exit_code);
     }
@@ -357,14 +359,10 @@ impl<'a> ErrorFormatter<'a> {
 
         if let Some(colon_pos) = line.find(':') {
             let after_colon = &line[colon_pos..];
-            self.print_prefixed_error(&format!("{colored_error}{after_colon}"));
+            eprintln!("{colored_error}{after_colon}");
         } else {
-            self.print_prefixed_error(line);
+            eprintln!("{line}");
         }
-    }
-
-    fn print_prefixed_error(&self, message: &str) {
-        eprintln!("{}: {message}", self.util_name);
     }
 
     /// Extract and print clap's built-in tips
