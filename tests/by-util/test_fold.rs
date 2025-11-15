@@ -5,6 +5,8 @@
 use bytecount::count;
 use unicode_width::UnicodeWidthChar;
 use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
@@ -186,6 +188,42 @@ fn test_zero_width_spaces_in_character_mode() {
     new_ucmd!()
         .args(&["--characters"])
         .pipe_in(input)
+        .succeeds()
+        .stdout_is(&expected);
+}
+
+#[test]
+fn test_zero_width_bytes_from_file() {
+    let len = io_buf_size_times_two();
+    let input = vec![0u8; len];
+    let expected = fold_characters_reference_bytes(&input, 80);
+
+    let ts = TestScenario::new(util_name!());
+    let path = "zeros.bin";
+    ts.fixtures.write_bytes(path, &input);
+
+    ts.ucmd().arg(path).succeeds().stdout_is_bytes(&input);
+
+    ts.ucmd()
+        .args(&["--characters", path])
+        .succeeds()
+        .stdout_is_bytes(expected);
+}
+
+#[test]
+fn test_zero_width_spaces_from_file() {
+    let len = io_buf_size_times_two();
+    let input = "\u{200B}".repeat(len);
+    let expected = fold_characters_reference(&input, 80);
+
+    let ts = TestScenario::new(util_name!());
+    let path = "zero-width.txt";
+    ts.fixtures.write(path, &input);
+
+    ts.ucmd().arg(path).succeeds().stdout_is(&input);
+
+    ts.ucmd()
+        .args(&["--characters", path])
         .succeeds()
         .stdout_is(&expected);
 }
