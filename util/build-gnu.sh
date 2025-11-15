@@ -109,25 +109,21 @@ cd -
 # min test for SELinux
 [ ${SELINUX_ENABLED} = 1 ] && touch g && "${UU_MAKE_PROFILE}"/stat -c%C g && rm g
 
-cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
+ln -sf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
 # Create *sum binaries
-for sum in b2sum b3sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum; do
-    sum_path="${UU_BUILD_DIR}/${sum}"
-    test -f "${sum_path}" || (cd ${UU_BUILD_DIR} && ln -s "hashsum" "${sum}")
+for sum in {b2,md5}sum sha{1,224,256,384,512}sum ; do
+    (cd ${UU_BUILD_DIR} && ln -sf hashsum $sum )
 done
-test -f "${UU_BUILD_DIR}/[" || (cd ${UU_BUILD_DIR} && ln -s "test" "[")
+(cd ${UU_BUILD_DIR} && ln -sf test "[")
 
 ##
 
 cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
 
-# Any binaries that aren't built become `false` so their tests fail
+echo Replacing missing binaries with false to their tests fail
 for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs); do
     bin_path="${UU_BUILD_DIR}/${binary}"
-    test -f "${bin_path}" || {
-        echo "'${binary}' was not built with uutils, using the 'false' program"
-        cp "${UU_BUILD_DIR}/false" "${bin_path}"
-    }
+    test -f "${bin_path}" || ln -svf "${UU_BUILD_DIR}/false" "${bin_path}"
 done
 
 if test -f gnu-built; then
