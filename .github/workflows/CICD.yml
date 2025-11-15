@@ -273,10 +273,7 @@ jobs:
         target: aarch64-unknown-linux-gnu
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
+    # Test build on the system missing libselinux (don't install libselinux1-dev at here)
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: "`make build`"
