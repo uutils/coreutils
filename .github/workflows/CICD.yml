@@ -303,11 +303,14 @@ jobs:
       run: make nextest PROFILE=ci CARGOFLAGS="--hide-progress-bar"
       env:
         RUST_BACKTRACE: "1"
-    - name: "`make install COMPLETIONS=n MANPAGES=n LOCALES=n`"
+
+    - name: "`make install PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n`"
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/ make PROFILE=release COMPLETIONS=n MANPAGES=n LOCALES=n install
+        DESTDIR=/tmp/ make PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n install
+        # Check that utils are built with given profile
+        ./target/release-fast/true
         # Check that the utils are present
         test -f /tmp/usr/local/bin/tty
         # Check that the manpage is not present
@@ -1199,6 +1202,7 @@ jobs:
     - name: build and test all features individually
       shell: bash
       run: |
+        command -v sudo && sudo rm -rf /usr/share/dotnet # avoid no space left
         CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ;
         for f in $(util/show-utils.sh ${CARGO_FEATURES_OPTION})
         do
