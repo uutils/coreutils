@@ -582,6 +582,7 @@ name = "coreutils"
 version = "0.4.0"
 dependencies = [
  "bincode",
+ "bytecount",
  "chrono",
  "clap",
  "clap_complete",

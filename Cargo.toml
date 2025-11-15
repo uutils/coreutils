@@ -536,6 +536,7 @@ ctor.workspace = true
 filetime.workspace = true
 glob.workspace = true
 libc.workspace = true
+bytecount.workspace = true
 num-prime.workspace = true
 pretty_assertions = "1.4.0"
 rand.workspace = true

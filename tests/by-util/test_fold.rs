@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+use bytecount::count;
 use unicode_width::UnicodeWidthChar;
 use uutests::new_ucmd;
 
@@ -302,7 +303,7 @@ fn fold_characters_reference_bytes(input: &[u8], width: usize) -> Vec<u8> {
 }
 
 fn newline_count(bytes: &[u8]) -> usize {
-    bytes.iter().filter(|&&b| b == b'\n').count()
+    count(bytes, b'\n')
 }
 
 fn tail_inclusive(text: &str, lines: usize) -> String {
