@@ -1202,6 +1202,7 @@ jobs:
     - name: build and test all features individually
       shell: bash
       run: |
+        command -v sudo && sudo rm -rf /usr/share/dotnet # avoid no space left
         CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ;
         for f in $(util/show-utils.sh ${CARGO_FEATURES_OPTION})
         do
