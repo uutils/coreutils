@@ -8,19 +8,21 @@ use std::ffi::OsString;
 use std::fmt::Write;
 use std::io;
 
+use thiserror::Error;
 use uucore::display::Quotable;
+use uucore::translate;
 
 pub(crate) type Result<T> = std::result::Result<T, Error>;
 
-#[derive(thiserror::Error, Debug)]
+#[derive(Error, Debug)]
 pub(crate) enum Error {
-    #[error("No context is specified")]
+    #[error("{}", translate!("chcon-error-no-context-specified"))]
     MissingContext,
 
-    #[error("No files are specified")]
+    #[error("{}", translate!("chcon-error-no-files-specified"))]
     MissingFiles,
 
-    #[error("Data is out of range")]
+    #[error("{}", translate!("chcon-error-data-out-of-range"))]
     OutOfRange,
 
     #[error("{0}")]
@@ -29,45 +31,57 @@ pub(crate) enum Error {
     #[error(transparent)]
     CommandLine(#[from] clap::Error),
 
-    #[error("{operation} failed")]
+    #[error("{}", translate!("chcon-error-operation-failed", "operation" => operation.clone()))]
     SELinux {
-        operation: &'static str,
+        operation: String,
+        #[source]
         source: selinux::errors::Error,
     },
 
-    #[error("{operation} failed")]
+    #[error("{}", translate!("chcon-error-operation-failed", "operation" => operation.clone()))]
     Io {
-        operation: &'static str,
+        operation: String,
+        #[source]
         source: io::Error,
     },
 
-    #[error("{operation} failed on {}", .operand1.quote())]
+    #[error("{}", translate!("chcon-error-operation-failed-on", "operation" => operation.clone(), "operand" => operand1.quote()))]
     Io1 {
-        operation: &'static str,
+        operation: String,
         operand1: OsString,
+        #[source]
         source: io::Error,
     },
 }
 
 impl Error {
-    pub(crate) fn from_io(operation: &'static str, source: io::Error) -> Self {
-        Self::Io { operation, source }
+    pub(crate) fn from_io(operation: impl Into<String>, source: io::Error) -> Self {
+        Self::Io {
+            operation: operation.into(),
+            source,
+        }
     }
 
     pub(crate) fn from_io1(
-        operation: &'static str,
+        operation: impl Into<String>,
         operand1: impl Into<OsString>,
         source: io::Error,
     ) -> Self {
         Self::Io1 {
-            operation,
+            operation: operation.into(),
             operand1: operand1.into(),
             source,
         }
     }
 
-    pub(crate) fn from_selinux(operation: &'static str, source: selinux::errors::Error) -> Self {
-        Self::SELinux { operation, source }
+    pub(crate) fn from_selinux(
+        operation: impl Into<String>,
+        source: selinux::errors::Error,
+    ) -> Self {
+        Self::SELinux {
+            operation: operation.into(),
+            source,
+        }
     }
 }
 

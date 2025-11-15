@@ -4,8 +4,6 @@
 // file that was distributed with this source code.
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
@@ -26,9 +24,8 @@ fn test_unlink_file() {
 
 #[test]
 fn test_unlink_multiple_files() {
-    let ts = TestScenario::new(util_name!());
+    let (at, mut ucmd) = at_and_ucmd!();
 
-    let (at, mut ucmd) = (ts.fixtures.clone(), ts.ucmd());
     let file_a = "test_unlink_multiple_file_a";
     let file_b = "test_unlink_multiple_file_b";
 
@@ -77,4 +74,24 @@ fn test_unlink_symlink() {
 
     assert!(at.file_exists("foo"));
     assert!(!at.file_exists("bar"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_unlink_non_utf8_paths() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    // Create a test file with non-UTF-8 bytes in the name
+    let non_utf8_bytes = b"test_\xFF\xFE.txt";
+    let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
+
+    at.touch(non_utf8_name);
+    assert!(at.file_exists(non_utf8_name));
+
+    // Test that unlink handles non-UTF-8 file names without crashing
+    ucmd.arg(non_utf8_name).succeeds();
+
+    assert!(!at.file_exists(non_utf8_name));
 }

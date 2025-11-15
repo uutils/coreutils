@@ -51,3 +51,8 @@ fn test_column_output() {
         .succeeds()
         .stdout_does_not_match(&Regex::new("[rwx-]{10}.*some-file1$").unwrap());
 }
+
+#[test]
+fn test_invalid_option_exit_code() {
+    new_ucmd!().arg("-/").fails().code_is(2);
+}

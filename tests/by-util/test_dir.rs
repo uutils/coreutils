@@ -51,3 +51,8 @@ fn test_long_output() {
         .succeeds()
         .stdout_matches(&Regex::new("[rwx-]{10}.*some-file1\n$").unwrap());
 }
+
+#[test]
+fn test_invalid_option_exit_code() {
+    new_ucmd!().arg("-/").fails().code_is(2);
+}

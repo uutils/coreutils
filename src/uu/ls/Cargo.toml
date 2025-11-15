@@ -1,47 +1,61 @@
+# spell-checker:ignore tzdb zoneinfo
+
 [package]
 name = "uu_ls"
-version = "0.0.30"
-authors = ["uutils developers"]
-license = "MIT"
 description = "ls ~ (uutils) display directory contents"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/ls"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2024"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/ls.rs"
 
 [dependencies]
 ansi-width = { workspace = true }
-chrono = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 glob = { workspace = true }
 hostname = { workspace = true }
+fnv = { workspace = true }
 lscolors = { workspace = true }
-number_prefix = { workspace = true }
 selinux = { workspace = true, optional = true }
 terminal_size = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "colors",
-  "custom-tz-fmt",
   "entries",
   "format",
   "fs",
+  "fsext",
   "fsxattr",
+  "parser",
   "quoting-style",
+  "time",
   "version-cmp",
 ] }
 uutils_term_grid = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "ls"
 path = "src/main.rs"
 
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "ls_bench"
+harness = false
+
 [features]
-feat_selinux = ["selinux"]
+feat_selinux = ["selinux", "uucore/selinux"]

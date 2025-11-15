@@ -1,17 +1,18 @@
 [package]
 name = "uu_mknod"
-version = "0.0.30"
-authors = ["uutils developers"]
-license = "MIT"
 description = "mknod ~ (uutils) create special file NAME of TYPE"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/mknod"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2024"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 name = "uu_mknod"
@@ -21,6 +22,10 @@ path = "src/mknod.rs"
 clap = { workspace = true }
 libc = { workspace = true }
 uucore = { workspace = true, features = ["mode"] }
+fluent = { workspace = true }
+
+[features]
+selinux = ["uucore/selinux"]
 
 [[bin]]
 name = "mknod"

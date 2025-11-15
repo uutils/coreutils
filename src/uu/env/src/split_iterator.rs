@@ -7,9 +7,9 @@
 // licensed under the Apache License, Version 2.0 <LICENSE-APACHE>
 // or the MIT license <LICENSE-MIT>, at your option.
 //
-//! Process command line according to parsing rules of original GNU env.
+//! Process command line according to parsing rules of the original GNU env.
 //! Even though it looks quite like a POSIX syntax, the original
-//! "shell_words" implementation had to be adapted significantly.
+//! `shell_words` implementation had to be adapted significantly.
 //!
 //! Apart from the grammar differences, there is a new feature integrated: $VARIABLE expansion.
 //!
@@ -111,7 +111,7 @@ impl<'a> SplitIterator<'a> {
             (None, Some(default)) => {
                 self.expander.put_native_string(default);
             }
-        };
+        }
 
         Ok(())
     }
@@ -172,12 +172,11 @@ impl<'a> SplitIterator<'a> {
                 self.get_parser().get_peek_position(),
                 "Delimiter".into(),
             )),
-            Some('_') | Some(NEW_LINE) => {
+            Some('_' | NEW_LINE) => {
                 self.skip_one()?;
                 Ok(())
             }
-            Some(DOLLAR) | Some(BACKSLASH) | Some('#') | Some(SINGLE_QUOTES)
-            | Some(DOUBLE_QUOTES) => {
+            Some(DOLLAR | BACKSLASH | '#' | SINGLE_QUOTES | DOUBLE_QUOTES) => {
                 self.take_one()?;
                 self.state_unquoted()
             }
@@ -240,7 +239,7 @@ impl<'a> SplitIterator<'a> {
                 self.push_word_to_words();
                 Err(EnvError::EnvReachedEnd)
             }
-            Some(DOLLAR) | Some(BACKSLASH) | Some(SINGLE_QUOTES) | Some(DOUBLE_QUOTES) => {
+            Some(DOLLAR | BACKSLASH | SINGLE_QUOTES | DOUBLE_QUOTES) => {
                 self.take_one()?;
                 Ok(())
             }
@@ -283,7 +282,7 @@ impl<'a> SplitIterator<'a> {
                 self.skip_one()?;
                 Ok(())
             }
-            Some(SINGLE_QUOTES) | Some(BACKSLASH) => {
+            Some(SINGLE_QUOTES | BACKSLASH) => {
                 self.take_one()?;
                 Ok(())
             }
@@ -336,7 +335,7 @@ impl<'a> SplitIterator<'a> {
                 self.skip_one()?;
                 Ok(())
             }
-            Some(DOUBLE_QUOTES) | Some(DOLLAR) | Some(BACKSLASH) => {
+            Some(DOUBLE_QUOTES | DOLLAR | BACKSLASH) => {
                 self.take_one()?;
                 Ok(())
             }

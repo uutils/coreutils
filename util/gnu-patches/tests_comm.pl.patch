@@ -3,7 +3,7 @@ Index: gnu/tests/misc/comm.pl
 --- gnu.orig/tests/misc/comm.pl
 +++ gnu/tests/misc/comm.pl
 @@ -73,18 +73,24 @@ my @Tests =
- 
+
     # invalid missing command line argument (1)
     ['missing-arg1', $inputs[0], {EXIT=>1},
 -    {ERR => "$prog: missing operand after 'a'\n"
@@ -12,7 +12,7 @@ Index: gnu/tests/misc/comm.pl
 +        . "  <FILE2>\n\n"
 +        . "Usage: $prog [OPTION]... FILE1 FILE2\n\n"
 +        . "For more information, try '--help'.\n"}],
- 
+
     # invalid missing command line argument (both)
     ['missing-arg2', {EXIT=>1},
 -    {ERR => "$prog: missing operand\n"
@@ -22,7 +22,7 @@ Index: gnu/tests/misc/comm.pl
 +        . "  <FILE2>\n\n"
 +        . "Usage: $prog [OPTION]... FILE1 FILE2\n\n"
 +        . "For more information, try '--help'.\n"}],
- 
+
     # invalid extra command line argument
     ['extra-arg', @inputs, 'no-such', {EXIT=>1},
 -    {ERR => "$prog: extra operand 'no-such'\n"
@@ -30,15 +30,15 @@ Index: gnu/tests/misc/comm.pl
 +    {ERR => "error: unexpected argument 'no-such' found\n\n"
 +        . "Usage: $prog [OPTION]... FILE1 FILE2\n\n"
 +        . "For more information, try '--help'.\n"}],
- 
+
     # out-of-order input
     ['ooo', {IN=>{a=>"1\n3"}}, {IN=>{b=>"3\n2"}}, {EXIT=>1},
 @@ -163,7 +169,7 @@ my @Tests =
- 
+
     # invalid dual delimiter
     ['delim-dual', '--output-delimiter=,', '--output-delimiter=+', @inputs,
 -    {EXIT=>1}, {ERR => "$prog: multiple output delimiters specified\n"}],
 +    {EXIT=>1}, {ERR => "$prog: multiple conflicting output delimiters specified\n"}],
- 
+
     # valid dual delimiter specification
     ['delim-dual2', '--output-delimiter=,', '--output-delimiter=,', @inputs,

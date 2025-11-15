@@ -5,9 +5,8 @@
 use clap::{Arg, ArgAction, Command};
 use std::{ffi::OsString, io::Write};
 use uucore::error::{UResult, set_exit_code};
-use uucore::help_about;
 
-const ABOUT: &str = help_about!("true.md");
+use uucore::translate;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -29,7 +28,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         if let Err(print_fail) = error {
             // Try to display this error.
-            let _ = writeln!(std::io::stderr(), "{}: {}", uucore::util_name(), print_fail);
+            let _ = writeln!(std::io::stderr(), "{}: {print_fail}", uucore::util_name());
             // Mirror GNU options. When failing to print warnings or version flags, then we exit
             // with FAIL. This avoids allocation some error information which may result in yet
             // other types of failure.
@@ -43,20 +42,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("true-about"))
         // We provide our own help and version options, to ensure maximum compatibility with GNU.
         .disable_help_flag(true)
         .disable_version_flag(true)
         .arg(
             Arg::new("help")
                 .long("help")
-                .help("Print help information")
+                .help(translate!("true-help-text"))
                 .action(ArgAction::Help),
         )
         .arg(
             Arg::new("version")
                 .long("version")
-                .help("Print version information")
+                .help(translate!("true-version-text"))
                 .action(ArgAction::Version),
         )
 }

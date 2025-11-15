@@ -36,6 +36,7 @@ use crate::{
 };
 use crate::{Line, print_sorted};
 
+// Note: update `test_sort::test_start_buffer` if this size is changed
 const START_BUFFER_SIZE: usize = 8_000;
 
 /// Sort files by using auxiliary files for storing intermediate chunks (if needed), and output the result.
@@ -85,9 +86,15 @@ fn reader_writer<
 ) -> UResult<()> {
     let separator = settings.line_ending.into();
 
-    // Heuristically chosen: Dividing by 10 seems to keep our memory usage roughly
-    // around settings.buffer_size as a whole.
-    let buffer_size = settings.buffer_size / 10;
+    // Cap oversized buffer requests to avoid unnecessary allocations and give the automatic
+    // heuristic room to grow when the user does not provide an explicit value.
+    let mut buffer_size = match settings.buffer_size {
+        size if size <= 512 * 1024 * 1024 => size,
+        size => size / 2,
+    };
+    if !settings.buffer_size_is_explicit {
+        buffer_size = buffer_size.max(8 * 1024 * 1024);
+    }
     let read_result: ReadResult<Tmp> = read_write_loop(
         files,
         tmp_dir,
@@ -115,9 +122,9 @@ fn reader_writer<
                     }),
                     settings,
                     output,
-                );
+                )?;
             } else {
-                print_sorted(chunk.lines().iter(), settings, output);
+                print_sorted(chunk.lines().iter(), settings, output)?;
             }
         }
         ReadResult::SortedTwoChunks([a, b]) => {
@@ -138,9 +145,9 @@ fn reader_writer<
                         .map(|(line, _)| line),
                     settings,
                     output,
-                );
+                )?;
             } else {
-                print_sorted(merged_iter.map(|(line, _)| line), settings, output);
+                print_sorted(merged_iter.map(|(line, _)| line), settings, output)?;
             }
         }
         ReadResult::EmptyInput => {
@@ -272,7 +279,7 @@ fn write<I: WriteableTmpFile>(
 
 fn write_lines<T: Write>(lines: &[Line], writer: &mut T, separator: u8) {
     for s in lines {
-        writer.write_all(s.line.as_bytes()).unwrap();
+        writer.write_all(s.line).unwrap();
         writer.write_all(&[separator]).unwrap();
     }
 }

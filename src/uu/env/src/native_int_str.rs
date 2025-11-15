@@ -283,8 +283,7 @@ impl<'a> NativeStr<'a> {
         match &self.native {
             Cow::Borrowed(b) => {
                 let slice = f_borrow(b);
-                let os_str = slice.map(|x| from_native_int_representation(Cow::Borrowed(x)));
-                os_str
+                slice.map(|x| from_native_int_representation(Cow::Borrowed(x)))
             }
             Cow::Owned(o) => {
                 let slice = f_owned(o);

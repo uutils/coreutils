@@ -4,11 +4,10 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore bsdutils toybox
-
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStringExt;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 struct TestData<'b> {
     name: &'b str,
@@ -254,6 +253,7 @@ FIRST!SECOND@THIRD#FOURTH!ABCDEFG
 }
 
 #[test]
+#[cfg(unix)]
 fn test_non_utf8_input() {
     // 0xC0 is not valid UTF-8
     const INPUT: &[u8] = b"Non-UTF-8 test: \xC0\x00\xC0.\n";
@@ -376,4 +376,21 @@ fn test_data() {
             .succeeds()
             .stdout_is(example.out);
     }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_paste_non_utf8_paths() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename1 = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    let filename2 = std::ffi::OsString::from_vec(vec![0xF0, 0x90]);
+
+    std::fs::write(at.plus(&filename1), b"line1\nline2\n").unwrap();
+    std::fs::write(at.plus(&filename2), b"col1\ncol2\n").unwrap();
+
+    ucmd.arg(&filename1)
+        .arg(&filename2)
+        .succeeds()
+        .stdout_is("line1\tcol1\nline2\tcol2\n");
 }

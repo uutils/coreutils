@@ -2,12 +2,12 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) araba merci mright
+// spell-checker:ignore (words) araba merci efjkow
 
+use regex::Regex;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util::UCommand;
-use uutests::util_name;
 
 #[test]
 fn test_default() {
@@ -126,6 +126,16 @@ fn test_escape_override() {
         .args(&["-E", "-e", "\\na"])
         .succeeds()
         .stdout_only("\na\n");
+
+    new_ucmd!()
+        .args(&["-E", "-e", "-n", "\\na"])
+        .succeeds()
+        .stdout_only("\na");
+
+    new_ucmd!()
+        .args(&["-e", "-E", "-n", "\\na"])
+        .succeeds()
+        .stdout_only("\\na");
 }
 
 #[test]
@@ -277,6 +287,89 @@ fn test_double_hyphens_at_start() {
 }
 
 #[test]
+fn test_double_hyphens_after_single_hyphen() {
+    new_ucmd!()
+        .arg("-")
+        .arg("--")
+        .succeeds()
+        .stdout_only("- --\n");
+
+    new_ucmd!()
+        .arg("-")
+        .arg("-n")
+        .arg("--")
+        .succeeds()
+        .stdout_only("- -n --\n");
+
+    new_ucmd!()
+        .arg("-n")
+        .arg("-")
+        .arg("--")
+        .succeeds()
+        .stdout_only("- --");
+}
+
+#[test]
+fn test_flag_like_arguments_which_are_no_flags() {
+    new_ucmd!()
+        .arg("-efjkow")
+        .arg("--")
+        .succeeds()
+        .stdout_only("-efjkow --\n");
+
+    new_ucmd!()
+        .arg("--")
+        .arg("-efjkow")
+        .succeeds()
+        .stdout_only("-- -efjkow\n");
+
+    new_ucmd!()
+        .arg("-efjkow")
+        .arg("-n")
+        .arg("--")
+        .succeeds()
+        .stdout_only("-efjkow -n --\n");
+
+    new_ucmd!()
+        .arg("-n")
+        .arg("--")
+        .arg("-efjkow")
+        .succeeds()
+        .stdout_only("-- -efjkow");
+}
+
+#[test]
+fn test_backslash_n_last_char_in_last_argument() {
+    new_ucmd!()
+        .arg("-n")
+        .arg("-e")
+        .arg("--")
+        .arg("foo\n")
+        .succeeds()
+        .stdout_only("-- foo\n");
+
+    new_ucmd!()
+        .arg("-e")
+        .arg("--")
+        .arg("foo\\n")
+        .succeeds()
+        .stdout_only("-- foo\n\n");
+
+    new_ucmd!()
+        .arg("-n")
+        .arg("--")
+        .arg("foo\n")
+        .succeeds()
+        .stdout_only("-- foo\n");
+
+    new_ucmd!()
+        .arg("--")
+        .arg("foo\n")
+        .succeeds()
+        .stdout_only("-- foo\n\n");
+}
+
+#[test]
 fn test_double_hyphens_after_flags() {
     new_ucmd!()
         .arg("-e")
@@ -291,6 +384,18 @@ fn test_double_hyphens_after_flags() {
         .arg("foo\n")
         .succeeds()
         .stdout_only("-- foo\n");
+
+    new_ucmd!()
+        .arg("-ne")
+        .arg("--")
+        .succeeds()
+        .stdout_only("--");
+
+    new_ucmd!()
+        .arg("-neE")
+        .arg("--")
+        .succeeds()
+        .stdout_only("--");
 
     new_ucmd!()
         .arg("-e")
@@ -408,6 +513,20 @@ fn partial_version_argument() {
 #[test]
 fn partial_help_argument() {
     new_ucmd!().arg("--he").succeeds().stdout_is("--he\n");
+}
+
+#[test]
+fn full_version_argument() {
+    new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .stdout_matches(&Regex::new(r"^echo \(uutils coreutils\) (\d+\.\d+\.\d+)\n$").unwrap());
+}
+
+#[test]
+fn full_help_argument() {
+    assert_ne!(new_ucmd!().arg("--help").succeeds().stdout(), b"--help\n");
+    assert_ne!(new_ucmd!().arg("--help").succeeds().stdout(), b"--help"); // This one is just in case.
 }
 
 #[test]
@@ -549,7 +668,7 @@ fn test_cmd_result_stdout_str_check_when_false_then_panics() {
 #[cfg(unix)]
 #[test]
 fn test_cmd_result_signal_when_normal_exit_then_no_signal() {
-    let result = TestScenario::new("echo").ucmd().run();
+    let result = new_ucmd!().run();
     assert!(result.signal().is_none());
 }
 
@@ -656,4 +775,31 @@ fn test_uchild_when_run_no_wait_with_a_non_blocking_util() {
 
     // we should be able to call wait without panics and apply some assertions
     child.wait().unwrap().code_is(0).no_stdout().no_stderr();
+}
+
+#[test]
+fn test_escape_sequence_ctrl_c() {
+    new_ucmd!()
+        .args(&["-e", "show\\c123"])
+        .run()
+        .success()
+        .stdout_only("show");
+}
+
+#[test]
+fn test_emoji_output() {
+    new_ucmd!()
+        .arg("Hello 🌍 World 🚀")
+        .succeeds()
+        .stdout_only("Hello 🌍 World 🚀\n");
+
+    new_ucmd!()
+        .args(&["-n", "Status: 🎯 Complete"])
+        .succeeds()
+        .stdout_only("Status: 🎯 Complete");
+
+    new_ucmd!()
+        .args(&["🦀", "loves", "🚀", "and", "🌟"])
+        .succeeds()
+        .stdout_only("🦀 loves 🚀 and 🌟\n");
 }

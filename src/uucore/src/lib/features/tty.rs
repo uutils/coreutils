@@ -20,9 +20,9 @@ pub enum Teletype {
 impl Display for Teletype {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            Self::Tty(id) => write!(f, "/dev/pts/{}", id),
-            Self::TtyS(id) => write!(f, "/dev/tty{}", id),
-            Self::Pts(id) => write!(f, "/dev/ttyS{}", id),
+            Self::Tty(id) => write!(f, "/dev/tty{id}"),
+            Self::TtyS(id) => write!(f, "/dev/ttyS{id}"),
+            Self::Pts(id) => write!(f, "/dev/pts/{id}"),
             Self::Unknown => write!(f, "?"),
         }
     }
@@ -32,10 +32,6 @@ impl TryFrom<String> for Teletype {
     type Error = ();
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        if value == "?" {
-            return Ok(Self::Unknown);
-        }
-
         Self::try_from(value.as_str())
     }
 }
@@ -44,6 +40,10 @@ impl TryFrom<&str> for Teletype {
     type Error = ();
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
+        if value == "?" {
+            return Ok(Self::Unknown);
+        }
+
         Self::try_from(PathBuf::from(value))
     }
 }
@@ -65,7 +65,7 @@ impl TryFrom<PathBuf> for Teletype {
                 .parse::<u64>()
                 .map_err(|_| ())
                 .map(Teletype::Pts);
-        };
+        }
 
         // Considering this format: **/**/ttyS** then **/**/tty**
         let path = value.to_str().ok_or(())?;
@@ -73,7 +73,7 @@ impl TryFrom<PathBuf> for Teletype {
         let f = |prefix: &str| {
             value
                 .iter()
-                .last()?
+                .next_back()?
                 .to_str()?
                 .strip_prefix(prefix)?
                 .parse::<u64>()

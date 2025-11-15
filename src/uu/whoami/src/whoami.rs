@@ -3,36 +3,32 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use std::ffi::OsString;
-
 use clap::Command;
-
+use std::ffi::OsString;
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::translate;
 
 mod platform;
 
-const ABOUT: &str = help_about!("whoami.md");
-const USAGE: &str = help_usage!("whoami.md");
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    uu_app().try_get_matches_from(args)?;
+    uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let username = whoami()?;
-    println_verbatim(username).map_err_context(|| "failed to print username".into())?;
+    println_verbatim(username).map_err_context(|| translate!("whoami-error-failed-to-print"))?;
     Ok(())
 }
 
 /// Get the current username
 pub fn whoami() -> UResult<OsString> {
-    platform::get_username().map_err_context(|| "failed to get username".into())
+    platform::get_username().map_err_context(|| translate!("whoami-error-failed-to-get"))
 }
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("whoami-about"))
+        .override_usage(uucore::util_name())
         .infer_long_args(true)
 }

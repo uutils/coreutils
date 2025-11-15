@@ -6,7 +6,6 @@
 use std::{
     ffi::{OsStr, OsString},
     mem,
-    ops::Deref,
 };
 
 use crate::{
@@ -17,8 +16,8 @@ use crate::{
 /// This class makes parsing and word collection more convenient.
 ///
 /// It manages an "output" buffer that is automatically filled.
-/// It provides "skip_one" and "take_one" that focus on
-/// working with ASCII separators. Thus they will skip or take
+/// It provides `skip_one` and `take_one` that focus on
+/// working with ASCII separators. Thus, they will skip or take
 /// all consecutive non-ascii char sequences at once.
 pub struct StringExpander<'a> {
     parser: StringParser<'a>,
@@ -79,7 +78,7 @@ impl<'a> StringExpander<'a> {
 
     pub fn put_string<S: AsRef<OsStr>>(&mut self, os_str: S) {
         let native = to_native_int_representation(os_str.as_ref());
-        self.output.extend(native.deref());
+        self.output.extend(&*native);
     }
 
     pub fn put_native_string(&mut self, n_str: &NativeIntStr) {

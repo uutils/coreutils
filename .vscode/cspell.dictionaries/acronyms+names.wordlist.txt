@@ -1,4 +1,5 @@
 # * abbreviations / acronyms
+aarch
 AIX
 ASLR # address space layout randomization
 AST # abstract syntax tree
@@ -9,23 +10,27 @@ DevOps
 Ext3
 FIFO
 FIFOs
+flac
 FQDN # fully qualified domain name
 GID # group ID
 GIDs
 GNU
 GNUEABI
 GNUEABIhf
+impls
 JFS
+loongarch
+lzma
 MSRV # minimum supported rust version
 MSVC
 NixOS
 POSIX
 POSIXLY
+ReiserFS
 RISC
 RISCV
 RNG # random number generator
 RNGs
-ReiserFS
 Solaris
 UID # user ID
 UIDs
@@ -33,11 +38,6 @@ UUID # universally unique identifier
 WASI
 WASM
 XFS
-aarch
-flac
-impls
-lzma
-loongarch
 
 # * names
 BusyBox
@@ -48,25 +48,26 @@ Deno
 EditorConfig
 EPEL
 FreeBSD
+genric
 Gmail
-GNU
 Illumos
 Irix
 libfuzzer
-MS-DOS
-MSDOS
 MacOS
 MinGW
 Minix
+MS-DOS
+MSDOS
 NetBSD
 Novell
 Nushell
 OpenBSD
-POSIX
 PowerPC
 SELinux
 SkyPack
-Solaris
 SysV
 Xenix
 Yargs
+
+# Product
+codspeed

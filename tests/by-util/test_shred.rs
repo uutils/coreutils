@@ -10,6 +10,12 @@ use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
 
+const PATTERNS: [&str; 22] = [
+    "000000", "ffffff", "555555", "aaaaaa", "249249", "492492", "6db6db", "924924", "b6db6d",
+    "db6db6", "111111", "222222", "333333", "444444", "666666", "777777", "888888", "999999",
+    "bbbbbb", "cccccc", "dddddd", "eeeeee",
+];
+
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
@@ -39,7 +45,7 @@ fn test_shred() {
     // File exists
     assert!(at.file_exists(file));
     // File is obfuscated
-    assert!(at.read_bytes(file) != file_original_content.as_bytes());
+    assert_ne!(at.read_bytes(file), file_original_content.as_bytes());
 }
 
 #[test]
@@ -96,8 +102,7 @@ fn test_shred_remove_wipesync() {
 
 #[test]
 fn test_shred_u() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
 
     let file_a = "test_shred_remove_a";
     let file_b = "test_shred_remove_b";
@@ -107,7 +112,7 @@ fn test_shred_u() {
     at.touch(file_b);
 
     // Shred file_a.
-    scene.ucmd().arg("-u").arg(file_a).succeeds();
+    ucmd.arg("-u").arg(file_a).succeeds();
 
     // file_a was deleted, file_b exists.
     assert!(!at.file_exists(file_a));
@@ -207,4 +212,121 @@ fn test_shred_fail_no_perm() {
         .arg(path)
         .fails()
         .stderr_contains("Couldn't rename to");
+}
+
+#[test]
+fn test_shred_verbose_no_padding_1() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "foo";
+    at.write(file, "non-empty");
+    ucmd.arg("-vn1")
+        .arg(file)
+        .succeeds()
+        .stderr_only("shred: foo: pass 1/1 (random)...\n");
+}
+
+#[test]
+fn test_shred_verbose_no_padding_10() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "foo";
+    at.write(file, "non-empty");
+    ucmd.arg("-vn10")
+        .arg(file)
+        .succeeds()
+        .stderr_contains("shred: foo: pass 1/10 (random)...\n");
+}
+
+#[test]
+fn test_all_patterns_present() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file = "foo.txt";
+    at.write(file, "bar");
+
+    let result = ucmd.arg("-vn25").arg(file).succeeds();
+
+    for pat in PATTERNS {
+        result.stderr_contains(pat);
+    }
+}
+
+#[test]
+fn test_random_source_regular_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // Currently, our block size is 4096. If it changes, this test has to be adapted.
+    let mut many_bytes = Vec::with_capacity(4096 * 4);
+
+    for i in 0..4096u32 {
+        many_bytes.extend(i.to_le_bytes());
+    }
+
+    assert_eq!(many_bytes.len(), 4096 * 4);
+    at.write_bytes("source_long", &many_bytes);
+
+    let file = "foo.txt";
+    at.write(file, "a");
+
+    ucmd
+        .arg("-vn3")
+        .arg("--random-source=source_long")
+        .arg(file)
+        .succeeds()
+        .stderr_only("shred: foo.txt: pass 1/3 (random)...\nshred: foo.txt: pass 2/3 (random)...\nshred: foo.txt: pass 3/3 (random)...\n");
+
+    // Should rewrite the file exactly three times
+    assert_eq!(at.read_bytes(file), many_bytes[(4096 * 2)..(4096 * 3)]);
+}
+
+#[test]
+#[ignore = "known issue #7947"]
+fn test_random_source_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("source");
+    let file = "foo.txt";
+    at.write(file, "a");
+
+    ucmd
+        .arg("-v")
+        .arg("--random-source=source")
+        .arg(file)
+        .fails()
+        .stderr_only("shred: foo.txt: pass 1/3 (random)...\nshred: foo.txt: File write pass failed: Is a directory\n");
+}
+
+#[test]
+fn test_shred_rename_exhaustion() {
+    // GNU: tests/shred/shred-remove.sh
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("test");
+    at.touch("000");
+
+    scene
+        .ucmd()
+        .arg("-vu")
+        .arg("test")
+        .succeeds()
+        .stderr_contains("renamed to 0000")
+        .stderr_contains("renamed to 001")
+        .stderr_contains("renamed to 00")
+        .stderr_contains("removed");
+
+    assert!(!at.file_exists("test"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_shred_non_utf8_paths() {
+    use std::os::unix::ffi::OsStrExt;
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let file_name = std::ffi::OsStr::from_bytes(b"test_\xFF\xFE.txt");
+    std::fs::write(at.plus(file_name), "test content").unwrap();
+
+    // Test that shred can handle non-UTF-8 filenames
+    ts.ucmd().arg(file_name).succeeds();
 }

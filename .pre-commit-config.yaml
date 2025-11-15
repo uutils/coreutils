@@ -1,23 +1,51 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
 repos:
--   repo: local
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
     hooks:
-    -   id: rust-linting
+      - id: check-added-large-files
+      - id: check-executables-have-shebangs
+      - id: check-json
+        exclude: '.vscode/cSpell\.json' # cSpell.json uses comments
+      - id: check-shebang-scripts-are-executable
+        exclude: '.+\.rs' # would be triggered by #![some_attribute]
+      - id: check-symlinks
+      - id: check-toml
+      - id: check-yaml
+        args: [ --allow-multiple-documents ]
+      - id: destroyed-symlinks
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [ --fix=lf ]
+      - id: trailing-whitespace
+
+  - repo: https://github.com/mozilla-l10n/moz-fluent-linter
+    rev: v0.4.8
+    hooks:
+      - id: fluent_linter
+        files: \.ftl$
+        args: [--config, .github/fluent_linter_config.yml, src/uu/]
+
+  - repo: local
+    hooks:
+      - id: rust-linting
         name: Rust linting
         description: Run cargo fmt on files included in the commit.
         entry: cargo +stable fmt --
         pass_filenames: true
         types: [file, rust]
         language: system
-    -   id: rust-clippy
+      - id: rust-clippy
         name: Rust clippy
         description: Run cargo clippy on files included in the commit.
-        entry: cargo +stable clippy --workspace --all-targets --all-features --
+        entry: cargo +stable clippy --workspace --all-targets --all-features -- -D warnings
         pass_filenames: false
         types: [file, rust]
         language: system
-    -   id: cspell
+      - id: cspell
         name: Code spell checker (cspell)
-        description: Run cspell to check for spelling errors.
-        entry: cspell --
+        description: Run cspell to check for spelling errors (if available).
+        entry: bash -c 'if command -v cspell >/dev/null 2>&1; then cspell --no-must-find-files -- "$@"; else echo "cspell not found, skipping spell check"; exit 0; fi' --
         pass_filenames: true
         language: system

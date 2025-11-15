@@ -1,0 +1,16 @@
+Index: gnu/tests/du/move-dir-while-traversing.sh
+===================================================================
+--- gnu.orig/tests/du/move-dir-while-traversing.sh
++++ gnu/tests/du/move-dir-while-traversing.sh
+@@ -91,9 +91,7 @@ retry_delay_ nonempty .1 5 || fail=1
+ # Before coreutils-8.10, du would abort.
+ returns_ 1 du -a $t d2 2> err || fail=1
+ 
+-# check for the new diagnostic
+-printf "du: fts_read failed: $t/3/a/b: No such file or directory\n" > exp \
+-  || fail=1
+-compare exp err || fail=1
++# check that it doesn't crash
++grep -Pq "^du: cannot read directory '$t/3/a/b.*': No such file or directory" err || fail=1
+ 
+ Exit $fail

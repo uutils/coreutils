@@ -1,25 +1,36 @@
 [package]
 name = "uu_uniq"
-version = "0.0.30"
-authors = ["uutils developers"]
-license = "MIT"
 description = "uniq ~ (uutils) filter identical adjacent lines from input"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/uniq"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2024"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/uniq.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["parser"] }
+fluent = { workspace = true }
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark", "parser"] }
 
 [[bin]]
 name = "uniq"
 path = "src/main.rs"
+
+[[bench]]
+name = "uniq_bench"
+harness = false

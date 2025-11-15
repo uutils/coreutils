@@ -8,15 +8,12 @@
 use libfuzzer_sys::fuzz_target;
 use uu_expr::uumain;
 
-use rand::prelude::IndexedRandom;
 use rand::Rng;
+use rand::prelude::IndexedRandom;
 use std::{env, ffi::OsString};
 
-mod fuzz_common;
-use crate::fuzz_common::CommandResult;
-use crate::fuzz_common::{
-    compare_result, generate_and_run_uumain, generate_random_string, run_gnu_cmd,
-};
+use uufuzz::CommandResult;
+use uufuzz::{compare_result, generate_and_run_uumain, generate_random_string, run_gnu_cmd};
 static CMD_PATH: &str = "expr";
 
 fn generate_expr(max_depth: u32) -> String {
@@ -39,7 +36,7 @@ fn generate_expr(max_depth: u32) -> String {
             // 90% chance to add an operator followed by a number
             if rng.random_bool(0.9) {
                 let op = *ops.choose(&mut rng).unwrap();
-                expr.push_str(&format!(" {} ", op));
+                expr.push_str(&format!(" {op} "));
                 last_was_operator = true;
             }
             // 10% chance to add a random string (potentially invalid syntax)

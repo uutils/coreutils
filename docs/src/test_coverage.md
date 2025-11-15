@@ -18,4 +18,4 @@ or resulted in an error.
 
 ## Progress over time
 
-<image src="https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.png?raw=true">
+<image src="https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.svg?raw=true">

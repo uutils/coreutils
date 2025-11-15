@@ -30,14 +30,14 @@ projects.
 ## Selecting the utils to include
 
 Not all utils are available on all platforms. To get the full set of utils for a
-particular platform, you must enable the feature flag with the platform name.
+particular platform, you must enable the feature flag corresponding to the platform name.
 For example, on Unix-like system, use `--features unix` and `--features windows`
 on Windows.
 
 For a more fine-grained selection, you can enable just the features with the
 name of the utils you want to include and disable the default feature set.
 
-Additionally, support for SELinux must explicitly enabled with the
+Additionally, support for SELinux must be explicitly enabled with the
 `feat_selinux` feature.
 
 We recommend including all the utilities that a platform supports.
@@ -62,7 +62,7 @@ them:
 - `release-fast`: Every setting is tuned for the best performance, at the cost
   of compile time. This binary is still quite large.
 - `release-small`: Generates the smallest binary possible. This strips _all_
-  debug info from the binary and leads to worse backtraces. The performance of
+  debug info from the binary, resulting in less informative backtraces. The performance of
   this profile is also really good as it is close to the `release-fast` profile,
   but with all debuginfo stripped.
 

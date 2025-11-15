@@ -11,9 +11,8 @@
 )]
 
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
+use std::fmt::Write;
 use std::time::{Duration, SystemTime};
 
 use rand::distr::{Distribution, Uniform};
@@ -25,6 +24,19 @@ const NUM_TESTS: usize = 100;
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[test]
+fn test_invalid_negative_arg_shows_tip() {
+    // Test that factor shows a tip when given an invalid negative argument
+    // This replicates the GNU test issue where "-1" was interpreted as an invalid option
+    new_ucmd!()
+        .arg("-1")
+        .fails()
+        .code_is(1)
+        .stderr_contains("unexpected argument '-1' found")
+        .stderr_contains("tip: to pass '-1' as a value, use '-- -1'")
+        .stderr_contains("Usage: factor");
 }
 
 #[test]
@@ -50,12 +62,15 @@ fn test_parallel() {
     use sha1::{Digest, Sha1};
     use std::{fs::OpenOptions, time::Duration};
     use tempfile::TempDir;
-    use uutests::util::AtPath;
+    use uutests::{
+        util::{AtPath, TestScenario},
+        util_name,
+    };
     // factor should only flush the buffer at line breaks
     let n_integers = 100_000;
     let mut input_string = String::new();
     for i in 0..=n_integers {
-        input_string.push_str(&(format!("{i} "))[..]);
+        let _ = write!(input_string, "{i} ");
     }
 
     let tmp_dir = TempDir::new().unwrap();
@@ -100,7 +115,7 @@ fn test_first_1000_integers() {
     let n_integers = 1000;
     let mut input_string = String::new();
     for i in 0..=n_integers {
-        input_string.push_str(&(format!("{i} "))[..]);
+        let _ = write!(input_string, "{i} ");
     }
 
     println!("STDIN='{input_string}'");
@@ -124,7 +139,7 @@ fn test_first_1000_integers_with_exponents() {
     let n_integers = 1000;
     let mut input_string = String::new();
     for i in 0..=n_integers {
-        input_string.push_str(&(format!("{i} "))[..]);
+        let _ = write!(input_string, "{i} ");
     }
 
     println!("STDIN='{input_string}'");
@@ -185,7 +200,7 @@ fn test_random() {
                     factors.push(factor);
                 }
                 None => break,
-            };
+            }
         }
 
         factors.sort_unstable();
@@ -197,11 +212,11 @@ fn test_random() {
     let mut output_string = String::new();
     for _ in 0..NUM_TESTS {
         let (product, factors) = rand_gt(1 << 63);
-        input_string.push_str(&(format!("{product} "))[..]);
+        let _ = write!(input_string, "{product} ");
 
-        output_string.push_str(&(format!("{product}:"))[..]);
+        let _ = write!(output_string, "{product}:");
         for factor in factors {
-            output_string.push_str(&(format!(" {factor}"))[..]);
+            let _ = write!(output_string, " {factor}");
         }
         output_string.push('\n');
     }
@@ -281,11 +296,11 @@ fn test_random_big() {
     let mut output_string = String::new();
     for _ in 0..NUM_TESTS {
         let (product, factors) = rand_64();
-        input_string.push_str(&(format!("{product} "))[..]);
+        let _ = write!(input_string, "{product} ");
 
-        output_string.push_str(&(format!("{product}:"))[..]);
+        let _ = write!(output_string, "{product}:");
         for factor in factors {
-            output_string.push_str(&(format!(" {factor}"))[..]);
+            let _ = write!(output_string, " {factor}");
         }
         output_string.push('\n');
     }
@@ -298,8 +313,8 @@ fn test_big_primes() {
     let mut input_string = String::new();
     let mut output_string = String::new();
     for prime in PRIMES64 {
-        input_string.push_str(&(format!("{prime} "))[..]);
-        output_string.push_str(&(format!("{prime}: {prime}\n"))[..]);
+        let _ = write!(input_string, "{prime} ");
+        let _ = writeln!(output_string, "{prime}: {prime}");
     }
 
     run(input_string.as_bytes(), output_string.as_bytes());
@@ -325,8 +340,8 @@ fn test_primes_with_exponents() {
     let mut output_string = String::new();
     for primes in PRIMES_BY_BITS {
         for &prime in *primes {
-            input_string.push_str(&(format!("{prime} "))[..]);
-            output_string.push_str(&(format!("{prime}: {prime}\n"))[..]);
+            let _ = write!(input_string, "{prime} ");
+            let _ = writeln!(output_string, "{prime}: {prime}");
         }
     }
 

@@ -7,24 +7,23 @@
 use chrono::{DateTime, Duration, Utc};
 use std::fs::metadata;
 use uutests::new_ucmd;
-use uutests::util::{TestScenario, UCommand};
-use uutests::util_name;
+use uutests::util::UCommand;
 
-const DATE_TIME_FORMAT: &str = "%b %d %H:%M %Y";
+const DATE_TIME_FORMAT_DEFAULT: &str = "%Y-%m-%d %H:%M";
 
-fn file_last_modified_time(ucmd: &UCommand, path: &str) -> String {
+fn file_last_modified_time_format(ucmd: &UCommand, path: &str, format: &str) -> String {
     let tmp_dir_path = ucmd.get_full_fixture_path(path);
-    let file_metadata = metadata(tmp_dir_path);
-    file_metadata
-        .map(|i| {
-            i.modified()
-                .map(|x| {
-                    let date_time: DateTime<Utc> = x.into();
-                    date_time.format(DATE_TIME_FORMAT).to_string()
-                })
-                .unwrap_or_default()
+    metadata(tmp_dir_path)
+        .and_then(|meta| meta.modified())
+        .map(|mtime| {
+            let dt: DateTime<Utc> = mtime.into();
+            dt.format(format).to_string()
         })
         .unwrap_or_default()
+}
+
+fn file_last_modified_time(ucmd: &UCommand, path: &str) -> String {
+    file_last_modified_time_format(ucmd, path, DATE_TIME_FORMAT_DEFAULT)
 }
 
 fn all_minutes(from: DateTime<Utc>, to: DateTime<Utc>) -> Vec<String> {
@@ -32,7 +31,7 @@ fn all_minutes(from: DateTime<Utc>, to: DateTime<Utc>) -> Vec<String> {
     let mut vec = vec![];
     let mut current = from;
     while current < to {
-        vec.push(current.format(DATE_TIME_FORMAT).to_string());
+        vec.push(current.format(DATE_TIME_FORMAT_DEFAULT).to_string());
         current += Duration::try_minutes(1).unwrap();
     }
     vec
@@ -400,6 +399,91 @@ fn test_with_offset_space_option() {
 }
 
 #[test]
+fn test_with_date_format() {
+    let test_file_path = "test_one_page.log";
+    let expected_test_file_path = "test_one_page.log.expected";
+    let mut scenario = new_ucmd!();
+    let value = file_last_modified_time_format(&scenario, test_file_path, "%Y__%s");
+    scenario
+        .args(&[test_file_path, "-D", "%Y__%s"])
+        .succeeds()
+        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
+
+    // "Format" doesn't need to contain any replaceable token.
+    new_ucmd!()
+        .args(&[test_file_path, "-D", "Hello!"])
+        .succeeds()
+        .stdout_is_templated_fixture(
+            expected_test_file_path,
+            &[("{last_modified_time}", "Hello!")],
+        );
+
+    // Long option also works
+    new_ucmd!()
+        .args(&[test_file_path, "--date-format=Hello!"])
+        .succeeds()
+        .stdout_is_templated_fixture(
+            expected_test_file_path,
+            &[("{last_modified_time}", "Hello!")],
+        );
+
+    // Option takes precedence over environment variables
+    new_ucmd!()
+        .env("POSIXLY_CORRECT", "1")
+        .env("LC_TIME", "POSIX")
+        .args(&[test_file_path, "-D", "Hello!"])
+        .succeeds()
+        .stdout_is_templated_fixture(
+            expected_test_file_path,
+            &[("{last_modified_time}", "Hello!")],
+        );
+}
+
+#[test]
+fn test_with_date_format_env() {
+    const POSIXLY_FORMAT: &str = "%b %e %H:%M %Y";
+
+    // POSIXLY_CORRECT + LC_ALL/TIME=POSIX uses "%b %e %H:%M %Y" date format
+    let test_file_path = "test_one_page.log";
+    let expected_test_file_path = "test_one_page.log.expected";
+    let mut scenario = new_ucmd!();
+    let value = file_last_modified_time_format(&scenario, test_file_path, POSIXLY_FORMAT);
+    scenario
+        .env("POSIXLY_CORRECT", "1")
+        .env("LC_ALL", "POSIX")
+        .args(&[test_file_path])
+        .succeeds()
+        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
+
+    let mut scenario = new_ucmd!();
+    let value = file_last_modified_time_format(&scenario, test_file_path, POSIXLY_FORMAT);
+    scenario
+        .env("POSIXLY_CORRECT", "1")
+        .env("LC_TIME", "POSIX")
+        .args(&[test_file_path])
+        .succeeds()
+        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
+
+    // But not if POSIXLY_CORRECT/LC_ALL is something else.
+    let mut scenario = new_ucmd!();
+    let value = file_last_modified_time_format(&scenario, test_file_path, DATE_TIME_FORMAT_DEFAULT);
+    scenario
+        .env("LC_TIME", "POSIX")
+        .args(&[test_file_path])
+        .succeeds()
+        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
+
+    let mut scenario = new_ucmd!();
+    let value = file_last_modified_time_format(&scenario, test_file_path, DATE_TIME_FORMAT_DEFAULT);
+    scenario
+        .env("POSIXLY_CORRECT", "1")
+        .env("LC_TIME", "C")
+        .args(&[test_file_path])
+        .succeeds()
+        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
+}
+
+#[test]
 fn test_with_pr_core_utils_tests() {
     let test_cases = vec![
         ("", vec!["0Ft"], vec!["0F"], 0),
@@ -472,6 +556,49 @@ fn test_value_for_number_lines() {
     // foo5.txt is of not the form [SEP[NUMBER]] so is not used as value.
     // Therefore, pr tries to access the file, which does not exist.
     new_ucmd!().args(&["-n", "foo5.txt", "test.log"]).fails();
+}
+
+#[test]
+fn test_header_formatting_with_custom_date_format() {
+    // This test verifies that the header is properly formatted with:
+    // - Date/time on the left
+    // - Filename centered
+    // - "Page X" on the right
+    // This matches GNU pr behavior for the time-style test
+
+    let test_file_path = "test_one_page.log";
+
+    // Set a specific date format like in the GNU test
+    let output = new_ucmd!()
+        .args(&["-D", "+%Y-%m-%d %H:%M:%S %z (%Z)", test_file_path])
+        .succeeds()
+        .stdout_move_str();
+
+    // Extract the header line (3rd line of output)
+    let lines: Vec<&str> = output.lines().collect();
+    assert!(
+        lines.len() >= 5,
+        "Output should have at least 5 lines for header"
+    );
+
+    let header_line = lines[2];
+
+    // The header should be 72 characters wide (default page width)
+    assert_eq!(header_line.chars().count(), 72);
+
+    // Check that it contains the expected parts
+    assert!(header_line.contains(test_file_path));
+    assert!(header_line.contains("Page 1"));
+
+    // Verify the filename is roughly centered
+    let filename_pos = header_line.find(test_file_path).unwrap();
+    let page_pos = header_line.find("Page 1").unwrap();
+
+    // Filename should be somewhere in the middle third of the line
+    assert!(filename_pos > 24 && filename_pos < 48);
+
+    // Page should be right-aligned (near the end)
+    assert!(page_pos >= 60);
 }
 
 #[test]

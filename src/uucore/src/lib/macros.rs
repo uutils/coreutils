@@ -91,7 +91,7 @@ macro_rules! show(
         use $crate::error::UError;
         let e = $err;
         $crate::error::set_exit_code(e.code());
-        eprintln!("{}: {}", $crate::util_name(), e);
+        eprintln!("{}: {e}", $crate::util_name());
     })
 );
 

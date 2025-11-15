@@ -7,7 +7,7 @@
 use std::cmp;
 use std::slice::Iter;
 
-use crate::formatteriteminfo::FormatterItemInfo;
+use crate::formatter_item_info::FormatterItemInfo;
 use crate::parse_formats::ParsedFormatterItemInfo;
 
 /// Size in bytes of the max datatype. ie set to 16 for 128-bit numbers.
@@ -47,7 +47,7 @@ pub struct OutputInfo {
 
 impl OutputInfo {
     /// Returns an iterator over the `SpacedFormatterItemInfo` vector.
-    pub fn spaced_formatters_iter(&self) -> Iter<SpacedFormatterItemInfo> {
+    pub fn spaced_formatters_iter(&self) -> Iter<'_, SpacedFormatterItemInfo> {
         self.spaced_formatters.iter()
     }
 

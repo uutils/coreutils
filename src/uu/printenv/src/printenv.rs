@@ -5,10 +5,8 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::env;
-use uucore::{error::UResult, format_usage, help_about, help_usage};
-
-const ABOUT: &str = help_about!("printenv.md");
-const USAGE: &str = help_usage!("printenv.md");
+use uucore::translate;
+use uucore::{error::UResult, format_usage};
 
 static OPT_NULL: &str = "null";
 
@@ -16,7 +14,7 @@ static ARG_VARIABLES: &str = "variables";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
 
     let variables: Vec<String> = matches
         .get_many::<String>(ARG_VARIABLES)
@@ -54,16 +52,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
+        .about(translate!("printenv-about"))
+        .override_usage(format_usage(&translate!("printenv-usage")))
+        .infer_long_args(true);
+    uucore::clap_localization::configure_localized_command(cmd)
         .arg(
             Arg::new(OPT_NULL)
                 .short('0')
                 .long(OPT_NULL)
-                .help("end each output line with 0 byte rather than newline")
+                .help(translate!("printenv-help-null"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

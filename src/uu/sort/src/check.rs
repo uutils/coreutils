@@ -72,7 +72,7 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
                 return Err(SortError::Disorder {
                     file: path.to_owned(),
                     line_number: line_idx,
-                    line: new_first.line.to_owned(),
+                    line: String::from_utf8_lossy(new_first.line).into_owned(),
                     silent: settings.check_silent,
                 }
                 .into());
@@ -86,7 +86,7 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
                 return Err(SortError::Disorder {
                     file: path.to_owned(),
                     line_number: line_idx,
-                    line: b.line.to_owned(),
+                    line: String::from_utf8_lossy(b.line).into_owned(),
                     silent: settings.check_silent,
                 }
                 .into());

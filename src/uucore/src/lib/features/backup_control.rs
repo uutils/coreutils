@@ -53,8 +53,7 @@
 //!         .arg(backup_control::arguments::suffix())
 //!         .override_usage(usage)
 //!         .after_help(format!(
-//!             "{}\n{}",
-//!             long_usage,
+//!             "{long_usage}\n{}",
 //!             backup_control::BACKUP_CONTROL_LONG_HELP
 //!         ))
 //!         .get_matches_from(vec![
@@ -124,13 +123,13 @@ pub const DEFAULT_BACKUP_SUFFIX: &str = "~";
 pub enum BackupMode {
     /// Argument 'none', 'off'
     #[default]
-    NoBackup,
+    None,
     /// Argument 'simple', 'never'
-    SimpleBackup,
+    Simple,
     /// Argument 'numbered', 't'
-    NumberedBackup,
+    Numbered,
     /// Argument 'existing', 'nil'
-    ExistingBackup,
+    Existing,
 }
 
 /// Backup error types.
@@ -176,17 +175,13 @@ impl Display for BackupError {
         match self {
             Self::InvalidArgument(arg, origin) => write!(
                 f,
-                "invalid argument {} for '{}'\n{}",
+                "invalid argument {} for '{origin}'\n{VALID_ARGS_HELP}",
                 arg.quote(),
-                origin,
-                VALID_ARGS_HELP
             ),
             Self::AmbiguousArgument(arg, origin) => write!(
                 f,
-                "ambiguous argument {} for '{}'\n{}",
+                "ambiguous argument {} for '{origin}'\n{VALID_ARGS_HELP}",
                 arg.quote(),
-                origin,
-                VALID_ARGS_HELP
             ),
             Self::BackupImpossible() => write!(f, "cannot create backup"),
             // Placeholder for later
@@ -308,7 +303,7 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 ///         ]);
 ///
 ///     let backup_mode = backup_control::determine_backup_mode(&matches).unwrap();
-///     assert_eq!(backup_mode, BackupMode::NumberedBackup)
+///     assert_eq!(backup_mode, BackupMode::Numbered)
 /// }
 /// ```
 ///
@@ -353,7 +348,7 @@ pub fn determine_backup_mode(matches: &ArgMatches) -> UResult<BackupMode> {
             match_method(&method, "$VERSION_CONTROL")
         } else {
             // Default if no argument is provided to '--backup'
-            Ok(BackupMode::ExistingBackup)
+            Ok(BackupMode::Existing)
         }
     } else if matches.get_flag(arguments::OPT_BACKUP_NO_ARG) {
         // the short form of this option, -b does not accept any argument.
@@ -362,11 +357,11 @@ pub fn determine_backup_mode(matches: &ArgMatches) -> UResult<BackupMode> {
         if let Ok(method) = env::var("VERSION_CONTROL") {
             match_method(&method, "$VERSION_CONTROL")
         } else {
-            Ok(BackupMode::ExistingBackup)
+            Ok(BackupMode::Existing)
         }
     } else {
         // No option was present at all
-        Ok(BackupMode::NoBackup)
+        Ok(BackupMode::None)
     }
 }
 
@@ -396,10 +391,10 @@ fn match_method(method: &str, origin: &str) -> UResult<BackupMode> {
         .collect();
     if matches.len() == 1 {
         match *matches[0] {
-            "simple" | "never" => Ok(BackupMode::SimpleBackup),
-            "numbered" | "t" => Ok(BackupMode::NumberedBackup),
-            "existing" | "nil" => Ok(BackupMode::ExistingBackup),
-            "none" | "off" => Ok(BackupMode::NoBackup),
+            "simple" | "never" => Ok(BackupMode::Simple),
+            "numbered" | "t" => Ok(BackupMode::Numbered),
+            "existing" | "nil" => Ok(BackupMode::Existing),
+            "none" | "off" => Ok(BackupMode::None),
             _ => unreachable!(), // cannot happen as we must have exactly one match
                                  // from the list above.
         }
@@ -416,10 +411,10 @@ pub fn get_backup_path(
     suffix: &str,
 ) -> Option<PathBuf> {
     match backup_mode {
-        BackupMode::NoBackup => None,
-        BackupMode::SimpleBackup => Some(simple_backup_path(backup_path, suffix)),
-        BackupMode::NumberedBackup => Some(numbered_backup_path(backup_path)),
-        BackupMode::ExistingBackup => Some(existing_backup_path(backup_path, suffix)),
+        BackupMode::None => None,
+        BackupMode::Simple => Some(simple_backup_path(backup_path, suffix)),
+        BackupMode::Numbered => Some(numbered_backup_path(backup_path)),
+        BackupMode::Existing => Some(existing_backup_path(backup_path, suffix)),
     }
 }
 
@@ -433,7 +428,7 @@ fn numbered_backup_path(path: &Path) -> PathBuf {
     let file_name = path.file_name().unwrap_or_default();
     for i in 1_u64.. {
         let mut numbered_file_name = file_name.to_os_string();
-        numbered_file_name.push(format!(".~{}~", i));
+        numbered_file_name.push(format!(".~{i}~"));
         let path = path.with_file_name(numbered_file_name);
         if !path.exists() {
             return path;
@@ -516,7 +511,7 @@ mod tests {
 
         let result = determine_backup_mode(&matches).unwrap();
 
-        assert_eq!(result, BackupMode::ExistingBackup);
+        assert_eq!(result, BackupMode::Existing);
     }
 
     // --backup takes precedence over -b
@@ -527,7 +522,7 @@ mod tests {
 
         let result = determine_backup_mode(&matches).unwrap();
 
-        assert_eq!(result, BackupMode::NoBackup);
+        assert_eq!(result, BackupMode::None);
     }
 
     // --backup can be passed without an argument
@@ -538,7 +533,7 @@ mod tests {
 
         let result = determine_backup_mode(&matches).unwrap();
 
-        assert_eq!(result, BackupMode::ExistingBackup);
+        assert_eq!(result, BackupMode::Existing);
     }
 
     // --backup can be passed with an argument only
@@ -549,7 +544,7 @@ mod tests {
 
         let result = determine_backup_mode(&matches).unwrap();
 
-        assert_eq!(result, BackupMode::SimpleBackup);
+        assert_eq!(result, BackupMode::Simple);
     }
 
     // --backup errors on invalid argument
@@ -586,7 +581,7 @@ mod tests {
 
         let result = determine_backup_mode(&matches).unwrap();
 
-        assert_eq!(result, BackupMode::SimpleBackup);
+        assert_eq!(result, BackupMode::Simple);
     }
 
     // -b doesn't ignores the "VERSION_CONTROL" environment variable
@@ -598,7 +593,7 @@ mod tests {
 
         let result = determine_backup_mode(&matches).unwrap();
 
-        assert_eq!(result, BackupMode::NumberedBackup);
+        assert_eq!(result, BackupMode::Numbered);
         unsafe { env::remove_var(ENV_VERSION_CONTROL) };
     }
 
@@ -611,7 +606,7 @@ mod tests {
 
         let result = determine_backup_mode(&matches).unwrap();
 
-        assert_eq!(result, BackupMode::NoBackup);
+        assert_eq!(result, BackupMode::None);
         unsafe { env::remove_var(ENV_VERSION_CONTROL) };
     }
 
@@ -654,7 +649,7 @@ mod tests {
 
         let result = determine_backup_mode(&matches).unwrap();
 
-        assert_eq!(result, BackupMode::SimpleBackup);
+        assert_eq!(result, BackupMode::Simple);
         unsafe { env::remove_var(ENV_VERSION_CONTROL) };
     }
 

@@ -2,10 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStringExt;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
@@ -81,4 +81,15 @@ fn test_invalid_metadata() {
     ucmd.arg("b")
         .fails()
         .stderr_is("sum: b: No such file or directory\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_sum_non_utf8_paths() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    std::fs::write(at.plus(&filename), b"test content").unwrap();
+
+    ucmd.arg(&filename).succeeds();
 }

@@ -4,10 +4,23 @@
 // file that was distributed with this source code.
 //
 // spell-checker:ignore binvalid finvalid hinvalid iinvalid linvalid nabcabc nabcabcabc ninvalid vinvalid winvalid dabc näää
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
+use uutests::{at_and_ucmd, new_ucmd, util::TestScenario, util_name};
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_non_utf8_paths() {
+    use std::os::unix::ffi::OsStringExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    std::fs::write(at.plus(&filename), b"line 1\nline 2\nline 3\n").unwrap();
+
+    ucmd.arg(&filename)
+        .succeeds()
+        .stdout_contains("1\t")
+        .stdout_contains("2\t")
+        .stdout_contains("3\t");
+}
 
 #[test]
 fn test_invalid_arg() {
@@ -194,6 +207,28 @@ fn test_number_separator() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_number_separator_non_utf8() {
+    use std::{
+        ffi::{OsStr, OsString},
+        os::unix::ffi::{OsStrExt, OsStringExt},
+    };
+
+    let separator_bytes = [0xFF, 0xFE];
+    let mut v = b"--number-separator=".to_vec();
+    v.extend_from_slice(&separator_bytes);
+
+    let arg = OsString::from_vec(v);
+    let separator = OsStr::from_bytes(&separator_bytes);
+
+    new_ucmd!()
+        .arg(arg)
+        .pipe_in("test")
+        .succeeds()
+        .stdout_is(format!("     1{}test\n", separator.to_string_lossy()));
+}
+
+#[test]
 fn test_starting_line_number() {
     for arg in ["-v10", "--starting-line-number=10"] {
         new_ucmd!()
@@ -289,6 +324,25 @@ fn test_join_blank_lines() {
 }
 
 #[test]
+fn test_join_blank_lines_zero() {
+    for arg in ["-l0", "--join-blank-lines=0"] {
+        new_ucmd!()
+            .arg(arg)
+            .arg("--body-numbering=a")
+            .pipe_in("\n\n\n\n\n\n")
+            .succeeds()
+            .stdout_is(concat!(
+                "     1\t\n",
+                "     2\t\n",
+                "     3\t\n",
+                "     4\t\n",
+                "     5\t\n",
+                "     6\t\n",
+            ));
+    }
+}
+
+#[test]
 fn test_join_blank_lines_multiple_files() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -310,15 +364,6 @@ fn test_join_blank_lines_multiple_files() {
                 "       \n",
                 "     2\t\n",
             ));
-    }
-}
-
-#[test]
-fn test_join_blank_lines_zero() {
-    for arg in ["-l0", "--join-blank-lines=0"] {
-        new_ucmd!().arg(arg).fails().stderr_contains(
-            "Invalid line number of blank lines: ‘0’: Numerical result out of range",
-        );
     }
 }
 
@@ -582,7 +627,50 @@ fn test_section_delimiter() {
 }
 
 #[test]
-fn test_one_char_section_delimiter_expansion() {
+#[cfg(target_os = "linux")]
+fn test_section_delimiter_non_utf8() {
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+
+    fn create_arg(prefix: &[u8]) -> OsString {
+        let section_delimiter = [0xFF, 0xFE];
+        let mut v = prefix.to_vec();
+        v.extend_from_slice(&section_delimiter);
+        OsString::from_vec(v)
+    }
+
+    let short = create_arg(b"-d");
+    let long = create_arg(b"--section-delimiter=");
+
+    for arg in [short, long] {
+        let header_section: Vec<u8> =
+            vec![b'a', b'\n', 0xFF, 0xFE, 0xFF, 0xFE, 0xFF, 0xFE, b'\n', b'b'];
+
+        new_ucmd!()
+            .arg(&arg)
+            .pipe_in(header_section)
+            .succeeds()
+            .stdout_is("     1\ta\n\n       b\n");
+
+        let body_section: Vec<u8> = vec![b'a', b'\n', 0xFF, 0xFE, 0xFF, 0xFE, b'\n', b'b'];
+
+        new_ucmd!()
+            .arg(&arg)
+            .pipe_in(body_section)
+            .succeeds()
+            .stdout_is("     1\ta\n\n     1\tb\n");
+
+        let footer_section: Vec<u8> = vec![b'a', b'\n', 0xFF, 0xFE, b'\n', b'b'];
+
+        new_ucmd!()
+            .arg(&arg)
+            .pipe_in(footer_section)
+            .succeeds()
+            .stdout_is("     1\ta\n\n       b\n");
+    }
+}
+
+#[test]
+fn test_one_char_section_delimiter() {
     for arg in ["-da", "--section-delimiter=a"] {
         new_ucmd!()
             .arg(arg)
@@ -599,6 +687,48 @@ fn test_one_char_section_delimiter_expansion() {
         new_ucmd!()
             .arg(arg)
             .pipe_in("a\na:\nb") // footer section
+            .succeeds()
+            .stdout_is("     1\ta\n\n       b\n");
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_one_byte_section_delimiter() {
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+
+    fn create_arg(prefix: &[u8]) -> OsString {
+        let mut v = prefix.to_vec();
+        v.push(0xFF);
+        OsString::from_vec(v)
+    }
+
+    let short = create_arg(b"-d");
+    let long = create_arg(b"--section-delimiter=");
+
+    for arg in [short, long] {
+        let header_section: Vec<u8> =
+            vec![b'a', b'\n', 0xFF, b':', 0xFF, b':', 0xFF, b':', b'\n', b'b'];
+
+        new_ucmd!()
+            .arg(&arg)
+            .pipe_in(header_section)
+            .succeeds()
+            .stdout_is("     1\ta\n\n       b\n");
+
+        let body_section: Vec<u8> = vec![b'a', b'\n', 0xFF, b':', 0xFF, b':', b'\n', b'b'];
+
+        new_ucmd!()
+            .arg(&arg)
+            .pipe_in(body_section)
+            .succeeds()
+            .stdout_is("     1\ta\n\n     1\tb\n");
+
+        let footer_section: Vec<u8> = vec![b'a', b'\n', 0xFF, b':', b'\n', b'b'];
+
+        new_ucmd!()
+            .arg(&arg)
+            .pipe_in(footer_section)
             .succeeds()
             .stdout_is("     1\ta\n\n       b\n");
     }
@@ -653,4 +783,121 @@ fn test_directory_as_input() {
         .fails()
         .stderr_is(format!("nl: {dir}: Is a directory\n"))
         .stdout_contains(content);
+}
+
+#[test]
+fn test_file_with_non_utf8_content() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = "file";
+    let content: &[u8] = b"a\n\xFF\xFE\nb";
+    let invalid_utf8: &[u8] = b"\xFF\xFE";
+
+    at.write_bytes(filename, content);
+
+    ucmd.arg(filename).succeeds().stdout_is(format!(
+        "     1\ta\n     2\t{}\n     3\tb\n",
+        String::from_utf8_lossy(invalid_utf8)
+    ));
+}
+
+// Regression tests for issue #9132: repeated flags should use last value
+#[test]
+fn test_repeated_body_numbering_flag() {
+    // -ba -bt should use -bt (t=nonempty)
+    new_ucmd!()
+        .args(&["-ba", "-bt"])
+        .pipe_in("a\n\nb\n\nc")
+        .succeeds()
+        .stdout_is("     1\ta\n       \n     2\tb\n       \n     3\tc\n");
+}
+
+#[test]
+fn test_repeated_header_numbering_flag() {
+    // -ha -ht should use -ht (number only nonempty lines in header)
+    new_ucmd!()
+        .args(&["-ha", "-ht"])
+        .pipe_in("\\:\\:\\:\na\nb\n\nc")
+        .succeeds()
+        .stdout_is("\n     1\ta\n     2\tb\n       \n     3\tc\n");
+}
+
+#[test]
+fn test_repeated_footer_numbering_flag() {
+    // -fa -ft should use -ft (t=nonempty in footer)
+    new_ucmd!()
+        .args(&["-fa", "-ft"])
+        .pipe_in("\\:\na\nb\n\nc")
+        .succeeds()
+        .stdout_is("\n     1\ta\n     2\tb\n       \n     3\tc\n");
+}
+
+#[test]
+fn test_repeated_number_format_flag() {
+    // -n ln -n rn should use -n rn (rn=right aligned)
+    new_ucmd!()
+        .args(&["-n", "ln", "-n", "rn"])
+        .pipe_in("a\nb\nc")
+        .succeeds()
+        .stdout_is("     1\ta\n     2\tb\n     3\tc\n");
+}
+
+#[test]
+fn test_repeated_number_separator_flag() {
+    // -s ':' -s '|' should use -s '|'
+    new_ucmd!()
+        .args(&["-s", ":", "-s", "|"])
+        .pipe_in("a\nb\nc")
+        .succeeds()
+        .stdout_is("     1|a\n     2|b\n     3|c\n");
+}
+
+#[test]
+fn test_repeated_number_width_flag() {
+    // -w 3 -w 8 should use -w 8
+    new_ucmd!()
+        .args(&["-w", "3", "-w", "8"])
+        .pipe_in("a\nb\nc")
+        .succeeds()
+        .stdout_is("       1\ta\n       2\tb\n       3\tc\n");
+}
+
+#[test]
+fn test_repeated_line_increment_flag() {
+    // -i 1 -i 5 should use -i 5
+    new_ucmd!()
+        .args(&["-i", "1", "-i", "5"])
+        .pipe_in("a\nb\nc")
+        .succeeds()
+        .stdout_is("     1\ta\n     6\tb\n    11\tc\n");
+}
+
+#[test]
+fn test_repeated_starting_line_number_flag() {
+    // -v 1 -v 10 should use -v 10
+    new_ucmd!()
+        .args(&["-v", "1", "-v", "10"])
+        .pipe_in("a\nb\nc")
+        .succeeds()
+        .stdout_is("    10\ta\n    11\tb\n    12\tc\n");
+}
+
+#[test]
+fn test_repeated_join_blank_lines_flag() {
+    // -l 1 -l 2 should use -l 2
+    new_ucmd!()
+        .args(&["-l", "1", "-l", "2", "-ba"])
+        .pipe_in("a\n\n\nb")
+        .succeeds()
+        .stdout_is("     1\ta\n       \n     2\t\n     3\tb\n");
+}
+
+#[test]
+fn test_repeated_section_delimiter_flag() {
+    // -d ':' -d '|' should use -d '|'
+    new_ucmd!()
+        .args(&["-d", ":", "-d", "|"])
+        .pipe_in("|:|:|:\na\nb\nc")
+        .succeeds()
+        .stdout_is("\n       a\n       b\n       c\n");
 }

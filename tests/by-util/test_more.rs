@@ -2,56 +2,66 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use std::io::IsTerminal;
-#[cfg(target_family = "unix")]
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
+use std::io::IsTerminal;
+
+use uutests::{at_and_ucmd, new_ucmd};
+
+#[cfg(unix)]
 #[test]
-fn test_more_no_arg() {
+fn test_no_arg() {
     if std::io::stdout().is_terminal() {
-        new_ucmd!().fails().stderr_contains("more: bad usage");
+        new_ucmd!()
+            .terminal_simulation(true)
+            .fails()
+            .stderr_contains("more: bad usage");
     }
 }
 
 #[test]
 fn test_valid_arg() {
     if std::io::stdout().is_terminal() {
-        let scene = TestScenario::new(util_name!());
-        let at = &scene.fixtures;
-
-        let file = "test_file";
-        at.touch(file);
-
-        scene.ucmd().arg(file).arg("-c").succeeds();
-        scene.ucmd().arg(file).arg("--print-over").succeeds();
-
-        scene.ucmd().arg(file).arg("-p").succeeds();
-        scene.ucmd().arg(file).arg("--clean-print").succeeds();
-
-        scene.ucmd().arg(file).arg("-s").succeeds();
-        scene.ucmd().arg(file).arg("--squeeze").succeeds();
-
-        scene.ucmd().arg(file).arg("-u").succeeds();
-        scene.ucmd().arg(file).arg("--plain").succeeds();
-
-        scene.ucmd().arg(file).arg("-n").arg("10").succeeds();
-        scene.ucmd().arg(file).arg("--lines").arg("0").succeeds();
-        scene.ucmd().arg(file).arg("--number").arg("0").succeeds();
-
-        scene.ucmd().arg(file).arg("-F").arg("10").succeeds();
-        scene
-            .ucmd()
-            .arg(file)
-            .arg("--from-line")
-            .arg("0")
-            .succeeds();
-
-        scene.ucmd().arg(file).arg("-P").arg("something").succeeds();
-        scene.ucmd().arg(file).arg("--pattern").arg("-1").succeeds();
+        let args_list: Vec<&[&str]> = vec![
+            &["-c"],
+            &["--clean-print"],
+            &["-p"],
+            &["--print-over"],
+            &["-s"],
+            &["--squeeze"],
+            &["-u"],
+            &["--plain"],
+            &["-n", "10"],
+            &["--lines", "0"],
+            &["--number", "0"],
+            &["-F", "10"],
+            &["--from-line", "0"],
+            &["-P", "something"],
+            &["--pattern", "-1"],
+        ];
+        for args in args_list {
+            test_alive(args);
+        }
     }
+}
+
+fn test_alive(args: &[&str]) {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let content = "test content";
+    let file = "test_file";
+    at.write(file, content);
+
+    let mut cmd = ucmd.args(args).arg(file).run_no_wait();
+
+    // wait for more to start and display the file
+    while cmd.is_alive() && !cmd.stdout_all().contains(content) {
+        cmd.delay(50);
+    }
+
+    assert!(cmd.is_alive(), "Command should still be alive");
+
+    // cleanup
+    cmd.kill();
 }
 
 #[test]
@@ -67,59 +77,46 @@ fn test_invalid_arg() {
 }
 
 #[test]
-fn test_argument_from_file() {
-    if std::io::stdout().is_terminal() {
-        let scene = TestScenario::new(util_name!());
-        let at = &scene.fixtures;
-
-        let file = "test_file";
-
-        at.write(file, "1\n2");
-
-        // output all lines
-        scene
-            .ucmd()
-            .arg("-F")
-            .arg("0")
-            .arg(file)
-            .succeeds()
-            .no_stderr()
-            .stdout_contains("1")
-            .stdout_contains("2");
-
-        // output only the second line
-        scene
-            .ucmd()
-            .arg("-F")
-            .arg("2")
-            .arg(file)
-            .succeeds()
-            .no_stderr()
-            .stdout_contains("2")
-            .stdout_does_not_contain("1");
-    }
-}
-
-#[test]
-fn test_more_dir_arg() {
+fn test_file_arg() {
     // Run the test only if there's a valid terminal, else do nothing
     // Maybe we could capture the error, i.e. "Device not found" in that case
     // but I am leaving this for later
     if std::io::stdout().is_terminal() {
+        // Directory as argument
         new_ucmd!()
             .arg(".")
             .succeeds()
             .stderr_contains("'.' is a directory.");
+
+        // Single argument errors
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir_all("folder");
+        ucmd.arg("folder")
+            .succeeds()
+            .stderr_contains("is a directory");
+
+        new_ucmd!()
+            .arg("nonexistent_file")
+            .succeeds()
+            .stderr_contains("No such file or directory");
+
+        // Multiple nonexistent files
+        new_ucmd!()
+            .arg("file2")
+            .arg("file3")
+            .succeeds()
+            .stderr_contains("file2")
+            .stderr_contains("file3");
     }
 }
 
 #[test]
 #[cfg(target_family = "unix")]
-fn test_more_invalid_file_perms() {
-    use std::fs::{Permissions, set_permissions};
-    use std::os::unix::fs::PermissionsExt;
-
+fn test_invalid_file_perms() {
     if std::io::stdout().is_terminal() {
+        use std::fs::{Permissions, set_permissions};
+        use std::os::unix::fs::PermissionsExt;
+
         let (at, mut ucmd) = at_and_ucmd!();
         let permissions = Permissions::from_mode(0o244);
         at.make_file("invalid-perms.txt");
@@ -131,87 +128,19 @@ fn test_more_invalid_file_perms() {
 }
 
 #[test]
-fn test_more_error_on_single_arg() {
+#[cfg(target_os = "linux")]
+fn test_more_non_utf8_paths() {
+    use std::os::unix::ffi::OsStrExt;
     if std::io::stdout().is_terminal() {
-        let ts = TestScenario::new("more");
-        ts.fixtures.mkdir_all("folder");
-        ts.ucmd()
-            .arg("folder")
-            .succeeds()
-            .stderr_contains("is a directory");
-        ts.ucmd()
-            .arg("file1")
-            .succeeds()
-            .stderr_contains("No such file or directory");
-    }
-}
+        let (at, mut ucmd) = at_and_ucmd!();
+        let file_name = std::ffi::OsStr::from_bytes(b"test_\xFF\xFE.txt");
+        // Create test file with normal name first
+        at.write(
+            &file_name.to_string_lossy(),
+            "test content for non-UTF-8 file",
+        );
 
-#[test]
-fn test_more_error_on_multiple_files() {
-    if std::io::stdout().is_terminal() {
-        let ts = TestScenario::new("more");
-        ts.fixtures.mkdir_all("folder");
-        ts.fixtures.make_file("file1");
-        ts.ucmd()
-            .arg("folder")
-            .arg("file2")
-            .arg("file1")
-            .succeeds()
-            .stderr_contains("folder")
-            .stderr_contains("file2")
-            .stdout_contains("file1");
-        ts.ucmd()
-            .arg("file2")
-            .arg("file3")
-            .succeeds()
-            .stderr_contains("file2")
-            .stderr_contains("file3");
-    }
-}
-
-#[test]
-fn test_more_pattern_found() {
-    if std::io::stdout().is_terminal() {
-        let scene = TestScenario::new(util_name!());
-        let at = &scene.fixtures;
-
-        let file = "test_file";
-
-        at.write(file, "line1\nline2");
-
-        // output only the second line "line2"
-        scene
-            .ucmd()
-            .arg("-P")
-            .arg("line2")
-            .arg(file)
-            .succeeds()
-            .no_stderr()
-            .stdout_does_not_contain("line1")
-            .stdout_contains("line2");
-    }
-}
-
-#[test]
-fn test_more_pattern_not_found() {
-    if std::io::stdout().is_terminal() {
-        let scene = TestScenario::new(util_name!());
-        let at = &scene.fixtures;
-
-        let file = "test_file";
-
-        let file_content = "line1\nline2";
-        at.write(file, file_content);
-
-        scene
-            .ucmd()
-            .arg("-P")
-            .arg("something")
-            .arg(file)
-            .succeeds()
-            .no_stderr()
-            .stdout_contains("Pattern not found")
-            .stdout_contains("line1")
-            .stdout_contains("line2");
+        // Test that more can handle non-UTF-8 filenames without crashing
+        ucmd.arg(file_name).succeeds();
     }
 }

@@ -5,8 +5,6 @@
 //
 
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[test]
 fn test_encode() {
@@ -115,12 +113,11 @@ fn test_wrap() {
 #[test]
 fn test_wrap_no_arg() {
     for wrap_param in ["-w", "--wrap"] {
-        let ts = TestScenario::new(util_name!());
-        let expected_stderr = "a value is required for '--wrap <COLS>' but none was supplied";
-        ts.ucmd()
+        new_ucmd!()
             .arg(wrap_param)
             .fails()
-            .stderr_contains(expected_stderr)
+            .stderr_contains("error: a value is required for '--wrap <COLS>' but none was supplied")
+            .stderr_contains("For more information, try '--help'.")
             .no_stdout();
     }
 }

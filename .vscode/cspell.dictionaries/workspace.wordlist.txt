@@ -8,6 +8,19 @@ advapi32-sys
 aho-corasick
 backtrace
 blake2b_simd
+
+# * uutils project
+uutils
+coreutils
+uucore
+uutests
+ucmd
+uumain
+rlimit
+mkfifo
+urandom
+uchild
+ello
 bstr
 bytecount
 byteorder
@@ -20,13 +33,14 @@ exacl
 filetime
 formatteriteminfo
 fsext
-fundu
 getopts
 getrandom
 globset
 indicatif
 itertools
 itoa
+iuse
+langid
 lscolors
 mdbook
 memchr
@@ -48,6 +62,7 @@ termsize
 termwidth
 textwrap
 thiserror
+unic
 ureq
 walkdir
 winapi
@@ -127,6 +142,7 @@ ENOSYS
 ENOTEMPTY
 EOPNOTSUPP
 EPERM
+EPIPE
 EROFS
 
 # * vars/fcntl
@@ -153,6 +169,7 @@ IFSOCK
 IRGRP
 IROTH
 IRUSR
+ISDIR
 ISGID
 ISUID
 ISVTX
@@ -204,6 +221,7 @@ setgid
 setgroups
 settime
 setuid
+socketpair
 socktype
 statfs
 statp
@@ -308,6 +326,7 @@ freecon
 getfilecon
 lgetfilecon
 lsetfilecon
+restorecon
 setfilecon
 
 # * vars/uucore
@@ -333,6 +352,7 @@ utmpx
 uucore
 uucore_procs
 uudoc
+uufuzz
 uumain
 uutil
 uutests
@@ -342,4 +362,14 @@ uutils
 getcwd
 
 # * other
+weblate
 algs
+
+# translation tests
+CLICOLOR
+erreur
+Utilisation
+merror
+merreur
+verbo
+inattendu

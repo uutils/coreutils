@@ -87,7 +87,7 @@ impl<'a> VariableParser<'a, '_> {
                         c.to_string(),
                     ));
                 }
-            };
+            }
         }
 
         let default_opt = if let Some(default_end) = default_end {
@@ -119,7 +119,7 @@ impl<'a> VariableParser<'a, '_> {
                     self.skip_one()?;
                 }
                 Some(_) => break,
-            };
+            }
         }
 
         let pos_end = self.parser.get_peek_position();

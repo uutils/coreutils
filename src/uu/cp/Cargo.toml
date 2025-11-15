@@ -1,21 +1,18 @@
 [package]
 name = "uu_cp"
-version = "0.0.30"
-authors = [
-  "Jordy Dickinson <jordy.dickinson@gmail.com>",
-  "Joshua S. Miller <jsmiller@uchicago.edu>",
-  "uutils developers",
-]
-license = "MIT"
 description = "cp ~ (uutils) copy SOURCE to DESTINATION"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/cp"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2024"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/cp.rs"
@@ -24,8 +21,7 @@ path = "src/cp.rs"
 clap = { workspace = true }
 filetime = { workspace = true }
 libc = { workspace = true }
-linux-raw-sys = { workspace = true }
-quick-error = { workspace = true }
+linux-raw-sys = { workspace = true, features = ["ioctl"] }
 selinux = { workspace = true, optional = true }
 uucore = { workspace = true, features = [
   "backup-control",
@@ -33,12 +29,15 @@ uucore = { workspace = true, features = [
   "entries",
   "fs",
   "fsxattr",
+  "parser",
   "perms",
   "mode",
   "update-control",
 ] }
 walkdir = { workspace = true }
 indicatif = { workspace = true }
+thiserror = { workspace = true }
+fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 xattr = { workspace = true }
@@ -48,6 +47,15 @@ exacl = { workspace = true, optional = true }
 name = "cp"
 path = "src/main.rs"
 
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "cp_bench"
+harness = false
+
 [features]
-feat_selinux = ["selinux"]
+feat_selinux = ["selinux", "uucore/selinux"]
 feat_acl = ["exacl"]

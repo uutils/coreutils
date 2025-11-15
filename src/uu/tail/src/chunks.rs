@@ -19,7 +19,7 @@ use uucore::error::UResult;
 /// block read at a time.
 pub const BLOCK_SIZE: u64 = 1 << 16;
 
-/// The size of the backing buffer of a LinesChunk or BytesChunk in bytes. The value of BUFFER_SIZE
+/// The size of the backing buffer of a [`LinesChunk`] or [`BytesChunk`] in bytes. The value of `BUFFER_SIZE`
 /// originates from the BUFSIZ constant in stdio.h and the libc crate to make stream IO efficient.
 /// In the latter the value is constantly set to 8192 on all platforms, where the value in stdio.h
 /// is determined on each platform differently. Since libc chose 8192 as a reasonable default the
@@ -115,8 +115,8 @@ pub struct BytesChunk {
     /// [`BytesChunk::fill`]
     buffer: ChunkBuffer,
 
-    /// Stores the number of bytes, this buffer holds. This is not equal to buffer.len(), since the
-    /// [`BytesChunk`] may store less bytes than the internal buffer can hold. In addition
+    /// Stores the number of bytes, this buffer holds. This is not equal to `buffer.len()`, since the
+    /// [`BytesChunk`] may store less bytes than the internal buffer can hold. In addition,
     /// [`BytesChunk`] may be reused, what makes it necessary to track the number of stored bytes.
     /// The choice of usize is sufficient here, since the number of bytes max value is
     /// [`BUFFER_SIZE`], which is a usize.
@@ -207,9 +207,9 @@ impl BytesChunk {
     }
 
     /// Fills `self.buffer` with maximal [`BUFFER_SIZE`] number of bytes, draining the reader by
-    /// that number of bytes. If EOF is reached (so 0 bytes are read), then returns
-    /// [`UResult<None>`] or else the result with [`Some(bytes)`] where bytes is the number of bytes
-    /// read from the source.
+    /// that number of bytes. If EOF is reached (so 0 bytes are read), it returns
+    /// [`UResult<None>`]; otherwise, it returns [`UResult<Some(bytes)>`], where bytes is the
+    /// number of bytes read from the source.
     pub fn fill(&mut self, filehandle: &mut impl BufRead) -> UResult<Option<usize>> {
         let num_bytes = filehandle.read(&mut self.buffer)?;
         self.bytes = num_bytes;
@@ -289,16 +289,16 @@ impl BytesChunkBuffer {
         let mut chunk = Box::new(BytesChunk::new());
 
         // fill chunks with all bytes from reader and reuse already instantiated chunks if possible
-        while (chunk.fill(reader)?).is_some() {
+        while chunk.fill(reader)?.is_some() {
             self.bytes += chunk.bytes as u64;
-            self.chunks.push_back(chunk);
+            self.chunks.push_back(chunk.clone());
 
             let first = &self.chunks[0];
             if self.bytes - first.bytes as u64 > self.num_print {
                 chunk = self.chunks.pop_front().unwrap();
                 self.bytes -= chunk.bytes as u64;
             } else {
-                chunk = Box::new(BytesChunk::new());
+                *chunk = BytesChunk::new();
             }
         }
 
@@ -319,7 +319,7 @@ impl BytesChunkBuffer {
         Ok(())
     }
 
-    pub fn print(&self, mut writer: impl Write) -> UResult<()> {
+    pub fn print(&self, writer: &mut impl Write) -> UResult<()> {
         for chunk in &self.chunks {
             writer.write_all(chunk.get_buffer())?;
         }
@@ -333,7 +333,7 @@ impl BytesChunkBuffer {
 
 /// Works similar to a [`BytesChunk`] but also stores the number of lines encountered in the current
 /// buffer. The size of the buffer is limited to a fixed size number of bytes.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct LinesChunk {
     /// Work on top of a [`BytesChunk`]
     chunk: BytesChunk,
@@ -565,9 +565,9 @@ impl LinesChunkBuffer {
     pub fn fill(&mut self, reader: &mut impl BufRead) -> UResult<()> {
         let mut chunk = Box::new(LinesChunk::new(self.delimiter));
 
-        while (chunk.fill(reader)?).is_some() {
+        while chunk.fill(reader)?.is_some() {
             self.lines += chunk.lines as u64;
-            self.chunks.push_back(chunk);
+            self.chunks.push_back(chunk.clone());
 
             let first = &self.chunks[0];
             if self.lines - first.lines as u64 > self.num_print {
@@ -575,20 +575,20 @@ impl LinesChunkBuffer {
 
                 self.lines -= chunk.lines as u64;
             } else {
-                chunk = Box::new(LinesChunk::new(self.delimiter));
+                *chunk = LinesChunk::new(self.delimiter);
             }
         }
 
         if self.chunks.is_empty() {
             // chunks is empty when a file is empty so quitting early here
             return Ok(());
-        } else {
-            let length = &self.chunks.len();
-            let last = &mut self.chunks[length - 1];
-            if !last.get_buffer().ends_with(&[self.delimiter]) {
-                last.lines += 1;
-                self.lines += 1;
-            }
+        }
+
+        let length = &self.chunks.len();
+        let last = &mut self.chunks[length - 1];
+        if !last.get_buffer().ends_with(&[self.delimiter]) {
+            last.lines += 1;
+            self.lines += 1;
         }
 
         // skip unnecessary chunks and save the first chunk which may hold some lines we have to

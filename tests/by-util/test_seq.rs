@@ -4,8 +4,6 @@
 // file that was distributed with this source code.
 // spell-checker:ignore lmnop xlmnop
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
@@ -17,6 +15,14 @@ fn test_no_args() {
     new_ucmd!()
         .fails_with_code(1)
         .stderr_contains("missing operand");
+}
+
+#[test]
+fn test_format_and_equal_width() {
+    new_ucmd!()
+        .args(&["-w", "-f", "%f", "1"])
+        .fails_with_code(1)
+        .stderr_contains("format string may not be specified");
 }
 
 #[test]
@@ -209,6 +215,10 @@ fn test_separator_and_terminator() {
         .succeeds()
         .stdout_is("2,3,4,5,6\n");
     new_ucmd!()
+        .args(&["-s", "", "2", "6"])
+        .succeeds()
+        .stdout_is("23456\n");
+    new_ucmd!()
         .args(&["-s", "\n", "2", "6"])
         .succeeds()
         .stdout_is("2\n3\n4\n5\n6\n");
@@ -216,6 +226,52 @@ fn test_separator_and_terminator() {
         .args(&["-s", "\\n", "2", "6"])
         .succeeds()
         .stdout_is("2\\n3\\n4\\n5\\n6\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_separator_non_utf8() {
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+
+    fn create_arg(prefix: &[u8]) -> OsString {
+        let separator = [0xFF, 0xFE];
+        OsString::from_vec([prefix, &separator].concat())
+    }
+
+    let short = create_arg(b"-s");
+    let long = create_arg(b"--separator=");
+    let expected = [b'1', 0xFF, 0xFE, b'2', b'\n'];
+
+    for arg in [short, long] {
+        new_ucmd!()
+            .arg(&arg)
+            .arg("2")
+            .succeeds()
+            .stdout_is_bytes(expected);
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_terminator_non_utf8() {
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+
+    fn create_arg(prefix: &[u8]) -> OsString {
+        let terminator = [0xFF, 0xFE];
+        OsString::from_vec([prefix, &terminator].concat())
+    }
+
+    let short = create_arg(b"-t");
+    let long = create_arg(b"--terminator=");
+    let expected = [b'1', b'\n', b'2', 0xFF, 0xFE];
+
+    for arg in [short, long] {
+        new_ucmd!()
+            .arg(&arg)
+            .arg("2")
+            .succeeds()
+            .stdout_is_bytes(expected);
+    }
 }
 
 #[test]
@@ -278,6 +334,10 @@ fn test_separator_and_terminator_floats() {
         .args(&["-s", ",", "-t", "!", "2.0", "6"])
         .succeeds()
         .stdout_is("2.0,3.0,4.0,5.0,6.0!");
+    new_ucmd!()
+        .args(&["-s", "", "-t", "!", "2.0", "6"])
+        .succeeds()
+        .stdout_is("2.03.04.05.06.0!");
 }
 
 #[test]
@@ -752,21 +812,23 @@ fn test_undefined() {
 
 #[test]
 fn test_invalid_float_point_fail_properly() {
+    // Note that we support arguments that are much bigger than what GNU coreutils supports.
+    // Tests below use exponents larger than we support (i64)
     new_ucmd!()
-        .args(&["66000e000000000000000000000000000000000000000000000000000009223372036854775807"])
+        .args(&["66000e0000000000000000000000000000000000000000000000000000092233720368547758070"])
         .fails()
         .no_stdout()
-        .usage_error("invalid floating point argument: '66000e000000000000000000000000000000000000000000000000000009223372036854775807'");
+        .usage_error("invalid floating point argument: '66000e0000000000000000000000000000000000000000000000000000092233720368547758070'");
     new_ucmd!()
-        .args(&["-1.1e9223372036854775807"])
+        .args(&["-1.1e92233720368547758070"])
         .fails()
         .no_stdout()
-        .usage_error("invalid floating point argument: '-1.1e9223372036854775807'");
+        .usage_error("invalid floating point argument: '-1.1e92233720368547758070'");
     new_ucmd!()
-        .args(&["-.1e9223372036854775807"])
+        .args(&["-.1e92233720368547758070"])
         .fails()
         .no_stdout()
-        .usage_error("invalid floating point argument: '-.1e9223372036854775807'");
+        .usage_error("invalid floating point argument: '-.1e92233720368547758070'");
 }
 
 #[test]
@@ -859,6 +921,8 @@ fn test_parse_valid_hexadecimal_float_two_args() {
         (["0xA.A9p-1", "6"], "5.33008\n"),
         (["0xa.a9p-1", "6"], "5.33008\n"),
         (["0xffffffffffp-30", "1024"], "1024\n"), // spell-checker:disable-line
+        (["  0XA.A9P-1", "6"], "5.33008\n"),
+        (["  0xee.", "  0xef."], "238\n239\n"),
     ];
 
     for (input_arguments, expected_output) in &test_cases {
@@ -909,9 +973,21 @@ fn test_parse_out_of_bounds_exponents() {
         .args(&["1e-9223372036854775808"])
         .succeeds()
         .stdout_only("");
+
+    // GNU seq supports arbitrarily small exponents (and treats the value as 0).
+    new_ucmd!()
+        .args(&["1e-922337203685477580800000000", "1"])
+        .succeeds()
+        .stdout_only("0\n1\n");
+
+    // Check we can also underflow to -0.0.
+    new_ucmd!()
+        .args(&["-1e-922337203685477580800000000", "1"])
+        .succeeds()
+        .stdout_only("-0\n1\n");
 }
 
-#[ignore]
+#[ignore = ""]
 #[test]
 fn test_parse_valid_hexadecimal_float_format_issues() {
     // These tests detect differences in the representation of floating-point values with GNU seq.

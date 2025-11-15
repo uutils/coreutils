@@ -38,6 +38,7 @@ pub static TERMS: &[&str] = &[
     "terminator",
     "tmux*",
     "vt100",
+    "wezterm*",
     "xterm*",
 ];
 

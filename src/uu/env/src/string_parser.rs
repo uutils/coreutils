@@ -25,7 +25,7 @@ pub enum ErrorType {
     InternalError,
 }
 
-/// Provides a valid char or a invalid sequence of bytes.
+/// Provides a valid char or an invalid sequence of bytes.
 ///
 /// Invalid byte sequences can't be split in any meaningful way.
 /// Thus, they need to be consumed as one piece.
@@ -34,9 +34,9 @@ pub enum Chunk<'a> {
     ValidSingleIntChar((char, NativeCharInt)),
 }
 
-/// This class makes parsing a OsString char by char more convenient.
+/// This class makes parsing a [`std::ffi::OsString`] char by char more convenient.
 ///
-/// It also allows to capturing of intermediate positions for later splitting.
+/// It also allows capturing the intermediate positions for later splitting.
 pub struct StringParser<'a> {
     input: &'a NativeIntStr,
     pointer: usize,

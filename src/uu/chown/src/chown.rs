@@ -7,8 +7,9 @@
 
 use uucore::display::Quotable;
 pub use uucore::entries::{self, Group, Locate, Passwd};
+use uucore::format_usage;
 use uucore::perms::{GidUidOwnerFilter, IfFrom, chown_base, options};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::translate;
 
 use uucore::error::{FromIo, UResult, USimpleError};
 
@@ -16,10 +17,6 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 
 use std::fs;
 use std::os::unix::fs::MetadataExt;
-
-static ABOUT: &str = help_about!("chown.md");
-
-const USAGE: &str = help_usage!("chown.md");
 
 fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
     let filter = if let Some(spec) = matches.get_one::<String>(options::FROM) {
@@ -37,8 +34,9 @@ fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> 
     let dest_gid: Option<u32>;
     let raw_owner: String;
     if let Some(file) = matches.get_one::<String>(options::REFERENCE) {
-        let meta = fs::metadata(file)
-            .map_err_context(|| format!("failed to get attributes of {}", file.quote()))?;
+        let meta = fs::metadata(file).map_err_context(
+            || translate!("chown-error-failed-to-get-attributes", "file" => file.quote()),
+        )?;
         let gid = meta.gid();
         let uid = meta.uid();
         dest_gid = Some(gid);
@@ -79,66 +77,61 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("chown-about"))
+        .override_usage(format_usage(&translate!("chown-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help("Print help information.")
+                .help(translate!("chown-help-print-help"))
                 .action(ArgAction::Help),
         )
         .arg(
             Arg::new(options::verbosity::CHANGES)
                 .short('c')
                 .long(options::verbosity::CHANGES)
-                .help("like verbose but report only when a change is made")
+                .help(translate!("chown-help-changes"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FROM)
                 .long(options::FROM)
-                .help(
-                    "change the owner and/or group of each file only if its \
-                    current owner and/or group match those specified here. \
-                    Either may be omitted, in which case a match is not required \
-                    for the omitted attribute",
-                )
+                .help(translate!("chown-help-from"))
                 .value_name("CURRENT_OWNER:CURRENT_GROUP"),
         )
         .arg(
             Arg::new(options::preserve_root::PRESERVE)
                 .long(options::preserve_root::PRESERVE)
-                .help("fail to operate recursively on '/'")
+                .help(translate!("chown-help-preserve-root"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::preserve_root::NO_PRESERVE)
                 .long(options::preserve_root::NO_PRESERVE)
-                .help("do not treat '/' specially (the default)")
+                .help(translate!("chown-help-no-preserve-root"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::verbosity::QUIET)
                 .long(options::verbosity::QUIET)
-                .help("suppress most error messages")
+                .help(translate!("chown-help-quiet"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::RECURSIVE)
                 .short('R')
                 .long(options::RECURSIVE)
-                .help("operate on files and directories recursively")
+                .help(translate!("chown-help-recursive"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::REFERENCE)
                 .long(options::REFERENCE)
-                .help("use RFILE's owner and group rather than specifying OWNER:GROUP values")
+                .help(translate!("chown-help-reference"))
                 .value_name("RFILE")
-                .value_hint(clap::ValueHint::FilePath)
-                .num_args(1..),
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::verbosity::SILENT)
@@ -150,7 +143,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::verbosity::VERBOSE)
                 .long(options::verbosity::VERBOSE)
                 .short('v')
-                .help("output a diagnostic for every file processed")
+                .help(translate!("chown-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         // Add common arguments with chgrp, chown & chmod
@@ -179,7 +172,7 @@ fn parse_uid(user: &str, spec: &str, sep: char) -> UResult<Option<u32>> {
                     Ok(uid) => Ok(Some(uid)),
                     Err(_) => Err(USimpleError::new(
                         1,
-                        format!("invalid user: {}", spec.quote()),
+                        translate!("chown-error-invalid-user", "user" => spec.quote()),
                     )),
                 }
             }
@@ -198,7 +191,7 @@ fn parse_gid(group: &str, spec: &str) -> UResult<Option<u32>> {
             Ok(gid) => Ok(Some(gid)),
             Err(_) => Err(USimpleError::new(
                 1,
-                format!("invalid group: {}", spec.quote()),
+                translate!("chown-error-invalid-group", "group" => spec.quote()),
             )),
         },
     }
@@ -225,15 +218,12 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
     let uid = parse_uid(user, spec, sep)?;
     let gid = parse_gid(group, spec)?;
 
-    if user.chars().next().map(char::is_numeric).unwrap_or(false)
-        && group.is_empty()
-        && spec != user
-    {
+    if user.chars().next().is_some_and(char::is_numeric) && group.is_empty() && spec != user {
         // if the arg starts with an id numeric value, the group isn't set but the separator is provided,
         // we should fail with an error
         return Err(USimpleError::new(
             1,
-            format!("invalid spec: {}", spec.quote()),
+            translate!("chown-error-invalid-spec", "spec" => spec.quote()),
         ));
     }
 
@@ -243,9 +233,15 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::env;
+    use uucore::locale;
 
     #[test]
     fn test_parse_spec() {
+        unsafe {
+            env::set_var("LANG", "C");
+        }
+        let _ = locale::setup_localization("chown");
         assert!(matches!(parse_spec(":", ':'), Ok((None, None))));
         assert!(matches!(parse_spec(".", ':'), Ok((None, None))));
         assert!(matches!(parse_spec(".", '.'), Ok((None, None))));
