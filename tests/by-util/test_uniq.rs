@@ -889,7 +889,7 @@ fn gnu_tests() {
             input: "", // Note: Different from GNU test, but should not matter
             stdout: Some(""),
             stderr: Some(concat!(
-                "error: invalid value 'badoption' for '--all-repeated[=<delimit-method>]'\n",
+                "uniq: error: invalid value 'badoption' for '--all-repeated[=<delimit-method>]'\n",
                 "\n",
                 "  [possible values: none, prepend, separate]\n",
                 "\n",
@@ -1066,7 +1066,7 @@ fn gnu_tests() {
             input: "",
             stdout: Some(""),
             stderr: Some(concat!(
-                "error: the argument '--group[=<group-method>]' cannot be used with '--count'\n",
+                "uniq: error: the argument '--group[=<group-method>]' cannot be used with '--count'\n",
                 "\n",
                 "For more information, try '--help'.\n"
             )),
@@ -1078,7 +1078,7 @@ fn gnu_tests() {
             input: "",
             stdout: Some(""),
             stderr: Some(concat!(
-                "error: the argument '--group[=<group-method>]' cannot be used with '--repeated'\n",
+                "uniq: error: the argument '--group[=<group-method>]' cannot be used with '--repeated'\n",
                 "\n",
                 "For more information, try '--help'.\n"
             )),
@@ -1090,7 +1090,7 @@ fn gnu_tests() {
             input: "",
             stdout: Some(""),
             stderr: Some(concat!(
-                "error: the argument '--group[=<group-method>]' cannot be used with '--unique'\n",
+                "uniq: error: the argument '--group[=<group-method>]' cannot be used with '--unique'\n",
                 "\n",
                 "For more information, try '--help'.\n"
             )),
@@ -1102,7 +1102,7 @@ fn gnu_tests() {
             input: "",
             stdout: Some(""),
             stderr: Some(concat!(
-                "error: the argument '--group[=<group-method>]' cannot be used with '--all-repeated[=<delimit-method>]'\n",
+                "uniq: error: the argument '--group[=<group-method>]' cannot be used with '--all-repeated[=<delimit-method>]'\n",
                 "\n",
                 "For more information, try '--help'.\n"
             )),
@@ -1114,7 +1114,7 @@ fn gnu_tests() {
             input: "",
             stdout: Some(""),
             stderr: Some(concat!(
-                "error: invalid value 'badoption' for '--group[=<group-method>]'\n",
+                "uniq: error: invalid value 'badoption' for '--group[=<group-method>]'\n",
                 "\n",
                 "  [possible values: separate, prepend, append, both]\n",
                 "\n",
