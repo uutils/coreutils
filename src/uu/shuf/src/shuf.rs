@@ -218,7 +218,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::RANDOM_SEED)
                 .long(options::RANDOM_SEED)
                 .value_name("STRING")
-                .help("seed with STRING for reproducible output")
+                .help(translate!("shuf-help-random-seed"))
                 .value_parser(ValueParser::string())
                 .value_hint(clap::ValueHint::Other)
                 .conflicts_with(options::RANDOM_SOURCE),

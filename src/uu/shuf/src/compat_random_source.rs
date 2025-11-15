@@ -6,6 +6,7 @@
 use std::{io::BufRead, ops::RangeInclusive};
 
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::translate;
 
 /// A uniform integer generator that tries to exactly match GNU shuf's --random-source.
 ///
@@ -51,9 +52,12 @@ impl<R: BufRead> RandomSourceAdapter<R> {
             let buf = self
                 .reader
                 .fill_buf()
-                .map_err_context(|| "reading random bytes failed".into())?;
+                .map_err_context(|| translate!("shuf-error-read-random-bytes"))?;
             let Some(&byte) = buf.first() else {
-                return Err(USimpleError::new(1, "end of random source"));
+                return Err(USimpleError::new(
+                    1,
+                    translate!("shuf-error-end-of-random-bytes"),
+                ));
             };
             self.reader.consume(1);
             // Is overflow OK here? Won't it cause bias? (Seems to work out...)
