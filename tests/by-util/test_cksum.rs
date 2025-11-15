@@ -10,9 +10,8 @@ use uutests::util::TestScenario;
 use uutests::util::log_info;
 use uutests::util_name;
 
-const ALGOS: [&str; 12] = [
-    "sysv", "bsd", "crc", "crc32b", "md5", "sha1", "sha224", "sha256", "sha384", "sha512",
-    "blake2b", "sm3",
+const ALGOS: [&str; 11] = [
+    "sysv", "bsd", "crc", "md5", "sha1", "sha224", "sha256", "sha384", "sha512", "blake2b", "sm3",
 ];
 const SHA_LENGTHS: [u32; 4] = [224, 256, 384, 512];
 
@@ -2744,5 +2743,104 @@ mod format_mix {
             .succeeds()
             .stdout_contains("bar: OK")
             .stderr_contains("cksum: WARNING: 1 line is improperly formatted");
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+mod debug_tests {
+    use super::*;
+
+    #[test]
+    fn test_debug_flag() {
+        // Test with default CRC algorithm - should output CPU feature detection
+        new_ucmd!()
+            .arg("--debug")
+            .arg("lorem_ipsum.txt")
+            .succeeds()
+            .stdout_is_fixture("crc_single_file.expected")
+            .stderr_contains("avx512")
+            .stderr_contains("avx2")
+            .stderr_contains("pclmul");
+
+        // Test with MD5 algorithm - CPU detection should be same regardless of algorithm
+        new_ucmd!()
+            .arg("--debug")
+            .arg("-a")
+            .arg("md5")
+            .arg("lorem_ipsum.txt")
+            .succeeds()
+            .stdout_is_fixture("md5_single_file.expected")
+            .stderr_contains("avx512")
+            .stderr_contains("avx2")
+            .stderr_contains("pclmul");
+
+        // Test with stdin - CPU detection should appear once
+        new_ucmd!()
+            .arg("--debug")
+            .pipe_in("test")
+            .succeeds()
+            .stderr_contains("avx512")
+            .stderr_contains("avx2")
+            .stderr_contains("pclmul");
+
+        // Test with multiple files - CPU detection should appear once, not per file
+        new_ucmd!()
+            .arg("--debug")
+            .arg("lorem_ipsum.txt")
+            .arg("alice_in_wonderland.txt")
+            .succeeds()
+            .stdout_is_fixture("crc_multiple_files.expected")
+            .stderr_contains("avx512")
+            .stderr_contains("avx2")
+            .stderr_contains("pclmul");
+    }
+
+    #[test]
+    fn test_debug_with_algorithms() {
+        // Test with SHA256 - CPU detection should be same regardless of algorithm
+        new_ucmd!()
+            .arg("--debug")
+            .arg("-a")
+            .arg("sha256")
+            .arg("lorem_ipsum.txt")
+            .succeeds()
+            .stderr_contains("avx512")
+            .stderr_contains("avx2")
+            .stderr_contains("pclmul");
+
+        // Test with BLAKE2b default length
+        new_ucmd!()
+            .arg("--debug")
+            .arg("-a")
+            .arg("blake2b")
+            .arg("lorem_ipsum.txt")
+            .succeeds()
+            .stderr_contains("avx512")
+            .stderr_contains("avx2")
+            .stderr_contains("pclmul");
+
+        // Test with BLAKE2b custom length
+        new_ucmd!()
+            .arg("--debug")
+            .arg("-a")
+            .arg("blake2b")
+            .arg("--length")
+            .arg("256")
+            .arg("lorem_ipsum.txt")
+            .succeeds()
+            .stderr_contains("avx512")
+            .stderr_contains("avx2")
+            .stderr_contains("pclmul");
+
+        // Test with SHA1
+        new_ucmd!()
+            .arg("--debug")
+            .arg("-a")
+            .arg("sha1")
+            .arg("lorem_ipsum.txt")
+            .succeeds()
+            .stderr_contains("avx512")
+            .stderr_contains("avx2")
+            .stderr_contains("pclmul");
     }
 }

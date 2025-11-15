@@ -3264,6 +3264,7 @@ version = "0.4.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
+ "cpufeatures",
  "fluent",
  "hex",
  "tempfile",

@@ -311,6 +311,7 @@ clap = { version = "4.5", features = ["wrap_help", "cargo", "color"] }
 clap_complete = "4.4"
 clap_mangen = "0.2"
 compare = "0.1.0"
+cpufeatures = "0.2.12"
 crossterm = "0.29.0"
 ctor = "0.6.0"
 ctrlc = { version = "3.4.7", features = ["termination"] }
