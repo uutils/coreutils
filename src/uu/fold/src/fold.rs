@@ -599,8 +599,7 @@ fn process_pending_chunk<W: Write>(
                     break;
                 }
 
-                let valid =
-                    std::str::from_utf8(&pending[..valid_up_to]).expect("valid prefix");
+                let valid = std::str::from_utf8(&pending[..valid_up_to]).expect("valid prefix");
                 process_utf8_line(valid, ctx)?;
                 pending.drain(..valid_up_to);
             }
