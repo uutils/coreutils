@@ -70,6 +70,7 @@ impl SeededRng {
         Self(Box::new(rand_chacha::ChaCha12Rng::from_seed(seed)))
     }
 
+    #[allow(clippy::many_single_char_names)] // use original lemire names for easy comparison
     fn generate_at_most(&mut self, at_most: u64) -> u64 {
         if at_most == u64::MAX {
             return self.0.next_u64();

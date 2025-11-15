@@ -442,25 +442,25 @@ enum WrappedRng {
 impl WrappedRng {
     fn choose<T: Copy>(&mut self, vals: &[T]) -> UResult<T> {
         match self {
-            WrappedRng::Default(rng) => Ok(*vals.choose(rng).unwrap()),
-            WrappedRng::Seed(rng) => Ok(rng.choose_from_slice(vals)),
-            WrappedRng::File(rng) => rng.choose_from_slice(vals),
+            Self::Default(rng) => Ok(*vals.choose(rng).unwrap()),
+            Self::Seed(rng) => Ok(rng.choose_from_slice(vals)),
+            Self::File(rng) => rng.choose_from_slice(vals),
         }
     }
 
     fn shuffle<'a, T>(&mut self, vals: &'a mut [T], amount: usize) -> UResult<&'a mut [T]> {
         match self {
-            WrappedRng::Default(rng) => Ok(vals.partial_shuffle(rng, amount).0),
-            WrappedRng::Seed(rng) => Ok(rng.shuffle(vals, amount)),
-            WrappedRng::File(rng) => rng.shuffle(vals, amount),
+            Self::Default(rng) => Ok(vals.partial_shuffle(rng, amount).0),
+            Self::Seed(rng) => Ok(rng.shuffle(vals, amount)),
+            Self::File(rng) => rng.shuffle(vals, amount),
         }
     }
 
     fn choose_from_range(&mut self, range: RangeInclusive<u64>) -> UResult<u64> {
         match self {
-            WrappedRng::Default(rng) => Ok(rng.random_range(range)),
-            WrappedRng::Seed(rng) => Ok(rng.choose_from_range(range)),
-            WrappedRng::File(rng) => rng.choose_from_range(range),
+            Self::Default(rng) => Ok(rng.random_range(range)),
+            Self::Seed(rng) => Ok(rng.choose_from_range(range)),
+            Self::File(rng) => rng.choose_from_range(range),
         }
     }
 }

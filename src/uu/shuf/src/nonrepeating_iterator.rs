@@ -72,10 +72,10 @@ impl<'a> NonrepeatingIterator<'a> {
 
                 let other_idx = self.rng.choose_from_range(range.clone())?;
 
-                let val = if this_idx != other_idx {
-                    items.insert(other_idx, this_val).unwrap_or(other_idx)
-                } else {
+                let val = if this_idx == other_idx {
                     this_val
+                } else {
+                    items.insert(other_idx, this_val).unwrap_or(other_idx)
                 };
                 *range = *range.start() + 1..=*range.end();
 
