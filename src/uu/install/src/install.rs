@@ -396,7 +396,14 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     } else {
         match usr2uid(&owner) {
             Ok(u) => Some(u),
-            Err(_) => return Err(InstallError::InvalidUser(owner.clone()).into()),
+            // When using for example -o500 option and there's no user with uid 500
+            // usr2uid returns an Err value and the whole install operation fails.
+            // GNU coreutils installs a file with uid 500 in this situation
+            // if the supplied owner is an integer value, just return it as uid
+            Err(_) => match owner.parse::<u32>() {
+                Ok(u) => Some(u),
+                Err(_) => return Err(InstallError::InvalidUser(owner.clone()).into()),
+            },
         }
     };
 
@@ -410,7 +417,14 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     } else {
         match grp2gid(&group) {
             Ok(g) => Some(g),
-            Err(_) => return Err(InstallError::InvalidGroup(group.clone()).into()),
+            // When using for example -g500 option and there's no group with gid 500
+            // grp2gid returns an Err value and the whole install operation fails.
+            // GNU coreutils installs a file with gid 500 in this situation
+            // if the supplied group is an integer value, just return it as gid
+            Err(_) => match group.parse::<u32>() {
+                Ok(u) => Some(u),
+                Err(_) => return Err(InstallError::InvalidGroup(group.clone()).into()),
+            },
         }
     };
 
