@@ -347,6 +347,7 @@ memmap2 = "0.9.4"
 nix = { version = "0.30", default-features = false }
 nom = "8.0.0"
 notify = { version = "=8.2.0", features = ["macos_kqueue"] }
+num_cpus = "1.16"
 num-bigint = "0.4.4"
 num-prime = "0.4.4"
 num-traits = "0.2.19"

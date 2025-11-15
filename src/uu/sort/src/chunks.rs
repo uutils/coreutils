@@ -216,12 +216,157 @@ fn parse_lines<'a>(
     assert!(line_data.num_infos.is_empty());
     assert!(line_data.parsed_floats.is_empty());
     assert!(line_data.line_num_floats.is_empty());
+
+    if settings.mode == crate::SortMode::GeneralNumeric && read.len() > 10000 {
+        parse_lines_parallel(read, lines, line_data, separator, settings);
+    } else {
+        parse_lines_sequential(read, lines, line_data, separator, settings);
+    }
+}
+
+fn parse_lines_sequential<'a>(
+    read: &'a [u8],
+    lines: &mut Vec<Line<'a>>,
+    line_data: &mut LineData<'a>,
+    separator: u8,
+    settings: &GlobalSettings,
+) {
     let mut token_buffer = vec![];
     lines.extend(
         read.split(|&c| c == separator)
             .enumerate()
             .map(|(index, line)| Line::create(line, index, line_data, &mut token_buffer, settings)),
     );
+}
+
+fn parse_lines_parallel<'a>(
+    read: &'a [u8],
+    lines: &mut Vec<Line<'a>>,
+    line_data: &mut LineData<'a>,
+    separator: u8,
+    settings: &GlobalSettings,
+) {
+    use rayon::{ThreadPoolBuilder, prelude::*};
+
+    // find all line boundaries
+    let line_boundaries: Vec<usize> = std::iter::once(0)
+        .chain(
+            read.iter()
+                .enumerate()
+                .filter_map(|(i, &byte)| if byte == separator { Some(i + 1) } else { None }),
+        )
+        .collect();
+
+    if line_boundaries.len() < 2 {
+        // fallback to sequential if no separators found
+        return parse_lines_sequential(read, lines, line_data, separator, settings);
+    }
+
+    let num_lines = line_boundaries.len() - 1;
+
+    // threshold to determine parallelism
+    if num_lines < 50_000 || read.len() < (1 << 20) {
+        return parse_lines_sequential(read, lines, line_data, separator, settings);
+    }
+
+    // create local thread pool
+    let phys_cores = num_cpus::get_physical().max(1);
+    let thread_count = (phys_cores / 2).max(1);
+    let pool = ThreadPoolBuilder::new()
+        .num_threads(thread_count)
+        .build()
+        .expect("Failed to create thread pool");
+
+    pool.install(|| {
+        let target_chunks = (thread_count * 2).min(num_lines).max(1);
+        let base_chunk_size = num_lines / target_chunks;
+        let remainder = num_lines % target_chunks;
+
+        // create chunk ranges
+        let chunk_ranges: Vec<(usize, usize)> = (0..target_chunks)
+            .map(|i| {
+                let chunk_size = base_chunk_size + usize::from(i < remainder);
+                let start = i * base_chunk_size + i.min(remainder);
+                let end = start + chunk_size;
+                (start, end)
+            })
+            .collect();
+
+        // process chunks in parallel and collect results
+        let results: Vec<(Vec<Line<'_>>, LineData<'_>)> = chunk_ranges
+            .par_iter()
+            .map(|&(start_idx, end_idx)| {
+                let mut chunk_lines = Vec::new();
+                let mut chunk_line_data = LineData {
+                    selections: Vec::new(),
+                    num_infos: Vec::new(),
+                    parsed_floats: Vec::new(),
+                    line_num_floats: Vec::new(),
+                };
+                let mut token_buffer = Vec::with_capacity(64); // pre-allocate buffer for tokens
+
+                for line_idx in start_idx..end_idx {
+                    let line_start = line_boundaries[line_idx];
+                    let line_end = if line_idx + 1 < line_boundaries.len() {
+                        line_boundaries[line_idx + 1] - 1
+                    } else {
+                        read.len()
+                    };
+
+                    let line_bytes = &read[line_start..line_end];
+                    let line = Line::create(
+                        line_bytes,
+                        line_idx,
+                        &mut chunk_line_data,
+                        &mut token_buffer,
+                        settings,
+                    );
+                    chunk_lines.push(line);
+                }
+
+                (chunk_lines, chunk_line_data)
+            })
+            .collect();
+
+        // pre-allocate based on known total sizes
+        let total_lines: usize = results.iter().map(|(lines, _)| lines.len()).sum();
+        let total_selections: usize = results.iter().map(|(_, data)| data.selections.len()).sum();
+        let total_num_infos: usize = results.iter().map(|(_, data)| data.num_infos.len()).sum();
+        let total_parsed_floats: usize = results
+            .iter()
+            .map(|(_, data)| data.parsed_floats.len())
+            .sum();
+        let total_line_num_floats: usize = results
+            .iter()
+            .map(|(_, data)| data.line_num_floats.len())
+            .sum();
+
+        lines.clear();
+        lines.reserve_exact(total_lines);
+        line_data.selections.clear();
+        line_data.selections.reserve_exact(total_selections);
+        line_data.num_infos.clear();
+        line_data.num_infos.reserve_exact(total_num_infos);
+        line_data.parsed_floats.clear();
+        line_data.parsed_floats.reserve_exact(total_parsed_floats);
+        line_data.line_num_floats.clear();
+        line_data
+            .line_num_floats
+            .reserve_exact(total_line_num_floats);
+
+        // merge results back in order with pre-allocated space (no more reallocations)
+        for (chunk_lines, chunk_line_data) in results {
+            lines.extend(chunk_lines);
+            line_data.selections.extend(chunk_line_data.selections);
+            line_data.num_infos.extend(chunk_line_data.num_infos);
+            line_data
+                .parsed_floats
+                .extend(chunk_line_data.parsed_floats);
+            line_data
+                .line_num_floats
+                .extend(chunk_line_data.line_num_floats);
+        }
+    });
 }
 
 /// Read from `file` into `buffer`.
