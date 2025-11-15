@@ -280,7 +280,6 @@ members = [
   "src/uu/stdbuf/src/libstdbuf",
   "src/uucore",
   "src/uucore_procs",
-  "tests/benches/factor",
   "tests/uutests",
   # "fuzz",  # TODO
 ]
