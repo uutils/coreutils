@@ -119,7 +119,7 @@ fn test_two_cycles() {
     new_ucmd!()
         .pipe_in("a b b c c b b d d b")
         .fails_with_code(1)
-        .stdout_is("a\nb\nc\nd\n")
+        .stdout_is("a\nb\nd\nc\n")
         .stderr_is("tsort: -: input contains a loop:\ntsort: b\ntsort: c\ntsort: -: input contains a loop:\ntsort: b\ntsort: d\n");
 }
 
@@ -157,7 +157,7 @@ fn test_loop_for_iterative_dfs_correctness() {
 const TSORT_LOOP_STDERR: &str = "tsort: f: input contains a loop:\ntsort: s\ntsort: t\n";
 const TSORT_LOOP_STDERR_AC: &str = "tsort: f: input contains a loop:\ntsort: a\ntsort: b\ntsort: f: input contains a loop:\ntsort: a\ntsort: c\n";
 const TSORT_ODD_ERROR: &str = "tsort: -: input contains an odd number of tokens\n";
-const TSORT_UNEXPECTED_ARG_ERROR: &str = "error: unexpected argument 'g' found\n\nUsage: tsort [OPTIONS] FILE\n\nFor more information, try '--help'.\n";
+const TSORT_UNEXPECTED_ARG_ERROR: &str = "tsort: error: unexpected argument 'g' found\n\nUsage: tsort [OPTIONS] FILE\n\nFor more information, try '--help'.\n";
 
 #[test]
 fn test_cycle_loop_from_file() {
@@ -188,7 +188,7 @@ fn test_cycle_loop_multiple_loops_from_file() {
 
     ucmd.arg("f")
         .fails_with_code(1)
-        .stdout_is("a\nb\nc\n")
+        .stdout_is("a\nc\nb\n")
         .stderr_is(TSORT_LOOP_STDERR_AC);
 }
 
@@ -215,12 +215,12 @@ fn test_linear_tree_graphs() {
     new_ucmd!()
         .pipe_in("a b b c c d d e e f f g\nc x x y y z\n")
         .succeeds()
-        .stdout_only("a\nb\nc\nd\nx\ne\ny\nf\nz\ng\n");
+        .stdout_only("a\nb\nc\nx\nd\ny\ne\nz\nf\ng\n");
 
     new_ucmd!()
         .pipe_in("a b b c c d d e e f f g\nc x x y y z\nf r r s s t\n")
         .succeeds()
-        .stdout_only("a\nb\nc\nd\nx\ne\ny\nf\nz\ng\nr\ns\nt\n");
+        .stdout_only("a\nb\nc\nx\nd\ny\ne\nz\nf\nr\ng\ns\nt\n");
 }
 
 #[test]

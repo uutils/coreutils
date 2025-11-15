@@ -592,7 +592,7 @@ fn test_comm_arg_error() {
         .args(&["a"])
         .fails()
         .code_is(1)
-        .stderr_is("error: the following required arguments were not provided:\n  <FILE2>\n\nUsage: comm [OPTION]... FILE1 FILE2\n\nFor more information, try '--help'.\n");
+        .stderr_is("comm: error: the following required arguments were not provided:\n  <FILE2>\n\nUsage: comm [OPTION]... FILE1 FILE2\n\nFor more information, try '--help'.\n");
 }
 
 #[test]

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //spell-checker:ignore TAOCP indegree
-use clap::{Arg, Command};
+use clap::{Arg, ArgAction, Command};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
 use std::ffi::OsString;
@@ -96,6 +96,12 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(&translate!("tsort-usage")))
         .about(translate!("tsort-about"))
         .infer_long_args(true)
+        .arg(
+            Arg::new("warn")
+                .short('w')
+                .action(ArgAction::SetTrue)
+                .hide(true),
+        )
         .arg(
             Arg::new(options::FILE)
                 .default_value("-")
@@ -190,7 +196,7 @@ impl<'input> Graph<'input> {
             let v = self.find_next_node(&mut independent_nodes_queue);
             println!("{v}");
             if let Some(node_to_process) = self.nodes.remove(v) {
-                for successor_name in node_to_process.successor_names {
+                for successor_name in node_to_process.successor_names.into_iter().rev() {
                     let successor_node = self.nodes.get_mut(successor_name).unwrap();
                     successor_node.predecessor_count -= 1;
                     if successor_node.predecessor_count == 0 {

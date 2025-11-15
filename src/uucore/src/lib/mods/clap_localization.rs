@@ -150,14 +150,11 @@ impl<'a> ErrorFormatter<'a> {
             let error_word = translate!("common-error");
 
             // Print main error
-            eprintln!(
-                "{}",
-                translate!(
-                    "clap-error-unexpected-argument",
-                    "arg" => self.color_mgr.colorize(&arg_str, Color::Yellow),
-                    "error_word" => self.color_mgr.colorize(&error_word, Color::Red)
-                )
-            );
+            self.print_prefixed_error(&translate!(
+                "clap-error-unexpected-argument",
+                "arg" => self.color_mgr.colorize(&arg_str, Color::Yellow),
+                "error_word" => self.color_mgr.colorize(&error_word, Color::Red)
+            ));
             eprintln!();
 
             // Show suggestion if available
@@ -204,12 +201,12 @@ impl<'a> ErrorFormatter<'a> {
             if value.is_empty() {
                 // Value required but not provided
                 let error_word = translate!("common-error");
-                eprintln!(
-                    "{}",
-                    translate!("clap-error-value-required",
-                        "error_word" => self.color_mgr.colorize(&error_word, Color::Red),
-                        "option" => self.color_mgr.colorize(&option, Color::Green))
+                let error_line = translate!(
+                    "clap-error-value-required",
+                    "error_word" => self.color_mgr.colorize(&error_word, Color::Red),
+                    "option" => self.color_mgr.colorize(&option, Color::Green)
                 );
+                self.print_prefixed_error(&error_line);
             } else {
                 // Invalid value provided
                 let error_word = translate!("common-error");
@@ -219,13 +216,12 @@ impl<'a> ErrorFormatter<'a> {
                     "value" => self.color_mgr.colorize(&value, Color::Yellow),
                     "option" => self.color_mgr.colorize(&option, Color::Green)
                 );
-
                 // Include validation error if present
                 match err.source() {
                     Some(source) if matches!(err.kind(), ErrorKind::ValueValidation) => {
-                        eprintln!("{error_msg}: {source}");
+                        self.print_prefixed_error(&format!("{error_msg}: {source}"));
                     }
-                    _ => eprintln!("{error_msg}"),
+                    _ => self.print_prefixed_error(&error_msg),
                 }
             }
 
@@ -280,13 +276,10 @@ impl<'a> ErrorFormatter<'a> {
                     .starts_with("error: the following required arguments were not provided:") =>
             {
                 let error_word = translate!("common-error");
-                eprintln!(
-                    "{}",
-                    translate!(
-                        "clap-error-missing-required-arguments",
-                        "error_word" => self.color_mgr.colorize(&error_word, Color::Red)
-                    )
-                );
+                self.print_prefixed_error(&translate!(
+                    "clap-error-missing-required-arguments",
+                    "error_word" => self.color_mgr.colorize(&error_word, Color::Red)
+                ));
 
                 // Print the missing arguments
                 for line in lines.iter().skip(1) {
@@ -345,10 +338,11 @@ impl<'a> ErrorFormatter<'a> {
         F: FnOnce(),
     {
         let error_word = translate!("common-error");
-        eprintln!(
+        let message_line = format!(
             "{}: {message}",
             self.color_mgr.colorize(&error_word, Color::Red)
         );
+        self.print_prefixed_error(&message_line);
         callback();
         std::process::exit(exit_code);
     }
@@ -360,10 +354,14 @@ impl<'a> ErrorFormatter<'a> {
 
         if let Some(colon_pos) = line.find(':') {
             let after_colon = &line[colon_pos..];
-            eprintln!("{colored_error}{after_colon}");
+            self.print_prefixed_error(&format!("{colored_error}{after_colon}"));
         } else {
-            eprintln!("{line}");
+            self.print_prefixed_error(line);
         }
+    }
+
+    fn print_prefixed_error(&self, message: &str) {
+        eprintln!("{}: {message}", self.util_name);
     }
 
     /// Extract and print clap's built-in tips
