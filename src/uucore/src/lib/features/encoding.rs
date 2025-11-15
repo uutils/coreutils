@@ -22,6 +22,26 @@ pub struct Base64SimdWrapper {
 }
 
 impl Base64SimdWrapper {
+    fn decode_with_standard(input: &[u8], output: &mut Vec<u8>) -> Result<(), ()> {
+        match base64_simd::STANDARD.decode_to_vec(input) {
+            Ok(decoded_bytes) => {
+                output.extend_from_slice(&decoded_bytes);
+                Ok(())
+            }
+            Err(_) => Err(()),
+        }
+    }
+
+    fn decode_with_no_pad(input: &[u8], output: &mut Vec<u8>) -> Result<(), ()> {
+        match base64_simd::STANDARD_NO_PAD.decode_to_vec(input) {
+            Ok(decoded_bytes) => {
+                output.extend_from_slice(&decoded_bytes);
+                Ok(())
+            }
+            Err(_) => Err(()),
+        }
+    }
+
     pub fn new(
         use_padding: bool,
         valid_decoding_multiple: usize,
@@ -47,22 +67,64 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
     }
 
     fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
-        let decoded = if self.use_padding {
-            base64_simd::STANDARD.decode_to_vec(input)
+        let original_len = output.len();
+
+        let decode_result = if self.use_padding {
+            // GNU coreutils keeps decoding even when '=' appears before the true end
+            // of the stream (e.g. concatenated padded chunks). Mirror that logic
+            // by splitting at each '='-containing quantum, decoding those 4-byte
+            // groups with the padded variant, then letting the remainder fall back
+            // to whichever alphabet fits.
+            let mut start = 0usize;
+            while start < input.len() {
+                let remaining = &input[start..];
+
+                if remaining.is_empty() {
+                    break;
+                }
+
+                if let Some(eq_rel_idx) = remaining.iter().position(|&b| b == b'=') {
+                    let blocks = (eq_rel_idx / 4) + 1;
+                    let segment_len = blocks * 4;
+
+                    if segment_len > remaining.len() {
+                        return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                    }
+
+                    if Self::decode_with_standard(&remaining[..segment_len], output).is_err() {
+                        return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                    }
+
+                    start += segment_len;
+                } else {
+                    // If there are no more '=' bytes the tail might still be padded
+                    // (len % 4 == 0) or purposely unpadded (GNU --ignore-garbage or
+                    // concatenated streams), so select the matching alphabet.
+                    let decoder = if remaining.len() % 4 == 0 {
+                        Self::decode_with_standard
+                    } else {
+                        Self::decode_with_no_pad
+                    };
+
+                    if decoder(remaining, output).is_err() {
+                        return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                    }
+
+                    break;
+                }
+            }
+
+            Ok(())
         } else {
-            base64_simd::STANDARD_NO_PAD.decode_to_vec(input)
+            Self::decode_with_no_pad(input, output)
+                .map_err(|_| USimpleError::new(1, "error: invalid input".to_owned()))
         };
 
-        match decoded {
-            Ok(decoded_bytes) => {
-                output.extend_from_slice(&decoded_bytes);
-                Ok(())
-            }
-            Err(_) => {
-                // Restore original length on error
-                output.truncate(output.len());
-                Err(USimpleError::new(1, "error: invalid input".to_owned()))
-            }
+        if let Err(err) = decode_result {
+            output.truncate(original_len);
+            Err(err)
+        } else {
+            Ok(())
         }
     }
 
@@ -152,6 +214,11 @@ impl EncodingWrapper {
     }
 }
 
+pub struct PadResult {
+    pub chunk: Vec<u8>,
+    pub had_invalid_tail: bool,
+}
+
 pub trait SupportsFastDecodeAndEncode {
     /// Returns the list of characters used by this encoding
     fn alphabet(&self) -> &'static [u8];
@@ -183,6 +250,19 @@ pub trait SupportsFastDecodeAndEncode {
     ///
     /// The decoding performed by `fast_decode` depends on this number being correct.
     fn valid_decoding_multiple(&self) -> usize;
+
+    /// Whether the decoder can flush partial chunks (multiples of `valid_decoding_multiple`)
+    /// before seeing the full input. Defaults to `false` for encodings that must consume the
+    /// entire input (e.g. base58).
+    fn supports_partial_decode(&self) -> bool {
+        false
+    }
+
+    /// Gives encoding-specific logic a chance to pad a trailing, non-empty remainder
+    /// before the final decode attempt. The default implementation opts out.
+    fn pad_remainder(&self, _remainder: &[u8]) -> Option<PadResult> {
+        None
+    }
 }
 
 impl SupportsFastDecodeAndEncode for Base58Wrapper {
@@ -440,5 +520,82 @@ impl SupportsFastDecodeAndEncode for EncodingWrapper {
 
     fn unpadded_multiple(&self) -> usize {
         self.unpadded_multiple
+    }
+}
+
+pub struct Base32Wrapper {
+    inner: EncodingWrapper,
+}
+
+impl Base32Wrapper {
+    pub fn new(
+        encoding: Encoding,
+        valid_decoding_multiple: usize,
+        unpadded_multiple: usize,
+        alphabet: &'static [u8],
+    ) -> Self {
+        Self {
+            inner: EncodingWrapper::new(
+                encoding,
+                valid_decoding_multiple,
+                unpadded_multiple,
+                alphabet,
+            ),
+        }
+    }
+}
+
+impl SupportsFastDecodeAndEncode for Base32Wrapper {
+    fn alphabet(&self) -> &'static [u8] {
+        self.inner.alphabet()
+    }
+
+    fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
+        self.inner.decode_into_vec(input, output)
+    }
+
+    fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()> {
+        self.inner.encode_to_vec_deque(input, output)
+    }
+
+    fn unpadded_multiple(&self) -> usize {
+        self.inner.unpadded_multiple()
+    }
+
+    fn valid_decoding_multiple(&self) -> usize {
+        self.inner.valid_decoding_multiple()
+    }
+
+    fn pad_remainder(&self, remainder: &[u8]) -> Option<PadResult> {
+        if remainder.is_empty() || remainder.contains(&b'=') {
+            return None;
+        }
+
+        const VALID_REMAINDERS: [usize; 4] = [2, 4, 5, 7];
+
+        let mut len = remainder.len();
+        let mut trimmed = false;
+
+        while len > 0 && !VALID_REMAINDERS.contains(&len) {
+            len -= 1;
+            trimmed = true;
+        }
+
+        if len == 0 {
+            return None;
+        }
+
+        let mut padded = remainder[..len].to_vec();
+        let missing = self.valid_decoding_multiple() - padded.len();
+        padded.extend(std::iter::repeat_n(b'=', missing));
+
+        Some(PadResult {
+            chunk: padded,
+            had_invalid_tail: trimmed,
+        })
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        true
     }
 }

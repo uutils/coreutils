@@ -130,7 +130,7 @@ fn print_legacy_checksum(
             print!("{sum} {size}");
         }
         _ => unreachable!("Not a legacy algorithm"),
-    };
+    }
 
     // Print the filename after a space if not stdin
     if filename != "-" {
@@ -236,7 +236,9 @@ where
         match options.output_format {
             OutputFormat::Raw => {
                 let bytes = match options.algo_name {
-                    ALGORITHM_OPTIONS_CRC => sum_hex.parse::<u32>().unwrap().to_be_bytes().to_vec(),
+                    ALGORITHM_OPTIONS_CRC | ALGORITHM_OPTIONS_CRC32B => {
+                        sum_hex.parse::<u32>().unwrap().to_be_bytes().to_vec()
+                    }
                     ALGORITHM_OPTIONS_SYSV | ALGORITHM_OPTIONS_BSD => {
                         sum_hex.parse::<u16>().unwrap().to_be_bytes().to_vec()
                     }
