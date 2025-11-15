@@ -10,7 +10,7 @@ publish = false
 
 [dev-dependencies]
 array-init = "2.0.0"
-criterion = "0.6.0"
+divan = { workspace = true }
 rand = "0.9.1"
 rand_chacha = "0.9.0"
 num-prime = "0.4.4"
