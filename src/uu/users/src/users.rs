@@ -35,9 +35,7 @@ fn get_long_usage() -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(get_long_usage())
-        .try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let maybe_file: Option<&Path> = matches.get_one::<OsString>(ARG_FILE).map(AsRef::as_ref);
 
@@ -68,7 +66,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let filename = maybe_file.unwrap_or(utmpx::DEFAULT_FILE.as_ref());
 
         users = Utmpx::iter_all_records_from(filename)
-            .filter(Utmpx::is_user_process)
+            .filter(|ut| ut.is_user_process())
             .map(|ut| ut.user())
             .collect::<Vec<_>>();
     };
@@ -89,9 +87,11 @@ pub fn uu_app() -> Command {
 
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(about)
         .override_usage(format_usage(&translate!("users-usage")))
         .infer_long_args(true)
+        .after_help(get_long_usage())
         .arg(
             Arg::new(ARG_FILE)
                 .num_args(1)

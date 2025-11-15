@@ -6,8 +6,10 @@
 // spell-checker:ignore (ToDO) delim mkdelim pairable
 
 use std::cmp::Ordering;
+use std::ffi::OsString;
 use std::fs::{File, metadata};
-use std::io::{self, BufRead, BufReader, Read, Stdin, stdin};
+use std::io::{self, BufRead, BufReader, Read, StdinLock, stdin};
+use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::fs::paths_refer_to_same_file;
@@ -39,8 +41,8 @@ enum FileNumber {
 impl FileNumber {
     fn as_str(&self) -> &'static str {
         match self {
-            FileNumber::One => "1",
-            FileNumber::Two => "2",
+            Self::One => "1",
+            Self::Two => "2",
         }
     }
 }
@@ -53,8 +55,18 @@ struct OrderChecker {
 }
 
 enum Input {
-    Stdin(Stdin),
+    Stdin(StdinLock<'static>),
     FileIn(BufReader<File>),
+}
+
+impl Input {
+    fn stdin() -> Self {
+        Self::Stdin(stdin().lock())
+    }
+
+    fn from_file(f: File) -> Self {
+        Self::FileIn(BufReader::new(f))
+    }
 }
 
 struct LineReader {
@@ -71,7 +83,7 @@ impl LineReader {
         let line_ending = self.line_ending.into();
 
         let result = match &mut self.input {
-            Input::Stdin(r) => r.lock().read_until(line_ending, buf),
+            Input::Stdin(r) => r.read_until(line_ending, buf),
             Input::FileIn(r) => r.read_until(line_ending, buf),
         };
 
@@ -114,7 +126,7 @@ impl OrderChecker {
 }
 
 // Check if two files are identical by comparing their contents
-pub fn are_files_identical(path1: &str, path2: &str) -> io::Result<bool> {
+pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
     // First compare file sizes
     let metadata1 = metadata(path1)?;
     let metadata2 = metadata(path2)?;
@@ -133,8 +145,24 @@ pub fn are_files_identical(path1: &str, path2: &str) -> io::Result<bool> {
     let mut buffer2 = [0; 8192];
 
     loop {
-        let bytes1 = reader1.read(&mut buffer1)?;
-        let bytes2 = reader2.read(&mut buffer2)?;
+        // Read from first file with EINTR retry handling
+        // This loop retries the read operation if it's interrupted by signals (e.g., SIGUSR1)
+        // instead of failing, which is the POSIX-compliant way to handle interrupted I/O
+        let bytes1 = loop {
+            match reader1.read(&mut buffer1) {
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                result => break result?,
+            }
+        };
+
+        // Read from second file with EINTR retry handling
+        // Same retry logic as above for the second file to ensure consistent behavior
+        let bytes2 = loop {
+            match reader2.read(&mut buffer2) {
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                result => break result?,
+            }
+        };
 
         if bytes1 != bytes2 {
             return Ok(false);
@@ -173,11 +201,11 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
     let should_check_order = !no_check_order
         && (check_order
             || if let (Some(file1), Some(file2)) = (
-                opts.get_one::<String>(options::FILE_1),
-                opts.get_one::<String>(options::FILE_2),
+                opts.get_one::<OsString>(options::FILE_1),
+                opts.get_one::<OsString>(options::FILE_2),
             ) {
-                !(paths_refer_to_same_file(file1, file2, true)
-                    || are_files_identical(file1, file2).unwrap_or(false))
+                !(paths_refer_to_same_file(file1.as_os_str(), file2.as_os_str(), true)
+                    || are_files_identical(Path::new(file1), Path::new(file2)).unwrap_or(false))
             } else {
                 true
             });
@@ -263,29 +291,28 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
     }
 }
 
-fn open_file(name: &str, line_ending: LineEnding) -> io::Result<LineReader> {
+fn open_file(name: &OsString, line_ending: LineEnding) -> io::Result<LineReader> {
     if name == "-" {
-        Ok(LineReader::new(Input::Stdin(stdin()), line_ending))
+        Ok(LineReader::new(Input::stdin(), line_ending))
     } else {
         if metadata(name)?.is_dir() {
             return Err(io::Error::other(translate!("comm-error-is-directory")));
         }
         let f = File::open(name)?;
-        Ok(LineReader::new(
-            Input::FileIn(BufReader::new(f)),
-            line_ending,
-        ))
+        Ok(LineReader::new(Input::from_file(f), line_ending))
     }
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
-    let filename1 = matches.get_one::<String>(options::FILE_1).unwrap();
-    let filename2 = matches.get_one::<String>(options::FILE_2).unwrap();
-    let mut f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string())?;
-    let mut f2 = open_file(filename2, line_ending).map_err_context(|| filename2.to_string())?;
+    let filename1 = matches.get_one::<OsString>(options::FILE_1).unwrap();
+    let filename2 = matches.get_one::<OsString>(options::FILE_2).unwrap();
+    let mut f1 = open_file(filename1, line_ending)
+        .map_err_context(|| filename1.to_string_lossy().to_string())?;
+    let mut f2 = open_file(filename2, line_ending)
+        .map_err_context(|| filename2.to_string_lossy().to_string())?;
 
     // Due to default_value(), there must be at least one value here, thus unwrap() must not panic.
     let all_delimiters = matches
@@ -315,6 +342,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("comm-about"))
         .override_usage(format_usage(&translate!("comm-usage")))
         .infer_long_args(true)
@@ -358,12 +386,14 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FILE_1)
                 .required(true)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::FILE_2)
                 .required(true)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::TOTAL)

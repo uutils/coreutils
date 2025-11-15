@@ -4,17 +4,19 @@
 // file that was distributed with this source code.
 
 mod operation;
+mod simd;
 mod unicode_table;
 
 use clap::{Arg, ArgAction, Command, value_parser};
 use operation::{
     DeleteOperation, Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation,
-    translate_input,
+    flush_output, translate_input,
 };
+use simd::process_input;
 use std::ffi::OsString;
-use std::io::{Write, stdin, stdout};
+use std::io::{stdin, stdout};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::fs::is_stdin_directory;
 #[cfg(not(target_os = "windows"))]
 use uucore::libc;
@@ -40,7 +42,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
 
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let delete_flag = matches.get_flag(options::DELETE);
     let complement_flag = matches.get_flag(options::COMPLEMENT);
@@ -134,7 +136,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             translate_input(&mut locked_stdin, &mut locked_stdout, op)?;
         } else {
             let op = DeleteOperation::new(set1);
-            translate_input(&mut locked_stdin, &mut locked_stdout, op)?;
+            process_input(&mut locked_stdin, &mut locked_stdout, &op)?;
         }
     } else if squeeze_flag {
         if sets_len == 1 {
@@ -148,21 +150,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     } else {
         let op = TranslateOperation::new(set1, set2)?;
-        translate_input(&mut locked_stdin, &mut locked_stdout, op)?;
+        process_input(&mut locked_stdin, &mut locked_stdout, &op)?;
     }
 
-    #[cfg(not(target_os = "windows"))]
-    locked_stdout
-        .flush()
-        .map_err_context(|| translate!("tr-error-write-error"))?;
-
-    // SIGPIPE is not available on Windows.
-    #[cfg(target_os = "windows")]
-    match locked_stdout.flush() {
-        Ok(()) => {}
-        Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => std::process::exit(13),
-        Err(err) => return Err(err.map_err_context(|| translate!("tr-error-write-error"))),
-    }
+    flush_output(&mut locked_stdout)?;
 
     Ok(())
 }
@@ -170,6 +161,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("tr-about"))
         .override_usage(format_usage(&translate!("tr-usage")))
         .after_help(translate!("tr-after-help"))

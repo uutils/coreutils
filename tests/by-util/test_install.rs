@@ -7,6 +7,8 @@
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
 use std::fs;
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(not(windows))]
 use std::process::Command;
@@ -239,6 +241,29 @@ fn test_install_mode_symbolic() {
     assert!(at.file_exists(dest_file));
     let permissions = at.metadata(dest_file).permissions();
     assert_eq!(0o100_003_u32, PermissionsExt::mode(&permissions));
+}
+
+#[test]
+fn test_install_mode_symbolic_ignore_umask() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "target_dir";
+    let file = "source_file";
+    let mode_arg = "--mode=+w";
+
+    at.touch(file);
+    at.mkdir(dir);
+    ucmd.arg(file)
+        .arg(dir)
+        .arg(mode_arg)
+        .umask(0o022)
+        .succeeds()
+        .no_stderr();
+
+    let dest_file = &format!("{dir}/{file}");
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(dest_file));
+    let permissions = at.metadata(dest_file).permissions();
+    assert_eq!(0o100_222_u32, PermissionsExt::mode(&permissions));
 }
 
 #[test]
@@ -1011,7 +1036,7 @@ fn test_install_creating_leading_dir_fails_on_long_name() {
         .arg(source)
         .arg(at.plus(target.as_str()))
         .fails()
-        .stderr_contains("failed to create");
+        .stderr_contains("cannot create directory");
 }
 
 #[test]
@@ -2321,6 +2346,35 @@ fn test_selinux_invalid_args() {
 }
 
 #[test]
+#[cfg(feature = "feat_selinux")]
+fn test_selinux_default_context() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let src = "orig";
+    at.touch(src);
+    let dest = "orig.2";
+
+    let result = new_ucmd!()
+        .arg("-Z")
+        .arg("-v")
+        .arg(at.plus_as_string(src))
+        .arg(at.plus_as_string(dest))
+        .run();
+
+    // Skip test if SELinux is not enabled
+    if result
+        .stderr_str()
+        .contains("SELinux is not enabled on this system")
+    {
+        println!("Skipping SELinux default context test: SELinux is not enabled");
+        return;
+    }
+
+    result.success().stdout_contains("orig' -> '");
+    assert!(at.file_exists(dest));
+}
+
+#[test]
 #[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
 fn test_install_compare_with_mode_bits() {
     let test_cases = [
@@ -2365,4 +2419,27 @@ fn test_install_compare_with_mode_bits() {
             "Failed to create dest file for {description}"
         );
     }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_non_utf8_paths() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source_filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    let dest_dir = "target_dir";
+
+    std::fs::write(at.plus(&source_filename), b"test content").unwrap();
+    at.mkdir(dest_dir);
+
+    ucmd.arg(&source_filename).arg(dest_dir).succeeds();
+
+    // Test with trailing slash and directory creation (-D flag)
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source_file = "source.txt";
+    let mut target_path = std::ffi::OsString::from_vec(vec![0xFF, 0xFE, b'd', b'i', b'r']);
+    target_path.push("/target.txt");
+
+    at.touch(source_file);
+
+    ucmd.arg("-D").arg(source_file).arg(&target_path).succeeds();
 }

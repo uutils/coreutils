@@ -14,7 +14,7 @@ use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process;
 use uucore::entries::{Locate, Passwd, grp2gid, usr2uid};
-use uucore::error::{UClapError, UResult, UUsageError, set_exit_code};
+use uucore::error::{UResult, UUsageError, set_exit_code};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
 use uucore::{format_usage, show};
@@ -155,7 +155,8 @@ impl Options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
+    let matches =
+        uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
     let default_shell: &'static str = "/bin/sh";
     let default_option: &'static str = "-i";
@@ -234,12 +235,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .about(translate!("chroot-about"))
         .override_usage(format_usage(&translate!("chroot-usage")))
         .infer_long_args(true)
-        .trailing_var_arg(true)
+        .trailing_var_arg(true);
+    uucore::clap_localization::configure_localized_command(cmd)
         .arg(
             Arg::new(options::NEWROOT)
                 .value_hint(clap::ValueHint::DirPath)
@@ -409,22 +411,22 @@ fn set_context(options: &Options) -> UResult<()> {
             let gid = uid as libc::gid_t;
             let strategy = Strategy::FromUID(uid, false);
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
-            set_gid(gid).map_err(|e| ChrootError::SetGidFailed(user.to_string(), e))?;
-            set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_string(), e))?;
+            set_gid(gid).map_err(|e| ChrootError::SetGidFailed(user.to_owned(), e))?;
+            set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_owned(), e))?;
         }
         Some(UserSpec::GroupOnly(group)) => {
             let gid = name_to_gid(group)?;
             let strategy = Strategy::Nothing;
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
-            set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_string(), e))?;
+            set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_owned(), e))?;
         }
         Some(UserSpec::UserAndGroup(user, group)) => {
             let uid = name_to_uid(user)?;
             let gid = name_to_gid(group)?;
             let strategy = Strategy::FromUID(uid, true);
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
-            set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_string(), e))?;
-            set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_string(), e))?;
+            set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_owned(), e))?;
+            set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_owned(), e))?;
         }
     }
     Ok(())

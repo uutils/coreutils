@@ -10,7 +10,8 @@ mod error;
 mod hardlink;
 
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, ArgMatches, Command, error::ErrorKind};
+use clap::error::ErrorKind;
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
@@ -151,8 +152,7 @@ static OPT_SELINUX: &str = "selinux";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut app = uu_app();
-    let matches = app.try_get_matches_from_mut(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let files: Vec<OsString> = matches
         .get_many::<OsString>(ARG_FILES)
@@ -161,11 +161,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect();
 
     if files.len() == 1 && !matches.contains_id(OPT_TARGET_DIRECTORY) {
-        app.error(
+        let err = uu_app().error(
             ErrorKind::TooFewValues,
             translate!("mv-error-insufficient-arguments", "arg_files" => ARG_FILES),
-        )
-        .exit();
+        );
+        uucore::clap_localization::handle_clap_error_with_exit_code(err, 1);
     }
 
     let overwrite_mode = determine_overwrite_mode(&matches);
@@ -225,6 +225,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .about(translate!("mv-about"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .override_usage(format_usage(&translate!("mv-usage")))
         .after_help(format!(
             "{}\n\n{}",
@@ -373,8 +374,12 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         });
     }
 
-    let target_is_dir = target.is_dir();
-    let source_is_dir = source.is_dir();
+    let source_is_dir = source.is_dir() && !source.is_symlink();
+    let target_is_dir = if target.is_symlink() {
+        fs::canonicalize(target).is_ok_and(|p| p.is_dir())
+    } else {
+        target.is_dir()
+    };
 
     if path_ends_with_terminator(target)
         && (!target_is_dir && !source_is_dir)
@@ -413,7 +418,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         } else {
             move_files_into_dir(&[source.to_path_buf()], target, opts)
         }
-    } else if target.exists() && source.is_dir() {
+    } else if target.exists() && source_is_dir {
         match opts.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => {
@@ -598,12 +603,12 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         return Err(MvError::NotADirectory(target_dir.quote().to_string()).into());
     }
 
-    let multi_progress = options.progress_bar.then(MultiProgress::new);
+    let display_manager = options.progress_bar.then(MultiProgress::new);
 
-    let count_progress = if let Some(ref multi_progress) = multi_progress {
+    let count_progress = if let Some(ref display_manager) = display_manager {
         if files.len() > 1 {
             Some(
-                multi_progress.add(
+                display_manager.add(
                     ProgressBar::new(files.len().try_into().unwrap()).with_style(
                         ProgressStyle::with_template(&format!(
                             "{} {{msg}} {{wide_bar}} {{pos}}/{{len}}",
@@ -664,7 +669,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
             sourcepath,
             &targetpath,
             options,
-            multi_progress.as_ref(),
+            display_manager.as_ref(),
             hardlink_params.0,
             hardlink_params.1,
         ) {
@@ -673,7 +678,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
                 let e = e.map_err_context(|| {
                     translate!("mv-error-cannot-move", "source" => sourcepath.quote(), "target" => targetpath.quote())
                 });
-                match multi_progress {
+                match display_manager {
                     Some(ref pb) => pb.suspend(|| show!(e)),
                     None => show!(e),
                 }
@@ -692,7 +697,7 @@ fn rename(
     from: &Path,
     to: &Path,
     opts: &Options,
-    multi_progress: Option<&MultiProgress>,
+    display_manager: Option<&MultiProgress>,
     #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
     #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
     #[cfg(not(unix))] _hardlink_tracker: Option<()>,
@@ -740,12 +745,12 @@ fn rename(
         backup_path = backup_control::get_backup_path(opts.backup, to, &opts.suffix);
         if let Some(ref backup_path) = backup_path {
             // For backup renames, we don't need to track hardlinks as we're just moving the existing file
-            rename_with_fallback(to, backup_path, multi_progress, None, None)?;
+            rename_with_fallback(to, backup_path, display_manager, false, None, None)?;
         }
     }
 
     // "to" may no longer exist if it was backed up
-    if to.exists() && to.is_dir() {
+    if to.exists() && to.is_dir() && !to.is_symlink() {
         // normalize behavior between *nix and windows
         if from.is_dir() {
             if is_empty_dir(to) {
@@ -758,11 +763,18 @@ fn rename(
 
     #[cfg(unix)]
     {
-        rename_with_fallback(from, to, multi_progress, hardlink_tracker, hardlink_scanner)?;
+        rename_with_fallback(
+            from,
+            to,
+            display_manager,
+            opts.verbose,
+            hardlink_tracker,
+            hardlink_scanner,
+        )?;
     }
     #[cfg(not(unix))]
     {
-        rename_with_fallback(from, to, multi_progress, None, None)?;
+        rename_with_fallback(from, to, display_manager, opts.verbose, None, None)?;
     }
 
     #[cfg(feature = "selinux")]
@@ -779,7 +791,7 @@ fn rename(
             None => translate!("mv-verbose-renamed", "from" => from.quote(), "to" => to.quote()),
         };
 
-        match multi_progress {
+        match display_manager {
             Some(pb) => pb.suspend(|| {
                 println!("{message}");
             }),
@@ -804,7 +816,8 @@ fn is_fifo(_filetype: fs::FileType) -> bool {
 fn rename_with_fallback(
     from: &Path,
     to: &Path,
-    multi_progress: Option<&MultiProgress>,
+    display_manager: Option<&MultiProgress>,
+    verbose: bool,
     #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
     #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
     #[cfg(not(unix))] _hardlink_tracker: Option<()>,
@@ -837,13 +850,20 @@ fn rename_with_fallback(
                     hardlink_tracker,
                     hardlink_scanner,
                     |tracker, scanner| {
-                        rename_dir_fallback(from, to, multi_progress, Some(tracker), Some(scanner))
+                        rename_dir_fallback(
+                            from,
+                            to,
+                            display_manager,
+                            verbose,
+                            Some(tracker),
+                            Some(scanner),
+                        )
                     },
                 )
             }
             #[cfg(not(unix))]
             {
-                rename_dir_fallback(from, to, multi_progress)
+                rename_dir_fallback(from, to, display_manager, verbose)
             }
         } else if is_fifo(file_type) {
             rename_fifo_fallback(from, to)
@@ -916,7 +936,8 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
 fn rename_dir_fallback(
     from: &Path,
     to: &Path,
-    multi_progress: Option<&MultiProgress>,
+    display_manager: Option<&MultiProgress>,
+    verbose: bool,
     #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
     #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
 ) -> io::Result<()> {
@@ -934,12 +955,12 @@ fn rename_dir_fallback(
     //    (Move will probably fail due to permission error later?)
     let total_size = dir_get_size(from).ok();
 
-    let progress_bar = match (multi_progress, total_size) {
-        (Some(multi_progress), Some(total_size)) => {
+    let progress_bar = match (display_manager, total_size) {
+        (Some(display_manager), Some(total_size)) => {
             let template = "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}";
             let style = ProgressStyle::with_template(template).unwrap();
             let bar = ProgressBar::new(total_size).with_style(style);
-            Some(multi_progress.add(bar))
+            Some(display_manager.add(bar))
         }
         (_, _) => None,
     };
@@ -955,7 +976,9 @@ fn rename_dir_fallback(
         hardlink_tracker,
         #[cfg(unix)]
         hardlink_scanner,
+        verbose,
         progress_bar.as_ref(),
+        display_manager,
     );
 
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
@@ -975,7 +998,9 @@ fn copy_dir_contents(
     to: &Path,
     #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
     #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
+    verbose: bool,
     progress_bar: Option<&ProgressBar>,
+    display_manager: Option<&MultiProgress>,
 ) -> io::Result<()> {
     // Create the destination directory
     fs::create_dir_all(to)?;
@@ -984,12 +1009,20 @@ fn copy_dir_contents(
     #[cfg(unix)]
     {
         if let (Some(tracker), Some(scanner)) = (hardlink_tracker, hardlink_scanner) {
-            copy_dir_contents_recursive(from, to, tracker, scanner, progress_bar)?;
+            copy_dir_contents_recursive(
+                from,
+                to,
+                tracker,
+                scanner,
+                verbose,
+                progress_bar,
+                display_manager,
+            )?;
         }
     }
     #[cfg(not(unix))]
     {
-        copy_dir_contents_recursive(from, to, progress_bar)?;
+        copy_dir_contents_recursive(from, to, None, None, verbose, progress_bar, display_manager)?;
     }
 
     Ok(())
@@ -1000,7 +1033,11 @@ fn copy_dir_contents_recursive(
     to_dir: &Path,
     #[cfg(unix)] hardlink_tracker: &mut HardlinkTracker,
     #[cfg(unix)] hardlink_scanner: &HardlinkGroupScanner,
+    #[cfg(not(unix))] _hardlink_tracker: Option<()>,
+    #[cfg(not(unix))] _hardlink_scanner: Option<()>,
+    verbose: bool,
     progress_bar: Option<&ProgressBar>,
+    display_manager: Option<&MultiProgress>,
 ) -> io::Result<()> {
     let entries = fs::read_dir(from_dir)?;
 
@@ -1017,6 +1054,18 @@ fn copy_dir_contents_recursive(
         if from_path.is_dir() {
             // Recursively copy subdirectory
             fs::create_dir_all(&to_path)?;
+
+            // Print verbose message for directory
+            if verbose {
+                let message = translate!("mv-verbose-renamed", "from" => from_path.quote(), "to" => to_path.quote());
+                match display_manager {
+                    Some(pb) => pb.suspend(|| {
+                        println!("{message}");
+                    }),
+                    None => println!("{message}"),
+                }
+            }
+
             copy_dir_contents_recursive(
                 &from_path,
                 &to_path,
@@ -1024,7 +1073,13 @@ fn copy_dir_contents_recursive(
                 hardlink_tracker,
                 #[cfg(unix)]
                 hardlink_scanner,
+                #[cfg(not(unix))]
+                _hardlink_tracker,
+                #[cfg(not(unix))]
+                _hardlink_scanner,
+                verbose,
                 progress_bar,
+                display_manager,
             )?;
         } else {
             // Copy file with or without hardlink support based on platform
@@ -1040,6 +1095,17 @@ fn copy_dir_contents_recursive(
             #[cfg(not(unix))]
             {
                 fs::copy(&from_path, &to_path)?;
+            }
+
+            // Print verbose message for file
+            if verbose {
+                let message = translate!("mv-verbose-renamed", "from" => from_path.quote(), "to" => to_path.quote());
+                match display_manager {
+                    Some(pb) => pb.suspend(|| {
+                        println!("{message}");
+                    }),
+                    None => println!("{message}"),
+                }
             }
         }
 

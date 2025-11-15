@@ -20,7 +20,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let numbers = matches
         .get_many::<String>(options::NUMBER)
@@ -39,6 +39,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("sleep-about"))
         .after_help(translate!("sleep-after-help"))
         .override_usage(format_usage(&translate!("sleep-usage")))

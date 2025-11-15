@@ -23,7 +23,7 @@ fn get_userlogin() -> Option<String> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let _ = uu_app().try_get_matches_from(args)?;
+    let _ = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     match get_userlogin() {
         Some(userlogin) => println!("{userlogin}"),
@@ -36,6 +36,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .override_usage(uucore::util_name())
         .about(translate!("logname-about"))
         .infer_long_args(true)

@@ -6,7 +6,7 @@
 #![cfg(target_os = "linux")]
 
 use clap::builder::ValueParser;
-use uucore::error::{UClapError, UError, UResult};
+use uucore::error::{UError, UResult};
 use uucore::translate;
 
 use clap::{Arg, ArgAction, Command};
@@ -37,12 +37,7 @@ pub mod options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let config = uu_app();
 
-    let options = match parse_command_line(config, args) {
-        Ok(r) => r,
-        Err(r) => {
-            return Err(r);
-        }
-    };
+    let options = parse_command_line(config, args)?;
 
     match &options.mode {
         CommandLineMode::Print => print_current_context().map_err(|e| RunconError::new(e).into()),
@@ -85,12 +80,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .about(translate!("runcon-about"))
         .after_help(translate!("runcon-after-help"))
         .override_usage(format_usage(&translate!("runcon-usage")))
-        .infer_long_args(true)
+        .infer_long_args(true);
+    uucore::clap_localization::configure_localized_command(cmd)
         .arg(
             Arg::new(options::COMPUTE)
                 .short('c')
@@ -184,7 +180,7 @@ struct Options {
 }
 
 fn parse_command_line(config: Command, args: impl uucore::Args) -> UResult<Options> {
-    let matches = config.try_get_matches_from(args).with_exit_code(125)?;
+    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(config, args, 125)?;
 
     let compute_transition_context = matches.get_flag(options::COMPUTE);
 

@@ -6,13 +6,14 @@
 // spell-checker:ignore (ToDO) tempdir dyld dylib optgrps libstdbuf
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use std::ffi::OsString;
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process;
 use tempfile::TempDir;
 use tempfile::tempdir;
 use thiserror::Error;
-use uucore::error::{FromIo, UClapError, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::parser::parse_size::parse_size_u64;
 use uucore::translate;
@@ -34,6 +35,7 @@ mod options {
         target_os = "android",
         target_os = "freebsd",
         target_os = "netbsd",
+        target_os = "openbsd",
         target_os = "dragonfly"
     )
 ))]
@@ -81,6 +83,7 @@ enum ProgramOptionsError {
     target_os = "android",
     target_os = "freebsd",
     target_os = "netbsd",
+    target_os = "openbsd",
     target_os = "dragonfly"
 ))]
 fn preload_strings() -> UResult<(&'static str, &'static str)> {
@@ -97,6 +100,7 @@ fn preload_strings() -> UResult<(&'static str, &'static str)> {
     target_os = "android",
     target_os = "freebsd",
     target_os = "netbsd",
+    target_os = "openbsd",
     target_os = "dragonfly",
     target_vendor = "apple"
 )))]
@@ -178,14 +182,15 @@ fn get_preload_env(_tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
+    let matches =
+        uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
     let options =
         ProgramOptions::try_from(&matches).map_err(|e| UUsageError::new(125, e.to_string()))?;
 
-    let mut command_values = matches.get_many::<String>(options::COMMAND).unwrap();
+    let mut command_values = matches.get_many::<OsString>(options::COMMAND).unwrap();
     let mut command = process::Command::new(command_values.next().unwrap());
-    let command_params: Vec<&str> = command_values.map(|s| s.as_ref()).collect();
+    let command_params: Vec<&OsString> = command_values.collect();
 
     let tmp_dir = tempdir().unwrap();
     let (preload_env, libstdbuf) = get_preload_env(&tmp_dir)?;
@@ -234,6 +239,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("stdbuf-about"))
         .after_help(translate!("stdbuf-after-help"))
         .override_usage(format_usage(&translate!("stdbuf-usage")))
@@ -268,6 +274,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Append)
                 .hide(true)
                 .required(true)
-                .value_hint(clap::ValueHint::CommandName),
+                .value_hint(clap::ValueHint::CommandName)
+                .value_parser(clap::value_parser!(OsString)),
         )
 }

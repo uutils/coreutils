@@ -10,6 +10,7 @@ mod platform;
 use crate::platform::is_unsafe_overwrite;
 use clap::{Arg, ArgAction, Command};
 use memchr::memchr2;
+use std::ffi::OsString;
 use std::fs::{File, metadata};
 use std::io::{self, BufWriter, ErrorKind, IsTerminal, Read, Write};
 /// Unix domain socket support
@@ -62,7 +63,7 @@ impl LineNumber {
 
         buf[print_start..].copy_from_slice(init_str.as_bytes());
 
-        LineNumber {
+        Self {
             buf,
             print_start,
             num_start,
@@ -95,16 +96,16 @@ enum CatError {
     #[error("{0}")]
     Nix(#[from] nix::Error),
     /// Unknown file type; it's not a regular file, socket, etc.
-    #[error("unknown filetype: {ft_debug}")]
+    #[error("{}", translate!("cat-error-unknown-filetype", "ft_debug" => .ft_debug))]
     UnknownFiletype {
         /// A debug print of the file type
         ft_debug: String,
     },
-    #[error("Is a directory")]
+    #[error("{}", translate!("cat-error-is-directory"))]
     IsDirectory,
-    #[error("input file is output file")]
+    #[error("{}", translate!("cat-error-input-file-is-output-file"))]
     OutputIsInput,
-    #[error("Too many levels of symbolic links")]
+    #[error("{}", translate!("cat-error-too-many-symbolic-links"))]
     TooManySymlinks,
 }
 
@@ -230,7 +231,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
 
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let number_mode = if matches.get_flag(options::NUMBER_NONBLANK) {
         NumberingMode::NonEmpty
@@ -266,9 +267,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     .any(|v| matches.get_flag(v));
 
     let squeeze_blank = matches.get_flag(options::SQUEEZE_BLANK);
-    let files: Vec<String> = match matches.get_many::<String>(options::FILE) {
+    let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILE) {
         Some(v) => v.cloned().collect(),
-        None => vec!["-".to_owned()],
+        None => vec![OsString::from("-")],
     };
 
     let options = OutputOptions {
@@ -286,26 +287,28 @@ pub fn uu_app() -> Command {
         .version(uucore::crate_version!())
         .override_usage(format_usage(&translate!("cat-usage")))
         .about(translate!("cat-about"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
                 .action(ArgAction::Append)
+                .value_parser(clap::value_parser!(OsString))
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::SHOW_ALL)
                 .short('A')
                 .long(options::SHOW_ALL)
-                .help("equivalent to -vET")
+                .help(translate!("cat-help-show-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NUMBER_NONBLANK)
                 .short('b')
                 .long(options::NUMBER_NONBLANK)
-                .help("number nonempty output lines, overrides -n")
+                .help(translate!("cat-help-number-nonblank"))
                 // Note: This MUST NOT .overrides_with(options::NUMBER)!
                 // In clap, overriding is symmetric, so "-b -n" counts as "-n", which is not what we want.
                 .action(ArgAction::SetTrue),
@@ -313,54 +316,54 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::SHOW_NONPRINTING_ENDS)
                 .short('e')
-                .help("equivalent to -vE")
+                .help(translate!("cat-help-show-nonprinting-ends"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHOW_ENDS)
                 .short('E')
                 .long(options::SHOW_ENDS)
-                .help("display $ at end of each line")
+                .help(translate!("cat-help-show-ends"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NUMBER)
                 .short('n')
                 .long(options::NUMBER)
-                .help("number all output lines")
+                .help(translate!("cat-help-number"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SQUEEZE_BLANK)
                 .short('s')
                 .long(options::SQUEEZE_BLANK)
-                .help("suppress repeated empty output lines")
+                .help(translate!("cat-help-squeeze-blank"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHOW_NONPRINTING_TABS)
                 .short('t')
-                .help("equivalent to -vT")
+                .help(translate!("cat-help-show-nonprinting-tabs"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHOW_TABS)
                 .short('T')
                 .long(options::SHOW_TABS)
-                .help("display TAB characters at ^I")
+                .help(translate!("cat-help-show-tabs"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHOW_NONPRINTING)
                 .short('v')
                 .long(options::SHOW_NONPRINTING)
-                .help("use ^ and M- notation, except for LF (\\n) and TAB (\\t)")
+                .help(translate!("cat-help-show-nonprinting"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::IGNORED_U)
                 .short('u')
-                .help("(ignored)")
+                .help(translate!("cat-help-ignored-u"))
                 .action(ArgAction::SetTrue),
         )
 }
@@ -377,7 +380,7 @@ fn cat_handle<R: FdReadable>(
     }
 }
 
-fn cat_path(path: &str, options: &OutputOptions, state: &mut OutputState) -> CatResult<()> {
+fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -> CatResult<()> {
     match get_input_type(path)? {
         InputType::StdIn => {
             let stdin = io::stdin();
@@ -415,7 +418,7 @@ fn cat_path(path: &str, options: &OutputOptions, state: &mut OutputState) -> Cat
     }
 }
 
-fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
+fn cat_files(files: &[OsString], options: &OutputOptions) -> UResult<()> {
     let mut state = OutputState {
         line_number: LineNumber::new(),
         at_line_start: true,
@@ -450,7 +453,7 @@ fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
 /// # Arguments
 ///
 /// * `path` - Path on a file system to classify metadata
-fn get_input_type(path: &str) -> CatResult<InputType> {
+fn get_input_type(path: &OsString) -> CatResult<InputType> {
     if path == "-" {
         return Ok(InputType::StdIn);
     }
@@ -516,6 +519,7 @@ fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
                     .write_all(&buf[..n])
                     .inspect_err(handle_broken_pipe)?;
             }
+            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
             Err(e) => return Err(e.into()),
         }
     }
@@ -542,10 +546,13 @@ fn write_lines<R: FdReadable>(
     // Add a 32K buffer for stdout - this greatly improves performance.
     let mut writer = BufWriter::with_capacity(32 * 1024, stdout);
 
-    while let Ok(n) = handle.reader.read(&mut in_buf) {
-        if n == 0 {
-            break;
-        }
+    loop {
+        let n = match handle.reader.read(&mut in_buf) {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e.into()),
+        };
         let in_buf = &in_buf[..n];
         let mut pos = 0;
         while pos < n {

@@ -544,7 +544,7 @@ fn test_files0_from_with_stdin_in_file() {
 
 #[test]
 fn test_files0_from_with_stdin_try_read_from_stdin() {
-    const MSG: &str = "when reading file names from stdin, no file name of '-' allowed";
+    const MSG: &str = "when reading file names from standard input, no file name of '-' allowed";
     new_ucmd!()
         .args(&["--files0-from=-"])
         .pipe_in("-")
@@ -798,4 +798,13 @@ fn test_args_override() {
         .args(&["--total=always", "--total=never", "alice_in_wonderland.txt"])
         .succeeds()
         .stdout_is("  5  57 302 alice_in_wonderland.txt\n");
+}
+
+#[test]
+fn wc_w_words_with_emoji_separator() {
+    new_ucmd!()
+        .args(&["-w"])
+        .pipe_in("foo 💐 bar\n")
+        .succeeds()
+        .stdout_contains("3");
 }

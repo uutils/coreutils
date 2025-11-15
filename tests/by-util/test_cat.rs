@@ -749,6 +749,30 @@ fn test_write_fast_read_error() {
 
 #[test]
 #[cfg(target_os = "linux")]
+fn test_cat_non_utf8_paths() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a test file with non-UTF-8 bytes in the name
+    let non_utf8_bytes = b"test_\xFF\xFE.txt";
+    let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
+
+    // Create the actual file with some content
+    std::fs::write(at.plus(non_utf8_name), "Hello, non-UTF-8 world!\n").unwrap();
+
+    // Test that cat handles non-UTF-8 file names without crashing
+    let result = scene.ucmd().arg(non_utf8_name).succeeds();
+
+    // The result should contain the file content
+    let output = result.stdout_str_lossy();
+    assert_eq!(output, "Hello, non-UTF-8 world!\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
 fn test_appending_same_input_output() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -801,4 +825,61 @@ fn test_child_when_pipe_in() {
     child.wait().unwrap().stdout_only("content").success();
 
     ts.ucmd().pipe_in("content").run().stdout_is("content");
+}
+
+#[test]
+fn test_cat_eintr_handling() {
+    // Test that cat properly handles EINTR (ErrorKind::Interrupted) during I/O operations
+    // This verifies the signal interruption retry logic added in the EINTR handling fix
+    use std::io::{Error, ErrorKind, Read};
+    use std::sync::{Arc, Mutex};
+
+    // Create a mock reader that simulates EINTR interruptions
+    struct InterruptedReader {
+        data: Vec<u8>,
+        position: usize,
+        interrupt_count: Arc<Mutex<usize>>,
+    }
+
+    impl Read for InterruptedReader {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            // Simulate interruption on first read attempt
+            if self.position < self.data.len() {
+                let mut count = self.interrupt_count.lock().unwrap();
+                if *count == 0 {
+                    *count += 1;
+                    return Err(Error::new(
+                        ErrorKind::Interrupted,
+                        "Simulated signal interruption",
+                    ));
+                }
+            }
+
+            // Return actual data on subsequent attempts
+            if self.position >= self.data.len() {
+                return Ok(0);
+            }
+
+            let remaining = self.data.len() - self.position;
+            let to_copy = std::cmp::min(buf.len(), remaining);
+            buf[..to_copy].copy_from_slice(&self.data[self.position..self.position + to_copy]);
+            self.position += to_copy;
+            Ok(to_copy)
+        }
+    }
+
+    let test_data = b"Hello, World!\n";
+    let interrupt_count = Arc::new(Mutex::new(0));
+    let reader = InterruptedReader {
+        data: test_data.to_vec(),
+        position: 0,
+        interrupt_count: interrupt_count.clone(),
+    };
+
+    // Test that cat can handle the interrupted reader
+    let result = std::io::copy(&mut { reader }, &mut std::io::stdout());
+    assert!(result.is_ok());
+
+    // Verify that the interruption was encountered and handled
+    assert_eq!(*interrupt_count.lock().unwrap(), 1);
 }

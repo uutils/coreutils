@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDO) sysv
 
 use clap::{Arg, ArgAction, Command};
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{ErrorKind, Read, Write, stdin, stdout};
 use std::path::Path;
@@ -66,27 +67,26 @@ fn sysv_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
     Ok((blocks_read, ret as u16))
 }
 
-fn open(name: &str) -> UResult<Box<dyn Read>> {
-    match name {
-        "-" => Ok(Box::new(stdin()) as Box<dyn Read>),
-        _ => {
-            let path = &Path::new(name);
-            if path.is_dir() {
-                return Err(USimpleError::new(
-                    2,
-                    translate!("sum-error-is-directory", "name" => name.maybe_quote()),
-                ));
-            }
-            // Silent the warning as we want to the error message
-            if path.metadata().is_err() {
-                return Err(USimpleError::new(
-                    2,
-                    translate!("sum-error-no-such-file-or-directory", "name" => name.maybe_quote()),
-                ));
-            }
-            let f = File::open(path).map_err_context(String::new)?;
-            Ok(Box::new(f) as Box<dyn Read>)
+fn open(name: &OsString) -> UResult<Box<dyn Read>> {
+    if name == "-" {
+        Ok(Box::new(stdin()) as Box<dyn Read>)
+    } else {
+        let path = Path::new(name);
+        if path.is_dir() {
+            return Err(USimpleError::new(
+                2,
+                translate!("sum-error-is-directory", "name" => name.to_string_lossy().maybe_quote()),
+            ));
         }
+        // Silent the warning as we want to the error message
+        if path.metadata().is_err() {
+            return Err(USimpleError::new(
+                2,
+                translate!("sum-error-no-such-file-or-directory", "name" => name.to_string_lossy().maybe_quote()),
+            ));
+        }
+        let f = File::open(path).map_err_context(String::new)?;
+        Ok(Box::new(f) as Box<dyn Read>)
     }
 }
 
@@ -98,11 +98,11 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let files: Vec<String> = match matches.get_many::<String>(options::FILE) {
+    let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILE) {
         Some(v) => v.cloned().collect(),
-        None => vec!["-".to_owned()],
+        None => vec![OsString::from("-")],
     };
 
     let sysv = matches.get_flag(options::SYSTEM_V_COMPATIBLE);
@@ -126,7 +126,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let mut stdout = stdout().lock();
         if print_names {
-            writeln!(stdout, "{sum:0width$} {blocks:width$} {file}")?;
+            writeln!(
+                stdout,
+                "{sum:0width$} {blocks:width$} {}",
+                file.to_string_lossy()
+            )?;
         } else {
             writeln!(stdout, "{sum:0width$} {blocks:width$}")?;
         }
@@ -137,6 +141,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .override_usage(format_usage(&translate!("sum-usage")))
         .about(translate!("sum-about"))
         .infer_long_args(true)
@@ -144,7 +149,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE)
                 .action(ArgAction::Append)
                 .hide(true)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::BSD_COMPATIBLE)

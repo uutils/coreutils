@@ -69,6 +69,7 @@ fn get_context_help_text() -> String {
 }
 
 mod options {
+    pub const OPT_IGNORE: &str = "ignore";
     pub const OPT_AUDIT: &str = "audit"; // GNU's id does not have this
     pub const OPT_CONTEXT: &str = "context";
     pub const OPT_EFFECTIVE_USER: &str = "user";
@@ -119,9 +120,7 @@ struct State {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(translate!("id-after-help"))
-        .try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let users: Vec<String> = matches
         .get_many::<String>(options::ARG_USERS)
@@ -349,10 +348,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("id-about"))
         .override_usage(format_usage(&translate!("id-usage")))
         .infer_long_args(true)
         .args_override_self(true)
+        .after_help(translate!("id-after-help"))
+        .arg(
+            Arg::new(options::OPT_IGNORE)
+                .short('a')
+                .long(options::OPT_IGNORE)
+                .help(translate!("id-help-ignore"))
+                .action(ArgAction::SetTrue),
+        )
         .arg(
             Arg::new(options::OPT_AUDIT)
                 .short('A')

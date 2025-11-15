@@ -60,7 +60,7 @@ mod wsa {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     #[cfg(windows)]
     let _handle = wsa::start().map_err_context(|| translate!("hostname-error-winsock"))?;
@@ -76,6 +76,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("hostname-about"))
         .override_usage(format_usage(&translate!("hostname-usage")))
         .infer_long_args(true)
@@ -176,8 +177,10 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
                 } else {
                     println!("{}", &hostname[ci.0 + 1..]);
                 }
-                return Ok(());
+            } else if matches.get_flag(OPT_SHORT) {
+                println!("{hostname}");
             }
+            return Ok(());
         }
 
         println!("{hostname}");

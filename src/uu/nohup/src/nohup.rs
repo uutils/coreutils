@@ -16,7 +16,7 @@ use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{UClapError, UError, UResult, set_exit_code};
+use uucore::error::{UError, UResult, set_exit_code};
 use uucore::translate;
 use uucore::{format_usage, show_error};
 
@@ -57,7 +57,8 @@ impl UError for NohupError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
+    let matches =
+        uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
     replace_fds()?;
 
@@ -86,6 +87,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("nohup-about"))
         .after_help(translate!("nohup-after-help"))
         .override_usage(format_usage(&translate!("nohup-usage")))

@@ -25,12 +25,14 @@ use uucore::checksum::detect_algo;
 use uucore::checksum::digest_reader;
 use uucore::checksum::escape_filename;
 use uucore::checksum::perform_checksum_validation;
-use uucore::error::{FromIo, UResult};
+use uucore::error::{UResult, strip_errno};
 use uucore::format_usage;
 use uucore::sum::{Digest, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
 use uucore::translate;
 
 const NAME: &str = "hashsum";
+// Using the same read buffer size as GNU
+const READ_BUFFER_SIZE: usize = 32 * 1024;
 
 struct Options<'a> {
     algoname: &'static str,
@@ -97,8 +99,10 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
         set_or_err(detect_algo("b3sum", None)?)?;
     }
     if matches.get_flag("sha3") {
-        let bits = matches.get_one::<usize>("bits").copied();
-        set_or_err(create_sha3(bits)?)?;
+        match matches.get_one::<usize>("bits") {
+            Some(bits) => set_or_err(create_sha3(*bits)?)?,
+            None => return Err(ChecksumError::LengthRequired("SHA3".into()).into()),
+        }
     }
     if matches.get_flag("sha3-224") {
         set_or_err(HashAlgorithm {
@@ -135,7 +139,7 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
                 create_fn: Box::new(|| Box::new(Shake128::new())),
                 bits: *bits,
             })?,
-            None => return Err(ChecksumError::BitsRequiredForShake128.into()),
+            None => return Err(ChecksumError::LengthRequired("SHAKE128".into()).into()),
         }
     }
     if matches.get_flag("shake256") {
@@ -145,7 +149,7 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
                 create_fn: Box::new(|| Box::new(Shake256::new())),
                 bits: *bits,
             })?,
-            None => return Err(ChecksumError::BitsRequiredForShake256.into()),
+            None => return Err(ChecksumError::LengthRequired("SHAKE256".into()).into()),
         }
     }
 
@@ -181,7 +185,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     //        causes "error: " to be printed twice (once from crash!() and once from clap).  With
     //        the current setup, the name of the utility is not printed, but I think this is at
     //        least somewhat better from a user's perspective.
-    let matches = command.try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(command, args)?;
 
     let input_length: Option<&usize> = if binary_name == "b2sum" {
         matches.get_one::<usize>(options::LENGTH)
@@ -311,6 +315,7 @@ mod options {
 pub fn uu_app_common() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("hashsum-about"))
         .override_usage(format_usage(&translate!("hashsum-usage")))
         .infer_long_args(true)
@@ -495,25 +500,28 @@ pub fn uu_app_custom() -> Command {
 /// hashsum is handled differently in build.rs
 /// therefore, this is different from other utilities.
 fn uu_app(binary_name: &str) -> (Command, bool) {
-    match binary_name {
+    let (command, is_hashsum_bin) = match binary_name {
         // These all support the same options.
         "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" => {
             (uu_app_common(), false)
         }
         // b2sum supports the md5sum options plus -l/--length.
         "b2sum" => (uu_app_length(), false),
-        // These have never been part of GNU Coreutils, but can function with the same
-        // options as md5sum.
-        "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum" => (uu_app_common(), false),
-        // These have never been part of GNU Coreutils, and require an additional --bits
-        // option to specify their output size.
-        "sha3sum" | "shake128sum" | "shake256sum" => (uu_app_bits(), false),
-        // b3sum has never been part of GNU Coreutils, and has a --no-names option in
-        // addition to the b2sum options.
-        "b3sum" => (uu_app_b3sum(), false),
         // We're probably just being called as `hashsum`, so give them everything.
         _ => (uu_app_custom(), true),
-    }
+    };
+
+    // If not called as generic hashsum, override the command name and usage
+    let command = if is_hashsum_bin {
+        command
+    } else {
+        let usage = translate!("hashsum-usage-specific", "utility_name" => binary_name);
+        command
+            .help_template(uucore::localized_help_template(binary_name))
+            .override_usage(format_usage(&usage))
+    };
+
+    (command, is_hashsum_bin)
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -526,31 +534,47 @@ where
     for filename in files {
         let filename = Path::new(filename);
 
-        let mut file = BufReader::new(if filename == OsStr::new("-") {
-            Box::new(stdin()) as Box<dyn Read>
-        } else {
-            let file_buf = match File::open(filename) {
-                Ok(f) => f,
-                Err(e) => {
-                    eprintln!(
-                        "{}: {}: {e}",
-                        options.binary_name,
-                        filename.to_string_lossy()
-                    );
-                    err_found = Some(ChecksumError::Io(e));
-                    continue;
-                }
-            };
-            Box::new(file_buf) as Box<dyn Read>
-        });
+        let mut file = BufReader::with_capacity(
+            READ_BUFFER_SIZE,
+            if filename == OsStr::new("-") {
+                Box::new(stdin()) as Box<dyn Read>
+            } else {
+                let file_buf = match File::open(filename) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        eprintln!(
+                            "{}: {}: {}",
+                            options.binary_name,
+                            filename.to_string_lossy(),
+                            strip_errno(&e)
+                        );
+                        err_found = Some(ChecksumError::Io(e));
+                        continue;
+                    }
+                };
+                Box::new(file_buf) as Box<dyn Read>
+            },
+        );
 
-        let (sum, _) = digest_reader(
+        let sum = match digest_reader(
             &mut options.digest,
             &mut file,
             options.binary,
             options.output_bits,
-        )
-        .map_err_context(|| translate!("hashsum-error-failed-to-read-input"))?;
+        ) {
+            Ok((sum, _)) => sum,
+            Err(e) => {
+                eprintln!(
+                    "{}: {}: {}",
+                    options.binary_name,
+                    filename.to_string_lossy(),
+                    strip_errno(&e)
+                );
+                err_found = Some(ChecksumError::Io(e));
+                continue;
+            }
+        };
+
         let (escaped_filename, prefix) = escape_filename(filename);
         if options.tag {
             if options.algoname == "blake2b" {

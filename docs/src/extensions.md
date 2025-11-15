@@ -22,10 +22,13 @@ We support a third way:
 $ ls -w=80
 ```
 
+With GNU coreutils, `--help` usually prints the help message and `--version` prints the version.
+We also commonly provide short options: `-h` for help and `-V` for version.
+
 ## `env`
 
 GNU `env` allows the empty string to be used as an environment variable name.
-This is unsupported by uutils, and it will show a warning on any such
+This is unsupported by uutils, which will show a warning for any such
 assignment.
 
  `env` has an additional `-f`/`--file` flag that can
@@ -40,19 +43,16 @@ packages.
 
 `mv` can display a progress bar when the `-g`/`--progress` flag is set.
 
-## `hashsum`
+## `rm`
+
+`rm` can display a progress bar when the `-g`/`--progress` flag is set.
+
+## `hashsum` (deprecated)
 
 This utility does not exist in GNU coreutils. `hashsum` is a utility that
 supports computing the checksums with several algorithms. The flags and options
 are identical to the `*sum` family of utils (`sha1sum`, `sha256sum`, `b2sum`,
-etc.).
-
-## `b3sum`
-
-This utility does not exist in GNU coreutils. The behavior is modeled after both
-the `b2sum` utility of GNU and the
-[`b3sum`](https://github.com/BLAKE3-team/BLAKE3) utility by the BLAKE3 team and
-supports the `--no-names` option that does not appear in the GNU util.
+etc.). This utility will be removed in the future and it is advised to use `cksum --untagged` instead.
 
 ## `more`
 
@@ -82,7 +82,7 @@ numbers. GNU coreutils uses `long double`, whose actual size may be [double prec
 (x86(-64)), or
 [quadruple precision 128-bit float](https://en.wikipedia.org/wiki/Quadruple-precision_floating-point_format) (e.g. arm64).
 
-Practically, this means that printing a number with a large precision will stay exact:
+Practically, this means that printing a number with high precision will remain exact:
 ```
 printf "%.48f\n" 0.1
 0.100000000000000000000000000000000000000000000000 << uutils on all platforms
@@ -199,7 +199,7 @@ The number of random passes is deterministic in both GNU and uutils. However, uu
 GNU `unexpand` provides `--first-only` to convert only leading sequences of blanks. We support a
 second way: `-f` like busybox.
 
-Using `-U`/`--no-utf8`, you can interpret input files as 8-bit ASCII rather than UTF-8.
+With `-U`/`--no-utf8`, you can interpret input files as 8-bit ASCII rather than UTF-8.
 
 ## `expand`
 

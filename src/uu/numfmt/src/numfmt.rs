@@ -214,7 +214,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 
     let delimiter = args.get_one::<String>(DELIMITER).map_or(Ok(None), |arg| {
         if arg.len() == 1 {
-            Ok(Some(arg.to_string()))
+            Ok(Some(arg.to_owned()))
         } else {
             Err(translate!(
                 "numfmt-error-delimiter-must-be-single-character"
@@ -254,7 +254,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
 
@@ -279,6 +279,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("numfmt-about"))
         .after_help(translate!("numfmt-after-help"))
         .override_usage(format_usage(&translate!("numfmt-usage")))

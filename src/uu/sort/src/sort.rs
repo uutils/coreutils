@@ -9,6 +9,7 @@
 
 // spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit
 
+mod buffer_hint;
 mod check;
 mod chunks;
 mod custom_str_cmp;
@@ -43,7 +44,7 @@ use std::str::Utf8Error;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
-use uucore::error::{UError, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::format_usage;
 use uucore::line_ending::LineEnding;
@@ -54,6 +55,7 @@ use uucore::show_error;
 use uucore::translate;
 use uucore::version_cmp::version_cmp;
 
+use crate::buffer_hint::automatic_buffer_size;
 use crate::tmp_dir::TmpDirWrapper;
 
 mod options {
@@ -115,10 +117,12 @@ const DECIMAL_PT: u8 = b'.';
 const NEGATIVE: &u8 = &b'-';
 const POSITIVE: &u8 = &b'+';
 
-// Choosing a higher buffer size does not result in performance improvements
-// (at least not on my machine). TODO: In the future, we should also take the amount of
-// available memory into consideration, instead of relying on this constant only.
-const DEFAULT_BUF_SIZE: usize = 1_000_000_000; // 1 GB
+// The automatic buffer heuristics clamp to this range to avoid
+// over-committing memory on constrained systems while still keeping
+// reasonably large chunks for typical workloads.
+const MIN_AUTOMATIC_BUF_SIZE: usize = 512 * 1024; // 512 KiB
+const FALLBACK_AUTOMATIC_BUF_SIZE: usize = 32 * 1024 * 1024; // 32 MiB
+const MAX_AUTOMATIC_BUF_SIZE: usize = 1024 * 1024 * 1024; // 1 GiB
 
 #[derive(Debug, Error)]
 pub enum SortError {
@@ -283,6 +287,7 @@ pub struct GlobalSettings {
     threads: String,
     line_ending: LineEnding,
     buffer_size: usize,
+    buffer_size_is_explicit: bool,
     compress_prog: Option<String>,
     merge_batch_size: usize,
     precomputed: Precomputed,
@@ -296,6 +301,8 @@ struct Precomputed {
     num_infos_per_line: usize,
     floats_per_line: usize,
     selections_per_line: usize,
+    fast_lexicographic: bool,
+    fast_ascii_insensitive: bool,
 }
 
 impl GlobalSettings {
@@ -336,6 +343,47 @@ impl GlobalSettings {
             .iter()
             .filter(|s| matches!(s.settings.mode, SortMode::GeneralNumeric))
             .count();
+
+        self.precomputed.fast_lexicographic = self.can_use_fast_lexicographic();
+        self.precomputed.fast_ascii_insensitive = self.can_use_fast_ascii_insensitive();
+    }
+
+    /// Returns true when the fast lexicographic path can be used safely.
+    fn can_use_fast_lexicographic(&self) -> bool {
+        self.mode == SortMode::Default
+            && !self.ignore_case
+            && !self.dictionary_order
+            && !self.ignore_non_printing
+            && !self.ignore_leading_blanks
+            && self.selectors.len() == 1
+            && {
+                let selector = &self.selectors[0];
+                !selector.needs_selection
+                    && matches!(selector.settings.mode, SortMode::Default)
+                    && !selector.settings.ignore_case
+                    && !selector.settings.dictionary_order
+                    && !selector.settings.ignore_non_printing
+                    && !selector.settings.ignore_blanks
+            }
+    }
+
+    /// Returns true when the ASCII case-insensitive fast path is valid.
+    fn can_use_fast_ascii_insensitive(&self) -> bool {
+        self.mode == SortMode::Default
+            && self.ignore_case
+            && !self.dictionary_order
+            && !self.ignore_non_printing
+            && !self.ignore_leading_blanks
+            && self.selectors.len() == 1
+            && {
+                let selector = &self.selectors[0];
+                !selector.needs_selection
+                    && matches!(selector.settings.mode, SortMode::Default)
+                    && selector.settings.ignore_case
+                    && !selector.settings.dictionary_order
+                    && !selector.settings.ignore_non_printing
+                    && !selector.settings.ignore_blanks
+            }
     }
 }
 
@@ -359,9 +407,10 @@ impl Default for GlobalSettings {
             separator: None,
             threads: String::new(),
             line_ending: LineEnding::Newline,
-            buffer_size: DEFAULT_BUF_SIZE,
+            buffer_size: FALLBACK_AUTOMATIC_BUF_SIZE,
+            buffer_size_is_explicit: false,
             compress_prog: None,
-            merge_batch_size: 32,
+            merge_batch_size: default_merge_batch_size(),
             precomputed: Precomputed::default(),
         }
     }
@@ -1036,27 +1085,38 @@ fn get_rlimit() -> UResult<usize> {
 }
 
 const STDIN_FILE: &str = "-";
+#[cfg(target_os = "linux")]
+const LINUX_BATCH_DIVISOR: usize = 4;
+#[cfg(target_os = "linux")]
+const LINUX_BATCH_MIN: usize = 32;
+#[cfg(target_os = "linux")]
+const LINUX_BATCH_MAX: usize = 256;
+
+fn default_merge_batch_size() -> usize {
+    #[cfg(target_os = "linux")]
+    {
+        // Adjust merge batch size dynamically based on available file descriptors.
+        match get_rlimit() {
+            Ok(limit) => {
+                let usable_limit = limit.saturating_div(LINUX_BATCH_DIVISOR);
+                usable_limit.clamp(LINUX_BATCH_MIN, LINUX_BATCH_MAX)
+            }
+            Err(_) => 64,
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        64
+    }
+}
 
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut settings = GlobalSettings::default();
 
-    let matches = match uu_app().try_get_matches_from(args) {
-        Ok(t) => t,
-        Err(e) => {
-            // not all clap "Errors" are because of a failure to parse arguments.
-            // "--version" also causes an Error to be returned, but we should not print to stderr
-            // nor return with a non-zero exit code in this case (we should print to stdout and return 0).
-            // This logic is similar to the code in clap, but we return 2 as the exit code in case of real failure
-            // (clap returns 1).
-            e.print().unwrap();
-            if e.use_stderr() {
-                set_exit_code(2);
-            }
-            return Ok(());
-        }
-    };
+    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
 
     // Prevent -o/--output to be specified multiple times
     if matches
@@ -1171,14 +1231,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    settings.buffer_size =
-        matches
-            .get_one::<String>(options::BUF_SIZE)
-            .map_or(Ok(DEFAULT_BUF_SIZE), |s| {
-                GlobalSettings::parse_byte_count(s).map_err(|e| {
-                    USimpleError::new(2, format_error_message(&e, s, options::BUF_SIZE))
-                })
-            })?;
+    if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
+        settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|e| {
+            USimpleError::new(2, format_error_message(&e, size_str, options::BUF_SIZE))
+        })?;
+        settings.buffer_size_is_explicit = true;
+    } else {
+        settings.buffer_size = automatic_buffer_size(&files);
+        settings.buffer_size_is_explicit = false;
+    }
 
     let mut tmp_dir = TmpDirWrapper::new(
         matches
@@ -1340,247 +1401,251 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(uucore::crate_version!())
-        .about(translate!("sort-about"))
-        .after_help(translate!("sort-after-help"))
-        .override_usage(format_usage(&translate!("sort-usage")))
-        .infer_long_args(true)
-        .disable_help_flag(true)
-        .disable_version_flag(true)
-        .args_override_self(true)
-        .arg(
-            Arg::new(options::HELP)
-                .long(options::HELP)
-                .help(translate!("sort-help-help"))
-                .action(ArgAction::Help),
-        )
-        .arg(
-            Arg::new(options::VERSION)
-                .long(options::VERSION)
-                .help(translate!("sort-help-version"))
-                .action(ArgAction::Version),
-        )
-        .arg(
-            Arg::new(options::modes::SORT)
-                .long(options::modes::SORT)
-                .value_parser(ShortcutValueParser::new([
-                    "general-numeric",
-                    "human-numeric",
-                    "month",
-                    "numeric",
-                    "version",
-                    "random",
-                ]))
-                .conflicts_with_all(options::modes::ALL_SORT_MODES),
-        )
-        .arg(make_sort_mode_arg(
-            options::modes::HUMAN_NUMERIC,
-            'h',
-            translate!("sort-help-human-numeric"),
-        ))
-        .arg(make_sort_mode_arg(
-            options::modes::MONTH,
-            'M',
-            translate!("sort-help-month"),
-        ))
-        .arg(make_sort_mode_arg(
-            options::modes::NUMERIC,
-            'n',
-            translate!("sort-help-numeric"),
-        ))
-        .arg(make_sort_mode_arg(
-            options::modes::GENERAL_NUMERIC,
-            'g',
-            translate!("sort-help-general-numeric"),
-        ))
-        .arg(make_sort_mode_arg(
-            options::modes::VERSION,
-            'V',
-            translate!("sort-help-version-sort"),
-        ))
-        .arg(make_sort_mode_arg(
-            options::modes::RANDOM,
-            'R',
-            translate!("sort-help-random"),
-        ))
-        .arg(
-            Arg::new(options::DICTIONARY_ORDER)
-                .short('d')
-                .long(options::DICTIONARY_ORDER)
-                .help(translate!("sort-help-dictionary-order"))
-                .conflicts_with_all([
-                    options::modes::NUMERIC,
-                    options::modes::GENERAL_NUMERIC,
-                    options::modes::HUMAN_NUMERIC,
-                    options::modes::MONTH,
-                ])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::MERGE)
-                .short('m')
-                .long(options::MERGE)
-                .help(translate!("sort-help-merge"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::check::CHECK)
-                .short('c')
-                .long(options::check::CHECK)
-                .require_equals(true)
-                .num_args(0..)
-                .value_parser(ShortcutValueParser::new([
-                    options::check::SILENT,
-                    options::check::QUIET,
-                    options::check::DIAGNOSE_FIRST,
-                ]))
-                .conflicts_with_all([options::OUTPUT, options::check::CHECK_SILENT])
-                .help(translate!("sort-help-check")),
-        )
-        .arg(
-            Arg::new(options::check::CHECK_SILENT)
-                .short('C')
-                .long(options::check::CHECK_SILENT)
-                .conflicts_with_all([options::OUTPUT, options::check::CHECK])
-                .help(translate!("sort-help-check-silent"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::IGNORE_CASE)
-                .short('f')
-                .long(options::IGNORE_CASE)
-                .help(translate!("sort-help-ignore-case"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::IGNORE_NONPRINTING)
-                .short('i')
-                .long(options::IGNORE_NONPRINTING)
-                .help(translate!("sort-help-ignore-nonprinting"))
-                .conflicts_with_all([
-                    options::modes::NUMERIC,
-                    options::modes::GENERAL_NUMERIC,
-                    options::modes::HUMAN_NUMERIC,
-                    options::modes::MONTH,
-                ])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::IGNORE_LEADING_BLANKS)
-                .short('b')
-                .long(options::IGNORE_LEADING_BLANKS)
-                .help(translate!("sort-help-ignore-leading-blanks"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::OUTPUT)
-                .short('o')
-                .long(options::OUTPUT)
-                .help(translate!("sort-help-output"))
-                .value_parser(ValueParser::os_string())
-                .value_name("FILENAME")
-                .value_hint(clap::ValueHint::FilePath)
-                // To detect multiple occurrences and raise an error
-                .action(ArgAction::Append),
-        )
-        .arg(
-            Arg::new(options::REVERSE)
-                .short('r')
-                .long(options::REVERSE)
-                .help(translate!("sort-help-reverse"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::STABLE)
-                .short('s')
-                .long(options::STABLE)
-                .help(translate!("sort-help-stable"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::UNIQUE)
-                .short('u')
-                .long(options::UNIQUE)
-                .help(translate!("sort-help-unique"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::KEY)
-                .short('k')
-                .long(options::KEY)
-                .help(translate!("sort-help-key"))
-                .action(ArgAction::Append)
-                .num_args(1),
-        )
-        .arg(
-            Arg::new(options::SEPARATOR)
-                .short('t')
-                .long(options::SEPARATOR)
-                .help(translate!("sort-help-separator"))
-                .value_parser(ValueParser::os_string()),
-        )
-        .arg(
-            Arg::new(options::ZERO_TERMINATED)
-                .short('z')
-                .long(options::ZERO_TERMINATED)
-                .help(translate!("sort-help-zero-terminated"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::PARALLEL)
-                .long(options::PARALLEL)
-                .help(translate!("sort-help-parallel"))
-                .value_name("NUM_THREADS"),
-        )
-        .arg(
-            Arg::new(options::BUF_SIZE)
-                .short('S')
-                .long(options::BUF_SIZE)
-                .help(translate!("sort-help-buf-size"))
-                .value_name("SIZE"),
-        )
-        .arg(
-            Arg::new(options::TMP_DIR)
-                .short('T')
-                .long(options::TMP_DIR)
-                .help(translate!("sort-help-tmp-dir"))
-                .value_name("DIR")
-                .value_hint(clap::ValueHint::DirPath),
-        )
-        .arg(
-            Arg::new(options::COMPRESS_PROG)
-                .long(options::COMPRESS_PROG)
-                .help(translate!("sort-help-compress-prog"))
-                .value_name("PROG")
-                .value_hint(clap::ValueHint::CommandName),
-        )
-        .arg(
-            Arg::new(options::BATCH_SIZE)
-                .long(options::BATCH_SIZE)
-                .help(translate!("sort-help-batch-size"))
-                .value_name("N_MERGE"),
-        )
-        .arg(
-            Arg::new(options::FILES0_FROM)
-                .long(options::FILES0_FROM)
-                .help(translate!("sort-help-files0-from"))
-                .value_name("NUL_FILE")
-                .value_parser(ValueParser::os_string())
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::DEBUG)
-                .long(options::DEBUG)
-                .help(translate!("sort-help-debug"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FILES)
-                .action(ArgAction::Append)
-                .value_parser(ValueParser::os_string())
-                .value_hint(clap::ValueHint::FilePath),
-        )
+    uucore::clap_localization::configure_localized_command(
+        Command::new(uucore::util_name())
+            .version(uucore::crate_version!())
+            .about(translate!("sort-about"))
+            .after_help(translate!("sort-after-help"))
+            .override_usage(format_usage(&translate!("sort-usage"))),
+    )
+    .infer_long_args(true)
+    .disable_help_flag(true)
+    .disable_version_flag(true)
+    .args_override_self(true)
+    .arg(
+        Arg::new(options::HELP)
+            .long(options::HELP)
+            .help(translate!("sort-help-help"))
+            .action(ArgAction::Help),
+    )
+    .arg(
+        Arg::new(options::VERSION)
+            .long(options::VERSION)
+            .help(translate!("sort-help-version"))
+            .action(ArgAction::Version),
+    )
+    .arg(
+        Arg::new(options::modes::SORT)
+            .long(options::modes::SORT)
+            .value_parser(ShortcutValueParser::new([
+                "general-numeric",
+                "human-numeric",
+                "month",
+                "numeric",
+                "version",
+                "random",
+            ]))
+            .conflicts_with_all(options::modes::ALL_SORT_MODES),
+    )
+    .arg(make_sort_mode_arg(
+        options::modes::HUMAN_NUMERIC,
+        'h',
+        translate!("sort-help-human-numeric"),
+    ))
+    .arg(make_sort_mode_arg(
+        options::modes::MONTH,
+        'M',
+        translate!("sort-help-month"),
+    ))
+    .arg(make_sort_mode_arg(
+        options::modes::NUMERIC,
+        'n',
+        translate!("sort-help-numeric"),
+    ))
+    .arg(make_sort_mode_arg(
+        options::modes::GENERAL_NUMERIC,
+        'g',
+        translate!("sort-help-general-numeric"),
+    ))
+    .arg(make_sort_mode_arg(
+        options::modes::VERSION,
+        'V',
+        translate!("sort-help-version-sort"),
+    ))
+    .arg(make_sort_mode_arg(
+        options::modes::RANDOM,
+        'R',
+        translate!("sort-help-random"),
+    ))
+    .arg(
+        Arg::new(options::DICTIONARY_ORDER)
+            .short('d')
+            .long(options::DICTIONARY_ORDER)
+            .help(translate!("sort-help-dictionary-order"))
+            .conflicts_with_all([
+                options::modes::NUMERIC,
+                options::modes::GENERAL_NUMERIC,
+                options::modes::HUMAN_NUMERIC,
+                options::modes::MONTH,
+            ])
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::MERGE)
+            .short('m')
+            .long(options::MERGE)
+            .help(translate!("sort-help-merge"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::check::CHECK)
+            .short('c')
+            .long(options::check::CHECK)
+            .require_equals(true)
+            .num_args(0..)
+            .value_parser(ShortcutValueParser::new([
+                options::check::SILENT,
+                options::check::QUIET,
+                options::check::DIAGNOSE_FIRST,
+            ]))
+            .conflicts_with_all([options::OUTPUT, options::check::CHECK_SILENT])
+            .help(translate!("sort-help-check")),
+    )
+    .arg(
+        Arg::new(options::check::CHECK_SILENT)
+            .short('C')
+            .long(options::check::CHECK_SILENT)
+            .conflicts_with_all([options::OUTPUT, options::check::CHECK])
+            .help(translate!("sort-help-check-silent"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::IGNORE_CASE)
+            .short('f')
+            .long(options::IGNORE_CASE)
+            .help(translate!("sort-help-ignore-case"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::IGNORE_NONPRINTING)
+            .short('i')
+            .long(options::IGNORE_NONPRINTING)
+            .help(translate!("sort-help-ignore-nonprinting"))
+            .conflicts_with_all([
+                options::modes::NUMERIC,
+                options::modes::GENERAL_NUMERIC,
+                options::modes::HUMAN_NUMERIC,
+                options::modes::MONTH,
+            ])
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::IGNORE_LEADING_BLANKS)
+            .short('b')
+            .long(options::IGNORE_LEADING_BLANKS)
+            .help(translate!("sort-help-ignore-leading-blanks"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::OUTPUT)
+            .short('o')
+            .long(options::OUTPUT)
+            .help(translate!("sort-help-output"))
+            .value_parser(ValueParser::os_string())
+            .value_name("FILENAME")
+            .value_hint(clap::ValueHint::FilePath)
+            .num_args(1)
+            .allow_hyphen_values(true)
+            // To detect multiple occurrences and raise an error
+            .action(ArgAction::Append),
+    )
+    .arg(
+        Arg::new(options::REVERSE)
+            .short('r')
+            .long(options::REVERSE)
+            .help(translate!("sort-help-reverse"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::STABLE)
+            .short('s')
+            .long(options::STABLE)
+            .help(translate!("sort-help-stable"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::UNIQUE)
+            .short('u')
+            .long(options::UNIQUE)
+            .help(translate!("sort-help-unique"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::KEY)
+            .short('k')
+            .long(options::KEY)
+            .help(translate!("sort-help-key"))
+            .action(ArgAction::Append)
+            .num_args(1),
+    )
+    .arg(
+        Arg::new(options::SEPARATOR)
+            .short('t')
+            .long(options::SEPARATOR)
+            .help(translate!("sort-help-separator"))
+            .value_parser(ValueParser::os_string()),
+    )
+    .arg(
+        Arg::new(options::ZERO_TERMINATED)
+            .short('z')
+            .long(options::ZERO_TERMINATED)
+            .help(translate!("sort-help-zero-terminated"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::PARALLEL)
+            .long(options::PARALLEL)
+            .help(translate!("sort-help-parallel"))
+            .value_name("NUM_THREADS"),
+    )
+    .arg(
+        Arg::new(options::BUF_SIZE)
+            .short('S')
+            .long(options::BUF_SIZE)
+            .help(translate!("sort-help-buf-size"))
+            .value_name("SIZE"),
+    )
+    .arg(
+        Arg::new(options::TMP_DIR)
+            .short('T')
+            .long(options::TMP_DIR)
+            .help(translate!("sort-help-tmp-dir"))
+            .value_name("DIR")
+            .value_hint(clap::ValueHint::DirPath),
+    )
+    .arg(
+        Arg::new(options::COMPRESS_PROG)
+            .long(options::COMPRESS_PROG)
+            .help(translate!("sort-help-compress-prog"))
+            .value_name("PROG")
+            .value_hint(clap::ValueHint::CommandName),
+    )
+    .arg(
+        Arg::new(options::BATCH_SIZE)
+            .long(options::BATCH_SIZE)
+            .help(translate!("sort-help-batch-size"))
+            .value_name("N_MERGE"),
+    )
+    .arg(
+        Arg::new(options::FILES0_FROM)
+            .long(options::FILES0_FROM)
+            .help(translate!("sort-help-files0-from"))
+            .value_name("NUL_FILE")
+            .value_parser(ValueParser::os_string())
+            .value_hint(clap::ValueHint::FilePath),
+    )
+    .arg(
+        Arg::new(options::DEBUG)
+            .long(options::DEBUG)
+            .help(translate!("sort-help-debug"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::FILES)
+            .action(ArgAction::Append)
+            .value_parser(ValueParser::os_string())
+            .value_hint(clap::ValueHint::FilePath),
+    )
 }
 
 fn exec(
@@ -1621,6 +1686,26 @@ fn compare_by<'a>(
     a_line_data: &LineData<'a>,
     b_line_data: &LineData<'a>,
 ) -> Ordering {
+    if global_settings.precomputed.fast_lexicographic {
+        let cmp = a.line.cmp(b.line);
+        return if global_settings.reverse {
+            cmp.reverse()
+        } else {
+            cmp
+        };
+    }
+
+    if global_settings.precomputed.fast_ascii_insensitive {
+        let cmp = ascii_case_insensitive_cmp(a.line, b.line);
+        if cmp != Ordering::Equal || a.line == b.line {
+            return if global_settings.reverse {
+                cmp.reverse()
+            } else {
+                cmp
+            };
+        }
+    }
+
     let mut selection_index = 0;
     let mut num_info_index = 0;
     let mut parsed_float_index = 0;
@@ -1730,6 +1815,26 @@ fn compare_by<'a>(
     } else {
         cmp
     }
+}
+
+/// Compare two byte slices in ASCII case-insensitive order without allocating.
+/// We lower each byte on the fly so that binary input (including `NUL`) stays
+/// untouched and we avoid locale-sensitive routines such as `strcasecmp`.
+fn ascii_case_insensitive_cmp(a: &[u8], b: &[u8]) -> Ordering {
+    #[inline]
+    fn lower(byte: u8) -> u8 {
+        byte.to_ascii_lowercase()
+    }
+
+    for (lhs, rhs) in a.iter().copied().zip(b.iter().copied()) {
+        let l = lower(lhs);
+        let r = lower(rhs);
+        if l != r {
+            return l.cmp(&r);
+        }
+    }
+
+    a.len().cmp(&b.len())
 }
 
 // This function cleans up the initial comparison done by leading_num_common for a general numeric compare.

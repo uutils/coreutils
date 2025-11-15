@@ -376,7 +376,7 @@ impl UError for WcError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let settings = Settings::new(&matches);
     let inputs = Inputs::new(&matches)?;
@@ -387,6 +387,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("wc-about"))
         .override_usage(format_usage(&translate!("wc-usage")))
         .infer_long_args(true)

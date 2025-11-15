@@ -14,7 +14,7 @@ use std::process::{self, Child, Stdio};
 use std::sync::atomic::{self, AtomicBool};
 use std::time::Duration;
 use uucore::display::Quotable;
-use uucore::error::{UClapError, UResult, USimpleError, UUsageError};
+use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parser::parse_time;
 use uucore::process::ChildExt;
 use uucore::translate;
@@ -104,7 +104,8 @@ impl Config {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
+    let matches =
+        uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
     let config = Config::from(&matches)?;
     timeout(
@@ -121,6 +122,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new("timeout")
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("timeout-about"))
         .override_usage(format_usage(&translate!("timeout-usage")))
         .arg(
@@ -157,15 +159,21 @@ pub fn uu_app() -> Command {
                 .help(translate!("timeout-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(options::DURATION).required(true))
+        .arg(
+            Arg::new(options::DURATION)
+                .required(true)
+                .help(translate!("timeout-help-duration")),
+        )
         .arg(
             Arg::new(options::COMMAND)
                 .required(true)
                 .action(ArgAction::Append)
+                .help(translate!("timeout-help-command"))
                 .value_hint(clap::ValueHint::CommandName),
         )
         .trailing_var_arg(true)
         .infer_long_args(true)
+        .after_help(translate!("timeout-after-help"))
 }
 
 /// Remove pre-existing SIGCHLD handlers that would make waiting for the child's exit code fail.

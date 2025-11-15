@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use std::{
+    ffi::OsString,
     fs::File,
     io::{BufRead, BufReader, Stdin, Stdout, Write, stdin, stdout},
     panic::set_hook,
@@ -39,7 +40,7 @@ enum MoreError {
 impl std::fmt::Display for MoreError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MoreError::IsDirectory(path) => {
+            Self::IsDirectory(path) => {
                 write!(
                     f,
                     "{}",
@@ -49,7 +50,7 @@ impl std::fmt::Display for MoreError {
                     )
                 )
             }
-            MoreError::CannotOpenNoSuchFile(path) => {
+            Self::CannotOpenNoSuchFile(path) => {
                 write!(
                     f,
                     "{}",
@@ -59,7 +60,7 @@ impl std::fmt::Display for MoreError {
                     )
                 )
             }
-            MoreError::CannotOpenIOError(path, error) => {
+            Self::CannotOpenIOError(path, error) => {
                 write!(
                     f,
                     "{}",
@@ -70,7 +71,7 @@ impl std::fmt::Display for MoreError {
                     )
                 )
             }
-            MoreError::BadUsage => {
+            Self::BadUsage => {
                 write!(f, "{}", translate!("more-error-bad-usage"))
             }
         }
@@ -151,14 +152,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         print!("\r");
         println!("{panic_info}");
     }));
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let mut options = Options::from(&matches);
-    if let Some(files) = matches.get_many::<String>(options::FILES) {
+    if let Some(files) = matches.get_many::<OsString>(options::FILES) {
         let length = files.len();
 
-        let mut files_iter = files.map(|s| s.as_str()).peekable();
-        while let (Some(file), next_file) = (files_iter.next(), files_iter.peek()) {
-            let file = Path::new(file);
+        let mut files_iter = files.peekable();
+        while let (Some(file_os), next_file) = (files_iter.next(), files_iter.peek()) {
+            let file = Path::new(file_os);
             if file.is_dir() {
                 show!(UUsageError::new(
                     0,
@@ -187,11 +188,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
                 Ok(opened_file) => opened_file,
             };
+            let next_file_str = next_file.map(|f| f.to_string_lossy().into_owned());
             more(
                 InputType::File(BufReader::new(opened_file)),
                 length > 1,
-                file.to_str(),
-                next_file.copied(),
+                Some(&file.to_string_lossy()),
+                next_file_str.as_deref(),
                 &mut options,
             )?;
         }
@@ -212,6 +214,7 @@ pub fn uu_app() -> Command {
         .about(translate!("more-about"))
         .override_usage(format_usage(&translate!("more-usage")))
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .infer_long_args(true)
         .arg(
             Arg::new(options::SILENT)
@@ -309,7 +312,8 @@ pub fn uu_app() -> Command {
                 .required(false)
                 .action(ArgAction::Append)
                 .help(translate!("more-help-files"))
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
 }
 
@@ -321,15 +325,15 @@ enum InputType {
 impl InputType {
     fn read_line(&mut self, buf: &mut String) -> std::io::Result<usize> {
         match self {
-            InputType::File(reader) => reader.read_line(buf),
-            InputType::Stdin(stdin) => stdin.read_line(buf),
+            Self::File(reader) => reader.read_line(buf),
+            Self::Stdin(stdin) => stdin.read_line(buf),
         }
     }
 
     fn len(&self) -> std::io::Result<Option<u64>> {
         let len = match self {
-            InputType::File(reader) => Some(reader.get_ref().metadata()?.len()),
-            InputType::Stdin(_) => None,
+            Self::File(reader) => Some(reader.get_ref().metadata()?.len()),
+            Self::Stdin(_) => None,
         };
         Ok(len)
     }
@@ -903,7 +907,7 @@ mod tests {
         type Target = Vec<u8>;
         fn deref(&self) -> &Vec<u8> {
             match self {
-                OutputType::Test(buf) => buf,
+                Self::Test(buf) => buf,
                 _ => unreachable!(),
             }
         }
@@ -912,7 +916,7 @@ mod tests {
     impl DerefMut for OutputType {
         fn deref_mut(&mut self) -> &mut Vec<u8> {
             match self {
-                OutputType::Test(buf) => buf,
+                Self::Test(buf) => buf,
                 _ => unreachable!(),
             }
         }

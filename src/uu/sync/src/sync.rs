@@ -173,7 +173,7 @@ mod platform {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let files: Vec<String> = matches
         .get_many::<String>(ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
@@ -226,6 +226,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("sync-about"))
         .override_usage(format_usage(&translate!("sync-usage")))
         .infer_long_args(true)

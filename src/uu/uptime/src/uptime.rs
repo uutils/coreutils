@@ -47,7 +47,7 @@ impl UError for UptimeError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     #[cfg(unix)]
     let file_path = matches.get_one::<OsString>(options::PATH);
@@ -71,6 +71,7 @@ pub fn uu_app() -> Command {
 
     let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(about)
         .override_usage(format_usage(&translate!("uptime-usage")))
         .infer_long_args(true)
@@ -167,7 +168,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
 
     #[cfg(target_os = "openbsd")]
     {
-        let upsecs = get_uptime(None);
+        let upsecs = get_uptime(None)?;
         if upsecs >= 0 {
             print_uptime(Some(upsecs))?;
         } else {

@@ -14,3 +14,4 @@ readlink-help-zero = separate output with NUL rather than newline
 # Error messages
 readlink-error-missing-operand = missing operand
 readlink-error-ignoring-no-newline = ignoring --no-newline with multiple arguments
+readlink-error-invalid-argument = {$path}: Invalid argument

@@ -5,7 +5,7 @@
 //! library ~ (core/bundler file)
 // #![deny(missing_docs)] //TODO: enable this
 //
-// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal
+// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil logind
 
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
@@ -22,6 +22,7 @@ mod mods; // core cross-platform modules
 pub use uucore_procs::*;
 
 // * cross-platform modules
+pub use crate::mods::clap_localization;
 pub use crate::mods::display;
 pub use crate::mods::error;
 #[cfg(feature = "fs")]
@@ -35,6 +36,8 @@ pub use crate::mods::posix;
 // * feature-gated modules
 #[cfg(feature = "backup-control")]
 pub use crate::features::backup_control;
+#[cfg(feature = "benchmark")]
+pub use crate::features::benchmark;
 #[cfg(feature = "buf-copy")]
 pub use crate::features::buf_copy;
 #[cfg(feature = "checksum")]
@@ -65,6 +68,8 @@ pub use crate::features::ranges;
 pub use crate::features::ringbuffer;
 #[cfg(feature = "sum")]
 pub use crate::features::sum;
+#[cfg(feature = "feat_systemd_logind")]
+pub use crate::features::systemd_logind;
 #[cfg(feature = "time")]
 pub use crate::features::time;
 #[cfg(feature = "update-control")]
@@ -87,6 +92,8 @@ pub use crate::features::perms;
 pub use crate::features::pipes;
 #[cfg(all(unix, feature = "process"))]
 pub use crate::features::process;
+#[cfg(target_os = "linux")]
+pub use crate::features::safe_traversal;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
 pub use crate::features::signals;
 #[cfg(all(
@@ -226,6 +233,80 @@ pub fn format_usage(s: &str) -> String {
     s.replace("{}", crate::execution_phrase())
 }
 
+/// Creates a localized help template for clap commands.
+///
+/// This function returns a help template that uses the localized
+/// "Usage:" label from the translation files. This ensures consistent
+/// localization across all utilities.
+///
+/// Note: We avoid using clap's `{usage-heading}` placeholder because it is
+/// hardcoded to "Usage:" and cannot be localized. Instead, we manually
+/// construct the usage line with the localized label.
+///
+/// # Parameters
+/// - `util_name`: The name of the utility (for localization setup)
+///
+/// # Example
+/// ```no_run
+/// use clap::Command;
+/// use uucore::localized_help_template;
+///
+/// let app = Command::new("myutil")
+///     .help_template(localized_help_template("myutil"));
+/// ```
+pub fn localized_help_template(util_name: &str) -> clap::builder::StyledStr {
+    use std::io::IsTerminal;
+
+    // Determine if colors should be enabled - same logic as configure_localized_command
+    let colors_enabled = if std::env::var("NO_COLOR").is_ok() {
+        false
+    } else if std::env::var("CLICOLOR_FORCE").is_ok() || std::env::var("FORCE_COLOR").is_ok() {
+        true
+    } else {
+        IsTerminal::is_terminal(&std::io::stdout())
+            && std::env::var("TERM").unwrap_or_default() != "dumb"
+    };
+
+    localized_help_template_with_colors(util_name, colors_enabled)
+}
+
+/// Create a localized help template with explicit color control
+/// This ensures color detection consistency between clap and our template
+pub fn localized_help_template_with_colors(
+    util_name: &str,
+    colors_enabled: bool,
+) -> clap::builder::StyledStr {
+    use std::fmt::Write;
+
+    // Ensure localization is initialized for this utility
+    let _ = crate::locale::setup_localization(util_name);
+
+    // Get the localized "Usage" label
+    let usage_label = crate::locale::translate!("common-usage");
+
+    // Create a styled template
+    let mut template = clap::builder::StyledStr::new();
+
+    // Add the basic template parts
+    writeln!(template, "{{before-help}}{{about-with-newline}}").unwrap();
+
+    // Add styled usage header (bold + underline like clap's default)
+    if colors_enabled {
+        write!(
+            template,
+            "\x1b[1m\x1b[4m{usage_label}:\x1b[0m {{usage}}\n\n"
+        )
+        .unwrap();
+    } else {
+        write!(template, "{usage_label}: {{usage}}\n\n").unwrap();
+    }
+
+    // Add the rest
+    write!(template, "{{all-args}}{{after-help}}").unwrap();
+
+    template
+}
+
 /// Used to check if the utility is the second argument.
 /// Used to check if we were called as a multicall binary (`coreutils <utility>`)
 pub fn get_utility_is_second_arg() -> bool {
@@ -247,7 +328,14 @@ static UTIL_NAME: LazyLock<String> = LazyLock::new(|| {
     let is_man = usize::from(ARGV[base_index].eq("manpage"));
     let argv_index = base_index + is_man;
 
-    ARGV[argv_index].to_string_lossy().into_owned()
+    // Strip directory path to show only utility name
+    // (e.g., "mkdir" instead of "./target/debug/mkdir")
+    // in version output, error messages, and other user-facing output
+    std::path::Path::new(&ARGV[argv_index])
+        .file_name()
+        .unwrap_or(&ARGV[argv_index])
+        .to_string_lossy()
+        .into_owned()
 });
 
 /// Derive the utility name.
@@ -294,6 +382,13 @@ impl<T: Iterator<Item = OsString> + Sized> Args for T {}
 /// args_os() can be expensive to call
 pub fn args_os() -> impl Iterator<Item = OsString> {
     ARGV.iter().cloned()
+}
+
+/// Returns an iterator over the command line arguments as `OsString`s, filtering out empty arguments.
+/// This is useful for handling cases where extra whitespace or empty arguments are present.
+/// args_os_filtered() can be expensive to call
+pub fn args_os_filtered() -> impl Iterator<Item = OsString> {
+    ARGV.iter().filter(|arg| !arg.is_empty()).cloned()
 }
 
 /// Read a line from stdin and check whether the first character is `'y'` or `'Y'`
@@ -478,19 +573,19 @@ pub enum CharByte {
 
 impl From<char> for CharByte {
     fn from(value: char) -> Self {
-        CharByte::Char(value)
+        Self::Char(value)
     }
 }
 
 impl From<u8> for CharByte {
     fn from(value: u8) -> Self {
-        CharByte::Byte(value)
+        Self::Byte(value)
     }
 }
 
 impl From<&u8> for CharByte {
     fn from(value: &u8) -> Self {
-        CharByte::Byte(*value)
+        Self::Byte(*value)
     }
 }
 
@@ -507,7 +602,7 @@ impl Iterator for Utf8ChunkIterator<'_> {
 }
 
 impl<'a> From<Utf8Chunk<'a>> for Utf8ChunkIterator<'a> {
-    fn from(chk: Utf8Chunk<'a>) -> Utf8ChunkIterator<'a> {
+    fn from(chk: Utf8Chunk<'a>) -> Self {
         Self {
             iter: Box::new(
                 chk.valid()
@@ -528,7 +623,7 @@ pub struct CharByteIterator<'a> {
 impl<'a> CharByteIterator<'a> {
     /// Make a `CharByteIterator` from a byte slice.
     /// [`CharByteIterator`]
-    pub fn new(input: &'a [u8]) -> CharByteIterator<'a> {
+    pub fn new(input: &'a [u8]) -> Self {
         Self {
             iter: Box::new(input.utf8_chunks().flat_map(Utf8ChunkIterator::from)),
         }

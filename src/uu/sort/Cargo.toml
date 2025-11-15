@@ -37,10 +37,27 @@ thiserror = { workspace = true }
 unicode-width = { workspace = true }
 uucore = { workspace = true, features = ["fs", "parser", "version-cmp"] }
 fluent = { workspace = true }
-
-[target.'cfg(target_os = "linux")'.dependencies]
 nix = { workspace = true }
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = [
+  "benchmark",
+  "fs",
+  "parser",
+  "version-cmp",
+  "i18n-collator",
+] }
 
 [[bin]]
 name = "sort"
 path = "src/main.rs"
+
+[[bench]]
+name = "sort_bench"
+harness = false
+
+[[bench]]
+name = "sort_locale_bench"
+harness = false

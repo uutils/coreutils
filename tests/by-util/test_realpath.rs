@@ -464,3 +464,106 @@ fn test_realpath_trailing_slash() {
 fn test_realpath_empty() {
     new_ucmd!().fails_with_code(1);
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_realpath_non_utf8_paths() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a test file with non-UTF-8 bytes in the name
+    let non_utf8_bytes = b"test_\xFF\xFE.txt";
+    let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
+
+    at.touch(non_utf8_name);
+    let result = scene.ucmd().arg(non_utf8_name).succeeds();
+
+    let output = result.stdout_str_lossy();
+    assert!(output.contains("test_"));
+    assert!(output.contains(".txt"));
+}
+
+#[test]
+fn test_realpath_empty_string() {
+    // Test that empty string arguments are rejected with exit code 1
+    new_ucmd!().arg("").fails().code_is(1);
+
+    // Test that empty --relative-base is rejected
+    new_ucmd!()
+        .arg("--relative-base=")
+        .arg("--relative-to=.")
+        .arg(".")
+        .fails()
+        .code_is(1);
+
+    new_ucmd!()
+        .arg("--relative-to=")
+        .arg(".")
+        .fails()
+        .code_is(1);
+}
+
+#[test]
+fn test_realpath_canonicalize_options() {
+    // Test that default, -E, and --canonicalize all allow nonexistent final component
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("existing_dir");
+
+    let test_cases = [
+        vec![],                 // default behavior
+        vec!["-E"],             // explicit -E flag
+        vec!["--canonicalize"], // --canonicalize long form
+    ];
+
+    #[cfg(windows)]
+    let expected_path = "existing_dir\\nonexistent";
+    #[cfg(not(windows))]
+    let expected_path = "existing_dir/nonexistent";
+
+    for args in test_cases {
+        let mut ucmd = scene.ucmd();
+        for arg in args {
+            ucmd.arg(arg);
+        }
+        ucmd.arg("existing_dir/nonexistent")
+            .succeeds()
+            .stdout_contains(expected_path);
+    }
+}
+
+#[test]
+fn test_realpath_canonicalize_vs_existing() {
+    // Test difference between -E and -e, and option overrides
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("existing_dir");
+
+    let test_cases = [
+        (vec!["-E"], true),       // -E should succeed with nonexistent final component
+        (vec!["-e"], false),      // -e should fail with nonexistent final component
+        (vec!["-e", "-E"], true), // -E should override -e
+    ];
+
+    #[cfg(windows)]
+    let expected_path = "existing_dir\\nonexistent";
+    #[cfg(not(windows))]
+    let expected_path = "existing_dir/nonexistent";
+
+    for (args, should_succeed) in test_cases {
+        let mut ucmd = scene.ucmd();
+        for arg in args {
+            ucmd.arg(arg);
+        }
+        ucmd.arg("existing_dir/nonexistent");
+
+        if should_succeed {
+            ucmd.succeeds().stdout_contains(expected_path);
+        } else {
+            ucmd.fails();
+        }
+    }
+}

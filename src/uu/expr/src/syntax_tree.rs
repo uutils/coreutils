@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ints paren prec multibytes
+// spell-checker:ignore (ToDO) ints paren prec multibytes aaaabc
 
 use std::{cell::Cell, collections::BTreeMap};
 
@@ -153,101 +153,9 @@ impl StringOp {
                 Ok(left)
             }
             Self::Match => {
-                let left = String::from_utf8(left?.eval_as_string()).map_err(|u| {
-                    ExprError::UnsupportedNonUtf8Match(
-                        String::from_utf8_lossy(u.as_bytes()).into_owned(),
-                    )
-                })?;
-                let right = String::from_utf8(right?.eval_as_string()).map_err(|u| {
-                    ExprError::UnsupportedNonUtf8Match(
-                        String::from_utf8_lossy(u.as_bytes()).into_owned(),
-                    )
-                })?;
-
-                check_posix_regex_errors(&right)?;
-
-                // Transpile the input pattern from BRE syntax to `onig` crate's `Syntax::grep`
-                let mut re_string = String::with_capacity(right.len() + 1);
-                let mut pattern_chars = right.chars().peekable();
-                let mut prev = '\0';
-                let mut prev_is_escaped = false;
-                let mut is_start_of_expression = true;
-
-                // All patterns are anchored so they begin with a caret (^)
-                if pattern_chars.peek() != Some(&'^') {
-                    re_string.push('^');
-                }
-
-                while let Some(curr) = pattern_chars.next() {
-                    let curr_is_escaped = prev == '\\' && !prev_is_escaped;
-                    let is_first_character = prev == '\0';
-
-                    match curr {
-                        // Character class negation "[^a]"
-                        // Explicitly escaped caret "\^"
-                        '^' if !is_start_of_expression && !matches!(prev, '[' | '\\') => {
-                            re_string.push_str(r"\^");
-                        }
-                        '$' if !curr_is_escaped && !is_end_of_expression(&pattern_chars) => {
-                            re_string.push_str(r"\$");
-                        }
-                        '\\' if !curr_is_escaped && pattern_chars.peek().is_none() => {
-                            return Err(ExprError::TrailingBackslash);
-                        }
-                        '{' if curr_is_escaped => {
-                            // Handle '{' literally at the start of an expression
-                            if is_start_of_expression {
-                                if re_string.ends_with('\\') {
-                                    let _ = re_string.pop();
-                                }
-                                re_string.push(curr);
-                            } else {
-                                // Check if the following section is a valid range quantifier
-                                verify_range_quantifier(&pattern_chars)?;
-
-                                re_string.push(curr);
-                                // Set the lower bound of range quantifier to 0 if it is missing
-                                if pattern_chars.peek() == Some(&',') {
-                                    re_string.push('0');
-                                }
-                            }
-                        }
-                        _ => re_string.push(curr),
-                    }
-
-                    // Capturing group "\(abc\)"
-                    // Alternative pattern "a\|b"
-                    is_start_of_expression = curr == '\\' && is_first_character
-                        || curr_is_escaped && matches!(curr, '(' | '|')
-                        || curr == '\\' && prev_is_escaped && matches!(prev, '(' | '|');
-
-                    prev_is_escaped = curr_is_escaped;
-                    prev = curr;
-                }
-
-                let re = Regex::with_options(
-                    &re_string,
-                    RegexOptions::REGEX_OPTION_SINGLELINE,
-                    Syntax::grep(),
-                )
-                .map_err(|error| match error.code() {
-                    // "invalid repeat range {lower,upper}"
-                    -123 => ExprError::InvalidBracketContent,
-                    // "too big number for repeat range"
-                    -201 => ExprError::TooBigRangeQuantifierIndex,
-                    _ => ExprError::InvalidRegexExpression,
-                })?;
-
-                Ok(if re.captures_len() > 0 {
-                    re.captures(&left)
-                        .and_then(|captures| captures.at(1))
-                        .unwrap_or("")
-                        .to_string()
-                } else {
-                    re.find(&left)
-                        .map_or("0".to_string(), |(start, end)| (end - start).to_string())
-                }
-                .into())
+                let left_bytes = left?.eval_as_string();
+                let right_bytes = right?.eval_as_string();
+                evaluate_match_expression(left_bytes, right_bytes)
             }
             Self::Index => {
                 let left = left?.eval_as_string();
@@ -367,6 +275,278 @@ fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
         0 => Ok(()),
         _ => Err(ExprError::UnmatchedOpeningParenthesis),
     }
+}
+
+/// Build a regex from a pattern string with locale-aware encoding
+fn build_regex(pattern_bytes: Vec<u8>) -> ExprResult<(Regex, String)> {
+    use onig::EncodedBytes;
+    use uucore::i18n::{UEncoding, get_locale_encoding};
+
+    let encoding = get_locale_encoding();
+
+    // For pattern processing, we need to handle it based on locale
+    let pattern_str = String::from_utf8(pattern_bytes.clone())
+        .unwrap_or_else(|_| String::from_utf8_lossy(&pattern_bytes).into());
+    check_posix_regex_errors(&pattern_str)?;
+
+    // Transpile the input pattern from BRE syntax to `onig` crate's `Syntax::grep`
+    let mut re_string = String::with_capacity(pattern_str.len() + 1);
+    let mut pattern_chars = pattern_str.chars().peekable();
+    let mut prev = '\0';
+    let mut prev_is_escaped = false;
+    let mut is_start_of_expression = true;
+
+    // All patterns are anchored so they begin with a caret (^)
+    if pattern_chars.peek() != Some(&'^') {
+        re_string.push('^');
+    }
+
+    while let Some(curr) = pattern_chars.next() {
+        let curr_is_escaped = prev == '\\' && !prev_is_escaped;
+        let is_first_character = prev == '\0';
+
+        match curr {
+            // Character class negation "[^a]"
+            // Explicitly escaped caret "\^"
+            '^' if !is_start_of_expression && !matches!(prev, '[' | '\\') => {
+                re_string.push_str(r"\^");
+            }
+            '$' if !curr_is_escaped && !is_end_of_expression(&pattern_chars) => {
+                re_string.push_str(r"\$");
+            }
+            '\\' if !curr_is_escaped && pattern_chars.peek().is_none() => {
+                return Err(ExprError::TrailingBackslash);
+            }
+            '{' if curr_is_escaped => {
+                // Handle '{' literally at the start of an expression
+                if is_start_of_expression {
+                    if re_string.ends_with('\\') {
+                        let _ = re_string.pop();
+                    }
+                    re_string.push(curr);
+                } else {
+                    // Check if the following section is a valid range quantifier
+                    verify_range_quantifier(&pattern_chars)?;
+
+                    re_string.push(curr);
+                    // Set the lower bound of range quantifier to 0 if it is missing
+                    if pattern_chars.peek() == Some(&',') {
+                        re_string.push('0');
+                    }
+                }
+            }
+            _ => re_string.push(curr),
+        }
+
+        // Capturing group "\(abc\)"
+        // Alternative pattern "a\|b"
+        is_start_of_expression = curr == '\\' && is_first_character
+            || curr_is_escaped && matches!(curr, '(' | '|')
+            || curr == '\\' && prev_is_escaped && matches!(prev, '(' | '|');
+
+        prev_is_escaped = curr_is_escaped;
+        prev = curr;
+    }
+
+    // Create regex with proper encoding
+    let re = match encoding {
+        UEncoding::Utf8 => {
+            // For UTF-8 locale, use UTF-8 encoding
+            Regex::with_options_and_encoding(
+                &re_string,
+                RegexOptions::REGEX_OPTION_SINGLELINE,
+                Syntax::grep(),
+            )
+        }
+        UEncoding::Ascii => {
+            // For non-UTF-8 locale, use ASCII encoding
+            Regex::with_options_and_encoding(
+                EncodedBytes::ascii(re_string.as_bytes()),
+                RegexOptions::REGEX_OPTION_SINGLELINE,
+                Syntax::grep(),
+            )
+        }
+    }
+    .map_err(|error| match error.code() {
+        // "invalid repeat range {lower,upper}"
+        -123 => ExprError::InvalidBracketContent,
+        // "too big number for repeat range"
+        -201 => ExprError::TooBigRangeQuantifierIndex,
+        _ => ExprError::InvalidRegexExpression,
+    })?;
+
+    Ok((re, re_string))
+}
+
+/// Find matches in the input using the compiled regex
+fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> ExprResult<String> {
+    use onig::EncodedBytes;
+    use uucore::i18n::{UEncoding, get_locale_encoding};
+
+    let encoding = get_locale_encoding();
+
+    // Match against the input using the appropriate encoding
+    let mut region = onig::Region::new();
+    let result = match encoding {
+        UEncoding::Utf8 => {
+            // In UTF-8 locale, check if input is valid UTF-8
+            if let Ok(left_str) = std::str::from_utf8(&left_bytes) {
+                // Valid UTF-8, match as UTF-8
+                let pos = regex.search_with_encoding(
+                    left_str,
+                    0,
+                    left_str.len(),
+                    onig::SearchOptions::SEARCH_OPTION_NONE,
+                    Some(&mut region),
+                );
+
+                if pos.is_some() {
+                    if regex.captures_len() > 0 {
+                        // Get first capture group
+                        region
+                            .pos(1)
+                            .map(|(start, end)| left_str[start..end].to_string())
+                            .unwrap_or_default()
+                    } else {
+                        // Count characters in the match
+                        let (start, end) = region.pos(0).unwrap();
+                        left_str[start..end].chars().count().to_string()
+                    }
+                } else {
+                    // No match
+                    if regex.captures_len() > 0 {
+                        String::new()
+                    } else {
+                        "0".to_string()
+                    }
+                }
+            } else {
+                // Invalid UTF-8 in UTF-8 locale
+                // Try to match as bytes using ASCII encoding
+                let left_encoded = EncodedBytes::ascii(&left_bytes);
+                // Need to create ASCII version of regex too
+                let re_ascii = Regex::with_options_and_encoding(
+                    EncodedBytes::ascii(re_string.as_bytes()),
+                    RegexOptions::REGEX_OPTION_SINGLELINE,
+                    Syntax::grep(),
+                )
+                .ok();
+
+                if let Some(re_ascii) = re_ascii {
+                    let pos = re_ascii.search_with_encoding(
+                        left_encoded,
+                        0,
+                        left_bytes.len(),
+                        onig::SearchOptions::SEARCH_OPTION_NONE,
+                        Some(&mut region),
+                    );
+
+                    if pos.is_some() {
+                        if re_ascii.captures_len() > 0 {
+                            // Get first capture group
+                            region
+                                .pos(1)
+                                .map(|(start, end)| {
+                                    // Return empty string for invalid UTF-8 capture in UTF-8 locale
+                                    if std::str::from_utf8(&left_bytes[start..end]).is_err() {
+                                        String::new()
+                                    } else {
+                                        String::from_utf8_lossy(&left_bytes[start..end])
+                                            .into_owned()
+                                    }
+                                })
+                                .unwrap_or_default()
+                        } else {
+                            // No capture groups - return 0 for invalid UTF-8 in UTF-8 locale
+                            "0".to_string()
+                        }
+                    } else {
+                        // No match
+                        if re_ascii.captures_len() > 0 {
+                            String::new()
+                        } else {
+                            "0".to_string()
+                        }
+                    }
+                } else {
+                    // Couldn't create ASCII regex - no match
+                    if regex.captures_len() > 0 {
+                        String::new()
+                    } else {
+                        "0".to_string()
+                    }
+                }
+            }
+        }
+        UEncoding::Ascii => {
+            // In ASCII/C locale, work with bytes directly
+            let left_encoded = EncodedBytes::ascii(&left_bytes);
+            let pos = regex.search_with_encoding(
+                left_encoded,
+                0,
+                left_bytes.len(),
+                onig::SearchOptions::SEARCH_OPTION_NONE,
+                Some(&mut region),
+            );
+
+            if pos.is_some() {
+                if regex.captures_len() > 0 {
+                    // Get first capture group - return raw bytes for C locale
+                    if let Some((start, end)) = region.pos(1) {
+                        let capture_bytes = &left_bytes[start..end];
+                        // Return raw bytes as String for consistency with other cases
+                        return Ok(String::from_utf8_lossy(capture_bytes).into_owned());
+                    }
+                    String::new()
+                } else {
+                    // Return byte count of match
+                    let (start, end) = region.pos(0).unwrap();
+                    (end - start).to_string()
+                }
+            } else {
+                // No match
+                if regex.captures_len() > 0 {
+                    String::new()
+                } else {
+                    "0".to_string()
+                }
+            }
+        }
+    };
+
+    Ok(result)
+}
+
+/// Evaluate a match expression with locale-aware regex matching
+fn evaluate_match_expression(left_bytes: Vec<u8>, right_bytes: Vec<u8>) -> ExprResult<NumOrStr> {
+    let (regex, re_string) = build_regex(right_bytes)?;
+
+    // Special case for ASCII locale with capture groups that need to return raw bytes
+    use uucore::i18n::{UEncoding, get_locale_encoding};
+    let encoding = get_locale_encoding();
+
+    if matches!(encoding, UEncoding::Ascii) && regex.captures_len() > 0 {
+        // Try to find the actual capture bytes for ASCII locale
+        let mut region = onig::Region::new();
+        let left_encoded = onig::EncodedBytes::ascii(&left_bytes);
+        let pos = regex.search_with_encoding(
+            left_encoded,
+            0,
+            left_bytes.len(),
+            onig::SearchOptions::SEARCH_OPTION_NONE,
+            Some(&mut region),
+        );
+
+        if pos.is_some() {
+            if let Some((start, end)) = region.pos(1) {
+                let capture_bytes = &left_bytes[start..end];
+                return Ok(MaybeNonUtf8String::from(capture_bytes.to_vec()).into());
+            }
+        }
+    }
+
+    let result = find_match(regex, re_string, left_bytes)?;
+    Ok(result.into())
 }
 
 /// Precedence for infix binary operators
@@ -1037,5 +1217,188 @@ mod test {
             verify_range_quantifier(&"32768\\}".chars()),
             Err(ExprError::TooBigRangeQuantifierIndex)
         );
+    }
+
+    #[test]
+    fn test_evaluate_match_expression_basic() {
+        use super::evaluate_match_expression;
+
+        // Basic literal match
+        let result = evaluate_match_expression(b"hello".to_vec(), b"hello".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"5");
+
+        // No match
+        let result = evaluate_match_expression(b"hello".to_vec(), b"world".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"0");
+
+        // Partial match from beginning
+        let result = evaluate_match_expression(b"hello world".to_vec(), b"hello".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"5");
+    }
+
+    #[test]
+    fn test_evaluate_match_expression_regex_patterns() {
+        use super::evaluate_match_expression;
+
+        // Dot matches any character
+        let result = evaluate_match_expression(b"abc".to_vec(), b"a.c".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"3");
+
+        // Star quantifier
+        let result = evaluate_match_expression(b"aaaabc".to_vec(), b"a*bc".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"6");
+
+        // Plus quantifier (escaped in BRE)
+        let result = evaluate_match_expression(b"aaaabc".to_vec(), b"a\\+bc".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"6");
+
+        // Question mark quantifier (escaped in BRE)
+        let result = evaluate_match_expression(b"abc".to_vec(), b"ab\\?c".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"3");
+    }
+
+    #[test]
+    fn test_evaluate_match_expression_capture_groups() {
+        use super::evaluate_match_expression;
+
+        // Simple capture group
+        let result =
+            evaluate_match_expression(b"hello123".to_vec(), b"hello\\([0-9]*\\)".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"123");
+
+        // Empty capture group
+        let result =
+            evaluate_match_expression(b"hello".to_vec(), b"hello\\([0-9]*\\)".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"");
+
+        // No capture group, just match length
+        let result =
+            evaluate_match_expression(b"hello123".to_vec(), b"hello[0-9]*".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"8");
+    }
+
+    #[test]
+    fn test_evaluate_match_expression_character_classes() {
+        use super::evaluate_match_expression;
+
+        // Simple character class
+        let result = evaluate_match_expression(b"abc123".to_vec(), b"[a-z]*".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"3");
+
+        // Negated character class
+        let result = evaluate_match_expression(b"123abc".to_vec(), b"[^a-z]*".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"3");
+
+        // Digit character class
+        let result = evaluate_match_expression(b"123abc".to_vec(), b"[0-9]*".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"3");
+    }
+
+    #[test]
+    fn test_evaluate_match_expression_anchoring() {
+        use super::evaluate_match_expression;
+
+        // Patterns are automatically anchored at start
+        let result = evaluate_match_expression(b"world hello".to_vec(), b"hello".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"0");
+
+        // Explicit start anchor (redundant but should work)
+        let result =
+            evaluate_match_expression(b"hello world".to_vec(), b"^hello".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"5");
+
+        // End anchor
+        let result =
+            evaluate_match_expression(b"hello world".to_vec(), b"world$".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"0"); // Should fail because not at start
+
+        let result = evaluate_match_expression(b"world".to_vec(), b"world$".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"5");
+    }
+
+    #[test]
+    fn test_evaluate_match_expression_special_characters() {
+        use super::evaluate_match_expression;
+
+        // Escaped special characters
+        let result = evaluate_match_expression(b"a.b".to_vec(), b"a\\.b".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"3");
+
+        // Escaped asterisk
+        let result = evaluate_match_expression(b"a*b".to_vec(), b"a\\*b".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"3");
+
+        // Caret not at beginning should be escaped
+        let result = evaluate_match_expression(b"a^b".to_vec(), b"a^b".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"3");
+
+        // Dollar not at end should be escaped
+        let result = evaluate_match_expression(b"a$b".to_vec(), b"a$b".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"3");
+    }
+
+    #[test]
+    fn test_evaluate_match_expression_range_quantifiers() {
+        use super::evaluate_match_expression;
+
+        // Fixed count quantifier
+        let result = evaluate_match_expression(b"aaa".to_vec(), b"a\\{3\\}".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"3");
+
+        // Range quantifier
+        let result = evaluate_match_expression(b"aa".to_vec(), b"a\\{1,3\\}".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"2");
+
+        // Minimum quantifier
+        let result = evaluate_match_expression(b"aaaa".to_vec(), b"a\\{2,\\}".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"4");
+
+        // Maximum quantifier
+        let result = evaluate_match_expression(b"aa".to_vec(), b"a\\{,3\\}".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"2");
+    }
+
+    #[test]
+    fn test_evaluate_match_expression_empty_and_edge_cases() {
+        use super::evaluate_match_expression;
+
+        // Empty input string
+        let result = evaluate_match_expression(b"".to_vec(), b".*".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"0");
+
+        // Empty pattern (should match empty string)
+        let result = evaluate_match_expression(b"".to_vec(), b"".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"0");
+
+        // Pattern matching empty string
+        let result = evaluate_match_expression(b"hello".to_vec(), b".*".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"5");
+    }
+
+    #[test]
+    fn test_evaluate_match_expression_error_cases() {
+        use super::evaluate_match_expression;
+
+        // Unmatched opening parenthesis
+        let result = evaluate_match_expression(b"hello".to_vec(), b"\\(hello".to_vec());
+        assert!(matches!(
+            result,
+            Err(ExprError::UnmatchedOpeningParenthesis)
+        ));
+
+        // Unmatched closing parenthesis
+        let result = evaluate_match_expression(b"hello".to_vec(), b"hello\\)".to_vec());
+        assert!(matches!(
+            result,
+            Err(ExprError::UnmatchedClosingParenthesis)
+        ));
+
+        // Trailing backslash
+        let result = evaluate_match_expression(b"hello".to_vec(), b"hello\\".to_vec());
+        assert!(matches!(result, Err(ExprError::TrailingBackslash)));
+
+        // Invalid bracket content
+        let result = evaluate_match_expression(b"hello".to_vec(), b"a\\{invalid\\}".to_vec());
+        assert!(matches!(result, Err(ExprError::InvalidBracketContent)));
     }
 }

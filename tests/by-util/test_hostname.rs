@@ -15,7 +15,7 @@ fn test_hostname() {
 }
 
 // FixME: fails for "MacOS" => "failed to lookup address information"
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos")))]
 #[test]
 fn test_hostname_ip() {
     let result = new_ucmd!().arg("-i").succeeds();
@@ -36,4 +36,17 @@ fn test_hostname_full() {
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[test]
+fn test_hostname_domain_empty() {
+    let fqdn = new_ucmd!().arg("-f").succeeds();
+    let short = new_ucmd!().arg("-s").succeeds();
+    let domain = new_ucmd!().arg("-d").succeeds();
+    let domain_short = new_ucmd!().arg("-sd").succeeds();
+
+    if fqdn.stdout() == short.stdout() {
+        assert!(domain.stdout().is_empty());
+        assert!(domain_short.stdout().is_empty());
+    }
 }

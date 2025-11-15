@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) nosuchgroup groupname
 
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStringExt;
 use uucore::process::getegid;
 use uutests::{at_and_ucmd, new_ucmd};
 #[cfg(not(target_vendor = "apple"))]
@@ -598,4 +600,43 @@ fn test_numeric_group_formats() {
 
     let final_gid = at.plus("test_file").metadata().unwrap().gid();
     assert_eq!(final_gid, first_group.as_raw());
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_chgrp_non_utf8_paths() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+    std::fs::write(at.plus(&filename), b"test content").unwrap();
+
+    // Get current user's primary group
+    let current_gid = getegid();
+
+    ucmd.arg(current_gid.to_string()).arg(&filename).succeeds();
+}
+
+#[test]
+fn test_chgrp_recursive_on_file() {
+    // Test for regression where `chgrp -R` on a regular file would fail
+    // with "Not a directory" error. This should succeed since there's nothing
+    // to recurse into, similar to GNU chgrp behavior.
+    // equivalent of tests/chgrp/recurse in GNU coreutils
+    use std::os::unix::fs::MetadataExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("regular_file");
+
+    let current_gid = getegid();
+
+    ucmd.arg("-R")
+        .arg(current_gid.to_string())
+        .arg("regular_file")
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(
+        at.plus("regular_file").metadata().unwrap().gid(),
+        current_gid
+    );
 }

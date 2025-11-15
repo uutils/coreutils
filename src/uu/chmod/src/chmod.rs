@@ -15,9 +15,11 @@ use uucore::display::Quotable;
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;
-#[cfg(not(windows))]
 use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
+
+#[cfg(target_os = "linux")]
+use uucore::safe_traversal::DirFd;
 use uucore::{format_usage, show, show_error};
 
 use uucore::translate;
@@ -111,19 +113,17 @@ fn extract_negative_modes(mut args: impl uucore::Args) -> (Option<String>, Vec<O
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (parsed_cmode, args) = extract_negative_modes(args.skip(1)); // skip binary name
-    let matches = uu_app()
-        .after_help(translate!("chmod-after-help"))
-        .try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let changes = matches.get_flag(options::CHANGES);
     let quiet = matches.get_flag(options::QUIET);
     let verbose = matches.get_flag(options::VERBOSE);
     let preserve_root = matches.get_flag(options::PRESERVE_ROOT);
-    let fmode = match matches.get_one::<String>(options::REFERENCE) {
+    let fmode = match matches.get_one::<OsString>(options::REFERENCE) {
         Some(fref) => match fs::metadata(fref) {
             Ok(meta) => Some(meta.mode() & 0o7777),
             Err(_) => {
-                return Err(ChmodError::CannotStat(fref.to_string()).into());
+                return Err(ChmodError::CannotStat(fref.to_string_lossy().to_string()).into());
             }
         },
         None => None,
@@ -133,18 +133,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let cmode = if let Some(parsed_cmode) = parsed_cmode {
         parsed_cmode
     } else {
-        modes.unwrap().to_string() // modes is required
+        modes.unwrap().to_owned() // modes is required
     };
-    // FIXME: enable non-utf8 paths
-    let mut files: Vec<String> = matches
-        .get_many::<String>(options::FILE)
-        .map(|v| v.map(ToString::to_string).collect())
+    let mut files: Vec<OsString> = matches
+        .get_many::<OsString>(options::FILE)
+        .map(|v| v.cloned().collect())
         .unwrap_or_default();
     let cmode = if fmode.is_some() {
         // "--reference" and MODE are mutually exclusive
         // if "--reference" was used MODE needs to be interpreted as another FILE
         // it wasn't possible to implement this behavior directly with clap
-        files.push(cmode);
+        files.push(OsString::from(cmode));
         None
     } else {
         Some(cmode)
@@ -180,10 +179,12 @@ pub fn uu_app() -> Command {
         .version(uucore::crate_version!())
         .about(translate!("chmod-about"))
         .override_usage(format_usage(&translate!("chmod-usage")))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .args_override_self(true)
         .infer_long_args(true)
         .no_binary_name(true)
         .disable_help_flag(true)
+        .after_help(translate!("chmod-after-help"))
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
@@ -235,6 +236,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::REFERENCE)
                 .long("reference")
                 .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString))
                 .help(translate!("chmod-help-reference")),
         )
         .arg(
@@ -247,7 +249,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE)
                 .required_unless_present(options::MODE)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::AnyPath),
+                .value_hint(clap::ValueHint::AnyPath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         // Add common arguments with chgrp, chown & chmod
         .args(uucore::perms::common_args())
@@ -266,11 +269,108 @@ struct Chmoder {
 }
 
 impl Chmoder {
-    fn chmod(&self, files: &[String]) -> UResult<()> {
+    /// Calculate the new mode based on the current mode and the chmod specification.
+    /// Returns (`new_mode`, `naively_expected_new_mode`) for symbolic modes, or (`new_mode`, `new_mode`) for numeric/reference modes.
+    fn calculate_new_mode(&self, current_mode: u32, is_dir: bool) -> UResult<(u32, u32)> {
+        match self.fmode {
+            Some(mode) => Ok((mode, mode)),
+            None => {
+                let cmode_unwrapped = self.cmode.clone().unwrap();
+                let mut new_mode = current_mode;
+                let mut naively_expected_new_mode = current_mode;
+
+                for mode in cmode_unwrapped.split(',') {
+                    let result = if mode.chars().any(|c| c.is_ascii_digit()) {
+                        mode::parse_numeric(new_mode, mode, is_dir).map(|v| (v, v))
+                    } else {
+                        mode::parse_symbolic(new_mode, mode, mode::get_umask(), is_dir).map(|m| {
+                            // calculate the new mode as if umask was 0
+                            let naive_mode =
+                                mode::parse_symbolic(naively_expected_new_mode, mode, 0, is_dir)
+                                    .unwrap(); // we know that mode must be valid, so this cannot fail
+                            (m, naive_mode)
+                        })
+                    };
+
+                    match result {
+                        Ok((mode, naive_mode)) => {
+                            new_mode = mode;
+                            naively_expected_new_mode = naive_mode;
+                        }
+                        Err(f) => {
+                            return if self.quiet {
+                                Err(ExitCode::new(1))
+                            } else {
+                                Err(USimpleError::new(1, f))
+                            };
+                        }
+                    }
+                }
+                Ok((new_mode, naively_expected_new_mode))
+            }
+        }
+    }
+
+    /// Report permission changes based on verbose and changes flags
+    fn report_permission_change(&self, file_path: &Path, old_mode: u32, new_mode: u32) {
+        if self.verbose || self.changes {
+            let current_permissions = display_permissions_unix(old_mode as mode_t, false);
+            let new_permissions = display_permissions_unix(new_mode as mode_t, false);
+
+            if new_mode != old_mode {
+                println!(
+                    "mode of {} changed from {:04o} ({}) to {:04o} ({})",
+                    file_path.quote(),
+                    old_mode,
+                    current_permissions,
+                    new_mode,
+                    new_permissions
+                );
+            } else if self.verbose {
+                println!(
+                    "mode of {} retained as {:04o} ({})",
+                    file_path.quote(),
+                    old_mode,
+                    current_permissions
+                );
+            }
+        }
+    }
+
+    /// Handle symlinks during directory traversal based on traversal mode
+    #[cfg(not(target_os = "linux"))]
+    fn handle_symlink_during_traversal(
+        &self,
+        path: &Path,
+        is_command_line_arg: bool,
+    ) -> UResult<()> {
+        let should_follow_symlink = match self.traverse_symlinks {
+            TraverseSymlinks::All => true,
+            TraverseSymlinks::First => is_command_line_arg,
+            TraverseSymlinks::None => false,
+        };
+
+        if !should_follow_symlink {
+            return self.chmod_file_internal(path, false);
+        }
+
+        match fs::metadata(path) {
+            Ok(meta) if meta.is_dir() => self.walk_dir_with_context(path, false),
+            Ok(_) => {
+                // It's a file symlink, chmod it
+                self.chmod_file(path)
+            }
+            Err(_) => {
+                // Dangling symlink, chmod it without dereferencing
+                self.chmod_file_internal(path, false)
+            }
+        }
+    }
+
+    fn chmod(&self, files: &[OsString]) -> UResult<()> {
         let mut r = Ok(());
 
         for filename in files {
-            let filename = &filename[..];
             let file = Path::new(filename);
             if !file.exists() {
                 if file.is_symlink() {
@@ -284,18 +384,22 @@ impl Chmoder {
                     }
 
                     if !self.quiet {
-                        show!(ChmodError::DanglingSymlink(filename.to_string()));
+                        show!(ChmodError::DanglingSymlink(
+                            filename.to_string_lossy().to_string()
+                        ));
                         set_exit_code(1);
                     }
 
                     if self.verbose {
                         println!(
                             "{}",
-                            translate!("chmod-verbose-failed-dangling", "file" => filename.quote())
+                            translate!("chmod-verbose-failed-dangling", "file" => filename.to_string_lossy().quote())
                         );
                     }
                 } else if !self.quiet {
-                    show!(ChmodError::NoSuchFile(filename.to_string()));
+                    show!(ChmodError::NoSuchFile(
+                        filename.to_string_lossy().to_string()
+                    ));
                 }
                 // GNU exits with exit code 1 even if -q or --quiet are passed
                 // So we set the exit code, because it hasn't been set yet if `self.quiet` is true.
@@ -307,8 +411,8 @@ impl Chmoder {
                 // should not change the permissions in this case
                 continue;
             }
-            if self.recursive && self.preserve_root && filename == "/" {
-                return Err(ChmodError::PreserveRoot(filename.to_string()).into());
+            if self.recursive && self.preserve_root && file == Path::new("/") {
+                return Err(ChmodError::PreserveRoot("/".to_string()).into());
             }
             if self.recursive {
                 r = self.walk_dir_with_context(file, true);
@@ -319,6 +423,7 @@ impl Chmoder {
         r
     }
 
+    #[cfg(not(target_os = "linux"))]
     fn walk_dir_with_context(&self, file_path: &Path, is_command_line_arg: bool) -> UResult<()> {
         let mut r = self.chmod_file(file_path);
 
@@ -349,7 +454,90 @@ impl Chmoder {
         r
     }
 
-    fn handle_symlink_during_recursion(&self, path: &Path) -> UResult<()> {
+    #[cfg(target_os = "linux")]
+    fn walk_dir_with_context(&self, file_path: &Path, is_command_line_arg: bool) -> UResult<()> {
+        let mut r = self.chmod_file(file_path);
+
+        // Determine whether to traverse symlinks based on context and traversal mode
+        let should_follow_symlink = match self.traverse_symlinks {
+            TraverseSymlinks::All => true,
+            TraverseSymlinks::First => is_command_line_arg, // Only follow symlinks that are command line args
+            TraverseSymlinks::None => false,
+        };
+
+        // If the path is a directory (or we should follow symlinks), recurse into it using safe traversal
+        if (!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir() {
+            match DirFd::open(file_path) {
+                Ok(dir_fd) => {
+                    r = self.safe_traverse_dir(&dir_fd, file_path).and(r);
+                }
+                Err(err) => {
+                    // Handle permission denied errors with proper file path context
+                    if err.kind() == std::io::ErrorKind::PermissionDenied {
+                        r = r.and(Err(ChmodError::PermissionDenied(
+                            file_path.to_string_lossy().to_string(),
+                        )
+                        .into()));
+                    } else {
+                        r = r.and(Err(err.into()));
+                    }
+                }
+            }
+        }
+        r
+    }
+
+    #[cfg(target_os = "linux")]
+    fn safe_traverse_dir(&self, dir_fd: &DirFd, dir_path: &Path) -> UResult<()> {
+        let mut r = Ok(());
+
+        let entries = dir_fd.read_dir()?;
+
+        // Determine if we should follow symlinks (doesn't depend on entry_name)
+        let should_follow_symlink = self.traverse_symlinks == TraverseSymlinks::All;
+
+        for entry_name in entries {
+            let entry_path = dir_path.join(&entry_name);
+
+            let dir_meta = dir_fd.metadata_at(&entry_name, should_follow_symlink);
+            let Ok(meta) = dir_meta else {
+                // Handle permission denied with proper file path context
+                let e = dir_meta.unwrap_err();
+                let error = if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    ChmodError::PermissionDenied(entry_path.to_string_lossy().to_string()).into()
+                } else {
+                    e.into()
+                };
+                r = r.and(Err(error));
+                continue;
+            };
+
+            if entry_path.is_symlink() {
+                r = self
+                    .handle_symlink_during_safe_recursion(&entry_path, dir_fd, &entry_name)
+                    .and(r);
+            } else {
+                // For regular files and directories, chmod them
+                r = self
+                    .safe_chmod_file(&entry_path, dir_fd, &entry_name, meta.mode() & 0o7777)
+                    .and(r);
+
+                // Recurse into subdirectories
+                if meta.is_dir() {
+                    r = self.walk_dir_with_context(&entry_path, false).and(r);
+                }
+            }
+        }
+        r
+    }
+
+    #[cfg(target_os = "linux")]
+    fn handle_symlink_during_safe_recursion(
+        &self,
+        path: &Path,
+        dir_fd: &DirFd,
+        entry_name: &std::ffi::OsStr,
+    ) -> UResult<()> {
         // During recursion, determine behavior based on traversal mode
         match self.traverse_symlinks {
             TraverseSymlinks::All => {
@@ -357,9 +545,9 @@ impl Chmoder {
                 // Check if the symlink target is a directory, but handle dangling symlinks gracefully
                 match fs::metadata(path) {
                     Ok(meta) if meta.is_dir() => self.walk_dir_with_context(path, false),
-                    Ok(_) => {
-                        // It's a file symlink, chmod it
-                        self.chmod_file(path)
+                    Ok(meta) => {
+                        // It's a file symlink, chmod it using safe traversal
+                        self.safe_chmod_file(path, dir_fd, entry_name, meta.mode() & 0o7777)
                     }
                     Err(_) => {
                         // Dangling symlink, chmod it without dereferencing
@@ -375,22 +563,50 @@ impl Chmoder {
         }
     }
 
-    #[cfg(windows)]
-    fn chmod_file(&self, file: &Path) -> UResult<()> {
-        // chmod is useless on Windows
-        // it doesn't set any permissions at all
-        // instead it just sets the readonly attribute on the file
+    #[cfg(target_os = "linux")]
+    fn safe_chmod_file(
+        &self,
+        file_path: &Path,
+        dir_fd: &DirFd,
+        entry_name: &std::ffi::OsStr,
+        current_mode: u32,
+    ) -> UResult<()> {
+        // Calculate the new mode using the helper method
+        let (new_mode, _) = self.calculate_new_mode(current_mode, file_path.is_dir())?;
+
+        // Use safe traversal to change the mode
+        let follow_symlinks = self.dereference;
+        if let Err(_e) = dir_fd.chmod_at(entry_name, new_mode, follow_symlinks) {
+            if self.verbose {
+                println!(
+                    "failed to change mode of {} to {:o}",
+                    file_path.quote(),
+                    new_mode
+                );
+            }
+            return Err(
+                ChmodError::PermissionDenied(file_path.to_string_lossy().to_string()).into(),
+            );
+        }
+
+        // Report the change using the helper method
+        self.report_permission_change(file_path, current_mode, new_mode);
+
         Ok(())
     }
 
-    #[cfg(unix)]
+    #[cfg(not(target_os = "linux"))]
+    fn handle_symlink_during_recursion(&self, path: &Path) -> UResult<()> {
+        // Use the common symlink handling logic
+        self.handle_symlink_during_traversal(path, false)
+    }
+
     fn chmod_file(&self, file: &Path) -> UResult<()> {
         self.chmod_file_internal(file, self.dereference)
     }
 
-    #[cfg(unix)]
     fn chmod_file_internal(&self, file: &Path, dereference: bool) -> UResult<()> {
-        use uucore::{mode::get_umask, perms::get_metadata};
+        use uucore::perms::get_metadata;
 
         let metadata = get_metadata(file, dereference);
 
@@ -416,45 +632,14 @@ impl Chmoder {
             }
         };
 
-        // Determine the new permissions to apply
+        // Calculate the new mode using the helper method
+        let (new_mode, naively_expected_new_mode) =
+            self.calculate_new_mode(fperm, file.is_dir())?;
+
+        // Determine how to apply the permissions
         match self.fmode {
             Some(mode) => self.change_file(fperm, mode, file)?,
             None => {
-                let cmode_unwrapped = self.cmode.clone().unwrap();
-                let mut new_mode = fperm;
-                let mut naively_expected_new_mode = new_mode;
-                for mode in cmode_unwrapped.split(',') {
-                    let result = if mode.chars().any(|c| c.is_ascii_digit()) {
-                        mode::parse_numeric(new_mode, mode, file.is_dir()).map(|v| (v, v))
-                    } else {
-                        mode::parse_symbolic(new_mode, mode, get_umask(), file.is_dir()).map(|m| {
-                            // calculate the new mode as if umask was 0
-                            let naive_mode = mode::parse_symbolic(
-                                naively_expected_new_mode,
-                                mode,
-                                0,
-                                file.is_dir(),
-                            )
-                            .unwrap(); // we know that mode must be valid, so this cannot fail
-                            (m, naive_mode)
-                        })
-                    };
-
-                    match result {
-                        Ok((mode, naive_mode)) => {
-                            new_mode = mode;
-                            naively_expected_new_mode = naive_mode;
-                        }
-                        Err(f) => {
-                            return if self.quiet {
-                                Err(ExitCode::new(1))
-                            } else {
-                                Err(USimpleError::new(1, f))
-                            };
-                        }
-                    }
-                }
-
                 // Special handling for symlinks when not dereferencing
                 if file.is_symlink() && !dereference {
                     // TODO: On most Unix systems, symlink permissions are ignored by the kernel,
@@ -484,16 +669,10 @@ impl Chmoder {
         Ok(())
     }
 
-    #[cfg(unix)]
     fn change_file(&self, fperm: u32, mode: u32, file: &Path) -> Result<(), i32> {
         if fperm == mode {
-            if self.verbose && !self.changes {
-                println!(
-                    "mode of {} retained as {fperm:04o} ({})",
-                    file.quote(),
-                    display_permissions_unix(fperm as mode_t, false),
-                );
-            }
+            // Use the helper method for consistent reporting
+            self.report_permission_change(file, fperm, mode);
             Ok(())
         } else if let Err(err) = fs::set_permissions(file, fs::Permissions::from_mode(mode)) {
             if !self.quiet {
@@ -509,14 +688,8 @@ impl Chmoder {
             }
             Err(1)
         } else {
-            if self.verbose || self.changes {
-                println!(
-                    "mode of {} changed from {fperm:04o} ({}) to {mode:04o} ({})",
-                    file.quote(),
-                    display_permissions_unix(fperm as mode_t, false),
-                    display_permissions_unix(mode as mode_t, false)
-                );
-            }
+            // Use the helper method for consistent reporting
+            self.report_permission_change(file, fperm, mode);
             Ok(())
         }
     }

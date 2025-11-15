@@ -15,6 +15,7 @@ use chrono::{
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
 use filetime::{FileTime, set_file_times, set_symlink_file_times};
+use jiff::{Timestamp, Zoned};
 use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fs::{self, File};
@@ -156,20 +157,20 @@ fn is_first_filename_timestamp(
     reference: Option<&OsString>,
     date: Option<&str>,
     timestamp: Option<&str>,
-    files: &[&String],
+    files: &[&OsString],
 ) -> bool {
-    if timestamp.is_none()
+    timestamp.is_none()
         && reference.is_none()
         && date.is_none()
         && files.len() >= 2
         // env check is last as the slowest op
         && matches!(std::env::var("_POSIX2_VERSION").as_deref(), Ok("199209"))
-    {
-        let s = files[0];
-        all_digits(s) && (s.len() == 8 || (s.len() == 10 && (69..=99).contains(&get_year(s))))
-    } else {
-        false
-    }
+        && files[0].to_str().is_some_and(is_timestamp)
+}
+
+// Check if string is a valid POSIX timestamp (8 digits or 10 digits with valid year range)
+fn is_timestamp(s: &str) -> bool {
+    all_digits(s) && (s.len() == 8 || (s.len() == 10 && (69..=99).contains(&get_year(s))))
 }
 
 /// Cycle the last two characters to the beginning of the string.
@@ -186,10 +187,10 @@ fn shr2(s: &str) -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let mut filenames: Vec<&String> = matches
-        .get_many::<String>(ARG_FILES)
+    let mut filenames: Vec<&OsString> = matches
+        .get_many::<OsString>(ARG_FILES)
         .ok_or_else(|| {
             USimpleError::new(
                 1,
@@ -210,10 +211,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|t| t.to_owned());
 
     if is_first_filename_timestamp(reference, date.as_deref(), timestamp.as_deref(), &filenames) {
-        timestamp = if filenames[0].len() == 10 {
-            Some(shr2(filenames[0]))
+        let first_file = filenames[0].to_str().unwrap();
+        timestamp = if first_file.len() == 10 {
+            Some(shr2(first_file))
         } else {
-            Some(filenames[0].to_string())
+            Some(first_file.to_string())
         };
         filenames = filenames[1..].to_vec();
     }
@@ -254,6 +256,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("touch-about"))
         .override_usage(format_usage(&translate!("touch-usage")))
         .infer_long_args(true)
@@ -289,7 +292,6 @@ pub fn uu_app() -> Command {
             Arg::new(options::FORCE)
                 .short('f')
                 .help("(ignored)")
-                .hide(true)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -336,6 +338,7 @@ pub fn uu_app() -> Command {
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .num_args(1..)
+                .value_parser(clap::value_parser!(OsString))
                 .value_hint(clap::ValueHint::AnyPath),
         )
         .group(
@@ -634,7 +637,41 @@ fn parse_date(ref_time: DateTime<Local>, s: &str) -> Result<FileTime, TouchError
         }
     }
 
-    if let Ok(dt) = parse_datetime::parse_datetime_at_date(ref_time, s) {
+    // **parse_datetime 0.13 API change:**
+    // The parse_datetime crate was updated from 0.11 to 0.13 in commit 2a69918ca to fix
+    // issue #8754 (large second values like "12345.123456789 seconds ago" failing).
+    // This introduced a breaking API change in parse_datetime_at_date:
+    //
+    // Previously (0.11): parse_datetime_at_date(chrono::DateTime) → chrono::DateTime
+    // Now (0.13):        parse_datetime_at_date(jiff::Zoned) → jiff::Zoned
+    //
+    // Commit 4340913c4 initially adapted to this by switching from parse_datetime_at_date
+    // to parse_datetime, which broke deterministic relative date parsing (the ref_time
+    // parameter was no longer used, causing tests/touch/relative to fail in CI).
+    //
+    // This implementation restores parse_datetime_at_date usage with proper conversions:
+    // chrono::DateTime → jiff::Zoned → parse_datetime_at_date → jiff::Zoned → chrono::DateTime
+    //
+    // The use of parse_datetime_at_date (not parse_datetime) is critical for deterministic
+    // behavior with relative dates like "yesterday" or "2 days ago", which must be
+    // calculated relative to ref_time, not the current system time.
+
+    // Convert chrono DateTime to jiff Zoned for parse_datetime_at_date
+    let ref_zoned = {
+        let ts = Timestamp::new(
+            ref_time.timestamp(),
+            ref_time.timestamp_subsec_nanos() as i32,
+        )
+        .map_err(|_| TouchError::InvalidDateFormat(s.to_owned()))?;
+        Zoned::new(ts, jiff::tz::TimeZone::system())
+    };
+
+    if let Ok(zoned) = parse_datetime::parse_datetime_at_date(ref_zoned, s) {
+        let timestamp = zoned.timestamp();
+        let dt =
+            DateTime::from_timestamp(timestamp.as_second(), timestamp.subsec_nanosecond() as u32)
+                .map(|dt| dt.with_timezone(&Local))
+                .ok_or_else(|| TouchError::InvalidDateFormat(s.to_owned()))?;
         return Ok(datetime_to_filetime(&dt));
     }
 

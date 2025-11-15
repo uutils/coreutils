@@ -5,9 +5,11 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::cell::{OnceCell, RefCell};
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Stdin, Write, stdin, stdout};
 use std::iter::Cycle;
+use std::path::Path;
 use std::rc::Rc;
 use std::slice::Iter;
 use uucore::error::{UResult, USimpleError};
@@ -24,12 +26,12 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let serial = matches.get_flag(options::SERIAL);
     let delimiters = matches.get_one::<String>(options::DELIMITER).unwrap();
     let files = matches
-        .get_many::<String>(options::FILE)
+        .get_many::<OsString>(options::FILE)
         .unwrap()
         .cloned()
         .collect();
@@ -41,6 +43,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("paste-about"))
         .override_usage(format_usage(&translate!("paste-usage")))
         .infer_long_args(true)
@@ -65,7 +68,8 @@ pub fn uu_app() -> Command {
                 .value_name("FILE")
                 .action(ArgAction::Append)
                 .default_value("-")
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::ZERO_TERMINATED)
@@ -78,7 +82,7 @@ pub fn uu_app() -> Command {
 
 #[allow(clippy::cognitive_complexity)]
 fn paste(
-    filenames: Vec<String>,
+    filenames: Vec<OsString>,
     serial: bool,
     delimiters: &str,
     line_ending: LineEnding,
@@ -90,17 +94,16 @@ fn paste(
     let mut input_source_vec = Vec::with_capacity(filenames.len());
 
     for filename in filenames {
-        let input_source = match filename.as_str() {
-            "-" => InputSource::StandardInput(
+        let input_source = if filename == "-" {
+            InputSource::StandardInput(
                 stdin_once_cell
                     .get_or_init(|| Rc::new(RefCell::new(stdin())))
                     .clone(),
-            ),
-            st => {
-                let file = File::open(st)?;
-
-                InputSource::File(BufReader::new(file))
-            }
+            )
+        } else {
+            let path = Path::new(&filename);
+            let file = File::open(path)?;
+            InputSource::File(BufReader::new(file))
         };
 
         input_source_vec.push(input_source);
@@ -268,7 +271,7 @@ enum DelimiterState<'a> {
 }
 
 impl<'a> DelimiterState<'a> {
-    fn new(unescaped_and_encoded_delimiters: &'a [Box<[u8]>]) -> DelimiterState<'a> {
+    fn new(unescaped_and_encoded_delimiters: &'a [Box<[u8]>]) -> Self {
         match unescaped_and_encoded_delimiters {
             [] => DelimiterState::NoDelimiters,
             [only_delimiter] => {
@@ -361,8 +364,8 @@ enum InputSource {
 impl InputSource {
     fn read_until(&mut self, byte: u8, buf: &mut Vec<u8>) -> UResult<usize> {
         let us = match self {
-            InputSource::File(bu) => bu.read_until(byte, buf)?,
-            InputSource::StandardInput(rc) => rc
+            Self::File(bu) => bu.read_until(byte, buf)?,
+            Self::StandardInput(rc) => rc
                 .try_borrow()
                 .map_err(|bo| {
                     USimpleError::new(1, translate!("paste-error-stdin-borrow", "error" => bo))

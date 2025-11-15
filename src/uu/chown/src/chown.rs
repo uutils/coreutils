@@ -77,6 +77,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("chown-about"))
         .override_usage(format_usage(&translate!("chown-usage")))
         .infer_long_args(true)
@@ -130,8 +131,7 @@ pub fn uu_app() -> Command {
                 .long(options::REFERENCE)
                 .help(translate!("chown-help-reference"))
                 .value_name("RFILE")
-                .value_hint(clap::ValueHint::FilePath)
-                .num_args(1..),
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::verbosity::SILENT)

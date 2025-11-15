@@ -1350,6 +1350,29 @@ fn test_multiple_output_files() {
 }
 
 #[test]
+fn test_output_file_with_leading_dash() {
+    let test_cases = [
+        (
+            ["--output", "--dash-file"],
+            "banana\napple\ncherry\n",
+            "apple\nbanana\ncherry\n",
+        ),
+        (
+            ["-o", "--another-dash-file"],
+            "zebra\nxray\nyak\n",
+            "xray\nyak\nzebra\n",
+        ),
+    ];
+
+    for (args, input, expected) in test_cases {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&args).pipe_in(input).succeeds().no_stdout();
+
+        assert_eq!(at.read(args[1]), expected);
+    }
+}
+
+#[test]
 // Test for GNU tests/sort/sort-files0-from.pl "f-extra-arg"
 fn test_files0_from_extra_arg() {
     new_ucmd!()
@@ -1382,7 +1405,9 @@ fn test_files0_from_minus_in_stdin() {
         .args(&["--files0-from", "-"])
         .pipe_in("-")
         .fails_with_code(2)
-        .stderr_only("sort: when reading file names from stdin, no file name of '-' allowed\n");
+        .stderr_only(
+            "sort: when reading file names from standard input, no file name of '-' allowed\n",
+        );
 }
 
 #[test]
@@ -1568,3 +1593,338 @@ fn test_g_float_hex() {
         .succeeds()
         .stdout_is(output);
 }
+
+/* spell-checker: disable */
+#[test]
+fn test_french_translations() {
+    // Test that French translations work for clap error messages
+    // Set LANG to French and test with an invalid argument
+    let result = new_ucmd!()
+        .env("LANG", "fr_FR.UTF-8")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("--invalid-arg")
+        .fails();
+
+    let stderr = result.stderr_str();
+    assert!(stderr.contains("erreur"));
+    assert!(stderr.contains("argument inattendu"));
+    assert!(stderr.contains("trouvé"));
+}
+
+#[test]
+fn test_argument_suggestion() {
+    let test_cases = vec![
+        ("en_US.UTF-8", vec!["tip", "similar", "--reverse"]),
+        ("fr_FR.UTF-8", vec!["conseil", "similaire", "--reverse"]),
+    ];
+
+    for (locale, expected_strings) in test_cases {
+        let result = new_ucmd!()
+            .env("LANG", locale)
+            .env("LC_ALL", locale)
+            .arg("--revrse") // Typo
+            .fails();
+
+        let stderr = result.stderr_str();
+        for expected in expected_strings {
+            assert!(stderr.contains(expected));
+        }
+    }
+}
+
+#[test]
+fn test_clap_localization_unknown_argument() {
+    let test_cases = vec![
+        (
+            "en_US.UTF-8",
+            vec![
+                "error: unexpected argument '--unknown-option' found",
+                "Usage:",
+                "For more information, try '--help'.",
+            ],
+        ),
+        (
+            "fr_FR.UTF-8",
+            vec![
+                "erreur : argument inattendu '--unknown-option' trouvé",
+                "Utilisation:",
+                "Pour plus d'informations, essayez '--help'.",
+            ],
+        ),
+    ];
+
+    for (locale, expected_strings) in test_cases {
+        let result = new_ucmd!()
+            .env("LANG", locale)
+            .env("LC_ALL", locale)
+            .arg("--unknown-option")
+            .fails();
+
+        result.code_is(2); // sort uses exit code 2 for invalid options
+        let stderr = result.stderr_str();
+        for expected in expected_strings {
+            assert!(stderr.contains(expected));
+        }
+    }
+}
+
+#[test]
+fn test_clap_localization_help_message() {
+    // Test help message in English
+    let result_en = new_ucmd!()
+        .env("LANG", "en_US.UTF-8")
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("--help")
+        .succeeds();
+
+    let stdout_en = result_en.stdout_str();
+    assert!(stdout_en.contains("Usage:"));
+    assert!(stdout_en.contains("Options:"));
+
+    // Test help message in French
+    let result_fr = new_ucmd!()
+        .env("LANG", "fr_FR.UTF-8")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("--help")
+        .succeeds();
+
+    let stdout_fr = result_fr.stdout_str();
+    assert!(stdout_fr.contains("Utilisation:"));
+    assert!(stdout_fr.contains("Options:"));
+}
+
+#[test]
+fn test_clap_localization_missing_required_argument() {
+    // Test missing required argument
+    let result_en = new_ucmd!().env("LC_ALL", "en_US.UTF-8").arg("-k").fails();
+
+    let stderr_en = result_en.stderr_str();
+    assert!(stderr_en.contains(" a value is required for '--key <key>' but none was supplied"));
+    assert!(stderr_en.contains("-k"));
+}
+
+#[test]
+fn test_clap_localization_invalid_value() {
+    let test_cases = vec![
+        ("en_US.UTF-8", "sort: failed to parse key 'invalid'"),
+        ("fr_FR.UTF-8", "sort: échec d'analyse de la clé 'invalid'"),
+    ];
+
+    for (locale, expected_message) in test_cases {
+        let result = new_ucmd!()
+            .env("LANG", locale)
+            .env("LC_ALL", locale)
+            .arg("-k")
+            .arg("invalid")
+            .fails();
+
+        let stderr = result.stderr_str();
+        assert!(stderr.contains(expected_message));
+    }
+}
+
+#[test]
+fn test_help_colors_enabled() {
+    // Test that help messages have ANSI color codes when colors are forced
+    let test_cases = vec![("en_US.UTF-8", "Usage"), ("fr_FR.UTF-8", "Utilisation")];
+
+    for (locale, usage_word) in test_cases {
+        let result = new_ucmd!()
+            .env("LANG", locale)
+            .env("LC_ALL", locale)
+            .env("CLICOLOR_FORCE", "1")
+            .arg("--help")
+            .succeeds();
+
+        let stdout = result.stdout_str();
+
+        // Check for ANSI bold+underline codes around the usage header
+        let expected_pattern = format!("\x1b[1m\x1b[4m{usage_word}:\x1b[0m");
+        assert!(
+            stdout.contains(&expected_pattern),
+            "Expected bold+underline '{usage_word}:' in locale {locale}, got: {}",
+            stdout.lines().take(10).collect::<Vec<_>>().join("\\n")
+        );
+    }
+}
+
+#[test]
+fn test_help_colors_disabled() {
+    // Test that help messages don't have ANSI color codes when colors are disabled
+    let test_cases = vec![("en_US.UTF-8", "Usage"), ("fr_FR.UTF-8", "Utilisation")];
+
+    for (locale, usage_word) in test_cases {
+        let result = new_ucmd!()
+            .env("LANG", locale)
+            .env("LC_ALL", locale)
+            .env("NO_COLOR", "1")
+            .arg("--help")
+            .succeeds();
+
+        let stdout = result.stdout_str();
+
+        // Check that we have the usage word but no ANSI codes
+        assert!(stdout.contains(&format!("{usage_word}:")));
+        assert!(
+            !stdout.contains("\x1b["),
+            "Found ANSI escape codes when colors should be disabled in locale {locale}"
+        );
+    }
+}
+
+#[test]
+fn test_error_colors_enabled() {
+    // Test that error messages have ANSI color codes when colors are forced
+    let test_cases = vec![
+        ("en_US.UTF-8", "error", "tip"),
+        ("fr_FR.UTF-8", "erreur", "conseil"),
+    ];
+
+    for (locale, error_word, tip_word) in test_cases {
+        let result = new_ucmd!()
+            .env("LANG", locale)
+            .env("LC_ALL", locale)
+            .env("CLICOLOR_FORCE", "1")
+            .arg("--numerc") // Typo to trigger suggestion for --numeric-sort
+            .fails();
+
+        let stderr = result.stderr_str();
+
+        // Check for colored error word (red)
+        let colored_error = format!("\x1b[31m{error_word}\x1b[0m");
+        assert!(
+            stderr.contains(&colored_error),
+            "Expected red '{error_word}' in locale {locale}, got: {}",
+            stderr.lines().take(5).collect::<Vec<_>>().join("\\n")
+        );
+
+        // Check for colored tip word (green)
+        let colored_tip = format!("\x1b[32m{tip_word}\x1b[0m");
+        assert!(
+            stderr.contains(&colored_tip),
+            "Expected green '{tip_word}' in locale {locale}, got: {}",
+            stderr.lines().take(5).collect::<Vec<_>>().join("\\n")
+        );
+    }
+}
+
+#[test]
+fn test_error_colors_disabled() {
+    // Test that error messages don't have ANSI color codes when colors are disabled
+    let test_cases = vec![
+        ("en_US.UTF-8", "error", "tip"),
+        ("fr_FR.UTF-8", "erreur", "conseil"),
+    ];
+
+    for (locale, error_word, tip_word) in test_cases {
+        let result = new_ucmd!()
+            .env("LANG", locale)
+            .env("LC_ALL", locale)
+            .env("NO_COLOR", "1")
+            .arg("--numerc") // Typo to trigger suggestion for --numeric-sort
+            .fails();
+
+        let stderr = result.stderr_str();
+
+        // Check that we have the error and tip words but no ANSI codes
+        assert!(stderr.contains(error_word));
+        assert!(stderr.contains(tip_word));
+        assert!(
+            !stderr.contains("\x1b["),
+            "Found ANSI escape codes when colors should be disabled in locale {locale}"
+        );
+    }
+}
+
+#[test]
+fn test_argument_suggestion_colors_enabled() {
+    // Test that argument suggestions have colors
+    let test_cases = vec![
+        ("en_US.UTF-8", "tip", "--reverse"),
+        ("fr_FR.UTF-8", "conseil", "--reverse"),
+    ];
+
+    for (locale, _tip_word, suggestion) in test_cases {
+        let result = new_ucmd!()
+            .env("LANG", locale)
+            .env("LC_ALL", locale)
+            .env("CLICOLOR_FORCE", "1")
+            .arg("--revrse") // Typo to trigger suggestion
+            .fails();
+
+        let stderr = result.stderr_str();
+
+        // Check for colored invalid argument (yellow)
+        let colored_invalid = "\x1b[33m--revrse\x1b[0m";
+        assert!(
+            stderr.contains(colored_invalid),
+            "Expected yellow '--revrse' in locale {locale}, got: {}",
+            stderr.lines().take(10).collect::<Vec<_>>().join("\\n")
+        );
+
+        // Check for colored suggestion (green)
+        let colored_suggestion = format!("\x1b[32m{suggestion}\x1b[0m");
+        assert!(
+            stderr.contains(&colored_suggestion),
+            "Expected green '{suggestion}' in locale {locale}, got: {}",
+            stderr.lines().take(10).collect::<Vec<_>>().join("\\n")
+        );
+    }
+}
+
+#[test]
+fn test_color_environment_variables() {
+    // Test different color environment variable combinations
+    let test_env_vars = vec![
+        // Colors should be enabled
+        (vec![("CLICOLOR_FORCE", "1")], true, "CLICOLOR_FORCE=1"),
+        // Colors should be disabled
+        (vec![("NO_COLOR", "1")], false, "NO_COLOR=1"),
+        (
+            vec![("NO_COLOR", "1"), ("CLICOLOR_FORCE", "1")],
+            false,
+            "NO_COLOR overrides CLICOLOR_FORCE",
+        ),
+    ];
+
+    for (env_vars, should_have_colors, description) in test_env_vars {
+        let mut cmd = new_ucmd!();
+        cmd.env("LANG", "en_US.UTF-8");
+
+        for (key, value) in env_vars {
+            cmd.env(key, value);
+        }
+
+        let result = cmd.arg("--help").succeeds();
+        let stdout = result.stdout_str();
+
+        let has_ansi_codes = stdout.contains("\x1b[");
+        assert_eq!(
+            has_ansi_codes, should_have_colors,
+            "Color test failed for {description}: expected colors={should_have_colors}, found ANSI codes={has_ansi_codes}"
+        );
+    }
+}
+
+#[test]
+fn test_start_buffer() {
+    // Test that a file with the exact same size as the start buffer is handled correctly
+    const FILE_B: &[u8] = &[b'b'; 8_000];
+    const FILE_A: &[u8] = b"aaa";
+
+    let mut expected = FILE_A.to_vec();
+    expected.push(b'\n');
+    expected.extend_from_slice(FILE_B);
+    expected.push(b'\n');
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write_bytes("b", FILE_B);
+    at.write_bytes("a", FILE_A);
+
+    ucmd.args(&["b", "a"])
+        .succeeds()
+        .stdout_only_bytes(&expected);
+}
+
+/* spell-checker: enable */

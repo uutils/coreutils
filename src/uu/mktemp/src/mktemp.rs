@@ -13,7 +13,7 @@ use uucore::format_usage;
 use uucore::translate;
 
 use std::env;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::io::ErrorKind;
 use std::iter;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
@@ -105,7 +105,7 @@ pub struct Options {
     pub treat_as_template: bool,
 
     /// The template to use for the name of the temporary file.
-    pub template: String,
+    pub template: OsString,
 }
 
 impl Options {
@@ -123,12 +123,12 @@ impl Options {
                     .ok()
                     .map_or_else(env::temp_dir, PathBuf::from),
             });
-        let (tmpdir, template) = match matches.get_one::<String>(ARG_TEMPLATE) {
+        let (tmpdir, template) = match matches.get_one::<OsString>(ARG_TEMPLATE) {
             // If no template argument is given, `--tmpdir` is implied.
             None => {
                 let tmpdir = Some(tmpdir.unwrap_or_else(env::temp_dir));
                 let template = DEFAULT_TEMPLATE;
-                (tmpdir, template.to_string())
+                (tmpdir, OsString::from(template))
             }
             Some(template) => {
                 let tmpdir = if env::var(TMPDIR_ENV_VAR).is_ok() && matches.get_flag(OPT_T) {
@@ -142,7 +142,7 @@ impl Options {
                 } else {
                     None
                 };
-                (tmpdir, template.to_string())
+                (tmpdir, template.clone())
             }
         };
         Self {
@@ -200,23 +200,30 @@ fn find_last_contiguous_block_of_xs(s: &str) -> Option<(usize, usize)> {
 
 impl Params {
     fn from(options: Options) -> Result<Self, MkTempError> {
+        // Convert OsString template to string for processing
+        let Some(template_str) = options.template.to_str() else {
+            // For non-UTF-8 templates, return an error
+            return Err(MkTempError::InvalidTemplate(
+                options.template.to_string_lossy().into_owned(),
+            ));
+        };
+
         // The template argument must end in 'X' if a suffix option is given.
-        if options.suffix.is_some() && !options.template.ends_with('X') {
-            return Err(MkTempError::MustEndInX(options.template));
+        if options.suffix.is_some() && !template_str.ends_with('X') {
+            return Err(MkTempError::MustEndInX(template_str.to_string()));
         }
 
         // Get the start and end indices of the randomized part of the template.
         //
         // For example, if the template is "abcXXXXyz", then `i` is 3 and `j` is 7.
-        let Some((i, j)) = find_last_contiguous_block_of_xs(&options.template) else {
+        let Some((i, j)) = find_last_contiguous_block_of_xs(template_str) else {
             let s = match options.suffix {
                 // If a suffix is specified, the error message includes the template without the suffix.
-                Some(_) => options
-                    .template
+                Some(_) => template_str
                     .chars()
-                    .take(options.template.len())
+                    .take(template_str.len())
                     .collect::<String>(),
-                None => options.template,
+                None => template_str.to_string(),
             };
             return Err(MkTempError::TooFewXs(s));
         };
@@ -227,35 +234,36 @@ impl Params {
         // then `prefix` is "a/b/c/d".
         let tmpdir = options.tmpdir;
         let prefix_from_option = tmpdir.clone().unwrap_or_default();
-        let prefix_from_template = &options.template[..i];
-        let prefix = Path::new(&prefix_from_option)
-            .join(prefix_from_template)
-            .display()
-            .to_string();
+        let prefix_from_template = &template_str[..i];
+        let prefix_path = Path::new(&prefix_from_option).join(prefix_from_template);
         if options.treat_as_template && prefix_from_template.contains(MAIN_SEPARATOR) {
-            return Err(MkTempError::PrefixContainsDirSeparator(options.template));
+            return Err(MkTempError::PrefixContainsDirSeparator(
+                template_str.to_string(),
+            ));
         }
         if tmpdir.is_some() && Path::new(prefix_from_template).is_absolute() {
-            return Err(MkTempError::InvalidTemplate(options.template));
+            return Err(MkTempError::InvalidTemplate(template_str.to_string()));
         }
 
         // Split the parent directory from the file part of the prefix.
         //
-        // For example, if `prefix` is "a/b/c/d", then `directory` is
-        // "a/b/c" is `prefix` gets reassigned to "d".
-        let (directory, prefix) = if prefix.ends_with(MAIN_SEPARATOR) {
-            (prefix, String::new())
-        } else {
-            let path = Path::new(&prefix);
-            let directory = match path.parent() {
-                None => String::new(),
-                Some(d) => d.display().to_string(),
-            };
-            let prefix = match path.file_name() {
-                None => String::new(),
-                Some(f) => f.to_str().unwrap().to_string(),
-            };
-            (directory, prefix)
+        // For example, if `prefix_path` is "a/b/c/d", then `directory` is
+        // "a/b/c" and `prefix` gets reassigned to "d".
+        let (directory, prefix) = {
+            let prefix_str = prefix_path.to_string_lossy();
+            if prefix_str.ends_with(MAIN_SEPARATOR) {
+                (prefix_path, String::new())
+            } else {
+                let directory = match prefix_path.parent() {
+                    None => PathBuf::new(),
+                    Some(d) => d.to_path_buf(),
+                };
+                let prefix = match prefix_path.file_name() {
+                    None => String::new(),
+                    Some(f) => f.to_str().unwrap().to_string(),
+                };
+                (directory, prefix)
+            }
         };
 
         // Combine the suffix from the template with the suffix given as an option.
@@ -263,7 +271,7 @@ impl Params {
         // For example, if the suffix command-line argument is ".txt" and
         // the template is "XXXabc", then `suffix` is "abc.txt".
         let suffix_from_option = options.suffix.unwrap_or_default();
-        let suffix_from_template = &options.template[j..];
+        let suffix_from_template = &template_str[j..];
         let suffix = format!("{suffix_from_template}{suffix_from_option}");
         if suffix.contains(MAIN_SEPARATOR) {
             return Err(MkTempError::SuffixContainsDirSeparator(suffix));
@@ -276,7 +284,7 @@ impl Params {
         let num_rand_chars = j - i;
 
         Ok(Self {
-            directory: directory.into(),
+            directory,
             prefix,
             num_rand_chars,
             suffix,
@@ -333,6 +341,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = match uu_app().try_get_matches_from(&args) {
         Ok(m) => m,
         Err(e) => {
+            use uucore::clap_localization::handle_clap_error_with_exit_code;
+            if e.kind() == clap::error::ErrorKind::UnknownArgument {
+                handle_clap_error_with_exit_code(e, 1);
+            }
             if e.kind() == clap::error::ErrorKind::TooManyValues
                 && e.context().any(|(kind, val)| {
                     kind == clap::error::ContextKind::InvalidArg
@@ -356,7 +368,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // If POSIXLY_CORRECT was set, template MUST be the last argument.
         if matches.contains_id(ARG_TEMPLATE) {
             // Template argument was provided, check if was the last one.
-            if args.last().unwrap() != OsStr::new(&options.template) {
+            if args.last().unwrap() != &options.template {
                 return Err(Box::new(MkTempError::TooManyTemplates));
             }
         }
@@ -393,6 +405,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("mktemp-about"))
         .override_usage(format_usage(&translate!("mktemp-usage")))
         .infer_long_args(true)
@@ -452,7 +465,11 @@ pub fn uu_app() -> Command {
                 .help(translate!("mktemp-help-t"))
                 .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(ARG_TEMPLATE).num_args(..=1))
+        .arg(
+            Arg::new(ARG_TEMPLATE)
+                .num_args(..=1)
+                .value_parser(clap::value_parser!(OsString)),
+        )
 }
 
 fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {

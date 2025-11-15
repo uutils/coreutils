@@ -6,8 +6,10 @@
 // spell-checker:ignore (ToDO) PSKIP linebreak ostream parasplit tabwidth xanti xprefix
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
+use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::translate;
@@ -204,27 +206,27 @@ impl FmtOptions {
 ///
 /// A `UResult<()>` indicating success or failure.
 fn process_file(
-    file_name: &str,
+    file_name: &OsString,
     fmt_opts: &FmtOptions,
     ostream: &mut BufWriter<Stdout>,
 ) -> UResult<()> {
-    let mut fp = BufReader::new(match file_name {
-        "-" => Box::new(stdin()) as Box<dyn Read + 'static>,
-        _ => {
-            let f = File::open(file_name).map_err_context(
-                || translate!("fmt-error-cannot-open-for-reading", "file" => file_name.quote()),
-            )?;
-            if f.metadata()
-                .map_err_context(
-                    || translate!("fmt-error-cannot-get-metadata", "file" => file_name.quote()),
-                )?
-                .is_dir()
-            {
-                return Err(FmtError::ReadError.into());
-            }
-
-            Box::new(f) as Box<dyn Read + 'static>
+    let mut fp = BufReader::new(if file_name == "-" {
+        Box::new(stdin()) as Box<dyn Read + 'static>
+    } else {
+        let path = Path::new(file_name);
+        let f = File::open(path).map_err_context(
+            || translate!("fmt-error-cannot-open-for-reading", "file" => path.quote()),
+        )?;
+        if f.metadata()
+            .map_err_context(
+                || translate!("fmt-error-cannot-get-metadata", "file" => path.quote()),
+            )?
+            .is_dir()
+        {
+            return Err(FmtError::ReadError.into());
         }
+
+        Box::new(f) as Box<dyn Read + 'static>
     });
 
     let p_stream = ParagraphStream::new(fmt_opts, &mut fp);
@@ -257,23 +259,24 @@ fn process_file(
 /// # Returns
 /// A `UResult<()>` with the file names, or an error if one of the file names could not be parsed
 /// (e.g., it is given as a negative number not in the first argument and not after a --
-fn extract_files(matches: &ArgMatches) -> UResult<Vec<String>> {
+fn extract_files(matches: &ArgMatches) -> UResult<Vec<OsString>> {
     let in_first_pos = matches
         .index_of(options::FILES_OR_WIDTH)
         .is_some_and(|x| x == 1);
     let is_neg = |s: &str| s.parse::<isize>().is_ok_and(|w| w < 0);
 
-    let files: UResult<Vec<String>> = matches
-        .get_many::<String>(options::FILES_OR_WIDTH)
+    let files: UResult<Vec<OsString>> = matches
+        .get_many::<OsString>(options::FILES_OR_WIDTH)
         .into_iter()
         .flatten()
         .enumerate()
         .filter_map(|(i, x)| {
-            if is_neg(x) {
+            let x_str = x.to_string_lossy();
+            if is_neg(&x_str) {
                 if in_first_pos && i == 0 {
                     None
                 } else {
-                    let first_num = x
+                    let first_num = x_str
                         .chars()
                         .nth(1)
                         .expect("a negative number should be at least two characters long");
@@ -286,7 +289,7 @@ fn extract_files(matches: &ArgMatches) -> UResult<Vec<String>> {
         .collect();
 
     if files.as_ref().is_ok_and(|f| f.is_empty()) {
-        Ok(vec!["-".into()])
+        Ok(vec![OsString::from("-")])
     } else {
         files
     }
@@ -303,8 +306,11 @@ fn extract_width(matches: &ArgMatches) -> UResult<Option<usize>> {
     }
 
     if let Some(1) = matches.index_of(options::FILES_OR_WIDTH) {
-        let width_arg = matches.get_one::<String>(options::FILES_OR_WIDTH).unwrap();
-        if let Some(num) = width_arg.strip_prefix('-') {
+        let width_arg = matches
+            .get_one::<OsString>(options::FILES_OR_WIDTH)
+            .unwrap();
+        let width_str = width_arg.to_string_lossy();
+        if let Some(num) = width_str.strip_prefix('-') {
             Ok(num.parse::<usize>().ok())
         } else {
             // will be treated as a file name
@@ -334,7 +340,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let matches = uu_app().try_get_matches_from(&args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), &args)?;
 
     let files = extract_files(&matches)?;
 
@@ -352,6 +358,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("fmt-about"))
         .override_usage(format_usage(&translate!("fmt-usage")))
         .infer_long_args(true)
@@ -454,6 +461,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Append)
                 .value_name("FILES")
                 .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString))
                 .allow_negative_numbers(true),
         )
 }

@@ -7,7 +7,7 @@
 
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
-use uutests::util::{TestScenario, expected_result};
+use uutests::util::{TestScenario, expected_result, gnu_cmd_result};
 use uutests::util_name;
 #[test]
 fn test_invalid_arg() {
@@ -249,4 +249,29 @@ fn test_all() {
         let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "issue #3219"]
+fn test_locale() {
+    let ts = TestScenario::new(util_name!());
+
+    let expected_stdout =
+        unwrap_or_return!(gnu_cmd_result(&ts, &[], &[("LC_ALL", "C")])).stdout_move_str();
+    ts.ucmd()
+        .env("LC_ALL", "C")
+        .succeeds()
+        .stdout_is(&expected_stdout);
+
+    let expected_stdout =
+        unwrap_or_return!(gnu_cmd_result(&ts, &[], &[("LC_ALL", "en_US.UTF-8")])).stdout_move_str();
+    ts.ucmd()
+        .env("LC_ALL", "C")
+        .succeeds()
+        .stdout_str_check(|s| s != expected_stdout);
+    ts.ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .succeeds()
+        .stdout_is(&expected_stdout);
 }

@@ -9,12 +9,12 @@ mod error;
 use clap::{Arg, ArgAction, Command};
 use memchr::memmem;
 use memmap2::Mmap;
+use std::ffi::OsString;
 use std::io::{BufWriter, Read, Write, stdin, stdout};
 use std::{
     fs::{File, read},
     path::Path,
 };
-use uucore::display::Quotable;
 use uucore::error::UError;
 use uucore::error::UResult;
 use uucore::{format_usage, show};
@@ -32,7 +32,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let before = matches.get_flag(options::BEFORE);
     let regex = matches.get_flag(options::REGEX);
@@ -45,9 +45,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         raw_separator
     };
 
-    let files: Vec<&str> = match matches.get_many::<String>(options::FILE) {
-        Some(v) => v.map(|s| s.as_str()).collect(),
-        None => vec!["-"],
+    let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILE) {
+        Some(v) => v.cloned().collect(),
+        None => vec![OsString::from("-")],
     };
 
     tac(&files, before, regex, separator)
@@ -56,6 +56,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .override_usage(format_usage(&translate!("tac-usage")))
         .about(translate!("tac-about"))
         .infer_long_args(true)
@@ -84,6 +85,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE)
                 .hide(true)
                 .action(ArgAction::Append)
+                .value_parser(clap::value_parser!(OsString))
                 .value_hint(clap::ValueHint::FilePath),
         )
 }
@@ -219,7 +221,7 @@ fn buffer_tac(data: &[u8], before: bool, separator: &str) -> std::io::Result<()>
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn tac(filenames: &[&str], before: bool, regex: bool, separator: &str) -> UResult<()> {
+fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UResult<()> {
     // Compile the regular expression pattern if it is provided.
     let maybe_pattern = if regex {
         match regex::bytes::Regex::new(separator) {
@@ -230,7 +232,7 @@ fn tac(filenames: &[&str], before: bool, regex: bool, separator: &str) -> UResul
         None
     };
 
-    for &filename in filenames {
+    for filename in filenames {
         let mmap;
         let buf;
 
@@ -241,7 +243,7 @@ fn tac(filenames: &[&str], before: bool, regex: bool, separator: &str) -> UResul
             } else {
                 let mut buf1 = Vec::new();
                 if let Err(e) = stdin().read_to_end(&mut buf1) {
-                    let e: Box<dyn UError> = TacError::ReadError("stdin".to_string(), e).into();
+                    let e: Box<dyn UError> = TacError::ReadError(OsString::from("stdin"), e).into();
                     show!(e);
                     continue;
                 }
@@ -251,13 +253,13 @@ fn tac(filenames: &[&str], before: bool, regex: bool, separator: &str) -> UResul
         } else {
             let path = Path::new(filename);
             if path.is_dir() {
-                let e: Box<dyn UError> = TacError::InvalidArgument(String::from(filename)).into();
+                let e: Box<dyn UError> = TacError::InvalidArgument(filename.clone()).into();
                 show!(e);
                 continue;
             }
 
             if path.metadata().is_err() {
-                let e: Box<dyn UError> = TacError::FileNotFound(String::from(filename)).into();
+                let e: Box<dyn UError> = TacError::FileNotFound(filename.clone()).into();
                 show!(e);
                 continue;
             }
@@ -272,8 +274,7 @@ fn tac(filenames: &[&str], before: bool, regex: bool, separator: &str) -> UResul
                         &buf
                     }
                     Err(e) => {
-                        let s = format!("{}", filename.quote());
-                        let e: Box<dyn UError> = TacError::ReadError(s.to_string(), e).into();
+                        let e: Box<dyn UError> = TacError::ReadError(filename.clone(), e).into();
                         show!(e);
                         continue;
                     }

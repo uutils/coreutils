@@ -399,6 +399,96 @@ fn test_mv_replace_file() {
 }
 
 #[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_replace_symlink_with_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("a");
+    at.mkdir("b");
+    at.touch("a/empty_file_a");
+    at.touch("b/empty_file_b");
+
+    at.symlink_dir("a", "symlink_a");
+    at.symlink_dir("b", "symlink_b");
+
+    assert_eq!(at.read("symlink_a/empty_file_a"), "");
+
+    ucmd.arg("-T")
+        .arg("symlink_b")
+        .arg("symlink_a")
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists("symlink_a/empty_file_b"));
+    assert!(!at.file_exists("symlink_a/empty_file_a"));
+    assert!(!at.symlink_exists("symlink_b"));
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_replace_symlink_with_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.mkdir("b");
+    at.touch("b/empty_file_b");
+
+    at.symlink_file("a", "symlink");
+
+    ucmd.arg("-T")
+        .arg("b")
+        .arg("symlink")
+        .fails()
+        .stderr_contains("cannot overwrite non-directory")
+        .stderr_contains("with directory");
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_replace_symlink_with_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.touch("b");
+
+    at.symlink_file("a", "symlink");
+
+    ucmd.arg("-T")
+        .arg("b")
+        .arg("symlink")
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists("symlink"));
+    assert!(!at.is_symlink("symlink"));
+    assert!(!at.file_exists("b"));
+    assert!(at.file_exists("a"));
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_file_to_symlink_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("a");
+    at.touch("a/empty_file_a");
+    at.touch("b");
+
+    at.symlink_dir("a", "symlink");
+
+    assert!(at.file_exists("symlink/empty_file_a"));
+
+    ucmd.arg("b").arg("symlink").succeeds().no_stderr();
+
+    assert!(at.dir_exists("symlink"));
+    assert!(at.is_symlink("symlink"));
+    assert!(at.file_exists("symlink/b"));
+    assert!(!at.file_exists("b"));
+    assert!(at.dir_exists("a"));
+    assert!(at.file_exists("a/b"));
+}
+
+#[test]
 fn test_mv_force_replace_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_force_replace_file_a";
@@ -2546,4 +2636,82 @@ fn test_mv_selinux_context() {
         let _ = std::fs::remove_file(at.plus_as_string(dest));
         let _ = std::fs::remove_file(at.plus_as_string(src));
     }
+}
+
+#[test]
+fn test_mv_error_usage_display_missing_arg() {
+    new_ucmd!()
+        .arg("--target-directory=.")
+        .fails()
+        .code_is(1)
+        .stderr_contains("error: the following required arguments were not provided:")
+        .stderr_contains("<files>...")
+        .stderr_contains("Usage: mv [OPTION]... [-T] SOURCE DEST")
+        .stderr_contains("For more information, try '--help'.");
+}
+
+#[test]
+fn test_mv_error_usage_display_too_few() {
+    new_ucmd!()
+        .arg("file1")
+        .fails()
+        .code_is(1)
+        .stderr_contains("requires at least 2 values, but only 1 was provided")
+        .stderr_contains("Usage: mv [OPTION]... [-T] SOURCE DEST")
+        .stderr_contains("For more information, try '--help'.");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_verbose_directory_recursive() {
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("mv-dir");
+    at.mkdir("mv-dir/a");
+    at.mkdir("mv-dir/a/b");
+    at.mkdir("mv-dir/a/b/c");
+    at.mkdir("mv-dir/d");
+    at.mkdir("mv-dir/d/e");
+    at.mkdir("mv-dir/d/e/f");
+    at.touch("mv-dir/a/b/c/file1");
+    at.touch("mv-dir/d/e/f/file2");
+
+    // Force cross-filesystem move using /dev/shm (tmpfs)
+    let target_dir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let target_path = target_dir.path().to_str().unwrap();
+
+    let result = scene
+        .ucmd()
+        .arg("--verbose")
+        .arg("mv-dir")
+        .arg(target_path)
+        .succeeds();
+
+    // Check that the directory structure was moved
+    assert!(!at.dir_exists("mv-dir"));
+    assert!(target_dir.path().join("mv-dir").exists());
+    assert!(target_dir.path().join("mv-dir/a").exists());
+    assert!(target_dir.path().join("mv-dir/a/b").exists());
+    assert!(target_dir.path().join("mv-dir/a/b/c").exists());
+    assert!(target_dir.path().join("mv-dir/d").exists());
+    assert!(target_dir.path().join("mv-dir/d/e").exists());
+    assert!(target_dir.path().join("mv-dir/d/e/f").exists());
+    assert!(target_dir.path().join("mv-dir/a/b/c/file1").exists());
+    assert!(target_dir.path().join("mv-dir/d/e/f/file2").exists());
+
+    let stdout = result.stdout_str();
+
+    // With cross-filesystem move, we MUST see recursive verbose output
+    assert!(stdout.contains("'mv-dir/a' -> "));
+    assert!(stdout.contains("'mv-dir/a/b' -> "));
+    assert!(stdout.contains("'mv-dir/a/b/c' -> "));
+    assert!(stdout.contains("'mv-dir/a/b/c/file1' -> "));
+    assert!(stdout.contains("'mv-dir/d' -> "));
+    assert!(stdout.contains("'mv-dir/d/e' -> "));
+    assert!(stdout.contains("'mv-dir/d/e/f' -> "));
+    assert!(stdout.contains("'mv-dir/d/e/f/file2' -> "));
 }

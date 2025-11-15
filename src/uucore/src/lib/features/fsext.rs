@@ -130,10 +130,10 @@ impl From<&str> for MetadataTimeField {
     /// not supported), and the default branch should not be reached.
     fn from(value: &str) -> Self {
         match value {
-            "ctime" | "status" => MetadataTimeField::Change,
-            "access" | "atime" | "use" => MetadataTimeField::Access,
-            "mtime" | "modification" => MetadataTimeField::Modification,
-            "birth" | "creation" => MetadataTimeField::Birth,
+            "ctime" | "status" => Self::Change,
+            "access" | "atime" | "use" => Self::Access,
+            "mtime" | "modification" => Self::Modification,
+            "birth" | "creation" => Self::Birth,
             // below should never happen as clap already restricts the values.
             _ => unreachable!("Invalid metadata time field."),
         }
@@ -243,7 +243,7 @@ impl MountInfo {
                 mount_option = String::from_utf8_lossy(raw[3]).to_string();
             }
             _ => return None,
-        };
+        }
 
         let dev_id = mount_dev_id(&mount_dir);
         let dummy = is_dummy_filesystem(&fs_type, &mount_option);
@@ -985,6 +985,7 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x7372_7279 => "btrfs_test".into(),
         0x00C3_6400 => "ceph".into(),
         0x0027_E0EB => "cgroupfs".into(),
+        0x6367_7270 => "cgroup2fs".into(),
         0xFF53_4D42 => "cifs".into(),
         0x7375_7245 => "coda".into(),
         0x012F_F7B7 => "coh".into(),

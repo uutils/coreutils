@@ -26,7 +26,7 @@ This file documents why some tests are failing:
 * gnu/tests/misc/close-stdout.sh
 * gnu/tests/misc/comm.pl
 * gnu/tests/misc/nohup.sh
-* gnu/tests/misc/numfmt.pl - https://github.com/uutils/coreutils/issues/7219 / https://github.com/uutils/coreutils/issues/7221
+* gnu/tests/numfmt/numfmt.pl - https://github.com/uutils/coreutils/issues/7219 / https://github.com/uutils/coreutils/issues/7221
 * gnu/tests/misc/stdbuf.sh - https://github.com/uutils/coreutils/issues/7072
 * gnu/tests/misc/tee.sh - https://github.com/uutils/coreutils/issues/7073
 * gnu/tests/misc/time-style.sh

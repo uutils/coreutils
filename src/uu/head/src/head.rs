@@ -23,12 +23,12 @@ use uucore::{format_usage, show};
 const BUF_SIZE: usize = 65536;
 
 mod options {
-    pub const BYTES_NAME: &str = "BYTES";
-    pub const LINES_NAME: &str = "LINES";
-    pub const QUIET_NAME: &str = "QUIET";
-    pub const VERBOSE_NAME: &str = "VERBOSE";
-    pub const ZERO_NAME: &str = "ZERO";
-    pub const FILES_NAME: &str = "FILE";
+    pub const BYTES: &str = "BYTES";
+    pub const LINES: &str = "LINES";
+    pub const QUIET: &str = "QUIET";
+    pub const VERBOSE: &str = "VERBOSE";
+    pub const ZERO: &str = "ZERO";
+    pub const FILES: &str = "FILE";
     pub const PRESUME_INPUT_PIPE: &str = "-PRESUME-INPUT-PIPE";
 }
 
@@ -46,9 +46,6 @@ enum HeadError {
 
     #[error("{}", translate!("head-error-parse-error", "err" => 0))]
     ParseError(String),
-
-    #[error("{}", translate!("head-error-bad-encoding"))]
-    BadEncoding,
 
     #[error("{}", translate!("head-error-num-too-large"))]
     NumTooLarge(#[from] TryFromIntError),
@@ -71,42 +68,43 @@ type HeadResult<T> = Result<T, HeadError>;
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("head-about"))
         .override_usage(format_usage(&translate!("head-usage")))
         .infer_long_args(true)
         .arg(
-            Arg::new(options::BYTES_NAME)
+            Arg::new(options::BYTES)
                 .short('c')
                 .long("bytes")
                 .value_name("[-]NUM")
                 .help(translate!("head-help-bytes"))
-                .overrides_with_all([options::BYTES_NAME, options::LINES_NAME])
+                .overrides_with_all([options::BYTES, options::LINES])
                 .allow_hyphen_values(true),
         )
         .arg(
-            Arg::new(options::LINES_NAME)
+            Arg::new(options::LINES)
                 .short('n')
                 .long("lines")
                 .value_name("[-]NUM")
                 .help(translate!("head-help-lines"))
-                .overrides_with_all([options::LINES_NAME, options::BYTES_NAME])
+                .overrides_with_all([options::LINES, options::BYTES])
                 .allow_hyphen_values(true),
         )
         .arg(
-            Arg::new(options::QUIET_NAME)
+            Arg::new(options::QUIET)
                 .short('q')
                 .long("quiet")
                 .visible_alias("silent")
                 .help(translate!("head-help-quiet"))
-                .overrides_with_all([options::VERBOSE_NAME, options::QUIET_NAME])
+                .overrides_with_all([options::VERBOSE, options::QUIET])
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(options::VERBOSE_NAME)
+            Arg::new(options::VERBOSE)
                 .short('v')
                 .long("verbose")
                 .help(translate!("head-help-verbose"))
-                .overrides_with_all([options::QUIET_NAME, options::VERBOSE_NAME])
+                .overrides_with_all([options::QUIET, options::VERBOSE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -117,16 +115,17 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(options::ZERO_NAME)
+            Arg::new(options::ZERO)
                 .short('z')
                 .long("zero-terminated")
                 .help(translate!("head-help-zero-terminated"))
-                .overrides_with(options::ZERO_NAME)
+                .overrides_with(options::ZERO)
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(options::FILES_NAME)
+            Arg::new(options::FILES)
                 .action(ArgAction::Append)
+                .value_parser(clap::value_parser!(OsString))
                 .value_hint(clap::ValueHint::FilePath),
         )
 }
@@ -147,7 +146,7 @@ impl Default for Mode {
 
 impl Mode {
     fn from(matches: &ArgMatches) -> Result<Self, String> {
-        if let Some(v) = matches.get_one::<String>(options::BYTES_NAME) {
+        if let Some(v) = matches.get_one::<String>(options::BYTES) {
             let (n, all_but_last) = parse::parse_num(v)
                 .map_err(|err| translate!("head-error-invalid-bytes", "err" => err))?;
             if all_but_last {
@@ -155,7 +154,7 @@ impl Mode {
             } else {
                 Ok(Self::FirstBytes(n))
             }
-        } else if let Some(v) = matches.get_one::<String>(options::LINES_NAME) {
+        } else if let Some(v) = matches.get_one::<String>(options::LINES) {
             let (n, all_but_last) = parse::parse_num(v)
                 .map_err(|err| translate!("head-error-invalid-lines", "err" => err))?;
             if all_but_last {
@@ -176,15 +175,22 @@ fn arg_iterate<'a>(
     let first = args.next().unwrap();
     if let Some(second) = args.next() {
         if let Some(s) = second.to_str() {
-            match parse::parse_obsolete(s) {
-                Some(Ok(iter)) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
-                Some(Err(parse::ParseError)) => Err(HeadError::ParseError(
-                    translate!("head-error-bad-argument-format", "arg" => s.quote()),
-                )),
-                None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
+            if let Some(v) = parse::parse_obsolete(s) {
+                match v {
+                    Ok(iter) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
+                    Err(parse::ParseError) => Err(HeadError::ParseError(
+                        translate!("head-error-bad-argument-format", "arg" => s.quote()),
+                    )),
+                }
+            } else {
+                // The second argument contains non-UTF-8 sequences, so it can't be an obsolete option
+                // like "-5". Treat it as a regular file argument.
+                Ok(Box::new(vec![first, second].into_iter().chain(args)))
             }
         } else {
-            Err(HeadError::BadEncoding)
+            // The second argument contains non-UTF-8 sequences, so it can't be an obsolete option
+            // like "-5". Treat it as a regular file argument.
+            Ok(Box::new(vec![first, second].into_iter().chain(args)))
         }
     } else {
         Ok(Box::new(vec![first].into_iter()))
@@ -198,7 +204,7 @@ struct HeadOptions {
     pub line_ending: LineEnding,
     pub presume_input_pipe: bool,
     pub mode: Mode,
-    pub files: Vec<String>,
+    pub files: Vec<OsString>,
 }
 
 impl HeadOptions {
@@ -206,16 +212,16 @@ impl HeadOptions {
     pub fn get_from(matches: &ArgMatches) -> Result<Self, String> {
         let mut options = Self::default();
 
-        options.quiet = matches.get_flag(options::QUIET_NAME);
-        options.verbose = matches.get_flag(options::VERBOSE_NAME);
-        options.line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_NAME));
+        options.quiet = matches.get_flag(options::QUIET);
+        options.verbose = matches.get_flag(options::VERBOSE);
+        options.line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
         options.presume_input_pipe = matches.get_flag(options::PRESUME_INPUT_PIPE);
 
         options.mode = Mode::from(matches)?;
 
-        options.files = match matches.get_many::<String>(options::FILES_NAME) {
+        options.files = match matches.get_many::<OsString>(options::FILES) {
             Some(v) => v.cloned().collect(),
-            None => vec!["-".to_owned()],
+            None => vec![OsString::from("-")],
         };
 
         Ok(options)
@@ -461,82 +467,76 @@ fn head_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
 fn uu_head(options: &HeadOptions) -> UResult<()> {
     let mut first = true;
     for file in &options.files {
-        let res = match file.as_str() {
-            "-" => {
-                if (options.files.len() > 1 && !options.quiet) || options.verbose {
-                    if !first {
-                        println!();
-                    }
-                    println!("{}", translate!("head-header-stdin"));
+        let res = if file == "-" {
+            if (options.files.len() > 1 && !options.quiet) || options.verbose {
+                if !first {
+                    println!();
                 }
-                let stdin = io::stdin();
-
-                #[cfg(unix)]
-                {
-                    let stdin_raw_fd = stdin.as_raw_fd();
-                    let mut stdin_file = unsafe { File::from_raw_fd(stdin_raw_fd) };
-                    let current_pos = stdin_file.stream_position();
-                    if let Ok(current_pos) = current_pos {
-                        // We have a seekable file. Ensure we set the input stream to the
-                        // last byte read so that any tools that parse the remainder of
-                        // the stdin stream read from the correct place.
-
-                        let bytes_read = head_file(&mut stdin_file, options)?;
-                        stdin_file.seek(SeekFrom::Start(current_pos + bytes_read))?;
-                    } else {
-                        let _bytes_read = head_file(&mut stdin_file, options)?;
-                    }
-                }
-
-                #[cfg(not(unix))]
-                {
-                    let mut stdin = stdin.lock();
-
-                    match options.mode {
-                        Mode::FirstBytes(n) => read_n_bytes(&mut stdin, n),
-                        Mode::AllButLastBytes(n) => read_but_last_n_bytes(&mut stdin, n),
-                        Mode::FirstLines(n) => {
-                            read_n_lines(&mut stdin, n, options.line_ending.into())
-                        }
-                        Mode::AllButLastLines(n) => {
-                            read_but_last_n_lines(&mut stdin, n, options.line_ending.into())
-                        }
-                    }?;
-                }
-
-                Ok(())
+                println!("{}", translate!("head-header-stdin"));
             }
-            name => {
-                let mut file = match File::open(name) {
-                    Ok(f) => f,
-                    Err(err) => {
-                        show!(err.map_err_context(
-                            || translate!("head-error-cannot-open", "name" => name.quote())
-                        ));
-                        continue;
-                    }
-                };
-                if (options.files.len() > 1 && !options.quiet) || options.verbose {
-                    if !first {
-                        println!();
-                    }
-                    println!("==> {name} <==");
+            let stdin = io::stdin();
+
+            #[cfg(unix)]
+            {
+                let stdin_raw_fd = stdin.as_raw_fd();
+                let mut stdin_file = unsafe { File::from_raw_fd(stdin_raw_fd) };
+                let current_pos = stdin_file.stream_position();
+                if let Ok(current_pos) = current_pos {
+                    // We have a seekable file. Ensure we set the input stream to the
+                    // last byte read so that any tools that parse the remainder of
+                    // the stdin stream read from the correct place.
+
+                    let bytes_read = head_file(&mut stdin_file, options)?;
+                    stdin_file.seek(SeekFrom::Start(current_pos + bytes_read))?;
+                } else {
+                    let _bytes_read = head_file(&mut stdin_file, options)?;
                 }
-                head_file(&mut file, options)?;
-                Ok(())
             }
-        };
-        if let Err(e) = res {
-            let name = if file.as_str() == "-" {
-                "standard input"
-            } else {
-                file
+
+            #[cfg(not(unix))]
+            {
+                let mut stdin = stdin.lock();
+
+                match options.mode {
+                    Mode::FirstBytes(n) => read_n_bytes(&mut stdin, n),
+                    Mode::AllButLastBytes(n) => read_but_last_n_bytes(&mut stdin, n),
+                    Mode::FirstLines(n) => read_n_lines(&mut stdin, n, options.line_ending.into()),
+                    Mode::AllButLastLines(n) => {
+                        read_but_last_n_lines(&mut stdin, n, options.line_ending.into())
+                    }
+                }?;
+            }
+
+            Ok(())
+        } else {
+            let mut file_handle = match File::open(file) {
+                Ok(f) => f,
+                Err(err) => {
+                    show!(err.map_err_context(
+                        || translate!("head-error-cannot-open", "name" => file.to_string_lossy().quote())
+                    ));
+                    continue;
+                }
             };
-            return Err(HeadError::Io {
-                name: name.to_string(),
-                err: e,
+            if (options.files.len() > 1 && !options.quiet) || options.verbose {
+                if !first {
+                    println!();
+                }
+                match file.to_str() {
+                    Some(name) => println!("==> {name} <=="),
+                    None => println!("==> {} <==", file.to_string_lossy()),
+                }
             }
-            .into());
+            head_file(&mut file_handle, options)?;
+            Ok(())
+        };
+        if let Err(err) = res {
+            let name = if file == "-" {
+                "standard input".to_string()
+            } else {
+                file.to_string_lossy().into_owned()
+            };
+            return Err(HeadError::Io { name, err }.into());
         }
         first = false;
     }
@@ -549,14 +549,10 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(arg_iterate(args)?)?;
-    let args = match HeadOptions::get_from(&matches) {
-        Ok(o) => o,
-        Err(s) => {
-            return Err(HeadError::MatchOption(s).into());
-        }
-    };
-    uu_head(&args)
+    let args: Vec<_> = arg_iterate(args)?.collect();
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let options = HeadOptions::get_from(&matches).map_err(HeadError::MatchOption)?;
+    uu_head(&options)
 }
 
 #[cfg(test)]
@@ -672,7 +668,7 @@ mod tests {
         use std::os::unix::ffi::OsStringExt;
         let invalid = OsString::from_vec(vec![b'\x80', b'\x81']);
         // this arises from a conversion from OsString to &str
-        assert!(arg_iterate(vec![OsString::from("head"), invalid].into_iter()).is_err());
+        assert!(arg_iterate(vec![OsString::from("head"), invalid].into_iter()).is_ok());
     }
 
     #[test]

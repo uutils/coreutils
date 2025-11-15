@@ -58,6 +58,16 @@ fn test_simple_arithmetic() {
         .args(&["4", "/", "2"])
         .succeeds()
         .stdout_only("2\n");
+
+    new_ucmd!()
+        .args(&["4", "=", "2"])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["4", "=", "4"])
+        .succeeds()
+        .stdout_only("1\n");
 }
 
 #[test]
@@ -572,10 +582,16 @@ fn test_eager_evaluation() {
 #[test]
 fn test_long_input() {
     // Giving expr an arbitrary long expression should succeed rather than end with a segfault due to a stack overflow.
-    #[cfg(not(windows))]
+    #[cfg(all(not(windows), not(target_os = "openbsd")))]
     const MAX_NUMBER: usize = 40000;
-    #[cfg(not(windows))]
+    #[cfg(all(not(windows), not(target_os = "openbsd")))]
     const RESULT: &str = "800020000\n";
+
+    // On OpenBSD, crash with default MAX_NUMBER
+    #[cfg(target_os = "openbsd")]
+    const MAX_NUMBER: usize = 10000;
+    #[cfg(target_os = "openbsd")]
+    const RESULT: &str = "50005000\n";
 
     // On windows there is 8192 characters input limit
     #[cfg(windows)]
@@ -1859,11 +1875,10 @@ mod gnu_expr_multibyte {
 
     // The regex engine should match the '.' to the first multibyte character.
     #[test]
-    #[ignore = "not implemented"]
     fn test_m3() {
         let args: &[&[u8]] = &[b"match", b"\xCE\xB1bc\xCE\xB4ef", b".bc"];
 
-        let cases = &[TestCase::FR.out("3"), TestCase::C.code(1)];
+        let cases = &[TestCase::FR.out("3"), TestCase::C.out("0").code(1)];
 
         for tc in cases {
             check_test_case(args, tc);
@@ -1873,7 +1888,6 @@ mod gnu_expr_multibyte {
     // The opposite of the previous test: two dots should only match the two
     // octets in single-byte locale.
     #[test]
-    #[ignore = "not implemented"]
     fn test_m4() {
         let args: &[&[u8]] = &[b"match", b"\xCE\xB1bc\xCE\xB4ef", b"..bc"];
 
@@ -1886,11 +1900,10 @@ mod gnu_expr_multibyte {
 
     // Match with grouping - a single dot should return the two octets
     #[test]
-    #[ignore = "not implemented"]
     fn test_m5() {
         let args: &[&[u8]] = &[b"match", b"\xCE\xB1bc\xCE\xB4ef", b"\\(.b\\)c"];
 
-        let cases = &[TestCase::FR.out(b"\xCE\xB1b"), TestCase::C.code(1)];
+        let cases = &[TestCase::FR.out(b"\xCE\xB1b"), TestCase::C.out("").code(1)];
 
         for tc in cases {
             check_test_case(args, tc);
@@ -1900,11 +1913,10 @@ mod gnu_expr_multibyte {
     // Invalid multibyte sequences - regex should not match in multibyte locale
     // (POSIX requirement)
     #[test]
-    #[ignore = "not implemented"]
     fn test_m6() {
         let args: &[&[u8]] = &[b"match", b"\xCEbc\xCE\xB4ef", b"\\(.\\)"];
 
-        let cases = &[TestCase::FR.code(1), TestCase::C.out(b"\xCE")];
+        let cases = &[TestCase::FR.out("").code(1), TestCase::C.out(b"\xCE")];
 
         for tc in cases {
             check_test_case(args, tc);
@@ -1916,7 +1928,6 @@ mod gnu_expr_multibyte {
     // In the single byte case, the regex engine sees two octets in the
     // character class ('\xCE' and '\xB1') - and it matches the first one.
     #[test]
-    #[ignore = "not implemented"]
     fn test_m7() {
         let args: &[&[u8]] = &[b"match", b"\xCE\xB1bc\xCE\xB4ef", b"\\(.\\)"];
 
@@ -1926,4 +1937,33 @@ mod gnu_expr_multibyte {
             check_test_case(args, tc);
         }
     }
+}
+
+#[test]
+fn test_emoji_operations() {
+    new_ucmd!()
+        .args(&["🚀", "=", "🚀"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["🚀", "!=", "🚀"])
+        .fails()
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["🚀", "=", "🧨"])
+        .fails()
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["length", "🦀🚀🎯"])
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .succeeds()
+        .stdout_only("3\n");
+
+    new_ucmd!()
+        .args(&["🌍", "!=", "🌎"])
+        .succeeds()
+        .stdout_only("1\n");
 }
