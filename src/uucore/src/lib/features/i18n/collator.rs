@@ -54,7 +54,7 @@ pub fn init_collator(opts: CollatorOptions) {
 /// }
 /// ```
 pub fn init_locale_collation() -> bool {
-    use crate::i18n::{get_locale_encoding, UEncoding};
+    use crate::i18n::{UEncoding, get_locale_encoding};
 
     // Check if we need locale-aware collation
     if get_locale_encoding() != UEncoding::Utf8 {
