@@ -744,9 +744,9 @@ checksum = "19d374276b40fb8bbdee95aef7c7fa6b5316ec764510eb64b8dd0e2ed0d7e7f5"
 
 [[package]]
 name = "crc-fast"
-version = "1.7.0"
+version = "1.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "311eddc0ebdb918fb3f9ce10304736a8e94bfbe48e3dfd61c04754fdbb5a4d67"
+checksum = "ffde0dda52b6befc15f7d1c573d2935cda15dc81bd546ef76d8679b2bf85a300"
 dependencies = [
  "crc",
  "digest",
@@ -1563,9 +1563,9 @@ dependencies = [
 
 [[package]]
 name = "indicatif"
-version = "0.18.2"
+version = "0.18.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ade6dfcba0dfb62ad59e59e7241ec8912af34fd29e0e743e3db992bd278e8b65"
+checksum = "9375e112e4b463ec1b1c6c011953545c65a30164fbab5b581df32b3abf0dcb88"
 dependencies = [
  "console",
  "portable-atomic",
@@ -1751,7 +1751,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07033963ba89ebaf1584d767badaa2e8fcec21aedea6b8c0346d487d49c28667"
 dependencies = [
  "cfg-if",
- "windows-targets 0.53.2",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -3495,6 +3495,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "tempfile",
+ "unicode-width 0.2.2",
  "uucore",
 ]
 

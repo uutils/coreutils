@@ -105,6 +105,8 @@ other Rust program:
 cargo build --release
 ```
 
+Replace `--release` with `--profile=release-fast` or `--profile=release-small` to use all optimizations or save binary size.
+
 This command builds the most portable common core set of uutils into a multicall
 (BusyBox-type) binary, named 'coreutils', on most Rust-supported platforms.
 

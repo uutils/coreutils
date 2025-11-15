@@ -75,19 +75,6 @@ ifeq ($(OS),Windows_NT)
 endif
 LN ?= ln -sf
 
-ifdef SELINUX_ENABLED
-	override SELINUX_ENABLED := 0
-# Now check if we should enable it (only on non-Windows)
-	ifneq ($(OS),Windows_NT)
-		ifeq ($(shell if [ -x /sbin/selinuxenabled ] && /sbin/selinuxenabled 2>/dev/null; then echo 0; else echo 1; fi),0)
-			override SELINUX_ENABLED := 1
-$(info /sbin/selinuxenabled successful)
-	    else
-$(info SELINUX_ENABLED=1 but /sbin/selinuxenabled failed)
-		endif
-	endif
-endif
-
 # Possible programs
 PROGS       := \
 	arch \
@@ -208,8 +195,8 @@ HASHSUM_PROGS := \
 
 $(info Detected OS = $(OS))
 
-# Don't build the SELinux programs on macOS (Darwin) and FreeBSD
-ifeq ($(filter $(OS),Darwin FreeBSD),$(OS))
+# Build the SELinux programs only on Linux
+ifeq ($(filter $(OS),Linux),)
 	SELINUX_PROGS :=
 endif
 
@@ -330,8 +317,6 @@ endif
 
 all: build
 
-use_default := 1
-
 build-pkgs:
 ifneq (${MULTICALL}, y)
 ifdef BUILD_SPEC_FEATURE
@@ -360,7 +345,7 @@ test_toybox:
 toybox-src:
 	if [ ! -e "$(TOYBOX_SRC)" ] ; then \
 		mkdir -p "$(TOYBOX_ROOT)" ; \
-		wget "https://github.com/landley/toybox/archive/refs/tags/$(TOYBOX_VER).tar.gz" -P "$(TOYBOX_ROOT)" ; \
+		curl -Ls "https://github.com/landley/toybox/archive/refs/tags/$(TOYBOX_VER).tar.gz" -o "$(TOYBOX_ROOT)/$(TOYBOX_VER).tar.gz" ; \
 		tar -C "$(TOYBOX_ROOT)" -xf "$(TOYBOX_ROOT)/$(TOYBOX_VER).tar.gz" ; \
 		sed -i -e "s|TESTDIR=\".*\"|TESTDIR=\"$(BUILDDIR)\"|g" $(TOYBOX_SRC)/scripts/test.sh; \
 		sed -i -e "s/ || exit 1//g" $(TOYBOX_SRC)/scripts/test.sh; \
@@ -369,8 +354,8 @@ toybox-src:
 busybox-src:
 	if [ ! -e "$(BUSYBOX_SRC)" ] ; then \
 		mkdir -p "$(BUSYBOX_ROOT)" ; \
-		wget "https://busybox.net/downloads/busybox-$(BUSYBOX_VER).tar.bz2" -P "$(BUSYBOX_ROOT)" ; \
-		tar -C "$(BUSYBOX_ROOT)" -xf "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.bz2" ; \
+		curl -Ls "https://github.com/mirror/busybox/archive/refs/tags/$(subst .,_,$(BUSYBOX_VER)).tar.gz" -o "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.gz" ; \
+		tar -C "$(BUSYBOX_ROOT)" -xf "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.gz" ; \
 	fi ;
 
 # This is a busybox-specific config file their test suite wants to parse.
