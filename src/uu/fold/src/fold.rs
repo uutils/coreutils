@@ -580,11 +580,7 @@ fn process_pending_chunk<W: Write>(
     pending: &mut Vec<u8>,
     ctx: &mut FoldContext<'_, W>,
 ) -> UResult<()> {
-    loop {
-        if pending.is_empty() {
-            break;
-        }
-
+    while !pending.is_empty() {
         match std::str::from_utf8(pending) {
             Ok(valid) => {
                 process_utf8_line(valid, ctx)?;
@@ -592,20 +588,21 @@ fn process_pending_chunk<W: Write>(
                 break;
             }
             Err(err) => {
-                if let Some(_) = err.error_len() {
+                if err.error_len().is_some() {
                     process_non_utf8_line(pending, ctx)?;
                     pending.clear();
                     break;
-                } else {
-                    let valid_up_to = err.valid_up_to();
-                    if valid_up_to > 0 {
-                        let valid =
-                            std::str::from_utf8(&pending[..valid_up_to]).expect("valid prefix");
-                        process_utf8_line(valid, ctx)?;
-                        pending.drain(..valid_up_to);
-                    }
+                }
+
+                let valid_up_to = err.valid_up_to();
+                if valid_up_to == 0 {
                     break;
                 }
+
+                let valid =
+                    std::str::from_utf8(&pending[..valid_up_to]).expect("valid prefix");
+                process_utf8_line(valid, ctx)?;
+                pending.drain(..valid_up_to);
             }
         }
     }
