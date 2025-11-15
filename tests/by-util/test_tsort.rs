@@ -155,11 +155,9 @@ fn test_loop_for_iterative_dfs_correctness() {
 }
 
 const TSORT_LOOP_STDERR: &str = "tsort: f: input contains a loop:\ntsort: s\ntsort: t\n";
-const TSORT_LOOP_STDERR_AC: &str =
-    "tsort: f: input contains a loop:\ntsort: a\ntsort: b\ntsort: f: input contains a loop:\ntsort: a\ntsort: c\n";
+const TSORT_LOOP_STDERR_AC: &str = "tsort: f: input contains a loop:\ntsort: a\ntsort: b\ntsort: f: input contains a loop:\ntsort: a\ntsort: c\n";
 const TSORT_ODD_ERROR: &str = "tsort: -: input contains an odd number of tokens\n";
-const TSORT_UNEXPECTED_ARG_ERROR: &str =
-    "error: unexpected argument 'g' found\n\nUsage: tsort [OPTIONS] FILE\n\nFor more information, try '--help'.\n";
+const TSORT_UNEXPECTED_ARG_ERROR: &str = "error: unexpected argument 'g' found\n\nUsage: tsort [OPTIONS] FILE\n\nFor more information, try '--help'.\n";
 
 #[test]
 fn test_cycle_loop_from_file() {
