@@ -195,15 +195,11 @@ HASHSUM_PROGS := \
 
 $(info Detected OS = $(OS))
 
-# Build the SELinux programs only on Linux
-ifeq ($(filter $(OS),Linux),)
-	SELINUX_PROGS :=
-endif
-
 ifneq ($(OS),Windows_NT)
-	PROGS := $(PROGS) $(UNIX_PROGS)
-# Build the selinux command even if not on the system
-	PROGS := $(PROGS) $(SELINUX_PROGS)
+	PROGS += $(UNIX_PROGS)
+endif
+ifeq ($(SELINUX_ENABLED),1)
+	PROGS += $(SELINUX_PROGS)
 endif
 
 UTILS ?= $(filter-out $(SKIP_UTILS),$(PROGS))
