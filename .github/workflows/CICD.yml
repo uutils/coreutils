@@ -122,8 +122,6 @@ jobs:
     - name: Install/setup prerequisites
       shell: bash
       run: |
-        # Avoid no space left
-        sudo rm -rf /usr/local/lib/android /usr/share/dotnet /usr/share/swift /usr/lib/firefox /opt/google/chrome &
         sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu libselinux1-dev
     - name: Initialize workflow variables
       id: vars
@@ -1201,6 +1199,7 @@ jobs:
     - name: build and test all features individually
       shell: bash
       run: |
+        command -v sudo && sudo rm -rf /usr/share/dotnet # avoid no space left
         CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ;
         for f in $(util/show-utils.sh ${CARGO_FEATURES_OPTION})
         do
