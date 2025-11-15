@@ -150,11 +150,14 @@ impl<'a> ErrorFormatter<'a> {
             let error_word = translate!("common-error");
 
             // Print main error
-            self.print_prefixed_error(&translate!(
-                "clap-error-unexpected-argument",
-                "arg" => self.color_mgr.colorize(&arg_str, Color::Yellow),
-                "error_word" => self.color_mgr.colorize(&error_word, Color::Red)
-            ));
+            eprintln!(
+                "{}",
+                translate!(
+                    "clap-error-unexpected-argument",
+                    "arg" => self.color_mgr.colorize(&arg_str, Color::Yellow),
+                    "error_word" => self.color_mgr.colorize(&error_word, Color::Red)
+                )
+            );
             eprintln!();
 
             // Show suggestion if available
