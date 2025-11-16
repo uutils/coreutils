@@ -46,8 +46,9 @@ pub fn ext_sort(
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
-    let (sorted_sender, sorted_receiver) = std::sync::mpsc::sync_channel(1);
-    let (recycled_sender, recycled_receiver) = std::sync::mpsc::sync_channel(1);
+    let pipeline_depth = settings.pipeline_depth.max(2);
+    let (sorted_sender, sorted_receiver) = std::sync::mpsc::sync_channel(pipeline_depth);
+    let (recycled_sender, recycled_receiver) = std::sync::mpsc::sync_channel(pipeline_depth);
     thread::spawn({
         let settings = settings.clone();
         move || sorter(&recycled_receiver, &sorted_sender, &settings)
@@ -193,6 +194,7 @@ fn read_write_loop<I: WriteableTmpFile>(
     sender: SyncSender<Chunk>,
 ) -> UResult<ReadResult<I>> {
     let mut file = files.next().unwrap()?;
+    let pipeline_depth = settings.pipeline_depth.max(2);
 
     let mut carry_over = vec![];
     let initial_capacity = if START_BUFFER_SIZE < buffer_size {
@@ -200,11 +202,21 @@ fn read_write_loop<I: WriteableTmpFile>(
     } else {
         buffer_size
     };
-    // kick things off with two reads
-    for _ in 0..2 {
+    let mut free_chunks: Vec<RecycledChunk> = (0..pipeline_depth)
+        .map(|_| RecycledChunk::new(initial_capacity))
+        .collect();
+
+    // kick things off with two reads so we can detect "fits in memory" cases
+    let mut primed = 0;
+    let mut sender_option = Some(sender);
+    while primed < 2 && !free_chunks.is_empty() {
+        let recycled_chunk = free_chunks.pop().unwrap();
+        let Some(sender_ref) = sender_option.as_ref() else {
+            break;
+        };
         let should_continue = chunks::read(
-            &sender,
-            RecycledChunk::new(initial_capacity),
+            sender_ref,
+            recycled_chunk,
             Some(buffer_size),
             &mut carry_over,
             &mut file,
@@ -212,9 +224,12 @@ fn read_write_loop<I: WriteableTmpFile>(
             separator,
             settings,
         )?;
+        primed += 1;
 
         if !should_continue {
-            drop(sender);
+            if let Some(sender) = sender_option.take() {
+                drop(sender);
+            }
             // We have already read the whole input. Since we are in our first two reads,
             // this means that we can fit the whole input into memory. Bypass writing below and
             // handle this case in a more straightforward way.
@@ -230,7 +245,29 @@ fn read_write_loop<I: WriteableTmpFile>(
         }
     }
 
-    let mut sender_option = Some(sender);
+    if sender_option.is_some() {
+        // Fill the remaining pipeline slots so sorting can overlap with reading.
+        while let Some(recycled_chunk) = free_chunks.pop() {
+            let Some(sender_ref) = sender_option.as_ref() else {
+                break;
+            };
+            let should_continue = chunks::read(
+                sender_ref,
+                recycled_chunk,
+                None,
+                &mut carry_over,
+                &mut file,
+                &mut files,
+                separator,
+                settings,
+            )?;
+            if !should_continue {
+                sender_option = None;
+                break;
+            }
+        }
+    }
+
     let mut tmp_files = vec![];
     loop {
         let Ok(chunk) = receiver.recv() else {
@@ -247,19 +284,27 @@ fn read_write_loop<I: WriteableTmpFile>(
 
         let recycled_chunk = chunk.recycle();
 
-        if let Some(sender) = &sender_option {
-            let should_continue = chunks::read(
-                sender,
-                recycled_chunk,
-                None,
-                &mut carry_over,
-                &mut file,
-                &mut files,
-                separator,
-                settings,
-            )?;
-            if !should_continue {
-                sender_option = None;
+        free_chunks.push(recycled_chunk);
+
+        if sender_option.is_some() {
+            while let Some(recycled_chunk) = free_chunks.pop() {
+                let Some(sender_ref) = sender_option.as_ref() else {
+                    break;
+                };
+                let should_continue = chunks::read(
+                    sender_ref,
+                    recycled_chunk,
+                    None,
+                    &mut carry_over,
+                    &mut file,
+                    &mut files,
+                    separator,
+                    settings,
+                )?;
+                if !should_continue {
+                    sender_option = None;
+                    break;
+                }
             }
         }
     }
