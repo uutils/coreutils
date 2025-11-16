@@ -141,6 +141,10 @@ fn collect_biguint_factors(factors: &[BigUint]) -> BTreeMap<BigUint, usize> {
     map
 }
 
+fn is_even(value: &BigUint) -> bool {
+    (value & BigUint::one()).is_zero()
+}
+
 fn is_probable_prime(candidate: &BigUint) -> bool {
     if *candidate < BigUint::from_u32(2).unwrap() {
         return false;
@@ -149,7 +153,7 @@ fn is_probable_prime(candidate: &BigUint) -> bool {
         return true;
     }
     // even check: candidate % 2 == 0
-    if (candidate & BigUint::from_u32(1).unwrap()).is_zero() {
+    if is_even(candidate) {
         return false;
     }
 
@@ -160,7 +164,7 @@ fn is_probable_prime(candidate: &BigUint) -> bool {
     let mut odd_component = candidate - &one;
     let mut power_of_two = 0u32;
     // while odd_component is even
-    while (&odd_component & BigUint::from_u32(1).unwrap()).is_zero() {
+    while is_even(&odd_component) {
         odd_component >>= 1;
         power_of_two += 1;
     }
@@ -240,7 +244,7 @@ fn pollard_p_minus_1(n: &BigUint) -> Option<BigUint> {
         return None;
     }
 
-    if (n & &one).is_zero() {
+    if is_even(n) {
         return Some(two);
     }
 
@@ -307,15 +311,18 @@ fn pollard_rho(composite: &BigUint) -> Option<BigUint> {
     }
 
     // If composite is even, return 2 immediately.
-    if (composite & &one).is_zero() {
+    if is_even(composite) {
         return Some(two);
     }
 
     // Use a deterministic LCG to generate parameter sequences.
+    const LCG_MULTIPLIER: u128 = 6364136223846793005;
+    const LCG_INCREMENT: u128 = 1442695040888963407;
+
     fn lcg_next(x: &mut u128) {
         *x = x
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
+            .wrapping_mul(LCG_MULTIPLIER)
+            .wrapping_add(LCG_INCREMENT);
     }
 
     let bits = composite.bits();
@@ -325,7 +332,8 @@ fn pollard_rho(composite: &BigUint) -> Option<BigUint> {
     let max_tries: u64 = 16;
     let max_iter: u64 = (bits * bits).clamp(10_000, 200_000);
 
-    let mut seed: u128 = 0x9e3779b97f4a7c15;
+    const LCG_DEFAULT_SEED: u128 = 0x9e3779b97f4a7c15;
+    let mut seed: u128 = LCG_DEFAULT_SEED;
 
     for _try in 0..max_tries {
         lcg_next(&mut seed);
@@ -347,9 +355,9 @@ fn pollard_rho(composite: &BigUint) -> Option<BigUint> {
 
         while current_gcd == one && iter < max_iter {
             // Brent variant: use batched gcd.
-            let mut inner_iter = 0;
+            let mut batch_iter = 0;
             let x_saved = x_state.clone();
-            while inner_iter < batch_size && iter < max_iter {
+            while batch_iter < batch_size && iter < max_iter {
                 // f(z) = z^2 + c mod composite.
                 y_state = (&y_state * &y_state + &constant) % composite;
                 let diff = if x_state > y_state {
@@ -360,7 +368,7 @@ fn pollard_rho(composite: &BigUint) -> Option<BigUint> {
                 if !diff.is_zero() {
                     product = (product * diff) % composite;
                 }
-                inner_iter += 1;
+                batch_iter += 1;
                 iter += 1;
             }
             current_gcd = gcd_biguint(&product, composite);
