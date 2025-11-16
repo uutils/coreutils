@@ -363,6 +363,8 @@ getcwd
 # * other
 weblate
 algs
+largefile
+verylargefile
 
 # translation tests
 CLICOLOR

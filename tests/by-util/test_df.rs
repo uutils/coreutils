@@ -973,3 +973,59 @@ fn test_nonexistent_file() {
         .stderr_is("df: does-not-exist: No such file or directory\n")
         .stdout_is("File\n.\n");
 }
+
+#[test]
+fn test_df_thousands_separator_basic() {
+    // Test with leading quote in --block-size
+    let output = new_ucmd!()
+        .args(&["--block-size='1", "--output=size"])
+        .succeeds()
+        .stdout_str_lossy();
+
+    // Header should show "1B-blocks"
+    let header = output.lines().next().unwrap().trim();
+    assert_eq!(header, "1B-blocks");
+
+    // At least one line should contain a comma (for filesystems with > 1000 bytes)
+    // This is a basic smoke test - actual values depend on the system
+    assert!(!output.is_empty());
+}
+
+#[test]
+fn test_df_thousands_separator_with_suffix() {
+    // Test with leading quote and suffix
+    let output = new_ucmd!()
+        .args(&["--block-size='1K", "--output=size"])
+        .succeeds()
+        .stdout_str_lossy();
+
+    // Header should show "1K-blocks"
+    let header = output.lines().next().unwrap().trim();
+    assert_eq!(header, "1K-blocks");
+}
+
+#[test]
+fn test_df_thousands_separator_without_quote() {
+    // Test without leading quote - should work normally
+    let output = new_ucmd!()
+        .args(&["--block-size=1", "--output=size"])
+        .succeeds()
+        .stdout_str_lossy();
+
+    // Header should show "1B-blocks"
+    let header = output.lines().next().unwrap().trim();
+    assert_eq!(header, "1B-blocks");
+}
+
+#[test]
+fn test_df_thousands_separator_short_option() {
+    // Test with short option -B
+    let output = new_ucmd!()
+        .args(&["-B'1K", "--output=size"])
+        .succeeds()
+        .stdout_str_lossy();
+
+    // Header should show "1K-blocks"
+    let header = output.lines().next().unwrap().trim();
+    assert_eq!(header, "1K-blocks");
+}

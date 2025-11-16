@@ -13,6 +13,7 @@ use crate::blocks::{SuffixType, to_magnitude_and_suffix};
 use crate::columns::{Alignment, Column};
 use crate::filesystem::Filesystem;
 use crate::{BlockSize, Options};
+use uucore::format::human::format_with_thousands_separator;
 use uucore::fsext::{FsUsage, MountInfo};
 use uucore::translate;
 
@@ -266,8 +267,13 @@ impl<'a> RowFormatter<'a> {
         let s = if let Some(h) = self.options.human_readable {
             to_magnitude_and_suffix(size.into(), SuffixType::HumanReadable(h), true)
         } else {
-            let BlockSize::Bytes(d) = self.options.block_size;
-            (size as f64 / d as f64).ceil().to_string()
+            let BlockSize::Bytes(d) = self.options.block_size_config.block_size;
+            let result = (size as f64 / d as f64).ceil() as u64;
+            if self.options.block_size_config.use_thousands_separator {
+                format_with_thousands_separator(result)
+            } else {
+                result.to_string()
+            }
         };
         Cell::from_ascii_string(s)
     }
@@ -373,13 +379,13 @@ impl Header {
                     HeaderMode::PosixPortability => {
                         format!(
                             "{}{}",
-                            options.block_size.as_u64(),
+                            options.block_size_config.block_size.as_u64(),
                             translate!("df-blocks-suffix")
                         )
                     }
                     _ => format!(
                         "{}{}",
-                        options.block_size.to_header(),
+                        options.block_size_config.block_size.to_header(),
                         translate!("df-blocks-suffix")
                     ),
                 },
@@ -642,7 +648,10 @@ mod tests {
     fn test_header_with_block_size_1024() {
         init();
         let options = Options {
-            block_size: BlockSize::Bytes(3 * 1024),
+            block_size_config: crate::blocks::BlockSizeConfig {
+                block_size: BlockSize::Bytes(3 * 1024),
+                use_thousands_separator: false,
+            },
             ..Default::default()
         };
         assert_eq!(
@@ -722,7 +731,10 @@ mod tests {
     fn test_row_formatter() {
         init();
         let options = Options {
-            block_size: BlockSize::Bytes(1),
+            block_size_config: crate::blocks::BlockSizeConfig {
+                block_size: BlockSize::Bytes(1),
+                use_thousands_separator: false,
+            },
             ..Default::default()
         };
         let row = Row {
@@ -748,7 +760,10 @@ mod tests {
         init();
         let options = Options {
             columns: COLUMNS_WITH_FS_TYPE.to_vec(),
-            block_size: BlockSize::Bytes(1),
+            block_size_config: crate::blocks::BlockSizeConfig {
+                block_size: BlockSize::Bytes(1),
+                use_thousands_separator: false,
+            },
             ..Default::default()
         };
         let row = Row {
@@ -775,7 +790,10 @@ mod tests {
         init();
         let options = Options {
             columns: COLUMNS_WITH_INODES.to_vec(),
-            block_size: BlockSize::Bytes(1),
+            block_size_config: crate::blocks::BlockSizeConfig {
+                block_size: BlockSize::Bytes(1),
+                use_thousands_separator: false,
+            },
             ..Default::default()
         };
         let row = Row {
@@ -801,7 +819,10 @@ mod tests {
         init();
         let options = Options {
             columns: vec![Column::Size, Column::Itotal],
-            block_size: BlockSize::Bytes(100),
+            block_size_config: crate::blocks::BlockSizeConfig {
+                block_size: BlockSize::Bytes(100),
+                use_thousands_separator: false,
+            },
             ..Default::default()
         };
         let row = Row {
@@ -903,7 +924,10 @@ mod tests {
         init();
         fn get_formatted_values(bytes: u64, bytes_used: u64, bytes_avail: u64) -> Vec<Cell> {
             let options = Options {
-                block_size: BlockSize::Bytes(1000),
+                block_size_config: crate::blocks::BlockSizeConfig {
+                    block_size: BlockSize::Bytes(1000),
+                    use_thousands_separator: false,
+                },
                 columns: vec![Column::Size, Column::Used, Column::Avail],
                 ..Default::default()
             };

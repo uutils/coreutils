@@ -25,7 +25,7 @@ use std::io::stdout;
 use std::path::Path;
 use thiserror::Error;
 
-use crate::blocks::{BlockSize, read_block_size};
+use crate::blocks::{BlockSize, BlockSizeConfig, read_block_size};
 use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
 use crate::filesystem::FsError;
@@ -62,7 +62,7 @@ struct Options {
     show_local_fs: bool,
     show_all_fs: bool,
     human_readable: Option<HumanReadable>,
-    block_size: BlockSize,
+    block_size_config: BlockSizeConfig,
     header_mode: HeaderMode,
 
     /// Optional list of filesystem types to include in the output table.
@@ -92,7 +92,10 @@ impl Default for Options {
         Self {
             show_local_fs: Default::default(),
             show_all_fs: Default::default(),
-            block_size: BlockSize::default(),
+            block_size_config: BlockSizeConfig {
+                block_size: BlockSize::default(),
+                use_thousands_separator: false,
+            },
             human_readable: Option::default(),
             header_mode: HeaderMode::default(),
             include: Option::default(),
@@ -160,7 +163,7 @@ impl Options {
             show_local_fs: matches.get_flag(OPT_LOCAL),
             show_all_fs: matches.get_flag(OPT_ALL),
             sync: matches.get_flag(OPT_SYNC),
-            block_size: read_block_size(matches).map_err(|e| match e {
+            block_size_config: read_block_size(matches).map_err(|e| match e {
                 ParseSizeError::InvalidSuffix(s) => OptionsError::InvalidSuffix(s),
                 ParseSizeError::SizeTooBig(_) => OptionsError::BlockSizeTooLarge(
                     matches.get_one::<String>(OPT_BLOCKSIZE).unwrap().to_owned(),

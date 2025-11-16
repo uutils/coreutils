@@ -369,6 +369,33 @@ pub fn parse_size_u128(size: &str) -> Result<u128, ParseSizeError> {
     Parser::default().parse(size)
 }
 
+/// Extracts the thousands separator flag from a block size string.
+///
+/// GNU coreutils uses a leading single quote (`'`) to indicate that output
+/// should be formatted with locale-aware thousands separators.
+///
+/// # Arguments
+/// * `size` - The block size string (e.g., `"'1"`, `"'1K"`, `"1024"`)
+///
+/// # Returns
+/// A tuple of `(cleaned_string, use_thousands_separator)`
+///
+/// # Examples
+/// ```
+/// use uucore::parser::parse_size::extract_thousands_separator_flag;
+/// assert_eq!(extract_thousands_separator_flag("'1"), ("1", true));
+/// assert_eq!(extract_thousands_separator_flag("'1K"), ("1K", true));
+/// assert_eq!(extract_thousands_separator_flag("1024"), ("1024", false));
+/// assert_eq!(extract_thousands_separator_flag(""), ("", false));
+/// ```
+pub fn extract_thousands_separator_flag(size: &str) -> (&str, bool) {
+    if let Some(stripped) = size.strip_prefix('\'') {
+        (stripped, true)
+    } else {
+        (size, false)
+    }
+}
+
 /// Same as `parse_size_u128()`, but for u64
 pub fn parse_size_u64(size: &str) -> Result<u64, ParseSizeError> {
     Parser::default().parse_u64(size)
@@ -784,5 +811,31 @@ mod tests {
         assert!(parse_size_u64("-1%").is_err());
         assert!(parse_size_u64("1.0%").is_err());
         assert!(parse_size_u64("0x1%").is_err());
+    }
+
+    #[test]
+    fn test_extract_thousands_separator_flag() {
+        // Valid inputs with quote
+        assert_eq!(extract_thousands_separator_flag("'1"), ("1", true));
+        assert_eq!(extract_thousands_separator_flag("'1K"), ("1K", true));
+        assert_eq!(extract_thousands_separator_flag("'1024"), ("1024", true));
+        assert_eq!(extract_thousands_separator_flag("'1kB"), ("1kB", true));
+        assert_eq!(extract_thousands_separator_flag("'0"), ("0", true));
+        assert_eq!(
+            extract_thousands_separator_flag("'1234567890"),
+            ("1234567890", true)
+        );
+
+        // Valid inputs without quote
+        assert_eq!(extract_thousands_separator_flag("1"), ("1", false));
+        assert_eq!(extract_thousands_separator_flag("1K"), ("1K", false));
+        assert_eq!(extract_thousands_separator_flag("1024"), ("1024", false));
+        assert_eq!(extract_thousands_separator_flag("1kB"), ("1kB", false));
+
+        // Edge cases
+        assert_eq!(extract_thousands_separator_flag(""), ("", false));
+        assert_eq!(extract_thousands_separator_flag("'"), ("", true));
+        assert_eq!(extract_thousands_separator_flag("''1"), ("'1", true));
+        assert_eq!(extract_thousands_separator_flag("'''"), ("''", true));
     }
 }

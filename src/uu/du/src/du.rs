@@ -30,8 +30,11 @@ use uucore::line_ending::LineEnding;
 use uucore::safe_traversal::DirFd;
 use uucore::translate;
 
+use uucore::format::human::format_with_thousands_separator;
 use uucore::parser::parse_glob;
-use uucore::parser::parse_size::{ParseSizeError, parse_size_non_zero_u64, parse_size_u64};
+use uucore::parser::parse_size::{
+    ParseSizeError, extract_thousands_separator_flag, parse_size_non_zero_u64, parse_size_u64,
+};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
 use uucore::{format_usage, show, show_error, show_warning};
@@ -91,6 +94,7 @@ struct StatPrinter {
     threshold: Option<Threshold>,
     apparent_size: bool,
     size_format: SizeFormat,
+    use_thousands_separator: bool,
     time: Option<MetadataTimeField>,
     time_format: String,
     line_ending: LineEnding,
@@ -271,26 +275,33 @@ fn get_file_info(path: &Path, _metadata: &Metadata) -> Option<FileInfo> {
     result
 }
 
-fn block_size_from_env() -> Option<u64> {
+fn block_size_from_env() -> Option<(u64, bool)> {
     for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
         if let Ok(env_size) = env::var(env_var) {
-            return parse_size_non_zero_u64(&env_size).ok();
+            let (cleaned, use_thousands) = extract_thousands_separator_flag(&env_size);
+            if let Ok(size) = parse_size_non_zero_u64(cleaned) {
+                return Some((size, use_thousands));
+            }
+            // If env var is set but invalid, return None (don't check other env vars)
+            return None;
         }
     }
 
     None
 }
 
-fn read_block_size(s: Option<&str>) -> UResult<u64> {
+fn read_block_size(s: Option<&str>) -> UResult<(u64, bool)> {
     if let Some(s) = s {
-        parse_size_u64(s)
+        let (cleaned, use_thousands) = extract_thousands_separator_flag(s);
+        parse_size_u64(cleaned)
+            .map(|size| (size, use_thousands))
             .map_err(|e| USimpleError::new(1, format_error_message(&e, s, options::BLOCK_SIZE)))
-    } else if let Some(bytes) = block_size_from_env() {
-        Ok(bytes)
+    } else if let Some((bytes, use_thousands)) = block_size_from_env() {
+        Ok((bytes, use_thousands))
     } else if env::var("POSIXLY_CORRECT").is_ok() {
-        Ok(512)
+        Ok((512, false))
     } else {
-        Ok(1024)
+        Ok((1024, false))
     }
 }
 
@@ -874,7 +885,12 @@ impl StatPrinter {
                     // we ignore block size (-B) with --inodes
                     size.to_string()
                 } else {
-                    size.div_ceil(block_size).to_string()
+                    let result = size.div_ceil(block_size);
+                    if self.use_thousands_separator {
+                        format_with_thousands_separator(result)
+                    } else {
+                        result.to_string()
+                    }
                 }
             }
         }
@@ -1005,24 +1021,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .map_or(MetadataTimeField::Modification, |s| s.as_str().into())
     });
 
-    let size_format = if matches.get_flag(options::HUMAN_READABLE) {
-        SizeFormat::HumanBinary
+    let (size_format, use_thousands_separator) = if matches.get_flag(options::HUMAN_READABLE) {
+        (SizeFormat::HumanBinary, false)
     } else if matches.get_flag(options::SI) {
-        SizeFormat::HumanDecimal
+        (SizeFormat::HumanDecimal, false)
     } else if matches.get_flag(options::BYTES) {
-        SizeFormat::BlockSize(1)
+        (SizeFormat::BlockSize(1), false)
     } else if matches.get_flag(options::BLOCK_SIZE_1K) {
-        SizeFormat::BlockSize(1024)
+        (SizeFormat::BlockSize(1024), false)
     } else if matches.get_flag(options::BLOCK_SIZE_1M) {
-        SizeFormat::BlockSize(1024 * 1024)
+        (SizeFormat::BlockSize(1024 * 1024), false)
     } else {
         let block_size_str = matches.get_one::<String>(options::BLOCK_SIZE);
-        let block_size = read_block_size(block_size_str.map(AsRef::as_ref))?;
+        let (block_size, use_thousands) = read_block_size(block_size_str.map(AsRef::as_ref))?;
         if block_size == 0 {
             return Err(std::io::Error::other(translate!("du-error-invalid-block-size-argument", "option" => options::BLOCK_SIZE, "value" => block_size_str.map_or("???BUG", |v| v).quote()))
             .into());
         }
-        SizeFormat::BlockSize(block_size)
+        (SizeFormat::BlockSize(block_size), use_thousands)
     };
 
     let traversal_options = TraversalOptions {
@@ -1051,6 +1067,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let stat_printer = StatPrinter {
         max_depth,
         size_format,
+        use_thousands_separator,
         summarize,
         total: matches.get_flag(options::TOTAL),
         inodes: matches.get_flag(options::INODES),
@@ -1508,7 +1525,11 @@ mod test_du {
     fn test_read_block_size() {
         let test_data = [Some("1024".to_string()), Some("K".to_string()), None];
         for it in &test_data {
-            assert!(matches!(read_block_size(it.as_deref()), Ok(1024)));
+            assert!(matches!(read_block_size(it.as_deref()), Ok((1024, false))));
         }
+
+        // Test with thousands separator flag
+        assert!(matches!(read_block_size(Some("'1024")), Ok((1024, true))));
+        assert!(matches!(read_block_size(Some("'1K")), Ok((1024, true))));
     }
 }
