@@ -332,6 +332,56 @@ pub fn get_message_with_args(id: &str, ftl_args: FluentArgs) -> String {
     get_message_internal(id, Some(ftl_args))
 }
 
+/// Helper function to safely set a FluentArgs value, preserving precision for large integers.
+///
+/// This function handles the limitation of fluent-rs where numeric values are stored as f64,
+/// which can only safely represent integers in the range [-2^53+1, 2^53-1]. For values
+/// outside this range, they are passed as strings to preserve exact precision.
+///
+/// # Arguments
+///
+/// * `args` - The FluentArgs to add the value to
+/// * `key` - The argument key name
+/// * `value_str` - The string representation of the value
+///
+/// # Implementation Notes
+///
+/// This is a workaround for <https://github.com/projectfluent/fluent-rs/issues/337>
+/// Once fluent-rs supports full i64/u64 precision, this can be simplified.
+#[inline]
+pub fn safe_set_fluent_arg<'a>(args: &mut FluentArgs<'a>, key: &'a str, value_str: &'a str) {
+    const F64_SAFE_MAX: u64 = (1_u64 << 53) - 1;
+
+    // Fast path: try i64 parsing first (most common case)
+    if let Ok(val) = value_str.parse::<i64>() {
+        if val.unsigned_abs() <= F64_SAFE_MAX {
+            args.set(key, val);
+        } else {
+            args.set(key, value_str); // Preserve as string to avoid allocation
+        }
+        return;
+    }
+
+    // Second path: u64 for large positive numbers
+    if let Ok(val) = value_str.parse::<u64>() {
+        if val <= F64_SAFE_MAX {
+            args.set(key, val as i64);
+        } else {
+            args.set(key, value_str);
+        }
+        return;
+    }
+
+    // Third path: actual floating point numbers
+    if let Ok(val) = value_str.parse::<f64>() {
+        args.set(key, val);
+        return;
+    }
+
+    // Default: pass as string (no allocation needed)
+    args.set(key, value_str);
+}
+
 /// Function to detect system locale from environment variables
 fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
     let locale_str = std::env::var("LANG")
@@ -529,17 +579,12 @@ macro_rules! translate {
     // Case 2: Message ID with key-value arguments
     ($id:expr, $($key:expr => $value:expr),+ $(,)?) => {
         {
+            // Use helper function to handle large integer precision safely.
+            // This reduces macro expansion bloat while preserving precision.
             let mut args = fluent::FluentArgs::new();
             $(
-                let value_str = $value.to_string();
-                if let Ok(num_val) = value_str.parse::<i64>() {
-                    args.set($key, num_val);
-                } else if let Ok(float_val) = value_str.parse::<f64>() {
-                    args.set($key, float_val);
-                } else {
-                    // Keep as string if not a number
-                    args.set($key, value_str);
-                }
+                let value_string = $value.to_string();
+                $crate::locale::safe_set_fluent_arg(&mut args, $key, &value_string);
             )+
             $crate::locale::get_message_with_args($id, args)
         }
@@ -1384,6 +1429,152 @@ invalid-syntax = This is { $missing
             // Test usage key fallback
             let usage_key = get_message("common-usage");
             assert!(!usage_key.is_empty());
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn test_translate_macro_big_number_precision() {
+        std::thread::spawn(|| {
+            let temp_dir = create_test_locales_dir();
+            let locale = LanguageIdentifier::from_str("en-US").unwrap();
+
+            init_test_localization(&locale, temp_dir.path()).unwrap();
+
+            // Test with i64::MAX - should preserve precision
+            let result = translate!("welcome", "name" => i64::MAX);
+            assert!(
+                result.contains("9223372036854775807"),
+                "Expected i64::MAX (9223372036854775807) to be preserved, got: {result}"
+            );
+            assert!(
+                !result.contains("9223372036854776000"),
+                "Should not have precision loss, but got: {result}"
+            );
+
+            // Test with number within safe range
+            let result_safe = translate!("welcome", "name" => 1000);
+            assert!(result_safe.contains("1000"));
+
+            // Test with number at safe boundary
+            const F64_SAFE_MAX: i64 = (1_i64 << 53) - 1;
+            let result_boundary = translate!("welcome", "name" => F64_SAFE_MAX);
+            assert!(result_boundary.contains(&F64_SAFE_MAX.to_string()));
+
+            // Test with number just beyond safe boundary
+            let beyond_safe = F64_SAFE_MAX + 1;
+            let result_beyond = translate!("welcome", "name" => beyond_safe);
+            assert!(result_beyond.contains(&beyond_safe.to_string()));
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn test_translate_macro_preserves_existing_behavior() {
+        std::thread::spawn(|| {
+            let temp_dir = create_test_locales_dir();
+            let locale = LanguageIdentifier::from_str("en-US").unwrap();
+
+            init_test_localization(&locale, temp_dir.path()).unwrap();
+
+            // Test string values still work
+            let result_str = translate!("welcome", "name" => "Alice");
+            assert_eq!(result_str, "Welcome, Alice!");
+
+            // Test small numbers still work
+            let result_num = translate!("count-items", "count" => 5);
+            assert_eq!(result_num, "You have 5 items");
+
+            // Test with multiple arguments
+            let count = 10;
+            let result_multi = translate!(
+                "count-items",
+                "count" => count
+            );
+            assert!(result_multi.contains("10"));
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn test_translate_macro_u64_precision() {
+        std::thread::spawn(|| {
+            let temp_dir = create_test_locales_dir();
+            let locale = LanguageIdentifier::from_str("en-US").unwrap();
+
+            init_test_localization(&locale, temp_dir.path()).unwrap();
+
+            // Test u64::MAX - should preserve precision
+            let result = translate!("welcome", "name" => u64::MAX);
+            assert!(
+                result.contains("18446744073709551615"),
+                "Expected u64::MAX (18446744073709551615) to be preserved, got: {result}"
+            );
+            assert!(
+                !result.contains("18446744073709552000"),
+                "Should not have precision loss, but got: {result}"
+            );
+
+            // Test i64::MAX + 1 as u64 - should preserve precision
+            let big_u64 = i64::MAX as u64 + 1;
+            let result2 = translate!("welcome", "name" => big_u64);
+            assert!(
+                result2.contains("9223372036854775808"),
+                "Expected i64::MAX+1 (9223372036854775808) to be preserved, got: {result2}"
+            );
+            assert!(
+                !result2.contains("9223372036854776000"),
+                "Should not have precision loss, but got: {result2}"
+            );
+
+            // Test u64 within safe range - should work as number
+            let safe_u64: u64 = 1000;
+            let result_safe = translate!("welcome", "name" => safe_u64);
+            assert!(result_safe.contains("1000"));
+
+            // Test u64 at boundary of safe range
+            const F64_SAFE_MAX: u64 = (1_u64 << 53) - 1;
+            let result_boundary = translate!("welcome", "name" => F64_SAFE_MAX);
+            assert!(result_boundary.contains(&F64_SAFE_MAX.to_string()));
+
+            // Test u64 just beyond safe boundary
+            let beyond_safe = F64_SAFE_MAX + 1;
+            let result_beyond = translate!("welcome", "name" => beyond_safe);
+            assert!(
+                result_beyond.contains(&beyond_safe.to_string()),
+                "Expected {beyond_safe} to be preserved, got: {result_beyond}"
+            );
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn test_translate_macro_negative_large_numbers() {
+        std::thread::spawn(|| {
+            let temp_dir = create_test_locales_dir();
+            let locale = LanguageIdentifier::from_str("en-US").unwrap();
+
+            init_test_localization(&locale, temp_dir.path()).unwrap();
+
+            // Test i64::MIN - should preserve precision
+            let result = translate!("welcome", "name" => i64::MIN);
+            assert!(
+                result.contains("-9223372036854775808"),
+                "Expected i64::MIN to be preserved, got: {result}"
+            );
+
+            // Test large negative number beyond safe range
+            const F64_SAFE_MAX: i64 = (1_i64 << 53) - 1;
+            let large_negative = -F64_SAFE_MAX - 1;
+            let result2 = translate!("welcome", "name" => large_negative);
+            assert!(
+                result2.contains(&large_negative.to_string()),
+                "Expected {large_negative} to be preserved, got: {result2}"
+            );
         })
         .join()
         .unwrap();

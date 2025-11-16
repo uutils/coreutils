@@ -809,7 +809,7 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
             0 => {
                 return Err(TouchError::WindowsStdoutPathError(translate!(
                 "touch-error-windows-stdout-path-failed",
-                    "code".to_string() =>
+                    "code" =>
                     format!(
                         "{}",
                         // SAFETY: GetLastError is thread-safe and has no documented memory unsafety.
