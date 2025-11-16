@@ -42,6 +42,11 @@ const PIPELINE_DEPTH_CHUNK: usize = 4 * 1024 * 1024;
 const MIN_DYNAMIC_PIPELINE_DEPTH: usize = 2;
 const MAX_DYNAMIC_PIPELINE_DEPTH: usize = 8;
 
+struct ReaderWriterConfig {
+    buffer_size: usize,
+    pipeline_depth: usize,
+}
+
 fn normalized_buffer_size(settings: &GlobalSettings) -> usize {
     let mut buffer_size = if settings.buffer_size <= BUFFER_CAP_LIMIT {
         settings.buffer_size
@@ -57,12 +62,12 @@ fn normalized_buffer_size(settings: &GlobalSettings) -> usize {
 fn tuned_pipeline_depth(settings: &GlobalSettings, buffer_size: usize) -> usize {
     let base = settings
         .pipeline_depth
-        .max(MIN_DYNAMIC_PIPELINE_DEPTH)
-        .min(MAX_DYNAMIC_PIPELINE_DEPTH);
+        .clamp(MIN_DYNAMIC_PIPELINE_DEPTH, MAX_DYNAMIC_PIPELINE_DEPTH);
     if settings.pipeline_depth_is_explicit {
         base
     } else {
-        let size_based = ((buffer_size + PIPELINE_DEPTH_CHUNK - 1) / PIPELINE_DEPTH_CHUNK)
+        let size_based = buffer_size
+            .div_ceil(PIPELINE_DEPTH_CHUNK)
             .clamp(MIN_DYNAMIC_PIPELINE_DEPTH, MAX_DYNAMIC_PIPELINE_DEPTH);
         base.max(size_based).min(MAX_DYNAMIC_PIPELINE_DEPTH)
     }
@@ -86,6 +91,10 @@ pub fn ext_sort(
         let settings = settings.clone();
         move || sorter(&recycled_receiver, &sorted_sender, &settings)
     });
+    let config = ReaderWriterConfig {
+        buffer_size,
+        pipeline_depth,
+    };
     if settings.compress_prog.is_some() {
         reader_writer::<_, WriteableCompressedTmpFile>(
             files,
@@ -94,8 +103,7 @@ pub fn ext_sort(
             recycled_sender,
             output,
             tmp_dir,
-            buffer_size,
-            pipeline_depth,
+            &config,
         )
     } else {
         reader_writer::<_, WriteablePlainTmpFile>(
@@ -105,8 +113,7 @@ pub fn ext_sort(
             recycled_sender,
             output,
             tmp_dir,
-            buffer_size,
-            pipeline_depth,
+            &config,
         )
     }
 }
@@ -121,20 +128,12 @@ fn reader_writer<
     sender: SyncSender<Chunk>,
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
-    buffer_size: usize,
-    pipeline_depth: usize,
+    config: &ReaderWriterConfig,
 ) -> UResult<()> {
     let separator = settings.line_ending.into();
 
     let read_result: ReadResult<Tmp> = read_write_loop(
-        files,
-        tmp_dir,
-        separator,
-        buffer_size,
-        pipeline_depth,
-        settings,
-        receiver,
-        sender,
+        files, tmp_dir, separator, config, settings, receiver, sender,
     )?;
     match read_result {
         ReadResult::WroteChunksToFile { tmp_files } => {
@@ -219,8 +218,7 @@ fn read_write_loop<I: WriteableTmpFile>(
     mut files: impl Iterator<Item = UResult<Box<dyn Read + Send>>>,
     tmp_dir: &mut TmpDirWrapper,
     separator: u8,
-    buffer_size: usize,
-    pipeline_depth: usize,
+    config: &ReaderWriterConfig,
     settings: &GlobalSettings,
     receiver: &Receiver<Chunk>,
     sender: SyncSender<Chunk>,
@@ -228,12 +226,12 @@ fn read_write_loop<I: WriteableTmpFile>(
     let mut file = files.next().unwrap()?;
 
     let mut carry_over = vec![];
-    let initial_capacity = if START_BUFFER_SIZE < buffer_size {
+    let initial_capacity = if START_BUFFER_SIZE < config.buffer_size {
         START_BUFFER_SIZE
     } else {
-        buffer_size
+        config.buffer_size
     };
-    let mut free_chunks: Vec<RecycledChunk> = (0..pipeline_depth)
+    let mut free_chunks: Vec<RecycledChunk> = (0..config.pipeline_depth)
         .map(|_| RecycledChunk::new(initial_capacity))
         .collect();
 
@@ -248,7 +246,7 @@ fn read_write_loop<I: WriteableTmpFile>(
         let should_continue = chunks::read(
             sender_ref,
             recycled_chunk,
-            Some(buffer_size),
+            Some(config.buffer_size),
             &mut carry_over,
             &mut file,
             &mut files,
