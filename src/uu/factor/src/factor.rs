@@ -320,9 +320,7 @@ fn pollard_rho(composite: &BigUint) -> Option<BigUint> {
     const LCG_INCREMENT: u128 = 1442695040888963407;
 
     fn lcg_next(x: &mut u128) {
-        *x = x
-            .wrapping_mul(LCG_MULTIPLIER)
-            .wrapping_add(LCG_INCREMENT);
+        *x = x.wrapping_mul(LCG_MULTIPLIER).wrapping_add(LCG_INCREMENT);
     }
 
     let bits = composite.bits();
