@@ -36,6 +36,38 @@ use crate::{
 };
 use crate::{Line, print_sorted};
 
+const BUFFER_CAP_LIMIT: usize = 512 * 1024 * 1024;
+const BUFFER_MIN_WITHOUT_USER: usize = 8 * 1024 * 1024;
+const PIPELINE_DEPTH_CHUNK: usize = 4 * 1024 * 1024;
+const MIN_DYNAMIC_PIPELINE_DEPTH: usize = 2;
+const MAX_DYNAMIC_PIPELINE_DEPTH: usize = 8;
+
+fn normalized_buffer_size(settings: &GlobalSettings) -> usize {
+    let mut buffer_size = if settings.buffer_size <= BUFFER_CAP_LIMIT {
+        settings.buffer_size
+    } else {
+        settings.buffer_size / 2
+    };
+    if !settings.buffer_size_is_explicit {
+        buffer_size = buffer_size.max(BUFFER_MIN_WITHOUT_USER);
+    }
+    buffer_size
+}
+
+fn tuned_pipeline_depth(settings: &GlobalSettings, buffer_size: usize) -> usize {
+    let base = settings
+        .pipeline_depth
+        .max(MIN_DYNAMIC_PIPELINE_DEPTH)
+        .min(MAX_DYNAMIC_PIPELINE_DEPTH);
+    if settings.pipeline_depth_is_explicit {
+        base
+    } else {
+        let size_based = ((buffer_size + PIPELINE_DEPTH_CHUNK - 1) / PIPELINE_DEPTH_CHUNK)
+            .clamp(MIN_DYNAMIC_PIPELINE_DEPTH, MAX_DYNAMIC_PIPELINE_DEPTH);
+        base.max(size_based).min(MAX_DYNAMIC_PIPELINE_DEPTH)
+    }
+}
+
 // Note: update `test_sort::test_start_buffer` if this size is changed
 const START_BUFFER_SIZE: usize = 8_000;
 
@@ -46,8 +78,10 @@ pub fn ext_sort(
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
-    let (sorted_sender, sorted_receiver) = std::sync::mpsc::sync_channel(1);
-    let (recycled_sender, recycled_receiver) = std::sync::mpsc::sync_channel(1);
+    let buffer_size = normalized_buffer_size(settings);
+    let pipeline_depth = tuned_pipeline_depth(settings, buffer_size);
+    let (sorted_sender, sorted_receiver) = std::sync::mpsc::sync_channel(pipeline_depth);
+    let (recycled_sender, recycled_receiver) = std::sync::mpsc::sync_channel(pipeline_depth);
     thread::spawn({
         let settings = settings.clone();
         move || sorter(&recycled_receiver, &sorted_sender, &settings)
@@ -87,6 +121,8 @@ pub fn ext_sort(
             recycled_sender,
             output,
             tmp_dir,
+            buffer_size,
+            pipeline_depth,
         )
     } else {
         reader_writer::<_, WriteablePlainTmpFile>(
@@ -96,6 +132,8 @@ pub fn ext_sort(
             recycled_sender,
             output,
             tmp_dir,
+            buffer_size,
+            pipeline_depth,
         )
     }
 }
@@ -110,23 +148,17 @@ fn reader_writer<
     sender: SyncSender<Chunk>,
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
+    buffer_size: usize,
+    pipeline_depth: usize,
 ) -> UResult<()> {
     let separator = settings.line_ending.into();
 
-    // Cap oversized buffer requests to avoid unnecessary allocations and give the automatic
-    // heuristic room to grow when the user does not provide an explicit value.
-    let mut buffer_size = match settings.buffer_size {
-        size if size <= 512 * 1024 * 1024 => size,
-        size => size / 2,
-    };
-    if !settings.buffer_size_is_explicit {
-        buffer_size = buffer_size.max(8 * 1024 * 1024);
-    }
     let read_result: ReadResult<Tmp> = read_write_loop(
         files,
         tmp_dir,
         separator,
         buffer_size,
+        pipeline_depth,
         settings,
         receiver,
         sender,
@@ -215,6 +247,7 @@ fn read_write_loop<I: WriteableTmpFile>(
     tmp_dir: &mut TmpDirWrapper,
     separator: u8,
     buffer_size: usize,
+    pipeline_depth: usize,
     settings: &GlobalSettings,
     receiver: &Receiver<Chunk>,
     sender: SyncSender<Chunk>,
@@ -222,15 +255,26 @@ fn read_write_loop<I: WriteableTmpFile>(
     let mut file = files.next().unwrap()?;
 
     let mut carry_over = vec![];
-    // kick things off with two reads
-    for _ in 0..2 {
+    let initial_capacity = if START_BUFFER_SIZE < buffer_size {
+        START_BUFFER_SIZE
+    } else {
+        buffer_size
+    };
+    let mut free_chunks: Vec<RecycledChunk> = (0..pipeline_depth)
+        .map(|_| RecycledChunk::new(initial_capacity))
+        .collect();
+
+    // kick things off with two reads so we can detect "fits in memory" cases
+    let mut primed = 0;
+    let mut sender_option = Some(sender);
+    while primed < 2 && !free_chunks.is_empty() {
+        let recycled_chunk = free_chunks.pop().unwrap();
+        let Some(sender_ref) = sender_option.as_ref() else {
+            break;
+        };
         let should_continue = chunks::read(
-            &sender,
-            RecycledChunk::new(if START_BUFFER_SIZE < buffer_size {
-                START_BUFFER_SIZE
-            } else {
-                buffer_size
-            }),
+            sender_ref,
+            recycled_chunk,
             Some(buffer_size),
             &mut carry_over,
             &mut file,
@@ -238,9 +282,12 @@ fn read_write_loop<I: WriteableTmpFile>(
             separator,
             settings,
         )?;
+        primed += 1;
 
         if !should_continue {
-            drop(sender);
+            if let Some(sender) = sender_option.take() {
+                drop(sender);
+            }
             // We have already read the whole input. Since we are in our first two reads,
             // this means that we can fit the whole input into memory. Bypass writing below and
             // handle this case in a more straightforward way.
@@ -256,7 +303,29 @@ fn read_write_loop<I: WriteableTmpFile>(
         }
     }
 
-    let mut sender_option = Some(sender);
+    if sender_option.is_some() {
+        // Fill the remaining pipeline slots so sorting can overlap with reading.
+        while let Some(recycled_chunk) = free_chunks.pop() {
+            let Some(sender_ref) = sender_option.as_ref() else {
+                break;
+            };
+            let should_continue = chunks::read(
+                sender_ref,
+                recycled_chunk,
+                None,
+                &mut carry_over,
+                &mut file,
+                &mut files,
+                separator,
+                settings,
+            )?;
+            if !should_continue {
+                sender_option = None;
+                break;
+            }
+        }
+    }
+
     let mut tmp_files = vec![];
     loop {
         let Ok(chunk) = receiver.recv() else {
@@ -273,19 +342,27 @@ fn read_write_loop<I: WriteableTmpFile>(
 
         let recycled_chunk = chunk.recycle();
 
-        if let Some(sender) = &sender_option {
-            let should_continue = chunks::read(
-                sender,
-                recycled_chunk,
-                None,
-                &mut carry_over,
-                &mut file,
-                &mut files,
-                separator,
-                settings,
-            )?;
-            if !should_continue {
-                sender_option = None;
+        free_chunks.push(recycled_chunk);
+
+        if sender_option.is_some() {
+            while let Some(recycled_chunk) = free_chunks.pop() {
+                let Some(sender_ref) = sender_option.as_ref() else {
+                    break;
+                };
+                let should_continue = chunks::read(
+                    sender_ref,
+                    recycled_chunk,
+                    None,
+                    &mut carry_over,
+                    &mut file,
+                    &mut files,
+                    separator,
+                    settings,
+                )?;
+                if !should_continue {
+                    sender_option = None;
+                    break;
+                }
             }
         }
     }
