@@ -45,6 +45,7 @@ pub struct LineData<'a> {
     pub parsed_floats: Vec<GeneralBigDecimalParseResult>,
     pub line_num_floats: Vec<Option<f64>>,
     pub utf8_cache: Vec<Option<&'a str>>,
+    pub filtered_lines: Vec<Vec<u8>>,
 }
 
 impl Chunk {
@@ -57,6 +58,7 @@ impl Chunk {
             contents.line_data.parsed_floats.clear();
             contents.line_data.line_num_floats.clear();
             contents.line_data.utf8_cache.clear();
+            contents.line_data.filtered_lines.clear();
             let lines = unsafe {
                 // SAFETY: It is safe to (temporarily) transmute to a vector of lines with a longer lifetime,
                 // because the vector is empty.
@@ -78,6 +80,7 @@ impl Chunk {
                     std::mem::take(&mut contents.line_data.utf8_cache),
                 )
             };
+            let filtered_lines = std::mem::take(&mut contents.line_data.filtered_lines);
             let token_buffer = std::mem::take(&mut contents.token_buffer);
             (
                 lines,
@@ -86,6 +89,7 @@ impl Chunk {
                 std::mem::take(&mut contents.line_data.parsed_floats),
                 std::mem::take(&mut contents.line_data.line_num_floats),
                 utf8_cache,
+                filtered_lines,
                 token_buffer,
             )
         });
@@ -96,7 +100,8 @@ impl Chunk {
             parsed_floats: recycled_contents.3,
             line_num_floats: recycled_contents.4,
             utf8_cache: recycled_contents.5,
-            token_buffer: recycled_contents.6,
+            filtered_lines: recycled_contents.6,
+            token_buffer: recycled_contents.7,
             buffer: self.into_owner(),
         }
     }
@@ -117,6 +122,7 @@ pub struct RecycledChunk {
     parsed_floats: Vec<GeneralBigDecimalParseResult>,
     line_num_floats: Vec<Option<f64>>,
     utf8_cache: Vec<Option<&'static str>>,
+    filtered_lines: Vec<Vec<u8>>,
     token_buffer: Vec<Field>,
     buffer: Vec<u8>,
 }
@@ -130,6 +136,7 @@ impl RecycledChunk {
             parsed_floats: Vec::new(),
             line_num_floats: Vec::new(),
             utf8_cache: Vec::new(),
+            filtered_lines: Vec::new(),
             token_buffer: Vec::new(),
             buffer: vec![0; capacity],
         }
@@ -175,6 +182,7 @@ pub fn read<T: Read>(
         parsed_floats,
         line_num_floats,
         utf8_cache,
+        filtered_lines,
         token_buffer,
         mut buffer,
     } = recycled_chunk;
@@ -216,6 +224,7 @@ pub fn read<T: Read>(
                 parsed_floats,
                 line_num_floats,
                 utf8_cache,
+                filtered_lines,
             };
             parse_lines(
                 read,
@@ -252,6 +261,7 @@ fn parse_lines<'a>(
     assert!(line_data.num_infos.is_empty());
     assert!(line_data.parsed_floats.is_empty());
     assert!(line_data.line_num_floats.is_empty());
+    assert!(line_data.filtered_lines.is_empty());
     lines.extend(
         read.split(|&c| c == separator)
             .enumerate()

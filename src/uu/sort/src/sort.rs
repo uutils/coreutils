@@ -22,7 +22,7 @@ use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
-use custom_str_cmp::custom_str_cmp;
+use custom_str_cmp::{build_filtered_line, custom_str_cmp};
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
 #[cfg(target_os = "linux")]
@@ -293,6 +293,7 @@ pub struct GlobalSettings {
     merge_batch_size: usize,
     pipeline_depth: usize,
     precomputed: Precomputed,
+    pipeline_depth_is_explicit: bool,
 }
 
 /// Data needed for sorting. Should be computed once before starting to sort
@@ -305,6 +306,7 @@ struct Precomputed {
     selections_per_line: usize,
     fast_lexicographic: bool,
     fast_ascii_insensitive: bool,
+    needs_filtered_view: bool,
 }
 
 impl GlobalSettings {
@@ -348,6 +350,7 @@ impl GlobalSettings {
 
         self.precomputed.fast_lexicographic = self.can_use_fast_lexicographic();
         self.precomputed.fast_ascii_insensitive = self.can_use_fast_ascii_insensitive();
+        self.precomputed.needs_filtered_view = self.can_use_filtered_view();
     }
 
     /// Returns true when the fast lexicographic path can be used safely.
@@ -387,6 +390,12 @@ impl GlobalSettings {
                     && !selector.settings.ignore_blanks
             }
     }
+
+    fn can_use_filtered_view(&self) -> bool {
+        self.mode == SortMode::Default
+            && self.selectors.is_empty()
+            && (self.ignore_case || self.dictionary_order || self.ignore_non_printing)
+    }
 }
 
 impl Default for GlobalSettings {
@@ -414,6 +423,7 @@ impl Default for GlobalSettings {
             compress_prog: None,
             merge_batch_size: default_merge_batch_size(),
             pipeline_depth: default_pipeline_depth(),
+            pipeline_depth_is_explicit: false,
             precomputed: Precomputed::default(),
         }
     }
@@ -532,6 +542,14 @@ impl<'a> Line<'a> {
                 .flatten()
                 .and_then(|s| s.parse::<f64>().ok());
             line_data.line_num_floats.push(line_num_float);
+        }
+        if settings.precomputed.needs_filtered_view {
+            line_data.filtered_lines.push(build_filtered_line(
+                line,
+                settings.ignore_non_printing,
+                settings.dictionary_order,
+                settings.ignore_case,
+            ));
         }
         for (selector, selection) in settings
             .selectors
@@ -1249,7 +1267,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     settings.dictionary_order = matches.get_flag(options::DICTIONARY_ORDER);
     settings.ignore_non_printing = matches.get_flag(options::IGNORE_NONPRINTING);
-    if matches.contains_id(options::PARALLEL) {
+    let parallel_override = matches.contains_id(options::PARALLEL);
+    if parallel_override {
         // "0" is default - threads = num of cores
         settings.threads = matches
             .get_one::<String>(options::PARALLEL)
@@ -1260,6 +1279,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
     settings.pipeline_depth =
         pipeline_depth_from_parallel_arg(matches.get_one::<String>(options::PARALLEL));
+    settings.pipeline_depth_is_explicit = parallel_override;
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
         settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|e| {
@@ -1732,6 +1752,19 @@ fn compare_by<'a>(
 
     if global_settings.precomputed.fast_ascii_insensitive {
         let cmp = ascii_case_insensitive_cmp(a.line, b.line);
+        if cmp != Ordering::Equal || a.line == b.line {
+            return if global_settings.reverse {
+                cmp.reverse()
+            } else {
+                cmp
+            };
+        }
+    }
+
+    if global_settings.precomputed.needs_filtered_view {
+        let a_filtered = &a_line_data.filtered_lines[a.index];
+        let b_filtered = &b_line_data.filtered_lines[b.index];
+        let cmp = a_filtered.cmp(b_filtered);
         if cmp != Ordering::Equal || a.line == b.line {
             return if global_settings.reverse {
                 cmp.reverse()

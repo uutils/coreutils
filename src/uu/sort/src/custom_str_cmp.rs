@@ -60,3 +60,23 @@ pub fn custom_str_cmp(
         }
     }
 }
+
+pub fn build_filtered_line(
+    line: &[u8],
+    ignore_non_printing: bool,
+    ignore_non_dictionary: bool,
+    ignore_case: bool,
+) -> Vec<u8> {
+    let mut filtered = Vec::with_capacity(line.len());
+    for &c in line {
+        if !filter_char(c, ignore_non_printing, ignore_non_dictionary) {
+            continue;
+        }
+        filtered.push(if ignore_case {
+            c.to_ascii_uppercase()
+        } else {
+            c
+        });
+    }
+    filtered
+}
