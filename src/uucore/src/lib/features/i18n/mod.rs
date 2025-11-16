@@ -70,6 +70,12 @@ fn get_collating_locale() -> &'static (Locale, UEncoding) {
     COLLATING_LOCALE.get_or_init(|| get_locale_from_env("LC_COLLATE"))
 }
 
+pub fn get_character_handling_locale() -> &'static (Locale, UEncoding) {
+    static CHAR_HANDLING_LOCALE: OnceLock<(Locale, UEncoding)> = OnceLock::new();
+
+    CHAR_HANDLING_LOCALE.get_or_init(|| get_locale_from_env("LC_CTYPE"))
+}
+
 /// Get the numeric locale from the environment
 pub fn get_numeric_locale() -> &'static (Locale, UEncoding) {
     static NUMERIC_LOCALE: OnceLock<(Locale, UEncoding)> = OnceLock::new();
