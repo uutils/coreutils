@@ -460,76 +460,26 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
             // See also mkdir.rs for another occurrence of this
             let path_to_create = dir_strip_dot_for_creation(path);
 
-            // Differently than the primary functionality
-            // (MainFunction::Standard), the directory functionality should
-            // create all ancestors (or components) of a directory
-            // regardless of the presence of the "-D" flag.
+            // Differently than the primary functionality (MainFunction::Standard),
+            // the directory functionality should create all ancestors (or components)
+            // of a directory regardless of the presence of the "-D" flag.
             //
-            // GNU "install" sets the expected mode on all newly created
-            // directories, not just the target. We need to create directories
-            // one by one and set permissions on each newly created one.
-            if !path_to_create.exists() {
-                // Collect all directories that need to be created, from root to leaf
-                let mut dirs_to_create = Vec::new();
-                let mut current = path_to_create.clone();
-
-                // Collect all parent directories that don't exist
-                while let Some(parent) = current.parent() {
-                    if parent == Path::new("") || parent == Path::new("/") {
-                        break;
-                    }
-                    if !parent.exists() {
-                        dirs_to_create.push(parent.to_path_buf());
-                    }
-                    current = parent.to_path_buf();
-                }
-
-                // Reverse to get order from root to leaf
-                dirs_to_create.reverse();
-
-                // Add the target directory itself
-                dirs_to_create.push(path_to_create.clone());
-
-                // Create each directory and set its mode
-                for dir in dirs_to_create {
-                    if !dir.exists() {
-                        if let Err(e) = fs::create_dir(&dir)
-                            .map_err_context(|| translate!("install-error-create-dir-failed", "path" => dir.as_path().quote()))
-                        {
-                            show!(e);
-                            continue;
-                        }
-
-                        // Set mode on newly created directory
-                        if mode::chmod(&dir, b.mode()).is_err() {
-                            // Error messages are printed by the mode::chmod function!
-                            uucore::error::set_exit_code(1);
-                            continue;
-                        }
-
-                        // Set ownership on newly created directory
-                        show_if_err!(chown_optional_user_group(&dir, b));
-
-                        // Set SELinux context for newly created directory if needed
-                        #[cfg(feature = "selinux")]
-                        if b.default_context {
-                            show_if_err!(set_selinux_default_context(&dir));
-                        } else if b.context.is_some() {
-                            let context = get_context_for_selinux(b);
-                            show_if_err!(set_selinux_security_context(&dir, context));
-                        }
-
-                        if b.verbose {
-                            println!(
-                                "{}",
-                                translate!("install-verbose-creating-directory", "path" => dir.as_path().quote())
-                            );
-                        }
-                    }
-                }
-            } else {
-                // Path already exists, but we still need to set mode/ownership
-                // on it if a mode was specified
+            // GNU "install -d -m MODE" sets the specified mode on ALL newly created
+            // directories in the path, not just the final target. For example:
+            //   install -m 755 -d path/to/dir
+            // sets mode 755 on 'path', 'path/to', and 'path/to/dir'.
+            //
+            // To match GNU behavior, we use a two-pass approach:
+            // 1. Create all directories first (with default permissions that allow traversal)
+            // 2. Then set the specified mode on all newly created directories
+            //
+            // This two-pass approach is necessary because some modes (e.g., 200 = --w-------)
+            // don't include execute permission, which would prevent entering the directory
+            // to create subdirectories. By creating all directories first, we ensure we can
+            // traverse the entire path before applying restrictive permissions.
+            if path_to_create.exists() {
+                // Path already exists: update mode, ownership, and SELinux context
+                // to match the specified behavior, but don't create new directories.
                 if mode::chmod(path, b.mode()).is_err() {
                     // Error messages are printed by the mode::chmod function!
                     uucore::error::set_exit_code(1);
@@ -545,6 +495,82 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                 } else if b.context.is_some() {
                     let context = get_context_for_selinux(b);
                     show_if_err!(set_selinux_security_context(path, context));
+                }
+            } else {
+                // Path doesn't exist: create all intermediate directories and the target.
+                // Step 1: Collect all directories that need to be created, from root to leaf.
+                let mut dirs_to_create = Vec::new();
+                let mut current = path_to_create.clone();
+
+                // Walk up the path, collecting all parent directories that don't exist.
+                // Stop at root directory ("/") or empty path to avoid infinite loops.
+                while let Some(parent) = current.parent() {
+                    if parent == Path::new("") || parent == Path::new("/") {
+                        break;
+                    }
+                    // Only add directories that don't already exist
+                    if !parent.exists() {
+                        dirs_to_create.push(parent.to_path_buf());
+                    }
+                    current = parent.to_path_buf();
+                }
+
+                // Reverse to get creation order from root to leaf (e.g., [ancestor1, ancestor1/ancestor2])
+                dirs_to_create.reverse();
+
+                // Add the target directory itself as the final directory to create
+                dirs_to_create.push(path_to_create.clone());
+
+                // Step 2: Create all directories with default permissions.
+                // Default permissions include execute permission, which is necessary to
+                // traverse into directories when creating nested subdirectories.
+                let mut created_dirs = Vec::new();
+                for dir in &dirs_to_create {
+                    if !dir.exists() {
+                        if let Err(e) = fs::create_dir(dir)
+                            .map_err_context(|| translate!("install-error-create-dir-failed", "path" => dir.as_path().quote()))
+                        {
+                            show!(e);
+                            continue;
+                        }
+                        // Track which directories we actually created (they might have existed
+                        // due to race conditions or other processes)
+                        created_dirs.push(dir.clone());
+
+                        if b.verbose {
+                            println!(
+                                "{}",
+                                translate!("install-verbose-creating-directory", "path" => dir.as_path().quote())
+                            );
+                        }
+                    }
+                }
+
+                // Step 3: Apply specified mode, ownership, and SELinux context
+                // to all newly created directories. This happens after all directories are
+                // created, ensuring we can traverse the entire path even if the specified
+                // mode doesn't include execute permission.
+                for dir in created_dirs {
+                    // Set the specified mode on the newly created directory
+                    if mode::chmod(&dir, b.mode()).is_err() {
+                        // Error messages are printed by the mode::chmod function!
+                        uucore::error::set_exit_code(1);
+                        continue;
+                    }
+
+                    // Set ownership (user/group) on the newly created directory
+                    show_if_err!(chown_optional_user_group(&dir, b));
+
+                    // Set SELinux security context for the newly created directory if needed
+                    #[cfg(feature = "selinux")]
+                    if b.default_context {
+                        // Use -Z flag behavior: derive default context from SELinux policy
+                        show_if_err!(set_selinux_default_context(&dir));
+                    } else if b.context.is_some() {
+                        // Use --context flag: set the explicitly specified context
+                        let context = get_context_for_selinux(b);
+                        show_if_err!(set_selinux_security_context(&dir, context));
+                    }
                 }
             }
         }
