@@ -48,7 +48,7 @@ pub struct LineData<'a> {
     pub filtered_line_ranges: Vec<(usize, usize)>,
 }
 
-impl<'a> LineData<'a> {
+impl LineData<'_> {
     pub fn filtered_line(&self, index: usize) -> &[u8] {
         let (start, len) = self.filtered_line_ranges[index];
         &self.filtered_lines_data[start..start + len]
