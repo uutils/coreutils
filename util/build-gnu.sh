@@ -105,21 +105,21 @@ fi
 cd -
 
 [ "${SELINUX_ENABLED}" != 1 ] && export MULTICALL=y # Reduce time to build
-# Pass the feature flags to make, which will pass them to cargo
-"${MAKE}" PROFILE="${UU_MAKE_PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
+# The GNU tests rename install to ginstall
+"${MAKE}" UTILS=install MULTICALL=n PROFILE="${UU_MAKE_PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}" &&  cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall"
+"${MAKE}" SKIP_UTILS=install PROFILE="${UU_MAKE_PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
 if [ "${MULTICALL}" = y ]; then
-    for b in $(./coreutils --list)
-        do cp -vf "${UU_BUILD_DIR}"/coreutils "${UU_BUILD_DIR}/${b}"
+    for b in $("${UU_BUILD_DIR}"/coreutils --list)
+        do cp -v --remove-destination "${UU_BUILD_DIR}"/coreutils "${UU_BUILD_DIR}/${b}"
     done
 else
-    cp "${UU_BUILD_DIR}"/test "${UU_BUILD_DIR}"/test/'['
+    ln -sf "${UU_BUILD_DIR}"/test "${UU_BUILD_DIR}"/'['
     for b in {b2,md5}sum sha{1,224,256,384,512}sum
-        do cp -vf "${UU_BUILD_DIR}"/hashsum "${UU_BUILD_DIR}/${b}"
+        do ln -sf "${UU_BUILD_DIR}"/hashsum "${UU_BUILD_DIR}/${b}"
     done
 fi
 # min test for SELinux
 [ "${SELINUX_ENABLED}" = 1 ] && touch g && "${UU_MAKE_PROFILE}"/stat -c%C g && rm g
-cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
 
 ##
 
@@ -133,6 +133,7 @@ for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs); do
         cp "${UU_BUILD_DIR}/false" "${bin_path}"
     }
 done
+[ "${SELINUX_ENABLED}" != 1 ] && rm  "${UU_BUILD_DIR}/chcon" "${UU_BUILD_DIR}/runcon"
 
 if test -f gnu-built; then
     echo "GNU build already found. Skip"
