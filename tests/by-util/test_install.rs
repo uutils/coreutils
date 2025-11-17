@@ -99,10 +99,6 @@ fn test_install_ancestors_mode_directories() {
     let target_dir = "ancestor1/ancestor2/target_dir";
     let directories_arg = "-d";
     let mode_arg = "--mode=200";
-    let probe = "probe";
-
-    at.mkdir(probe);
-    let default_perms = at.metadata(probe).permissions().mode();
 
     ucmd.args(&[mode_arg, directories_arg, target_dir])
         .succeeds()
@@ -112,10 +108,9 @@ fn test_install_ancestors_mode_directories() {
     assert!(at.dir_exists(ancestor2));
     assert!(at.dir_exists(target_dir));
 
-    assert_eq!(default_perms, at.metadata(ancestor1).permissions().mode());
-    assert_eq!(default_perms, at.metadata(ancestor2).permissions().mode());
-
-    // Expected mode only on the target_dir.
+    // GNU install sets the specified mode on all newly created directories
+    assert_eq!(0o40_200_u32, at.metadata(ancestor1).permissions().mode());
+    assert_eq!(0o40_200_u32, at.metadata(ancestor2).permissions().mode());
     assert_eq!(0o40_200_u32, at.metadata(target_dir).permissions().mode());
 }
 
