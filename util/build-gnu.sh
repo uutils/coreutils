@@ -110,7 +110,7 @@ cd -
 "${MAKE}" SKIP_UTILS=install PROFILE="${UU_MAKE_PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
 if [ "${MULTICALL}" = y ]; then
     for b in $("${UU_BUILD_DIR}"/coreutils --list)
-        do cp -v --remove-destination "${UU_BUILD_DIR}"/coreutils "${UU_BUILD_DIR}/${b}"
+        do ln -vf "${UU_BUILD_DIR}"/coreutils "${UU_BUILD_DIR}/${b}"
     done
 else
     ln -sf "${UU_BUILD_DIR}"/test "${UU_BUILD_DIR}"/'['
