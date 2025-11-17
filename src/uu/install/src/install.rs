@@ -510,12 +510,12 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                     if !current.exists() {
                         dirs_to_create.push(current.clone());
                     }
-                    
+
                     // Get the parent directory
                     let Some(parent) = current.parent() else {
                         break;
                     };
-                    
+
                     // Stop at filesystem root
                     if parent == Path::new("/") {
                         break;
@@ -524,7 +524,7 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                     if parent == Path::new("") {
                         break;
                     }
-                    
+
                     current = parent.to_path_buf();
                 }
 
@@ -565,13 +565,12 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                                     );
                                     uucore::error::set_exit_code(1);
                                     continue;
-                                } else {
-                                    // Other error (permission denied, etc.)
-                                    let err = InstallError::CreateDirFailed(dir.clone(), e);
-                                    show!(err);
-                                    uucore::error::set_exit_code(1);
-                                    continue;
                                 }
+                                // Other error (permission denied, etc.)
+                                let err = InstallError::CreateDirFailed(dir.clone(), e);
+                                show!(err);
+                                uucore::error::set_exit_code(1);
+                                continue;
                             }
                         }
                         // Track which directories we actually created (they might have existed
@@ -600,7 +599,7 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                 // restrictive modes like 200 (--w-------).
                 let mode = b.mode();
                 let is_restrictive = (mode & 0o111) == 0; // No execute bits set
-                
+
                 let dirs_to_chmod = if is_restrictive {
                     // For restrictive modes, only set mode on the final directory
                     // (the last one in created_dirs, which is the target)
@@ -610,7 +609,7 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                     // to ensure we can access parents when setting mode on children)
                     created_dirs.iter().rev().collect::<Vec<_>>()
                 };
-                
+
                 for dir in dirs_to_chmod {
                     // Set the specified mode on the newly created directory
                     if mode::chmod(dir, mode).is_err() {
