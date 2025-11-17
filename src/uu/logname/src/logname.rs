@@ -29,11 +29,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(userlogin) => {
             println!("{userlogin}");
             Ok(())
-        },
+        }
         None => {
             show_error!("{}", translate!("logname-error-no-login-name"));
             Err(1.into())
-        },
+        }
     }
 }
 
