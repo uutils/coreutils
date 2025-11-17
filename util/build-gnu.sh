@@ -104,18 +104,22 @@ else
 fi
 cd -
 
+[ "${SELINUX_ENABLED}" != 1 ] && export MULTICALL=y # Reduce time to build
 # Pass the feature flags to make, which will pass them to cargo
 "${MAKE}" PROFILE="${UU_MAKE_PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
+if [ "${MULTICALL}" = y ]; then
+    for b in $(./coreutils --list)
+        do cp -vf "${UU_BUILD_DIR}"/coreutils "${UU_BUILD_DIR}/${b}"
+    done
+else
+    cp "${UU_BUILD_DIR}"/test "${UU_BUILD_DIR}"/test/'['
+    for b in {b2,md5}sum sha{1,224,256,384,512}sum
+        do cp -vf "${UU_BUILD_DIR}"/hashsum "${UU_BUILD_DIR}/${b}"
+    done
+fi
 # min test for SELinux
 [ "${SELINUX_ENABLED}" = 1 ] && touch g && "${UU_MAKE_PROFILE}"/stat -c%C g && rm g
-
 cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
-# Create *sum binaries
-for sum in b2sum b3sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum; do
-    sum_path="${UU_BUILD_DIR}/${sum}"
-    test -f "${sum_path}" || (cd ${UU_BUILD_DIR} && ln -s "hashsum" "${sum}")
-done
-test -f "${UU_BUILD_DIR}/[" || (cd ${UU_BUILD_DIR} && ln -s "test" "[")
 
 ##
 
