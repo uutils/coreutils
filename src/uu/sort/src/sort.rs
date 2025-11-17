@@ -22,7 +22,7 @@ use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
-use custom_str_cmp::{build_filtered_line, custom_str_cmp};
+use custom_str_cmp::{append_filtered_line_to, custom_str_cmp};
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
 #[cfg(target_os = "linux")]
@@ -562,12 +562,15 @@ impl<'a> Line<'a> {
             }
         }
         if settings.precomputed.needs_filtered_view {
-            line_data.filtered_lines.push(build_filtered_line(
+            let start = line_data.filtered_lines_data.len();
+            let len = append_filtered_line_to(
                 line,
                 settings.ignore_non_printing,
                 settings.dictionary_order,
                 settings.ignore_case,
-            ));
+                &mut line_data.filtered_lines_data,
+            );
+            line_data.filtered_line_ranges.push((start, len));
         }
         if settings.precomputed.fast_lexicographic {
             line_data.utf8_cache.push(std::str::from_utf8(line).ok());
@@ -1775,8 +1778,8 @@ fn compare_by<'a>(
     }
 
     if global_settings.precomputed.needs_filtered_view {
-        let a_filtered = &a_line_data.filtered_lines[a.index];
-        let b_filtered = &b_line_data.filtered_lines[b.index];
+        let a_filtered = a_line_data.filtered_line(a.index);
+        let b_filtered = b_line_data.filtered_line(b.index);
         let cmp = a_filtered.cmp(b_filtered);
         if cmp != Ordering::Equal || a.line == b.line {
             return if global_settings.reverse {
