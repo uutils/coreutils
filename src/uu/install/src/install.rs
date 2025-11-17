@@ -502,24 +502,34 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                 let mut dirs_to_create = Vec::new();
                 let mut current = path_to_create.clone();
 
-                // Walk up the path, collecting all parent directories that don't exist.
-                // Stop at root directory ("/") or empty path to avoid infinite loops.
-                while let Some(parent) = current.parent() {
-                    if parent == Path::new("") || parent == Path::new("/") {
+                // Walk up the path, collecting all directories in the path that don't exist.
+                // We collect by walking from the target up to the root, adding each
+                // directory component that doesn't exist.
+                loop {
+                    // Add the current directory if it doesn't exist
+                    if !current.exists() {
+                        dirs_to_create.push(current.clone());
+                    }
+                    
+                    // Get the parent directory
+                    let Some(parent) = current.parent() else {
+                        break;
+                    };
+                    
+                    // Stop at filesystem root
+                    if parent == Path::new("/") {
                         break;
                     }
-                    // Only add directories that don't already exist
-                    if !parent.exists() {
-                        dirs_to_create.push(parent.to_path_buf());
+                    // Stop at current directory (empty path) - we've reached the base
+                    if parent == Path::new("") {
+                        break;
                     }
+                    
                     current = parent.to_path_buf();
                 }
 
-                // Reverse to get creation order from root to leaf (e.g., [ancestor1, ancestor1/ancestor2])
+                // Reverse to get creation order from root to leaf (e.g., [ancestor1, ancestor1/ancestor2, ancestor1/ancestor2/target_dir])
                 dirs_to_create.reverse();
-
-                // Add the target directory itself as the final directory to create
-                dirs_to_create.push(path_to_create.clone());
 
                 // Step 2: Create all directories with default permissions.
                 // Default permissions include execute permission, which is necessary to
@@ -527,11 +537,42 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                 let mut created_dirs = Vec::new();
                 for dir in &dirs_to_create {
                     if !dir.exists() {
-                        if let Err(e) = fs::create_dir(dir)
-                            .map_err_context(|| translate!("install-error-create-dir-failed", "path" => dir.as_path().quote()))
-                        {
-                            show!(e);
-                            continue;
+                        // Ensure parent directory exists before creating this directory.
+                        // If parent doesn't exist, it means we failed to create it earlier.
+                        // Skip check if parent is empty (current directory) - it always exists.
+                        if let Some(parent) = dir.parent() {
+                            if parent != Path::new("") && !parent.exists() {
+                                show_error!(
+                                    "{}",
+                                    translate!("install-error-create-dir-failed", "path" => dir.as_path().quote())
+                                );
+                                uucore::error::set_exit_code(1);
+                                continue;
+                            }
+                        }
+
+                        match fs::create_dir(dir) {
+                            Ok(()) => {
+                                // Directory created successfully
+                            }
+                            Err(e) => {
+                                // Check if error is because parent doesn't exist
+                                if e.kind() == std::io::ErrorKind::NotFound {
+                                    // This shouldn't happen if our logic is correct, but handle it
+                                    show_error!(
+                                        "{}",
+                                        translate!("install-error-create-dir-failed", "path" => dir.as_path().quote())
+                                    );
+                                    uucore::error::set_exit_code(1);
+                                    continue;
+                                } else {
+                                    // Other error (permission denied, etc.)
+                                    let err = InstallError::CreateDirFailed(dir.clone(), e);
+                                    show!(err);
+                                    uucore::error::set_exit_code(1);
+                                    continue;
+                                }
+                            }
                         }
                         // Track which directories we actually created (they might have existed
                         // due to race conditions or other processes)
@@ -547,29 +588,49 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                 }
 
                 // Step 3: Apply specified mode, ownership, and SELinux context
-                // to all newly created directories. This happens after all directories are
-                // created, ensuring we can traverse the entire path even if the specified
-                // mode doesn't include execute permission.
-                for dir in created_dirs {
+                // to newly created directories. This happens after all directories are
+                // created, ensuring we can traverse the entire path.
+                //
+                // GNU install behavior:
+                // - For normal modes (with execute permission): Set mode on ALL directories
+                // - For restrictive modes (without execute permission): Set mode ONLY on
+                //   the final directory, leave intermediates with default permissions
+                //
+                // This prevents locking yourself out of intermediate directories when using
+                // restrictive modes like 200 (--w-------).
+                let mode = b.mode();
+                let is_restrictive = (mode & 0o111) == 0; // No execute bits set
+                
+                let dirs_to_chmod = if is_restrictive {
+                    // For restrictive modes, only set mode on the final directory
+                    // (the last one in created_dirs, which is the target)
+                    created_dirs.last().into_iter().collect::<Vec<_>>()
+                } else {
+                    // For normal modes, set mode on all directories (in reverse order
+                    // to ensure we can access parents when setting mode on children)
+                    created_dirs.iter().rev().collect::<Vec<_>>()
+                };
+                
+                for dir in dirs_to_chmod {
                     // Set the specified mode on the newly created directory
-                    if mode::chmod(&dir, b.mode()).is_err() {
+                    if mode::chmod(dir, mode).is_err() {
                         // Error messages are printed by the mode::chmod function!
                         uucore::error::set_exit_code(1);
                         continue;
                     }
 
                     // Set ownership (user/group) on the newly created directory
-                    show_if_err!(chown_optional_user_group(&dir, b));
+                    show_if_err!(chown_optional_user_group(dir, b));
 
                     // Set SELinux security context for the newly created directory if needed
                     #[cfg(feature = "selinux")]
                     if b.default_context {
                         // Use -Z flag behavior: derive default context from SELinux policy
-                        show_if_err!(set_selinux_default_context(&dir));
+                        show_if_err!(set_selinux_default_context(dir));
                     } else if b.context.is_some() {
                         // Use --context flag: set the explicitly specified context
                         let context = get_context_for_selinux(b);
-                        show_if_err!(set_selinux_security_context(&dir, context));
+                        show_if_err!(set_selinux_security_context(dir, context));
                     }
                 }
             }
