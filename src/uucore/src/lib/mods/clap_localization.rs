@@ -15,7 +15,7 @@ use crate::error::UResult;
 use crate::locale::translate;
 
 use clap::error::{ContextKind, ErrorKind};
-use clap::{ArgMatches, Command, Error};
+use clap::{Arg, ArgAction, ArgMatches, Command, Error};
 
 use std::error::Error as StdError;
 use std::ffi::OsString;
@@ -559,6 +559,39 @@ pub fn configure_localized_command(mut cmd: Command) -> Command {
         colors_enabled,
     ));
     cmd
+}
+
+pub trait CommandHelpLocalization {
+    /// Replaces default --help and --version with localized versions
+    fn localize_help_and_version(self) -> Self;
+}
+
+impl CommandHelpLocalization for Command {
+    fn localize_help_and_version(self) -> Self {
+        let mut cmd = self.disable_help_flag(true).arg(
+            Arg::new("help")
+                .short('h')
+                .long("help")
+                .action(ArgAction::Help)
+                .help(translate!("help-flag-help"))
+                .global(true),
+        );
+
+        // Only set version flag if version is denied.
+        // ArgAction panic if no version string is provided for the command.
+        if cmd.get_version().is_some() {
+            cmd = cmd.disable_version_flag(true).arg(
+                Arg::new("version")
+                    .short('V')
+                    .long("version")
+                    .action(ArgAction::Version)
+                    .help(translate!("help-flag-version"))
+                    .global(true),
+            );
+        }
+
+        cmd
+    }
 }
 
 /* spell-checker: disable */
