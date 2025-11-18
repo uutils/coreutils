@@ -379,6 +379,8 @@ impl Writable for &OsStr {
 
 impl Writable for u64 {
     fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), Error> {
+        // The itoa crate is surprisingly much more efficient than a formatted write.
+        // It speeds up `shuf -r -n1000000 -i1-1024` by 1.8×.
         let mut buf = itoa::Buffer::new();
         output.write_all(buf.format(*self).as_bytes())
     }
