@@ -9,7 +9,7 @@
 //!
 //! Format sizes like gnulibs human_readable() would
 
-use number_prefix::NumberPrefix;
+use unit_prefix::NumberPrefix;
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum SizeFormat {

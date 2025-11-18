@@ -121,6 +121,10 @@ test -f "${UU_BUILD_DIR}/[" || (cd ${UU_BUILD_DIR} && ln -s "test" "[")
 
 cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
 
+# Always update the PATH to test the uutils coreutils instead of the GNU coreutils
+# This ensures the correct path is used even if the repository was moved or rebuilt in a different location
+sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" tests/local.mk
+
 if test -f gnu-built; then
     echo "GNU build already found. Skip"
     echo "'rm -f $(pwd)/gnu-built' to force the build"
@@ -128,8 +132,6 @@ if test -f gnu-built; then
 else
     # Disable useless checks
     sed -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
-    # Change the PATH to test the uutils coreutils instead of the GNU coreutils
-    sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" tests/local.mk
     ./bootstrap --skip-po
     ./configure --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
       "$([ "${SELINUX_ENABLED}" = 1 ] && echo --with-selinux || echo --without-selinux)"
