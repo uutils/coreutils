@@ -8,10 +8,8 @@ cksum-after-help = DIGEST détermine l'algorithme de condensé et le format de s
   - crc32b : (disponible uniquement via cksum)
   - md5 : (équivalent à md5sum)
   - sha1 : (équivalent à sha1sum)
-  - sha224 : (équivalent à sha224sum)
-  - sha256 : (équivalent à sha256sum)
-  - sha384 : (équivalent à sha384sum)
-  - sha512 : (équivalent à sha512sum)
+  - sha2: (équivalent à sha{"{224,256,384,512}"}sum)
+  - sha3 : (disponible uniquement via cksum)
   - blake2b : (équivalent à b2sum)
   - sm3 : (disponible uniquement via cksum)
 

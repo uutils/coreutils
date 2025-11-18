@@ -29,7 +29,7 @@ suitable, and that if a file is given as its input directly (as in
 ### Counting lines and UTF-8 characters
 
 If the flags set are a subset of `-clm` then the input doesn't have to be decoded. The
-input is read in chunks and the `bytecount` crate is used to count the newlines (`-l` flag) 
+input is read in chunks and the `bytecount` crate is used to count the newlines (`-l` flag)
 and/or UTF-8 characters (`-m` flag).
 
 It's useful to vary the line length in the input. GNU wc seems particularly
@@ -56,7 +56,7 @@ To get a file with less artificial contents, download a book from
 Project Gutenberg and concatenate it a lot of times:
 
 ```shell
-wget https://www.gutenberg.org/files/2701/2701-0.txt -O moby.txt
+curl https://www.gutenberg.org/files/2701/2701-0.txt -o moby.txt
 cat moby.txt moby.txt moby.txt moby.txt > moby4.txt
 cat moby4.txt moby4.txt moby4.txt moby4.txt > moby16.txt
 cat moby16.txt moby16.txt moby16.txt moby16.txt > moby64.txt
@@ -65,7 +65,7 @@ cat moby16.txt moby16.txt moby16.txt moby16.txt > moby64.txt
 And get one with lots of unicode too:
 
 ```shell
-wget https://www.gutenberg.org/files/30613/30613-0.txt -O odyssey.txt
+curl https://www.gutenberg.org/files/30613/30613-0.txt -o odyssey.txt
 cat odyssey.txt odyssey.txt odyssey.txt odyssey.txt > odyssey4.txt
 cat odyssey4.txt odyssey4.txt odyssey4.txt odyssey4.txt > odyssey16.txt
 cat odyssey16.txt odyssey16.txt odyssey16.txt odyssey16.txt > odyssey64.txt
@@ -83,16 +83,16 @@ performance. For example, `hyperfine 'wc somefile' 'uuwc somefile'`.
 
 If you want to get fancy and exhaustive, generate a table:
 
-|                        |   moby64.txt |   odyssey256.txt |   25Mshortlines |   /usr/bin/docker |
-|------------------------|--------------|------------------|-----------------|-------------------|
-| `wc <FILE>`            |       1.3965 |           1.6182 |          5.2967 |            2.2294 |
-| `wc -c <FILE>`         |       0.8134 |           1.2774 |          0.7732 |            0.9106 |
+|                         |   moby64.txt |   odyssey256.txt |   25Mshortlines |   /usr/bin/docker |
+|-------------------------|--------------|------------------|-----------------|-------------------|
+| `wc <FILE>`             |       1.3965 |           1.6182 |          5.2967 |            2.2294 |
+| `wc -c <FILE>`          |       0.8134 |           1.2774 |          0.7732 |            0.9106 |
 | `uucat <FILE> \| wc -c` |       2.7760 |           2.5565 |          2.3769 |            2.3982 |
-| `wc -l <FILE>`         |       1.1441 |           1.2854 |          2.9681 |            1.1493 |
-| `wc -L <FILE>`         |       2.1087 |           1.2551 |          5.4577 |            2.1490 |
-| `wc -m <FILE>`         |       2.7272 |           2.1704 |          7.3371 |            3.4347 |
-| `wc -w <FILE>`         |       1.9007 |           1.5206 |          4.7851 |            2.8529 |
-| `wc -lwcmL <FILE>`     |       1.1687 |           0.9169 |          4.4092 |            2.0663 |
+| `wc -l <FILE>`          |       1.1441 |           1.2854 |          2.9681 |            1.1493 |
+| `wc -L <FILE>`          |       2.1087 |           1.2551 |          5.4577 |            2.1490 |
+| `wc -m <FILE>`          |       2.7272 |           2.1704 |          7.3371 |            3.4347 |
+| `wc -w <FILE>`          |       1.9007 |           1.5206 |          4.7851 |            2.8529 |
+| `wc -lwcmL <FILE>`      |       1.1687 |           0.9169 |          4.4092 |            2.0663 |
 
 Beware that:
 

@@ -22,9 +22,9 @@ const SUB_DIR: &str = "subdir/deeper";
 const SUB_DEEPER_DIR: &str = "subdir/deeper/deeper_dir";
 const SUB_DIR_LINKS: &str = "subdir/links";
 const SUB_DIR_LINKS_DEEPER_SYM_DIR: &str = "subdir/links/deeper_dir";
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(all(not(target_os = "android"), not(target_os = "openbsd")))]
 const SUB_FILE: &str = "subdir/links/subwords.txt";
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(all(not(target_os = "android"), not(target_os = "openbsd")))]
 const SUB_LINK: &str = "subdir/links/sublink.txt";
 
 #[test]
@@ -69,7 +69,11 @@ fn du_basics(s: &str) {
     assert_eq!(s, answer);
 }
 
-#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "openbsd")
+))]
 fn du_basics(s: &str) {
     let answer = concat!(
         "8\t./subdir/deeper/deeper_dir\n",
@@ -119,7 +123,8 @@ fn du_basics_subdir(s: &str) {
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "windows"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 fn du_basics_subdir(s: &str) {
     // MS-WSL linux has altered expected output
@@ -177,6 +182,105 @@ fn test_du_with_posixly_correct() {
         .stdout_move_str();
 
     assert_eq!(expected, result);
+}
+
+#[test]
+fn test_du_zero_env_block_size() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "a";
+
+    at.mkdir(dir);
+    at.write(&format!("{dir}/file"), "some content");
+
+    let expected = ts
+        .ucmd()
+        .arg(dir)
+        .arg("--block-size=1024")
+        .succeeds()
+        .stdout_move_str();
+
+    let result = ts
+        .ucmd()
+        .arg(dir)
+        .env("DU_BLOCK_SIZE", "0")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(expected, result);
+}
+
+#[test]
+fn test_du_zero_env_block_size_hierarchy() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "a";
+
+    at.mkdir(dir);
+    at.write(&format!("{dir}/file"), "some content");
+
+    let expected = ts
+        .ucmd()
+        .arg(dir)
+        .arg("--block-size=1024")
+        .succeeds()
+        .stdout_move_str();
+
+    let result1 = ts
+        .ucmd()
+        .arg(dir)
+        .env("BLOCK_SIZE", "1")
+        .env("DU_BLOCK_SIZE", "0")
+        .succeeds()
+        .stdout_move_str();
+
+    let result2 = ts
+        .ucmd()
+        .arg(dir)
+        .env("BLOCK_SIZE", "1")
+        .env("BLOCKSIZE", "1")
+        .env("DU_BLOCK_SIZE", "0")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(expected, result1);
+    assert_eq!(expected, result2);
+}
+
+#[test]
+fn test_du_env_block_size_hierarchy() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "a";
+
+    at.mkdir(dir);
+    at.write(&format!("{dir}/file"), "some content");
+
+    let expected = ts
+        .ucmd()
+        .arg(dir)
+        .arg("--block-size=1")
+        .succeeds()
+        .stdout_move_str();
+
+    let result1 = ts
+        .ucmd()
+        .arg(dir)
+        .env("BLOCK_SIZE", "0")
+        .env("DU_BLOCK_SIZE", "1")
+        .succeeds()
+        .stdout_move_str();
+
+    let result2 = ts
+        .ucmd()
+        .arg(dir)
+        .env("BLOCK_SIZE", "1")
+        .env("BLOCKSIZE", "0")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(expected, result1);
+    assert_eq!(expected, result2);
 }
 
 #[test]
@@ -348,7 +452,8 @@ fn du_d_flag(s: &str) {
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "windows"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 fn du_d_flag(s: &str) {
     // MS-WSL linux has altered expected output
@@ -421,7 +526,8 @@ fn du_dereference(s: &str) {
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "windows"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 fn du_dereference(s: &str) {
     // MS-WSL linux has altered expected output

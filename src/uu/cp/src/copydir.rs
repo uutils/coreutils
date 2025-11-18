@@ -9,8 +9,9 @@
 #[cfg(windows)]
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::convert::identity;
 use std::env;
-use std::fs;
+use std::fs::{self, exists};
 use std::io;
 use std::path::{Path, PathBuf, StripPrefixError};
 
@@ -20,16 +21,14 @@ use uucore::error::UIoError;
 use uucore::fs::{
     FileInformation, MissingHandling, ResolveMode, canonicalize, path_ends_with_terminator,
 };
-use uucore::translate;
-
 use uucore::show;
 use uucore::show_error;
+use uucore::translate;
 use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{
     CopyResult, CpError, Options, aligned_ancestors, context_for, copy_attributes, copy_file,
-    copy_link,
 };
 
 /// Ensure a Windows path starts with a `\\?`.
@@ -194,15 +193,23 @@ impl Entry {
             get_local_to_root_parent(&source_absolute, context.root_parent.as_deref())?;
         if no_target_dir {
             let source_is_dir = source.is_dir();
-            if path_ends_with_terminator(context.target) && source_is_dir {
+            if path_ends_with_terminator(context.target)
+                && source_is_dir
+                && !exists(context.target).is_ok_and(identity)
+            {
                 if let Err(e) = fs::create_dir_all(context.target) {
                     eprintln!(
                         "{}",
                         translate!("cp-error-failed-to-create-directory", "error" => e)
                     );
                 }
-            } else {
-                descendant = descendant.strip_prefix(context.root)?.to_path_buf();
+            } else if let Some(stripped) = context
+                .root
+                .components()
+                .next_back()
+                .and_then(|stripped| descendant.strip_prefix(stripped).ok())
+            {
+                descendant = stripped.to_path_buf();
             }
         } else if context.root == Path::new(".") && context.target.is_dir() {
             // Special case: when copying current directory (.) to an existing directory,
@@ -251,17 +258,6 @@ fn copy_direntry(
         entry_is_dir_no_follow
     };
 
-    // If the source is a symbolic link and the options tell us not to
-    // dereference the link, then copy the link object itself.
-    if source_is_symlink && !options.dereference {
-        return copy_link(
-            &entry.source_absolute,
-            &entry.local_to_target,
-            symlinked_files,
-            options,
-        );
-    }
-
     // If the source is a directory and the destination does not
     // exist, ...
     if source_is_dir && !entry.local_to_target.exists() {
@@ -288,7 +284,7 @@ fn copy_direntry(
     if !source_is_dir {
         if let Err(err) = copy_file(
             progress_bar,
-            &entry.source_absolute,
+            &entry.source_relative,
             entry.local_to_target.as_path(),
             options,
             symlinked_files,
@@ -605,12 +601,10 @@ fn build_dir(
             0
         } as u32;
 
-        let umask = if copy_attributes_from.is_some()
-            && matches!(options.attributes.mode, Preserve::Yes { .. })
+        let umask = if let (Some(from), Preserve::Yes { .. }) =
+            (copy_attributes_from, options.attributes.mode)
         {
-            !fs::symlink_metadata(copy_attributes_from.unwrap())?
-                .permissions()
-                .mode()
+            !fs::symlink_metadata(from)?.permissions().mode()
         } else {
             uucore::mode::get_umask()
         };

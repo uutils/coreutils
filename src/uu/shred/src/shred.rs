@@ -291,7 +291,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let force = matches.get_flag(options::FORCE);
     let size_arg = matches
         .get_one::<String>(options::SIZE)
-        .map(|s| s.to_string());
+        .map(ToOwned::to_owned);
     let size = get_size(size_arg);
     let exact = matches.get_flag(options::EXACT) || size.is_some();
     let zero = matches.get_flag(options::ZERO);

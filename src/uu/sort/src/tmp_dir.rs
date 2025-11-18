@@ -2,10 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     fs::File,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use tempfile::TempDir;
@@ -27,6 +28,70 @@ pub struct TmpDirWrapper {
     parent_path: PathBuf,
     size: usize,
     lock: Arc<Mutex<()>>,
+}
+
+#[derive(Default, Clone)]
+struct HandlerRegistration {
+    lock: Option<Arc<Mutex<()>>>,
+    path: Option<PathBuf>,
+}
+
+fn handler_state() -> Arc<Mutex<HandlerRegistration>> {
+    // Lazily create the global HandlerRegistration so all TmpDirWrapper instances and the
+    // SIGINT handler operate on the same lock/path snapshot.
+    static HANDLER_STATE: OnceLock<Arc<Mutex<HandlerRegistration>>> = OnceLock::new();
+    HANDLER_STATE
+        .get_or_init(|| Arc::new(Mutex::new(HandlerRegistration::default())))
+        .clone()
+}
+
+fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) -> UResult<()> {
+    // This shared state must originate from `handler_state()` so the handler always sees
+    // the current lock/path pair and can clean up the active temp directory on SIGINT.
+    // Install a shared SIGINT handler so the active temp directory is deleted when the user aborts.
+    // Guard to ensure the SIGINT handler is registered once per process and reused.
+    static HANDLER_INSTALLED: AtomicBool = AtomicBool::new(false);
+
+    if HANDLER_INSTALLED
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return Ok(());
+    }
+
+    let handler_state = state.clone();
+    if let Err(e) = ctrlc::set_handler(move || {
+        // Load the latest lock/path snapshot so the handler cleans the active temp dir.
+        let (lock, path) = {
+            let state = handler_state.lock().unwrap();
+            (state.lock.clone(), state.path.clone())
+        };
+
+        if let Some(lock) = lock {
+            let _guard = lock.lock().unwrap();
+            if let Some(path) = path {
+                if let Err(e) = remove_tmp_dir(&path) {
+                    show_error!(
+                        "{}",
+                        translate!(
+                            "sort-failed-to-delete-temporary-directory",
+                            "error" => e
+                        )
+                    );
+                }
+            }
+        }
+
+        std::process::exit(2)
+    }) {
+        HANDLER_INSTALLED.store(false, Ordering::Release);
+        return Err(USimpleError::new(
+            2,
+            translate!("sort-failed-to-set-up-signal-handler", "error" => e),
+        ));
+    }
+
+    Ok(())
 }
 
 impl TmpDirWrapper {
@@ -52,31 +117,14 @@ impl TmpDirWrapper {
         );
 
         let path = self.temp_dir.as_ref().unwrap().path().to_owned();
-        let lock = self.lock.clone();
-        ctrlc::set_handler(move || {
-            // Take the lock so that `next_file_path` returns no new file path,
-            // and the program doesn't terminate before the handler has finished
-            let _lock = lock.lock().unwrap();
-            if let Err(e) = remove_tmp_dir(&path) {
-                show_error!(
-                    "{}",
-                    translate!(
-                        "sort-failed-to-delete-temporary-directory",
-                        "error" => e
-                    )
-                );
-            }
-            std::process::exit(2)
-        })
-        .map_err(|e| {
-            USimpleError::new(
-                2,
-                translate!(
-                    "sort-failed-to-set-up-signal-handler",
-                    "error" => e
-                ),
-            )
-        })
+        let state = handler_state();
+        {
+            let mut guard = state.lock().unwrap();
+            guard.lock = Some(self.lock.clone());
+            guard.path = Some(path);
+        }
+
+        ensure_signal_handler_installed(state)
     }
 
     pub fn next_file(&mut self) -> UResult<(File, PathBuf)> {
@@ -97,6 +145,22 @@ impl TmpDirWrapper {
     /// Function just waits if signal handler was called
     pub fn wait_if_signal(&self) {
         let _lock = self.lock.lock().unwrap();
+    }
+}
+
+impl Drop for TmpDirWrapper {
+    fn drop(&mut self) {
+        let state = handler_state();
+        let mut guard = state.lock().unwrap();
+
+        if guard
+            .lock
+            .as_ref()
+            .is_some_and(|current| Arc::ptr_eq(current, &self.lock))
+        {
+            guard.lock = None;
+            guard.path = None;
+        }
     }
 }
 

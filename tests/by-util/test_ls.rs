@@ -1353,15 +1353,15 @@ fn test_ls_long_symlink_color() {
         expected_target: &str,
     ) {
         // Names are always compared.
-        assert_eq!(&name, &expected_name);
-        assert_eq!(&target, &expected_target);
+        assert_eq!(name, expected_name);
+        assert_eq!(target, expected_target);
 
         // Colors are only compared when we have inferred what color we are looking for.
-        if expected_name_color.is_some() {
-            assert_eq!(&name_color, &expected_name_color.unwrap());
+        if let Some(name) = expected_name_color {
+            assert_eq!(name_color, name);
         }
-        if expected_target_color.is_some() {
-            assert_eq!(&target_color, &expected_target_color.unwrap());
+        if let Some(name) = expected_target_color {
+            assert_eq!(target_color, name);
         }
     }
 
@@ -5355,6 +5355,12 @@ fn test_ls_invalid_block_size() {
         .fails_with_code(2)
         .no_stdout()
         .stderr_is("ls: invalid --block-size argument 'invalid'\n");
+
+    new_ucmd!()
+        .arg("--block-size=0")
+        .fails_with_code(2)
+        .no_stdout()
+        .stderr_is("ls: invalid --block-size argument '0'\n");
 }
 
 #[cfg(all(unix, feature = "dd"))]
@@ -5391,6 +5397,14 @@ fn test_ls_invalid_block_size_in_env_var() {
         .ucmd()
         .arg("-og")
         .env("BLOCKSIZE", "invalid")
+        .succeeds()
+        .stdout_contains_line("total 4")
+        .stdout_contains(" 1024 ");
+
+    scene
+        .ucmd()
+        .arg("-og")
+        .env("BLOCKSIZE", "0")
         .succeeds()
         .stdout_contains_line("total 4")
         .stdout_contains(" 1024 ");
@@ -5744,6 +5758,15 @@ fn test_acl_display() {
 
     scene
         .ucmd()
+        .args(&["-la", &at.as_string()])
+        .succeeds()
+        .stdout_matches(&re_with_acl)
+        .stdout_matches(&re_without_acl);
+
+    // Verify that it also works if the current dir is different from the ucmd temporary dir
+    scene
+        .ucmd()
+        .current_dir("/")
         .args(&["-la", &at.as_string()])
         .succeeds()
         .stdout_matches(&re_with_acl)
@@ -6310,4 +6333,333 @@ fn test_ls_time_sort_without_long() {
     let def = default_out.stdout_str();
     let t = t_out.stdout_str();
     assert_ne!(def, t);
+}
+
+// Tests for -f flag implementation
+#[test]
+fn test_f_flag_enables_all() {
+    // Test that -f enables -a (shows all files including . and ..)
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("visible");
+    at.touch(".hidden");
+
+    scene
+        .ucmd()
+        .arg("-f")
+        .succeeds()
+        .stdout_contains("visible")
+        .stdout_contains(".hidden");
+}
+
+#[test]
+fn test_f_flag_disables_sorting() {
+    // Test that -f disables sorting by verifying it matches -U behavior
+    // and that explicitly sorting after -f works (proving sorting was disabled)
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("zebra");
+    at.touch("apple");
+    at.touch("banana");
+
+    // Get outputs with different flags
+    let out_f = scene
+        .ucmd()
+        .arg("-f")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+    let out_u_all = scene
+        .ucmd()
+        .arg("-U")
+        .arg("-a")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+
+    // Test that explicit sorting after -f works (proves -f disabled sorting)
+    let out_f_then_sort = scene
+        .ucmd()
+        .arg("-f")
+        .arg("--sort=name")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+
+    // Get sorted output for comparison
+    let out_sorted = scene
+        .ucmd()
+        .arg("-a")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+
+    // -f output should match -U output (both use directory order)
+    assert_eq!(out_f, out_u_all, "-f should match unsorted -U behavior");
+
+    // Explicit --sort after -f should enable sorting
+    assert_eq!(
+        out_f_then_sort, out_sorted,
+        "--sort after -f should enable sorting"
+    );
+}
+
+#[test]
+fn test_f_flag_disables_implicit_color() {
+    // Test that -f disables implicit color (not explicitly set)
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.touch("file.txt");
+
+    // -f without explicit --color: should not have color
+    let result = scene.ucmd().arg("-f").succeeds().stdout_move_str();
+    assert!(
+        !result.contains("\x1b["),
+        "Color should be disabled with -f alone"
+    );
+}
+
+#[test]
+fn test_explicit_color_always_works_with_f() {
+    // Test that explicit --color always enables color, regardless of -f
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.touch("file.txt");
+
+    // --color then -f: explicit --color should still enable color
+    let result1 = scene
+        .ucmd()
+        .arg("--color=always")
+        .arg("-f")
+        .succeeds()
+        .stdout_move_str();
+    assert!(
+        result1.contains("\x1b["),
+        "Explicit --color should work even with -f after"
+    );
+
+    // -f then --color: explicit --color should enable color
+    let result2 = scene
+        .ucmd()
+        .arg("-f")
+        .arg("--color=always")
+        .succeeds()
+        .stdout_move_str();
+    assert!(
+        result2.contains("\x1b["),
+        "Explicit --color should work even with -f before"
+    );
+}
+
+#[test]
+fn test_f_overrides_big_a() {
+    // Test last-flag-wins between -f and -A using .. as discriminator
+    // -f shows .. (all files including . and ..)
+    // -A hides .. (almost all, excluding . and ..)
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("visible");
+    at.touch(".hidden");
+
+    // -A then -f: -f wins, should show ..
+    let out_a_f = scene
+        .ucmd()
+        .arg("-A")
+        .arg("-f")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+    assert!(
+        out_a_f.lines().any(|l| l == ".."),
+        "-f should win and show .."
+    );
+
+    // -f then -A: -A wins, should NOT show ..
+    let out_f_a = scene
+        .ucmd()
+        .arg("-f")
+        .arg("-A")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+    assert!(
+        !out_f_a.lines().any(|l| l == ".."),
+        "-A should win and hide .."
+    );
+}
+
+#[test]
+fn test_f_overrides_sort_flags() {
+    // Test last-flag-wins using size-based sorting for determinism
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create files with different sizes for predictable sort order
+    at.write("small.txt", "a"); // 1 byte
+    at.write("medium.txt", "bb"); // 2 bytes  
+    at.write("large.txt", "ccc"); // 3 bytes
+
+    // Get baseline outputs (include -a to match -f behavior which shows all files)
+    let out_s = scene
+        .ucmd()
+        .arg("-S")
+        .arg("-a")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+    let out_u = scene
+        .ucmd()
+        .arg("-U")
+        .arg("-a")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+
+    // -f then -S: -S wins, should be sorted by size
+    let out_f_s = scene
+        .ucmd()
+        .arg("-f")
+        .arg("-S")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(
+        out_f_s, out_s,
+        "-S should win: output should be size-sorted"
+    );
+
+    // -S then -f: -f wins, should be unsorted
+    let out_s_f = scene
+        .ucmd()
+        .arg("-S")
+        .arg("-f")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(
+        out_s_f, out_u,
+        "-f should win: output should match unsorted -U"
+    );
+}
+
+#[test]
+fn test_a_overrides_f_files() {
+    // Test that -a after -f still shows all files
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("visible");
+    at.touch(".hidden");
+
+    scene
+        .ucmd()
+        .arg("-f")
+        .arg("-a")
+        .succeeds()
+        .stdout_contains(".hidden")
+        .stdout_contains("visible");
+}
+
+#[test]
+fn test_big_u_participates_in_sort_flag_wins() {
+    // Test that -U participates in last-flag-wins with sorting flags
+    // -U disables sorting (like -f), but can be overridden by other sort flags
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create files with different sizes for predictable sort order
+    at.write("small.txt", "a"); // 1 byte
+    at.write("medium.txt", "bb"); // 2 bytes
+    at.write("large.txt", "ccc"); // 3 bytes
+
+    // Get baseline outputs
+    let out_s = scene
+        .ucmd()
+        .arg("-S")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+    let out_u = scene
+        .ucmd()
+        .arg("-U")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+
+    // -U then -S: -S wins, should be sorted by size
+    let out_u_s = scene
+        .ucmd()
+        .arg("-U")
+        .arg("-S")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(
+        out_u_s, out_s,
+        "-S should win: output should be size-sorted"
+    );
+
+    // -S then -U: -U wins, should match plain -U output
+    let out_s_u = scene
+        .ucmd()
+        .arg("-S")
+        .arg("-U")
+        .arg("-1")
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(
+        out_s_u, out_u,
+        "-U should win: output should match plain -U"
+    );
+
+    // Verify size-sorted output is in correct order (this is deterministic)
+    let lines: Vec<&str> = out_s.lines().collect();
+    assert_eq!(lines[0], "large.txt", "First file should be largest");
+    assert_eq!(lines[1], "medium.txt", "Second file should be medium");
+    assert_eq!(lines[2], "small.txt", "Third file should be smallest");
+}
+
+#[test]
+fn test_f_flag_combined_behavior() {
+    // Test that -f behaves correctly with all its effects together
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("zebra.txt");
+    at.touch(".hidden");
+    at.touch("apple.txt");
+    at.mkdir("directory");
+
+    let result = scene.ucmd().arg("-f").succeeds().stdout_move_str();
+
+    // Should show hidden files
+    assert!(result.contains(".hidden"));
+    // Should show all files
+    assert!(result.contains("zebra.txt"));
+    assert!(result.contains("apple.txt"));
+    assert!(result.contains("directory"));
+    // Should not contain ANSI color codes
+    assert!(!result.contains("\x1b["));
+}
+
+#[test]
+fn test_f_with_long_format() {
+    // Test that -f works with long format (-l)
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file1");
+    at.touch(".hidden");
+
+    let result = scene
+        .ucmd()
+        .arg("-f")
+        .arg("-l")
+        .succeeds()
+        .stdout_move_str();
+
+    // Should show hidden files in long format
+    assert!(result.contains(".hidden"));
+    assert!(result.contains("file1"));
+    // Long format should still work (contains permissions, etc.)
+    assert!(result.contains("-rw"));
 }

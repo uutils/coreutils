@@ -1002,32 +1002,31 @@ fn test_compress_merge() {
 #[test]
 #[cfg(not(target_os = "android"))]
 fn test_compress_fail() {
+    let result = new_ucmd!()
+        .args(&[
+            "ext_sort.txt",
+            "-n",
+            "--compress-program",
+            "nonexistent-program",
+            "-S",
+            "10",
+        ])
+        .succeeds();
+
     #[cfg(not(windows))]
-    new_ucmd!()
-        .args(&[
-            "ext_sort.txt",
-            "-n",
-            "--compress-program",
-            "nonexistent-program",
-            "-S",
-            "10",
-        ])
-        .fails()
-        .stderr_only("sort: couldn't execute compress program: errno 2\n");
-    // With coverage, it fails with a different error:
-    // "thread 'main' panicked at 'called `Option::unwrap()` on ...
-    // So, don't check the output
+    result.stderr_contains(
+        "sort: could not run compress program 'nonexistent-program': No such file or directory",
+    );
+
     #[cfg(windows)]
-    new_ucmd!()
-        .args(&[
-            "ext_sort.txt",
-            "-n",
-            "--compress-program",
-            "nonexistent-program",
-            "-S",
-            "10",
-        ])
-        .fails();
+    result.stderr_contains("could not run compress program");
+
+    // Check that it still produces correct sorted output to stdout
+    let expected = new_ucmd!()
+        .args(&["ext_sort.txt", "-n"])
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(result.stdout_str(), expected);
 }
 
 #[test]
@@ -1904,6 +1903,27 @@ fn test_color_environment_variables() {
             "Color test failed for {description}: expected colors={should_have_colors}, found ANSI codes={has_ansi_codes}"
         );
     }
+}
+
+#[test]
+fn test_start_buffer() {
+    // Test that a file with the exact same size as the start buffer is handled correctly
+    const FILE_B: &[u8] = &[b'b'; 8_000];
+    const FILE_A: &[u8] = b"aaa";
+
+    let mut expected = FILE_A.to_vec();
+    expected.push(b'\n');
+    expected.extend_from_slice(FILE_B);
+    expected.push(b'\n');
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write_bytes("b", FILE_B);
+    at.write_bytes("a", FILE_A);
+
+    ucmd.args(&["b", "a"])
+        .succeeds()
+        .stdout_only_bytes(&expected);
 }
 
 /* spell-checker: enable */
