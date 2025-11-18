@@ -152,16 +152,16 @@ cargo build -p uu_base32 -p uu_cat -p uu_echo -p uu_rm
 
 Building using `make` is a simple process as well.
 
-To simply build all available utilities:
+To simply build all available utilities (with debug profile):
 
 ```shell
 make
 ```
 
-In release mode:
+In release-fast mode:
 
 ```shell
-make PROFILE=release
+make PROFILE=release-fast
 ```
 
 To build all but a few of the available utilities:
@@ -199,6 +199,12 @@ To install all available utilities:
 
 ```shell
 make install
+```
+
+To install all utilities with all possible optimizations:
+
+```shell
+make PROFILE=release-fast install
 ```
 
 To install using `sudo` switch `-E` must be used:
