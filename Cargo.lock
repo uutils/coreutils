@@ -1951,12 +1951,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "number_prefix"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "830b246a0e5f20af87141b25c173cd1b609bd7779a4617d6ec582abaf90870f3"
-
-[[package]]
 name = "once_cell"
 version = "1.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2958,9 +2952,9 @@ checksum = "7264e107f553ccae879d21fbea1d6724ac785e8c3bfc762137959b5802826ef3"
 
 [[package]]
 name = "unit-prefix"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "323402cff2dd658f39ca17c789b502021b3f18707c91cdf22e3838e1b4023817"
+checksum = "81e544489bf3d8ef66c953931f56617f423cd4b5494be343d9b9d3dda037b9a3"
 
 [[package]]
 name = "unty"
@@ -4208,7 +4202,6 @@ dependencies = [
  "memchr",
  "nix",
  "num-traits",
- "number_prefix",
  "os_display",
  "phf",
  "procfs",
@@ -4221,6 +4214,7 @@ dependencies = [
  "thiserror 2.0.17",
  "time",
  "unic-langid",
+ "unit-prefix",
  "utmp-classic",
  "uucore_procs",
  "walkdir",
