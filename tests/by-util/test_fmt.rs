@@ -323,6 +323,8 @@ fn test_fmt_unicode_whitespace_handling() {
         ("non-breaking space", non_breaking_space),
         ("figure space", figure_space),
         ("narrow no-break space", narrow_no_break_space),
+        ("word joiner", "\u{2060}"),
+        ("cyrillic kha", "\u{0445}"),
     ] {
         let input = format!("={char}=");
         let result = new_ucmd!()
