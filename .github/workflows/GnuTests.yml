@@ -80,7 +80,8 @@ jobs:
       run: |
         ## Install dependencies
         sudo apt-get update
-        sudo apt-get install -y autopoint gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev libselinux1-dev attr quilt
+        ## Check that build-gnu.sh works on the non SELinux system by installing libselinux only on lima
+        sudo apt-get install -y autopoint gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev attr quilt
     - name: Add various locales
       shell: bash
       run: |
@@ -109,7 +110,7 @@ jobs:
       run: |
         ## Build binaries
         cd 'uutils'
-        bash util/build-gnu.sh --release-build
+        env PROFILE=release-small bash util/build-gnu.sh
 
     ### Run tests as user
     - name: Run GNU tests
@@ -244,7 +245,7 @@ jobs:
     ### Build
     - name: Build binaries
       run: |
-        lima bash -c "cd ~/work/uutils/ && SELINUX_ENABLED=1 bash util/build-gnu.sh --release-build"
+        lima bash -c "cd ~/work/uutils/ && SELINUX_ENABLED=1 PROFILE=release-small bash util/build-gnu.sh"
 
     ### Run tests as user
     - name: Generate SELinux tests list
