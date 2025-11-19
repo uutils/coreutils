@@ -105,11 +105,7 @@ fn uudoc_check_sums() {
         "sha256sum",
         "sha384sum",
         "sha512sum",
-        "sha3sum",
-        "shake128sum",
-        "shake256sum",
         "b2sum",
-        "b3sum",
     ];
     for one_sum in sums {
         let output_path = pages
