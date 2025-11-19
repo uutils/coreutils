@@ -69,17 +69,26 @@ pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, 
         ]) {
             // test if the last input can be parsed as an offset.
             let offset = parse_offset_operand(input_strings[input_strings.len() - 1]);
-            if let Ok(n) = offset {
-                // if there is just 1 input (stdin), an offset must start with '+'
-                if input_strings.len() == 1 && input_strings[0].starts_with('+') {
-                    return Ok(CommandLineInputs::FileAndOffset(("-".to_string(), n, None)));
+            match offset {
+                Ok(n) => {
+                    // if there is just 1 input (stdin), an offset must start with '+'
+                    if input_strings.len() == 1 && input_strings[0].starts_with('+') {
+                        return Ok(CommandLineInputs::FileAndOffset(("-".to_string(), n, None)));
+                    }
+                    if input_strings.len() == 2 {
+                        return Ok(CommandLineInputs::FileAndOffset((
+                            input_strings[0].to_string(),
+                            n,
+                            None,
+                        )));
+                    }
                 }
-                if input_strings.len() == 2 {
-                    return Ok(CommandLineInputs::FileAndOffset((
-                        input_strings[0].to_string(),
-                        n,
-                        None,
-                    )));
+                Err(e) => {
+                    // If it's an overflow error, propagate it
+                    // Otherwise, treat it as a filename
+                    if e == translate!("od-error-overflow").leak() {
+                        return Err(format!("{}: {}", input_strings[input_strings.len() - 1], e));
+                    }
                 }
             }
         }
@@ -123,7 +132,7 @@ pub fn parse_inputs_traditional(input_strings: &[&str]) -> Result<CommandLineInp
                     m,
                     None,
                 ))),
-                _ => Err(translate!("od-error-invalid-offset", "offset" => input_strings[1])),
+                (_, Err(e)) => Err(format!("{}: {}", input_strings[1], e)),
             }
         }
         3 => {
@@ -135,12 +144,8 @@ pub fn parse_inputs_traditional(input_strings: &[&str]) -> Result<CommandLineInp
                     n,
                     Some(m),
                 ))),
-                (Err(_), _) => {
-                    Err(translate!("od-error-invalid-offset", "offset" => input_strings[1]))
-                }
-                (_, Err(_)) => {
-                    Err(translate!("od-error-invalid-label", "label" => input_strings[2]))
-                }
+                (Err(e), _) => Err(format!("{}: {}", input_strings[1], e)),
+                (_, Err(e)) => Err(format!("{}: {}", input_strings[2], e)),
             }
         }
         _ => Err(translate!("od-error-too-many-inputs", "input" => input_strings[3])),
@@ -149,6 +154,26 @@ pub fn parse_inputs_traditional(input_strings: &[&str]) -> Result<CommandLineInp
 
 /// parses format used by offset and label on the command line
 pub fn parse_offset_operand(s: &str) -> Result<u64, &'static str> {
+    // Reject empty strings
+    if s.is_empty() {
+        return Err(translate!("od-error-parse-failed").leak());
+    }
+
+    // Reject strings with spaces (e.g., "+ 0")
+    if s.contains(' ') {
+        return Err(translate!("od-error-parse-failed").leak());
+    }
+
+    // Reject strings starting with "++" or "+-"
+    if s.starts_with("++") || s.starts_with("+-") {
+        return Err(translate!("od-error-parse-failed").leak());
+    }
+
+    // Reject strings starting with "-" (negative numbers not allowed)
+    if s.starts_with('-') {
+        return Err(translate!("od-error-parse-failed").leak());
+    }
+
     let mut start = 0;
     let mut len = s.len();
     let mut radix = 8;
@@ -171,11 +196,32 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, &'static str> {
             radix = 10;
         }
     }
+
+    // Check if the substring is empty after processing prefixes/suffixes
+    if start >= len {
+        return Err(translate!("od-error-parse-failed").leak());
+    }
+
     match u64::from_str_radix(&s[start..len], radix) {
-        Ok(i) => Ok(i * multiply),
-        Err(_) => Err(translate!("od-error-parse-failed").leak()),
+        Ok(i) => {
+            // Check for overflow during multiplication
+            match i.checked_mul(multiply) {
+                Some(result) => Ok(result),
+                None => Err(translate!("od-error-overflow").leak()),
+            }
+        }
+        Err(e) => {
+            // Distinguish between overflow and parse failure
+            // from_str_radix returns IntErrorKind::PosOverflow for overflow
+            use std::num::IntErrorKind;
+            match e.kind() {
+                IntErrorKind::PosOverflow => Err(translate!("od-error-overflow").leak()),
+                _ => Err(translate!("od-error-parse-failed").leak()),
+            }
+        }
     }
 }
+
 
 #[cfg(test)]
 mod tests {

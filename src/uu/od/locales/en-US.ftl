@@ -55,6 +55,7 @@ od-error-invalid-offset = invalid offset: {$offset}
 od-error-invalid-label = invalid label: {$label}
 od-error-too-many-inputs = too many inputs after --traditional: {$input}
 od-error-parse-failed = parse failed
+od-error-overflow = Numerical result out of range
 od-error-invalid-suffix = invalid suffix in --{$option} argument {$value}
 od-error-invalid-argument = invalid --{$option} argument {$value}
 od-error-argument-too-large = --{$option} argument {$value} too large

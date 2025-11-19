@@ -115,7 +115,7 @@ impl OdOptions {
         let mut label: Option<u64> = None;
 
         let parsed_input = parse_inputs(matches)
-            .map_err(|e| USimpleError::new(1, translate!("od-error-invalid-inputs", "msg" => e)))?;
+            .map_err(|e| USimpleError::new(1, e))?;
         let input_strings = match parsed_input {
             CommandLineInputs::FileNames(v) => v,
             CommandLineInputs::FileAndOffset((f, s, l)) => {
@@ -132,13 +132,32 @@ impl OdOptions {
             Some(s) => {
                 if matches.value_source(options::WIDTH) == Some(ValueSource::CommandLine) {
                     match parse_number_of_bytes(s) {
-                        Ok(n) => usize::try_from(n)
-                            .map_err(|_| USimpleError::new(1, format!("‘{s}‘ is too large")))?,
+                        Ok(n) => {
+                            let width = usize::try_from(n)
+                                .map_err(|_| USimpleError::new(1, format!("'{s}' is too large")))?;
+                            // Validate width is not zero
+                            if width == 0 {
+                                return Err(USimpleError::new(
+                                    1,
+                                    format!("invalid -w argument '{s}'"),
+                                ));
+                            }
+                            width
+                        }
                         Err(e) => {
-                            return Err(USimpleError::new(
-                                1,
-                                format_error_message(&e, s, options::WIDTH),
-                            ));
+                            // Format error message using -w instead of --width
+                            let error_msg = match e {
+                                ParseSizeError::InvalidSuffix(_) => {
+                                    format!("invalid -w argument '{s}'")
+                                }
+                                ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
+                                    format!("invalid -w argument '{s}'")
+                                }
+                                ParseSizeError::SizeTooBig(_) => {
+                                    format!("invalid -w argument '{s}'")
+                                }
+                            };
+                            return Err(USimpleError::new(1, error_msg));
                         }
                     }
                 } else {
