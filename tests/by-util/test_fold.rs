@@ -597,3 +597,36 @@ fn test_all_tab_advances_at_non_utf8_character() {
         .succeeds()
         .stdout_is_fixture_bytes("non_utf8_tab_stops_w16.expected");
 }
+
+#[test]
+fn test_combining_characters_nfc() {
+    // e acute NFC form (single character)
+    let e_acute_nfc = "\u{00E9}"; // é as single character
+    new_ucmd!()
+        .arg("-w2")
+        .pipe_in(format!("{}{}{}", e_acute_nfc, e_acute_nfc, e_acute_nfc))
+        .succeeds()
+        .stdout_is(format!("{}{}\n{}", e_acute_nfc, e_acute_nfc, e_acute_nfc));
+}
+
+#[test]
+fn test_combining_characters_nfd() {
+    // e acute NFD form (base + combining acute)
+    let e_acute_nfd = "e\u{0301}"; // e + combining acute accent
+    new_ucmd!()
+        .arg("-w2")
+        .pipe_in(format!("{}{}{}", e_acute_nfd, e_acute_nfd, e_acute_nfd))
+        .succeeds()
+        .stdout_is(format!("{}{}\n{}", e_acute_nfd, e_acute_nfd, e_acute_nfd));
+}
+
+#[test]
+fn test_fullwidth_characters() {
+    // e fullwidth (takes 2 columns)
+    let e_fullwidth = "\u{FF45}"; // ｅ
+    new_ucmd!()
+        .arg("-w2")
+        .pipe_in(format!("{}{}", e_fullwidth, e_fullwidth))
+        .succeeds()
+        .stdout_is(format!("{}\n{}", e_fullwidth, e_fullwidth));
+}
