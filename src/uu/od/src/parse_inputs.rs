@@ -160,22 +160,22 @@ pub fn parse_inputs_traditional(input_strings: &[&str]) -> Result<CommandLineInp
 pub fn parse_offset_operand(s: &str) -> Result<u64, String> {
     // Reject empty strings
     if s.is_empty() {
-        return Err(translate!("od-error-parse-failed").leak().to_string());
+        return Err((*translate!("od-error-parse-failed").leak()).to_string());
     }
 
     // Reject strings with spaces (e.g., "+ 0")
     if s.contains(' ') {
-        return Err(translate!("od-error-parse-failed").leak().to_string());
+        return Err((*translate!("od-error-parse-failed").leak()).to_string());
     }
 
     // Reject strings starting with "++" or "+-"
     if s.starts_with("++") || s.starts_with("+-") {
-        return Err(translate!("od-error-parse-failed").leak().to_string());
+        return Err((*translate!("od-error-parse-failed").leak()).to_string());
     }
 
     // Reject strings starting with "-" (negative numbers not allowed)
     if s.starts_with('-') {
-        return Err(translate!("od-error-parse-failed").leak().to_string());
+        return Err((*translate!("od-error-parse-failed").leak()).to_string());
     }
 
     let mut start = 0;
@@ -203,7 +203,7 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, String> {
 
     // Check if the substring is empty after processing prefixes/suffixes
     if start >= len {
-        return Err(translate!("od-error-parse-failed").leak().to_string());
+        return Err((*translate!("od-error-parse-failed").leak()).to_string());
     }
 
     match u64::from_str_radix(&s[start..len], radix) {
@@ -231,7 +231,7 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, String> {
                     let msg = msg.split(" (os error").next().unwrap_or(&msg).to_string();
                     Err(msg)
                 }
-                _ => Err(translate!("od-error-parse-failed").leak().to_string()),
+                _ => Err((*translate!("od-error-parse-failed").leak()).to_string()),
             }
         }
     }

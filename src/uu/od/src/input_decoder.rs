@@ -178,7 +178,7 @@ impl MemoryDecoder<'_> {
 fn f128_to_f64(u: u128) -> f64 {
     let sign = (u >> 127) as u64;
     let exp = ((u >> 112) & 0x7FFF) as u64;
-    let mant = (u & ((1 << 112) - 1)) as u128;
+    let mant = u & ((1 << 112) - 1);
 
     if exp == 0x7FFF {
         // Infinity or NaN

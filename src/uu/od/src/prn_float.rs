@@ -116,30 +116,28 @@ fn format_float_simple(f: f64, width: usize) -> String {
             return format!("{:>width$}", "NaN");
         } else if f.is_sign_negative() {
             return format!("{:>width$}", "-inf");
-        } else {
-            return format!("{:>width$}", "inf");
         }
+        return format!("{:>width$}", "inf");
     }
 
     if f == 0.0 {
         if f.is_sign_negative() {
             return format!("{:>width$}", "-0");
-        } else {
-            return format!("{:>width$}", "0");
         }
+        return format!("{:>width$}", "0");
     }
 
     // Format with %g style - use exponential for very large/small numbers
     let abs_f = f.abs();
-    if abs_f < 1e-4 || abs_f >= 1e6 {
+    if !(1e-4..1e6).contains(&abs_f) {
         // Use exponential notation
-        let formatted = format!("{:e}", f);
-        format!("{:>width$}", formatted)
+        let formatted = format!("{f:e}");
+        format!("{formatted:>width$}")
     } else {
         // Use decimal notation and remove trailing zeros
-        let formatted = format!("{:.6}", f);
+        let formatted = format!("{f:.6}");
         let trimmed = formatted.trim_end_matches('0').trim_end_matches('.');
-        format!("{:>width$}", trimmed)
+        format!("{trimmed:>width$}")
     }
 }
 
@@ -185,16 +183,14 @@ fn format_long_double(f: f64) -> String {
     if f.is_infinite() {
         if f.is_sign_negative() {
             return format!("{:>width$}", "-inf");
-        } else {
-            return format!("{:>width$}", "inf");
         }
+        return format!("{:>width$}", "inf");
     }
     if f == 0.0 {
         if f.is_sign_negative() {
             return format!("{:>width$}", "-0");
-        } else {
-            return format!("{:>width$}", "0");
         }
+        return format!("{:>width$}", "0");
     }
 
     // For normal numbers, format with appropriate precision using exponential notation
