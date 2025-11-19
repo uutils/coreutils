@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore funcs
+
 use divan::{Bencher, black_box};
 use uu_factor::uumain;
 use uucore::benchmark::run_util_function;
@@ -19,41 +21,6 @@ fn factor_multiple_u64s(bencher: Bencher, start_num: u64) {
             }
         });
 }
-
-/* Too much variance
-/// Benchmark multiple u128 digits
-#[divan::bench(args = [(18446744073709551616)])]
-fn factor_multiple_u128s(bencher: Bencher, start_num: u128) {
-    bencher
-        .with_inputs(|| {
-            // this is a range of 1000 different u128 integers
-            (start_num, start_num + 1000)
-        })
-        .bench_values(|(start_u128, end_u128)| {
-            for u128_digit in start_u128..=end_u128 {
-                black_box(run_util_function(uumain, &[&u128_digit.to_string()]));
-            }
-        });
-}
-*/
-
-/* Too much variance
-/// Benchmark multiple > u128::MAX digits
-#[divan::bench]
-fn factor_multiple_big_uint(bencher: Bencher) {
-    // max u128 value is 340_282_366_920_938_463_463_374_607_431_768_211_455
-    bencher
-        // this is a range of 3 different BigUints. The range is small due to
-        // some BigUints being unable to be factorized into prime numbers properly
-        .with_inputs(|| (768_211_459_u64, 768_211_461_u64))
-        .bench_values(|(start_big_uint, end_big_uint)| {
-            for digit in start_big_uint..=end_big_uint {
-                let big_uint_str = format!("340282366920938463463374607431768211456{digit}");
-                black_box(run_util_function(uumain, &[&big_uint_str]));
-            }
-        });
-}
-*/
 
 fn main() {
     divan::main();
