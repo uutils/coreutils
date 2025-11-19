@@ -14,33 +14,22 @@ NPROC=$(command -v gnproc||command -v nproc)
 READLINK=$(command -v greadlink||command -v readlink)
 SED=$(command -v gsed||command -v sed)
 
+SYSTEM_TIMEOUT=$(command -v timeout)
+SYSTEM_YES=$(command -v yes)
+
 ME="${0}"
 ME_dir="$(dirname -- "$("${READLINK}" -fm -- "${ME}")")"
 REPO_main_dir="$(dirname -- "${ME_dir}")"
 
-# Default profile is 'debug'
-UU_MAKE_PROFILE='debug'
+
+: ${PROFILE:=debug} # default profile
+export PROFILE
 CARGO_FEATURE_FLAGS=""
-
-for arg in "$@"
-do
-    if [ "$arg" == "--release-build" ]; then
-        UU_MAKE_PROFILE='release'
-        break
-    fi
-done
-
-echo "UU_MAKE_PROFILE='${UU_MAKE_PROFILE}'"
 
 ### * config (from environment with fallback defaults); note: GNU is expected to be a sibling repo directory
 
 path_UUTILS=${path_UUTILS:-${REPO_main_dir}}
 path_GNU="$("${READLINK}" -fm -- "${path_GNU:-${path_UUTILS}/../gnu}")"
-
-###
-
-SYSTEM_TIMEOUT=$(command -v timeout)
-SYSTEM_YES=$(command -v yes)
 
 ###
 
@@ -71,9 +60,9 @@ echo "path_GNU='${path_GNU}'"
 ###
 
 if [[ ! -z  "$CARGO_TARGET_DIR" ]]; then
-UU_BUILD_DIR="${CARGO_TARGET_DIR}/${UU_MAKE_PROFILE}"
+UU_BUILD_DIR="${CARGO_TARGET_DIR}/${PROFILE}"
 else
-UU_BUILD_DIR="${path_UUTILS}/target/${UU_MAKE_PROFILE}"
+UU_BUILD_DIR="${path_UUTILS}/target/${PROFILE}"
 fi
 echo "UU_BUILD_DIR='${UU_BUILD_DIR}'"
 
@@ -105,9 +94,9 @@ fi
 cd -
 
 # Pass the feature flags to make, which will pass them to cargo
-"${MAKE}" PROFILE="${UU_MAKE_PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
+"${MAKE}" PROFILE="${PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
 # min test for SELinux
-[ "${SELINUX_ENABLED}" = 1 ] && touch g && "${UU_MAKE_PROFILE}"/stat -c%C g && rm g
+[ "${SELINUX_ENABLED}" = 1 ] && touch g && "${PROFILE}"/stat -c%C g && rm g
 
 cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
 # Create *sum binaries
@@ -134,6 +123,7 @@ else
     sed -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
     ./bootstrap --skip-po
     ./configure --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
+      --enable-install-program="arch" \
       "$([ "${SELINUX_ENABLED}" = 1 ] && echo --with-selinux || echo --without-selinux)"
     #Add timeout to to protect against hangs
     sed -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
@@ -238,9 +228,6 @@ sed -i "s/\$prog: invalid input/\$prog: error: invalid input/g" tests/basenc/bas
 # basenc: swap out error message for unexpected arg
 sed -i "s/  {ERR=>\"\$prog: foobar\\\\n\" \. \$try_help }/  {ERR=>\"error: unexpected argument '--foobar' found\n\n  tip: to pass '--foobar' as a value, use '-- --foobar'\n\nUsage: basenc [OPTION]... [FILE]\n\nFor more information, try '--help'.\n\"}]/" tests/basenc/basenc.pl
 sed -i "s/  {ERR_SUBST=>\"s\/(unrecognized|unknown) option \[-' \]\*foobar\[' \]\*\/foobar\/\"}],//" tests/basenc/basenc.pl
-
-# Remove the check whether a util was built. Otherwise tests against utils like "arch" are not run.
-sed -i "s|require_built_ |# require_built_ |g" init.cfg
 
 # exit early for the selinux check. The first is enough for us.
 sed -i "s|# Independent of whether SELinux|return 0\n  #|g" init.cfg
