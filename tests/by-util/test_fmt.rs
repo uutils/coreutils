@@ -399,3 +399,17 @@ fn fmt_reflow_unicode() {
         .succeeds()
         .stdout_is("漢字漢字\n💐\n日本語の文字\n");
 }
+
+#[test]
+fn test_fmt_invalid_utf8() {
+    // Regression test for handling invalid UTF-8 input (e.g. ISO-8859-1)
+    // fmt should not drop lines with invalid UTF-8.
+    // \xA0 is non-breaking space in ISO-8859-1, but invalid in UTF-8.
+    // We expect it to be replaced by replacement character and treated as non-space.
+    let input = b"=\xA0=";
+    new_ucmd!()
+        .args(&["-s", "-w1"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("=\u{FFFD}=\n");
+}
