@@ -564,6 +564,8 @@ pub fn configure_localized_command(mut cmd: Command) -> Command {
 pub trait CommandHelpLocalization {
     /// Replaces default --help and --version with localized versions
     fn localize_help_and_version(self) -> Self;
+    /// Wrapper for localizing command help template
+    fn localize_help_template(self) -> Self;
 }
 
 impl CommandHelpLocalization for Command {
@@ -591,6 +593,12 @@ impl CommandHelpLocalization for Command {
         }
 
         cmd
+    }
+
+    fn localize_help_template(self) -> Self {
+        let util_name = self.get_name();
+        let template = crate::localized_help_template(util_name, &self);
+        self.help_template(template)
     }
 }
 

@@ -136,6 +136,8 @@ use std::str;
 use std::str::Utf8Chunk;
 use std::sync::{LazyLock, atomic::Ordering};
 
+use clap::Command;
+
 /// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
 /// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
 #[cfg(unix)]
@@ -254,7 +256,7 @@ pub fn format_usage(s: &str) -> String {
 /// let app = Command::new("myutil")
 ///     .help_template(localized_help_template("myutil"));
 /// ```
-pub fn localized_help_template(util_name: &str) -> clap::builder::StyledStr {
+pub fn localized_help_template(util_name: &str, cmd: &Command) -> clap::builder::StyledStr {
     use std::io::IsTerminal;
 
     // Determine if colors should be enabled - same logic as configure_localized_command
@@ -267,13 +269,14 @@ pub fn localized_help_template(util_name: &str) -> clap::builder::StyledStr {
             && std::env::var("TERM").unwrap_or_default() != "dumb"
     };
 
-    localized_help_template_with_colors(util_name, colors_enabled)
+    localized_help_template_with_colors(util_name, cmd, colors_enabled)
 }
 
 /// Create a localized help template with explicit color control
 /// This ensures color detection consistency between clap and our template
 pub fn localized_help_template_with_colors(
     util_name: &str,
+    cmd: &Command,
     colors_enabled: bool,
 ) -> clap::builder::StyledStr {
     use std::fmt::Write;
@@ -283,6 +286,14 @@ pub fn localized_help_template_with_colors(
 
     // Get the localized "Usage" label
     let usage_label = crate::locale::translate!("common-usage");
+    let arguments_label = crate::locale::translate!("common-arguments");
+    let options_label = crate::locale::translate!("common-options");
+    let subcommands_label = crate::locale::translate!("common-subcommands");
+
+    // Manually check that a section is empty or not
+    let has_opts = cmd.get_opts().next().is_some();
+    let has_positionals = cmd.get_positionals().next().is_some();
+    let has_subs = cmd.get_subcommands().next().is_some();
 
     // Create a styled template
     let mut template = clap::builder::StyledStr::new();
@@ -292,17 +303,52 @@ pub fn localized_help_template_with_colors(
 
     // Add styled usage header (bold + underline like clap's default)
     if colors_enabled {
-        write!(
-            template,
-            "\x1b[1m\x1b[4m{usage_label}:\x1b[0m {{usage}}\n\n"
-        )
-        .unwrap();
+        write!(template, "\x1b[1m\x1b[4m{usage_label}:\x1b[0m {{usage}}").unwrap();
     } else {
-        write!(template, "{usage_label}: {{usage}}\n\n").unwrap();
+        write!(template, "{usage_label}: {{usage}}").unwrap();
+    }
+
+    // Arguments (positionals) section
+    if has_positionals {
+        if colors_enabled {
+            write!(
+                template,
+                "\n\n\x1b[1m\x1b[4m{arguments_label}:\x1b[0m\n{{positionals}}"
+            )
+            .unwrap();
+        } else {
+            write!(template, "{arguments_label}:\n{{positionals}}").unwrap();
+        }
+    }
+
+    // Options section
+    if has_opts {
+        if colors_enabled {
+            write!(
+                template,
+                "\n\n\x1b[1m\x1b[4m{options_label}:\x1b[0m\n{{options}}"
+            )
+            .unwrap();
+        } else {
+            write!(template, "\n\n{options_label}:\n{{options}}").unwrap();
+        }
+    }
+
+    // Subcommands section
+    if has_subs {
+        if colors_enabled {
+            write!(
+                template,
+                "\n\n\x1b[1m\x1b[4m{subcommands_label}:\x1b[0m\n{{subcommands}}end"
+            )
+            .unwrap();
+        } else {
+            write!(template, "\n\n{subcommands_label}:\n{{subcommands}}").unwrap();
+        }
     }
 
     // Add the rest
-    write!(template, "{{all-args}}{{after-help}}").unwrap();
+    write!(template, "{{after-help}}").unwrap();
 
     template
 }
