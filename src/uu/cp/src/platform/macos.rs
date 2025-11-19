@@ -10,6 +10,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 
 use uucore::buf_copy;
+use uucore::display::Quotable;
 use uucore::translate;
 
 use uucore::mode::get_umask;
@@ -86,7 +87,7 @@ pub(crate) fn copy_on_write(
         // support COW).
         match reflink_mode {
             ReflinkMode::Always => {
-                return Err(translate!("cp-error-failed-to-clone", "source" => source.display(), "dest" => dest.display(), "error" => error)
+                return Err(translate!("cp-error-failed-to-clone", "source" => source.quote(), "dest" => dest.quote(), "error" => error)
                 .into());
             }
             _ => {

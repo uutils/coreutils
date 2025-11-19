@@ -8,7 +8,7 @@ use std::{
     fs::File,
     io::{BufRead, BufReader, Stdin, Stdout, Write, stdin, stdout},
     panic::set_hook,
-    path::Path,
+    path::{Path, PathBuf},
     time::Duration,
 };
 
@@ -31,9 +31,9 @@ use uucore::translate;
 
 #[derive(Debug)]
 enum MoreError {
-    IsDirectory(String),
-    CannotOpenNoSuchFile(String),
-    CannotOpenIOError(String, std::io::ErrorKind),
+    IsDirectory(PathBuf),
+    CannotOpenNoSuchFile(PathBuf),
+    CannotOpenIOError(PathBuf, std::io::ErrorKind),
     BadUsage,
 }
 
@@ -163,14 +163,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if file.is_dir() {
                 show!(UUsageError::new(
                     0,
-                    MoreError::IsDirectory(file.to_string_lossy().to_string()).to_string(),
+                    MoreError::IsDirectory(file.into()).to_string(),
                 ));
                 continue;
             }
             if !file.exists() {
                 show!(USimpleError::new(
                     0,
-                    MoreError::CannotOpenNoSuchFile(file.to_string_lossy().to_string()).to_string(),
+                    MoreError::CannotOpenNoSuchFile(file.into()).to_string(),
                 ));
                 continue;
             }
@@ -178,11 +178,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Err(why) => {
                     show!(USimpleError::new(
                         0,
-                        MoreError::CannotOpenIOError(
-                            file.to_string_lossy().to_string(),
-                            why.kind()
-                        )
-                        .to_string(),
+                        MoreError::CannotOpenIOError(file.into(), why.kind()).to_string(),
                     ));
                     continue;
                 }

@@ -207,12 +207,12 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     if filename.is_dir() {
         Err(Box::new(USimpleError {
             code: 1,
-            message: translate!("unexpand-error-is-directory", "path" => filename.display()),
+            message: translate!("unexpand-error-is-directory", "path" => filename.maybe_quote()),
         }))
     } else if path == "-" {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
     } else {
-        file_buf = File::open(path).map_err_context(|| path.to_string_lossy().to_string())?;
+        file_buf = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
 }

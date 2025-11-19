@@ -29,14 +29,14 @@ mv-error-failed-access-not-directory = impossible d'accéder à {$path} : N'est 
 mv-error-backup-with-no-clobber = impossible de combiner --backup avec -n/--no-clobber ou --update=none-fail
 mv-error-extra-operand = mv : opérande supplémentaire {$operand}
 mv-error-backup-might-destroy-source = sauvegarder {$target} pourrait détruire la source ; {$source} non déplacé
-mv-error-will-not-overwrite-just-created = ne va pas écraser le fichier qui vient d'être créé '{$target}' avec '{$source}'
+mv-error-will-not-overwrite-just-created = ne va pas écraser le fichier qui vient d'être créé {$target} avec {$source}
 mv-error-not-replacing = ne remplace pas {$target}
 mv-error-cannot-move = impossible de déplacer {$source} vers {$target}
 mv-error-directory-not-empty = Répertoire non vide
 mv-error-dangling-symlink = impossible de déterminer le type de lien symbolique, car il est suspendu
 mv-error-no-symlink-support = votre système d'exploitation ne prend pas en charge les liens symboliques
 mv-error-permission-denied = Permission refusée
-mv-error-inter-device-move-failed = échec du déplacement inter-périphérique : '{$from}' vers '{$to}' ; impossible de supprimer la cible : {$err}
+mv-error-inter-device-move-failed = échec du déplacement inter-périphérique : {$from} vers {$to} ; impossible de supprimer la cible : {$err}
 
 # Messages d'aide
 mv-help-force = ne pas demander avant d'écraser

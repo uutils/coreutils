@@ -817,17 +817,14 @@ fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
     match File::open(filename) {
         Ok(f) => {
             if f.metadata()?.is_dir() {
-                Err(
-                    io::Error::other(format!("{}: Is a directory", filename.to_string_lossy()))
-                        .into(),
-                )
+                Err(io::Error::other(format!("{}: Is a directory", filename.maybe_quote())).into())
             } else {
                 Ok(Box::new(f))
             }
         }
         Err(_) => Err(io::Error::other(format!(
             "{}: No such file or directory",
-            filename.to_string_lossy()
+            filename.maybe_quote()
         ))
         .into()),
     }

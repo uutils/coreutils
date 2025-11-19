@@ -62,13 +62,13 @@ enum MkTempError {
     SuffixContainsDirSeparator(String),
 
     #[error("{}", translate!("mktemp-error-invalid-template", "template" => .0.quote()))]
-    InvalidTemplate(String),
+    InvalidTemplate(OsString),
 
     #[error("{}", translate!("mktemp-error-too-many-templates"))]
     TooManyTemplates,
 
     #[error("{}", translate!("mktemp-error-not-found", "template_type" => .0.clone(), "template" => .1.quote()))]
-    NotFound(String, String),
+    NotFound(String, PathBuf),
 }
 
 impl UError for MkTempError {
@@ -203,9 +203,7 @@ impl Params {
         // Convert OsString template to string for processing
         let Some(template_str) = options.template.to_str() else {
             // For non-UTF-8 templates, return an error
-            return Err(MkTempError::InvalidTemplate(
-                options.template.to_string_lossy().into_owned(),
-            ));
+            return Err(MkTempError::InvalidTemplate(options.template));
         };
 
         // The template argument must end in 'X' if a suffix option is given.
@@ -242,7 +240,7 @@ impl Params {
             ));
         }
         if tmpdir.is_some() && Path::new(prefix_from_template).is_absolute() {
-            return Err(MkTempError::InvalidTemplate(template_str.to_string()));
+            return Err(MkTempError::InvalidTemplate(template_str.into()));
         }
 
         // Split the parent directory from the file part of the prefix.
@@ -527,8 +525,7 @@ fn make_temp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult
         Err(e) if e.kind() == ErrorKind::NotFound => {
             let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
             let path = Path::new(dir).join(filename);
-            let s = path.display().to_string();
-            Err(MkTempError::NotFound(translate!("mktemp-template-type-directory"), s).into())
+            Err(MkTempError::NotFound(translate!("mktemp-template-type-directory"), path).into())
         }
         Err(e) => Err(e.into()),
     }
@@ -557,8 +554,7 @@ fn make_temp_file(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResul
         Err(e) if e.kind() == ErrorKind::NotFound => {
             let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
             let path = Path::new(dir).join(filename);
-            let s = path.display().to_string();
-            Err(MkTempError::NotFound(translate!("mktemp-template-type-file"), s).into())
+            Err(MkTempError::NotFound(translate!("mktemp-template-type-file"), path).into())
         }
         Err(e) => Err(e.into()),
     }

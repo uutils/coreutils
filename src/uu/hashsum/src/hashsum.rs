@@ -25,7 +25,7 @@ use uucore::checksum::detect_algo;
 use uucore::checksum::digest_reader;
 use uucore::checksum::escape_filename;
 use uucore::checksum::perform_checksum_validation;
-use uucore::display::print_verbatim;
+use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{UResult, strip_errno};
 use uucore::format_usage;
 use uucore::sum::{Digest, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
@@ -546,7 +546,7 @@ where
                         eprintln!(
                             "{}: {}: {}",
                             options.binary_name,
-                            filename.to_string_lossy(),
+                            filename.maybe_quote(),
                             strip_errno(&e)
                         );
                         err_found = Some(ChecksumError::Io(e));
@@ -568,7 +568,7 @@ where
                 eprintln!(
                     "{}: {}: {}",
                     options.binary_name,
-                    filename.to_string_lossy(),
+                    filename.maybe_quote(),
                     strip_errno(&e)
                 );
                 err_found = Some(ChecksumError::Io(e));

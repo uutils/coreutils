@@ -4800,7 +4800,7 @@ fn test_obsolete_encoding_unix() {
         .arg(invalid_utf8_arg)
         .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: bad argument encoding: '-�b'\n");
+        .stderr_is("tail: bad argument encoding: $'-\\x80'$'b'\n");
 }
 
 #[test]
@@ -4817,7 +4817,7 @@ fn test_obsolete_encoding_windows() {
         .arg(&invalid_utf16_arg)
         .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: bad argument encoding: '-�b'\n");
+        .stderr_is("tail: bad argument encoding: \"-`u{D800}b\"\n");
 }
 
 #[test]

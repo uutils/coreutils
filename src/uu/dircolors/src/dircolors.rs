@@ -149,7 +149,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if !files.is_empty() {
             return Err(UUsageError::new(
                 1,
-                translate!("dircolors-error-extra-operand-print-database", "operand" => files[0].to_string_lossy().quote()),
+                translate!("dircolors-error-extra-operand-print-database", "operand" => files[0].quote()),
             ));
         }
 
@@ -198,7 +198,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if files.len() > 1 {
         return Err(UUsageError::new(
             1,
-            translate!("dircolors-error-extra-operand", "operand" => files[1].to_string_lossy().quote()),
+            translate!("dircolors-error-extra-operand", "operand" => files[1].quote()),
         ));
     } else if files[0] == "-" {
         let fin = BufReader::new(std::io::stdin());

@@ -296,7 +296,7 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
     } else {
         let path_ref = Path::new(path);
-        file_buf = File::open(path_ref).map_err_context(|| path.to_string_lossy().to_string())?;
+        file_buf = File::open(path_ref).map_err_context(|| path.maybe_quote().to_string())?;
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
 }
@@ -458,7 +458,7 @@ fn expand(options: &Options) -> UResult<()> {
         if Path::new(file).is_dir() {
             show_error!(
                 "{}",
-                translate!("expand-error-is-directory", "file" => file.to_string_lossy())
+                translate!("expand-error-is-directory", "file" => file.maybe_quote())
             );
             set_exit_code(1);
             continue;

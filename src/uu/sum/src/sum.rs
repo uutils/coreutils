@@ -75,14 +75,14 @@ fn open(name: &OsString) -> UResult<Box<dyn Read>> {
         if path.is_dir() {
             return Err(USimpleError::new(
                 2,
-                translate!("sum-error-is-directory", "name" => name.to_string_lossy().maybe_quote()),
+                translate!("sum-error-is-directory", "name" => name.maybe_quote()),
             ));
         }
         // Silent the warning as we want to the error message
         if path.metadata().is_err() {
             return Err(USimpleError::new(
                 2,
-                translate!("sum-error-no-such-file-or-directory", "name" => name.to_string_lossy().maybe_quote()),
+                translate!("sum-error-no-such-file-or-directory", "name" => name.maybe_quote()),
             ));
         }
         let f = File::open(path).map_err_context(String::new)?;

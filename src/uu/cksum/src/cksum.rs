@@ -19,6 +19,7 @@ use uucore::checksum::{
     LEGACY_ALGORITHMS, SUPPORTED_ALGORITHMS, calculate_blake2b_length_str, detect_algo,
     digest_reader, perform_checksum_validation, sanitize_sha2_sha3_length_str,
 };
+use uucore::display::Quotable;
 use uucore::translate;
 
 use uucore::{
@@ -200,7 +201,7 @@ where
         if filepath.is_dir() {
             show!(USimpleError::new(
                 1,
-                translate!("cksum-error-is-directory", "file" => filepath.display())
+                translate!("cksum-error-is-directory", "file" => filepath.maybe_quote())
             ));
             continue;
         }
@@ -213,7 +214,7 @@ where
             file_buf = match File::open(filepath) {
                 Ok(file) => file,
                 Err(err) => {
-                    show!(err.map_err_context(|| filepath.to_string_lossy().to_string()));
+                    show!(err.map_err_context(|| filepath.maybe_quote().to_string()));
                     continue;
                 }
             };

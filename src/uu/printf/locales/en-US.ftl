@@ -249,6 +249,6 @@ printf-after-help = basic anonymous string templating:
   is set)
 
 printf-error-missing-operand = missing operand
-printf-warning-ignoring-excess-arguments = ignoring excess arguments, starting with '{ $arg }'
+printf-warning-ignoring-excess-arguments = ignoring excess arguments, starting with { $arg }
 printf-help-version = Print version information
 printf-help-help = Print help information
