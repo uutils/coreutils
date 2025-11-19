@@ -183,7 +183,11 @@ fn f128_to_f64(u: u128) -> f64 {
     if exp == 0x7FFF {
         // Infinity or NaN
         if mant == 0 {
-            if sign == 0 { f64::INFINITY } else { f64::NEG_INFINITY }
+            if sign == 0 {
+                f64::INFINITY
+            } else {
+                f64::NEG_INFINITY
+            }
         } else {
             f64::NAN
         }
@@ -200,7 +204,11 @@ fn f128_to_f64(u: u128) -> f64 {
         let new_exp = exp as i64 - 16383 + 1023;
         if new_exp >= 2047 {
             // Overflow to infinity
-            if sign == 0 { f64::INFINITY } else { f64::NEG_INFINITY }
+            if sign == 0 {
+                f64::INFINITY
+            } else {
+                f64::NEG_INFINITY
+            }
         } else if new_exp <= 0 {
             // Underflow to zero
             if sign == 0 { 0.0 } else { -0.0 }

@@ -114,8 +114,7 @@ impl OdOptions {
 
         let mut label: Option<u64> = None;
 
-        let parsed_input = parse_inputs(matches)
-            .map_err(|e| USimpleError::new(1, e))?;
+        let parsed_input = parse_inputs(matches).map_err(|e| USimpleError::new(1, e))?;
         let input_strings = match parsed_input {
             CommandLineInputs::FileNames(v) => v,
             CommandLineInputs::FileAndOffset((f, s, l)) => {
@@ -150,7 +149,8 @@ impl OdOptions {
                                 ParseSizeError::InvalidSuffix(_) => {
                                     format!("invalid -w argument '{s}'")
                                 }
-                                ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
+                                ParseSizeError::ParseFailure(_)
+                                | ParseSizeError::PhysicalMem(_) => {
                                     format!("invalid -w argument '{s}'")
                                 }
                                 ParseSizeError::SizeTooBig(_) => {

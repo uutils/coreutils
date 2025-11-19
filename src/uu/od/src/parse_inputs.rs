@@ -89,7 +89,7 @@ pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, 
                     let err = std::io::Error::from_raw_os_error(libc::ERANGE);
                     let msg = err.to_string();
                     let expected_msg = msg.split(" (os error").next().unwrap_or(&msg).to_string();
-                    
+
                     if e == expected_msg {
                         return Err(format!("{}: {}", input_strings[input_strings.len() - 1], e));
                     }
@@ -236,7 +236,6 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, String> {
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {

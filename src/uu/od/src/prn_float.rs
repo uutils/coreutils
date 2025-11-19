@@ -53,7 +53,6 @@ pub fn format_item_long_double(f: f64) -> String {
     format!(" {}", format_long_double(f))
 }
 
-
 fn format_f32_exp(f: f32, width: usize) -> String {
     if f.abs().log10() < 0.0 {
         return format!("{f:width$e}");
@@ -121,7 +120,7 @@ fn format_float_simple(f: f64, width: usize) -> String {
             return format!("{:>width$}", "inf");
         }
     }
-    
+
     if f == 0.0 {
         if f.is_sign_negative() {
             return format!("{:>width$}", "-0");
@@ -129,7 +128,7 @@ fn format_float_simple(f: f64, width: usize) -> String {
             return format!("{:>width$}", "0");
         }
     }
-    
+
     // Format with %g style - use exponential for very large/small numbers
     let abs_f = f.abs();
     if abs_f < 1e-4 || abs_f >= 1e6 {
@@ -178,7 +177,7 @@ fn format_long_double(f: f64) -> String {
     // Width is 39 (40 - 1 for leading space), precision is 21 significant digits
     let width: usize = 39;
     let precision: usize = 21;
-    
+
     // Handle special cases
     if f.is_nan() {
         return format!("{:>width$}", "NaN");
@@ -197,7 +196,7 @@ fn format_long_double(f: f64) -> String {
             return format!("{:>width$}", "0");
         }
     }
-    
+
     // For normal numbers, format with appropriate precision using exponential notation
     format!("{f:>width$.precision$e}")
 }
