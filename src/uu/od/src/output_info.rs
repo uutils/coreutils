@@ -11,7 +11,7 @@ use crate::formatter_item_info::FormatterItemInfo;
 use crate::parse_formats::ParsedFormatterItemInfo;
 
 /// Size in bytes of the max datatype. ie set to 16 for 128-bit numbers.
-const MAX_BYTES_PER_UNIT: usize = 8;
+const MAX_BYTES_PER_UNIT: usize = 16;
 
 /// Contains information to output single output line in human readable form
 pub struct SpacedFormatterItemInfo {

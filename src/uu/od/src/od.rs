@@ -669,6 +669,10 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
                     let p = input_decoder.read_float(b, f.formatter_item_info.byte_size);
                     output_text.push_str(&func(p));
                 }
+                FormatWriter::LongDoubleWriter(func) => {
+                    let p = input_decoder.read_long_double(b);
+                    output_text.push_str(&func(p));
+                }
                 FormatWriter::BFloatWriter(func) => {
                     let p = input_decoder.read_bfloat(b);
                     output_text.push_str(&func(p));

@@ -25,6 +25,12 @@ pub static FORMAT_ITEM_F64: FormatterItemInfo = FormatterItemInfo {
     formatter: FormatWriter::FloatWriter(format_item_f64),
 };
 
+pub static FORMAT_ITEM_LONG_DOUBLE: FormatterItemInfo = FormatterItemInfo {
+    byte_size: 16,
+    print_width: 40,
+    formatter: FormatWriter::LongDoubleWriter(format_item_long_double),
+};
+
 pub static FORMAT_ITEM_BF16: FormatterItemInfo = FormatterItemInfo {
     byte_size: 2,
     print_width: 16,
@@ -42,6 +48,11 @@ pub fn format_item_f32(f: f64) -> String {
 pub fn format_item_f64(f: f64) -> String {
     format!(" {}", format_f64(f))
 }
+
+pub fn format_item_long_double(f: f64) -> String {
+    format!(" {}", format_long_double(f))
+}
+
 
 fn format_f32_exp(f: f32, width: usize) -> String {
     if f.abs().log10() < 0.0 {
@@ -71,11 +82,13 @@ fn format_f64_exp_precision(f: f64, width: usize, precision: usize) -> String {
 }
 
 pub fn format_item_bf16(f: f64) -> String {
-    format!(" {}", format_f32(f as f32))
+    format!(" {}", format_float_simple(f, 15))
 }
 
 fn format_f16(f: f16) -> String {
-    format_float(f64::from(f), 15, 8)
+    // Use a simpler format for f16, similar to %g in C
+    let val = f64::from(f);
+    format_float_simple(val, 15)
 }
 
 /// formats float with 8 significant digits, eg 12345678 or -1.2345678e+12
@@ -94,6 +107,41 @@ fn format_f32(f: f32) -> String {
 
 fn format_f64(f: f64) -> String {
     format_float(f, 24, 17)
+}
+
+/// Formats float in a simple way, similar to %g in C
+/// Removes trailing zeros and unnecessary decimal points
+fn format_float_simple(f: f64, width: usize) -> String {
+    if !f.is_finite() {
+        if f.is_nan() {
+            return format!("{:>width$}", "NaN");
+        } else if f.is_sign_negative() {
+            return format!("{:>width$}", "-inf");
+        } else {
+            return format!("{:>width$}", "inf");
+        }
+    }
+    
+    if f == 0.0 {
+        if f.is_sign_negative() {
+            return format!("{:>width$}", "-0");
+        } else {
+            return format!("{:>width$}", "0");
+        }
+    }
+    
+    // Format with %g style - use exponential for very large/small numbers
+    let abs_f = f.abs();
+    if abs_f < 1e-4 || abs_f >= 1e6 {
+        // Use exponential notation
+        let formatted = format!("{:e}", f);
+        format!("{:>width$}", formatted)
+    } else {
+        // Use decimal notation and remove trailing zeros
+        let formatted = format!("{:.6}", f);
+        let trimmed = formatted.trim_end_matches('0').trim_end_matches('.');
+        format!("{:>width$}", trimmed)
+    }
 }
 
 fn format_float(f: f64, width: usize, precision: usize) -> String {
@@ -122,6 +170,36 @@ fn format_float(f: f64, width: usize, precision: usize) -> String {
     } else {
         format_f64_exp_precision(f, width, precision - 1) // subnormal numbers
     }
+}
+
+fn format_long_double(f: f64) -> String {
+    // On most platforms, long double is either 64-bit (same as f64) or 80-bit/128-bit
+    // Since we're reading it as f64, we format it with extended precision
+    // Width is 39 (40 - 1 for leading space), precision is 21 significant digits
+    let width: usize = 39;
+    let precision: usize = 21;
+    
+    // Handle special cases
+    if f.is_nan() {
+        return format!("{:>width$}", "NaN");
+    }
+    if f.is_infinite() {
+        if f.is_sign_negative() {
+            return format!("{:>width$}", "-inf");
+        } else {
+            return format!("{:>width$}", "inf");
+        }
+    }
+    if f == 0.0 {
+        if f.is_sign_negative() {
+            return format!("{:>width$}", "-0");
+        } else {
+            return format!("{:>width$}", "0");
+        }
+    }
+    
+    // For normal numbers, format with appropriate precision using exponential notation
+    format!("{f:>width$.precision$e}")
 }
 
 #[test]

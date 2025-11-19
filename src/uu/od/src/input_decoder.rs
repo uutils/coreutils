@@ -165,6 +165,14 @@ impl MemoryDecoder<'_> {
         let val = f32::from(bf16::from_bits(bits));
         f64::from(val)
     }
+
+    /// Returns a long double from the internal buffer at position `start`.
+    /// On most platforms, long double is 64-bit or 80-bit. We read the first 8 bytes as f64.
+    /// This matches GNU od behavior on platforms where long double == double.
+    pub fn read_long_double(&self, start: usize) -> f64 {
+        // Read as f64 (8 bytes)
+        self.read_float(start, 8)
+    }
 }
 
 #[cfg(test)]
