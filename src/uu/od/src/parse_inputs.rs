@@ -86,7 +86,11 @@ pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, 
                 Err(e) => {
                     // If it's an overflow error, propagate it
                     // Otherwise, treat it as a filename
-                    if e == translate!("od-error-overflow").leak() {
+                    let err = std::io::Error::from_raw_os_error(libc::ERANGE);
+                    let msg = err.to_string();
+                    let expected_msg = msg.split(" (os error").next().unwrap_or(&msg).to_string();
+                    
+                    if e == expected_msg {
                         return Err(format!("{}: {}", input_strings[input_strings.len() - 1], e));
                     }
                 }
@@ -153,25 +157,25 @@ pub fn parse_inputs_traditional(input_strings: &[&str]) -> Result<CommandLineInp
 }
 
 /// parses format used by offset and label on the command line
-pub fn parse_offset_operand(s: &str) -> Result<u64, &'static str> {
+pub fn parse_offset_operand(s: &str) -> Result<u64, String> {
     // Reject empty strings
     if s.is_empty() {
-        return Err(translate!("od-error-parse-failed").leak());
+        return Err(translate!("od-error-parse-failed").leak().to_string());
     }
 
     // Reject strings with spaces (e.g., "+ 0")
     if s.contains(' ') {
-        return Err(translate!("od-error-parse-failed").leak());
+        return Err(translate!("od-error-parse-failed").leak().to_string());
     }
 
     // Reject strings starting with "++" or "+-"
     if s.starts_with("++") || s.starts_with("+-") {
-        return Err(translate!("od-error-parse-failed").leak());
+        return Err(translate!("od-error-parse-failed").leak().to_string());
     }
 
     // Reject strings starting with "-" (negative numbers not allowed)
     if s.starts_with('-') {
-        return Err(translate!("od-error-parse-failed").leak());
+        return Err(translate!("od-error-parse-failed").leak().to_string());
     }
 
     let mut start = 0;
@@ -199,7 +203,7 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, &'static str> {
 
     // Check if the substring is empty after processing prefixes/suffixes
     if start >= len {
-        return Err(translate!("od-error-parse-failed").leak());
+        return Err(translate!("od-error-parse-failed").leak().to_string());
     }
 
     match u64::from_str_radix(&s[start..len], radix) {
@@ -207,7 +211,13 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, &'static str> {
             // Check for overflow during multiplication
             match i.checked_mul(multiply) {
                 Some(result) => Ok(result),
-                None => Err(translate!("od-error-overflow").leak()),
+                None => {
+                    let err = std::io::Error::from_raw_os_error(libc::ERANGE);
+                    let msg = err.to_string();
+                    // Strip "(os error N)" if present to match Perl's $!
+                    let msg = msg.split(" (os error").next().unwrap_or(&msg).to_string();
+                    Err(msg)
+                }
             }
         }
         Err(e) => {
@@ -215,8 +225,13 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, &'static str> {
             // from_str_radix returns IntErrorKind::PosOverflow for overflow
             use std::num::IntErrorKind;
             match e.kind() {
-                IntErrorKind::PosOverflow => Err(translate!("od-error-overflow").leak()),
-                _ => Err(translate!("od-error-parse-failed").leak()),
+                IntErrorKind::PosOverflow => {
+                    let err = std::io::Error::from_raw_os_error(libc::ERANGE);
+                    let msg = err.to_string();
+                    let msg = msg.split(" (os error").next().unwrap_or(&msg).to_string();
+                    Err(msg)
+                }
+                _ => Err(translate!("od-error-parse-failed").leak().to_string()),
             }
         }
     }
@@ -386,7 +401,7 @@ mod tests {
         .unwrap_err();
     }
 
-    fn parse_offset_operand_str(s: &str) -> Result<u64, &'static str> {
+    fn parse_offset_operand_str(s: &str) -> Result<u64, String> {
         parse_offset_operand(&String::from(s))
     }
 

@@ -510,7 +510,9 @@ where
                 let length = memory_decoder.length();
 
                 if length == 0 {
-                    input_offset.print_final_offset();
+                    if !input_decoder.has_error() {
+                        input_offset.print_final_offset();
+                    }
                     break;
                 }
 
