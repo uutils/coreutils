@@ -81,11 +81,10 @@ fn format_f64_exp_precision(f: f64, width: usize, precision: usize) -> String {
 }
 
 pub fn format_item_bf16(f: f64) -> String {
-    let value = f as f64;
-    let bf = bf16::from_f32(value as f32);
+    let bf = bf16::from_f32(f as f32);
     format!(
         " {}",
-        format_binary16_like(value, 15, 8, is_subnormal_bf16(bf))
+        format_binary16_like(f, 15, 8, is_subnormal_bf16(bf))
     )
 }
 
