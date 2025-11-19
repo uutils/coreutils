@@ -405,11 +405,11 @@ fn test_fmt_invalid_utf8() {
     // Regression test for handling invalid UTF-8 input (e.g. ISO-8859-1)
     // fmt should not drop lines with invalid UTF-8.
     // \xA0 is non-breaking space in ISO-8859-1, but invalid in UTF-8.
-    // We expect it to be replaced by replacement character and treated as non-space.
+    // We expect GNU-compatible passthrough of the raw byte, not lossy replacement.
     let input = b"=\xA0=";
     new_ucmd!()
         .args(&["-s", "-w1"])
         .pipe_in(input)
         .succeeds()
-        .stdout_is("=\u{FFFD}=\n");
+        .stdout_is_bytes(b"=\xA0=\n");
 }
