@@ -37,6 +37,7 @@ jobs:
           - { package: uu_numfmt }
           - { package: uu_rm }
           - { package: uu_seq }
+          - { package: uu_shuf }
           - { package: uu_sort }
           - { package: uu_split }
           - { package: uu_tsort }

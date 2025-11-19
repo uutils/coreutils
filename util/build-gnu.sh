@@ -14,33 +14,22 @@ NPROC=$(command -v gnproc||command -v nproc)
 READLINK=$(command -v greadlink||command -v readlink)
 SED=$(command -v gsed||command -v sed)
 
+SYSTEM_TIMEOUT=$(command -v timeout)
+SYSTEM_YES=$(command -v yes)
+
 ME="${0}"
 ME_dir="$(dirname -- "$("${READLINK}" -fm -- "${ME}")")"
 REPO_main_dir="$(dirname -- "${ME_dir}")"
 
-# Default profile is 'debug'
-UU_MAKE_PROFILE='debug'
+
+: ${PROFILE:=debug} # default profile
+export PROFILE
 CARGO_FEATURE_FLAGS=""
-
-for arg in "$@"
-do
-    if [ "$arg" == "--release-build" ]; then
-        UU_MAKE_PROFILE='release'
-        break
-    fi
-done
-
-echo "UU_MAKE_PROFILE='${UU_MAKE_PROFILE}'"
 
 ### * config (from environment with fallback defaults); note: GNU is expected to be a sibling repo directory
 
 path_UUTILS=${path_UUTILS:-${REPO_main_dir}}
 path_GNU="$("${READLINK}" -fm -- "${path_GNU:-${path_UUTILS}/../gnu}")"
-
-###
-
-SYSTEM_TIMEOUT=$(command -v timeout)
-SYSTEM_YES=$(command -v yes)
 
 ###
 
@@ -71,9 +60,9 @@ echo "path_GNU='${path_GNU}'"
 ###
 
 if [[ ! -z  "$CARGO_TARGET_DIR" ]]; then
-UU_BUILD_DIR="${CARGO_TARGET_DIR}/${UU_MAKE_PROFILE}"
+UU_BUILD_DIR="${CARGO_TARGET_DIR}/${PROFILE}"
 else
-UU_BUILD_DIR="${path_UUTILS}/target/${UU_MAKE_PROFILE}"
+UU_BUILD_DIR="${path_UUTILS}/target/${PROFILE}"
 fi
 echo "UU_BUILD_DIR='${UU_BUILD_DIR}'"
 
@@ -106,20 +95,20 @@ cd -
 
 [ "${SELINUX_ENABLED}" != 1 ] && export MULTICALL=y # Reduce time to build
 # The GNU tests rename install to ginstall
-"${MAKE}" UTILS=install MULTICALL=n PROFILE="${UU_MAKE_PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}" &&  cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall"
-"${MAKE}" SKIP_UTILS=install PROFILE="${UU_MAKE_PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
+"${MAKE}" UTILS=install MULTICALL=n PROFILE="${PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}" &&  ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall"
+"${MAKE}" SKIP_UTILS=install PROFILE="${PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
 if [ "${MULTICALL}" = y ]; then
     for b in $("${UU_BUILD_DIR}"/coreutils --list)
         do ln -vf "${UU_BUILD_DIR}"/coreutils "${UU_BUILD_DIR}/${b}"
     done
 else
-    ln -sf "${UU_BUILD_DIR}"/test "${UU_BUILD_DIR}"/'['
+    ln -f "${UU_BUILD_DIR}"/test "${UU_BUILD_DIR}"/'['
     for b in {b2,md5}sum sha{1,224,256,384,512}sum
-        do ln -sf "${UU_BUILD_DIR}"/hashsum "${UU_BUILD_DIR}/${b}"
+        do ln -f "${UU_BUILD_DIR}"/hashsum "${UU_BUILD_DIR}/${b}"
     done
 fi
 # min test for SELinux
-[ "${SELINUX_ENABLED}" = 1 ] && touch g && "${UU_MAKE_PROFILE}"/stat -c%C g && rm g
+[ "${SELINUX_ENABLED}" = 1 ] && touch g && "${PROFILE}"/stat -c%C g && rm g
 
 ##
 
@@ -135,6 +124,10 @@ for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs); do
 done
 [ "${SELINUX_ENABLED}" != 1 ] && rm  "${UU_BUILD_DIR}/chcon" "${UU_BUILD_DIR}/runcon"
 
+# Always update the PATH to test the uutils coreutils instead of the GNU coreutils
+# This ensures the correct path is used even if the repository was moved or rebuilt in a different location
+sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" tests/local.mk
+
 if test -f gnu-built; then
     echo "GNU build already found. Skip"
     echo "'rm -f $(pwd)/gnu-built' to force the build"
@@ -142,8 +135,6 @@ if test -f gnu-built; then
 else
     # Disable useless checks
     sed -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
-    # Change the PATH to test the uutils coreutils instead of the GNU coreutils
-    sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" tests/local.mk
     ./bootstrap --skip-po
     ./configure --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
       "$([ "${SELINUX_ENABLED}" = 1 ] && echo --with-selinux || echo --without-selinux)"
