@@ -606,9 +606,9 @@ fn test_combining_characters_nfc() {
     let e_acute_nfc = "\u{00E9}"; // é as single character
     new_ucmd!()
         .arg("-w2")
-        .pipe_in(format!("{}{}{}", e_acute_nfc, e_acute_nfc, e_acute_nfc))
+        .pipe_in(format!("{e_acute_nfc}{e_acute_nfc}{e_acute_nfc}"))
         .succeeds()
-        .stdout_is(format!("{}{}\n{}", e_acute_nfc, e_acute_nfc, e_acute_nfc));
+        .stdout_is(format!("{e_acute_nfc}{e_acute_nfc}\n{e_acute_nfc}"));
 }
 
 #[test]
@@ -617,9 +617,9 @@ fn test_combining_characters_nfd() {
     let e_acute_nfd = "e\u{0301}"; // e + combining acute accent
     new_ucmd!()
         .arg("-w2")
-        .pipe_in(format!("{}{}{}", e_acute_nfd, e_acute_nfd, e_acute_nfd))
+        .pipe_in(format!("{e_acute_nfd}{e_acute_nfd}{e_acute_nfd}"))
         .succeeds()
-        .stdout_is(format!("{}{}\n{}", e_acute_nfd, e_acute_nfd, e_acute_nfd));
+        .stdout_is(format!("{e_acute_nfd}{e_acute_nfd}\n{e_acute_nfd}"));
 }
 
 #[test]
@@ -628,7 +628,7 @@ fn test_fullwidth_characters() {
     let e_fullwidth = "\u{FF45}"; // ｅ
     new_ucmd!()
         .arg("-w2")
-        .pipe_in(format!("{}{}", e_fullwidth, e_fullwidth))
+        .pipe_in(format!("{e_fullwidth}{e_fullwidth}"))
         .succeeds()
-        .stdout_is(format!("{}\n{}", e_fullwidth, e_fullwidth));
+        .stdout_is(format!("{e_fullwidth}\n{e_fullwidth}"));
 }
