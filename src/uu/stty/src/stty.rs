@@ -564,19 +564,58 @@ fn string_to_combo(arg: &str) -> Option<&str> {
 }
 
 fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
-    // BSDs use a u32 for the baud rate, so any decimal number applies.
-    #[cfg(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
-    if let Ok(n) = arg.parse::<u32>() {
-        return Some(AllFlags::Baud(n));
+    // Normalize the input: trim whitespace and leading '+'
+    let normalized = arg.trim().trim_start_matches('+');
+    
+    // Try to parse as a floating point number for rounding
+    if let Ok(f) = normalized.parse::<f64>() {
+        let rounded = f.round() as u32;
+        
+        // BSDs use a u32 for the baud rate, so any decimal number applies.
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        ))]
+        return Some(AllFlags::Baud(rounded));
+        
+        // On other platforms, find the closest valid baud rate
+        #[cfg(not(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        )))]
+        {
+            let rounded_str = rounded.to_string();
+            // First try exact match
+            for (text, baud_rate) in BAUD_RATES {
+                if *text == rounded_str {
+                    return Some(AllFlags::Baud(*baud_rate));
+                }
+            }
+            // If no exact match, find closest baud rate
+            let mut closest: Option<(u32, nix::sys::termios::BaudRate)> = None;
+            for (text, baud_rate) in BAUD_RATES {
+                if let Ok(rate_val) = text.parse::<u32>() {
+                    let diff = rate_val.abs_diff(rounded);
+                    if closest.is_none() || diff < closest.unwrap().0 {
+                        closest = Some((diff, *baud_rate));
+                    }
+                }
+            }
+            if let Some((_, baud_rate)) = closest {
+                return Some(AllFlags::Baud(baud_rate));
+            }
+        }
     }
-
+    
+    // Fallback: try exact string match for non-numeric baud rate names
     #[cfg(not(any(
         target_os = "freebsd",
         target_os = "dragonfly",
@@ -586,10 +625,11 @@ fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
         target_os = "openbsd"
     )))]
     for (text, baud_rate) in BAUD_RATES {
-        if *text == arg {
+        if *text == normalized {
             return Some(AllFlags::Baud(*baud_rate));
         }
     }
+    
     None
 }
 
@@ -1080,5 +1120,61 @@ impl TermiosFlag for LocalFlags {
 
     fn apply(&self, termios: &mut Termios, val: bool) {
         termios.local_flags.set(*self, val);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_string_to_baud_exact_match() {
+        assert!(string_to_baud("9600").is_some());
+        assert!(string_to_baud("115200").is_some());
+    }
+
+    #[test]
+    fn test_string_to_baud_with_whitespace() {
+        assert!(string_to_baud(" 9600 ").is_some());
+        assert!(string_to_baud("\t115200\n").is_some());
+    }
+
+    #[test]
+    fn test_string_to_baud_with_plus_sign() {
+        assert!(string_to_baud("+9600").is_some());
+        assert!(string_to_baud(" +115200 ").is_some());
+    }
+
+    #[test]
+    fn test_string_to_baud_with_decimal() {
+        assert!(string_to_baud("9600.0").is_some());
+        assert!(string_to_baud("9600.4").is_some());
+    }
+
+    #[test]
+    fn test_string_to_baud_rounding() {
+        assert!(string_to_baud("9600.5").is_some());
+        assert!(string_to_baud("9599.6").is_some());
+    }
+
+    #[cfg(not(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
+    #[test]
+    fn test_string_to_baud_closest_match() {
+        assert!(string_to_baud("9601").is_some());
+        assert!(string_to_baud("115000").is_some());
+    }
+
+    #[test]
+    fn test_string_to_baud_invalid() {
+        assert!(string_to_baud("invalid").is_none());
+        assert!(string_to_baud("").is_none());
+        assert!(string_to_baud("abc123").is_none());
     }
 }
