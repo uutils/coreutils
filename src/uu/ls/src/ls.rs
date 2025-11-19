@@ -206,7 +206,7 @@ enum LsError {
     #[error("{}", translate!("ls-error-dired-and-zero-incompatible"))]
     DiredAndZeroAreIncompatible,
 
-    #[error("{}", translate!("ls-error-not-listing-already-listed", "path" => .0.quote()))]
+    #[error("{}", translate!("ls-error-not-listing-already-listed", "path" => .0.maybe_quote()))]
     AlreadyListedError(PathBuf),
 
     #[error("{}", translate!("ls-error-invalid-time-style", "style" => .0.quote()))]
