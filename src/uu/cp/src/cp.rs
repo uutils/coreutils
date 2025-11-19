@@ -1375,10 +1375,19 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
             {
                 // There is already a file and it isn't a symlink (managed in a different place)
                 if copied_destinations.contains(&dest) && options.backup != BackupMode::Numbered {
-                    // If the target file was already created in this cp call, do not overwrite
-                    return Err(CpError::Error(
-                        translate!("cp-error-will-not-overwrite-just-created", "dest" => dest.quote(), "source" => source.quote()),
-                    ));
+                    // If the target was already created in this cp call, check if it's a directory.
+                    // Directories should be merged (GNU cp behavior), but files should not be overwritten.
+                    let dest_is_dir = fs::metadata(&dest).is_ok_and(|m| m.is_dir());
+                    let source_is_dir = fs::metadata(source).is_ok_and(|m| m.is_dir());
+
+                    // Only prevent overwriting if both source and dest are files (not directories)
+                    // Directories should be merged, which is handled by copy_directory
+                    if !dest_is_dir || !source_is_dir {
+                        // If the target file was already created in this cp call, do not overwrite
+                        return Err(CpError::Error(
+                            translate!("cp-error-will-not-overwrite-just-created", "dest" => dest.quote(), "source" => source.quote()),
+                        ));
+                    }
                 }
             }
 

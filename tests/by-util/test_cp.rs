@@ -143,6 +143,41 @@ fn test_cp_duplicate_folder() {
 }
 
 #[test]
+fn test_cp_duplicate_directories_merge() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // Source directory 1
+    at.mkdir_all("src_dir/subdir");
+    at.write("src_dir/subdir/file1.txt", "content1");
+    at.write("src_dir/subdir/file2.txt", "content2");
+
+    // Source directory 2
+    at.mkdir_all("src_dir2/subdir");
+    at.write("src_dir2/subdir/file1.txt", "content3");
+
+    // Destination
+    at.mkdir("dest");
+
+    // Perform merge copy
+    ucmd.arg("-r")
+        .arg("src_dir/subdir")
+        .arg("src_dir2/subdir")
+        .arg("dest")
+        .succeeds();
+
+    // Verify directory exists
+    assert!(at.dir_exists("dest/subdir"));
+
+    // file1.txt should be overwritten by src_dir2/subdir/file1.txt
+    assert!(at.file_exists("dest/subdir/file1.txt"));
+    assert_eq!(at.read("dest/subdir/file1.txt"), "content3");
+
+    // file2.txt should remain from first copy
+    assert!(at.file_exists("dest/subdir/file2.txt"));
+    assert_eq!(at.read("dest/subdir/file2.txt"), "content2");
+}
+
+#[test]
 fn test_cp_duplicate_files_normalized_path() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
