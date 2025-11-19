@@ -34,7 +34,7 @@ enum ChmodError {
     NoSuchFile(PathBuf),
     #[error("{}", translate!("chmod-error-preserve-root", "file" => _0.quote()))]
     PreserveRoot(PathBuf),
-    #[error("{}", translate!("chmod-error-permission-denied", "file" => _0.maybe_quote()))]
+    #[error("{}", translate!("chmod-error-permission-denied", "file" => _0.quote()))]
     PermissionDenied(PathBuf),
     #[error("{}", translate!("chmod-error-new-permissions", "file" => _0.maybe_quote(), "actual" => _1.clone(), "expected" => _2.clone()))]
     NewPermissions(PathBuf, String, String),
@@ -614,8 +614,6 @@ impl Chmoder {
                     }
                     Ok(()) // Skip dangling symlinks
                 } else if err.kind() == std::io::ErrorKind::PermissionDenied {
-                    // These two filenames would normally be conditionally
-                    // quoted, but GNU's tests expect them to always be quoted
                     Err(ChmodError::PermissionDenied(file.into()).into())
                 } else {
                     Err(ChmodError::CannotStat(file.into()).into())
