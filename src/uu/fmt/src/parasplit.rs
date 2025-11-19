@@ -652,9 +652,7 @@ impl<'a> Iterator for WordSplit<'a> {
         let mut last_ascii = None;
         while idx < self.length {
             let (ch, consumed) = decode_char(self.bytes, idx);
-            let is_whitespace = ch
-                .filter(|c| c.is_ascii())
-                .is_some_and(is_fmt_whitespace);
+            let is_whitespace = ch.filter(|c| c.is_ascii()).is_some_and(is_fmt_whitespace);
             if is_whitespace {
                 break;
             }
