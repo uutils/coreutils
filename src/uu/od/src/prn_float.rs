@@ -129,15 +129,15 @@ fn format_float_simple(f: f64, width: usize) -> String {
 
     // Format with %g style - use exponential for very large/small numbers
     let abs_f = f.abs();
-    if !(1e-4..1e6).contains(&abs_f) {
-        // Use exponential notation
-        let formatted = format!("{f:e}");
-        format!("{formatted:>width$}")
-    } else {
+    if (1e-4..1e6).contains(&abs_f) {
         // Use decimal notation and remove trailing zeros
         let formatted = format!("{f:.6}");
         let trimmed = formatted.trim_end_matches('0').trim_end_matches('.');
         format!("{trimmed:>width$}")
+    } else {
+        // Use exponential notation
+        let formatted = format!("{f:e}");
+        format!("{formatted:>width$}")
     }
 }
 
