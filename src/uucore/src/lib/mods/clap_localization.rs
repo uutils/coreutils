@@ -14,6 +14,7 @@
 use crate::error::UResult;
 use crate::locale::translate;
 
+use clap::builder::{IntoResettable, Resettable, StyledStr};
 use clap::error::{ContextKind, ErrorKind};
 use clap::{Arg, ArgAction, ArgMatches, Command, Error};
 
@@ -553,6 +554,49 @@ impl CommandHelpLocalization for Command {
         let util_name = self.get_name();
         let template = crate::localized_help_template(util_name, &self);
         self.help_template(template)
+    }
+}
+
+pub trait ArgHelpLocalization {
+    /// Add translation of "default" keyword for options with defaults.
+    /// Also support options without defaults with the same output as normal .help()
+    fn help_localized(self, description: impl IntoResettable<StyledStr>) -> Self;
+}
+
+impl ArgHelpLocalization for Arg {
+    fn help_localized(self, description: impl IntoResettable<StyledStr>) -> Self {
+        use std::fmt::Write;
+
+        let mut template = clap::builder::StyledStr::new();
+        let mut has_description = false;
+
+        // Manually extract the Option from Resettable because ".into_option()" is private
+        if let Resettable::Value(description_str) = description.into_resettable() {
+            write!(template, "{}", description_str).unwrap();
+            has_description = true;
+        }
+
+        let defaults: Vec<String> = self
+            .get_default_values()
+            .iter()
+            .filter_map(|v| v.to_str().map(String::from))
+            .map(|s| format!("\"{}\"", s))
+            .collect();
+        if !defaults.is_empty() {
+            if has_description {
+                // Space between description and [Default: ...]
+                write!(template, " ").unwrap();
+            }
+
+            let default_label = translate!("common-default");
+            let defaults_str = defaults.join(" ");
+            write!(template, "[{default_label}: {defaults_str}]").unwrap();
+
+            // Only hide default value if replaced otherwise clap throw an error
+            self.hide_default_value(true).help(template)
+        } else {
+            self.help(template)
+        }
     }
 }
 

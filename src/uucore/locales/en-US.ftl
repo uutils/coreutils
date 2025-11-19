@@ -10,6 +10,7 @@ common-usage = Usage
 common-arguments = Arguments
 common-options = Options
 common-subcommands = Subcommands
+common-default = Default
 
 # Common clap error messages
 clap-error-unexpected-argument = { $error_word }: unexpected argument '{ $arg }' found
