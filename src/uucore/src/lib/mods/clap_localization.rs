@@ -515,52 +515,6 @@ pub fn handle_clap_error_with_exit_code(err: Error, exit_code: i32) -> ! {
     formatter.print_error_and_exit(&err, exit_code);
 }
 
-/// Configures a clap `Command` with proper localization and color settings.
-///
-/// This function sets up a `Command` with:
-/// - Appropriate color settings based on environment variables (`NO_COLOR`, `CLICOLOR_FORCE`, etc.)
-/// - Localized help template with proper formatting
-/// - TTY detection for automatic color enabling/disabling
-///
-/// # Arguments
-///
-/// * `cmd` - The clap `Command` to configure
-///
-/// # Returns
-///
-/// The configured `Command` with localization and color settings applied.
-///
-/// # Environment Variables
-///
-/// The following environment variables affect color output:
-/// - `NO_COLOR` - Disables all color output
-/// - `CLICOLOR_FORCE` or `FORCE_COLOR` - Forces color output even when not in a TTY
-/// - `TERM` - If set to "dumb", colors are disabled in auto mode
-///
-/// # Examples
-///
-/// ```no_run
-/// use clap::Command;
-/// use uucore::clap_localization::configure_localized_command;
-///
-/// let cmd = Command::new("myutil")
-///     .arg(clap::Arg::new("input").short('i'));
-/// let configured_cmd = configure_localized_command(cmd);
-/// ```
-pub fn configure_localized_command(mut cmd: Command) -> Command {
-    let color_choice = get_color_choice();
-    cmd = cmd.color(color_choice);
-
-    // For help output (stdout), we check stdout TTY status
-    let colors_enabled = should_use_color_for_stream(&std::io::stdout());
-
-    cmd = cmd.help_template(crate::localized_help_template_with_colors(
-        crate::util_name(),
-        colors_enabled,
-    ));
-    cmd
-}
-
 pub trait CommandHelpLocalization {
     /// Replaces default --help and --version with localized versions
     fn localize_help_and_version(self) -> Self;
@@ -668,15 +622,6 @@ mod tests {
         assert!(result.is_ok());
         let matches = result.unwrap();
         assert_eq!(matches.get_one::<String>("output").unwrap(), "out.txt");
-    }
-
-    #[test]
-    fn test_configure_localized_command() {
-        let cmd = Command::new("test");
-        let configured = configure_localized_command(cmd);
-        // The command should have color and help template configured
-        // We can't easily test the internal state, but we can verify it doesn't panic
-        assert_eq!(configured.get_name(), "test");
     }
 
     #[test]

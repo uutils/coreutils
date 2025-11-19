@@ -259,7 +259,7 @@ pub fn format_usage(s: &str) -> String {
 pub fn localized_help_template(util_name: &str, cmd: &Command) -> clap::builder::StyledStr {
     use std::io::IsTerminal;
 
-    // Determine if colors should be enabled - same logic as configure_localized_command
+    // Determine if colors should be enabled
     let colors_enabled = if std::env::var("NO_COLOR").is_ok() {
         false
     } else if std::env::var("CLICOLOR_FORCE").is_ok() || std::env::var("FORCE_COLOR").is_ok() {
