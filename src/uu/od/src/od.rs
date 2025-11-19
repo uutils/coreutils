@@ -131,33 +131,21 @@ impl OdOptions {
             Some(s) => {
                 if matches.value_source(options::WIDTH) == Some(ValueSource::CommandLine) {
                     match parse_number_of_bytes(s) {
-                        Ok(n) => {
-                            let width = usize::try_from(n)
-                                .map_err(|_| USimpleError::new(1, format!("'{s}' is too large")))?;
-                            // Validate width is not zero
-                            if width == 0 {
-                                return Err(USimpleError::new(
-                                    1,
-                                    format!("invalid -w argument '{s}'"),
-                                ));
-                            }
-                            width
-                        }
+                        Ok(n) => usize::try_from(n).map_err(|_| {
+                            USimpleError::new(
+                                1,
+                                translate!(
+                                    "od-error-argument-too-large",
+                                    "option" => options::WIDTH,
+                                    "value" => s.quote()
+                                ),
+                            )
+                        })?,
                         Err(e) => {
-                            // Format error message using -w instead of --width
-                            let error_msg = match e {
-                                ParseSizeError::InvalidSuffix(_) => {
-                                    format!("invalid -w argument '{s}'")
-                                }
-                                ParseSizeError::ParseFailure(_)
-                                | ParseSizeError::PhysicalMem(_) => {
-                                    format!("invalid -w argument '{s}'")
-                                }
-                                ParseSizeError::SizeTooBig(_) => {
-                                    format!("invalid -w argument '{s}'")
-                                }
-                            };
-                            return Err(USimpleError::new(1, error_msg));
+                            return Err(USimpleError::new(
+                                1,
+                                format_error_message(&e, s, options::WIDTH),
+                            ));
                         }
                     }
                 } else {

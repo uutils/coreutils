@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use half::f16;
+use half::{bf16, f16};
 use std::num::FpCategory;
 
 use crate::formatter_item_info::{FormatWriter, FormatterItemInfo};
@@ -81,13 +81,34 @@ fn format_f64_exp_precision(f: f64, width: usize, precision: usize) -> String {
 }
 
 pub fn format_item_bf16(f: f64) -> String {
-    format!(" {}", format_float_simple(f, 15))
+    let value = f as f64;
+    let bf = bf16::from_f32(value as f32);
+    format!(
+        " {}",
+        format_binary16_like(value, 15, 8, is_subnormal_bf16(bf))
+    )
 }
 
 fn format_f16(f: f16) -> String {
-    // Use a simpler format for f16, similar to %g in C
-    let val = f64::from(f);
-    format_float_simple(val, 15)
+    let value = f64::from(f);
+    format_binary16_like(value, 15, 8, is_subnormal_f16(f))
+}
+
+fn format_binary16_like(value: f64, width: usize, precision: usize, force_exp: bool) -> String {
+    if force_exp {
+        return format_f64_exp_precision(value, width, precision - 1);
+    }
+    format_float(value, width, precision)
+}
+
+fn is_subnormal_f16(value: f16) -> bool {
+    let bits = value.to_bits();
+    (bits & 0x7C00) == 0 && (bits & 0x03FF) != 0
+}
+
+fn is_subnormal_bf16(value: bf16) -> bool {
+    let bits = value.to_bits();
+    (bits & 0x7F80) == 0 && (bits & 0x007F) != 0
 }
 
 /// formats float with 8 significant digits, eg 12345678 or -1.2345678e+12
@@ -106,39 +127,6 @@ fn format_f32(f: f32) -> String {
 
 fn format_f64(f: f64) -> String {
     format_float(f, 24, 17)
-}
-
-/// Formats float in a simple way, similar to %g in C
-/// Removes trailing zeros and unnecessary decimal points
-fn format_float_simple(f: f64, width: usize) -> String {
-    if !f.is_finite() {
-        if f.is_nan() {
-            return format!("{:>width$}", "NaN");
-        } else if f.is_sign_negative() {
-            return format!("{:>width$}", "-inf");
-        }
-        return format!("{:>width$}", "inf");
-    }
-
-    if f == 0.0 {
-        if f.is_sign_negative() {
-            return format!("{:>width$}", "-0");
-        }
-        return format!("{:>width$}", "0");
-    }
-
-    // Format with %g style - use exponential for very large/small numbers
-    let abs_f = f.abs();
-    if (1e-4..1e6).contains(&abs_f) {
-        // Use decimal notation and remove trailing zeros
-        let formatted = format!("{f:.6}");
-        let trimmed = formatted.trim_end_matches('0').trim_end_matches('.');
-        format!("{trimmed:>width$}")
-    } else {
-        // Use exponential notation
-        let formatted = format!("{f:e}");
-        format!("{formatted:>width$}")
-    }
 }
 
 fn format_float(f: f64, width: usize, precision: usize) -> String {
