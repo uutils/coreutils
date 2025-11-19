@@ -188,16 +188,18 @@ impl FileLines<'_> {
             if idx >= prefix_end && !is_fmt_whitespace_byte(byte) {
                 indent_end = idx;
                 break;
-            } else if byte == b'\t' {
+            }
+
+            if byte == b'\t' {
                 indent_len = (indent_len / self.opts.tabwidth + 1) * self.opts.tabwidth;
                 idx += 1;
                 continue;
-            } else {
-                let (ch, consumed) = decode_char(bytes, idx);
-                indent_len += ch.map_or(1, char_width);
-                idx += consumed;
-                continue;
             }
+
+            let (ch, consumed) = decode_char(bytes, idx);
+            indent_len += ch.map_or(1, char_width);
+            idx += consumed;
+            continue;
         }
         if indent_end == bytes.len() {
             indent_end = idx;
@@ -652,7 +654,7 @@ impl<'a> Iterator for WordSplit<'a> {
             let (ch, consumed) = decode_char(self.bytes, idx);
             let is_whitespace = ch
                 .filter(|c| c.is_ascii())
-                .map_or(false, |c| is_fmt_whitespace(c));
+                .is_some_and(is_fmt_whitespace);
             if is_whitespace {
                 break;
             }
@@ -676,7 +678,7 @@ impl<'a> Iterator for WordSplit<'a> {
             self.prev_punct && (before_tab.is_some() || word_start_relative > 1);
 
         // now record whether this word ends in punctuation
-        let ends_punct = last_ascii.map_or(false, WordSplit::is_punctuation_byte);
+        let ends_punct = last_ascii.is_some_and(WordSplit::is_punctuation_byte);
         self.prev_punct = ends_punct;
 
         let (word, word_start_relative, before_tab, after_tab) = if self.opts.uniform {
