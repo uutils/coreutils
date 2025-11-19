@@ -147,17 +147,12 @@ fn test_cp_duplicate_directories_merge() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     // Source directory 1
-    at.mkdir("src_dir");
-    at.mkdir("src_dir/subdir");
-    at.touch("src_dir/subdir/file1.txt");
+    at.mkdir_all("src_dir/subdir");
     at.write("src_dir/subdir/file1.txt", "content1");
-    at.touch("src_dir/subdir/file2.txt");
     at.write("src_dir/subdir/file2.txt", "content2");
 
     // Source directory 2
-    at.mkdir("src_dir2");
-    at.mkdir("src_dir2/subdir");
-    at.touch("src_dir2/subdir/file1.txt");
+    at.mkdir_all("src_dir2/subdir");
     at.write("src_dir2/subdir/file1.txt", "content3");
 
     // Destination
