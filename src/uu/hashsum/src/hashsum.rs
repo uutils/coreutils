@@ -25,6 +25,7 @@ use uucore::checksum::detect_algo;
 use uucore::checksum::digest_reader;
 use uucore::checksum::escape_filename;
 use uucore::checksum::perform_checksum_validation;
+use uucore::display::print_verbatim;
 use uucore::error::{UResult, strip_errno};
 use uucore::format_usage;
 use uucore::sum::{Digest, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
@@ -597,7 +598,9 @@ where
             println!("{sum}");
         } else if options.zero {
             // with zero, we don't escape the filename
-            print!("{sum} {binary_marker}{}\0", filename.display());
+            print!("{sum} {binary_marker}");
+            print_verbatim(filename).unwrap();
+            print!("\0");
         } else {
             println!("{prefix}{sum} {binary_marker}{escaped_filename}");
         }

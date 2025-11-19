@@ -10,7 +10,7 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{ErrorKind, Read, Write, stdin, stdout};
 use std::path::Path;
-use uucore::display::Quotable;
+use uucore::display::{OsWrite, Quotable};
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::translate;
 
@@ -126,11 +126,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let mut stdout = stdout().lock();
         if print_names {
-            writeln!(
-                stdout,
-                "{sum:0width$} {blocks:width$} {}",
-                file.to_string_lossy()
-            )?;
+            write!(stdout, "{sum:0width$} {blocks:width$} ")?;
+            stdout.write_all_os(file)?;
+            stdout.write_all(b"\n")?;
         } else {
             writeln!(stdout, "{sum:0width$} {blocks:width$}")?;
         }

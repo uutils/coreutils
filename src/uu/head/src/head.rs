@@ -14,7 +14,7 @@ use std::num::TryFromIntError;
 #[cfg(unix)]
 use std::os::fd::{AsRawFd, FromRawFd};
 use thiserror::Error;
-use uucore::display::Quotable;
+use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult};
 use uucore::line_ending::LineEnding;
 use uucore::translate;
@@ -522,10 +522,9 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 if !first {
                     println!();
                 }
-                match file.to_str() {
-                    Some(name) => println!("==> {name} <=="),
-                    None => println!("==> {} <==", file.to_string_lossy()),
-                }
+                print!("==> ");
+                print_verbatim(file).unwrap();
+                println!(" <==");
             }
             head_file(&mut file_handle, options)?;
             Ok(())
