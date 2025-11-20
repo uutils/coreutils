@@ -966,7 +966,7 @@ fn rename_dir_fallback(
     };
 
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    let xattrs = fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| HashMap::new());
+    let xattrs = fsxattr::retrieve_xattrs(from, false).unwrap_or_else(|_| HashMap::new());
 
     // Use directory copying (with or without hardlink support)
     let result = copy_dir_contents(
