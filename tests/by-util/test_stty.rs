@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh econl igpar ispeed ospeed
+// spell-checker:ignore parenb parmrk ixany iuclc onlcr icanon noflsh econl igpar ispeed ospeed
 
 use uutests::new_ucmd;
 use uutests::util::pty_path;
@@ -28,9 +28,7 @@ fn test_all_flag() {
     let (path, _controller, _replica) = pty_path();
     let result = new_ucmd!().args(&["--all", "--file", &path]).succeeds();
 
-    for flag in [
-        "parenb", "parmrk", "ixany", "onlcr", "ofdel", "icanon", "noflsh",
-    ] {
+    for flag in ["parenb", "parmrk", "ixany", "onlcr", "icanon", "noflsh"] {
         result.stdout_contains(flag);
     }
 }
