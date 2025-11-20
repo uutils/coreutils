@@ -1229,7 +1229,10 @@ fn test_one_file_system() {
     at.mkdir_all(a_b);
     at.mkdir_all(t_y);
 
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     let root = at.as_string();
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     let a_b_path = format!("{root}/{a_b}");
 
     #[cfg(target_os = "linux")]
@@ -1288,42 +1291,45 @@ fn test_one_file_system() {
         return;
     }
 
-    struct MountGuard {
-        path: String,
-        #[cfg(target_os = "macos")]
-        dmg_path: String,
-    }
-    impl Drop for MountGuard {
-        fn drop(&mut self) {
-            #[cfg(target_os = "linux")]
-            let _ = std::process::Command::new("umount")
-                .arg(&self.path)
-                .status();
-
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        struct MountGuard {
+            path: String,
             #[cfg(target_os = "macos")]
-            {
-                let _ = std::process::Command::new("hdiutil")
-                    .args(["detach", &self.path])
+            dmg_path: String,
+        }
+        impl Drop for MountGuard {
+            fn drop(&mut self) {
+                #[cfg(target_os = "linux")]
+                let _ = std::process::Command::new("umount")
+                    .arg(&self.path)
                     .status();
-                let _ = std::fs::remove_file(&self.dmg_path);
+
+                #[cfg(target_os = "macos")]
+                {
+                    let _ = std::process::Command::new("hdiutil")
+                        .args(["detach", &self.path])
+                        .status();
+                    let _ = std::fs::remove_file(&self.dmg_path);
+                }
             }
         }
+
+        let _guard = MountGuard {
+            path: a_b_path.clone(),
+            #[cfg(target_os = "macos")]
+            dmg_path: format!("{root}/auxiliary.dmg"),
+        };
+
+        // rm --one-file-system -rf a
+        scene
+            .ucmd()
+            .arg("--one-file-system")
+            .arg("-rf")
+            .arg("a")
+            .fails()
+            .stderr_contains("skipping 'a/b', since it's on a different device");
+
+        assert!(at.dir_exists(t_y));
     }
-
-    let _guard = MountGuard {
-        path: a_b_path.clone(),
-        #[cfg(target_os = "macos")]
-        dmg_path: format!("{root}/auxiliary.dmg"),
-    };
-
-    // rm --one-file-system -rf a
-    scene
-        .ucmd()
-        .arg("--one-file-system")
-        .arg("-rf")
-        .arg("a")
-        .fails()
-        .stderr_contains("skipping 'a/b', since it's on a different device");
-
-    assert!(at.dir_exists(t_y));
 }
