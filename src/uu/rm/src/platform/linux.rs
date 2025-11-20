@@ -11,6 +11,8 @@ use indicatif::ProgressBar;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::Path;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::safe_traversal::DirFd;
