@@ -1217,3 +1217,102 @@ fn test_progress_no_output_on_error() {
         .stderr_contains("cannot remove")
         .stderr_contains("No such file or directory");
 }
+
+#[test]
+fn test_one_file_system() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let t = "other_partition_tmpdir";
+    let a_b = "a/b";
+    let t_y = "other_partition_tmpdir/y";
+
+    at.mkdir_all(a_b);
+    at.mkdir_all(t_y);
+
+    let root = at.as_string();
+    let t_path = format!("{}/{}", root, t);
+    let a_b_path = format!("{}/{}", root, a_b);
+
+    #[cfg(target_os = "linux")]
+    {
+        // This test requires root and mount --bind
+        let status = std::process::Command::new("mount")
+            .arg("--bind")
+            .arg(&t_path)
+            .arg(&a_b_path)
+            .status();
+
+        if status.is_err() || !status.unwrap().success() {
+            println!("Skipping test_one_file_system: mount failed (requires root?)");
+            return;
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // Create a disk image
+        let dmg_path = format!("{}/auxiliary.dmg", root);
+        let status = std::process::Command::new("hdiutil")
+            .args(&["create", "-size", "10m", "-fs", "HFS+", "-volname", "auxiliary", &dmg_path])
+            .status();
+        
+        if status.is_err() || !status.unwrap().success() {
+            println!("Skipping test_one_file_system: hdiutil create failed");
+            return;
+        }
+
+        // Mount the dmg
+        let status = std::process::Command::new("hdiutil")
+            .args(&["attach", &dmg_path, "-mountpoint", &a_b_path])
+            .status();
+
+        if status.is_err() || !status.unwrap().success() {
+            println!("Skipping test_one_file_system: hdiutil attach failed");
+            return;
+        }
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        println!("Skipping test_one_file_system: unsupported OS");
+        return;
+    }
+
+    struct MountGuard {
+        path: String,
+        #[cfg(target_os = "macos")]
+        dmg_path: String,
+    }
+    impl Drop for MountGuard {
+        fn drop(&mut self) {
+            #[cfg(target_os = "linux")]
+            let _ = std::process::Command::new("umount")
+                .arg(&self.path)
+                .status();
+
+            #[cfg(target_os = "macos")]
+            {
+                let _ = std::process::Command::new("hdiutil")
+                    .args(&["detach", &self.path])
+                    .status();
+                let _ = std::fs::remove_file(&self.dmg_path);
+            }
+        }
+    }
+    
+    let _guard = MountGuard { 
+        path: a_b_path.clone(),
+        #[cfg(target_os = "macos")]
+        dmg_path: format!("{}/auxiliary.dmg", root),
+    };
+
+    // rm --one-file-system -rf a
+    scene.ucmd()
+        .arg("--one-file-system")
+        .arg("-rf")
+        .arg("a")
+        .fails()
+        .stderr_contains("skipping 'a/b', since it's on a different device");
+
+    assert!(at.dir_exists(t_y));
+}

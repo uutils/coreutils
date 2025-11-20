@@ -16,6 +16,8 @@ use std::ops::BitOr;
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use std::path::MAIN_SEPARATOR;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -45,6 +47,8 @@ enum RmError {
     UseNoPreserveRoot,
     #[error("{}", translate!("rm-error-refusing-to-remove-directory", "path" => _0.to_string_lossy()))]
     RefusingToRemoveDirectory(OsString),
+    #[error("{}", translate!("rm-error-skipping-directory-on-different-device", "path" => _0.to_string_lossy()))]
+    SkippingDirectoryOnDifferentDevice(OsString),
 }
 
 impl UError for RmError {}
@@ -485,8 +489,18 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
                 }
 
                 any_files_processed = true;
+                
+                #[cfg(unix)]
+                let dev_id = if options.one_fs {
+                    Some(metadata.dev())
+                } else {
+                    None
+                };
+                #[cfg(not(unix))]
+                let dev_id = None;
+
                 if metadata.is_dir() {
-                    handle_dir(file, options, progress_bar.as_ref())
+                    handle_dir(file, options, progress_bar.as_ref(), dev_id)
                 } else if is_symlink_dir(&metadata) {
                     remove_dir(file, options, progress_bar.as_ref())
                 } else {
@@ -585,6 +599,7 @@ fn remove_dir_recursive(
     path: &Path,
     options: &Options,
     progress_bar: Option<&ProgressBar>,
+    parent_dev_id: Option<u64>,
 ) -> bool {
     // Base case 1: this is a file or a symbolic link.
     //
@@ -603,6 +618,20 @@ fn remove_dir_recursive(
         && !prompt_descend(path)
     {
         return false;
+    }
+
+    // Base case 3: this is a directory on a different device
+    #[cfg(unix)]
+    if let Some(parent_dev_id) = parent_dev_id {
+        if let Ok(metadata) = path.symlink_metadata() {
+            if metadata.dev() != parent_dev_id {
+                show_error!(
+                    "{}",
+                    RmError::SkippingDirectoryOnDifferentDevice(path.as_os_str().to_os_string())
+                );
+                return true;
+            }
+        }
     }
 
     // Use secure traversal on Linux for all recursive directory removals
@@ -642,7 +671,7 @@ fn remove_dir_recursive(
                         Err(_) => error = true,
                         Ok(entry) => {
                             let child_error =
-                                remove_dir_recursive(&entry.path(), options, progress_bar);
+                                remove_dir_recursive(&entry.path(), options, progress_bar, parent_dev_id);
                             error = error || child_error;
                         }
                     }
@@ -684,7 +713,7 @@ fn remove_dir_recursive(
     }
 }
 
-fn handle_dir(path: &Path, options: &Options, progress_bar: Option<&ProgressBar>) -> bool {
+fn handle_dir(path: &Path, options: &Options, progress_bar: Option<&ProgressBar>, dev_id: Option<u64>) -> bool {
     let mut had_err = false;
 
     let path = clean_trailing_slashes(path);
@@ -698,7 +727,7 @@ fn handle_dir(path: &Path, options: &Options, progress_bar: Option<&ProgressBar>
 
     let is_root = path.has_root() && path.parent().is_none();
     if options.recursive && (!is_root || !options.preserve_root) {
-        had_err = remove_dir_recursive(path, options, progress_bar);
+        had_err = remove_dir_recursive(path, options, progress_bar, dev_id);
     } else if options.dir && (!is_root || !options.preserve_root) {
         had_err = remove_dir(path, options, progress_bar).bitor(had_err);
     } else if options.recursive {
