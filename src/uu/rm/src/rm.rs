@@ -50,6 +50,8 @@ enum RmError {
     #[error("{}", translate!("rm-error-skipping-directory-on-different-device", "path" => _0.to_string_lossy()))]
     #[cfg(unix)]
     SkippingDirectoryOnDifferentDevice(OsString),
+    #[error("{}", translate!("rm-error-preserve-root-all"))]
+    PreserveRootAllInEffect,
 }
 
 impl UError for RmError {}
@@ -158,6 +160,8 @@ pub struct Options {
     pub one_fs: bool,
     /// `--preserve-root`/`--no-preserve-root`
     pub preserve_root: bool,
+    /// `--preserve-root=all`
+    pub preserve_root_all: bool,
     /// `-r`, `--recursive`
     pub recursive: bool,
     /// `-d`, `--dir`
@@ -179,6 +183,7 @@ impl Default for Options {
             interactive: InteractiveMode::PromptProtected,
             one_fs: false,
             preserve_root: true,
+            preserve_root_all: false,
             recursive: false,
             dir: false,
             verbose: false,
@@ -248,6 +253,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
         one_fs: matches.get_flag(OPT_ONE_FILE_SYSTEM),
         preserve_root: !matches.get_flag(OPT_NO_PRESERVE_ROOT),
+        preserve_root_all: matches
+            .get_many::<String>(OPT_PRESERVE_ROOT)
+            .map(|values| values.into_iter().any(|v| v == "all"))
+            .unwrap_or(false),
         recursive: matches.get_flag(OPT_RECURSIVE),
         dir: matches.get_flag(OPT_DIR),
         verbose: matches.get_flag(OPT_VERBOSE),
@@ -346,7 +355,10 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_PRESERVE_ROOT)
                 .long(OPT_PRESERVE_ROOT)
                 .help(translate!("rm-help-preserve-root"))
-                .action(ArgAction::SetTrue),
+                .num_args(0..=1)
+                .require_equals(true)
+                .value_parser(ShortcutValueParser::new([PossibleValue::new("all")]))
+                .action(ArgAction::Append),
         )
         .arg(
             Arg::new(OPT_RECURSIVE)
@@ -492,16 +504,18 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
                 any_files_processed = true;
 
                 #[cfg(unix)]
-                let dev_id = if options.one_fs {
-                    Some(metadata.dev())
+                let parent_dev_id = if options.one_fs || options.preserve_root_all {
+                    file.parent()
+                        .and_then(|p| p.symlink_metadata().ok())
+                        .map(|m| m.dev())
                 } else {
                     None
                 };
                 #[cfg(not(unix))]
-                let dev_id = None;
+                let parent_dev_id = None;
 
                 if metadata.is_dir() {
-                    handle_dir(file, options, progress_bar.as_ref(), dev_id)
+                    handle_dir(file, options, progress_bar.as_ref(), parent_dev_id)
                 } else if is_symlink_dir(&metadata) {
                     remove_dir(file, options, progress_bar.as_ref())
                 } else {
@@ -600,15 +614,20 @@ fn remove_dir_recursive(
     path: &Path,
     options: &Options,
     progress_bar: Option<&ProgressBar>,
-    _parent_dev_id: Option<u64>,
+    parent_dev_id: Option<u64>,
 ) -> bool {
+    let metadata = match path.symlink_metadata() {
+        Ok(metadata) => metadata,
+        Err(e) => return show_removal_error(e, path),
+    };
+
     // Base case 1: this is a file or a symbolic link.
     //
     // The symbolic link case is important because it could be a link to
     // a directory and we don't want to recurse. In particular, this
     // avoids an infinite recursion in the case of a link to the current
     // directory, like `ln -s . link`.
-    if !path.is_dir() || path.is_symlink() {
+    if !metadata.is_dir() || path.is_symlink() {
         return remove_file(path, options, progress_bar);
     }
 
@@ -623,22 +642,39 @@ fn remove_dir_recursive(
 
     // Base case 3: this is a directory on a different device
     #[cfg(unix)]
-    if let Some(parent_dev_id) = _parent_dev_id {
-        if let Ok(metadata) = path.symlink_metadata() {
-            if metadata.dev() != parent_dev_id {
-                show_error!(
-                    "{}",
-                    RmError::SkippingDirectoryOnDifferentDevice(path.as_os_str().to_os_string())
-                );
-                return true;
+    if let Some(parent_dev_id) = parent_dev_id {
+        if metadata.dev() != parent_dev_id {
+            show_error!(
+                "{}",
+                RmError::SkippingDirectoryOnDifferentDevice(path.as_os_str().to_os_string())
+            );
+            if options.preserve_root_all {
+                show_error!("{}", RmError::PreserveRootAllInEffect);
             }
+            return true;
         }
     }
 
     // Use secure traversal on Linux for all recursive directory removals
     #[cfg(target_os = "linux")]
     {
-        safe_remove_dir_recursive(path, options, progress_bar)
+        safe_remove_dir_recursive(
+            path,
+            options,
+            progress_bar,
+            if options.one_fs || options.preserve_root_all {
+                #[cfg(unix)]
+                {
+                    Some(metadata.dev())
+                }
+                #[cfg(not(unix))]
+                {
+                    None
+                }
+            } else {
+                None
+            },
+        )
     }
 
     // Fallback for non-Linux or use fs::remove_dir_all for very long paths
@@ -661,6 +697,14 @@ fn remove_dir_recursive(
 
         // Recursive case: this is a directory.
         let mut error = false;
+        #[cfg(unix)]
+        let next_parent_dev_id = if options.one_fs || options.preserve_root_all {
+            Some(metadata.dev())
+        } else {
+            None
+        };
+        #[cfg(not(unix))]
+        let next_parent_dev_id = None;
         match fs::read_dir(path) {
             Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
                 // This is not considered an error.
@@ -675,7 +719,7 @@ fn remove_dir_recursive(
                                 &entry.path(),
                                 options,
                                 progress_bar,
-                                _parent_dev_id,
+                                next_parent_dev_id,
                             );
                             error = error || child_error;
                         }
@@ -722,7 +766,7 @@ fn handle_dir(
     path: &Path,
     options: &Options,
     progress_bar: Option<&ProgressBar>,
-    dev_id: Option<u64>,
+    parent_dev_id: Option<u64>,
 ) -> bool {
     let mut had_err = false;
 
@@ -737,7 +781,7 @@ fn handle_dir(
 
     let is_root = path.has_root() && path.parent().is_none();
     if options.recursive && (!is_root || !options.preserve_root) {
-        had_err = remove_dir_recursive(path, options, progress_bar, dev_id);
+        had_err = remove_dir_recursive(path, options, progress_bar, parent_dev_id);
     } else if options.dir && (!is_root || !options.preserve_root) {
         had_err = remove_dir(path, options, progress_bar).bitor(had_err);
     } else if options.recursive {
