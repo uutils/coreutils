@@ -1230,7 +1230,7 @@ fn test_one_file_system() {
     at.mkdir_all(t_y);
 
     let root = at.as_string();
-    let t_path = format!("{root}/{t}");
+    let _t_path = format!("{root}/{t}");
     let a_b_path = format!("{root}/{a_b}");
 
     #[cfg(target_os = "linux")]
@@ -1253,7 +1253,7 @@ fn test_one_file_system() {
         // Create a disk image
         let dmg_path = format!("{root}/auxiliary.dmg");
         let status = std::process::Command::new("hdiutil")
-            .args(&[
+            .args([
                 "create",
                 "-size",
                 "10m",
@@ -1272,7 +1272,7 @@ fn test_one_file_system() {
 
         // Mount the dmg
         let status = std::process::Command::new("hdiutil")
-            .args(&["attach", &dmg_path, "-mountpoint", &a_b_path])
+            .args(["attach", &dmg_path, "-mountpoint", &a_b_path])
             .status();
 
         if status.is_err() || !status.unwrap().success() {
@@ -1302,7 +1302,7 @@ fn test_one_file_system() {
             #[cfg(target_os = "macos")]
             {
                 let _ = std::process::Command::new("hdiutil")
-                    .args(&["detach", &self.path])
+                    .args(["detach", &self.path])
                     .status();
                 let _ = std::fs::remove_file(&self.dmg_path);
             }
