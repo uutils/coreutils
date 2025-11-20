@@ -195,15 +195,11 @@ HASHSUM_PROGS := \
 
 $(info Detected OS = $(OS))
 
-# Build the SELinux programs only on Linux
-ifeq ($(filter $(OS),Linux),)
-	SELINUX_PROGS :=
-endif
-
 ifneq ($(OS),Windows_NT)
-	PROGS := $(PROGS) $(UNIX_PROGS)
-# Build the selinux command even if not on the system
-	PROGS := $(PROGS) $(SELINUX_PROGS)
+	PROGS += $(UNIX_PROGS)
+endif
+ifeq ($(SELINUX_ENABLED),1)
+	PROGS += $(SELINUX_PROGS)
 endif
 
 UTILS ?= $(filter-out $(SKIP_UTILS),$(PROGS))
@@ -337,7 +333,7 @@ test:
 	${CARGO} test ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" $(PROFILE_CMD) --no-default-features $(TEST_NO_FAIL_FAST)
 
 nextest:
-	${CARGO} nextest run ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
+	${CARGO} nextest run ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" $(PROFILE_CMD) --no-default-features $(TEST_NO_FAIL_FAST)
 
 test_toybox:
 	-(cd $(TOYBOX_SRC)/ && make tests)
@@ -454,7 +450,7 @@ install: build install-manpages install-completions install-locales
 	mkdir -p $(INSTALLDIR_BIN)
 ifneq (,$(and $(findstring stdbuf,$(UTILS)),$(findstring feat_external_libstdbuf,$(CARGOFLAGS))))
 	mkdir -p $(DESTDIR)$(LIBSTDBUF_DIR)
-	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf* $(DESTDIR)$(LIBSTDBUF_DIR)/
+	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf.* $(DESTDIR)$(LIBSTDBUF_DIR)/
 endif
 ifeq (${MULTICALL}, y)
 	$(INSTALL) -m 755 $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
@@ -477,7 +473,7 @@ endif
 
 uninstall:
 ifneq ($(OS),Windows_NT)
-	rm -f $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf*
+	rm -f $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf.*
 	-rm -d $(DESTDIR)$(LIBSTDBUF_DIR) 2>/dev/null || true
 endif
 ifeq (${MULTICALL}, y)
