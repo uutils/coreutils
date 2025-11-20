@@ -48,6 +48,7 @@ enum RmError {
     #[error("{}", translate!("rm-error-refusing-to-remove-directory", "path" => _0.to_string_lossy()))]
     RefusingToRemoveDirectory(OsString),
     #[error("{}", translate!("rm-error-skipping-directory-on-different-device", "path" => _0.to_string_lossy()))]
+    #[cfg(unix)]
     SkippingDirectoryOnDifferentDevice(OsString),
 }
 
@@ -599,7 +600,7 @@ fn remove_dir_recursive(
     path: &Path,
     options: &Options,
     progress_bar: Option<&ProgressBar>,
-    parent_dev_id: Option<u64>,
+    _parent_dev_id: Option<u64>,
 ) -> bool {
     // Base case 1: this is a file or a symbolic link.
     //
@@ -622,7 +623,7 @@ fn remove_dir_recursive(
 
     // Base case 3: this is a directory on a different device
     #[cfg(unix)]
-    if let Some(parent_dev_id) = parent_dev_id {
+    if let Some(parent_dev_id) = _parent_dev_id {
         if let Ok(metadata) = path.symlink_metadata() {
             if metadata.dev() != parent_dev_id {
                 show_error!(
@@ -674,7 +675,7 @@ fn remove_dir_recursive(
                                 &entry.path(),
                                 options,
                                 progress_bar,
-                                parent_dev_id,
+                                _parent_dev_id,
                             );
                             error = error || child_error;
                         }
