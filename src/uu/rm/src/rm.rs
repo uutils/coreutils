@@ -50,6 +50,7 @@ enum RmError {
     #[error("{}", translate!("rm-error-skipping-directory-on-different-device", "path" => _0.to_string_lossy()))]
     #[cfg(unix)]
     SkippingDirectoryOnDifferentDevice(OsString),
+    #[cfg(unix)]
     #[error("{}", translate!("rm-error-preserve-root-all"))]
     PreserveRootAllInEffect,
 }
@@ -614,8 +615,11 @@ fn remove_dir_recursive(
     path: &Path,
     options: &Options,
     progress_bar: Option<&ProgressBar>,
-    parent_dev_id: Option<u64>,
+    _parent_dev_id: Option<u64>,
 ) -> bool {
+    #[cfg(unix)]
+    let parent_dev_id = _parent_dev_id;
+
     let metadata = match path.symlink_metadata() {
         Ok(metadata) => metadata,
         Err(e) => return show_removal_error(e, path),
