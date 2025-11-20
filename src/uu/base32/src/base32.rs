@@ -10,20 +10,11 @@ use uucore::{encoding::Format, error::UResult, translate};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let format = Format::Base32;
-    let (about, usage) = get_info();
-    let config = base_common::parse_base_cmd_args(args, about, usage)?;
+    let config = base_common::parse_base_cmd_args(args, uu_app())?;
     let mut input = base_common::get_input(&config)?;
-    base_common::handle_input(&mut input, format, config)
+    base_common::handle_input(&mut input, Format::Base32, config)
 }
 
 pub fn uu_app() -> Command {
-    let (about, usage) = get_info();
-    base_common::base_app(about, usage)
-}
-
-fn get_info() -> (&'static str, &'static str) {
-    let about: &'static str = Box::leak(translate!("base32-about").into_boxed_str());
-    let usage: &'static str = Box::leak(translate!("base32-usage").into_boxed_str());
-    (about, usage)
+    base_common::base_app(translate!("base32-about"), translate!("base32-usage"))
 }
