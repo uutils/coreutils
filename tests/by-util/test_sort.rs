@@ -6,10 +6,12 @@
 // spell-checker:ignore (words) ints (linux) NOFILE
 #![allow(clippy::cast_possible_wrap)]
 
+use std::env;
 use std::time::Duration;
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
+use uutests::util::TestScenario;
 
 fn test_helper(file_name: &str, possible_args: &[&str]) {
     for args in possible_args {
@@ -1868,6 +1870,160 @@ fn test_argument_suggestion_colors_enabled() {
             "Expected green '{suggestion}' in locale {locale}, got: {}",
             stderr.lines().take(10).collect::<Vec<_>>().join("\\n")
         );
+    }
+}
+
+#[test]
+fn test_debug_key_annotations() {
+    let ts = TestScenario::new("sort");
+
+    let number = |input: &str| -> String {
+        input
+            .split_terminator('\n')
+            .enumerate()
+            .map(|(idx, line)| format!("{}\t{line}\n", idx + 1))
+            .collect()
+    };
+
+    let run_sort = |args: &[&str], input: &str| -> String {
+        ts.ucmd()
+            .args(args)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_move_str()
+    };
+
+    let mut output = String::new();
+    for mode in ["n", "h", "g"] {
+        output.push_str(&run_sort(&["-s", &format!("-k2{mode}"), "--debug"], "1\n\n44\n33\n2\n"));
+        output.push_str(&run_sort(
+            &["-s", &format!("-k1.3{mode}"), "--debug"],
+            "1\n\n44\n33\n2\n",
+        ));
+        output.push_str(&run_sort(&["-s", &format!("-k1{mode}"), "--debug"], "1\n\n44\n33\n2\n"));
+        output.push_str(&run_sort(
+            &["-s", "-k2g", "--debug"],
+            &number("2\n\n1\n"),
+        ));
+    }
+
+    output.push_str(&run_sort(&["-s", "-k1M", "--debug"], "FEB\n\nJAN\n"));
+    output.push_str(&run_sort(&["-s", "-k2,2M", "--debug"], "FEB\n\nJAN\n"));
+    output.push_str(&run_sort(&["-s", "-k1M", "--debug"], "FEB\nJAZZ\n\nJAN\n"));
+    output.push_str(&run_sort(
+        &["-s", "-k2,2M", "--debug"],
+        &number("FEB\nJAZZ\n\nJAN\n"),
+    ));
+    output.push_str(&run_sort(&["-s", "-k1M", "--debug"], "FEB\nJANZ\n\nJAN\n"));
+    output.push_str(&run_sort(
+        &["-s", "-k2,2M", "--debug"],
+        &number("FEB\nJANZ\n\nJAN\n"),
+    ));
+
+    output.push_str(&run_sort(&["-s", "-g", "--debug"], " 1.2ignore\n 1.1e4ignore\n"));
+    output.push_str(&run_sort(&["-s", "-d", "--debug"], "\tb\n\t\ta\n"));
+    output.push_str(&run_sort(&["-s", "-k2,2", "--debug"], "a\n\n"));
+    output.push_str(&run_sort(&["-s", "-k1", "--debug"], "b\na\n"));
+    output.push_str(&run_sort(
+        &["-s", "--debug", "-k1,1h"],
+        "-0\n1\n-2\n--Mi-1\n-3\n-0\n",
+    ));
+    output.push_str(&run_sort(&["-b", "--debug"], " 1\n1\n"));
+    output.push_str(&run_sort(&["-s", "-b", "--debug"], " 1\n1\n"));
+    output.push_str(&run_sort(&["--debug"], " 1\n1\n"));
+    output.push_str(&run_sort(&["-s", "-k1n", "--debug"], "2,5\n2.4\n"));
+    output.push_str(&run_sort(&["-s", "-k1n", "--debug"], "2.,,3\n2.4\n"));
+    output.push_str(&run_sort(&["-s", "-k1n", "--debug"], "2,,3\n2.4\n"));
+    output.push_str(&run_sort(
+        &["-s", "-n", "-z", "--debug"],
+        concat!("1a\0", "2b\0"),
+    ));
+
+    let mut zero_mix = ts
+        .ucmd()
+        .args(&["-s", "-k2b,2", "--debug"])
+        .pipe_in("\0\ta\n")
+        .succeeds()
+        .stdout_move_bytes();
+    zero_mix.retain(|b| *b != 0);
+    output.push_str(&String::from_utf8(zero_mix).unwrap());
+
+    output.push_str(&run_sort(&["-s", "-k2.4b,2.3n", "--debug"], "A\tchr10\nB\tchr1\n"));
+    output.push_str(&run_sort(&["-s", "-k1.2b", "--debug"], "1 2\n1 3\n"));
+
+    assert_eq!(
+        output,
+        ts.fixtures.read("debug_key_annotation.expected")
+    );
+
+    if let Ok(locale_fr_utf8) = env::var("LOCALE_FR_UTF8") {
+        if locale_fr_utf8 != "none" {
+            let probe = ts
+                .ucmd()
+                .args(&["-g", "--debug", "/dev/null"])
+                .env("LC_NUMERIC", &locale_fr_utf8)
+                .env("LC_MESSAGES", "C")
+                .run();
+            if probe
+                .stderr_str()
+                .contains("numbers use .*,.* as a decimal point")
+            {
+                let mut locale_output = String::new();
+                locale_output.push_str(
+                    &ts.ucmd()
+                        .env("LC_ALL", "C")
+                        .args(&["--debug", "-k2g", "-k1b,1"])
+                        .pipe_in("   1²---++3   1,234  Mi\n")
+                        .succeeds()
+                        .stdout_move_str(),
+                );
+                locale_output.push_str(
+                    &ts.ucmd()
+                        .env("LC_ALL", &locale_fr_utf8)
+                        .args(&["--debug", "-k2g", "-k1b,1"])
+                        .pipe_in("   1²---++3   1,234  Mi\n")
+                        .succeeds()
+                        .stdout_move_str(),
+                );
+                locale_output.push_str(
+                    &ts.ucmd()
+                        .env("LC_ALL", &locale_fr_utf8)
+                        .args(&[
+                            "--debug",
+                            "-k1,1n",
+                            "-k1,1g",
+                            "-k1,1h",
+                            "-k2,2n",
+                            "-k2,2g",
+                            "-k2,2h",
+                            "-k3,3n",
+                            "-k3,3g",
+                            "-k3,3h",
+                        ])
+                        .pipe_in("+1234 1234Gi 1,234M\n")
+                        .succeeds()
+                        .stdout_move_str(),
+                );
+
+                let normalized = locale_output
+                    .lines()
+                    .map(|line| {
+                        if line.starts_with("^^ ") {
+                            "^ no match for key".to_string()
+                        } else {
+                            line.to_string()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+                    + "\n";
+
+                assert_eq!(
+                    normalized,
+                    ts.fixtures.read("debug_key_annotation_locale.expected")
+                );
+            }
+        }
     }
 }
 
