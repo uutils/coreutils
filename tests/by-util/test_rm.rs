@@ -1230,8 +1230,8 @@ fn test_one_file_system() {
     at.mkdir_all(t_y);
 
     let root = at.as_string();
-    let t_path = format!("{}/{}", root, t);
-    let a_b_path = format!("{}/{}", root, a_b);
+    let t_path = format!("{root}/{t}");
+    let a_b_path = format!("{root}/{a_b}");
 
     #[cfg(target_os = "linux")]
     {
@@ -1251,7 +1251,7 @@ fn test_one_file_system() {
     #[cfg(target_os = "macos")]
     {
         // Create a disk image
-        let dmg_path = format!("{}/auxiliary.dmg", root);
+        let dmg_path = format!("{root}/auxiliary.dmg");
         let status = std::process::Command::new("hdiutil")
             .args(&["create", "-size", "10m", "-fs", "HFS+", "-volname", "auxiliary", &dmg_path])
             .status();
@@ -1303,7 +1303,7 @@ fn test_one_file_system() {
     let _guard = MountGuard { 
         path: a_b_path.clone(),
         #[cfg(target_os = "macos")]
-        dmg_path: format!("{}/auxiliary.dmg", root),
+        dmg_path: format!("{root}/auxiliary.dmg"),
     };
 
     // rm --one-file-system -rf a
