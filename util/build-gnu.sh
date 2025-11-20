@@ -268,9 +268,6 @@ sed -i -e "s/cat opts/sed -i -e \"s| <.\*$||g\" opts/" tests/misc/usage_vs_getop
 # for some reasons, some stuff are duplicated, strip that
 sed -i -e "s/provoked error./provoked error\ncat pat |sort -u > pat/" tests/misc/usage_vs_getopt.sh
 
-# Update the GNU error message to match ours
-sed -i -e "s/link-to-dir: hard link not allowed for directory/failed to create hard link 'link-to-dir' =>/" -e "s|link-to-dir/: hard link not allowed for directory|failed to create hard link 'link-to-dir/' =>|" tests/ln/hard-to-sym.sh
-
 # install verbose messages shows ginstall as command
 sed -i -e "s/ginstall: creating directory/install: creating directory/g" tests/install/basic-1.sh
 
