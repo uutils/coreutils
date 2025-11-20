@@ -157,5 +157,5 @@ fn test_encode_large_input_is_buffered() {
     new_ucmd!()
         .pipe_in(input)
         .succeeds()
-        .stdout_contains("BIFAUCQK");
+        .stdout_contains("BIFAUCQK"); // spell-checker:disable-line
 }
