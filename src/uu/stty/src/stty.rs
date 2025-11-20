@@ -622,6 +622,12 @@ fn string_to_combo(arg: &str) -> Option<&str> {
 }
 
 fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
+    // Reject if has trailing/leading whitespace, multiple signs, negative, or invalid chars
+    if arg != arg.trim() || arg.starts_with('-') || arg.starts_with("++") 
+        || arg.contains('E') || arg.contains('e') {
+        return None;
+    }
+    
     // Normalize the input: trim whitespace and leading '+'
     let normalized = arg.trim().trim_start_matches('+');
 
