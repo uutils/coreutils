@@ -10,9 +10,9 @@
 use indicatif::ProgressBar;
 use std::ffi::OsStr;
 use std::fs;
-use std::path::Path;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
+use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::safe_traversal::DirFd;
@@ -20,8 +20,8 @@ use uucore::show_error;
 use uucore::translate;
 
 use super::super::{
-    InteractiveMode, Options, RmError, is_dir_empty, is_readable_metadata, prompt_descend, prompt_dir,
-    prompt_file, remove_file, show_permission_denied_error, show_removal_error,
+    InteractiveMode, Options, RmError, is_dir_empty, is_readable_metadata, prompt_descend,
+    prompt_dir, prompt_file, remove_file, show_permission_denied_error, show_removal_error,
     verbose_removed_directory, verbose_removed_file,
 };
 
@@ -243,11 +243,7 @@ pub fn safe_remove_dir_recursive(
         path,
         &dir_fd,
         options,
-        if check_device {
-            current_dev_id
-        } else {
-            None
-        },
+        if check_device { current_dev_id } else { None },
     );
 
     // After processing all children, remove the directory itself
