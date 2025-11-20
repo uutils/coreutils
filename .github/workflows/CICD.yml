@@ -4,7 +4,7 @@ name: CICD
 # spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic CARGOFLAGS
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata
 # spell-checker:ignore (people) Peltoche rivy dtolnay Anson dawidd
-# spell-checker:ignore (shell/tools) binutils choco clippy dmake dpkg esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libfuse libssl limactl mkdir nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache utmpdump xargs
+# spell-checker:ignore (shell/tools) binutils choco clippy dmake esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libfuse libssl limactl mkdir nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache utmpdump xargs
 # spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils libsystemd codspeed
 
 env:
@@ -149,7 +149,7 @@ jobs:
       shell: bash
       run: |
         RUSTDOCFLAGS="-Dwarnings" cargo doc  ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-deps --workspace --document-private-items
-    - uses: DavidAnson/markdownlint-cli2-action@v20
+    - uses: DavidAnson/markdownlint-cli2-action@v21
       with:
         fix: "true"
         globs: |
@@ -273,10 +273,7 @@ jobs:
         target: aarch64-unknown-linux-gnu
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
+    # Test build on the system missing libselinux (don't install libselinux1-dev at here)
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: "`make build`"
@@ -303,11 +300,13 @@ jobs:
       run: make nextest PROFILE=ci CARGOFLAGS="--hide-progress-bar"
       env:
         RUST_BACKTRACE: "1"
-    - name: "`make install PROG_PREFIX=uu- COMPLETIONS=n MANPAGES=n LOCALES=n`"
+    - name: "`make install PROG_PREFIX=uu- PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n`"
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/ make install PROG_PREFIX=uu- PROFILE=release COMPLETIONS=n MANPAGES=n LOCALES=n
+        DESTDIR=/tmp/ make install PROG_PREFIX=uu- PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n
+        # Check that utils are built with given profile
+        ./target/release-fast/true
         # Check that the progs have prefix
         test -f /tmp/usr/local/bin/uu-tty
         test -f /tmp/usr/local/libexec/uu-coreutils/libstdbuf.*   
@@ -658,25 +657,6 @@ jobs:
         # deployable tag? (ie, leading "vM" or "M"; M == version number)
         unset DEPLOY ; if [[ $REF_TAG =~ ^[vV]?[0-9].* ]]; then DEPLOY='true' ; fi
         outputs DEPLOY
-        # DPKG architecture?
-        unset DPKG_ARCH
-        case ${{ matrix.job.target }} in
-          x86_64-*-linux-*) DPKG_ARCH=amd64 ;;
-          *-linux-*) DPKG_ARCH=${TARGET_ARCH} ;;
-        esac
-        outputs DPKG_ARCH
-        # DPKG version?
-        unset DPKG_VERSION ; if [[ $REF_TAG =~ ^[vV]?[0-9].* ]]; then DPKG_VERSION=${REF_TAG/#[vV]/} ; fi
-        outputs DPKG_VERSION
-        # DPKG base name/conflicts?
-        DPKG_BASENAME=${PROJECT_NAME}
-        DPKG_CONFLICTS=${PROJECT_NAME}-musl
-        case ${{ matrix.job.target }} in *-musl) DPKG_BASENAME=${PROJECT_NAME}-musl ; DPKG_CONFLICTS=${PROJECT_NAME} ;; esac;
-        outputs DPKG_BASENAME DPKG_CONFLICTS
-        # DPKG name
-        unset DPKG_NAME;
-        if [[ -n $DPKG_ARCH && -n $DPKG_VERSION ]]; then DPKG_NAME="${DPKG_BASENAME}_${DPKG_VERSION}_${DPKG_ARCH}.deb" ; fi
-        outputs DPKG_NAME
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='' ;
@@ -735,7 +715,6 @@ jobs:
         ## Create build/work space
         mkdir -p '${{ steps.vars.outputs.STAGING }}'
         mkdir -p '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}'
-        mkdir -p '${{ steps.vars.outputs.STAGING }}/dpkg'
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -867,21 +846,6 @@ jobs:
           *) tar czf '${{ steps.vars.outputs.PKG_NAME }}' '${{ steps.vars.outputs.PKG_BASENAME }}'/* ;;
         esac
         popd >/dev/null
-        # dpkg
-        if [ -n "${{ steps.vars.outputs.DPKG_NAME }}" ]; then
-          DPKG_DIR="${{ steps.vars.outputs.STAGING }}/dpkg"
-          # binary
-          install -Dm755 'target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}' "${DPKG_DIR}/usr/bin/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}"
-          if [ -n "${{ steps.vars.outputs.STRIP }}" ]; then "${{ steps.vars.outputs.STRIP }}" "${DPKG_DIR}/usr/bin/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}" ; fi
-          # README and LICENSE
-          (shopt -s nullglob; for f in [R]"EADME"{,.*}; do install -Dm644 "$f" "${DPKG_DIR}/usr/share/doc/${{ env.PROJECT_NAME }}/$f" ; done)
-          (shopt -s nullglob; for f in [L]"ICENSE"{-*,}{,.*}; do install -Dm644 "$f" "${DPKG_DIR}/usr/share/doc/${{ env.PROJECT_NAME }}/$f" ; done)
-          # control file
-          mkdir -p "${DPKG_DIR}/DEBIAN"
-          printf "Package: ${{ steps.vars.outputs.DPKG_BASENAME }}\nVersion: ${{ steps.vars.outputs.DPKG_VERSION }}\nSection: utils\nPriority: optional\nMaintainer: ${{ env.PROJECT_AUTH }}\nArchitecture: ${{ steps.vars.outputs.DPKG_ARCH }}\nProvides: ${{ env.PROJECT_NAME }}\nConflicts: ${{ steps.vars.outputs.DPKG_CONFLICTS }}\nDescription: ${{ env.PROJECT_DESC }}\n" > "${DPKG_DIR}/DEBIAN/control"
-          # build dpkg
-          fakeroot dpkg-deb --build "${DPKG_DIR}" "${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.DPKG_NAME }}"
-        fi
     - name: Publish
       uses: softprops/action-gh-release@v2
       if: steps.vars.outputs.DEPLOY && matrix.job.skip-publish != true
@@ -889,7 +853,6 @@ jobs:
         draft: true
         files: |
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
-          ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.DPKG_NAME }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -1236,6 +1199,7 @@ jobs:
     - name: build and test all features individually
       shell: bash
       run: |
+        command -v sudo && sudo rm -rf /usr/share/dotnet # avoid no space left
         CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ;
         for f in $(util/show-utils.sh ${CARGO_FEATURES_OPTION})
         do
@@ -1300,13 +1264,8 @@ jobs:
     - name: Verify stub binaries exist
       shell: bash
       run: |
-        if [ "${{ runner.os }}" = "Windows" ]; then
-          test -f target/debug/chcon.exe
-          test -f target/debug/runcon.exe
-        else
-          test -f target/debug/chcon
-          test -f target/debug/runcon
-        fi
+        test -f target/debug/chcon || test -f target/debug/chcon.exe
+        test -f target/debug/runcon || test -f target/debug/runcon.exe
     - name: Verify workspace builds with stubs
       run: cargo build --features ${{ matrix.job.features }}
 
