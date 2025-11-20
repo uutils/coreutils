@@ -942,11 +942,9 @@ fn test_ln_hard_link_dir() {
 
     at.mkdir("dir");
 
-    let result = scene.ucmd().args(&["dir", "dir_link"]).fails();
-
-    assert!(
-        result
-            .stderr_str()
-            .contains("hard link not allowed for directory")
-    );
+    scene
+        .ucmd()
+        .args(&["dir", "dir_link"])
+        .fails()
+        .stderr_contains("hard link not allowed for directory");
 }
