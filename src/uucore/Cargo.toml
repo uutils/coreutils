@@ -96,6 +96,7 @@ nix = { workspace = true, features = [
   "dir",
   "user",
 ] }
+fnv = { workspace = true }
 xattr = { workspace = true, optional = true }
 
 [dev-dependencies]
