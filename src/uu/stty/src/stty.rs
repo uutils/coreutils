@@ -121,6 +121,7 @@ struct Options<'a> {
     save: bool,
     file: Device,
     settings: Option<Vec<&'a str>>,
+    columns: usize,
 }
 
 enum Device {
@@ -149,6 +150,7 @@ enum ArgOptions<'a> {
     Mapping((S, u8)),
     Special(SpecialSetting),
     Print(PrintSetting),
+    SavedState(Vec<u32>),
 }
 
 impl<'a> From<AllFlags<'a>> for ArgOptions<'a> {
@@ -177,9 +179,15 @@ impl AsRawFd for Device {
 
 impl<'a> Options<'a> {
     fn from(matches: &'a ArgMatches) -> io::Result<Self> {
+        let columns = std::env::var("COLUMNS")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(80);
+
         Ok(Self {
             all: matches.get_flag(options::ALL),
             save: matches.get_flag(options::SAVE),
+            columns,
             file: match matches.get_one::<String>(options::FILE) {
                 // Two notes here:
                 // 1. O_NONBLOCK is needed because according to GNU docs, a
@@ -268,6 +276,23 @@ fn stty(opts: &Options) -> UResult<()> {
     let mut valid_args: Vec<ArgOptions> = Vec::new();
 
     if let Some(args) = &opts.settings {
+        // Check if this looks like a saved state (all hex values)
+        if args.len() >= 4 && args.iter().all(|s| u32::from_str_radix(s, 16).is_ok()) {
+            // Parse as saved state
+            let mut state = Vec::new();
+            for arg in args {
+                if let Ok(val) = u32::from_str_radix(arg, 16) {
+                    state.push(val);
+                } else {
+                    return invalid_arg(arg);
+                }
+            }
+            let mut termios = tcgetattr(opts.file.as_fd())?;
+            apply_saved_state(&mut termios, &state)?;
+            tcsetattr(opts.file.as_fd(), set_arg, &termios)?;
+            return Ok(());
+        }
+
         let mut args_iter = args.iter();
         while let Some(&arg) = args_iter.next() {
             match arg {
@@ -351,6 +376,28 @@ fn stty(opts: &Options) -> UResult<()> {
                     valid_args.push(ArgOptions::Print(PrintSetting::Size));
                 }
                 _ => {
+                    // Try to parse saved format (hex string like "6d02:5:4bf:8a3b:...")
+                    if arg.contains(':') {
+                        let parts: Vec<&str> = arg.split(':').collect();
+                        if parts.len() >= 4 {
+                            // Check if all parts are valid hex (any size)
+                            let all_hex = parts.iter().all(|s| u32::from_str_radix(s, 16).is_ok());
+                            if all_hex {
+                                // Parse saved state without accessing device yet
+                                let mut state = Vec::new();
+                                for part in parts {
+                                    if let Ok(val) = u32::from_str_radix(part, 16) {
+                                        state.push(val);
+                                    } else {
+                                        return invalid_arg(arg);
+                                    }
+                                }
+                                valid_args.push(ArgOptions::SavedState(state));
+                                continue;
+                            }
+                        }
+                    }
+
                     // control char
                     if let Some(char_index) = cc_to_index(arg) {
                         if let Some(mapping) = args_iter.next() {
@@ -416,6 +463,9 @@ fn stty(opts: &Options) -> UResult<()> {
                 }
                 ArgOptions::Print(setting) => {
                     print_special_setting(setting, opts.file.as_raw_fd())?;
+                }
+                ArgOptions::SavedState(state) => {
+                    apply_saved_state(&mut termios, state)?;
                 }
             }
         }
@@ -564,19 +614,58 @@ fn string_to_combo(arg: &str) -> Option<&str> {
 }
 
 fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
-    // BSDs use a u32 for the baud rate, so any decimal number applies.
-    #[cfg(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
-    if let Ok(n) = arg.parse::<u32>() {
-        return Some(AllFlags::Baud(n));
+    // Normalize the input: trim whitespace and leading '+'
+    let normalized = arg.trim().trim_start_matches('+');
+
+    // Try to parse as a floating point number for rounding
+    if let Ok(f) = normalized.parse::<f64>() {
+        let rounded = f.round() as u32;
+
+        // BSDs use a u32 for the baud rate, so any decimal number applies.
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        ))]
+        return Some(AllFlags::Baud(rounded));
+
+        // On other platforms, find the closest valid baud rate
+        #[cfg(not(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        )))]
+        {
+            let rounded_str = rounded.to_string();
+            // First try exact match
+            for (text, baud_rate) in BAUD_RATES {
+                if *text == rounded_str {
+                    return Some(AllFlags::Baud(*baud_rate));
+                }
+            }
+            // If no exact match, find closest baud rate
+            let mut closest: Option<(u32, nix::sys::termios::BaudRate)> = None;
+            for (text, baud_rate) in BAUD_RATES {
+                if let Ok(rate_val) = text.parse::<u32>() {
+                    let diff = rate_val.abs_diff(rounded);
+                    if closest.is_none() || diff < closest.unwrap().0 {
+                        closest = Some((diff, *baud_rate));
+                    }
+                }
+            }
+            if let Some((_, baud_rate)) = closest {
+                return Some(AllFlags::Baud(baud_rate));
+            }
+        }
     }
 
+    // Fallback: try exact string match for non-numeric baud rate names
     #[cfg(not(any(
         target_os = "freebsd",
         target_os = "dragonfly",
@@ -590,6 +679,7 @@ fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
             return Some(AllFlags::Baud(*baud_rate));
         }
     }
+
     None
 }
 
@@ -648,38 +738,52 @@ fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
 }
 
 fn print_control_chars(termios: &Termios, opts: &Options) -> nix::Result<()> {
+    let mut line = String::new();
+
     if !opts.all {
         // Print only control chars that differ from sane defaults
-        let mut printed = false;
         for (text, cc_index) in CONTROL_CHARS {
             let current_val = termios.control_chars[*cc_index as usize];
             let sane_val = get_sane_control_char(*cc_index);
 
             if current_val != sane_val {
-                print!("{text} = {}; ", control_char_to_string(current_val)?);
-                printed = true;
+                let to_print = format!("{text} = {}; ", control_char_to_string(current_val)?);
+                if !line.is_empty() && line.len() + to_print.len() > opts.columns {
+                    println!("{}", line.trim_end());
+                    line.clear();
+                }
+                line.push_str(&to_print);
             }
         }
 
-        if printed {
-            println!();
+        if !line.is_empty() {
+            println!("{}", line.trim_end());
         }
         return Ok(());
     }
 
     for (text, cc_index) in CONTROL_CHARS {
-        print!(
+        let to_print = format!(
             "{text} = {}; ",
             control_char_to_string(termios.control_chars[*cc_index as usize])?
         );
+        if !line.is_empty() && line.len() + to_print.len() > opts.columns {
+            println!("{}", line.trim_end());
+            line.clear();
+        }
+        line.push_str(&to_print);
     }
-    println!(
-        "{}",
-        translate!("stty-output-min-time",
+
+    let min_time = translate!("stty-output-min-time",
         "min" => termios.control_chars[S::VMIN as usize],
         "time" => termios.control_chars[S::VTIME as usize]
-        )
     );
+    if !line.is_empty() && line.len() + min_time.len() > opts.columns {
+        println!("{}", line.trim_end());
+        line.clear();
+    }
+    line.push_str(&min_time);
+    println!("{}", line.trim_end());
     Ok(())
 }
 
@@ -712,7 +816,7 @@ fn print_settings(termios: &Termios, opts: &Options) -> nix::Result<()> {
 }
 
 fn print_flags<T: TermiosFlag>(termios: &Termios, opts: &Options, flags: &[Flag<T>]) {
-    let mut printed = false;
+    let mut line = String::new();
     for &Flag {
         name,
         flag,
@@ -725,21 +829,30 @@ fn print_flags<T: TermiosFlag>(termios: &Termios, opts: &Options, flags: &[Flag<
             continue;
         }
         let val = flag.is_in(termios, group);
+        let mut to_print = String::new();
+
         if group.is_some() {
             if val && (!sane || opts.all) {
-                print!("{name} ");
-                printed = true;
+                to_print = format!("{name} ");
             }
         } else if opts.all || val != sane {
             if !val {
-                print!("-");
+                to_print.push('-');
             }
-            print!("{name} ");
-            printed = true;
+            to_print.push_str(name);
+            to_print.push(' ');
+        }
+
+        if !to_print.is_empty() {
+            if !line.is_empty() && line.len() + to_print.len() > opts.columns {
+                println!("{}", line.trim_end());
+                line.clear();
+            }
+            line.push_str(&to_print);
         }
     }
-    if printed {
-        println!();
+    if !line.is_empty() {
+        println!("{}", line.trim_end());
     }
 }
 
@@ -792,6 +905,23 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) {
 
 fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
     termios.control_chars[mapping.0 as usize] = mapping.1;
+}
+
+fn apply_saved_state(termios: &mut Termios, state: &[u32]) -> nix::Result<()> {
+    if state.len() >= 4 {
+        termios.input_flags = InputFlags::from_bits_truncate(state[0]);
+        termios.output_flags = OutputFlags::from_bits_truncate(state[1]);
+        termios.control_flags = ControlFlags::from_bits_truncate(state[2]);
+        termios.local_flags = LocalFlags::from_bits_truncate(state[3]);
+
+        // Apply control characters (stored as u32 but used as u8)
+        for (i, &cc_val) in state.iter().skip(4).enumerate() {
+            if i < termios.control_chars.len() {
+                termios.control_chars[i] = cc_val as u8;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn apply_special_setting(
