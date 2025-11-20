@@ -1223,7 +1223,6 @@ fn test_progress_no_output_on_error() {
 fn test_one_file_system() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    let t = "other_partition_tmpdir";
     let a_b = "a/b";
     let t_y = "other_partition_tmpdir/y";
 
@@ -1231,12 +1230,13 @@ fn test_one_file_system() {
     at.mkdir_all(t_y);
 
     let root = at.as_string();
-    let t_path = format!("{root}/{t}");
     let a_b_path = format!("{root}/{a_b}");
 
     #[cfg(target_os = "linux")]
     {
+        let t = "other_partition_tmpdir";
         // This test requires root and mount --bind
+        let t_path = format!("{root}/{t}");
         let status = std::process::Command::new("mount")
             .arg("--bind")
             .arg(&t_path)
