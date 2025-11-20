@@ -1288,7 +1288,6 @@ fn test_one_file_system() {
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
         println!("Skipping test_one_file_system: unsupported OS");
-        return;
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
