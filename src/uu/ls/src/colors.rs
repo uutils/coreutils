@@ -16,14 +16,16 @@ pub(crate) struct StyleManager<'a> {
     /// `true` if the initial reset is applied
     pub(crate) initial_reset_is_done: bool,
     pub(crate) colors: &'a LsColors,
+    pub(crate) symlink_as_target: bool,
 }
 
 impl<'a> StyleManager<'a> {
-    pub(crate) fn new(colors: &'a LsColors) -> Self {
+    pub(crate) fn new(colors: &'a LsColors, symlink_as_target: bool) -> Self {
         Self {
             initial_reset_is_done: false,
             current_style: None,
             colors,
+            symlink_as_target,
         }
     }
 
@@ -152,6 +154,48 @@ pub(crate) fn color_name(
     target_symlink: Option<&PathData>,
     wrap: bool,
 ) -> OsString {
+    if style_manager.symlink_as_target
+        && path
+            .file_type()
+            .is_some_and(|ft| ft.is_symlink())
+    {
+        let target_metadata = target_symlink
+            .and_then(|p| p.metadata().cloned())
+            .or_else(|| {
+                path.path()
+                    .read_link()
+                    .ok()
+                    .and_then(|target| {
+                        let mut absolute = target.clone();
+                        if target.is_relative() {
+                            if let Some(parent) = path.path().parent() {
+                                absolute = parent.join(absolute);
+                            }
+                        }
+                        std::fs::metadata(&absolute).ok()
+                    })
+            });
+
+        let style = if let Some(md) = target_metadata.as_ref() {
+            style_manager
+                .colors
+                .style_for_path_with_metadata(&path.p_buf, Some(md))
+        } else if style_manager
+            .colors
+            .has_explicit_style_for(Indicator::OrphanedSymbolicLink)
+        {
+            style_manager
+                .colors
+                .style_for_indicator(Indicator::OrphanedSymbolicLink)
+        } else {
+            style_manager
+                .colors
+                .style_for_indicator(Indicator::SymbolicLink)
+        };
+
+        return style_manager.apply_style(style, name, wrap);
+    }
+
     // Check if the file has capabilities
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     {

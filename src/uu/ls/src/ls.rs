@@ -25,6 +25,7 @@ use std::{
     num::IntErrorKind,
     ops::RangeInclusive,
     path::{Path, PathBuf},
+    env,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -353,6 +354,7 @@ pub struct Config {
     #[cfg(unix)]
     inode: bool,
     color: Option<LsColors>,
+    color_symlink_as_target: bool,
     long: LongFormat,
     alloc_size: bool,
     file_size_block_size: u64,
@@ -856,6 +858,19 @@ impl Config {
         let sort = extract_sort(options);
         let time = extract_time(options);
         let mut needs_color = extract_color(options);
+        let color_symlink_as_target = if needs_color {
+            env::var("LS_COLORS").map_or(false, |value| {
+                value.split(':').any(|entry| {
+                    if let Some((key, val)) = entry.split_once('=') {
+                        key == "ln" && val == "target"
+                    } else {
+                        false
+                    }
+                })
+            })
+        } else {
+            false
+        };
         let hyperlink = extract_hyperlink(options);
 
         let opt_block_size = options.get_one::<String>(options::size::BLOCK_SIZE);
@@ -1147,6 +1162,7 @@ impl Config {
             directory: options.get_flag(options::DIRECTORY),
             time,
             color,
+            color_symlink_as_target,
             #[cfg(unix)]
             inode: options.get_flag(options::INODE),
             long,
@@ -2077,7 +2093,10 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
 
     let mut state = ListState {
         out: BufWriter::new(stdout()),
-        style_manager: config.color.as_ref().map(StyleManager::new),
+        style_manager: config
+            .color
+            .as_ref()
+            .map(|colors| StyleManager::new(colors, config.color_symlink_as_target)),
         #[cfg(unix)]
         uid_cache: HashMap::default(),
         #[cfg(unix)]
