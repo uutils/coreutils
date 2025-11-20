@@ -2886,6 +2886,24 @@ pub fn whoami() -> String {
         })
 }
 
+/// Create a PTY (pseudo-terminal) for testing utilities that require a TTY.
+///
+/// Returns a tuple of (path, controller_fd, replica_fd) where:
+/// - path: The filesystem path to the PTY replica device
+/// - controller_fd: The controller file descriptor
+/// - replica_fd: The replica file descriptor
+#[cfg(unix)]
+pub fn pty_path() -> (String, OwnedFd, OwnedFd) {
+    use nix::pty::openpty;
+    use nix::unistd::ttyname;
+    let pty = openpty(None, None).expect("Failed to create PTY");
+    let path = ttyname(&pty.slave)
+        .expect("Failed to get PTY path")
+        .to_string_lossy()
+        .to_string();
+    (path, pty.master, pty.slave)
+}
+
 /// Add prefix 'g' for `util_name` if not on linux
 #[cfg(unix)]
 pub fn host_name_for(util_name: &str) -> Cow<'_, str> {
