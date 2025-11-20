@@ -1253,9 +1253,18 @@ fn test_one_file_system() {
         // Create a disk image
         let dmg_path = format!("{root}/auxiliary.dmg");
         let status = std::process::Command::new("hdiutil")
-            .args(&["create", "-size", "10m", "-fs", "HFS+", "-volname", "auxiliary", &dmg_path])
+            .args(&[
+                "create",
+                "-size",
+                "10m",
+                "-fs",
+                "HFS+",
+                "-volname",
+                "auxiliary",
+                &dmg_path,
+            ])
             .status();
-        
+
         if status.is_err() || !status.unwrap().success() {
             println!("Skipping test_one_file_system: hdiutil create failed");
             return;
@@ -1299,15 +1308,16 @@ fn test_one_file_system() {
             }
         }
     }
-    
-    let _guard = MountGuard { 
+
+    let _guard = MountGuard {
         path: a_b_path.clone(),
         #[cfg(target_os = "macos")]
         dmg_path: format!("{root}/auxiliary.dmg"),
     };
 
     // rm --one-file-system -rf a
-    scene.ucmd()
+    scene
+        .ucmd()
         .arg("--one-file-system")
         .arg("-rf")
         .arg("a")

@@ -15,9 +15,9 @@ use std::ops::BitOr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
-#[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::MAIN_SEPARATOR;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -489,7 +489,7 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
                 }
 
                 any_files_processed = true;
-                
+
                 #[cfg(unix)]
                 let dev_id = if options.one_fs {
                     Some(metadata.dev())
@@ -670,8 +670,12 @@ fn remove_dir_recursive(
                     match entry {
                         Err(_) => error = true,
                         Ok(entry) => {
-                            let child_error =
-                                remove_dir_recursive(&entry.path(), options, progress_bar, parent_dev_id);
+                            let child_error = remove_dir_recursive(
+                                &entry.path(),
+                                options,
+                                progress_bar,
+                                parent_dev_id,
+                            );
                             error = error || child_error;
                         }
                     }
@@ -713,7 +717,12 @@ fn remove_dir_recursive(
     }
 }
 
-fn handle_dir(path: &Path, options: &Options, progress_bar: Option<&ProgressBar>, dev_id: Option<u64>) -> bool {
+fn handle_dir(
+    path: &Path,
+    options: &Options,
+    progress_bar: Option<&ProgressBar>,
+    dev_id: Option<u64>,
+) -> bool {
     let mut had_err = false;
 
     let path = clean_trailing_slashes(path);
