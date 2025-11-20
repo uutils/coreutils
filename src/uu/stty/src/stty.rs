@@ -521,10 +521,18 @@ fn parse_u8_or_err(arg: &str) -> Result<u8, String> {
 /// GNU uses an unsigned 32-bit integer for row/col sizes, but then wraps around 16 bits
 /// this function returns Some(n), where n is a u16 row/col size, or None if the string arg cannot be parsed as a u32
 fn parse_rows_cols(arg: &str) -> Option<u16> {
-    if let Ok(n) = arg.parse::<u32>() {
-        return Some((n % (u16::MAX as u32 + 1)) as u16);
-    }
-    None
+    let n = if let Some(hex) = arg.strip_prefix("0x").or_else(|| arg.strip_prefix("0X")) {
+        u32::from_str_radix(hex, 16).ok()?
+    } else if let Some(octal) = arg.strip_prefix('0') {
+        if octal.is_empty() {
+            0
+        } else {
+            u32::from_str_radix(octal, 8).ok()?
+        }
+    } else {
+        arg.parse::<u32>().ok()?
+    };
+    Some((n % (u16::MAX as u32 + 1)) as u16)
 }
 
 fn check_flag_group<T>(flag: &Flag<T>, remove: bool) -> bool {
