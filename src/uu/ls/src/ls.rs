@@ -17,6 +17,7 @@ use std::os::windows::fs::MetadataExt;
 use std::{
     cell::{LazyCell, OnceCell},
     cmp::Reverse,
+    env,
     ffi::{OsStr, OsString},
     fmt::Write as FmtWrite,
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
@@ -25,7 +26,6 @@ use std::{
     num::IntErrorKind,
     ops::RangeInclusive,
     path::{Path, PathBuf},
-    env,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -35,7 +35,7 @@ use clap::{
     builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
 };
 use glob::{MatchOptions, Pattern};
-use lscolors::{Colorable, LsColors};
+use lscolors::{Colorable, Indicator, LsColors};
 use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
 use thiserror::Error;
 
@@ -355,6 +355,7 @@ pub struct Config {
     inode: bool,
     color: Option<LsColors>,
     color_symlink_as_target: bool,
+    orphan_color_explicit: bool,
     long: LongFormat,
     alloc_size: bool,
     file_size_block_size: u64,
@@ -858,18 +859,23 @@ impl Config {
         let sort = extract_sort(options);
         let time = extract_time(options);
         let mut needs_color = extract_color(options);
-        let color_symlink_as_target = if needs_color {
-            env::var("LS_COLORS").map_or(false, |value| {
-                value.split(':').any(|entry| {
-                    if let Some((key, val)) = entry.split_once('=') {
-                        key == "ln" && val == "target"
-                    } else {
-                        false
+        let (color_symlink_as_target, orphan_color_explicit) = if needs_color {
+            let value = env::var("LS_COLORS").unwrap_or_default();
+            let mut symlink_target = false;
+            let mut orphan_explicit = false;
+            for entry in value.split(':') {
+                if let Some((key, val)) = entry.split_once('=') {
+                    if key == "ln" && val == "target" {
+                        symlink_target = true;
                     }
-                })
-            })
+                    if key == "or" {
+                        orphan_explicit = true;
+                    }
+                }
+            }
+            (symlink_target, orphan_explicit)
         } else {
-            false
+            (false, false)
         };
         let hyperlink = extract_hyperlink(options);
 
@@ -1163,6 +1169,7 @@ impl Config {
             time,
             color,
             color_symlink_as_target,
+            orphan_color_explicit,
             #[cfg(unix)]
             inode: options.get_flag(options::INODE),
             long,
@@ -1929,9 +1936,25 @@ impl PathData {
 
         let de: RefCell<Option<Box<DirEntry>>> = if let Some(de) = dir_entry {
             if must_dereference {
-                if let Ok(md_pb) = p_buf.metadata() {
-                    md.get_or_init(|| Some(md_pb.clone()));
-                    ft.get_or_init(|| Some(md_pb.file_type()));
+                match p_buf.metadata() {
+                    Ok(md_pb) => {
+                        md.get_or_init(|| Some(md_pb.clone()));
+                        ft.get_or_init(|| Some(md_pb.file_type()));
+                    }
+                    Err(err) => {
+                        // GNU ls reports an error (and sets exit status to 1)
+                        // when --dereference is in effect and a symlink target
+                        // cannot be reached while traversing a directory.
+                        // Emit the error here so even short listings (no -l)
+                        // behave the same, and mark metadata as probed to avoid
+                        // duplicate diagnostics later.
+                        show!(LsError::IOErrorContext(
+                            p_buf.to_path_buf(),
+                            err,
+                            command_line
+                        ));
+                        let _ = md.set(None);
+                    }
                 }
             }
 
@@ -2093,10 +2116,13 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
 
     let mut state = ListState {
         out: BufWriter::new(stdout()),
-        style_manager: config
-            .color
-            .as_ref()
-            .map(|colors| StyleManager::new(colors, config.color_symlink_as_target)),
+        style_manager: config.color.as_ref().map(|colors| {
+            StyleManager::new(
+                colors,
+                config.color_symlink_as_target,
+                config.orphan_color_explicit,
+            )
+        }),
         #[cfg(unix)]
         uid_cache: HashMap::default(),
         #[cfg(unix)]
@@ -3282,19 +3308,55 @@ fn display_item_name(
                     }
 
                     let target_data = PathData::new(absolute_target, None, None, config, false);
+                    let target_md = target_data.p_buf.symlink_metadata().ok();
+                    // Avoid emitting errors when trying to color a dangling target.
+                    // Cache the probed (or missing) metadata so later calls do not
+                    // attempt another stat that would raise a diagnostic.
+                    let _ = target_data.md.set(target_md.clone());
 
                     // If we have a symlink to a valid file, we use the metadata of said file.
                     // Because we use an absolute path, we can assume this is guaranteed to exist.
                     // Otherwise, we use path.md(), which will guarantee we color to the same
                     // color of non-existent symlinks according to style_for_path_with_metadata.
-                    if path.metadata().is_none() && target_data.metadata().is_none() {
-                        name.push(target_path);
+                    let escaped_target =
+                        locale_aware_escape_name(target_path.as_os_str(), config.quoting_style);
+
+                    if path.metadata().is_none() && target_md.is_none() {
+                        name.push(escaped_target);
+                    } else if target_md.is_none() {
+                        if let Some(style) = style_manager
+                            .colors
+                            .style_for_indicator(Indicator::MissingFile)
+                        {
+                            name.push(style_manager.apply_style(
+                                Some(style),
+                                escaped_target,
+                                is_wrap(name.len()),
+                            ));
+                        } else if let Some(style) = style_manager
+                            .colors
+                            .style_for_indicator(Indicator::SymbolicLink)
+                        {
+                            name.push(style_manager.apply_style(
+                                Some(style),
+                                escaped_target,
+                                is_wrap(name.len()),
+                            ));
+                        } else {
+                            name.push(color_name(
+                                escaped_target,
+                                &target_data,
+                                style_manager,
+                                None,
+                                is_wrap(name.len()),
+                            ));
+                        }
                     } else {
                         name.push(color_name(
-                            locale_aware_escape_name(target_path.as_os_str(), config.quoting_style),
-                            path,
+                            escaped_target,
+                            &target_data,
                             style_manager,
-                            Some(&target_data),
+                            None,
                             is_wrap(name.len()),
                         ));
                     }

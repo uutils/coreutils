@@ -17,15 +17,21 @@ pub(crate) struct StyleManager<'a> {
     pub(crate) initial_reset_is_done: bool,
     pub(crate) colors: &'a LsColors,
     pub(crate) symlink_as_target: bool,
+    pub(crate) orphan_color_explicit: bool,
 }
 
 impl<'a> StyleManager<'a> {
-    pub(crate) fn new(colors: &'a LsColors, symlink_as_target: bool) -> Self {
+    pub(crate) fn new(
+        colors: &'a LsColors,
+        symlink_as_target: bool,
+        orphan_color_explicit: bool,
+    ) -> Self {
         Self {
             initial_reset_is_done: false,
             current_style: None,
             colors,
             symlink_as_target,
+            orphan_color_explicit,
         }
     }
 
@@ -154,44 +160,66 @@ pub(crate) fn color_name(
     target_symlink: Option<&PathData>,
     wrap: bool,
 ) -> OsString {
-    if style_manager.symlink_as_target
-        && path
-            .file_type()
-            .is_some_and(|ft| ft.is_symlink())
-    {
+    // If we failed to obtain any metadata and don't even know the file type,
+    // treat the entry as missing so that `mi=` from LS_COLORS is honored
+    // (e.g. for dangling symlink targets).
+    if path.file_type().is_none() && path.metadata().is_none() {
+        if let Some(style) = style_manager
+            .colors
+            .style_for_indicator(Indicator::MissingFile)
+        {
+            return style_manager.apply_style(Some(style), name, wrap);
+        }
+    }
+
+    if style_manager.symlink_as_target && path.file_type().is_some_and(|ft| ft.is_symlink()) {
         let target_metadata = target_symlink
             .and_then(|p| p.metadata().cloned())
             .or_else(|| {
-                path.path()
-                    .read_link()
-                    .ok()
-                    .and_then(|target| {
-                        let mut absolute = target.clone();
-                        if target.is_relative() {
-                            if let Some(parent) = path.path().parent() {
-                                absolute = parent.join(absolute);
-                            }
+                path.path().read_link().ok().and_then(|target| {
+                    let mut absolute = target.clone();
+                    if target.is_relative() {
+                        if let Some(parent) = path.path().parent() {
+                            absolute = parent.join(absolute);
                         }
-                        std::fs::metadata(&absolute).ok()
-                    })
+                    }
+                    std::fs::metadata(&absolute).ok()
+                })
             });
+
+        let orphan_explicit = style_manager
+            .colors
+            .has_explicit_style_for(Indicator::OrphanedSymbolicLink)
+            || style_manager.orphan_color_explicit;
 
         let style = if let Some(md) = target_metadata.as_ref() {
             style_manager
                 .colors
                 .style_for_path_with_metadata(&path.p_buf, Some(md))
-        } else if style_manager
-            .colors
-            .has_explicit_style_for(Indicator::OrphanedSymbolicLink)
-        {
+        } else if orphan_explicit {
             style_manager
                 .colors
                 .style_for_indicator(Indicator::OrphanedSymbolicLink)
         } else {
-            style_manager
-                .colors
-                .style_for_indicator(Indicator::SymbolicLink)
+            // When `ln=target` is set but no orphan style is provided
+            // (e.g. `or=` to disable coloring), GNU ls leaves dangling
+            // symlinks uncolored.  Avoid falling back to the default
+            // symlink color in that case.
+            None
         };
+
+        // If the orphan style was explicitly mentioned but yields no color
+        // (e.g. `or=`), still wrap the name in reset codes for GNU parity.
+        if style.is_none() && orphan_explicit {
+            let mut ret: OsString = style_manager.reset(true).into();
+            ret.push("\x1b[m");
+            ret.push(name);
+            ret.push(style_manager.reset(true));
+            if wrap {
+                ret.push("\x1b[K");
+            }
+            return ret;
+        }
 
         return style_manager.apply_style(style, name, wrap);
     }
