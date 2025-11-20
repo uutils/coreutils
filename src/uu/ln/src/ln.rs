@@ -434,8 +434,9 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     if settings.symbolic {
         symlink(&source, dst)?;
     } else {
-        // Cannot create hard link to a directory
-        if src.is_dir() {
+        // Cannot create hard link to a directory directly
+        // We can however create hard link to a symlink that points to a directory, so long as -L is not passed
+        if src.is_dir() && (!src.is_symlink() || settings.logical) {
             return Err(LnError::FailedToCreateHardLinkDir(source.to_path_buf()).into());
         }
 
