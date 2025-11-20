@@ -1231,7 +1231,7 @@ fn test_one_file_system() {
     at.mkdir_all(t_y);
 
     let root = at.as_string();
-    let _t_path = format!("{root}/{t}");
+    let t_path = format!("{root}/{t}");
     let a_b_path = format!("{root}/{a_b}");
 
     #[cfg(target_os = "linux")]
