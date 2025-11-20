@@ -20,7 +20,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
 use nix::sys::termios::{
     ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices as S,
-    Termios, cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
+    Termios, cfgetospeed, cfsetispeed, cfsetospeed, tcgetattr, tcsetattr,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::fs::File;
@@ -296,9 +296,28 @@ fn stty(opts: &Options) -> UResult<()> {
         let mut args_iter = args.iter();
         while let Some(&arg) = args_iter.next() {
             match arg {
-                "ispeed" | "ospeed" => match args_iter.next() {
+                "ispeed" => match args_iter.next() {
                     Some(speed) => {
-                        if let Some(baud_flag) = string_to_baud(speed) {
+                        if let Some(baud_flag) = string_to_baud(speed, true) {
+                            valid_args.push(ArgOptions::Flags(baud_flag));
+                        } else {
+                            return Err(USimpleError::new(
+                                1,
+                                translate!(
+                                    "stty-error-invalid-speed",
+                                    "arg" => *arg,
+                                    "speed" => *speed,
+                                ),
+                            ));
+                        }
+                    }
+                    None => {
+                        return missing_arg(arg);
+                    }
+                },
+                "ospeed" => match args_iter.next() {
+                    Some(speed) => {
+                        if let Some(baud_flag) = string_to_baud(speed, false) {
                             valid_args.push(ArgOptions::Flags(baud_flag));
                         } else {
                             return Err(USimpleError::new(
@@ -422,13 +441,16 @@ fn stty(opts: &Options) -> UResult<()> {
                         } else {
                             return missing_arg(arg);
                         }
-                    // baud rate
-                    } else if let Some(baud_flag) = string_to_baud(arg) {
-                        valid_args.push(ArgOptions::Flags(baud_flag));
+                    // baud rate (sets both ispeed and ospeed)
+                    } else if let Some(ispeed_flag) = string_to_baud(arg, true) {
+                        if let Some(ospeed_flag) = string_to_baud(arg, false) {
+                            valid_args.push(ArgOptions::Flags(ispeed_flag));
+                            valid_args.push(ArgOptions::Flags(ospeed_flag));
+                        }
                     // non control char flag
                     } else if let Some(flag) = string_to_flag(arg) {
                         let remove_group = match flag {
-                            AllFlags::Baud(_) => false,
+                            AllFlags::ISpeed(_) | AllFlags::OSpeed(_) => false,
                             AllFlags::ControlFlags((flag, remove)) => {
                                 check_flag_group(flag, remove)
                             }
@@ -457,7 +479,7 @@ fn stty(opts: &Options) -> UResult<()> {
         for arg in &valid_args {
             match arg {
                 ArgOptions::Mapping(mapping) => apply_char_mapping(&mut termios, mapping),
-                ArgOptions::Flags(flag) => apply_setting(&mut termios, flag),
+                ArgOptions::Flags(flag) => apply_setting(&mut termios, flag)?,
                 ArgOptions::Special(setting) => {
                     apply_special_setting(&mut termios, setting, opts.file.as_raw_fd())?;
                 }
@@ -621,13 +643,17 @@ fn string_to_combo(arg: &str) -> Option<&str> {
         .map(|_| arg)
 }
 
-fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
-    // Reject if has trailing/leading whitespace, multiple signs, negative, or invalid chars
-    if arg != arg.trim() || arg.starts_with('-') || arg.starts_with("++") 
-        || arg.contains('E') || arg.contains('e') {
+fn string_to_baud(arg: &str, is_ispeed: bool) -> Option<AllFlags<'_>> {
+    // Reject if has trailing whitespace, negative, multiple signs, or scientific notation
+    if arg != arg.trim_end()
+        || arg.trim().starts_with('-')
+        || arg.trim().starts_with("++")
+        || arg.contains('E')
+        || arg.contains('e')
+    {
         return None;
     }
-    
+
     // Normalize the input: trim whitespace and leading '+'
     let normalized = arg.trim().trim_start_matches('+');
 
@@ -644,7 +670,11 @@ fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
             target_os = "netbsd",
             target_os = "openbsd"
         ))]
-        return Some(AllFlags::Baud(rounded));
+        return Some(if is_ispeed {
+            AllFlags::ISpeed(rounded)
+        } else {
+            AllFlags::OSpeed(rounded)
+        });
 
         // On other platforms, find the closest valid baud rate
         #[cfg(not(any(
@@ -660,7 +690,11 @@ fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
             // First try exact match
             for (text, baud_rate) in BAUD_RATES {
                 if *text == rounded_str {
-                    return Some(AllFlags::Baud(*baud_rate));
+                    return Some(if is_ispeed {
+                        AllFlags::ISpeed(*baud_rate)
+                    } else {
+                        AllFlags::OSpeed(*baud_rate)
+                    });
                 }
             }
             // If no exact match, find closest baud rate
@@ -674,7 +708,11 @@ fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
                 }
             }
             if let Some((_, baud_rate)) = closest {
-                return Some(AllFlags::Baud(baud_rate));
+                return Some(if is_ispeed {
+                    AllFlags::ISpeed(baud_rate)
+                } else {
+                    AllFlags::OSpeed(baud_rate)
+                });
             }
         }
     }
@@ -690,7 +728,11 @@ fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
     )))]
     for (text, baud_rate) in BAUD_RATES {
         if *text == arg {
-            return Some(AllFlags::Baud(*baud_rate));
+            return Some(if is_ispeed {
+                AllFlags::ISpeed(*baud_rate)
+            } else {
+                AllFlags::OSpeed(*baud_rate)
+            });
         }
     }
 
@@ -871,9 +913,9 @@ fn print_flags<T: TermiosFlag>(termios: &Termios, opts: &Options, flags: &[Flag<
 }
 
 /// Apply a single setting
-fn apply_setting(termios: &mut Termios, setting: &AllFlags) {
+fn apply_setting(termios: &mut Termios, setting: &AllFlags) -> nix::Result<()> {
     match setting {
-        AllFlags::Baud(_) => apply_baud_rate_flag(termios, setting),
+        AllFlags::ISpeed(_) | AllFlags::OSpeed(_) => apply_baud_rate_flag(termios, setting)?,
         AllFlags::ControlFlags((setting, disable)) => {
             setting.flag.apply(termios, !disable);
         }
@@ -887,34 +929,52 @@ fn apply_setting(termios: &mut Termios, setting: &AllFlags) {
             setting.flag.apply(termios, !disable);
         }
     }
+    Ok(())
 }
 
-fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) {
-    // BSDs use a u32 for the baud rate, so any decimal number applies.
-    #[cfg(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
-    if let AllFlags::Baud(n) = input {
-        cfsetospeed(termios, *n).expect("Failed to set baud rate");
+fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) -> nix::Result<()> {
+    match input {
+        // BSDs use a u32 for the baud rate
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        ))]
+        AllFlags::ISpeed(n) => cfsetispeed(termios, *n)?,
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        ))]
+        AllFlags::OSpeed(n) => cfsetospeed(termios, *n)?,
+        // Other platforms use an enum
+        #[cfg(not(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        )))]
+        AllFlags::ISpeed(br) => cfsetispeed(termios, *br)?,
+        #[cfg(not(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        )))]
+        AllFlags::OSpeed(br) => cfsetospeed(termios, *br)?,
+        _ => {}
     }
-
-    // Other platforms use an enum.
-    #[cfg(not(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    )))]
-    if let AllFlags::Baud(br) = input {
-        cfsetospeed(termios, *br).expect("Failed to set baud rate");
-    }
+    Ok(())
 }
 
 fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {

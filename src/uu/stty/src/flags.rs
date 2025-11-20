@@ -36,7 +36,7 @@ pub enum AllFlags<'a> {
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
-    Baud(u32),
+    ISpeed(u32),
     #[cfg(not(any(
         target_os = "freebsd",
         target_os = "dragonfly",
@@ -45,7 +45,25 @@ pub enum AllFlags<'a> {
         target_os = "netbsd",
         target_os = "openbsd"
     )))]
-    Baud(BaudRate),
+    ISpeed(BaudRate),
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    OSpeed(u32),
+    #[cfg(not(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
+    OSpeed(BaudRate),
     ControlFlags((&'a Flag<C>, bool)),
     InputFlags((&'a Flag<I>, bool)),
     LocalFlags((&'a Flag<L>, bool)),
