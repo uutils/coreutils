@@ -80,14 +80,19 @@ struct OdOptions {
 }
 
 /// Helper function to parse bytes with error handling
-fn parse_bytes_option(matches: &ArgMatches, option_name: &str) -> UResult<Option<u64>> {
+fn parse_bytes_option(
+    matches: &ArgMatches,
+    args: &[String],
+    option_name: &str,
+    short: Option<char>,
+) -> UResult<Option<u64>> {
     match matches.get_one::<String>(option_name) {
         None => Ok(None),
         Some(s) => match parse_number_of_bytes(s) {
             Ok(n) => Ok(Some(n)),
             Err(e) => Err(USimpleError::new(
                 1,
-                format_error_message(&e, s, option_name),
+                format_error_message(&e, s, &option_display_name(args, option_name, short)),
             )),
         },
     }
@@ -110,7 +115,8 @@ impl OdOptions {
             ByteOrder::Native
         };
 
-        let mut skip_bytes = parse_bytes_option(matches, options::SKIP_BYTES)?.unwrap_or(0);
+        let mut skip_bytes =
+            parse_bytes_option(matches, args, options::SKIP_BYTES, Some('j'))?.unwrap_or(0);
 
         let mut label: Option<u64> = None;
 
@@ -130,24 +136,36 @@ impl OdOptions {
             None => 16,
             Some(s) => {
                 if matches.value_source(options::WIDTH) == Some(ValueSource::CommandLine) {
-                    match parse_number_of_bytes(s) {
-                        Ok(n) => usize::try_from(n).map_err(|_| {
-                            USimpleError::new(
-                                1,
-                                translate!(
-                                    "od-error-argument-too-large",
-                                    "option" => options::WIDTH,
-                                    "value" => s.quote()
-                                ),
-                            )
-                        })?,
+                    let width_display = option_display_name(args, options::WIDTH, Some('w'));
+                    let parsed = match parse_number_of_bytes(s) {
+                        Ok(n) => n,
                         Err(e) => {
                             return Err(USimpleError::new(
                                 1,
-                                format_error_message(&e, s, options::WIDTH),
+                                format_error_message(&e, s, &width_display),
                             ));
                         }
+                    };
+                    if parsed == 0 {
+                        return Err(USimpleError::new(
+                            1,
+                            translate!(
+                                "od-error-invalid-argument",
+                                "option" => width_display.clone(),
+                                "value" => s.quote()
+                            ),
+                        ));
                     }
+                    usize::try_from(parsed).map_err(|_| {
+                        USimpleError::new(
+                            1,
+                            translate!(
+                                "od-error-argument-too-large",
+                                "option" => width_display.clone(),
+                                "value" => s.quote()
+                            ),
+                        )
+                    })?
                 } else {
                     16
                 }
@@ -167,9 +185,9 @@ impl OdOptions {
 
         let output_duplicates = matches.get_flag(options::OUTPUT_DUPLICATES);
 
-        let read_bytes = parse_bytes_option(matches, options::READ_BYTES)?;
+        let read_bytes = parse_bytes_option(matches, args, options::READ_BYTES, Some('N'))?;
 
-        let string_min_length = match parse_bytes_option(matches, options::STRINGS)? {
+        let string_min_length = match parse_bytes_option(matches, args, options::STRINGS, Some('S'))? {
             None => None,
             Some(n) => Some(usize::try_from(n).map_err(|_| {
                 USimpleError::new(
@@ -755,6 +773,32 @@ fn open_input_peek_reader(
 impl<R: HasError> HasError for BufReader<R> {
     fn has_error(&self) -> bool {
         self.get_ref().has_error()
+    }
+}
+
+fn option_display_name(args: &[String], option_name: &str, short: Option<char>) -> String {
+    let long_form = format!("--{option_name}");
+    let long_form_with_eq = format!("{long_form}=");
+    if let Some(short_char) = short {
+        let short_form = format!("-{short_char}");
+        for arg in args.iter().skip(1) {
+            if !arg.starts_with("--") && arg.starts_with(&short_form) {
+                return short_form.clone();
+            }
+        }
+        for arg in args.iter().skip(1) {
+            if arg == &long_form || arg.starts_with(&long_form_with_eq) {
+                return long_form.clone();
+            }
+        }
+        short_form
+    } else {
+        for arg in args.iter().skip(1) {
+            if arg == &long_form || arg.starts_with(&long_form_with_eq) {
+                return long_form.clone();
+            }
+        }
+        long_form
     }
 }
 
