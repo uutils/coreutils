@@ -36,7 +36,7 @@ jobs:
           - { os: macos-latest   , features: "feat_os_macos" }
           - { os: windows-latest , features: "feat_os_windows" }
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
@@ -76,7 +76,7 @@ jobs:
     name: L10n/Fluent Syntax Check
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - name: Setup Python
@@ -131,7 +131,7 @@ jobs:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
@@ -301,7 +301,7 @@ jobs:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
@@ -416,7 +416,7 @@ jobs:
           - { os: ubuntu-latest  , features: "feat_os_unix" }
           - { os: macos-latest   , features: "feat_os_macos" }
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
@@ -567,7 +567,7 @@ jobs:
           - { os: ubuntu-latest  , features: "feat_os_unix" }
           - { os: macos-latest   , features: "feat_os_macos" }
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
@@ -900,7 +900,7 @@ jobs:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
@@ -1131,7 +1131,7 @@ jobs:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
@@ -1151,7 +1151,7 @@ jobs:
     name: L10n/Locale Embedding - Cat Utility
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
@@ -1183,7 +1183,7 @@ jobs:
     name: L10n/Locale Embedding - Ls Utility
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
@@ -1215,7 +1215,7 @@ jobs:
     name: L10n/Locale Embedding - Multicall Binary
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
@@ -1252,7 +1252,7 @@ jobs:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
