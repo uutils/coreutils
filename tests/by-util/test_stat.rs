@@ -567,3 +567,14 @@ fn test_mount_point_combined_with_other_specifiers() {
         "Should print mount point, file name, and size"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn test_percent_escaping() {
+    let ts = TestScenario::new(util_name!());
+    let result = ts
+        .ucmd()
+        .args(&["--printf", "%%%m%%m%m%%%", "/bin/sh"])
+        .succeeds();
+    assert_eq!(result.stdout_str(), "%/%m/%%");
+}
