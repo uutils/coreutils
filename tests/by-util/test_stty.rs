@@ -88,6 +88,18 @@ fn test_all_flag() {
         target_os = "macos",
         target_os = "netbsd",
         target_os = "openbsd",
+        target_os = "aix",
+        target_os = "illumos",
+        target_os = "solaris"
+    ))]
+    result.stdout_contains("dsusp");
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd",
         target_os = "illumos",
     ))]
     result.stdout_contains("status");

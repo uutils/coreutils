@@ -1228,6 +1228,18 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
                     target_os = "macos",
                     target_os = "netbsd",
                     target_os = "openbsd",
+                    target_os = "aix",
+                    target_os = "illumos",
+                    target_os = "solaris"
+                ))]
+                (S::VDSUSP, "^Y"),
+                #[cfg(any(
+                    target_os = "freebsd",
+                    target_os = "dragonfly",
+                    target_os = "ios",
+                    target_os = "macos",
+                    target_os = "netbsd",
+                    target_os = "openbsd",
                     target_os = "illumos",
                 ))]
                 (S::VSTATUS, "^T"),
@@ -1272,6 +1284,19 @@ fn get_sane_control_char(cc_index: S) -> u8 {
         S::VTIME => 0,
         #[cfg(target_os = "linux")]
         S::VSWTC => 0,
+        // BSD-family sane defaults (GNU uses CDSUSP = ^Y, CSTATUS = ^T).
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd",
+            target_os = "aix",
+            target_os = "illumos",
+            target_os = "solaris"
+        ))]
+        S::VDSUSP => 25, // ^Y
         #[cfg(any(
             target_os = "freebsd",
             target_os = "dragonfly",
@@ -1429,6 +1454,18 @@ mod tests {
         };
         // sane always resets the standard control characters.
         assert!(has_mapping(S::VINTR, 3)); // ^C
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd",
+            target_os = "aix",
+            target_os = "illumos",
+            target_os = "solaris"
+        ))]
+        assert!(has_mapping(S::VDSUSP, 25)); // ^Y
         #[cfg(any(
             target_os = "freebsd",
             target_os = "dragonfly",
@@ -1631,6 +1668,22 @@ mod tests {
         assert_eq!(get_sane_control_char(S::VWERASE), 23); // ^W
         assert_eq!(get_sane_control_char(S::VLNEXT), 22); // ^V
         assert_eq!(get_sane_control_char(S::VDISCARD), 15); // ^O
+    }
+
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "aix",
+        target_os = "illumos",
+        target_os = "solaris"
+    ))]
+    #[test]
+    fn test_get_sane_control_char_dsusp() {
+        assert_eq!(get_sane_control_char(S::VDSUSP), 25); // ^Y
     }
 
     #[cfg(any(
