@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime
+// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime clocale
 
 #[cfg(unix)]
 use fnv::FnvHashMap as HashMap;
@@ -1956,11 +1956,7 @@ impl PathData {
                         // Emit the error here so even short listings (no -l)
                         // behave the same, and mark metadata as probed to avoid
                         // duplicate diagnostics later.
-                        show!(LsError::IOErrorContext(
-                            p_buf.to_path_buf(),
-                            err,
-                            command_line
-                        ));
+                        show!(LsError::IOErrorContext(p_buf.clone(), err, command_line));
                         let _ = md.set(None);
                     }
                 }

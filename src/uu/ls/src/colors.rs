@@ -140,7 +140,7 @@ impl<'a> StyleManager<'a> {
         if let Some(ind) = indicator_hint {
             if let Some(raw) = self.raw_ls_colors.get(&ind) {
                 self.current_style = Some(*new_style);
-                return format!("\x1b[{}m", raw);
+                return format!("\x1b[{raw}m");
             }
         }
 
