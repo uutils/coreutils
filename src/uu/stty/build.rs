@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore solarish
+
 use cfg_aliases::cfg_aliases;
 
 fn main() {
@@ -14,5 +16,6 @@ fn main() {
             target_os = "netbsd",
             target_os = "openbsd"
         ) },
+        solarish: { any(target_os = "illumos", target_os = "solaris") },
     };
 }
