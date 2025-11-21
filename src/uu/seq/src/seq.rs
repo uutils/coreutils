@@ -5,6 +5,8 @@
 // spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat biguint
 use std::ffi::{OsStr, OsString};
 use std::io::{BufWriter, ErrorKind, Write, stdout};
+#[cfg(unix)]
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use clap::{Arg, ArgAction, Command};
 use num_bigint::BigUint;
@@ -209,9 +211,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         padding,
     );
 
+    let sigpipe_ignored = sigpipe_is_ignored();
     match result {
         Ok(()) => Ok(()),
-        Err(err) if err.kind() == ErrorKind::BrokenPipe => Ok(()),
+        Err(err) if err.kind() == ErrorKind::BrokenPipe && !sigpipe_ignored => Ok(()),
         Err(err) => Err(err.map_err_context(|| "write error".into())),
     }
 }
@@ -325,6 +328,44 @@ fn fast_print_seq(
     stdout.write_all(terminator.as_encoded_bytes())?;
     stdout.flush()?;
     Ok(())
+}
+
+#[cfg(unix)]
+static SIGPIPE_WAS_IGNORED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(unix)]
+/// # Safety
+/// This function runs once at process initialization and only observes the
+/// current `SIGPIPE` handler, so there are no extra safety requirements for callers.
+unsafe extern "C" fn capture_sigpipe_state() {
+    use nix::libc;
+    use std::{mem::MaybeUninit, ptr};
+
+    let mut current = MaybeUninit::<libc::sigaction>::uninit();
+    if unsafe { libc::sigaction(libc::SIGPIPE, ptr::null(), current.as_mut_ptr()) } == 0 {
+        let ignored = unsafe { current.assume_init() }.sa_sigaction == libc::SIG_IGN;
+        SIGPIPE_WAS_IGNORED.store(ignored, Ordering::Relaxed);
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+#[used]
+#[unsafe(link_section = ".init_array")]
+static CAPTURE_SIGPIPE_STATE: unsafe extern "C" fn() = capture_sigpipe_state;
+
+#[cfg(all(unix, target_os = "macos"))]
+#[used]
+#[unsafe(link_section = "__DATA,__mod_init_func")]
+static CAPTURE_SIGPIPE_STATE_APPLE: unsafe extern "C" fn() = capture_sigpipe_state;
+
+#[cfg(unix)]
+fn sigpipe_is_ignored() -> bool {
+    SIGPIPE_WAS_IGNORED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(unix))]
+const fn sigpipe_is_ignored() -> bool {
+    false
 }
 
 fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> bool {
