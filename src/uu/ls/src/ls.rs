@@ -71,7 +71,7 @@ use uucore::{
     parser::parse_glob,
     parser::parse_size::parse_size_non_zero_u64,
     parser::shortcut_value_parser::ShortcutValueParser,
-    quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
+    quoting_style::{Quotes, QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
     show, show_error, show_warning,
     time::{FormatSystemTimeFallback, format, format_system_time},
     translate,
@@ -666,6 +666,12 @@ fn match_quoting_style_name(style: &str, show_control: bool) -> Option<QuotingSt
         "shell-escape-always" => Some(QuotingStyle::SHELL_ESCAPE_QUOTE),
         "c" => Some(QuotingStyle::C_DOUBLE),
         "escape" => Some(QuotingStyle::C_NO_QUOTES),
+        "locale" => Some(QuotingStyle::C {
+            quotes: Quotes::Single,
+        }),
+        "clocale" => Some(QuotingStyle::C {
+            quotes: Quotes::Double,
+        }),
         _ => None,
     }
     .map(|qs| qs.show_control(show_control))
@@ -1390,6 +1396,8 @@ pub fn uu_app() -> Command {
                 PossibleValue::new("shell-escape"),
                 PossibleValue::new("shell-always"),
                 PossibleValue::new("shell-escape-always"),
+                PossibleValue::new("locale"),
+                PossibleValue::new("clocale"),
                 PossibleValue::new("c").alias("c-maybe"),
                 PossibleValue::new("escape"),
             ]))
@@ -3332,6 +3340,7 @@ fn display_item_name(
                                 Some(style),
                                 escaped_target,
                                 is_wrap(name.len()),
+                                None,
                             ));
                         } else if let Some(style) = style_manager
                             .colors
@@ -3341,6 +3350,7 @@ fn display_item_name(
                                 Some(style),
                                 escaped_target,
                                 is_wrap(name.len()),
+                                Some(Indicator::SymbolicLink),
                             ));
                         } else {
                             name.push(color_name(

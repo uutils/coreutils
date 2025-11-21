@@ -4,8 +4,37 @@
 // file that was distributed with this source code.
 use super::PathData;
 use lscolors::{Colorable, Indicator, LsColors, Style};
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::Metadata;
+
+// The lscolors crate does not keep the original SGR token order or leading zeros.
+// Keep the raw LS_COLORS entries so we can emit sequences that match GNU ls.
+fn raw_ls_colors_map() -> HashMap<Indicator, String> {
+    // Copy the same defaults that lscolors uses internally.
+    const DEFAULT_LS_COLORS: &str = "rs=0:lc=\u{1b}[:rc=m:cl=\u{1b}[K:ex=01;32:sg=30;43:su=37;41:di=01;34:st=37;44:ow=34;42:tw=30;42:ln=01;36:bd=01;33:cd=01;33:do=01;35:pi=33:so=01;35:";
+
+    let mut map = HashMap::new();
+
+    let mut apply = |spec: &str| {
+        for entry in spec.split(':') {
+            if let Some((key, value)) = entry.split_once('=') {
+                if let Some(indicator) = Indicator::from(key) {
+                    map.insert(indicator, value.to_string());
+                }
+            }
+        }
+    };
+
+    apply(DEFAULT_LS_COLORS);
+    if let Ok(env_spec) = std::env::var("LS_COLORS") {
+        if !env_spec.is_empty() {
+            apply(&env_spec);
+        }
+    }
+
+    map
+}
 
 /// We need this struct to be able to store the previous style.
 /// This because we need to check the previous value in case we don't need
@@ -18,6 +47,7 @@ pub(crate) struct StyleManager<'a> {
     pub(crate) colors: &'a LsColors,
     pub(crate) symlink_as_target: bool,
     pub(crate) orphan_color_explicit: bool,
+    pub(crate) raw_ls_colors: HashMap<Indicator, String>,
 }
 
 impl<'a> StyleManager<'a> {
@@ -32,6 +62,7 @@ impl<'a> StyleManager<'a> {
             colors,
             symlink_as_target,
             orphan_color_explicit,
+            raw_ls_colors: raw_ls_colors_map(),
         }
     }
 
@@ -40,6 +71,7 @@ impl<'a> StyleManager<'a> {
         new_style: Option<&Style>,
         name: OsString,
         wrap: bool,
+        indicator_hint: Option<Indicator>,
     ) -> OsString {
         let mut style_code = String::new();
         let mut force_suffix_reset: bool = false;
@@ -47,7 +79,7 @@ impl<'a> StyleManager<'a> {
         // if reset is done we need to apply normal style before applying new style
         if self.is_reset() {
             if let Some(norm_sty) = self.get_normal_style().copied() {
-                style_code.push_str(&self.get_style_code(&norm_sty));
+                style_code.push_str(&self.get_style_code(&norm_sty, None));
             }
         }
 
@@ -58,7 +90,7 @@ impl<'a> StyleManager<'a> {
             // codes
             if !self.is_current_style(new_style) {
                 style_code.push_str(self.reset(!self.initial_reset_is_done));
-                style_code.push_str(&self.get_style_code(new_style));
+                style_code.push_str(&self.get_style_code(new_style, indicator_hint));
             }
         }
         // if new style is None and current style is Normal we should reset it
@@ -100,7 +132,18 @@ impl<'a> StyleManager<'a> {
         ""
     }
 
-    pub(crate) fn get_style_code(&mut self, new_style: &Style) -> String {
+    pub(crate) fn get_style_code(
+        &mut self,
+        new_style: &Style,
+        indicator_hint: Option<Indicator>,
+    ) -> String {
+        if let Some(ind) = indicator_hint {
+            if let Some(raw) = self.raw_ls_colors.get(&ind) {
+                self.current_style = Some(*new_style);
+                return format!("\x1b[{}m", raw);
+            }
+        }
+
         self.current_style = Some(*new_style);
         let mut nu_a_style = new_style.to_nu_ansi_term_style();
         nu_a_style.prefix_with_reset = false;
@@ -123,7 +166,7 @@ impl<'a> StyleManager<'a> {
     }
     pub(crate) fn apply_normal(&mut self) -> String {
         if let Some(sty) = self.get_normal_style().copied() {
-            return self.get_style_code(&sty);
+            return self.get_style_code(&sty, None);
         }
         String::new()
     }
@@ -134,11 +177,12 @@ impl<'a> StyleManager<'a> {
         md_option: Option<&Metadata>,
         name: OsString,
         wrap: bool,
+        indicator_hint: Option<Indicator>,
     ) -> OsString {
         let style = self
             .colors
             .style_for_path_with_metadata(&path.p_buf, md_option);
-        self.apply_style(style, name, wrap)
+        self.apply_style(style, name, wrap, indicator_hint)
     }
 
     pub(crate) fn apply_style_based_on_colorable<T: Colorable>(
@@ -146,9 +190,10 @@ impl<'a> StyleManager<'a> {
         path: &T,
         name: OsString,
         wrap: bool,
+        indicator_hint: Option<Indicator>,
     ) -> OsString {
         let style = self.colors.style_for(path);
-        self.apply_style(style, name, wrap)
+        self.apply_style(style, name, wrap, indicator_hint)
     }
 }
 
@@ -160,6 +205,23 @@ pub(crate) fn color_name(
     target_symlink: Option<&PathData>,
     wrap: bool,
 ) -> OsString {
+    // For symlinks we want to honor the exact LS_COLORS sequence, so detect them explicitly.
+    let symlink_indicator = if style_manager.symlink_as_target {
+        None
+    } else if path.file_type().is_some_and(|ft| ft.is_symlink()) {
+        let orphan = style_manager
+            .colors
+            .has_explicit_style_for(Indicator::OrphanedSymbolicLink)
+            && !path.path().exists();
+        if orphan {
+            Some(Indicator::OrphanedSymbolicLink)
+        } else {
+            Some(Indicator::SymbolicLink)
+        }
+    } else {
+        None
+    };
+
     // If we failed to obtain any metadata and don't even know the file type,
     // treat the entry as missing so that `mi=` from LS_COLORS is honored
     // (e.g. for dangling symlink targets).
@@ -168,7 +230,12 @@ pub(crate) fn color_name(
             .colors
             .style_for_indicator(Indicator::MissingFile)
         {
-            return style_manager.apply_style(Some(style), name, wrap);
+            return style_manager.apply_style(
+                Some(style),
+                name,
+                wrap,
+                Some(Indicator::MissingFile),
+            );
         }
     }
 
@@ -221,7 +288,7 @@ pub(crate) fn color_name(
             return ret;
         }
 
-        return style_manager.apply_style(style, name, wrap);
+        return style_manager.apply_style(style, name, wrap, symlink_indicator);
     }
 
     // Check if the file has capabilities
@@ -240,27 +307,33 @@ pub(crate) fn color_name(
 
         // If the file has capabilities, use a specific style for `ca` (capabilities)
         if has_capabilities {
-            return style_manager.apply_style(capabilities, name, wrap);
+            return style_manager.apply_style(capabilities, name, wrap, None);
         }
     }
 
     if !path.must_dereference {
         // If we need to dereference (follow) a symlink, we will need to get the metadata
         // There is a DirEntry, we don't need to get the metadata for the color
-        return style_manager.apply_style_based_on_colorable(path, name, wrap);
+        return style_manager.apply_style_based_on_colorable(path, name, wrap, symlink_indicator);
     }
 
     if let Some(target) = target_symlink {
         // use the optional target_symlink
         // Use fn symlink_metadata directly instead of get_metadata() here because ls
         // should not exit with an err, if we are unable to obtain the target_metadata
-        style_manager.apply_style_based_on_colorable(target, name, wrap)
+        style_manager.apply_style_based_on_colorable(target, name, wrap, None)
     } else {
         let md_option: Option<Metadata> = path
             .metadata()
             .cloned()
             .or_else(|| path.p_buf.symlink_metadata().ok());
 
-        style_manager.apply_style_based_on_metadata(path, md_option.as_ref(), name, wrap)
+        style_manager.apply_style_based_on_metadata(
+            path,
+            md_option.as_ref(),
+            name,
+            wrap,
+            symlink_indicator,
+        )
     }
 }
