@@ -91,8 +91,8 @@ pub const INPUT_FLAGS: &[Flag<I>] = &[
     Flag::new("inlcr", I::INLCR),
     Flag::new("igncr", I::IGNCR),
     Flag::new("icrnl", I::ICRNL).sane(),
-    Flag::new("ixoff", I::IXOFF),
     Flag::new("ixon", I::IXON),
+    Flag::new("ixoff", I::IXOFF),
     Flag::new("tandem", I::IXOFF).hidden(),
     // not supported by nix
     // Flag::new("iuclc", I::IUCLC),
