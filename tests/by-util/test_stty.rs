@@ -44,6 +44,53 @@ fn test_all_flag() {
     for flag in ["parenb", "parmrk", "ixany", "onlcr", "icanon", "noflsh"] {
         result.stdout_contains(flag);
     }
+
+    // GNU-compatibility entries that are only defined on some platforms.
+    #[cfg(any(
+        target_os = "aix",
+        target_os = "android",
+        target_os = "cygwin",
+        target_os = "haiku",
+        target_os = "hurd",
+        target_os = "illumos",
+        target_os = "nto",
+        target_os = "solaris",
+        target_os = "linux"
+    ))]
+    result.stdout_contains("iuclc");
+    #[cfg(any(
+        target_vendor = "apple",
+        target_os = "aix",
+        target_os = "android",
+        target_os = "cygwin",
+        target_os = "fuchsia",
+        target_os = "haiku",
+        target_os = "hurd",
+        target_os = "illumos",
+        target_os = "linux",
+        target_os = "nto",
+        target_os = "redox",
+        target_os = "solaris"
+    ))]
+    result.stdout_contains("ofill");
+    #[cfg(any(
+        target_os = "aix",
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "nto",
+        target_os = "linux",
+    ))]
+    result.stdout_contains("xcase");
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "illumos",
+    ))]
+    result.stdout_contains("status");
 }
 
 #[test]
