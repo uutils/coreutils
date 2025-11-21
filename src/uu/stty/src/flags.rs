@@ -398,4 +398,5 @@ pub const COMBINATION_SETTINGS: &[(&str, bool)] = &[
     ("pass8", true),
     ("raw", true),
     ("sane", false),
+    ("tabs", true),
 ];
