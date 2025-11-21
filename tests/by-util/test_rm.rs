@@ -1219,8 +1219,9 @@ fn test_progress_no_output_on_error() {
         .stderr_contains("No such file or directory");
 }
 
+#[cfg(target_os = "linux")]
 #[test]
-fn test_one_file_system() {
+fn test_one_file_system_linux() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let a_b = "a/b";
@@ -1229,106 +1230,119 @@ fn test_one_file_system() {
     at.mkdir_all(a_b);
     at.mkdir_all(t_y);
 
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
     let root = at.as_string();
-
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
     let a_b_path = format!("{root}/{a_b}");
+    let t_path = format!("{root}/other_partition_tmpdir");
 
-    #[cfg(target_os = "linux")]
-    {
-        let t = "other_partition_tmpdir";
-        // This test requires root and mount --bind
-        let t_path = format!("{root}/{t}");
-        let status = std::process::Command::new("mount")
-            .arg("--bind")
-            .arg(&t_path)
-            .arg(&a_b_path)
-            .status();
+    // This test requires root privileges and mount --bind support.
+    let status = std::process::Command::new("mount")
+        .arg("--bind")
+        .arg(&t_path)
+        .arg(&a_b_path)
+        .status();
 
-        if status.is_err() || !status.unwrap().success() {
-            println!("Skipping test_one_file_system: mount failed (requires root?)");
-            return;
-        }
+    if status.is_err() || !status.unwrap().success() {
+        println!("Skipping test_one_file_system_linux: mount --bind failed (requires root?)");
+        return;
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        // Create a disk image
-        let dmg_path = format!("{root}/auxiliary.dmg");
-        let status = std::process::Command::new("hdiutil")
-            .args([
-                "create",
-                "-size",
-                "10m",
-                "-fs",
-                "HFS+",
-                "-volname",
-                "auxiliary",
-                &dmg_path,
-            ])
-            .status();
-
-        if status.is_err() || !status.unwrap().success() {
-            println!("Skipping test_one_file_system: hdiutil create failed");
-            return;
-        }
-
-        // Mount the dmg
-        let status = std::process::Command::new("hdiutil")
-            .args(["attach", &dmg_path, "-mountpoint", &a_b_path])
-            .status();
-
-        if status.is_err() || !status.unwrap().success() {
-            println!("Skipping test_one_file_system: hdiutil attach failed");
-            return;
+    struct MountGuard {
+        path: String,
+    }
+    impl Drop for MountGuard {
+        fn drop(&mut self) {
+            let _ = std::process::Command::new("umount")
+                .arg(&self.path)
+                .status();
         }
     }
+    let _guard = MountGuard {
+        path: a_b_path.clone(),
+    };
 
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-    {
-        println!("Skipping test_one_file_system: unsupported OS");
+    scene
+        .ucmd()
+        .arg("--one-file-system")
+        .arg("-rf")
+        .arg("a")
+        .fails()
+        .stderr_contains("skipping 'a/b', since it's on a different device");
+
+    assert!(at.dir_exists(t_y));
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn test_one_file_system_macos() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let a_b = "a/b";
+    let t_y = "other_partition_tmpdir/y";
+
+    at.mkdir_all(a_b);
+    at.mkdir_all(t_y);
+
+    let root = at.as_string();
+    let a_b_path = format!("{root}/{a_b}");
+    let dmg_path = format!("{root}/auxiliary.dmg");
+
+    // Create a disk image to simulate another filesystem.
+    let create_status = std::process::Command::new("hdiutil")
+        .args([
+            "create",
+            "-size",
+            "10m",
+            "-fs",
+            "HFS+",
+            "-volname",
+            "auxiliary",
+            &dmg_path,
+        ])
+        .status();
+    if create_status.is_err() || !create_status.unwrap().success() {
+        println!("Skipping test_one_file_system_macos: hdiutil create failed");
+        return;
     }
 
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    {
-        struct MountGuard {
-            path: String,
-            #[cfg(target_os = "macos")]
-            dmg_path: String,
-        }
-        impl Drop for MountGuard {
-            fn drop(&mut self) {
-                #[cfg(target_os = "linux")]
-                let _ = std::process::Command::new("umount")
-                    .arg(&self.path)
-                    .status();
-
-                #[cfg(target_os = "macos")]
-                {
-                    let _ = std::process::Command::new("hdiutil")
-                        .args(["detach", &self.path])
-                        .status();
-                    let _ = std::fs::remove_file(&self.dmg_path);
-                }
-            }
-        }
-
-        let _guard = MountGuard {
-            path: a_b_path.clone(),
-            #[cfg(target_os = "macos")]
-            dmg_path: format!("{root}/auxiliary.dmg"),
-        };
-
-        // rm --one-file-system -rf a
-        scene
-            .ucmd()
-            .arg("--one-file-system")
-            .arg("-rf")
-            .arg("a")
-            .fails()
-            .stderr_contains("skipping 'a/b', since it's on a different device");
-
-        assert!(at.dir_exists(t_y));
+    let attach_status = std::process::Command::new("hdiutil")
+        .args(["attach", &dmg_path, "-mountpoint", &a_b_path])
+        .status();
+    if attach_status.is_err() || !attach_status.unwrap().success() {
+        println!("Skipping test_one_file_system_macos: hdiutil attach failed");
+        let _ = std::fs::remove_file(&dmg_path);
+        return;
     }
+
+    struct MountGuard {
+        mount_point: String,
+        dmg_path: String,
+    }
+    impl Drop for MountGuard {
+        fn drop(&mut self) {
+            let _ = std::process::Command::new("hdiutil")
+                .args(["detach", &self.mount_point])
+                .status();
+            let _ = std::fs::remove_file(&self.dmg_path);
+        }
+    }
+    let _guard = MountGuard {
+        mount_point: a_b_path.clone(),
+        dmg_path: dmg_path.clone(),
+    };
+
+    scene
+        .ucmd()
+        .arg("--one-file-system")
+        .arg("-rf")
+        .arg("a")
+        .fails()
+        .stderr_contains("skipping 'a/b', since it's on a different device");
+
+    assert!(at.dir_exists(t_y));
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[test]
+fn test_one_file_system_unsupported() {
+    println!("Skipping test_one_file_system: unsupported OS");
 }
