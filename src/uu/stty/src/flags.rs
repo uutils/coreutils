@@ -7,7 +7,7 @@
 // spell-checker:ignore ignbrk brkint ignpar parmrk inpck istrip inlcr igncr icrnl ixoff ixon iuclc ixany imaxbel iutf
 // spell-checker:ignore opost olcuc ocrnl onlcr onocr onlret ofdel nldly crdly tabdly bsdly vtdly ffdly
 // spell-checker:ignore isig icanon iexten echoe crterase echok echonl noflsh xcase tostop echoprt prterase echoctl ctlecho echoke crtkill flusho extproc
-// spell-checker:ignore lnext rprnt susp swtch vdiscard veof veol verase vintr vkill vlnext vquit vreprint vstart vstop vsusp vswtc vwerase werase
+// spell-checker:ignore lnext rprnt susp dsusp swtch vdiscard veof veol verase vintr vkill vlnext vquit vreprint vstart vstop vsusp vswtc vwerase werase VDSUSP
 // spell-checker:ignore sigquit sigtstp
 // spell-checker:ignore cbreak decctlq evenp litout oddp
 
@@ -370,6 +370,18 @@ pub const CONTROL_CHARS: &[(&str, S)] = &[
     ("stop", S::VSTOP),
     // Sends a suspend signal (SIGTSTP).
     ("susp", S::VSUSP),
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "aix",
+        target_os = "solaris"
+    ))]
+    // Sends a delayed suspend signal (SIGTSTP).
+    ("dsusp", S::VDSUSP),
     // Reprints the current line.
     ("rprnt", S::VREPRINT),
     // Deletes the last word typed.
