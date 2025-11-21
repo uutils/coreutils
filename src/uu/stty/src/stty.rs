@@ -264,6 +264,9 @@ fn stty(opts: &Options) -> UResult<()> {
         ));
     }
 
+    // Fetch termios for the target device once and reuse it downstream
+    let base_termios = tcgetattr(opts.file.as_fd())?;
+
     let mut set_arg = SetArg::TCSADRAIN;
     let mut valid_args: Vec<ArgOptions> = Vec::new();
 
@@ -274,11 +277,16 @@ fn stty(opts: &Options) -> UResult<()> {
 
     if let Some(args) = &opts.settings {
         if let Some((first, rest)) = args.split_first() {
-            if let Ok(termios) = parse_save_format(first) {
-                restored_from_save = Some(termios);
-                settings_iter = Box::new(rest.iter().copied());
-            } else {
-                settings_iter = Box::new(args.iter().map(|s| &**s));
+            match parse_save_format(first, &base_termios) {
+                Ok(termios) => {
+                    restored_from_save = Some(termios);
+                    settings_iter = Box::new(rest.iter().copied());
+                }
+                // GNU stty は先頭が save 形式っぽいのにパースできなければ即エラーにする
+                Err(e) if first.contains(':') => return Err(e),
+                Err(_) => {
+                    settings_iter = Box::new(args.iter().map(|s| &**s));
+                }
             }
         }
     }
@@ -426,11 +434,7 @@ fn stty(opts: &Options) -> UResult<()> {
         }
 
         // TODO: Figure out the right error message for when tcgetattr fails
-        let mut termios = if let Some(restored) = restored_from_save {
-            restored
-        } else {
-            tcgetattr(opts.file.as_fd())?
-        };
+        let mut termios = restored_from_save.unwrap_or(base_termios);
 
         // iterate over valid_args, match on the arg type, do the matching apply function
         for arg in &valid_args {
@@ -447,9 +451,7 @@ fn stty(opts: &Options) -> UResult<()> {
         }
         tcsetattr(opts.file.as_fd(), set_arg, &termios)?;
     } else {
-        // TODO: Figure out the right error message for when tcgetattr fails
-        let termios = tcgetattr(opts.file.as_fd())?;
-        print_settings(&termios, opts)?;
+        print_settings(&base_termios, opts)?;
     }
     Ok(())
 }
@@ -719,7 +721,7 @@ fn print_in_save_format(termios: &Termios) {
 
 /// GNU stty -g compatibility: restore Termios from the colon-separated hexadecimal representation
 /// produced by print_in_save_format.
-fn parse_save_format(s: &str) -> Result<Termios, Box<dyn UError>> {
+fn parse_save_format(s: &str, base: &Termios) -> Result<Termios, Box<dyn UError>> {
     // Expect four flag values + a variable-length sequence of cc_t values (at least one).
     let parts: Vec<&str> = s.split(':').collect();
     if parts.len() < 5 {
@@ -747,10 +749,8 @@ fn parse_save_format(s: &str) -> Result<Termios, Box<dyn UError>> {
     // Remaining segments are control_chars.
     let cc_hex = &parts[4..];
 
-    // Obtain the original termios and overwrite specific fields on top of it to preserve
-    // platform-dependent fields.
-    let mut termios = tcgetattr(std::io::stdout().as_fd())
-        .map_err(|_| USimpleError::new(1, translate!("stty-error-io")))?;
+    // base で渡されたデバイスの termios をコピーし、プラットフォーム依存フィールドを保持する
+    let mut termios = base.clone();
 
     termios.input_flags = InputFlags::from_bits_truncate(iflags_bits);
     termios.output_flags = OutputFlags::from_bits_truncate(oflags_bits);
