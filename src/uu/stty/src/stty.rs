@@ -282,7 +282,7 @@ fn stty(opts: &Options) -> UResult<()> {
                     restored_from_save = Some(termios);
                     settings_iter = Box::new(rest.iter().copied());
                 }
-                // GNU stty は先頭が save 形式っぽいのにパースできなければ即エラーにする
+                // GNU stty errors immediately when the first argument looks like save format but cannot be parsed
                 Err(e) if first.contains(':') => return Err(e),
                 Err(_) => {
                     settings_iter = Box::new(args.iter().map(|s| &**s));
@@ -749,7 +749,7 @@ fn parse_save_format(s: &str, base: &Termios) -> Result<Termios, Box<dyn UError>
     // Remaining segments are control_chars.
     let cc_hex = &parts[4..];
 
-    // base で渡されたデバイスの termios をコピーし、プラットフォーム依存フィールドを保持する
+    // Clone the passed-in device termios to preserve platform-specific fields
     let mut termios = base.clone();
 
     termios.input_flags = InputFlags::from_bits_truncate(iflags_bits);
