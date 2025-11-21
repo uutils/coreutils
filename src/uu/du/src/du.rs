@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 // spell-checker:ignore fstatat openat dirfd
 
+mod du_parallel;
+
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::Pattern;
 use std::collections::HashSet;
@@ -560,7 +562,7 @@ fn safe_du(
 // Regular traversal using std::fs
 // Used on non-Linux platforms and as fallback for symlinks on Linux
 #[allow(clippy::cognitive_complexity)]
-fn du_regular(
+pub(crate) fn du_regular(
     mut my_stat: Stat,
     options: &TraversalOptions,
     depth: usize,
@@ -1151,14 +1153,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 if let Some(inode) = stat.inode {
                     seen_inodes.insert(inode);
                 }
-                let stat = du_regular(
+
+                // Try parallel processing first, falls back to sequential if threshold not met
+                let stat = du_parallel::du_parallel(
                     stat,
                     &traversal_options,
                     0,
                     &mut seen_inodes,
                     &print_tx,
-                    None,
-                    None,
                 )
                 .map_err(|e| USimpleError::new(1, e.to_string()))?;
 
