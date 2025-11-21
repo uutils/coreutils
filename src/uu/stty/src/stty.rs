@@ -10,7 +10,7 @@
 // spell-checker:ignore isig icanon iexten echoe crterase echok echonl noflsh xcase tostop echoprt prterase echoctl ctlecho echoke crtkill flusho extproc
 // spell-checker:ignore lnext rprnt susp swtch vdiscard veof veol verase vintr vkill vlnext vquit vreprint vstart vstop vsusp vswtc vwerase werase
 // spell-checker:ignore sigquit sigtstp
-// spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain exta extb NCCS
+// spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain tcflag bitflag lflags cflags　NCCS　exta　extb
 
 mod flags;
 
@@ -266,7 +266,7 @@ fn stty(opts: &Options) -> UResult<()> {
         ));
     }
 
-    // termios を最初に必要になるまで遅延取得し、1 度だけキャッシュする
+    // Lazily fetch termios when first needed and cache it for reuse
     let mut base_termios: Option<Termios> = None;
     let mut get_base_termios = |fd: BorrowedFd<'_>| -> nix::Result<Termios> {
         if let Some(ref termios) = base_termios {
