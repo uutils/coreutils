@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore (acronyms) CTYPE
+
 //! Set of functions for escaping names according to different quoting styles.
 
 use std::ffi::{OsStr, OsString};
@@ -18,6 +20,7 @@ pub use escaped_char::{EscapeState, EscapedChar};
 
 mod c_quoter;
 mod literal_quoter;
+mod locale_quotes;
 mod shell_quoter;
 
 /// The quoting style to use when escaping a name.
@@ -137,7 +140,10 @@ pub enum Quotes {
 
     /// Use double quotes.
     Double,
-    // TODO: Locale
+
+    /// Use locale-specific quotation marks based on the current LC_CTYPE setting.
+    /// Falls back to double quotes for unknown or unset locales.
+    Locale,
 }
 
 /// Escape a name according to the given quoting style.
@@ -260,6 +266,7 @@ impl fmt::Display for Quotes {
             Self::None => f.write_str("None"),
             Self::Single => f.write_str("Single"),
             Self::Double => f.write_str("Double"),
+            Self::Locale => f.write_str("Locale"),
         }
     }
 }
@@ -1083,5 +1090,6 @@ mod tests {
         assert_eq!(format!("{}", Quotes::None), "None");
         assert_eq!(format!("{}", Quotes::Single), "Single");
         assert_eq!(format!("{}", Quotes::Double), "Double");
+        assert_eq!(format!("{}", Quotes::Locale), "Locale");
     }
 }
