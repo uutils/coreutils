@@ -6,14 +6,19 @@
 // spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST
 
 use clap::{Arg, ArgAction, Command};
+use icu_calendar::{AnyCalendar, Date as IcuDate};
+use icu_datetime::{fieldsets, DateTimeFormatter, input::DateTime as IcuDateTime};
+use icu_locale::Locale;
 use jiff::fmt::strtime;
 use jiff::tz::{TimeZone, TimeZoneDatabase};
 use jiff::{Timestamp, Zoned};
+use jiff_icu::ConvertFrom as _;
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 use libc::clock_settime;
 #[cfg(all(unix, not(target_os = "redox")))]
 use libc::{CLOCK_REALTIME, clock_getres, timespec};
 use std::collections::HashMap;
+use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -26,6 +31,102 @@ use uucore::{format_usage, show};
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+
+fn get_time_locale() -> Locale {
+    let locale_str = env::var("LC_ALL")
+        .or_else(|_| env::var("LC_TIME"))
+        .or_else(|_| env::var("LANG"))
+        .unwrap_or_else(|_| "C".to_string());
+    
+    // Convert POSIX locale format (th_TH.UTF-8) to BCP47 (th-TH)
+    let bcp47 = locale_str
+        .split('.')
+        .next()
+        .unwrap_or(&locale_str)
+        .replace('_', "-");
+    
+    bcp47.parse().unwrap_or_else(|_| "en-US".parse().unwrap())
+}
+
+fn get_calendar_for_locale(locale: &Locale) -> Option<&'static str> {
+    let lang = locale.id.language.as_str();
+    let region = locale.id.region.as_ref().map(|r| r.as_str());
+    
+    match (lang, region) {
+        ("th", Some("TH")) => Some("buddhist"),
+        ("fa", _) | (_, Some("IR")) => Some("persian"),
+        ("am", Some("ET")) => Some("ethiopic"),
+        _ => None,
+    }
+}
+
+fn format_with_icu(zdt: &Zoned, format_str: &str) -> Option<String> {
+    use icu_calendar::AnyCalendarKind;
+    
+    let base_locale = get_time_locale();
+    let icu_dt = IcuDateTime::convert_from(zdt.datetime());
+    
+    if let Some(cal_name) = get_calendar_for_locale(&base_locale) {
+        let kind = match cal_name {
+            "buddhist" => AnyCalendarKind::Buddhist,
+            "persian" => AnyCalendarKind::Persian,
+            "ethiopic" => AnyCalendarKind::Ethiopian,
+            _ => return None,
+        };
+        
+        // Build locale string with calendar extension
+        let locale_str = format!("{}-u-ca-{}", base_locale, cal_name);
+        let locale: Locale = locale_str.parse().ok()?;
+        
+        let cal = AnyCalendar::new(kind);
+        let iso_date = IcuDate::try_new_iso(zdt.year() as i32, zdt.month() as u8, zdt.day() as u8).ok()?;
+        let any_date = iso_date.to_any().to_calendar(cal);
+        
+        match format_str {
+            "%c" => {
+                let any_dt = IcuDateTime { date: any_date, time: icu_dt.time };
+                Some(DateTimeFormatter::try_new(locale.into(), fieldsets::YMDET::medium()).ok()?.format(&any_dt).to_string())
+            }
+            "%x" => {
+                Some(DateTimeFormatter::try_new(locale.into(), fieldsets::YMD::medium()).ok()?.format(&any_date).to_string())
+            }
+            "%X" => {
+                Some(DateTimeFormatter::try_new(locale.into(), fieldsets::ET::medium()).ok()?.format(&icu_dt).to_string())
+            }
+            "%Y" => {
+                use icu_calendar::types::YearInfo;
+                let year_num: i32 = match any_date.year() {
+                    YearInfo::Cyclic(y) => y.year as i32,
+                    YearInfo::Era(y) => y.year,
+                    _ => any_date.extended_year(),
+                };
+                Some(year_num.to_string())
+            }
+            "%B" => {
+                Some(DateTimeFormatter::try_new(locale.into(), fieldsets::M::long()).ok()?.format(&any_date).to_string())
+            }
+            _ => None,
+        }
+    } else {
+        let locale = base_locale;
+        match format_str {
+            "%c" => Some(DateTimeFormatter::try_new(
+                locale.into(),
+                fieldsets::YMDET::medium(),
+            ).ok()?.format(&icu_dt).to_string()),
+            "%x" => Some(DateTimeFormatter::try_new(
+                locale.into(),
+                fieldsets::YMD::medium(),
+            ).ok()?.format(&icu_dt).to_string()),
+            "%X" => Some(DateTimeFormatter::try_new(
+                locale.into(),
+                fieldsets::ET::medium(),
+            ).ok()?.format(&icu_dt).to_string()),
+            "%Y" => Some(zdt.year().to_string()),
+            _ => None,
+        }
+    }
+}
 
 // Options
 const DATE: &str = "date";
@@ -389,16 +490,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Format all the dates
     for date in dates {
         match date {
-            // TODO: Switch to lenient formatting.
-            Ok(date) => match strtime::format(format_string, &date) {
-                Ok(s) => println!("{s}"),
-                Err(e) => {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("date-error-invalid-format", "format" => format_string, "error" => e),
-                    ));
-                }
-            },
+            Ok(date) => {
+                let output = if let Some(icu_output) = format_with_icu(&date, format_string) {
+                    icu_output
+                } else {
+                    match strtime::format(format_string, &date) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            return Err(USimpleError::new(
+                                1,
+                                translate!("date-error-invalid-format", "format" => format_string, "error" => e),
+                            ));
+                        }
+                    }
+                };
+                println!("{}", output);
+            }
             Err((input, _err)) => show!(USimpleError::new(
                 1,
                 translate!("date-error-invalid-date", "date" => input)
