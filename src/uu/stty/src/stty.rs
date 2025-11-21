@@ -266,8 +266,17 @@ fn stty(opts: &Options) -> UResult<()> {
         ));
     }
 
-    // Fetch termios for the target device once and reuse it downstream
-    let base_termios = tcgetattr(opts.file.as_fd())?;
+    // termios を最初に必要になるまで遅延取得し、1 度だけキャッシュする
+    let mut base_termios: Option<Termios> = None;
+    let mut get_base_termios = |fd: BorrowedFd<'_>| -> nix::Result<Termios> {
+        if let Some(ref termios) = base_termios {
+            Ok(termios.clone())
+        } else {
+            let termios = tcgetattr(fd)?;
+            base_termios = Some(termios.clone());
+            Ok(termios)
+        }
+    };
 
     let mut set_arg = SetArg::TCSADRAIN;
     let mut valid_args: Vec<ArgOptions> = Vec::new();
@@ -281,7 +290,8 @@ fn stty(opts: &Options) -> UResult<()> {
         if let Some((first, rest)) = args.split_first() {
             if first.contains(':') {
                 // Only attempt to parse saved state when the first arg actually looks like one.
-                let mut restored = base_termios.clone();
+                let base = get_base_termios(opts.file.as_fd())?;
+                let mut restored = base.clone();
                 match parse_save_format(first, &mut restored) {
                     Ok(()) => {
                         restored_from_save = Some(restored);
@@ -442,9 +452,9 @@ fn stty(opts: &Options) -> UResult<()> {
                 }
             }
         }
-
         // TODO: Figure out the right error message for when tcgetattr fails
-        let mut termios = restored_from_save.unwrap_or(base_termios);
+        let base = get_base_termios(opts.file.as_fd())?;
+        let mut termios = restored_from_save.unwrap_or(base);
 
         // iterate over valid_args, match on the arg type, do the matching apply function
         for arg in &valid_args {
@@ -464,7 +474,8 @@ fn stty(opts: &Options) -> UResult<()> {
         }
         tcsetattr(opts.file.as_fd(), set_arg, &termios)?;
     } else {
-        print_settings(&base_termios, opts)?;
+        let base = get_base_termios(opts.file.as_fd())?;
+        print_settings(&base, opts)?;
     }
     Ok(())
 }
