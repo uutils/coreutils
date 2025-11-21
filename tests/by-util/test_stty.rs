@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh econl igpar ispeed ospeed NCCS nonhex gstty notachar cbreak evenp oddp CSIZE
+// spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh econl igpar ispeed ospeed NCCS nonhex gstty notachar cbreak dsusp evenp oddp CSIZE
 
 #![cfg(unix)]
 
@@ -53,6 +53,20 @@ fn test_all_flag() {
     ))]
     new_ucmd!()
         .args(&["--file", &path, "status", "^T"])
+        .succeeds();
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "aix",
+        target_os = "illumos",
+        target_os = "solaris"
+    ))]
+    new_ucmd!()
+        .args(&["--file", &path, "dsusp", "^Y"])
         .succeeds();
     let result = new_ucmd!().args(&["--all", "--file", &path]).succeeds();
 
@@ -113,6 +127,23 @@ fn test_all_flag() {
         target_os = "linux",
     ))]
     assert!(position("-xcase").is_some());
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "aix",
+        target_os = "illumos",
+        target_os = "solaris"
+    ))]
+    {
+        // `dsusp` resets to ^Y on the sane defaults; `--all` prints it as
+        // `dsusp = ^Y;`.
+        let dsusp = position("dsusp").unwrap();
+        assert_eq!(tokens[dsusp + 2], "^Y;");
+    }
     #[cfg(any(
         target_os = "freebsd",
         target_os = "dragonfly",
