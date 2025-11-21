@@ -99,7 +99,15 @@ pub const INPUT_FLAGS: &[Flag<I>] = &[
     Flag::new("ixon", I::IXON),
     Flag::new("ixoff", I::IXOFF),
     Flag::new("tandem", I::IXOFF).hidden(),
-    // not supported by nix
+    // not supported by nix and libc:
+    //  - https://github.com/rust-lang/libc/pull/4846
+    //  - https://github.com/nix-rust/nix/pull/2702
+    // #[cfg(any(
+    //     target_os = "aix",
+    //     target_os = "android",
+    //     target_os = "haiku",
+    //     target_os = "linux",
+    // ))]
     // Flag::new("iuclc", I::IUCLC),
     Flag::new("ixany", I::IXANY),
     Flag::new("imaxbel", I::IMAXBEL).sane(),
