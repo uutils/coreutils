@@ -15,6 +15,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
 #[cfg(unix)]
 use uutests::util::pty_path;
+#[cfg(unix)]
 use uutests::{at_and_ucmd, new_ucmd};
 
 #[cfg(unix)]
