@@ -659,26 +659,19 @@ fn remove_dir_recursive(
         }
     }
 
+    #[cfg(unix)]
+    let next_parent_dev_id = if options.one_fs || options.preserve_root_all {
+        Some(metadata.dev())
+    } else {
+        None
+    };
+    #[cfg(not(unix))]
+    let next_parent_dev_id = None;
+
     // Use secure traversal on Linux for all recursive directory removals
     #[cfg(target_os = "linux")]
     {
-        safe_remove_dir_recursive(
-            path,
-            options,
-            progress_bar,
-            if options.one_fs || options.preserve_root_all {
-                #[cfg(unix)]
-                {
-                    Some(metadata.dev())
-                }
-                #[cfg(not(unix))]
-                {
-                    None
-                }
-            } else {
-                None
-            },
-        )
+        safe_remove_dir_recursive(path, options, progress_bar, next_parent_dev_id)
     }
 
     // Fallback for non-Linux or use fs::remove_dir_all for very long paths
@@ -701,14 +694,6 @@ fn remove_dir_recursive(
 
         // Recursive case: this is a directory.
         let mut error = false;
-        #[cfg(unix)]
-        let next_parent_dev_id = if options.one_fs || options.preserve_root_all {
-            Some(metadata.dev())
-        } else {
-            None
-        };
-        #[cfg(not(unix))]
-        let next_parent_dev_id = None;
         match fs::read_dir(path) {
             Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
                 // This is not considered an error.
