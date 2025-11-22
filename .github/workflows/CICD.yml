@@ -301,21 +301,22 @@ jobs:
       env:
         RUST_BACKTRACE: "1"
 
-    - name: "`make install PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n`"
+    - name: "`make install UTILS=true PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n`"
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/ make PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n install
+        # Check make install without feat_external_libstdbuf and skipped stdbuf
+        DESTDIR=/tmp/ make UTILS=true PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n install
         # Check that utils are built with given profile
-        ./target/release-fast/true
+        ./target/release-small/true
         # Check that the utils are present
-        test -f /tmp/usr/local/bin/tty
+        /tmp/usr/local/bin/true
         # Check that the manpage is not present
-        ! test -f /tmp/usr/local/share/man/man1/whoami.1
+        ! test -f /tmp/usr/local/share/man/man1/true.1
         # Check that the completion is not present
-        ! test -f /tmp/usr/local/share/zsh/site-functions/_install
-        ! test -f /tmp/usr/local/share/bash-completion/completions/head.bash
-        ! test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
+        ! test -f /tmp/usr/local/share/zsh/site-functions/_true
+        ! test -f /tmp/usr/local/share/bash-completion/completions/true.bash
+        ! test -f /tmp/usr/local/share/fish/vendor_completions.d/true.fish
       env:
         RUST_BACKTRACE: "1"
     - name: "`make install`"
@@ -370,17 +371,6 @@ jobs:
         [ $(readlink /tmp/usr/local/bin/b2sum) = coreutils ]
         [ $(readlink /tmp/usr/local/bin/md5sum) = coreutils ]
         [ $(readlink /tmp/usr/local/bin/sha512sum) = coreutils ]
-    - name: "`make UTILS=XXX`"
-      shell: bash
-      run: |
-        set -x
-        # Regression-test for https://github.com/uutils/coreutils/issues/8701
-        make UTILS="rm chmod chown chgrp mv du"
-        # Verifies that
-        # 1. there is no "error: none of the selected packages contains this
-        # feature: feat_external_libstdbuf"
-        # 2. the makefile doesn't try to install libstdbuf even though stdbuf is skipped
-        DESTDIR=/tmp/ make SKIP_UTILS="stdbuf" install
 
   build_rust_stable:
     name: Build/stable
