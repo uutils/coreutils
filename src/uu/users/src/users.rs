@@ -10,7 +10,9 @@ use std::path::Path;
 
 use clap::builder::ValueParser;
 use clap::{Arg, Command};
+#[cfg(not(target_os = "openbsd"))]
 use nix::sys::signal::kill;
+#[cfg(not(target_os = "openbsd"))]
 use nix::unistd::Pid;
 use uucore::error::UResult;
 use uucore::format_usage;
