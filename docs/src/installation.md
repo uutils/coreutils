@@ -122,6 +122,12 @@ apt install rust-coreutils
 export PATH=/usr/lib/cargo/bin/coreutils:$PATH
 ```
 
+### AUR
+
+[AUR package](https://aur.archlinux.org/packages/uutils-coreutils-git)
+
+Rust rewrite of the GNU coreutils (main branch).
+
 ## MacOS
 
 ### Homebrew
@@ -184,11 +190,3 @@ Clone [poky](https://github.com/yoctoproject/poky) and [meta-openembedded](https
 and then either call `bitbake uutils-coreutils`, or use
 `PREFERRED_PROVIDER_coreutils = "uutils-coreutils"` in your `build/conf/local.conf` file and
 then build your usual yocto image.
-
-## Non-standard packages
-
-### `coreutils-uutils` (AUR)
-
-[AUR package](https://aur.archlinux.org/packages/coreutils-uutils)
-
-Cross-platform Rust rewrite of the GNU coreutils being used as actual system coreutils.
