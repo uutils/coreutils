@@ -8,18 +8,9 @@
 # * note: to run a single test => `make check TESTS=PATH/TO/TEST/SCRIPT SUBDIRS=. VERBOSE=yes`
 
 # Use GNU version for make, nproc, readlink on *BSD
-case "$OSTYPE" in
-    *bsd*)
-        MAKE="gmake"
-        NPROC="gnproc"
-        READLINK="greadlink"
-        ;;
-    *)
-        MAKE="make"
-        NPROC="nproc"
-        READLINK="readlink"
-        ;;
-esac
+MAKE=$(command -v gmake||command -v make)
+NPROC=$(command -v gnproc||command -v nproc)
+READLINK=$(command -v greadlink||command -v readlink)
 
 ME_dir="$(dirname -- "$("${READLINK}" -fm -- "$0")")"
 REPO_main_dir="$(dirname -- "${ME_dir}")"
