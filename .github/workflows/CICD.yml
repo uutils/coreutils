@@ -744,10 +744,11 @@ jobs:
             # The account also has empty gecos fields.
             # To work around these issues for pinky (and who) tests, we create a fake utmp file with a
             # system boot entry and a login entry for the GH runner account.
-            FAKE_UTMP_2='[2] [00000] [~~  ] [reboot] [~   ] [6.0.0-test] [0.0.0.0] [2022-02-22T22:11:22,222222+00:00]'
-            FAKE_UTMP_7='[7] [999999] [tty2] [runner] [tty2] [          ] [0.0.0.0] [2022-02-22T22:22:22,222222+00:00]'
-            FAKE_UTMP_LIVE='[7] [1] [tty3] [runner] [tty3] [          ] [0.0.0.0] [2022-02-22T22:22:22,222222+00:00]'
-            (echo "$FAKE_UTMP_2" ; echo "$FAKE_UTMP_7" ; echo "$FAKE_UTMP_LIVE") | sudo utmpdump -r -o /var/run/utmp
+            printf '%s\n%s\n%s' \
+              '[2] [00000] [~~  ] [reboot  ] [~           ] [6.0.0-test                      ] [0.0.0.0        ] [2022-02-22T22:11:22,222222+0000]' \
+              '[7] [999999] [tty2] [runner  ] [tty2        ] [                    ] [0.0.0.0        ] [2022-02-22T22:22:22,222222+0000]' \
+              '[7] [00001] [tty3] [runner  ] [tty3        ] [                    ] [0.0.0.0        ] [2022-02-22T22:22:22,222222+0000]' \
+              | sudo utmpdump -r -o /var/run/utmp
             # ... and add a full name to each account with a gecos field but no full name.
             sudo sed -i 's/:,/:runner name,/' /etc/passwd
             # We also create a couple optional files pinky looks for
@@ -1106,10 +1107,11 @@ jobs:
             # The account also has empty gecos fields.
             # To work around these issues for pinky (and who) tests, we create a fake utmp file with a
             # system boot entry and a login entry for the GH runner account.
-            FAKE_UTMP_2='[2] [00000] [~~  ] [reboot] [~   ] [6.0.0-test] [0.0.0.0] [2022-02-22T22:11:22,222222+00:00]'
-            FAKE_UTMP_7='[7] [999999] [tty2] [runner] [tty2] [          ] [0.0.0.0] [2022-02-22T22:22:22,222222+00:00]'
-            FAKE_UTMP_LIVE='[7] [1] [tty3] [runner] [tty3] [          ] [0.0.0.0] [2022-02-22T22:22:22,222222+00:00]'
-            (echo "$FAKE_UTMP_2" ; echo "$FAKE_UTMP_7"; echo "$FAKE_UTMP_LIVE") | sudo utmpdump -r -o /var/run/utmp
+            printf '%s\n%s\n%s' \
+              '[2] [00000] [~~  ] [reboot  ] [~           ] [6.0.0-test                      ] [0.0.0.0        ] [2022-02-22T22:11:22,222222+0000]' \
+              '[7] [999999] [tty2] [runner  ] [tty2        ] [                    ] [0.0.0.0        ] [2022-02-22T22:22:22,222222+0000]' \
+              '[7] [00001] [tty3] [runner  ] [tty3        ] [                    ] [0.0.0.0        ] [2022-02-22T22:22:22,222222+0000]' \
+              | sudo utmpdump -r -o /var/run/utmp
             # ... and add a full name to each account with a gecos field but no full name.
             sudo sed -i 's/:,/:runner name,/' /etc/passwd
             # We also create a couple optional files pinky looks for
