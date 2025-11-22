@@ -99,6 +99,9 @@ jobs:
         sudo locale-gen --keep-existing en_US
         sudo locale-gen --keep-existing en_US.UTF-8
         sudo locale-gen --keep-existing ru_RU.KOI8-R
+        sudo locale-gen --keep-existing fa_IR.UTF-8 # Iran
+        sudo locale-gen --keep-existing am_ET.UTF-8 # Ethiopia
+        sudo locale-gen --keep-existing th_TH.UTF-8 # Thailand
 
         sudo update-locale
         echo "After:"
