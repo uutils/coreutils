@@ -245,6 +245,7 @@ fn test_all() {
 
 #[cfg(unix)]
 #[test]
+#[ignore = "This test is the only one in the suite that checks if the reference version is 8.3. This has not been the case for a while"]
 fn test_locale() {
     let ts = TestScenario::new(util_name!());
 
