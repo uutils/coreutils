@@ -26,8 +26,13 @@ jiff = { workspace = true, features = [
   "tzdb-zoneinfo",
   "tzdb-concatenated",
 ] }
+jiff-icu = "0.2.2"
+icu_calendar = "2.0.0"
+icu_datetime = "2.0.0"
+icu_locale = { workspace = true }
+icu_provider = { workspace = true }
 parse_datetime = { workspace = true }
-uucore = { workspace = true, features = ["parser"] }
+uucore = { workspace = true, features = ["parser", "i18n-common"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
