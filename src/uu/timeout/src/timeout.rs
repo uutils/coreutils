@@ -65,7 +65,7 @@ impl Config {
                     Some(signal_value) => signal_value,
                 }
             }
-            _ => signal_by_name_or_value("TERM").unwrap(),
+            _ => signal_by_name_or_value("TERM").expect("TERM signal should always be valid"),
         };
 
         let kill_after = match options.get_one::<String>(options::KILL_AFTER) {
@@ -76,9 +76,13 @@ impl Config {
             },
         };
 
-        let duration =
-            parse_time::from_str(options.get_one::<String>(options::DURATION).unwrap(), true)
-                .map_err(|err| UUsageError::new(ExitStatus::TimeoutFailed.into(), err))?;
+        let duration = parse_time::from_str(
+            options
+                .get_one::<String>(options::DURATION)
+                .expect("DURATION is a required argument"),
+            true,
+        )
+        .map_err(|err| UUsageError::new(ExitStatus::TimeoutFailed.into(), err))?;
 
         let preserve_status: bool = options.get_flag(options::PRESERVE_STATUS);
         let foreground = options.get_flag(options::FOREGROUND);
@@ -86,7 +90,7 @@ impl Config {
 
         let command = options
             .get_many::<String>(options::COMMAND)
-            .unwrap()
+            .expect("COMMAND is a required argument")
             .map(String::from)
             .collect::<Vec<_>>();
 
@@ -179,11 +183,14 @@ pub fn uu_app() -> Command {
 /// Remove pre-existing SIGCHLD handlers that would make waiting for the child's exit code fail.
 fn unblock_sigchld() {
     unsafe {
+        // In extremely restricted environments (e.g., some sandboxes), signal registration
+        // might fail. We use expect here because timeout cannot function without proper
+        // signal handling, and this is a fundamental OS capability.
         nix::sys::signal::signal(
             nix::sys::signal::Signal::SIGCHLD,
             nix::sys::signal::SigHandler::SigDfl,
         )
-        .unwrap();
+        .expect("failed to reset SIGCHLD handler");
     }
 }
 
@@ -194,24 +201,35 @@ fn catch_sigterm() {
     use nix::sys::signal;
 
     extern "C" fn handle_sigterm(signal: libc::c_int) {
-        let signal = signal::Signal::try_from(signal).unwrap();
-        if signal == signal::Signal::SIGTERM {
-            SIGNALED.store(true, atomic::Ordering::Relaxed);
+        // In a signal handler, we must be extremely careful. If try_from fails,
+        // we simply don't set the flag - this is safer than panicking in a signal handler.
+        if let Ok(sig) = signal::Signal::try_from(signal) {
+            if sig == signal::Signal::SIGTERM {
+                SIGNALED.store(true, atomic::Ordering::Relaxed);
+            }
         }
     }
 
     let handler = signal::SigHandler::Handler(handle_sigterm);
-    unsafe { signal::signal(signal::Signal::SIGTERM, handler) }.unwrap();
+    unsafe { signal::signal(signal::Signal::SIGTERM, handler) }
+        .expect("failed to install SIGTERM handler");
 }
 
 /// Report that a signal is being sent if the verbose flag is set.
 fn report_if_verbose(signal: usize, cmd: &str, verbose: bool) {
     if verbose {
-        let s = signal_name_by_value(signal).unwrap();
-        show_error!(
-            "{}",
-            translate!("timeout-verbose-sending-signal", "signal" => s, "command" => cmd.quote())
-        );
+        if let Some(s) = signal_name_by_value(signal) {
+            show_error!(
+                "{}",
+                translate!("timeout-verbose-sending-signal", "signal" => s, "command" => cmd.quote())
+            );
+        } else {
+            // Fallback for unknown signal numbers
+            show_error!(
+                "{}",
+                translate!("timeout-verbose-sending-signal", "signal" => format!("signal {signal}"), "command" => cmd.quote())
+            );
+        }
     }
 }
 
@@ -223,8 +241,10 @@ fn send_signal(process: &mut Child, signal: usize, foreground: bool) {
         let _ = process.send_signal(signal);
     } else {
         let _ = process.send_signal_group(signal);
-        let kill_signal = signal_by_name_or_value("KILL").unwrap();
-        let continued_signal = signal_by_name_or_value("CONT").unwrap();
+        let kill_signal =
+            signal_by_name_or_value("KILL").expect("KILL signal should always be valid");
+        let continued_signal =
+            signal_by_name_or_value("CONT").expect("CONT signal should always be valid");
         if signal != kill_signal && signal != continued_signal {
             _ = process.send_signal_group(continued_signal);
         }
@@ -263,13 +283,21 @@ fn wait_or_kill_process(
     match process.wait_or_timeout(duration, None) {
         Ok(Some(status)) => {
             if preserve_status {
-                Ok(status.code().unwrap_or_else(|| status.signal().unwrap()))
+                let exit_code = status.code().unwrap_or_else(|| {
+                    status.signal().unwrap_or_else(|| {
+                        // Extremely rare: process exited but we have neither exit code nor signal.
+                        // This can happen on some platforms or in unusual termination scenarios.
+                        ExitStatus::WaitingFailed.into()
+                    })
+                });
+                Ok(exit_code)
             } else {
                 Ok(ExitStatus::TimeoutFailed.into())
             }
         }
         Ok(None) => {
-            let signal = signal_by_name_or_value("KILL").unwrap();
+            let signal =
+                signal_by_name_or_value("KILL").expect("KILL signal should always be valid");
             report_if_verbose(signal, cmd, verbose);
             send_signal(process, signal, foreground);
             process.wait()?;
@@ -354,10 +382,15 @@ fn timeout(
     // structure of `wait_or_kill_process()`. They can probably be
     // refactored into some common function.
     match process.wait_or_timeout(duration, Some(&SIGNALED)) {
-        Ok(Some(status)) => Err(status
-            .code()
-            .unwrap_or_else(|| preserve_signal_info(status.signal().unwrap()))
-            .into()),
+        Ok(Some(status)) => {
+            let exit_code = status.code().unwrap_or_else(|| {
+                status
+                    .signal()
+                    .map(preserve_signal_info)
+                    .unwrap_or_else(|| ExitStatus::WaitingFailed.into())
+            });
+            Err(exit_code.into())
+        }
         Ok(None) => {
             report_if_verbose(signal, &cmd[0], verbose);
             send_signal(process, signal, foreground);
@@ -370,7 +403,17 @@ fn timeout(
                         if let Some(ec) = status.code() {
                             Err(ec.into())
                         } else if let Some(sc) = status.signal() {
-                            Err(ExitStatus::SignalSent(sc.try_into().unwrap()).into())
+                            // Signal codes are typically small positive integers (1-31 on most systems).
+                            // try_into::<usize>() should never fail for valid signal numbers.
+                            match sc.try_into() {
+                                Ok(signal_usize) => {
+                                    Err(ExitStatus::SignalSent(signal_usize).into())
+                                }
+                                Err(_) => {
+                                    // Extremely rare: signal number doesn't fit in usize
+                                    Err(ExitStatus::CommandTimedOut.into())
+                                }
+                            }
                         } else {
                             Err(ExitStatus::CommandTimedOut.into())
                         }
