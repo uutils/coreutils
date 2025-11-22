@@ -114,7 +114,7 @@ jobs:
 
     ### Run tests as user
     - name: Run GNU tests
-      shell: bash
+      shell: 'script -q -e -c "bash {0}"'
       run: |
         ## Run GNU tests
         path_GNU='gnu'
