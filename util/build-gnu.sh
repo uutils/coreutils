@@ -4,7 +4,7 @@
 
 # spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
 # spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink texinfo CARGOFLAGS
-# spell-checker:ignore openat TOCTOU
+# spell-checker:ignore openat TOCTOU CFLAGS
 
 set -e
 
@@ -130,15 +130,16 @@ if test -f gnu-built; then
 else
     # Disable useless checks
     sed -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
+    export CFLAGS="${CFLAGS} -O0 -pipe -s" # For faster build time.
     ./bootstrap --skip-po
-    ./configure --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
+    ./configure --quiet --disable-gcc-warnings --disable-nls --disable-bold-man-page-references \
       "$([ "${SELINUX_ENABLED}" = 1 ] && echo --with-selinux || echo --without-selinux)"
     #Add timeout to to protect against hangs
     sed -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
     sed -i 's| tr | /usr/bin/tr |' tests/init.sh
     # Use a better diff
     sed -i 's|diff -c|diff -u|g' tests/Coreutils.pm
-    "${MAKE}" -j "$("${NPROC}")"
+    "${MAKE}" -j "$("${NPROC}")" src/getlimits # needed for tests
 
     # Handle generated factor tests
     t_first=00
