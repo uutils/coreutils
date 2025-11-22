@@ -87,7 +87,13 @@ impl MultifileReader<'_> {
                             // print an error at the time that the file is needed,
                             // then move to the next file.
                             // This matches the behavior of the original `od`
-                            show_error!("{}: {e}", fname.maybe_quote());
+                            // Format error without OS error code to match GNU od
+                            let error_msg = match e.kind() {
+                                io::ErrorKind::NotFound => "No such file or directory",
+                                io::ErrorKind::PermissionDenied => "Permission denied",
+                                _ => "I/O error",
+                            };
+                            show_error!("{}: {}", fname.maybe_quote().external(true), error_msg);
                             self.any_err = true;
                         }
                     }

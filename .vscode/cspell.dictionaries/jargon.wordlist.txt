@@ -41,6 +41,7 @@ duplicative
 dsync
 endianness
 enqueue
+ERANGE
 errored
 executable
 executables
