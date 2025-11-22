@@ -25,10 +25,7 @@ who-help-users = liste les utilisateurs connectés
 who-help-mesg = ajoute le statut de message de l'utilisateur comme +, - ou ?
 
 # Output messages
-who-user-count = # { $count ->
-    [one] utilisateur={ $count }
-   *[other] utilisateurs={ $count }
-}
+who-user-count = # utilisateurs={ $count }
 
 # Idle time indicators
 who-idle-old = anc.
