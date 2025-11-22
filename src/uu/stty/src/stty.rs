@@ -611,12 +611,25 @@ fn print_terminal_size(
         );
     }
 
-    #[cfg(any(target_os = "linux", target_os = "redox"))]
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "haiku"))]
     {
         let line = termios.line_discipline;
         printer.print(&translate!("stty-output-line", "line" => line));
     }
-    #[cfg(not(any(target_os = "linux", target_os = "redox")))]
+    #[cfg(target_os = "redox")]
+    {
+        // nix does not expose the line discipline on Redox, so we get the
+        // underlying libc::termios struct to read that information.
+        let libc_termios: nix::libc::termios = termios.clone().into();
+        let line = libc_termios.c_line;
+        printer.print(&translate!("stty-output-line", "line" => line));
+    }
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "redox"
+    )))]
     let _ = termios; // remove this hack when we switched to rustix completely
     printer.flush();
     Ok(())
@@ -968,7 +981,7 @@ fn apply_special_setting(
         SpecialSetting::Rows(n) => size.ws_row = *n,
         SpecialSetting::Cols(n) => size.ws_col = *n,
         #[cfg_attr(
-            not(any(target_os = "linux", target_os = "android")),
+            not(any(target_os = "linux", target_os = "android", target_os = "haiku")),
             expect(unused_variables)
         )]
         SpecialSetting::Line(n) => {
@@ -976,6 +989,12 @@ fn apply_special_setting(
             #[cfg(any(target_os = "linux", target_os = "android"))]
             {
                 _termios.line_discipline = *n;
+            }
+            // On Haiku the field is a `c_char`, so convert from `u8` first.
+            #[cfg(target_os = "haiku")]
+            {
+                _termios.line_discipline =
+                    (*n).try_into().map_err(|_| nix::errno::Errno::ERANGE)?;
             }
         }
     }
