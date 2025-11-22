@@ -18,7 +18,6 @@ fn test_users_no_arg() {
 
 #[test]
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
-#[ignore = "issue #3219"]
 fn test_users_check_name() {
     #[cfg(target_os = "linux")]
     let util_name = util_name!();
