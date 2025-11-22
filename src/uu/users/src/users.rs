@@ -10,6 +10,8 @@ use std::path::Path;
 
 use clap::builder::ValueParser;
 use clap::{Arg, Command};
+use nix::sys::signal::kill;
+use nix::unistd::Pid;
 use uucore::error::UResult;
 use uucore::format_usage;
 use uucore::translate;
@@ -31,6 +33,19 @@ fn get_long_usage() -> String {
     let default_path: &str = OPENBSD_UTMP_FILE;
 
     translate!("users-long-usage", "default_path" => default_path)
+}
+
+#[inline]
+fn pid_is_alive(pid: i32) -> bool {
+    if pid <= 0 {
+        return true;
+    }
+
+    match kill(Pid::from_raw(pid), None) {
+        Ok(()) => true,
+        Err(nix::errno::Errno::ESRCH) => false,
+        Err(_) => true,
+    }
 }
 
 #[uucore::main]
@@ -66,7 +81,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let filename = maybe_file.unwrap_or(utmpx::DEFAULT_FILE.as_ref());
 
         users = Utmpx::iter_all_records_from(filename)
-            .filter(|ut| ut.is_user_process())
+            .filter(|ut| ut.is_user_process() && pid_is_alive(ut.pid()))
             .map(|ut| ut.user())
             .collect::<Vec<_>>();
     };
