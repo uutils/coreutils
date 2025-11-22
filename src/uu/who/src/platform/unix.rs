@@ -13,6 +13,9 @@ use uucore::error::{FromIo, UResult};
 use uucore::libc::{S_IWGRP, STDIN_FILENO, ttyname};
 use uucore::translate;
 
+use nix::sys::signal::kill;
+use nix::unistd::Pid;
+
 use uucore::utmpx::{self, UtmpxRecord, time};
 
 use std::borrow::Cow;
@@ -178,6 +181,19 @@ fn time_string(ut: &UtmpxRecord) -> String {
 }
 
 #[inline]
+fn pid_is_alive(pid: i32) -> bool {
+    if pid <= 0 {
+        return true;
+    }
+
+    match kill(Pid::from_raw(pid), None) {
+        Ok(()) => true,
+        Err(nix::errno::Errno::ESRCH) => false,
+        Err(_) => true,
+    }
+}
+
+#[inline]
 fn current_tty() -> String {
     unsafe {
         let res = ttyname(STDIN_FILENO);
@@ -210,7 +226,7 @@ impl Who {
         };
         if self.short_list {
             let users = utmpx::Utmpx::iter_all_records_from(f)
-                .filter(|ut| ut.is_user_process())
+                .filter(|ut| ut.is_user_process() && pid_is_alive(ut.pid()))
                 .map(|ut| ut.user())
                 .collect::<Vec<_>>();
             println!("{}", users.join(" "));
@@ -229,7 +245,7 @@ impl Who {
 
             for ut in records {
                 if !self.my_line_only || cur_tty == ut.tty_device() {
-                    if self.need_users && ut.is_user_process() {
+                    if self.need_users && ut.is_user_process() && pid_is_alive(ut.pid()) {
                         self.print_user(&ut)?;
                     } else {
                         match ut.record_type() {
