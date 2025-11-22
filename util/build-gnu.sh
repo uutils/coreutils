@@ -4,7 +4,7 @@
 
 # spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
 # spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink texinfo CARGOFLAGS
-# spell-checker:ignore openat TOCTOU
+# spell-checker:ignore openat TOCTOU CFLAGS
 
 set -e
 
@@ -131,14 +131,19 @@ else
     # Disable useless checks
     sed -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
     ./bootstrap --skip-po
-    ./configure --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
+    # build getlimits
+    CFLAGS="${CFLAGS} -O0 -pipe -s" ./configure -C --quiet --disable-gcc-warnings --disable-nls --disable-bold-man-page-references \
+      --enable-no-install-program="[,b2sum,base32,base64,basename,basenc,cat,chcon,chgrp,chmod,chown,chroot,cksum,comm,cp,csplit,cut,date,dd,df,dir,dircolors,dirname,du,echo,env,expand,expr,factor,false,fmt,fold,groups,head,hostid,id,install,join,kill,link,ln,logname,ls,md5sum,mkdir,mkfifo,mknod,mktemp,mv,nice,nl,nohup,nproc,numfmt,od,paste,pathchk,pinky,pr,printenv,printf,ptx,pwd,readlink,realpath,rm,rmdir,runcon,seq,sha1sum,sha224sum,sha256sum,sha384sum,sha512sum,shred,shuf,sleep,sort,split,stat,stdbuf,stty,sum,sync,tac,tail,tee,test,timeout,touch,tr,true,truncate,tsort,tty,uname,unexpand,uniq,unlink,uptime,users,vdir,wc,who,whoami,yes" \
+      "$([ "${SELINUX_ENABLED}" = 1 ] && echo --with-selinux || echo --without-selinux)"
+    "${MAKE}" -j "$("${NPROC}")"
+    # build test suite
+    CFLAGS="${CFLAGS} -O0 -pipe -s" ./configure -C --quiet --disable-gcc-warnings --disable-nls --disable-bold-man-page-references \
       "$([ "${SELINUX_ENABLED}" = 1 ] && echo --with-selinux || echo --without-selinux)"
     #Add timeout to to protect against hangs
     sed -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
     sed -i 's| tr | /usr/bin/tr |' tests/init.sh
     # Use a better diff
     sed -i 's|diff -c|diff -u|g' tests/Coreutils.pm
-    "${MAKE}" -j "$("${NPROC}")"
 
     # Handle generated factor tests
     t_first=00
