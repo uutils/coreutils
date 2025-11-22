@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (paths) wtmp
+// spell-checker:ignore (paths) wtmp ESRCH
 
 use std::ffi::OsString;
 use std::path::Path;
