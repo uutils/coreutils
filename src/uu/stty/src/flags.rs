@@ -135,16 +135,17 @@ pub const OUTPUT_FLAGS: &[Flag<O>] = &[
         target_os = "linux",
         target_os = "macos"
     ))]
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos"
+    ))]
     // Not supported by nix.
     // See: https://github.com/nix-rust/nix/pull/2701
-    // #[cfg(any(
-    //     target_os = "android",
-    //     target_os = "haiku",
-    //     target_os = "ios",
-    //     target_os = "linux",
-    //     target_os = "macos"
-    // ))]
-    // Flag::new("ofill", O::OFILL),
+    // FIXME: Flag::new("ofill", O::OFILL),
+    Flag::new("ofill", O::from_bits_retain(nix::libc::OFILL)),
     Flag::new("ofdel", O::OFDEL),
     #[cfg(any(
         target_os = "android",
