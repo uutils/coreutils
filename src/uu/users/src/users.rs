@@ -36,6 +36,7 @@ fn get_long_usage() -> String {
 }
 
 #[inline]
+#[cfg(not(target_os = "openbsd"))]
 fn pid_is_alive(pid: i32) -> bool {
     if pid <= 0 {
         return true;
