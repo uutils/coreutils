@@ -110,15 +110,6 @@ test -f "${UU_BUILD_DIR}/[" || (cd ${UU_BUILD_DIR} && ln -s "test" "[")
 
 cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
 
-# Any binaries that aren't built become `false` so their tests fail
-for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs); do
-    bin_path="${UU_BUILD_DIR}/${binary}"
-    test -f "${bin_path}" || {
-        echo "'${binary}' was not built with uutils, using the 'false' program"
-        cp "${UU_BUILD_DIR}/false" "${bin_path}"
-    }
-done
-
 # Always update the PATH to test the uutils coreutils instead of the GNU coreutils
 # This ensures the correct path is used even if the repository was moved or rebuilt in a different location
 sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" tests/local.mk
