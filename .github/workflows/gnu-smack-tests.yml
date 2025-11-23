@@ -116,20 +116,14 @@ jobs:
           OVMF="/usr/share/qemu/OVMF.fd"
           PORT_SSH=3333
 
-          # Use a modern CPU model; enable KVM if available
-          EXTRA_FLAGS=""
-          if [ -e /dev/kvm ]; then
-            echo "Using KVM acceleration"
-            EXTRA_FLAGS="-enable-kvm -cpu kvm64 -cpu Skylake-Client-v4"
-          else
-            echo "No /dev/kvm, using TCG"
-            EXTRA_FLAGS="-cpu Skylake-Client-v4"
-          fi
+          echo "Starting QEMU in TCG mode (no KVM)..."
 
           qemu-system-x86_64 \
-            -hda "$DISK_IMAGE" \
+            -machine accel=tcg \
+            -drive file="$DISK_IMAGE",if=virtio,format=raw \
             -m 2048 \
-            -smp 4 \
+            -smp 2 \
+            -cpu Skylake-Client-v4 \
             -vga virtio \
             -device virtio-rng-pci \
             -serial mon:stdio \
@@ -137,7 +131,6 @@ jobs:
             -net nic \
             -net user,hostfwd=tcp::$PORT_SSH-:22 \
             -bios "$OVMF" \
-            $EXTRA_FLAGS \
             -nographic \
             > /tmp/qemu-smack.log 2>&1 &
 
