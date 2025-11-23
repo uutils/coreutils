@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main, master ]
 
+# End the current execution if there is a new changeset in the PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   gnu-smack-tests:
     runs-on: ubuntu-latest
@@ -105,30 +110,40 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Locate the disk image (should be named Redpesk-OS.img according to docs)
           DISK_IMAGE=$(ls Redpesk-OS*.img 2>/dev/null || ls *.img)
           echo "Using disk image: $DISK_IMAGE"
 
           OVMF="/usr/share/qemu/OVMF.fd"
           PORT_SSH=3333
 
-          # Start QEMU in the background, headless, with SSH port forwarded.
-          # redpesk SMACK images are built with SMACK enabled (smack/minimal). 
+          # Use a modern CPU model; enable KVM if available
+          EXTRA_FLAGS=""
+          if [ -e /dev/kvm ]; then
+            echo "Using KVM acceleration"
+            EXTRA_FLAGS="-enable-kvm -cpu kvm64 -cpu Skylake-Client-v4"
+          else
+            echo "No /dev/kvm, using TCG"
+            EXTRA_FLAGS="-cpu Skylake-Client-v4"
+          fi
+
           qemu-system-x86_64 \
             -hda "$DISK_IMAGE" \
             -m 2048 \
             -smp 4 \
-            -cpu qemu64 \
+            -vga virtio \
             -device virtio-rng-pci \
+            -serial mon:stdio \
+            -serial null \
             -net nic \
             -net user,hostfwd=tcp::$PORT_SSH-:22 \
             -bios "$OVMF" \
+            $EXTRA_FLAGS \
             -nographic \
             > /tmp/qemu-smack.log 2>&1 &
 
           echo $! > /tmp/qemu-smack.pid
           echo "QEMU started with PID $(cat /tmp/qemu-smack.pid)"
-
+          
       - name: Wait for SSH in guest
         run: |
           set -euo pipefail
@@ -162,7 +177,7 @@ jobs:
             # Inline QEMU log tail on each failed attempt
             if [ -f /tmp/qemu-smack.log ]; then
               echo "----- QEMU SMACK guest log tail (attempt $i) -----"
-              tail -n 20 /tmp/qemu-smack.log || true
+              tail -n 80 /tmp/qemu-smack.log || true
               echo "-----------------------------------------------"
             fi
 
