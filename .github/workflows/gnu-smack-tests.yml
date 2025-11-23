@@ -159,6 +159,13 @@ jobs:
               echo "SSH is up."
               exit 0
             fi
+            # Inline QEMU log tail on each failed attempt
+            if [ -f /tmp/qemu-smack.log ]; then
+              echo "----- QEMU SMACK guest log tail (attempt $i) -----"
+              tail -n 20 /tmp/qemu-smack.log || true
+              echo "-----------------------------------------------"
+            fi
+
 
             echo "SSH not ready yet (attempt $i)..."
             sleep 5
