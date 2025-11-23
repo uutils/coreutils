@@ -169,8 +169,6 @@ grep -rl '\$abs_path_dir_' tests/*/*.sh | xargs -r sed -i "s|\$abs_path_dir_|${U
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 sed -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
-# tests/ls/abmon-align.sh - https://github.com/uutils/coreutils/issues/3505
-sed -i 's|touch |/usr/bin/touch |' tests/test/test-N.sh tests/ls/abmon-align.sh
 
 # our messages are better
 sed -i "s|cannot stat 'symlink': Permission denied|not writing through dangling symlink 'symlink'|" tests/cp/fail-perm.sh
