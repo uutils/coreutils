@@ -195,10 +195,14 @@ jobs:
           PORT_SSH=3333
           SSH_BASE="sshpass -p root ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $PORT_SSH root@localhost"
 
-          # Create target directory and untar from stdin
-          # We tar AFTER build-gnu.sh so the GNU harness artifacts are included.
-          tar cz . | $SSH_BASE 'mkdir -p /root/uutils && cd /root/uutils && tar xz'
+          echo "Copying repo (with util/ and tests/) into guest at /root/uutils ..."
+          # github.workspace is the repo root (where util/ and tests/ live)
+          cd "$GITHUB_WORKSPACE"
+          tar cz . | $SSH_BASE 'rm -rf /root/uutils && mkdir -p /root/uutils && cd /root/uutils && tar xz'
 
+          # Quick sanity check: list util/ inside the guest
+          $SSH_BASE 'cd /root/uutils && ls && ls util'
+          
       - name: Run SMACK GNU tests inside guest
         run: |
           set -euo pipefail
@@ -210,10 +214,17 @@ jobs:
           $SSH_BASE 'grep smackfs /proc/filesystems || (echo "smackfs not present"; exit 1)'
 
           echo "Running SMACK-related GNU tests (mkdir + id)..."
-          # These are the GNU tests that depend on SMACK support.
-          # util/run-gnu-test.sh is the existing script in uutils for running individual tests.
           set +e
-          $SSH_BASE 'cd /root/uutils && bash util/run-gnu-test.sh tests/mkdir/smack-no-root.sh tests/mkdir/smack-root.sh tests/id/smack.sh'
+          $SSH_BASE '
+            set -e
+            cd /root/uutils
+            echo "PWD: $PWD"
+            ls util
+            bash util/run-gnu-test.sh \
+              tests/mkdir/smack-no-root.sh \
+              tests/mkdir/smack-root.sh \
+              tests/id/smack.sh
+          '
           RC=$?
           set -e
 
@@ -225,7 +236,6 @@ jobs:
           fi
 
           exit $RC
-
       - name: Dump QEMU log on failure
         if: failure()
         run: |
