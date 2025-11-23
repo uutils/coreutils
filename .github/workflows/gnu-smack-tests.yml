@@ -58,7 +58,6 @@ jobs:
         shell: bash
         run: |
           ## Build binaries
-          cd 'uutils'
           env PROFILE=release-small bash util/build-gnu.sh
 
         
