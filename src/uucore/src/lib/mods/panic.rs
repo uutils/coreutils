@@ -53,7 +53,7 @@ pub fn mute_sigpipe_panic() {
 #[cfg(unix)]
 pub fn preserve_inherited_sigpipe() {
     use nix::libc;
-    
+
     // Check if parent specified that SIGPIPE should be default
     if let Ok(val) = std::env::var("RUST_SIGPIPE") {
         if val == "default" {
@@ -70,6 +70,3 @@ pub fn preserve_inherited_sigpipe() {
 pub fn preserve_inherited_sigpipe() {
     // No-op on non-Unix platforms
 }
-
-
-

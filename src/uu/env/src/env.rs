@@ -1028,7 +1028,7 @@ fn apply_default_signal(request: &SignalRequest, log: &mut SignalActionLog) -> U
         let sig = signal_from_value(sig_value)?;
         reset_signal(sig)?;
         log.record(sig_value, SignalActionKind::Default, explicit);
-        
+
         // Set environment variable to communicate to Rust child processes
         // that SIGPIPE should be default (not ignored)
         if sig_value == nix::libc::SIGPIPE as usize {
@@ -1036,7 +1036,7 @@ fn apply_default_signal(request: &SignalRequest, log: &mut SignalActionLog) -> U
                 std::env::set_var("RUST_SIGPIPE", "default");
             }
         }
-        
+
         Ok(())
     })
 }
