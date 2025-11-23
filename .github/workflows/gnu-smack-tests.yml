@@ -54,12 +54,14 @@ jobs:
             ovmf \
             sshpass
 
-      - name: Build GNU test harness on host
+      - name: Build binaries
+        shell: bash
         run: |
-          set -euo pipefail
-          # This is the existing helper in uutils/coreutils
-          bash util/build-gnu.sh
+          ## Build binaries
+          cd 'uutils'
+          env PROFILE=release-small bash util/build-gnu.sh
 
+        
       - name: Download redpesk SMACK minimal x86_64 image
         working-directory: /tmp
         run: |
