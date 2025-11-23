@@ -177,6 +177,10 @@ fn parse_signal_opt(target: &mut SignalRequest, opt: &OsStr) -> UResult<()> {
     if opt.is_empty() {
         return Ok(());
     }
+    if opt == "__ALL__" {
+        target.apply_all = true;
+        return Ok(());
+    }
 
     for sig in opt
         .as_bytes()
@@ -223,6 +227,10 @@ impl SignalRequest {
         if self.apply_all {
             for sig_value in 1..ALL_SIGNALS.len() {
                 if self.signals.contains(&sig_value) {
+                    continue;
+                }
+                // SIGKILL (9) and SIGSTOP (17 on mac, 19 on linux) cannot be caught or ignored
+                if sig_value == libc::SIGKILL as usize || sig_value == libc::SIGSTOP as usize {
                     continue;
                 }
                 f(sig_value, false)?;
@@ -273,15 +281,20 @@ fn build_signal_request(matches: &clap::ArgMatches, option: &str) -> UResult<Sig
     let mut request = SignalRequest::default();
     let mut provided_values = 0usize;
 
+    let mut explicit_empty = false;
     if let Some(iter) = matches.get_many::<OsString>(option) {
         for opt in iter {
+            if opt.is_empty() {
+                explicit_empty = true;
+                continue;
+            }
             provided_values += 1;
             parse_signal_opt(&mut request, opt)?;
         }
     }
 
-    let occurrences = matches.get_count(option) as usize;
-    if occurrences > provided_values {
+    let present = matches.contains_id(option);
+    if present && provided_values == 0 && !explicit_empty {
         request.apply_all = true;
     }
 
@@ -423,6 +436,7 @@ pub fn uu_app() -> Command {
                 .num_args(0..=1)
                 .require_equals(true)
                 .action(ArgAction::Append)
+                .default_missing_value("")
                 .value_parser(ValueParser::os_string())
                 .help(translate!("env-help-ignore-signal")),
         )
@@ -433,6 +447,7 @@ pub fn uu_app() -> Command {
                 .num_args(0..=1)
                 .require_equals(true)
                 .action(ArgAction::Append)
+                .default_missing_value("")
                 .value_parser(ValueParser::os_string())
                 .help(translate!("env-help-default-signal")),
         )
@@ -443,6 +458,7 @@ pub fn uu_app() -> Command {
                 .num_args(0..=1)
                 .require_equals(true)
                 .action(ArgAction::Append)
+                .default_missing_value("")
                 .value_parser(ValueParser::os_string())
                 .help(translate!("env-help-block-signal")),
         )
@@ -628,7 +644,18 @@ impl EnvAppData {
         original_args: impl uucore::Args,
     ) -> Result<(Vec<OsString>, clap::ArgMatches), Box<dyn UError>> {
         let original_args: Vec<OsString> = original_args.collect();
-        let args = self.process_all_string_arguments(&original_args)?;
+        let mut args = self.process_all_string_arguments(&original_args)?;
+
+        for arg in &mut args {
+            if arg == "--ignore-signal" {
+                *arg = OsString::from("--ignore-signal=__ALL__");
+            } else if arg == "--default-signal" {
+                *arg = OsString::from("--default-signal=__ALL__");
+            } else if arg == "--block-signal" {
+                *arg = OsString::from("--block-signal=__ALL__");
+            }
+        }
+
         let app = uu_app();
         let matches = match app.try_get_matches_from(args) {
             Ok(matches) => matches,
