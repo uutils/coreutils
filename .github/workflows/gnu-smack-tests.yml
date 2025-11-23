@@ -12,47 +12,47 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: Checkout code (uutils)
-        uses: actions/checkout@v6
-        with:
-          path: 'uutils'
-          persist-credentials: false
-      - name: Extract GNU version from build-gnu.sh
-        id: gnu-version-selinux
-        run: |
-          GNU_VERSION=$(grep '^release_tag_GNU=' uutils/util/build-gnu.sh | cut -d'"' -f2)
-          if [ -z "$GNU_VERSION" ]; then
-            echo "Error: Failed to extract GNU version from build-gnu.sh"
-            exit 1
-          fi
-          echo "REPO_GNU_REF=${GNU_VERSION}" >> $GITHUB_ENV
-          echo "Extracted GNU version: ${GNU_VERSION}"
+      # - name: Checkout code (uutils)
+      #   uses: actions/checkout@v6
+      #   with:
+      #     path: 'uutils'
+      #     persist-credentials: false
+      # - name: Extract GNU version from build-gnu.sh
+      #   id: gnu-version-selinux
+      #   run: |
+      #     GNU_VERSION=$(grep '^release_tag_GNU=' uutils/util/build-gnu.sh | cut -d'"' -f2)
+      #     if [ -z "$GNU_VERSION" ]; then
+      #       echo "Error: Failed to extract GNU version from build-gnu.sh"
+      #       exit 1
+      #     fi
+      #     echo "REPO_GNU_REF=${GNU_VERSION}" >> $GITHUB_ENV
+      #     echo "Extracted GNU version: ${GNU_VERSION}"
 
-      - name: Checkout code (GNU coreutils)
-        uses: actions/checkout@v6
-        with:
-          repository: 'coreutils/coreutils'
-          path: 'gnu'
-          ref: ${{ env.REPO_GNU_REF }}
-          submodules: false
-          persist-credentials: false
-      - name: Override submodule URL and initialize submodules
-        # Use github instead of upstream git server
-        run: |
-          git submodule sync --recursive
-          git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
-          git submodule update --init --recursive --depth 1
-        working-directory: gnu
+      # - name: Checkout code (GNU coreutils)
+      #   uses: actions/checkout@v6
+      #   with:
+      #     repository: 'coreutils/coreutils'
+      #     path: 'gnu'
+      #     ref: ${{ env.REPO_GNU_REF }}
+      #     submodules: false
+      #     persist-credentials: false
+      # - name: Override submodule URL and initialize submodules
+      #   # Use github instead of upstream git server
+      #   run: |
+      #     git submodule sync --recursive
+      #     git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
+      #     git submodule update --init --recursive --depth 1
+      #   working-directory: gnu
     
 
-      #### Build environment setup
-      - name: Install dependencies
-        shell: bash
-        run: |
-          ## Install dependencies
-          sudo apt-get update
-          ## Check that build-gnu.sh works on the non SELinux system by installing libselinux only on lima
-          sudo apt-get install -y autopoint gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev attr quilt
+      # #### Build environment setup
+      # - name: Install dependencies
+      #   shell: bash
+      #   run: |
+      #     ## Install dependencies
+      #     sudo apt-get update
+      #     ## Check that build-gnu.sh works on the non SELinux system by installing libselinux only on lima
+      #     sudo apt-get install -y autopoint gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev attr quilt
 
       - name: Install host dependencies (GNU harness + QEMU + OVMF + sshpass)
         run: |
@@ -68,12 +68,12 @@ jobs:
             ovmf \
             sshpass
 
-      - name: Build binaries
-        shell: bash
-        run: |
-          ## Build binaries
-          cd uutils
-          env PROFILE=release-small bash util/build-gnu.sh
+      # - name: Build binaries
+      #   shell: bash
+      #   run: |
+      #     ## Build binaries
+      #     cd uutils
+      #     env PROFILE=release-small bash util/build-gnu.sh
 
         
       - name: Download redpesk SMACK minimal x86_64 image
@@ -136,19 +136,43 @@ jobs:
           PORT_SSH=3333
           SSH_BASE="sshpass -p root ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $PORT_SSH root@localhost"
 
-          echo "Waiting for SSH to become available in the redpesk guest..."
+          if [ ! -f /tmp/qemu-smack.pid ]; then
+            echo "ERROR: /tmp/qemu-smack.pid not found – QEMU did not start?"
+            exit 1
+          fi
+
+          QEMU_PID=$(cat /tmp/qemu-smack.pid)
+          echo "Waiting for SSH to become available in the redpesk guest (PID $QEMU_PID)..."
+
           for i in $(seq 1 60); do
+            # If QEMU died, show why and bail out
+            if ! kill -0 "$QEMU_PID" 2>/dev/null; then
+              echo "ERROR: QEMU process $QEMU_PID is no longer running."
+              if [ -f /tmp/qemu-smack.log ]; then
+                echo "===== QEMU SMACK guest log (tail) ====="
+                tail -n 100 /tmp/qemu-smack.log || true
+              fi
+              exit 1
+            fi
+
             if $SSH_BASE 'echo ready' >/dev/null 2>&1; then
               echo "SSH is up."
               exit 0
             fi
+
+            echo "SSH not ready yet (attempt $i)..."
             sleep 5
           done
 
           echo "ERROR: SSH did not become ready in time."
-          kill "$(cat /tmp/qemu-smack.pid)" || true
-          exit 1
+          if [ -f /tmp/qemu-smack.log ]; then
+            echo "===== QEMU SMACK guest log (tail) ====="
+            tail -n 100 /tmp/qemu-smack.log || true
+          fi
 
+          kill "$QEMU_PID" || true
+          exit 1
+          
       - name: Copy repo with built harness into guest
         run: |
           set -euo pipefail
