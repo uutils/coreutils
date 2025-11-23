@@ -17,47 +17,47 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      # - name: Checkout code (uutils)
-      #   uses: actions/checkout@v6
-      #   with:
-      #     path: 'uutils'
-      #     persist-credentials: false
-      # - name: Extract GNU version from build-gnu.sh
-      #   id: gnu-version-selinux
-      #   run: |
-      #     GNU_VERSION=$(grep '^release_tag_GNU=' uutils/util/build-gnu.sh | cut -d'"' -f2)
-      #     if [ -z "$GNU_VERSION" ]; then
-      #       echo "Error: Failed to extract GNU version from build-gnu.sh"
-      #       exit 1
-      #     fi
-      #     echo "REPO_GNU_REF=${GNU_VERSION}" >> $GITHUB_ENV
-      #     echo "Extracted GNU version: ${GNU_VERSION}"
+      - name: Checkout code (uutils)
+        uses: actions/checkout@v6
+        with:
+          path: 'uutils'
+          persist-credentials: false
+      - name: Extract GNU version from build-gnu.sh
+        id: gnu-version-selinux
+        run: |
+          GNU_VERSION=$(grep '^release_tag_GNU=' uutils/util/build-gnu.sh | cut -d'"' -f2)
+          if [ -z "$GNU_VERSION" ]; then
+            echo "Error: Failed to extract GNU version from build-gnu.sh"
+            exit 1
+          fi
+          echo "REPO_GNU_REF=${GNU_VERSION}" >> $GITHUB_ENV
+          echo "Extracted GNU version: ${GNU_VERSION}"
 
-      # - name: Checkout code (GNU coreutils)
-      #   uses: actions/checkout@v6
-      #   with:
-      #     repository: 'coreutils/coreutils'
-      #     path: 'gnu'
-      #     ref: ${{ env.REPO_GNU_REF }}
-      #     submodules: false
-      #     persist-credentials: false
-      # - name: Override submodule URL and initialize submodules
-      #   # Use github instead of upstream git server
-      #   run: |
-      #     git submodule sync --recursive
-      #     git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
-      #     git submodule update --init --recursive --depth 1
-      #   working-directory: gnu
+      - name: Checkout code (GNU coreutils)
+        uses: actions/checkout@v6
+        with:
+          repository: 'coreutils/coreutils'
+          path: 'gnu'
+          ref: ${{ env.REPO_GNU_REF }}
+          submodules: false
+          persist-credentials: false
+      - name: Override submodule URL and initialize submodules
+        # Use github instead of upstream git server
+        run: |
+          git submodule sync --recursive
+          git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
+          git submodule update --init --recursive --depth 1
+        working-directory: gnu
     
 
-      # #### Build environment setup
-      # - name: Install dependencies
-      #   shell: bash
-      #   run: |
-      #     ## Install dependencies
-      #     sudo apt-get update
-      #     ## Check that build-gnu.sh works on the non SELinux system by installing libselinux only on lima
-      #     sudo apt-get install -y autopoint gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev attr quilt
+      #### Build environment setup
+      - name: Install dependencies
+        shell: bash
+        run: |
+          ## Install dependencies
+          sudo apt-get update
+          ## Check that build-gnu.sh works on the non SELinux system by installing libselinux only on lima
+          sudo apt-get install -y autopoint gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev attr quilt
 
       - name: Install host dependencies (GNU harness + QEMU + OVMF + sshpass)
         run: |
@@ -73,12 +73,12 @@ jobs:
             ovmf \
             sshpass
 
-      # - name: Build binaries
-      #   shell: bash
-      #   run: |
-      #     ## Build binaries
-      #     cd uutils
-      #     env PROFILE=release-small bash util/build-gnu.sh
+      - name: Build binaries
+        shell: bash
+        run: |
+          ## Build binaries
+          cd uutils
+          env PROFILE=release-small bash util/build-gnu.sh
 
         
       - name: Download redpesk SMACK minimal x86_64 image
