@@ -563,7 +563,96 @@ fn string_to_combo(arg: &str) -> Option<&str> {
         .map(|_| arg)
 }
 
+/// Parse and round a baud rate value using GNU stty's custom rounding algorithm.
+///
+/// Accepts decimal values with the following rounding rules:
+/// - If first digit after decimal > 5: round up
+/// - If first digit after decimal < 5: round down
+/// - If first digit after decimal == 5:
+///   - If followed by any non-zero digit: round up
+///   - If followed only by zeros (or nothing): banker's rounding (round to nearest even)
+///
+/// Examples: "9600.49" -> 9600, "9600.51" -> 9600, "9600.5" -> 9600 (even), "9601.5" -> 9602 (even)
+/// TODO: there are two special cases "exta" → B19200 and "extb" → B38400
+fn parse_baud_with_rounding(normalized: &str) -> Option<u32> {
+    let mut chars = normalized.chars().peekable();
+    let mut value = 0u32;
+
+    // Parse integer part
+    while let Some(c) = chars.peek() {
+        if c.is_ascii_digit() {
+            value = value * 10 + (chars.next().unwrap() as u32 - '0' as u32);
+        } else {
+            break;
+        }
+    }
+
+    // Handle fractional part if present
+    if let Some('.') = chars.next() {
+        let d0 = chars.next()?;
+        if !d0.is_ascii_digit() {
+            return None;
+        }
+        let first_digit = d0 as u32 - '0' as u32;
+
+        if first_digit > 5 {
+            value += 1;
+        } else if first_digit == 5 {
+            // Check if there are non-zero digits after the 5
+            let mut has_nonzero = false;
+            while let Some(c) = chars.next() {
+                if !c.is_ascii_digit() {
+                    return None;
+                }
+                if c != '0' {
+                    has_nonzero = true;
+                    break;
+                }
+            }
+
+            if has_nonzero {
+                value += 1;
+            } else {
+                // Banker's rounding: round to nearest even
+                value += value & 1;
+            }
+
+            // Consume remaining digits
+            while let Some(c) = chars.next() {
+                if !c.is_ascii_digit() {
+                    return None;
+                }
+            }
+        } else {
+            // first_digit < 5: round down, but still validate remaining digits
+            while let Some(c) = chars.next() {
+                if !c.is_ascii_digit() {
+                    return None;
+                }
+            }
+        }
+    } else if chars.peek().is_some() {
+        // Non-digit character after integer part
+        return None;
+    }
+
+    Some(value)
+}
+
 fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
+    // Reject invalid formats
+    if arg != arg.trim_end()
+        || arg.trim().starts_with('-')
+        || arg.trim().starts_with("++")
+        || arg.contains('E')
+        || arg.contains('e')
+    {
+        return None;
+    }
+
+    let normalized = arg.trim().trim_start_matches('+');
+    let value = parse_baud_with_rounding(normalized)?;
+
     // BSDs use a u32 for the baud rate, so any decimal number applies.
     #[cfg(any(
         target_os = "freebsd",
@@ -573,9 +662,7 @@ fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
-    if let Ok(n) = arg.parse::<u32>() {
-        return Some(AllFlags::Baud(n));
-    }
+    return Some(AllFlags::Baud(value));
 
     #[cfg(not(any(
         target_os = "freebsd",
@@ -586,7 +673,7 @@ fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
         target_os = "openbsd"
     )))]
     for (text, baud_rate) in BAUD_RATES {
-        if *text == arg {
+        if text.parse::<u32>().ok() == Some(value) {
             return Some(AllFlags::Baud(*baud_rate));
         }
     }
