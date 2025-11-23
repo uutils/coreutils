@@ -72,14 +72,6 @@ jobs:
             qemu-system-x86 \
             ovmf \
             sshpass
-
-      - name: Build binaries
-        shell: bash
-        run: |
-          ## Build binaries
-          cd uutils
-          env PROFILE=release-small bash util/build-gnu.sh
-
         
       - name: Download redpesk SMACK minimal x86_64 image
         working-directory: /tmp
@@ -258,13 +250,38 @@ jobs:
           PORT_SSH=3333
           SSH_BASE="sshpass -p root ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $PORT_SSH root@localhost"
 
-          # Install build deps inside redpesk (uses dnf) 
-          $SSH_BASE 'dnf -y install gcc make autoconf automake libtool gettext texinfo gawk bison pkg-config git rust cargo'
+          # 1) Install build deps + curl inside redpesk
+          $SSH_BASE '
+            set -euo pipefail
+            dnf -y install \
+              gcc make autoconf automake libtool \
+              gettext texinfo \
+              gawk bison \
+              pkg-config \
+              git \
+              curl
+          '
 
-          # Build GNU+uutils harness in the same layout util/run-gnu-test.sh expects:
-          # /root/uutils (uutils) and /root/gnu (GNU coreutils).
-          $SSH_BASE 'cd /root/uutils && bash util/build-gnu.sh'
-          
+          # 2) Install latest Rust (stable) via rustup in the guest
+          $SSH_BASE '
+            set -euo pipefail
+
+            if ! command -v rustup >/dev/null 2>&1; then
+              curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs \
+                | sh -s -- -y --profile minimal --default-toolchain stable
+            fi
+
+            . "$HOME/.cargo/env"
+
+            # Ensure this directory uses the rustup toolchain, not system cargo
+            cd /root/uutils
+            rustup override set stable
+
+            # 3) Build GNU+uutils harness with the latest Rust
+            PATH="$HOME/.cargo/bin:$PATH" \
+              PROFILE=release-small \
+              bash util/build-gnu.sh
+          '          
       - name: Run SMACK GNU tests inside guest
         run: |
           set -euo pipefail
