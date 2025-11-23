@@ -62,6 +62,9 @@ enum LnError {
 
     #[error("{}", translate!("ln-error-extra-operand", "operand" => _0.to_string_lossy(), "program" => _1.clone()))]
     ExtraOperand(OsString, String),
+
+    #[error("{}", translate!("ln-failed-to-create-hard-link-dir", "source" => _0.to_string_lossy()))]
+    FailedToCreateHardLinkDir(PathBuf),
 }
 
 impl UError for LnError {
@@ -431,6 +434,12 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     if settings.symbolic {
         symlink(&source, dst)?;
     } else {
+        // Cannot create hard link to a directory directly
+        // We can however create hard link to a symlink that points to a directory, so long as -L is not passed
+        if src.is_dir() && (!src.is_symlink() || settings.logical) {
+            return Err(LnError::FailedToCreateHardLinkDir(source.to_path_buf()).into());
+        }
+
         let p = if settings.logical && source.is_symlink() {
             // if we want to have an hard link,
             // source is a symlink and -L is passed

@@ -280,7 +280,6 @@ members = [
   "src/uu/stdbuf/src/libstdbuf",
   "src/uucore",
   "src/uucore_procs",
-  "tests/benches/factor",
   "tests/uutests",
   # "fuzz",  # TODO
 ]
@@ -350,7 +349,6 @@ notify = { version = "=8.2.0", features = ["macos_kqueue"] }
 num-bigint = "0.4.4"
 num-prime = "0.4.4"
 num-traits = "0.2.19"
-number_prefix = "0.4"
 onig = { version = "~6.5.1", default-features = false }
 parse_datetime = "0.13.0"
 phf = "0.13.1"
@@ -374,6 +372,7 @@ textwrap = { version = "0.16.1", features = ["terminal_size"] }
 thiserror = "2.0.3"
 time = { version = "0.3.36" }
 unicode-width = "0.2.0"
+unit-prefix = "0.5"
 utmp-classic = "0.1.6"
 uutils_term_grid = "0.7"
 walkdir = "2.5"
@@ -587,17 +586,13 @@ name = "uudoc"
 path = "src/bin/uudoc.rs"
 required-features = ["uudoc"]
 
-# The default release profile. It contains all optimizations.
-# With this profile (like in the standard release profile),
-# the stack traces will still be available.
+# The default release profile with some optimizations.
 [profile.release]
 lto = true
+panic = "abort"
 
-# A release-like profile that is tuned to be fast, even when being fast
-# compromises on binary size. This includes aborting on panic.
 [profile.release-fast]
 inherits = "release"
-panic = "abort"
 codegen-units = 1
 
 # A release-like profile that is as small as possible.
@@ -606,10 +601,11 @@ inherits = "release-fast"
 opt-level = "z"
 strip = true
 
-# A release-like profile with debug info, useful for profiling.
+# A release-like profile with debug info for profiling.
 # See https://github.com/mstange/samply .
 [profile.profiling]
 inherits = "release"
+panic = "unwind"
 debug = true
 
 [lints]
