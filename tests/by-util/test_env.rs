@@ -16,9 +16,9 @@ use std::path::Path;
 #[cfg(unix)]
 use std::process::Command;
 use tempfile::tempdir;
+use uutests::new_ucmd;
 #[cfg(unix)]
 use uutests::util::PATH;
-use uutests::new_ucmd;
 #[cfg(unix)]
 use uutests::util::TerminalSimulation;
 use uutests::util::TestScenario;
