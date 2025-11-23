@@ -15,6 +15,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Extract GNU version from build-gnu.sh
+        id: gnu-version-selinux
+        run: |
+          GNU_VERSION=$(grep '^release_tag_GNU=' uutils/util/build-gnu.sh | cut -d'"' -f2)
+          if [ -z "$GNU_VERSION" ]; then
+            echo "Error: Failed to extract GNU version from build-gnu.sh"
+            exit 1
+          fi
+          echo "REPO_GNU_REF=${GNU_VERSION}" >> $GITHUB_ENV
+          echo "Extracted GNU version: ${GNU_VERSION}"
+
       - name: Checkout code (GNU coreutils)
         uses: actions/checkout@v6
         with:
@@ -30,6 +41,7 @@ jobs:
           git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
           git submodule update --init --recursive --depth 1
         working-directory: gnu
+    
 
       #### Build environment setup
       - name: Install dependencies
@@ -58,6 +70,7 @@ jobs:
         shell: bash
         run: |
           ## Build binaries
+          cd uutils
           env PROFILE=release-small bash util/build-gnu.sh
 
         
