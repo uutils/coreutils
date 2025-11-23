@@ -235,6 +235,21 @@ jobs:
           echo "Sanity check inside guest:"
           $SSH_BASE 'cd /root/uutils && echo "PWD: $PWD" && ls && ls util'
           $SSH_BASE 'cd /root/gnu && echo "PWD: $PWD" && ls src tests || ls'
+
+      - name: Install make inside SMACK guest
+        run: |
+          set -euo pipefail
+
+          PORT_SSH=3333
+          SSH_BASE="sshpass -p root ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $PORT_SSH root@localhost"
+
+          echo "Installing make inside guest (needed for util/run-gnu-test.sh)..."
+          # redpesk is rpm-based and uses dnf
+          $SSH_BASE 'command -v dnf || { echo "dnf not found in guest"; exit 1; }'
+          $SSH_BASE 'dnf -y install make'
+
+          echo "make in guest:"
+          $SSH_BASE 'command -v make && make --version | head -n1'
           
       - name: Run SMACK GNU tests inside guest
         run: |
