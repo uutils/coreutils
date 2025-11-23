@@ -65,18 +65,8 @@ set +x
 run_test_and_aggregate() {
     echo "# Running coverage tests for ${1}"
 
-    # Determine if sudo is needed for this utility
-    local SUDO_CMD=""
-    case "${1}" in
-        chroot|chown|cp|dd|install|mknod)
-            if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-                SUDO_CMD="sudo -E env PATH=${PATH}"
-            fi
-            ;;
-    esac
-
     # Build and run tests for the UTIL
-    ${SUDO_CMD} cargo nextest run \
+    cargo nextest run \
         --profile coverage \
         --no-fail-fast \
         --color=always \

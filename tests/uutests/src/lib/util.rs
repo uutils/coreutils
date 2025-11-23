@@ -3150,43 +3150,39 @@ pub fn run_ucmd_as_root_with_stdin_stdout(
     stdin: Option<&str>,
     stdout: Option<&str>,
 ) -> std::result::Result<CmdResult, String> {
-    if is_ci() {
-        Err(format!("{UUTILS_INFO}: {}", "cannot run inside CI"))
-    } else {
-        // check if we can run 'sudo'
-        log_info("run", "sudo -E --non-interactive whoami");
-        match Command::new("sudo")
-            .envs(DEFAULT_ENV)
-            .args(["-E", "--non-interactive", "whoami"])
-            .output()
-        {
-            Ok(output) if String::from_utf8_lossy(&output.stdout).eq("root\n") => {
-                // we can run sudo and we're root
-                // run ucmd as root:
-                let mut cmd = ts.cmd("sudo");
-                cmd.env("PATH", PATH)
-                    .envs(DEFAULT_ENV)
-                    .arg("-E")
-                    .arg("--non-interactive")
-                    .arg(&ts.bin_path)
-                    .arg(&ts.util_name)
-                    .args(args);
-                if let Some(stdin) = stdin {
-                    cmd.set_stdin(File::open(stdin).unwrap());
-                }
-                if let Some(stdout) = stdout {
-                    cmd.set_stdout(File::open(stdout).unwrap());
-                }
-                Ok(cmd.run())
+    // check if we can run 'sudo'
+    log_info("run", "sudo -E --non-interactive whoami");
+    match Command::new("sudo")
+        .envs(DEFAULT_ENV)
+        .args(["-E", "--non-interactive", "whoami"])
+        .output()
+    {
+        Ok(output) if String::from_utf8_lossy(&output.stdout).eq("root\n") => {
+            // we can run sudo and we're root
+            // run ucmd as root:
+            let mut cmd = ts.cmd("sudo");
+            cmd.env("PATH", PATH)
+                .envs(DEFAULT_ENV)
+                .arg("-E")
+                .arg("--non-interactive")
+                .arg(&ts.bin_path)
+                .arg(&ts.util_name)
+                .args(args);
+            if let Some(stdin) = stdin {
+                cmd.set_stdin(File::open(stdin).unwrap());
             }
-            Ok(output)
-                if String::from_utf8_lossy(&output.stderr).eq("sudo: a password is required\n") =>
-            {
-                Err("Cannot run non-interactive sudo".to_string())
+            if let Some(stdout) = stdout {
+                cmd.set_stdout(File::open(stdout).unwrap());
             }
-            Ok(_output) => Err("\"sudo whoami\" didn't return \"root\"".to_string()),
-            Err(e) => Err(format!("{UUTILS_WARNING}: {e}")),
+            Ok(cmd.run())
         }
+        Ok(output)
+            if String::from_utf8_lossy(&output.stderr).eq("sudo: a password is required\n") =>
+        {
+            Err("Cannot run non-interactive sudo".to_string())
+        }
+        Ok(_output) => Err("\"sudo whoami\" didn't return \"root\"".to_string()),
+        Err(e) => Err(format!("{UUTILS_WARNING}: {e}")),
     }
 }
 
