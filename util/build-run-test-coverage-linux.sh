@@ -70,7 +70,7 @@ run_test_and_aggregate() {
     case "${1}" in
         chroot|chown|cp|dd|install|mknod)
             if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-                SUDO_CMD="sudo -E"
+                SUDO_CMD="sudo -E env PATH=${PATH}"
             fi
             ;;
     esac
