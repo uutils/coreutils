@@ -997,7 +997,7 @@ fn run_sigpipe_script(ts: &TestScenario, extra_args: &[&str]) {
     cmd.arg("-c");
     cmd.arg("trap - PIPE; seq 999999 2>err | head -n1 > out");
     cmd.succeeds();
-    assert_eq!(ts.fixtures.read("out"), "999999\n");
+    assert_eq!(ts.fixtures.read("out"), "1\n");
     assert_eq!(ts.fixtures.read("err"), "");
 }
 
