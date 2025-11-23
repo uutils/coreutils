@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore pacman pamac nixpkgs openmandriva conda winget openembedded yocto bblayers bitbake -->
+<!-- spell-checker:ignore pacman pamac nixpkgs openmandriva conda winget openembedded yocto bblayers bitbake MSYS -->
 
 # Installation
 
@@ -169,6 +169,10 @@ winget install uutils.coreutils
 ```shell
 scoop install uutils-coreutils
 ```
+
+### MSYS2
+
+[MSYS2 package](https://packages.msys2.org/base/mingw-w64-uutils-coreutils)
 
 ## Alternative installers
 
