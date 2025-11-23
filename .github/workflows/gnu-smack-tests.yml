@@ -195,13 +195,46 @@ jobs:
           PORT_SSH=3333
           SSH_BASE="sshpass -p root ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $PORT_SSH root@localhost"
 
-          echo "Copying repo (with util/ and tests/) into guest at /root/uutils ..."
-          # github.workspace is the repo root (where util/ and tests/ live)
-          cd "$GITHUB_WORKSPACE"
-          tar cz . | $SSH_BASE 'rm -rf /root/uutils && mkdir -p /root/uutils && cd /root/uutils && tar xz'
+          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+          echo "Host layout:"
+          ls -1 "$GITHUB_WORKSPACE"
 
-          # Quick sanity check: list util/ inside the guest
-          $SSH_BASE 'cd /root/uutils && ls && ls util'
+          # Detect uutils repo root
+          if [ -d "$GITHUB_WORKSPACE/util" ]; then
+            UU_ROOT="$GITHUB_WORKSPACE"
+          elif [ -d "$GITHUB_WORKSPACE/uutils/util" ]; then
+            UU_ROOT="$GITHUB_WORKSPACE/uutils"
+          else
+            echo "Could not find uutils repo root (no util/)."
+            ls -R "$GITHUB_WORKSPACE"
+            exit 1
+          fi
+
+          # Detect GNU coreutils clone
+          if [ -d "$GITHUB_WORKSPACE/gnu" ]; then
+            GNU_ROOT="$GITHUB_WORKSPACE/gnu"
+          elif [ -d "$UU_ROOT/../gnu" ]; then
+            GNU_ROOT="$(readlink -fm "$UU_ROOT/../gnu")"
+          else
+            echo "Could not find gnu coreutils directory."
+            ls -R "$GITHUB_WORKSPACE"
+            exit 1
+          fi
+
+          echo "Host UU_ROOT=$UU_ROOT"
+          echo "Host GNU_ROOT=$GNU_ROOT"
+
+          echo "Copying uutils into guest at /root/uutils ..."
+          tar -C "$UU_ROOT" -cz . \
+            | $SSH_BASE 'rm -rf /root/uutils && mkdir -p /root/uutils && cd /root/uutils && tar xz'
+
+          echo "Copying GNU coreutils into guest at /root/gnu ..."
+          tar -C "$GNU_ROOT" -cz . \
+            | $SSH_BASE 'rm -rf /root/gnu && mkdir -p /root/gnu && cd /root/gnu && tar xz'
+
+          echo "Sanity check inside guest:"
+          $SSH_BASE 'cd /root/uutils && echo "PWD: $PWD" && ls && ls util'
+          $SSH_BASE 'cd /root/gnu && echo "PWD: $PWD" && ls src tests || ls'
           
       - name: Run SMACK GNU tests inside guest
         run: |
@@ -218,7 +251,7 @@ jobs:
           $SSH_BASE '
             set -e
             cd /root/uutils
-            echo "PWD: $PWD"
+            echo "In guest, PWD: $PWD"
             ls util
             bash util/run-gnu-test.sh \
               tests/mkdir/smack-no-root.sh \
