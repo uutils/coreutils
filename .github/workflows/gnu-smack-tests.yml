@@ -15,6 +15,31 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Checkout code (GNU coreutils)
+        uses: actions/checkout@v6
+        with:
+          repository: 'coreutils/coreutils'
+          path: 'gnu'
+          ref: ${{ env.REPO_GNU_REF }}
+          submodules: false
+          persist-credentials: false
+      - name: Override submodule URL and initialize submodules
+        # Use github instead of upstream git server
+        run: |
+          git submodule sync --recursive
+          git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
+          git submodule update --init --recursive --depth 1
+        working-directory: gnu
+
+      #### Build environment setup
+      - name: Install dependencies
+        shell: bash
+        run: |
+          ## Install dependencies
+          sudo apt-get update
+          ## Check that build-gnu.sh works on the non SELinux system by installing libselinux only on lima
+          sudo apt-get install -y autopoint gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev attr quilt
+
       - name: Install host dependencies (GNU harness + QEMU + OVMF + sshpass)
         run: |
           set -euo pipefail
