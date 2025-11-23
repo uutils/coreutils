@@ -348,8 +348,8 @@ sed -i 's/not supported/unexpected argument/' tests/mv/mv-exchange.sh
 # Most tests check that `/usr/bin/tr` is working correctly before running.
 # However in NixOS/Nix-based distros, the tr util is located somewhere in
 # /nix/store/xxxxxxxxxxxx...xxxx/bin/tr
-# We just replace the references to `/usr/bin/tr` with the result of `$(which tr)`
-sed -i  's/\/usr\/bin\/tr/$(which tr)/' tests/init.sh
+# We just replace the references to `/usr/bin/tr`
+sed -i  's/\/usr\/bin\/tr/$(command -v tr)/' tests/init.sh
 
 # upstream doesn't having the program name in the error message
 # but we do. We should keep it that way.
