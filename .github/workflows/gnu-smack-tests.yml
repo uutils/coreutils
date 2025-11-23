@@ -1,0 +1,157 @@
+name: GNU SMACK tests (redpesk)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  gnu-smack-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install host dependencies (GNU harness + QEMU + OVMF + sshpass)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            autoconf automake libtool \
+            gettext texinfo \
+            gawk bison \
+            pkg-config \
+            qemu-system-x86 \
+            ovmf \
+            sshpass
+
+      - name: Build GNU test harness on host
+        run: |
+          set -euo pipefail
+          # This is the existing helper in uutils/coreutils
+          bash util/build-gnu.sh
+
+      - name: Download redpesk SMACK minimal x86_64 image
+        working-directory: /tmp
+        run: |
+          set -euo pipefail
+
+          mkdir -p redpeskimage
+          cd redpeskimage
+
+          # Download a specific SMACK minimal x86_64 image (corn-3.0-update LTS)
+          # Directory listing shows image.raw.tar.xz and its checksum here:
+          # https://download.redpesk.bzh/redpesk-lts/corn-3.0-update/images/smack/minimal/x86_64/generic/
+          wget -q \
+            https://download.redpesk.bzh/redpesk-lts/corn-3.0-update/images/smack/minimal/x86_64/generic/redpesk-lts-corn-3.0-update-smack-minimal-x86_64-generic-2025_11_21_1557.tar.xz \
+            https://download.redpesk.bzh/redpesk-lts/corn-3.0-update/images/smack/minimal/x86_64/generic/redpesk-lts-corn-3.0-update-smack-minimal-x86_64-generic-2025_11_21_1557.tar.xz.sha256
+
+          # Verify integrity
+          sha256sum -c redpesk-lts-corn-3.0-update-smack-minimal-x86_64-generic-2025_11_21_1557.tar.xz.sha256
+
+          # Extract; this drops a disk image, typically named Redpesk-OS.img
+          tar xJf redpesk-lts-corn-3.0-update-smack-minimal-x86_64-generic-2025_11_21_1557.tar.xz
+
+          echo "Contents of redpeskimage:"
+          ls -lh
+
+      - name: Launch redpesk SMACK QEMU guest
+        working-directory: /tmp/redpeskimage
+        run: |
+          set -euo pipefail
+
+          # Locate the disk image (should be named Redpesk-OS.img according to docs)
+          DISK_IMAGE=$(ls Redpesk-OS*.img 2>/dev/null || ls *.img)
+          echo "Using disk image: $DISK_IMAGE"
+
+          OVMF="/usr/share/qemu/OVMF.fd"
+          PORT_SSH=3333
+
+          # Start QEMU in the background, headless, with SSH port forwarded.
+          # redpesk SMACK images are built with SMACK enabled (smack/minimal). 
+          qemu-system-x86_64 \
+            -hda "$DISK_IMAGE" \
+            -m 2048 \
+            -smp 4 \
+            -cpu qemu64 \
+            -device virtio-rng-pci \
+            -net nic \
+            -net user,hostfwd=tcp::$PORT_SSH-:22 \
+            -bios "$OVMF" \
+            -nographic \
+            > /tmp/qemu-smack.log 2>&1 &
+
+          echo $! > /tmp/qemu-smack.pid
+          echo "QEMU started with PID $(cat /tmp/qemu-smack.pid)"
+
+      - name: Wait for SSH in guest
+        run: |
+          set -euo pipefail
+
+          PORT_SSH=3333
+          SSH_BASE="sshpass -p root ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $PORT_SSH root@localhost"
+
+          echo "Waiting for SSH to become available in the redpesk guest..."
+          for i in $(seq 1 60); do
+            if $SSH_BASE 'echo ready' >/dev/null 2>&1; then
+              echo "SSH is up."
+              exit 0
+            fi
+            sleep 5
+          done
+
+          echo "ERROR: SSH did not become ready in time."
+          kill "$(cat /tmp/qemu-smack.pid)" || true
+          exit 1
+
+      - name: Copy repo with built harness into guest
+        run: |
+          set -euo pipefail
+
+          PORT_SSH=3333
+          SSH_BASE="sshpass -p root ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $PORT_SSH root@localhost"
+
+          # Create target directory and untar from stdin
+          # We tar AFTER build-gnu.sh so the GNU harness artifacts are included.
+          tar cz . | $SSH_BASE 'mkdir -p /root/uutils && cd /root/uutils && tar xz'
+
+      - name: Run SMACK GNU tests inside guest
+        run: |
+          set -euo pipefail
+
+          PORT_SSH=3333
+          SSH_BASE="sshpass -p root ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $PORT_SSH root@localhost"
+
+          echo "Checking that SMACK is active in the guest..."
+          $SSH_BASE 'grep smackfs /proc/filesystems || (echo "smackfs not present"; exit 1)'
+
+          echo "Running SMACK-related GNU tests (mkdir + id)..."
+          # These are the GNU tests that depend on SMACK support.
+          # util/run-gnu-test.sh is the existing script in uutils for running individual tests.
+          set +e
+          $SSH_BASE 'cd /root/uutils && bash util/run-gnu-test.sh tests/mkdir/smack-no-root.sh tests/mkdir/smack-root.sh tests/id/smack.sh'
+          RC=$?
+          set -e
+
+          echo "SMACK GNU tests exit code: $RC"
+
+          echo "Shutting down QEMU..."
+          if [ -f /tmp/qemu-smack.pid ]; then
+            kill "$(cat /tmp/qemu-smack.pid)" || true
+          fi
+
+          exit $RC
+
+      - name: Dump QEMU log on failure
+        if: failure()
+        run: |
+          echo "===== QEMU SMACK guest log ====="
+          if [ -f /tmp/qemu-smack.log ]; then
+            sed -n '1,400p' /tmp/qemu-smack.log || true
+          else
+            echo "No QEMU log file found."
+          fi
