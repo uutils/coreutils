@@ -12,9 +12,11 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
+      - name: Checkout code (uutils)
+        uses: actions/checkout@v6
+        with:
+          path: 'uutils'
+          persist-credentials: false
       - name: Extract GNU version from build-gnu.sh
         id: gnu-version-selinux
         run: |
