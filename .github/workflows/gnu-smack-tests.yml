@@ -250,6 +250,20 @@ jobs:
 
           echo "make in guest:"
           $SSH_BASE 'command -v make && make --version | head -n1'
+
+      - name: Prepare GNU harness inside guest
+        run: |
+          set -euo pipefail
+
+          PORT_SSH=3333
+          SSH_BASE="sshpass -p root ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $PORT_SSH root@localhost"
+
+          # Install build deps inside redpesk (uses dnf) 
+          $SSH_BASE 'dnf -y install gcc make autoconf automake libtool gettext texinfo gawk bison pkg-config git rust cargo'
+
+          # Build GNU+uutils harness in the same layout util/run-gnu-test.sh expects:
+          # /root/uutils (uutils) and /root/gnu (GNU coreutils).
+          $SSH_BASE 'cd /root/uutils && bash util/build-gnu.sh'
           
       - name: Run SMACK GNU tests inside guest
         run: |
