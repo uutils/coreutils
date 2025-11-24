@@ -120,9 +120,12 @@ pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
 ///
 /// `true` if the file has a capability extended attribute, `false` otherwise.
 pub fn has_capability<P: AsRef<Path>>(file: P) -> bool {
-    // check whether thread has cap, done call capget in order to pass GNU test only
-    // GNU test must see syscall capget in strace output in order to pass
+    // check whether thread has cap, done to call capget in order to pass GNU test only
+    //
+    // AFAICT GNU test must see syscall capget in strace output in order to pass, but has
+    // no bearing on what is displayed re files?
     let _ = current_thread_has_capability();
+
     // don't use exacl here, it is doing more getxattr call then needed
     xattr::get_deref(&file, OsStr::new(SECURITY_CAPABILITY_KEY))
         .ok()
@@ -139,15 +142,11 @@ pub fn current_thread_has_capability() -> bool {
 
         static CELL: OnceLock<bool> = OnceLock::new();
 
-        return *CELL.get_or_init(|| match caps::CapState::get_current() {
-            Ok(cap_state)
-                if !cap_state.effective.is_empty()
+        return *CELL.get_or_init(|| {
+            return matches!(caps::CapState::get_current(), Ok(cap_state) if !cap_state.effective.is_empty()
                     | !cap_state.inheritable.is_empty()
-                    | !cap_state.permitted.is_empty() =>
-            {
-                true
-            }
-            _ => false,
+                    | !cap_state.permitted.is_empty()
+            )
         });
     }
 
