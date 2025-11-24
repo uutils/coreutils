@@ -1025,7 +1025,11 @@ fn apply_specified_env_vars(opts: &Options<'_>) {
 #[cfg(unix)]
 fn apply_default_signal(request: &SignalRequest, log: &mut SignalActionLog) -> UResult<()> {
     request.for_each_signal(|sig_value, explicit| {
-        let sig = signal_from_value(sig_value)?;
+        // On some platforms ALL_SIGNALS may contain values that are not valid in libc.
+        // Skip those invalid ones and continue (GNU env also ignores undefined signals).
+        let Ok(sig) = signal_from_value(sig_value) else {
+            return Ok(());
+        };
         reset_signal(sig)?;
         log.record(sig_value, SignalActionKind::Default, explicit);
 
@@ -1044,7 +1048,9 @@ fn apply_default_signal(request: &SignalRequest, log: &mut SignalActionLog) -> U
 #[cfg(unix)]
 fn apply_ignore_signal(request: &SignalRequest, log: &mut SignalActionLog) -> UResult<()> {
     request.for_each_signal(|sig_value, explicit| {
-        let sig = signal_from_value(sig_value)?;
+        let Ok(sig) = signal_from_value(sig_value) else {
+            return Ok(());
+        };
         ignore_signal(sig)?;
         log.record(sig_value, SignalActionKind::Ignore, explicit);
         Ok(())
@@ -1054,7 +1060,9 @@ fn apply_ignore_signal(request: &SignalRequest, log: &mut SignalActionLog) -> UR
 #[cfg(unix)]
 fn apply_block_signal(request: &SignalRequest, log: &mut SignalActionLog) -> UResult<()> {
     request.for_each_signal(|sig_value, explicit| {
-        let sig = signal_from_value(sig_value)?;
+        let Ok(sig) = signal_from_value(sig_value) else {
+            return Ok(());
+        };
         block_signal(sig)?;
         log.record(sig_value, SignalActionKind::Block, explicit);
         Ok(())
