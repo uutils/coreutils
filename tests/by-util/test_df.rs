@@ -973,3 +973,26 @@ fn test_nonexistent_file() {
         .stderr_is("df: does-not-exist: No such file or directory\n")
         .stdout_is("File\n.\n");
 }
+
+#[test]
+#[cfg(target_os = "windows")]
+fn test_windows_avail_column_not_zero() {
+    // Regression test for issue #7461: Avail column should not be 0 on Windows
+    let output = new_ucmd!()
+        .args(&["--output=avail"])
+        .succeeds()
+        .stdout_str_lossy();
+
+    let lines: Vec<&str> = output.lines().skip(1).collect();
+    assert!(!lines.is_empty(), "Should have at least one filesystem");
+
+    // At least one filesystem should have non-zero avail
+    let has_non_zero = lines
+        .iter()
+        .any(|line| line.trim().parse::<u64>().map(|v| v > 0).unwrap_or(false));
+
+    assert!(
+        has_non_zero,
+        "At least one filesystem should have non-zero available space"
+    );
+}
