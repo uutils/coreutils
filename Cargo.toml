@@ -296,6 +296,7 @@ readme = "README.package.md"
 version = "0.3.0"
 
 [workspace.dependencies]
+capctl = { version = "0.2.4", default-features = false, features = ["std"] }
 ansi-width = "0.1.0"
 bigdecimal = "0.4"
 binary-heap-plus = "0.5.0"
