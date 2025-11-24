@@ -432,7 +432,7 @@ jobs:
             sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
           ;;
           macos-*)
-            brew install coreutils make
+            brew install coreutils
           ;;
         esac
     - name: Install via make and test multi-call binary
@@ -586,7 +586,7 @@ jobs:
             locale -a | grep -i fr || echo "French locale generation may have failed"
           ;;
           macos-*)
-            brew install coreutils make
+            brew install coreutils
           ;;
         esac
     - name: Test Make installation
