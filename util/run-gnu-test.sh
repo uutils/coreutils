@@ -19,10 +19,11 @@ if [ "${INSIDE_TTY_WRAPPER:-0}" -ne 1 ]; then
     done
 
     # New session + PTY; re-run this script inside it
-    command -v script || {
-        echo "DEBUG: environment does not have script command to run stty tests"
-        exec setsid script -qfec "$cmd" /dev/null
-    }
+    if command -v script >/dev/null 2>&1; then
+        setsid script -q -c '...' /dev/null
+    else
+        echo "script(1) not available; skipping this test"
+    fi
 fi
 
 
