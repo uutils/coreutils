@@ -7,7 +7,6 @@
 
 mod count_fast;
 mod countable;
-mod cpu_features;
 mod utf8;
 mod word_count;
 
@@ -28,6 +27,7 @@ use utf8::{BufReadDecoder, BufReadDecoderError};
 use uucore::translate;
 
 use uucore::{
+    hardware::simd_policy,
     error::{FromIo, UError, UResult},
     format_usage,
     parser::shortcut_value_parser::ShortcutValueParser,
@@ -827,15 +827,15 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
     };
 
     if settings.debug {
-        let policy = cpu_features::simd_policy();
-        if policy.env_allows_simd() {
-            let available = policy.available_features();
-            if available.is_empty() {
+        let policy = simd_policy();
+        if policy.allows_simd() {
+            let enabled = policy.enabled_features();
+            if enabled.is_empty() {
                 eprintln!("wc: debug: hardware support unavailable on this CPU");
             } else {
                 eprintln!(
                     "wc: debug: using hardware support (features: {})",
-                    available.join(", ")
+                    enabled.join(", ")
                 );
             }
         } else {
