@@ -1919,16 +1919,8 @@ fn test_debug_key_annotations_locale() {
                     &ts.ucmd()
                         .env("LC_ALL", &locale_fr_utf8)
                         .args(&[
-                            "--debug",
-                            "-k1,1n",
-                            "-k1,1g",
-                            "-k1,1h",
-                            "-k2,2n",
-                            "-k2,2g",
-                            "-k2,2h",
-                            "-k3,3n",
-                            "-k3,3g",
-                            "-k3,3h",
+                            "--debug", "-k1,1n", "-k1,1g", "-k1,1h", "-k2,2n", "-k2,2g", "-k2,2h",
+                            "-k3,3n", "-k3,3g", "-k3,3h",
                         ])
                         .pipe_in("+1234 1234Gi 1,234M\n")
                         .succeeds()
@@ -1977,16 +1969,19 @@ fn debug_key_annotation_output(ts: &TestScenario) -> String {
 
     let mut output = String::new();
     for mode in ["n", "h", "g"] {
-        output.push_str(&run_sort(&["-s", &format!("-k2{mode}"), "--debug"], "1\n\n44\n33\n2\n"));
+        output.push_str(&run_sort(
+            &["-s", &format!("-k2{mode}"), "--debug"],
+            "1\n\n44\n33\n2\n",
+        ));
         output.push_str(&run_sort(
             &["-s", &format!("-k1.3{mode}"), "--debug"],
             "1\n\n44\n33\n2\n",
         ));
-        output.push_str(&run_sort(&["-s", &format!("-k1{mode}"), "--debug"], "1\n\n44\n33\n2\n"));
         output.push_str(&run_sort(
-            &["-s", "-k2g", "--debug"],
-            &number("2\n\n1\n"),
+            &["-s", &format!("-k1{mode}"), "--debug"],
+            "1\n\n44\n33\n2\n",
         ));
+        output.push_str(&run_sort(&["-s", "-k2g", "--debug"], &number("2\n\n1\n")));
     }
 
     output.push_str(&run_sort(&["-s", "-k1M", "--debug"], "FEB\n\nJAN\n"));
@@ -2002,7 +1997,10 @@ fn debug_key_annotation_output(ts: &TestScenario) -> String {
         &number("FEB\nJANZ\n\nJAN\n"),
     ));
 
-    output.push_str(&run_sort(&["-s", "-g", "--debug"], " 1.2ignore\n 1.1e4ignore\n"));
+    output.push_str(&run_sort(
+        &["-s", "-g", "--debug"],
+        " 1.2ignore\n 1.1e4ignore\n",
+    ));
     output.push_str(&run_sort(&["-s", "-d", "--debug"], "\tb\n\t\ta\n"));
     output.push_str(&run_sort(&["-s", "-k2,2", "--debug"], "a\n\n"));
     output.push_str(&run_sort(&["-s", "-k1", "--debug"], "b\na\n"));
@@ -2030,7 +2028,10 @@ fn debug_key_annotation_output(ts: &TestScenario) -> String {
     zero_mix.retain(|b| *b != 0);
     output.push_str(&String::from_utf8(zero_mix).unwrap());
 
-    output.push_str(&run_sort(&["-s", "-k2.4b,2.3n", "--debug"], "A\tchr10\nB\tchr1\n"));
+    output.push_str(&run_sort(
+        &["-s", "-k2.4b,2.3n", "--debug"],
+        "A\tchr10\nB\tchr1\n",
+    ));
     output.push_str(&run_sort(&["-s", "-k1.2b", "--debug"], "1 2\n1 3\n"));
 
     output
