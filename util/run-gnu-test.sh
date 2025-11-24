@@ -12,9 +12,14 @@
 if [ "${INSIDE_TTY_WRAPPER:-0}" -ne 1 ]; then
     export INSIDE_TTY_WRAPPER=1
 
-    # Start a new session and allocate a PTY as controlling terminal,
-    # then re-run this same script inside that session.
-    exec setsid script -qfec "bash \"$0\" \"$@\"" /dev/null
+    # Build the command string with proper shell quoting
+    cmd="bash $(printf '%q' "$0")"
+    for arg in "$@"; do
+        cmd="$cmd $(printf '%q' "$arg")"
+    done
+
+    # New session + PTY; re-run this script inside it
+    exec setsid script -qfec "$cmd" /dev/null
 fi
 
 # Use GNU version for make, nproc, readlink on *BSD
