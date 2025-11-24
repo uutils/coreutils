@@ -398,7 +398,7 @@ impl Spec {
                             // TODO: This should break the _entire execution_ of printf
                             break;
                         }
-                    };
+                    }
                 }
                 writer.write_all(&parsed).map_err(FormatError::IoError)
             }

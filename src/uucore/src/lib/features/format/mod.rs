@@ -192,7 +192,7 @@ impl<C: FormatChar> FormatItem<C> {
         match self {
             Self::Spec(spec) => spec.write(writer, args)?,
             Self::Char(c) => return c.write(writer).map_err(FormatError::IoError),
-        };
+        }
         Ok(ControlFlow::Continue(()))
     }
 }
