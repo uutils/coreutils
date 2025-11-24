@@ -27,9 +27,9 @@ use utf8::{BufReadDecoder, BufReadDecoderError};
 use uucore::translate;
 
 use uucore::{
-    hardware::simd_policy,
     error::{FromIo, UError, UResult},
     format_usage,
+    hardware::simd_policy,
     parser::shortcut_value_parser::ShortcutValueParser,
     quoting_style::{self, QuotingStyle},
     show,
