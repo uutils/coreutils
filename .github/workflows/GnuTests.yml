@@ -27,6 +27,7 @@ env:
   DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
   TEST_FULL_SUMMARY_FILE: 'gnu-full-result.json'
   TEST_ROOT_FULL_SUMMARY_FILE: 'gnu-root-full-result.json'
+  TEST_STTY_FULL_SUMMARY_FILE: 'gnu-stty-full-result.json'
   TEST_SELINUX_FULL_SUMMARY_FILE: 'selinux-gnu-full-result.json'
   TEST_SELINUX_ROOT_FULL_SUMMARY_FILE: 'selinux-root-gnu-full-result.json'
 
@@ -137,11 +138,27 @@ jobs:
         path_GNU='gnu'
         path_UUTILS='uutils'
         bash "uutils/util/run-gnu-test.sh" run-root
+        ### Run tests as root
+
     - name: Extract testing info from individual logs (run as root) into JSON
       shell: bash
       run : |
         path_UUTILS='uutils'
         python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }}
+
+    - name: Run GNU stty tests
+      shell: 'script -q -e -c "bash {0}"'
+      run: |
+        ## Run GNU root tests
+        path_GNU='gnu'
+        path_UUTILS='uutils'
+        bash "uutils/util/run-gnu-test.sh" tests/stty/*.sh
+
+    - name: Extract testing info from individual logs (stty) into JSON
+      shell: bash
+      run : |
+        path_UUTILS='uutils'
+        python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_STTY_FULL_SUMMARY_FILE }}
 
     ### Upload artifacts
     - name: Upload full json results
