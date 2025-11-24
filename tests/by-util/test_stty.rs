@@ -194,6 +194,24 @@ fn invalid_baud_setting() {
         .args(&["ospeed", "995"])
         .fails()
         .stderr_contains("invalid ospeed '995'");
+
+    for speed in &[
+        "9599..", "9600..", "9600.5.", "9600.50.", "9600.0.", "++9600", "0x2580", "96E2", "9600,0",
+        "9600.0 ",
+    ] {
+        new_ucmd!().args(&["ispeed", speed]).fails();
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn valid_baud_formats() {
+    let (path, _controller, _replica) = pty_path();
+    for speed in &["  +9600", "9600.49", "9600.50", "9599.51", "  9600."] {
+        new_ucmd!()
+            .args(&["--file", &path, "ispeed", speed])
+            .succeeds();
+    }
 }
 
 #[test]
