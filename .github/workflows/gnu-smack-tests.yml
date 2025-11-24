@@ -160,10 +160,47 @@ jobs:
           # UU_MAKE_PROFILE selects Rust profile; keep it small but realistic
           UU_MAKE_PROFILE=release-small \
             bash "$UU_ROOT/util/build-gnu.sh"
+          rm -rf "$UU_ROOT/.git
           rm -rf "$UU_ROOT/target"/{debug,release}/incremental
           rm -rf "$UU_ROOT/target"/{debug,release}/build
+          rm -rf "$UU_ROOT/target"/{debug,release}/.fingerprint
           rm -rf "$UU_ROOT/target"/{debug,release}/deps
           find "$UU_ROOT/target" -type f -name '*.rlib' -delete
+          cd "$BUILD_DIR"
+
+          # List of binaries needed for the SMACK tests
+          KEEP_BINS="
+          coreutils
+          id
+          mkdir
+          mknod
+          mkfifo
+          ls
+          cut
+          grep
+          cat
+          env
+          rm
+          chmod
+          "
+          
+          # Normalize to one-line, space-separated
+          KEEP_BINS_ONE_LINE="$(echo $KEEP_BINS)"
+          
+          for f in *; do
+            # Skip non-regular files (dirs, symlinks, etc.)
+            [ -f "$f" ] || continue
+          
+            case " $KEEP_BINS_ONE_LINE " in
+              *" $f "*) 
+                # keep
+                ;;
+              *)
+                # delete everything else
+                rm -f -- "$f"
+                ;;
+            esac
+          done
 
 
           
