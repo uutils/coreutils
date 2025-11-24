@@ -7,6 +7,7 @@
 #![allow(clippy::cast_possible_wrap)]
 
 use std::env;
+use std::fmt::Write as FmtWrite;
 use std::time::Duration;
 
 use uutests::at_and_ucmd;
@@ -1958,11 +1959,12 @@ fn test_debug_key_annotations_locale() {
 
 fn debug_key_annotation_output(ts: &TestScenario) -> String {
     let number = |input: &str| -> String {
-        input
-            .split_terminator('\n')
-            .enumerate()
-            .map(|(idx, line)| format!("{}\t{line}\n", idx + 1))
-            .collect()
+        let mut out = String::new();
+        for (idx, line) in input.split_terminator('\n').enumerate() {
+            // build efficiently without collecting intermediary Strings
+            writeln!(&mut out, "{}\t{line}", idx + 1).unwrap();
+        }
+        out
     };
 
     let run_sort = |args: &[&str], input: &str| -> String {
