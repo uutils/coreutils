@@ -120,6 +120,7 @@ pseudoprimes
 quantiles
 readonly
 reparse
+rposition
 seedable
 semver
 semiprime
@@ -187,3 +188,16 @@ nofield
 # * clippy
 uninlined
 nonminimal
+
+# * CPU/hardware features
+ASIMD
+asimd
+hwcaps
+PCLMUL
+pclmul
+PCLMULQDQ
+pclmulqdq
+TUNABLES
+tunables
+VMULL
+vmull

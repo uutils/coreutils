@@ -236,8 +236,8 @@ impl<'input> Graph<'input> {
         for &node in &cycle {
             show!(LoopNode(node));
         }
-        let u = cycle[0];
-        let v = cycle[1];
+        let u = *cycle.last().expect("cycle must be non-empty");
+        let v = cycle[0];
         self.remove_edge(u, v);
         if self.indegree(v).unwrap() == 0 {
             frontier.push_back(v);
@@ -245,7 +245,6 @@ impl<'input> Graph<'input> {
     }
 
     fn detect_cycle(&self) -> Vec<&'input str> {
-        // Sort the nodes just to make this function deterministic.
         let mut nodes: Vec<_> = self.nodes.keys().collect();
         nodes.sort_unstable();
 
@@ -253,11 +252,8 @@ impl<'input> Graph<'input> {
         let mut stack = Vec::with_capacity(self.nodes.len());
         for node in nodes {
             if self.dfs(node, &mut visited, &mut stack) {
-                // last element in the stack appears twice: at the begin
-                // and at the end of the loop
                 let (loop_entry, _) = stack.pop().expect("loop is not empty");
 
-                // skip the prefix which doesn't belong to the loop
                 return stack
                     .into_iter()
                     .map(|(node, _)| node)

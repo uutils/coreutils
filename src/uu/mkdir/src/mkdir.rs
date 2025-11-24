@@ -218,7 +218,6 @@ fn chmod(_path: &Path, _mode: u32) -> UResult<()> {
 
 // Create a directory at the given path.
 // Uses iterative approach instead of recursion to avoid stack overflow with deep nesting.
-#[allow(unused_variables)]
 fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
     let path_exists = path.exists();
     if path_exists && !config.recursive {

@@ -159,15 +159,21 @@ pub fn uu_app() -> Command {
                 .help(translate!("timeout-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(options::DURATION).required(true))
+        .arg(
+            Arg::new(options::DURATION)
+                .required(true)
+                .help(translate!("timeout-help-duration")),
+        )
         .arg(
             Arg::new(options::COMMAND)
                 .required(true)
                 .action(ArgAction::Append)
+                .help(translate!("timeout-help-command"))
                 .value_hint(clap::ValueHint::CommandName),
         )
         .trailing_var_arg(true)
         .infer_long_args(true)
+        .after_help(translate!("timeout-after-help"))
 }
 
 /// Remove pre-existing SIGCHLD handlers that would make waiting for the child's exit code fail.

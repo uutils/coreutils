@@ -27,7 +27,7 @@ bstr = { workspace = true }
 chrono = { workspace = true, optional = true }
 clap = { workspace = true }
 uucore_procs = { workspace = true }
-number_prefix = { workspace = true }
+unit-prefix = { workspace = true }
 phf = { workspace = true }
 dns-lookup = { workspace = true, optional = true }
 dunce = { version = "1.0.4", optional = true }
@@ -66,7 +66,6 @@ sha3 = { workspace = true, optional = true }
 blake2b_simd = { workspace = true, optional = true }
 blake3 = { workspace = true, optional = true }
 sm3 = { workspace = true, optional = true }
-crc32fast = { workspace = true, optional = true }
 crc-fast = { workspace = true, optional = true }
 bigdecimal = { workspace = true, optional = true }
 num-traits = { workspace = true, optional = true }
@@ -134,6 +133,7 @@ fast-inc = []
 fs = ["dunce", "libc", "winapi-util", "windows-sys"]
 fsext = ["libc", "windows-sys"]
 fsxattr = ["xattr"]
+hardware = []
 lines = []
 feat_systemd_logind = ["utmpx", "libc"]
 format = [
@@ -172,7 +172,6 @@ sum = [
   "blake2b_simd",
   "blake3",
   "sm3",
-  "crc32fast",
   "crc-fast",
 ]
 update-control = ["parser"]

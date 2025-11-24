@@ -14,6 +14,7 @@ use std::process::Command;
     target_os = "android",
     target_os = "freebsd",
     target_os = "netbsd",
+    target_os = "openbsd",
     target_os = "dragonfly"
 ))]
 mod platform {
