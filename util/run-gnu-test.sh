@@ -2,14 +2,14 @@
 # `run-gnu-test.bash [TEST]`
 # run GNU test (or all tests if TEST is missing/null)
 
-# spell-checker:ignore (env/vars) GNULIB SRCDIR SUBDIRS OSTYPE ; (utils) shellcheck gnproc greadlink
+# spell-checker:ignore (env/vars) GNULIB SRCDIR SUBDIRS OSTYPE ; (utils) shellcheck gnproc greadlink setsid qfec
 
 # ref: [How the GNU coreutils are tested](https://www.pixelbeat.org/docs/coreutils-testing.html) @@ <https://archive.is/p2ITW>
 # * note: to run a single test => `make check TESTS=PATH/TO/TEST/SCRIPT SUBDIRS=. VERBOSE=yes`
 
-
 # This is added to run the GNU tests inside a PTY as a controlling terminal
 if [ "${INSIDE_TTY_WRAPPER:-0}" -ne 1 ]; then
+
     export INSIDE_TTY_WRAPPER=1
 
     # Build the command string with proper shell quoting
@@ -19,8 +19,13 @@ if [ "${INSIDE_TTY_WRAPPER:-0}" -ne 1 ]; then
     done
 
     # New session + PTY; re-run this script inside it
-    exec setsid script -qfec "$cmd" /dev/null
+    command -v script || {
+        echo "DEBUG: environment does not have script command to run stty tests"
+        exec setsid script -qfec "$cmd" /dev/null
+    }
 fi
+
+
 
 # Use GNU version for make, nproc, readlink on *BSD
 case "$OSTYPE" in
