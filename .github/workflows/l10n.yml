@@ -429,7 +429,7 @@ jobs:
         ## Install/setup prerequisites
         case '${{ matrix.job.os }}' in
           ubuntu-*)
-            sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev build-essential
+            sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
           ;;
           macos-*)
             brew install coreutils make
@@ -580,7 +580,7 @@ jobs:
         ## Install/setup prerequisites
         case '${{ matrix.job.os }}' in
           ubuntu-*)
-            sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev build-essential
+            sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
             # Generate French locale for testing
             sudo locale-gen --keep-existing fr_FR.UTF-8
             locale -a | grep -i fr || echo "French locale generation may have failed"
@@ -912,7 +912,7 @@ jobs:
       run: |
         ## Install/setup prerequisites including locale support
         sudo apt-get -y update
-        sudo apt-get -y install libselinux1-dev build-essential
+        sudo apt-get -y install libselinux1-dev
 
         # Generate multiple locales for testing
         sudo locale-gen --keep-existing en_US.UTF-8 fr_FR.UTF-8 de_DE.UTF-8 es_ES.UTF-8
@@ -1160,7 +1160,7 @@ jobs:
         # Use different cache key for each build to avoid conflicts
         key: cat-locale-embedding
     - name: Install prerequisites
-      run: sudo apt-get -y update && sudo apt-get -y install libselinux1-dev build-essential
+      run: sudo apt-get -y update && sudo apt-get -y install libselinux1-dev
     - name: Build cat with targeted locale embedding
       run: UUCORE_TARGET_UTIL=cat cargo build -p uu_cat --release
     - name: Verify cat locale count
@@ -1192,7 +1192,7 @@ jobs:
         # Use different cache key for each build to avoid conflicts
         key: ls-locale-embedding
     - name: Install prerequisites
-      run: sudo apt-get -y update && sudo apt-get -y install libselinux1-dev build-essential
+      run: sudo apt-get -y update && sudo apt-get -y install libselinux1-dev
     - name: Build ls with targeted locale embedding
       run: UUCORE_TARGET_UTIL=ls cargo build -p uu_ls --release
     - name: Verify ls locale count
@@ -1224,7 +1224,7 @@ jobs:
         # Use different cache key for each build to avoid conflicts
         key: multicall-locale-embedding
     - name: Install prerequisites
-      run: sudo apt-get -y update && sudo apt-get -y install libselinux1-dev build-essential
+      run: sudo apt-get -y update && sudo apt-get -y install libselinux1-dev
     - name: Build multicall binary with all locales
       run: cargo build --release
     - name: Verify multicall locale count
