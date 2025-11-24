@@ -117,6 +117,9 @@ jobs:
 
     ### Run tests as user
     - name: Run GNU tests
+      ### This shell has been changed from "bash" to this command
+      ### "script" will start a pty and the -q command removes the "script" initiation log
+      ### the -e flag makes it propogate the error code and -c runs the command in a pty
       shell: 'script -q -e -c "bash {0}"'
       run: |
         ## Run GNU tests
