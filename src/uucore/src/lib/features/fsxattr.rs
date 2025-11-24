@@ -143,7 +143,7 @@ pub fn current_thread_has_capability() -> bool {
         static CELL: OnceLock<bool> = OnceLock::new();
 
         return *CELL.get_or_init(|| {
-            return matches!(caps::CapState::get_current(), Ok(cap_state) if !cap_state.effective.is_empty()
+            matches!(caps::CapState::get_current(), Ok(cap_state) if !cap_state.effective.is_empty()
                     | !cap_state.inheritable.is_empty()
                     | !cap_state.permitted.is_empty()
             )
