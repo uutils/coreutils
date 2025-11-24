@@ -163,6 +163,7 @@ jobs:
           rm -rf "$UU_ROOT/target"/{debug,release}/incremental
           rm -rf "$UU_ROOT/target"/{debug,release}/build
           rm -rf "$UU_ROOT/target"/{debug,release}/deps
+          find "$UU_ROOT/target" -type f -name '*.rlib' -delete
 
 
           
