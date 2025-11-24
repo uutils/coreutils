@@ -14,33 +14,22 @@ NPROC=$(command -v gnproc||command -v nproc)
 READLINK=$(command -v greadlink||command -v readlink)
 SED=$(command -v gsed||command -v sed)
 
+SYSTEM_TIMEOUT=$(command -v timeout)
+SYSTEM_YES=$(command -v yes)
+
 ME="${0}"
 ME_dir="$(dirname -- "$("${READLINK}" -fm -- "${ME}")")"
 REPO_main_dir="$(dirname -- "${ME_dir}")"
 
-# Default profile is 'debug'
-UU_MAKE_PROFILE='debug'
+
+: ${PROFILE:=debug} # default profile
+export PROFILE
 CARGO_FEATURE_FLAGS=""
-
-for arg in "$@"
-do
-    if [ "$arg" == "--release-build" ]; then
-        UU_MAKE_PROFILE='release'
-        break
-    fi
-done
-
-echo "UU_MAKE_PROFILE='${UU_MAKE_PROFILE}'"
 
 ### * config (from environment with fallback defaults); note: GNU is expected to be a sibling repo directory
 
 path_UUTILS=${path_UUTILS:-${REPO_main_dir}}
 path_GNU="$("${READLINK}" -fm -- "${path_GNU:-${path_UUTILS}/../gnu}")"
-
-###
-
-SYSTEM_TIMEOUT=$(command -v timeout)
-SYSTEM_YES=$(command -v yes)
 
 ###
 
@@ -71,9 +60,9 @@ echo "path_GNU='${path_GNU}'"
 ###
 
 if [[ ! -z  "$CARGO_TARGET_DIR" ]]; then
-UU_BUILD_DIR="${CARGO_TARGET_DIR}/${UU_MAKE_PROFILE}"
+UU_BUILD_DIR="${CARGO_TARGET_DIR}/${PROFILE}"
 else
-UU_BUILD_DIR="${path_UUTILS}/target/${UU_MAKE_PROFILE}"
+UU_BUILD_DIR="${path_UUTILS}/target/${PROFILE}"
 fi
 echo "UU_BUILD_DIR='${UU_BUILD_DIR}'"
 
@@ -105,9 +94,9 @@ fi
 cd -
 
 # Pass the feature flags to make, which will pass them to cargo
-"${MAKE}" PROFILE="${UU_MAKE_PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
+"${MAKE}" PROFILE="${PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
 # min test for SELinux
-[ "${SELINUX_ENABLED}" = 1 ] && touch g && "${UU_MAKE_PROFILE}"/stat -c%C g && rm g
+[ "${SELINUX_ENABLED}" = 1 ] && touch g && "${PROFILE}"/stat -c%C g && rm g
 
 cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
 # Create *sum binaries
@@ -180,8 +169,6 @@ grep -rl '\$abs_path_dir_' tests/*/*.sh | xargs -r sed -i "s|\$abs_path_dir_|${U
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 sed -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
-# tests/ls/abmon-align.sh - https://github.com/uutils/coreutils/issues/3505
-sed -i 's|touch |/usr/bin/touch |' tests/test/test-N.sh tests/ls/abmon-align.sh
 
 # our messages are better
 sed -i "s|cannot stat 'symlink': Permission denied|not writing through dangling symlink 'symlink'|" tests/cp/fail-perm.sh
@@ -270,9 +257,6 @@ sed -i -e "s/rcexp=1$/rcexp=1\n  case \"\$prg\" in runcon|stdbuf) return;; esac/
 sed -i -e "s/cat opts/sed -i -e \"s| <.\*$||g\" opts/" tests/misc/usage_vs_getopt.sh
 # for some reasons, some stuff are duplicated, strip that
 sed -i -e "s/provoked error./provoked error\ncat pat |sort -u > pat/" tests/misc/usage_vs_getopt.sh
-
-# Update the GNU error message to match ours
-sed -i -e "s/link-to-dir: hard link not allowed for directory/failed to create hard link 'link-to-dir' =>/" -e "s|link-to-dir/: hard link not allowed for directory|failed to create hard link 'link-to-dir/' =>|" tests/ln/hard-to-sym.sh
 
 # install verbose messages shows ginstall as command
 sed -i -e "s/ginstall: creating directory/install: creating directory/g" tests/install/basic-1.sh
@@ -364,8 +348,8 @@ sed -i 's/not supported/unexpected argument/' tests/mv/mv-exchange.sh
 # Most tests check that `/usr/bin/tr` is working correctly before running.
 # However in NixOS/Nix-based distros, the tr util is located somewhere in
 # /nix/store/xxxxxxxxxxxx...xxxx/bin/tr
-# We just replace the references to `/usr/bin/tr` with the result of `$(which tr)`
-sed -i  's/\/usr\/bin\/tr/$(which tr)/' tests/init.sh
+# We just replace the references to `/usr/bin/tr`
+sed -i  's/\/usr\/bin\/tr/$(command -v tr)/' tests/init.sh
 
 # upstream doesn't having the program name in the error message
 # but we do. We should keep it that way.
