@@ -20,7 +20,7 @@ if [ "${INSIDE_TTY_WRAPPER:-0}" -ne 1 ]; then
 
     # New session + PTY; re-run this script inside it
     if command -v script >/dev/null 2>&1; then
-        setsid script -q -c '...' /dev/null
+        setsid script -q -c "$cmd" /dev/null
     else
         echo "script(1) not available; skipping this test"
     fi
