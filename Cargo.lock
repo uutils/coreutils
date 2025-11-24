@@ -345,18 +345,18 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.51"
+version = "4.5.53"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c26d721170e0295f191a69bd9a1f93efcdb0aff38684b61ab5750468972e5f5"
+checksum = "c9e340e012a1bf4935f5282ed1436d1489548e8f72308207ea5df0e23d2d03f8"
 dependencies = [
  "clap_builder",
 ]
 
 [[package]]
 name = "clap_builder"
-version = "4.5.51"
+version = "4.5.53"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75835f0c7bf681bfd05abe44e965760fea999a5286c6eb2d59883634fd02011a"
+checksum = "d76b5d13eaa18c901fd2f7fca939fefe3a0727a953561fefdf3b2922b8569d00"
 dependencies = [
  "anstream",
  "anstyle",
@@ -367,9 +367,9 @@ dependencies = [
 
 [[package]]
 name = "clap_complete"
-version = "4.5.60"
+version = "4.5.61"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e602857739c5a4291dfa33b5a298aeac9006185229a700e5810a3ef7272d971"
+checksum = "39615915e2ece2550c0149addac32fb5bd312c657f43845bb9088cb9c8a7c992"
 dependencies = [
  "clap",
 ]
@@ -1578,7 +1578,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde_core",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1876,7 +1876,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1949,12 +1949,6 @@ checksum = "5c7398b9c8b70908f6371f47ed36737907c87c52af34c268fed0bf0ceb92ead9"
 dependencies = [
  "libc",
 ]
-
-[[package]]
-name = "number_prefix"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "830b246a0e5f20af87141b25c173cd1b609bd7779a4617d6ec582abaf90870f3"
 
 [[package]]
 name = "once_cell"
@@ -2040,9 +2034,9 @@ dependencies = [
 
 [[package]]
 name = "parse_datetime"
-version = "0.13.2"
+version = "0.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4955561bc7aa4c40afcfd2a8c34297b13164ae9ac3b30ac348737befdc98e4c"
+checksum = "acea383beda9652270f3c9678d83aa58cbfc16880343cae0c0c8c7d6c0974132"
 dependencies = [
  "jiff",
  "num-traits",
@@ -2447,7 +2441,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.11.0",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2753,7 +2747,7 @@ dependencies = [
  "getrandom 0.3.3",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2958,9 +2952,9 @@ checksum = "7264e107f553ccae879d21fbea1d6724ac785e8c3bfc762137959b5802826ef3"
 
 [[package]]
 name = "unit-prefix"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "323402cff2dd658f39ca17c789b502021b3f18707c91cdf22e3838e1b4023817"
+checksum = "81e544489bf3d8ef66c953931f56617f423cd4b5494be343d9b9d3dda037b9a3"
 
 [[package]]
 name = "unty"
@@ -3812,9 +3806,11 @@ name = "uu_shuf"
 version = "0.4.0"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "rand 0.9.2",
  "rand_core 0.9.3",
+ "tempfile",
  "uucore",
 ]
 
@@ -4206,7 +4202,6 @@ dependencies = [
  "memchr",
  "nix",
  "num-traits",
- "number_prefix",
  "os_display",
  "phf",
  "procfs",
@@ -4219,6 +4214,7 @@ dependencies = [
  "thiserror 2.0.17",
  "time",
  "unic-langid",
+ "unit-prefix",
  "utmp-classic",
  "uucore_procs",
  "walkdir",
@@ -4414,7 +4410,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
