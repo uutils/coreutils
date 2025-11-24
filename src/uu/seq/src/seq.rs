@@ -209,11 +209,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         padding,
     );
 
-    match result {
-        Ok(()) => Ok(()),
-        Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
-        Err(err) => Err(err.map_err_context(|| "write error".into())),
-    }
+    result.map_err_context(|| "write error".into())
 }
 
 pub fn uu_app() -> Command {
