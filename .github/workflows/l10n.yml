@@ -141,7 +141,7 @@ jobs:
     - name: Install/setup prerequisites
       shell: bash
       run: |
-        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev locales
+        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
         sudo locale-gen --keep-existing fr_FR.UTF-8
         locale -a | grep -i fr || exit 1
     - name: Build coreutils with clap localization support
@@ -312,7 +312,7 @@ jobs:
       shell: bash
       run: |
         ## Install/setup prerequisites
-        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev locales
+        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
     - name: Generate French locale
       shell: bash
       run: |
@@ -580,7 +580,7 @@ jobs:
         ## Install/setup prerequisites
         case '${{ matrix.job.os }}' in
           ubuntu-*)
-            sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev build-essential locales
+            sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev build-essential
             # Generate French locale for testing
             sudo locale-gen --keep-existing fr_FR.UTF-8
             locale -a | grep -i fr || echo "French locale generation may have failed"
@@ -912,7 +912,7 @@ jobs:
       run: |
         ## Install/setup prerequisites including locale support
         sudo apt-get -y update
-        sudo apt-get -y install libselinux1-dev locales build-essential
+        sudo apt-get -y install libselinux1-dev build-essential
 
         # Generate multiple locales for testing
         sudo locale-gen --keep-existing en_US.UTF-8 fr_FR.UTF-8 de_DE.UTF-8 es_ES.UTF-8
@@ -1264,7 +1264,7 @@ jobs:
     - name: Install prerequisites
       run: |
         sudo apt-get -y update
-        sudo apt-get -y install libselinux1-dev locales
+        sudo apt-get -y install libselinux1-dev
         # Generate French locale for testing
         sudo locale-gen --keep-existing fr_FR.UTF-8
         locale -a | grep -i fr || exit 1
