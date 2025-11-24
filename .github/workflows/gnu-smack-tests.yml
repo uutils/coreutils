@@ -128,6 +128,39 @@ jobs:
 
           echo $! > /tmp/qemu-smack.pid
           echo "QEMU started with PID $(cat /tmp/qemu-smack.pid)"
+
+      - name: Build GNU harness on host (uutils + GNU)
+        run: |
+          set -euo pipefail
+
+          # Detect repo roots on host
+          if [ -d "$GITHUB_WORKSPACE/uutils/util" ]; then
+            UU_ROOT="$GITHUB_WORKSPACE/uutils"
+          else
+            echo "Could not find uutils repo root."
+            ls -R "$GITHUB_WORKSPACE"
+            exit 1
+          fi
+
+          if [ -d "$GITHUB_WORKSPACE/gnu" ]; then
+            GNU_ROOT="$GITHUB_WORKSPACE/gnu"
+          else
+            echo "Could not find gnu coreutils directory."
+            ls -R "$GITHUB_WORKSPACE"
+            exit 1
+          fi
+
+          echo "Host UU_ROOT=${UU_ROOT}"
+          echo "Host GNU_ROOT=${GNU_ROOT}"
+
+          export path_UUTILS="$UU_ROOT"
+          export path_GNU="$GNU_ROOT"
+
+          # Build uutils + GNU harness once on the host
+          # UU_MAKE_PROFILE selects Rust profile; keep it small but realistic
+          SELINUX_ENABLED=1 \
+          UU_MAKE_PROFILE=release-small \
+            bash "$UU_ROOT/util/build-gnu.sh"
           
       - name: Wait for SSH in guest
         run: |
@@ -179,7 +212,8 @@ jobs:
 
           kill "$QEMU_PID" || true
           exit 1
-          
+
+
       - name: Copy repo with built harness into guest
         run: |
           set -euo pipefail
@@ -191,7 +225,6 @@ jobs:
           echo "Host layout:"
           ls -1 "$GITHUB_WORKSPACE"
 
-          # Detect uutils repo root
           if [ -d "$GITHUB_WORKSPACE/util" ]; then
             UU_ROOT="$GITHUB_WORKSPACE"
           elif [ -d "$GITHUB_WORKSPACE/uutils/util" ]; then
@@ -202,7 +235,6 @@ jobs:
             exit 1
           fi
 
-          # Detect GNU coreutils clone
           if [ -d "$GITHUB_WORKSPACE/gnu" ]; then
             GNU_ROOT="$GITHUB_WORKSPACE/gnu"
           elif [ -d "$UU_ROOT/../gnu" ]; then
@@ -224,10 +256,7 @@ jobs:
           tar -C "$GNU_ROOT" -cz . \
             | $SSH_BASE 'rm -rf /root/gnu && mkdir -p /root/gnu && cd /root/gnu && tar xz'
 
-          echo "Sanity check inside guest:"
-          $SSH_BASE 'cd /root/uutils && echo "PWD: $PWD" && ls && ls util'
-          $SSH_BASE 'cd /root/gnu && echo "PWD: $PWD" && ls src tests || ls'
-
+            
       - name: Install make inside SMACK guest
         run: |
           set -euo pipefail
@@ -261,27 +290,6 @@ jobs:
               git \
               curl
           '
-
-          # 2) Install latest Rust (stable) via rustup in the guest
-          $SSH_BASE '
-            set -euo pipefail
-
-            if ! command -v rustup >/dev/null 2>&1; then
-              curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs \
-                | sh -s -- -y --profile minimal --default-toolchain stable
-            fi
-
-            . "$HOME/.cargo/env"
-
-            # Ensure this directory uses the rustup toolchain, not system cargo
-            cd /root/uutils
-            rustup override set stable
-
-            # 3) Build GNU+uutils harness with the latest Rust
-            PATH="$HOME/.cargo/bin:$PATH" \
-              PROFILE=release-small \
-              bash util/build-gnu.sh
-          '          
       - name: Run SMACK GNU tests inside guest
         run: |
           set -euo pipefail
@@ -306,7 +314,6 @@ jobs:
           '
           RC=$?
           set -e
-
           echo "SMACK GNU tests exit code: $RC"
 
           echo "Shutting down QEMU..."
