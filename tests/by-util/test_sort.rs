@@ -1879,7 +1879,7 @@ fn test_debug_key_annotations() {
     let ts = TestScenario::new("sort");
     let output = debug_key_annotation_output(&ts);
 
-    assert_eq!(output, ts.fixtures.read("debug_key_annotation.expected"));
+    assert_eq!(output, EXPECTED_DEBUG_KEY_ANNOTATION);
 }
 
 #[test]
@@ -1940,10 +1940,7 @@ fn test_debug_key_annotations_locale() {
                     .join("\n")
                     + "\n";
 
-                assert_eq!(
-                    normalized,
-                    ts.fixtures.read("debug_key_annotation_locale.expected")
-                );
+                assert_eq!(normalized, EXPECTED_DEBUG_KEY_ANNOTATION_LOCALE);
             }
         }
     }
@@ -2036,6 +2033,249 @@ fn debug_key_annotation_output(ts: &TestScenario) -> String {
 
     output
 }
+
+const EXPECTED_DEBUG_KEY_ANNOTATION: &str = r#"1
+ ^ no match for key
+
+^ no match for key
+44
+  ^ no match for key
+33
+  ^ no match for key
+2
+ ^ no match for key
+1
+ ^ no match for key
+
+^ no match for key
+44
+  ^ no match for key
+33
+  ^ no match for key
+2
+ ^ no match for key
+
+^ no match for key
+1
+_
+2
+_
+33
+__
+44
+__
+2>
+  ^ no match for key
+3>1
+  _
+1>2
+  _
+1
+ ^ no match for key
+
+^ no match for key
+44
+  ^ no match for key
+33
+  ^ no match for key
+2
+ ^ no match for key
+1
+ ^ no match for key
+
+^ no match for key
+44
+  ^ no match for key
+33
+  ^ no match for key
+2
+ ^ no match for key
+
+^ no match for key
+1
+_
+2
+_
+33
+__
+44
+__
+2>
+  ^ no match for key
+3>1
+  _
+1>2
+  _
+1
+ ^ no match for key
+
+^ no match for key
+44
+  ^ no match for key
+33
+  ^ no match for key
+2
+ ^ no match for key
+1
+ ^ no match for key
+
+^ no match for key
+44
+  ^ no match for key
+33
+  ^ no match for key
+2
+ ^ no match for key
+
+^ no match for key
+1
+_
+2
+_
+33
+__
+44
+__
+2>
+  ^ no match for key
+3>1
+  _
+1>2
+  _
+
+^ no match for key
+JAN
+___
+FEB
+___
+FEB
+   ^ no match for key
+
+^ no match for key
+JAN
+   ^ no match for key
+JAZZ
+^ no match for key
+
+^ no match for key
+JAN
+___
+FEB
+___
+2>JAZZ
+  ^ no match for key
+3>
+  ^ no match for key
+4>JAN
+  ___
+1>FEB
+  ___
+
+^ no match for key
+JANZ
+___
+JAN
+___
+FEB
+___
+3>
+  ^ no match for key
+2>JANZ
+  ___
+4>JAN
+  ___
+1>FEB
+  ___
+ 1.2ignore
+ ___
+ 1.1e4ignore
+ _____
+>>a
+___
+>b
+__
+a
+ ^ no match for key
+
+^ no match for key
+a
+_
+b
+_
+-3
+__
+-2
+__
+-0
+__
+--Mi-1
+^ no match for key
+-0
+__
+1
+_
+ 1
+ _
+__
+1
+_
+_
+ 1
+ _
+1
+_
+ 1
+__
+1
+_
+2,5
+_
+2.4
+___
+2.,,3
+__
+2.4
+___
+2,,3
+_
+2.4
+___
+1a
+_
+2b
+_
+>a
+ _
+A>chr10
+     ^ no match for key
+B>chr1
+     ^ no match for key
+1 2
+ __
+1 3
+ __
+"#;
+
+const EXPECTED_DEBUG_KEY_ANNOTATION_LOCALE: &str = r#"   1²---++3   1,234  Mi
+               _
+   _________
+________________________
+   1²---++3   1,234  Mi
+              _____
+   ________
+_______________________
++1234 1234Gi 1,234M
+^ no match for key
+_____
+^ no match for key
+      ____
+      ____
+      _____
+             _____
+             _____
+             ______
+___________________
+"#;
 
 #[test]
 fn test_color_environment_variables() {
