@@ -160,6 +160,11 @@ jobs:
           # UU_MAKE_PROFILE selects Rust profile; keep it small but realistic
           UU_MAKE_PROFILE=release-small \
             bash "$UU_ROOT/util/build-gnu.sh"
+          rm -rf "$UU_ROOT/target"/{debug,release}/incremental
+          rm -rf "$UU_ROOT/target"/{debug,release}/build
+          rm -rf "$UU_ROOT/target"/{debug,release}/deps
+
+
           
       - name: Wait for SSH in guest
         run: |
