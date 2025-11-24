@@ -152,7 +152,7 @@ jobs:
         ## Run GNU root tests
         path_GNU='gnu'
         path_UUTILS='uutils'
-        bash "uutils/util/run-gnu-test.sh" tests/stty/*.sh
+        bash "uutils/util/run-gnu-test.sh" tests/stty/stty-row-col tests/stty/stty-pairs tests/stty/stty-invalid tests/stty/stty tests/stty/bad-speed
 
     - name: Extract testing info from individual logs (stty) into JSON
       shell: bash
