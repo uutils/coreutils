@@ -10,8 +10,9 @@ use uutests::util::TestScenario;
 use uutests::util::log_info;
 use uutests::util_name;
 
-const ALGOS: [&str; 11] = [
-    "sysv", "bsd", "crc", "md5", "sha1", "sha224", "sha256", "sha384", "sha512", "blake2b", "sm3",
+const ALGOS: [&str; 12] = [
+    "sysv", "bsd", "crc", "crc32b", "md5", "sha1", "sha224", "sha256", "sha384", "sha512",
+    "blake2b", "sm3",
 ];
 const SHA_LENGTHS: [u32; 4] = [224, 256, 384, 512];
 
@@ -773,14 +774,31 @@ fn test_blake2b_length() {
 
 #[test]
 fn test_blake2b_length_greater_than_512() {
-    new_ucmd!()
-        .arg("--length=1024")
-        .arg("--algorithm=blake2b")
-        .arg("lorem_ipsum.txt")
-        .arg("alice_in_wonderland.txt")
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_is_fixture("length_larger_than_512.expected");
+    for l in ["513", "1024", "73786976294838206464"] {
+        new_ucmd!()
+            .arg("--algorithm=blake2b")
+            .arg("--length")
+            .arg(l)
+            .arg("lorem_ipsum.txt")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains(format!("invalid length: '{l}'"))
+            .stderr_contains("maximum digest length for 'BLAKE2b' is 512 bits");
+    }
+}
+
+#[test]
+fn test_blake2b_length_nan() {
+    for l in ["foo", "512x", "x512", "0xff"] {
+        new_ucmd!()
+            .arg("--algorithm=blake2b")
+            .arg("--length")
+            .arg(l)
+            .arg("lorem_ipsum.txt")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains(format!("invalid length: '{l}'"));
+    }
 }
 
 #[test]
@@ -2301,6 +2319,119 @@ mod gnu_cksum_base64 {
     }
 }
 
+/// This module reimplements the cksum-base64-untagged.sh GNU test.
+mod gnu_cksum_base64_untagged {
+    use super::*;
+
+    macro_rules! decl_sha_test {
+        ($id:ident, $algo:literal, $len:expr) => {
+            mod $id {
+                use super::*;
+
+                #[test]
+                fn check_length_guess() {
+                    let ts = TestScenario::new(util_name!());
+                    let at = &ts.fixtures;
+
+                    at.write("inp", "test input\n");
+
+                    let compute = ts
+                        .ucmd()
+                        .arg("-a")
+                        .arg($algo)
+                        .arg("-l")
+                        .arg(stringify!($len))
+                        .arg("--base64")
+                        .arg("--untagged")
+                        .arg("inp")
+                        .succeeds();
+
+                    at.write_bytes("check", compute.stdout());
+
+                    ts.ucmd()
+                        .arg("-a")
+                        .arg($algo)
+                        .arg("--check")
+                        .arg("check")
+                        .succeeds()
+                        .stdout_only("inp: OK\n");
+
+                    at.write("check", "  inp");
+
+                    ts.ucmd()
+                        .arg("-a")
+                        .arg($algo)
+                        .arg("check")
+                        .fails()
+                        .stderr_contains(concat!(
+                            "--algorithm=",
+                            $algo,
+                            " requires specifying --length"
+                        ));
+                }
+            }
+        };
+    }
+
+    decl_sha_test!(sha2_224, "sha2", 224);
+    decl_sha_test!(sha2_256, "sha2", 256);
+    decl_sha_test!(sha2_384, "sha2", 384);
+    decl_sha_test!(sha2_512, "sha2", 512);
+    decl_sha_test!(sha3_224, "sha3", 224);
+    decl_sha_test!(sha3_256, "sha3", 256);
+    decl_sha_test!(sha3_384, "sha3", 384);
+    decl_sha_test!(sha3_512, "sha3", 512);
+
+    macro_rules! decl_blake_test {
+        ($id:ident, $len:expr) => {
+            mod $id {
+                use super::*;
+
+                #[test]
+                fn check_length_guess() {
+                    let ts = TestScenario::new(util_name!());
+                    let at = &ts.fixtures;
+
+                    at.write("inp", "test input\n");
+
+                    let compute = ts
+                        .ucmd()
+                        .arg("-a")
+                        .arg("blake2b")
+                        .arg("-l")
+                        .arg(stringify!($len))
+                        .arg("--base64")
+                        .arg("--untagged")
+                        .arg("inp")
+                        .succeeds();
+
+                    at.write_bytes("check", compute.stdout());
+
+                    ts.ucmd()
+                        .arg("-a")
+                        .arg("blake2b")
+                        .arg("--check")
+                        .arg("check")
+                        .succeeds()
+                        .stdout_only("inp: OK\n");
+                }
+            }
+        };
+    }
+
+    decl_blake_test!(blake2b_8, 8);
+    decl_blake_test!(blake2b_216, 216);
+    decl_blake_test!(blake2b_224, 224);
+    decl_blake_test!(blake2b_232, 232);
+    decl_blake_test!(blake2b_248, 248);
+    decl_blake_test!(blake2b_256, 256);
+    decl_blake_test!(blake2b_264, 264);
+    decl_blake_test!(blake2b_376, 376);
+    decl_blake_test!(blake2b_384, 384);
+    decl_blake_test!(blake2b_392, 392);
+    decl_blake_test!(blake2b_504, 504);
+    decl_blake_test!(blake2b_512, 512);
+}
 /// This module reimplements the cksum-c.sh GNU test.
 mod gnu_cksum_c {
     use super::*;

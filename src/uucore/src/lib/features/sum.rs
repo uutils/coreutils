@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore memmem algo PCLMULQDQ refin xorout
+// spell-checker:ignore memmem algo PCLMULQDQ refin xorout Hdlc
 
 //! Implementations of digest functions, like md5 and sha1.
 //!
@@ -183,24 +183,31 @@ impl Digest for Crc {
     }
 }
 
-pub struct CRC32B(crc32fast::Hasher);
+pub struct CRC32B {
+    digest: crc_fast::Digest,
+}
+
 impl Digest for CRC32B {
     fn new() -> Self {
-        Self(crc32fast::Hasher::new())
+        Self {
+            digest: crc_fast::Digest::new(crc_fast::CrcAlgorithm::Crc32IsoHdlc),
+        }
     }
 
     fn hash_update(&mut self, input: &[u8]) {
-        self.0.update(input);
+        self.digest.update(input);
     }
 
     fn hash_finalize(&mut self, out: &mut [u8]) {
-        let result = self.0.clone().finalize();
-        let slice = result.to_be_bytes();
-        out.copy_from_slice(&slice);
+        let result = self.digest.finalize();
+        // crc_fast returns a 64-bit value, but CRC32B should be 32-bit
+        // Take the lower 32 bits and convert to big-endian bytes
+        let crc32_value = (result & 0xffffffff) as u32;
+        out.copy_from_slice(&crc32_value.to_be_bytes());
     }
 
     fn reset(&mut self) {
-        self.0.reset();
+        self.digest.reset();
     }
 
     fn output_bits(&self) -> usize {

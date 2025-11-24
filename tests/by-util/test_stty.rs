@@ -2,9 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh econl igpar ispeed ospeed
+// spell-checker:ignore parenb parmrk ixany iuclc onlcr icanon noflsh econl igpar ispeed ospeed
 
 use uutests::new_ucmd;
+use uutests::util::pty_path;
 
 #[test]
 fn test_invalid_arg() {
@@ -12,31 +13,41 @@ fn test_invalid_arg() {
 }
 
 #[test]
-#[ignore = "Fails because cargo test does not run in a tty"]
-fn runs() {
-    new_ucmd!().succeeds();
+#[cfg(unix)]
+fn test_basic() {
+    let (path, _controller, _replica) = pty_path();
+    new_ucmd!()
+        .args(&["--file", &path])
+        .succeeds()
+        .stdout_contains("speed");
 }
 
 #[test]
-#[ignore = "Fails because cargo test does not run in a tty"]
-fn print_all() {
-    let res = new_ucmd!().args(&["--all"]).succeeds();
+#[cfg(unix)]
+fn test_all_flag() {
+    let (path, _controller, _replica) = pty_path();
+    let result = new_ucmd!().args(&["--all", "--file", &path]).succeeds();
 
-    // Random selection of flags to check for
-    for flag in [
-        "parenb", "parmrk", "ixany", "onlcr", "ofdel", "icanon", "noflsh",
-    ] {
-        res.stdout_contains(flag);
+    for flag in ["parenb", "parmrk", "ixany", "onlcr", "icanon", "noflsh"] {
+        result.stdout_contains(flag);
     }
 }
 
 #[test]
-#[ignore = "Fails because cargo test does not run in a tty"]
-fn sane_settings() {
-    new_ucmd!().args(&["intr", "^A"]).succeeds();
-    new_ucmd!().succeeds().stdout_contains("intr = ^A");
+#[cfg(unix)]
+fn test_sane() {
+    let (path, _controller, _replica) = pty_path();
+
     new_ucmd!()
-        .args(&["sane"])
+        .args(&["--file", &path, "intr", "^A"])
+        .succeeds();
+    new_ucmd!()
+        .args(&["--file", &path])
+        .succeeds()
+        .stdout_contains("intr = ^A");
+    new_ucmd!().args(&["--file", &path, "sane"]).succeeds();
+    new_ucmd!()
+        .args(&["--file", &path])
         .succeeds()
         .stdout_str_check(|s| !s.contains("intr = ^A"));
 }
@@ -183,6 +194,24 @@ fn invalid_baud_setting() {
         .args(&["ospeed", "995"])
         .fails()
         .stderr_contains("invalid ospeed '995'");
+
+    for speed in &[
+        "9599..", "9600..", "9600.5.", "9600.50.", "9600.0.", "++9600", "0x2580", "96E2", "9600,0",
+        "9600.0 ",
+    ] {
+        new_ucmd!().args(&["ispeed", speed]).fails();
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn valid_baud_formats() {
+    let (path, _controller, _replica) = pty_path();
+    for speed in &["  +9600", "9600.49", "9600.50", "9599.51", "  9600."] {
+        new_ucmd!()
+            .args(&["--file", &path, "ispeed", speed])
+            .succeeds();
+    }
 }
 
 #[test]
