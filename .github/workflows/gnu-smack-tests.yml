@@ -158,7 +158,6 @@ jobs:
 
           # Build uutils + GNU harness once on the host
           # UU_MAKE_PROFILE selects Rust profile; keep it small but realistic
-          SELINUX_ENABLED=1 \
           UU_MAKE_PROFILE=release-small \
             bash "$UU_ROOT/util/build-gnu.sh"
           
