@@ -135,7 +135,6 @@ else
       "$([ "${SELINUX_ENABLED}" = 1 ] && echo --with-selinux || echo --without-selinux)"
     #Add timeout to to protect against hangs
     "${SED}" -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
-    "${SED}" -i 's| tr | /usr/bin/tr |' tests/init.sh
     # Use a better diff
     "${SED}" -i 's|diff -c|diff -u|g' tests/Coreutils.pm
     "${MAKE}" -j "$("${NPROC}")"
@@ -342,11 +341,6 @@ test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
 
 # Slightly different error message
 "${SED}" -i 's/not supported/unexpected argument/' tests/mv/mv-exchange.sh
-# Most tests check that `/usr/bin/tr` is working correctly before running.
-# However in NixOS/Nix-based distros, the tr util is located somewhere in
-# /nix/store/xxxxxxxxxxxx...xxxx/bin/tr
-# We just replace the references to `/usr/bin/tr`
-"${SED}" -i  's/\/usr\/bin\/tr/$(command -v tr)/' tests/init.sh
 
 # upstream doesn't having the program name in the error message
 # but we do. We should keep it that way.
