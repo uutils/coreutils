@@ -27,7 +27,7 @@ CARGO  ?= cargo
 CARGOFLAGS ?=
 RUSTC_ARCH ?= # should be empty except for cross-build, not --target $(shell rustc --print host-tuple)
 
-#prefix appended to all binaries and library dir
+#prefix prepended to all binaries and library dir
 PROG_PREFIX ?=
 
 # Install directories
