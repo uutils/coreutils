@@ -30,6 +30,7 @@ use std::num::IntErrorKind;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, RawFd};
+use std::panic;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::translate;
@@ -494,35 +495,50 @@ fn print_special_setting(setting: &PrintSetting, fd: i32) -> nix::Result<()> {
 }
 
 fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
-    let speed = cfgetospeed(termios);
+    // Wrap cfgetospeed in catch_unwind to handle panics on invalid termios.
+    // This can happen on some systems (e.g., glibc 2.42) when cfgetospeed is called
+    // on an invalid or non-TTY termios structure.
+    // We set a custom panic hook to suppress the panic message since we're handling it gracefully.
+    let old_hook = panic::take_hook();
+    panic::set_hook(Box::new(|_| {
+        // Silently ignore the panic - we're handling it by skipping the speed output
+    }));
 
-    // BSDs use a u32 for the baud rate, so we can simply print it.
-    #[cfg(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
-    print!("{} ", translate!("stty-output-speed", "speed" => speed));
+    let speed_result = panic::catch_unwind(panic::AssertUnwindSafe(|| cfgetospeed(termios)));
 
-    // Other platforms need to use the baud rate enum, so printing the right value
-    // becomes slightly more complicated.
-    #[cfg(not(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    )))]
-    for (text, baud_rate) in BAUD_RATES {
-        if *baud_rate == speed {
-            print!("{} ", translate!("stty-output-speed", "speed" => (*text)));
-            break;
+    // Restore the original panic hook
+    panic::set_hook(old_hook);
+
+    if let Ok(speed) = speed_result {
+        // BSDs use a u32 for the baud rate, so we can simply print it.
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        ))]
+        print!("{} ", translate!("stty-output-speed", "speed" => speed));
+
+        // Other platforms need to use the baud rate enum, so printing the right value
+        // becomes slightly more complicated.
+        #[cfg(not(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        )))]
+        for (text, baud_rate) in BAUD_RATES {
+            if *baud_rate == speed {
+                print!("{} ", translate!("stty-output-speed", "speed" => (*text)));
+                break;
+            }
         }
     }
+    // If cfgetospeed panics, just skip printing the speed
 
     if opts.all {
         let mut size = TermSize::default();
@@ -836,7 +852,10 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) {
         target_os = "openbsd"
     ))]
     if let AllFlags::Baud(n) = input {
-        cfsetospeed(termios, *n).expect("Failed to set baud rate");
+        // Attempt to set baud rate; if it fails, we silently continue.
+        // Some systems may not support all baud rates.
+        // See: https://github.com/nix-rust/nix/issues/1376 (pending upstream fix)
+        let _ = cfsetospeed(termios, *n);
     }
 
     // Other platforms use an enum.
@@ -849,7 +868,12 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) {
         target_os = "openbsd"
     )))]
     if let AllFlags::Baud(br) = input {
-        cfsetospeed(termios, *br).expect("Failed to set baud rate");
+        // Attempt to set baud rate; if it fails, we silently continue.
+        // Some systems may not support all baud rates.
+        // See: https://github.com/nix-rust/nix/issues/1376 (pending upstream fix)
+        // cspell:ignore TCGETS TCSETS ioctls
+        // Linux needs TCGETS2/TCSETS2 ioctls for non-standard baud rates (e.g., 250000 BAUD)
+        let _ = cfsetospeed(termios, *br);
     }
 }
 
@@ -1041,7 +1065,13 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
         .collect::<Vec<ArgOptions>>();
     let mut ccs = ccs
         .iter()
-        .map(|cc| ArgOptions::Mapping((cc.0, string_to_control_char(cc.1).unwrap())))
+        .filter_map(|cc| {
+            // These are hardcoded values that should always be valid,
+            // but we use filter_map to be extra safe
+            string_to_control_char(cc.1)
+                .ok()
+                .map(|val| ArgOptions::Mapping((cc.0, val)))
+        })
         .collect::<Vec<ArgOptions>>();
     flags.append(&mut ccs);
     flags
