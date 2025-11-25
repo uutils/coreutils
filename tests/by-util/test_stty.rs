@@ -7,6 +7,15 @@
 use uutests::util::{expected_result, pty_path};
 use uutests::{at_and_ts, new_ucmd, unwrap_or_return};
 
+/// Normalize stderr by replacing the full binary path with just the utility name
+/// This allows comparison between GNU (which shows "stty") and ours (which shows full path)
+fn normalize_stderr(stderr: &str, util_name: &str) -> String {
+    // Replace patterns like "Try '/path/to/binary util_name --help'" with "Try 'util_name --help'"
+    let re = regex::Regex::new(&format!(r"Try '[^']*{} --help'", util_name)).unwrap();
+    re.replace_all(stderr, &format!("Try '{} --help'", util_name))
+        .to_string()
+}
+
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
@@ -425,10 +434,11 @@ fn test_saved_state_valid_formats() {
         result.success().no_stderr();
 
         let exp_result = unwrap_or_return!(expected_result(&ts, &["--file", &path, state]));
+        let normalized_stderr = normalize_stderr(result.stderr_str(), "stty");
         result
             .stdout_is(exp_result.stdout_str())
-            .stderr_is(exp_result.stderr_str())
             .code_is(exp_result.code());
+        assert_eq!(normalized_stderr, exp_result.stderr_str());
     }
 }
 
@@ -456,10 +466,11 @@ fn test_saved_state_invalid_formats() {
         result.failure().stderr_contains("invalid argument");
 
         let exp_result = unwrap_or_return!(expected_result(&ts, &["--file", &path, state]));
+        let normalized_stderr = normalize_stderr(result.stderr_str(), "stty");
         result
             .stdout_is(exp_result.stdout_str())
-            .stderr_is(exp_result.stderr_str())
             .code_is(exp_result.code());
+        assert_eq!(normalized_stderr, exp_result.stderr_str());
     }
 }
 
