@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore parenb parmrk ixany iuclc onlcr icanon noflsh econl igpar ispeed ospeed
 
-use uutests::util::{pty_path, expected_result};
+use uutests::util::{expected_result, pty_path};
 use uutests::{at_and_ts, new_ucmd, unwrap_or_return};
 
 #[test]
@@ -426,10 +426,7 @@ fn test_saved_state_valid_formats() {
 
         result.success().no_stderr();
 
-        let exp_result = unwrap_or_return!(expected_result(
-            &ts,
-            &["--file", &path, state]
-        ));
+        let exp_result = unwrap_or_return!(expected_result(&ts, &["--file", &path, state]));
         result
             .stdout_is(exp_result.stdout_str())
             .stderr_is(exp_result.stderr_str())
@@ -455,10 +452,7 @@ fn test_saved_state_invalid_formats() {
 
         result.failure().stderr_contains("invalid argument");
 
-        let exp_result = unwrap_or_return!(expected_result(
-            &ts,
-            &["--file", &path, state]
-        ));
+        let exp_result = unwrap_or_return!(expected_result(&ts, &["--file", &path, state]));
         result
             .stdout_is(exp_result.stdout_str())
             .stderr_is(exp_result.stderr_str())
@@ -484,10 +478,7 @@ fn test_saved_state_with_control_chars() {
 
     result.success().stdout_contains(":");
 
-    let exp_result = unwrap_or_return!(expected_result(
-        &ts,
-        &["-g", "--file", &path]
-    ));
+    let exp_result = unwrap_or_return!(expected_result(&ts, &["-g", "--file", &path]));
     result
         .stdout_is(exp_result.stdout_str())
         .stderr_is(exp_result.stderr_str())
@@ -501,9 +492,9 @@ fn test_saved_state_less_than_4_elements() {
     let (_at, ts) = at_and_ts!();
 
     let states_with_insufficient_elements = [
-        "500:5:4bf",  // 3 elements
-        "500:5",       // 2 elements
-        "500",         // 1 element
+        "500:5:4bf", // 3 elements
+        "500:5",     // 2 elements
+        "500",       // 1 element
     ];
 
     for state in &states_with_insufficient_elements {
