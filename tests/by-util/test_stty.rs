@@ -4,8 +4,8 @@
 // file that was distributed with this source code.
 // spell-checker:ignore parenb parmrk ixany iuclc onlcr icanon noflsh econl igpar ispeed ospeed
 
-use uutests::new_ucmd;
-use uutests::util::pty_path;
+use uutests::util::{pty_path, expected_result};
+use uutests::{at_and_ts, new_ucmd, unwrap_or_return};
 
 #[test]
 fn test_invalid_arg() {
@@ -350,6 +350,7 @@ fn non_negatable_combo() {
         .stderr_contains("invalid argument '-ek'");
 }
 
+// Tests for saved state parsing and restoration
 #[test]
 #[cfg(unix)]
 fn test_save_and_restore() {
@@ -401,4 +402,119 @@ fn test_save_restore_after_change() {
         .args(&["--file", &path])
         .succeeds()
         .stdout_str_check(|s| !s.contains("intr = ^A"));
+}
+
+// These tests both validate what we expect each input to return and their error codes
+// and also use the GNU coreutil results to validate our results match expectations
+#[test]
+#[cfg(unix)]
+fn test_saved_state_valid_formats() {
+    let (path, _controller, _replica) = pty_path();
+    let (_at, ts) = at_and_ts!();
+
+    let valid_states = [
+        "500:5:4bf:8a3b",                                    // 4 hex values (flags only)
+        "500:5:4bf:8a3b:3:1c:7f:15:4:11:0:13:1a:12:17:16:f", // 4+ hex values (flags + control chars)
+        "500::4bf:8a3b",                                     // empty hex values treated as 0
+        "500:5:4BF:8A3B",                                    // uppercase hex
+        "0:0:0:0",                                           // all zeros
+        "ffffffff:ffffffff:ffffffff:ffffffff",               // maximum u32 values
+    ];
+
+    for state in &valid_states {
+        let result = ts.ucmd().args(&["--file", &path, state]).run();
+
+        result.success().no_stderr();
+
+        let exp_result = unwrap_or_return!(expected_result(
+            &ts,
+            &["--file", &path, state]
+        ));
+        result
+            .stdout_is(exp_result.stdout_str())
+            .stderr_is(exp_result.stderr_str())
+            .code_is(exp_result.code());
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_saved_state_invalid_formats() {
+    let (path, _controller, _replica) = pty_path();
+    let (_at, ts) = at_and_ts!();
+
+    let invalid_states = [
+        "500:5:4bf",       // fewer than 4 parts
+        "500",             // only 1 part
+        "500:5:xyz:8a3b",  // non-hex characters
+        "500:5:4bf :8a3b", // spaces in hex values
+    ];
+
+    for state in &invalid_states {
+        let result = ts.ucmd().args(&["--file", &path, state]).run();
+
+        result.failure().stderr_contains("invalid argument");
+
+        let exp_result = unwrap_or_return!(expected_result(
+            &ts,
+            &["--file", &path, state]
+        ));
+        result
+            .stdout_is(exp_result.stdout_str())
+            .stderr_is(exp_result.stderr_str())
+            .code_is(exp_result.code());
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_saved_state_with_control_chars() {
+    let (path, _controller, _replica) = pty_path();
+    let (_at, ts) = at_and_ts!();
+
+    ts.ucmd()
+        .args(&[
+            "--file",
+            &path,
+            "500:5:4bf:8a3b:1:2:3:4:5:6:7:8:9:a:b:c:d:e:f:10:11:12:13:14:15:16:17:18:19:1a",
+        ])
+        .succeeds();
+
+    let result = ts.ucmd().args(&["-g", "--file", &path]).run();
+
+    result.success().stdout_contains(":");
+
+    let exp_result = unwrap_or_return!(expected_result(
+        &ts,
+        &["-g", "--file", &path]
+    ));
+    result
+        .stdout_is(exp_result.stdout_str())
+        .stderr_is(exp_result.stderr_str())
+        .code_is(exp_result.code());
+}
+
+#[test]
+#[cfg(unix)]
+fn test_saved_state_less_than_4_elements() {
+    let (path, _controller, _replica) = pty_path();
+    let (_at, ts) = at_and_ts!();
+
+    let states_with_insufficient_elements = [
+        "500:5:4bf",  // 3 elements
+        "500:5",       // 2 elements
+        "500",         // 1 element
+    ];
+
+    for state in &states_with_insufficient_elements {
+        let result = ts.ucmd().args(&["--file", &path, state]).run();
+
+        result.failure().stderr_contains("invalid argument");
+
+        let exp_result = unwrap_or_return!(expected_result(&ts, &["--file", &path, state]));
+        result
+            .stdout_is(exp_result.stdout_str())
+            .stderr_is(exp_result.stderr_str())
+            .code_is(exp_result.code());
+    }
 }

@@ -486,18 +486,30 @@ fn parse_rows_cols(arg: &str) -> Option<u16> {
     None
 }
 
+/// Parse a saved terminal state string in stty format.
+///
+/// The format is colon-separated hexadecimal values:
+/// `input_flags:output_flags:control_flags:local_flags:cc0:cc1:cc2:...`
+///
+/// - First 4 values are terminal flags (input, output, control, local)
+/// - Remaining values are control characters (optional)
+/// - Empty hex values are treated as 0
+/// - Returns `None` if format is invalid (< 4 parts or non-hex values)
 fn parse_saved_state(arg: &str) -> Option<Vec<u32>> {
     let parts: Vec<&str> = arg.split(':').collect();
 
+    // Need at least 4 parts for the required flags
     if parts.len() < 4 {
         return None;
     }
 
+    // Validate all parts are valid hex (or empty)
     let is_valid_hex = |s: &&str| s.is_empty() || u32::from_str_radix(s, 16).is_ok();
     if !parts.iter().all(is_valid_hex) {
         return None;
     }
 
+    // Parse hex values, treating empty strings as 0
     let parse_hex = |part: &&str| {
         if part.is_empty() {
             0
@@ -888,20 +900,36 @@ fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
     termios.control_chars[mapping.0 as usize] = mapping.1;
 }
 
+/// Apply a saved terminal state to the current termios.
+///
+/// The state array contains:
+/// - `state[0]`: input flags
+/// - `state[1]`: output flags  
+/// - `state[2]`: control flags
+/// - `state[3]`: local flags
+/// - `state[4..]`: control characters (optional)
+///
+/// If state has fewer than 4 elements, no changes are applied. This is a defensive
+/// check that should never trigger since `parse_saved_state` rejects such states.
 fn apply_saved_state(termios: &mut Termios, state: &[u32]) -> nix::Result<()> {
-    if state.len() >= 4 {
-        termios.input_flags = InputFlags::from_bits_truncate(state[0] as _);
-        termios.output_flags = OutputFlags::from_bits_truncate(state[1] as _);
-        termios.control_flags = ControlFlags::from_bits_truncate(state[2] as _);
-        termios.local_flags = LocalFlags::from_bits_truncate(state[3] as _);
+    // Require at least 4 elements for the flags (defensive check)
+    if state.len() < 4 {
+        return Ok(()); // No-op for invalid state (already validated by parser)
+    }
 
-        // Apply control characters (stored as u32 but used as u8)
-        for (i, &cc_val) in state.iter().skip(4).enumerate() {
-            if i < termios.control_chars.len() {
-                termios.control_chars[i] = cc_val as u8;
-            }
+    // Apply the four flag groups, done (as _) for MacOS size compatibility
+    termios.input_flags = InputFlags::from_bits_truncate(state[0] as _);
+    termios.output_flags = OutputFlags::from_bits_truncate(state[1] as _);
+    termios.control_flags = ControlFlags::from_bits_truncate(state[2] as _);
+    termios.local_flags = LocalFlags::from_bits_truncate(state[3] as _);
+
+    // Apply control characters if present (stored as u32 but used as u8)
+    for (i, &cc_val) in state.iter().skip(4).enumerate() {
+        if i < termios.control_chars.len() {
+            termios.control_chars[i] = cc_val as u8;
         }
     }
+
     Ok(())
 }
 
