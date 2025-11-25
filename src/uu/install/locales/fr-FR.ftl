@@ -18,6 +18,7 @@ install-help-no-target-directory = traiter DEST comme un fichier normal
 install-help-verbose = expliquer ce qui est fait
 install-help-preserve-context = préserver le contexte de sécurité
 install-help-context = définir le contexte de sécurité des fichiers et répertoires
+install-help-default-context = définir le contexte de sécurité SELinux du fichier de destination et de chaque répertoire créé au type par défaut
 
 # Messages d'erreur
 install-error-dir-needs-arg = { $util_name } avec -d nécessite au moins un argument.

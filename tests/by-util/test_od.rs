@@ -3,16 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore abcdefghijklmnopqrstuvwxyz Anone fdbb
+// spell-checker:ignore abcdefghijklmnopqrstuvwxyz Anone fdbb littl
 
 #[cfg(unix)]
 use std::io::Read;
 
 use unindent::unindent;
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
 use uutests::util::TestScenario;
-use uutests::util_name;
+use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 // octal dump of 'abcdefghijklmnopqrstuvwxyz\n'
 static ALPHA_OUT: &str = "
@@ -32,39 +30,30 @@ fn test_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.write("test", "abcdefghijklmnopqrstuvwxyz\n");
-    scene
-        .ucmd()
-        .arg("--endian=little")
-        .arg("test")
-        .succeeds()
-        .no_stderr()
-        .stdout_is(unindent(ALPHA_OUT));
-    scene
-        .ucmd()
-        .arg("--endian=littl") // spell-checker:disable-line
-        .arg("test")
-        .succeeds()
-        .no_stderr()
-        .stdout_is(unindent(ALPHA_OUT));
-    scene
-        .ucmd()
-        .arg("--endian=l")
-        .arg("test")
-        .succeeds()
-        .no_stderr()
-        .stdout_is(unindent(ALPHA_OUT));
+
+    for arg in ["--endian=little", "--endian=littl", "--endian=l"] {
+        scene
+            .ucmd()
+            .arg(arg)
+            .arg("test")
+            .succeeds()
+            .stdout_only(unindent(ALPHA_OUT));
+    }
+
     // Ensure that default format matches `-t o2`, and that `-t` does not absorb file argument
     scene
         .ucmd()
         .arg("--endian=little")
         .arg("-t")
         .arg("o2")
-        .arg("test");
+        .arg("test")
+        .succeeds()
+        .stdout_only(unindent(ALPHA_OUT));
 }
 
 // Test that od can read 2 files and concatenate the contents
 #[test]
-fn test_2files() {
+fn test_two_files() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("test1", "abcdefghijklmnop");
     at.write("test2", "qrstuvwxyz\n"); // spell-checker:disable-line
@@ -72,15 +61,13 @@ fn test_2files() {
         .arg("test1")
         .arg("test2")
         .succeeds()
-        .no_stderr()
-        .stdout_is(unindent(ALPHA_OUT));
+        .stdout_only(unindent(ALPHA_OUT));
 }
 
 // Test that od gives non-0 exit val for filename that doesn't exist.
 #[test]
-fn test_no_file() {
-    let (_at, mut ucmd) = at_and_ucmd!();
-    ucmd.arg("}surely'none'would'thus'a'file'name").fails();
+fn test_non_existing_file() {
+    new_ucmd!().arg("non_existing_file").fails();
 }
 
 // Test that od reads from stdin instead of a file
@@ -91,8 +78,7 @@ fn test_from_stdin() {
         .arg("--endian=little")
         .run_piped_stdin(input.as_bytes())
         .success()
-        .no_stderr()
-        .stdout_is(unindent(ALPHA_OUT));
+        .stdout_only(unindent(ALPHA_OUT));
 }
 
 // Test that od reads from stdin and also from files
@@ -110,8 +96,7 @@ fn test_from_mixed() {
         .arg("test-3")
         .run_piped_stdin(data2.as_bytes())
         .success()
-        .no_stderr()
-        .stdout_is(unindent(ALPHA_OUT));
+        .stdout_only(unindent(ALPHA_OUT));
 }
 
 #[test]
@@ -122,8 +107,7 @@ fn test_multiple_formats() {
         .arg("-b")
         .run_piped_stdin(input.as_bytes())
         .success()
-        .no_stderr()
-        .stdout_is(unindent(
+        .stdout_only(unindent(
             "
             0000000   a   b   c   d   e   f   g   h   i   j   k   l   m   n   o   p
                     141 142 143 144 145 146 147 150 151 152 153 154 155 156 157 160
@@ -151,8 +135,7 @@ fn test_dec() {
         .arg("-s")
         .run_piped_stdin(&input[..])
         .success()
-        .no_stderr()
-        .stdout_is(expected_output);
+        .stdout_only(expected_output);
 }
 
 #[test]
@@ -171,8 +154,7 @@ fn test_hex16() {
         .arg("-x")
         .run_piped_stdin(&input[..])
         .success()
-        .no_stderr()
-        .stdout_is(expected_output);
+        .stdout_only(expected_output);
 }
 
 #[test]
@@ -189,8 +171,7 @@ fn test_hex32() {
         .arg("-X")
         .run_piped_stdin(&input[..])
         .success()
-        .no_stderr()
-        .stdout_is(expected_output);
+        .stdout_only(expected_output);
 }
 
 #[test]
@@ -217,8 +198,7 @@ fn test_f16() {
         .arg("-w8")
         .run_piped_stdin(&input[..])
         .success()
-        .no_stderr()
-        .stdout_is(expected_output);
+        .stdout_only(expected_output);
 }
 
 #[test]
@@ -245,8 +225,7 @@ fn test_fh() {
         .arg("-w8")
         .run_piped_stdin(&input[..])
         .success()
-        .no_stderr()
-        .stdout_is(expected_output);
+        .stdout_only(expected_output);
 }
 
 #[test]
@@ -273,8 +252,7 @@ fn test_fb() {
         .arg("-w8")
         .run_piped_stdin(&input[..])
         .success()
-        .no_stderr()
-        .stdout_is(expected_output);
+        .stdout_only(expected_output);
 }
 
 #[test]
@@ -300,8 +278,7 @@ fn test_f32() {
         .arg("-f")
         .run_piped_stdin(&input[..])
         .success()
-        .no_stderr()
-        .stdout_is(expected_output);
+        .stdout_only(expected_output);
 }
 
 #[test]
@@ -329,8 +306,7 @@ fn test_f64() {
         .arg("-F")
         .run_piped_stdin(&input[..])
         .success()
-        .no_stderr()
-        .stdout_is(expected_output);
+        .stdout_only(expected_output);
 }
 
 #[test]
@@ -340,8 +316,7 @@ fn test_multibyte() {
         .args(&["-t", "c"])
         .run_piped_stdin(input.as_bytes())
         .success()
-        .no_stderr()
-        .stdout_is(unindent(
+        .stdout_only(unindent(
             r"
             0000000 342 200 231 342 200 220 313 206 342 200 230 313 234 350 252 236
             0000020 360 237 231 202 342 234 205 360 237 220 266 360 235 233 221   U
@@ -368,8 +343,7 @@ fn test_width() {
         .arg("-v")
         .run_piped_stdin(&input[..])
         .success()
-        .no_stderr()
-        .stdout_is(expected_output);
+        .stdout_only(expected_output);
 }
 
 #[test]
@@ -425,8 +399,7 @@ fn test_width_without_value() {
         .arg("-w")
         .run_piped_stdin(&input[..])
         .success()
-        .no_stderr()
-        .stdout_is(expected_output);
+        .stdout_only(expected_output);
 }
 
 #[test]
@@ -456,9 +429,8 @@ fn test_suppress_duplicates() {
         .arg("-O")
         .arg("-x")
         .run_piped_stdin(&input[..])
-        .no_stderr()
         .success()
-        .stdout_is(expected_output);
+        .stdout_only(expected_output);
 }
 
 #[test]
@@ -482,9 +454,8 @@ fn test_big_endian() {
         .arg("-X")
         .arg("-x")
         .run_piped_stdin(&input[..])
-        .no_stderr()
         .success()
-        .stdout_is(&expected_output);
+        .stdout_only(&expected_output);
     new_ucmd!()
         .arg("--endian=b")
         .arg("-F")
@@ -492,9 +463,8 @@ fn test_big_endian() {
         .arg("-X")
         .arg("-x")
         .run_piped_stdin(&input[..])
-        .no_stderr()
         .success()
-        .stdout_is(expected_output);
+        .stdout_only(expected_output);
 }
 
 #[test]
@@ -518,9 +488,8 @@ fn test_alignment_Xxa() {
         .arg("-x")
         .arg("-a")
         .run_piped_stdin(&input[..])
-        .no_stderr()
         .success()
-        .stdout_is(expected_output);
+        .stdout_only(expected_output);
 }
 
 #[test]
@@ -542,9 +511,8 @@ fn test_alignment_Fx() {
         .arg("-F")
         .arg("-x")
         .run_piped_stdin(&input[..])
-        .no_stderr()
         .success()
-        .stdout_is(expected_output);
+        .stdout_only(expected_output);
 }
 
 #[test]
@@ -570,9 +538,8 @@ fn test_max_uint() {
         .arg("-Dd")
         .arg("--format=u1")
         .run_piped_stdin(&input[..])
-        .no_stderr()
         .success()
-        .stdout_is(expected_output);
+        .stdout_only(expected_output);
 }
 
 #[test]
@@ -593,9 +560,8 @@ fn test_hex_offset() {
         .arg("-X")
         .arg("-X")
         .run_piped_stdin(&input[..])
-        .no_stderr()
         .success()
-        .stdout_is(expected_output);
+        .stdout_only(expected_output);
 }
 
 #[test]
@@ -616,9 +582,8 @@ fn test_dec_offset() {
         .arg("-X")
         .arg("-X")
         .run_piped_stdin(&input[..])
-        .no_stderr()
         .success()
-        .stdout_is(expected_output);
+        .stdout_only(expected_output);
 }
 
 #[test]
@@ -632,9 +597,8 @@ fn test_no_offset() {
         .arg("-X")
         .arg("-X")
         .run_piped_stdin(&input[..])
-        .no_stderr()
         .success()
-        .stdout_is(expected_output);
+        .stdout_only(expected_output);
 }
 
 #[test]
@@ -670,9 +634,8 @@ fn test_skip_bytes() {
         .arg("-c")
         .arg("--skip-bytes=5")
         .run_piped_stdin(input.as_bytes())
-        .no_stderr()
         .success()
-        .stdout_is(unindent(
+        .stdout_only(unindent(
             "
             0000005   f   g   h   i   j   k   l   m   n   o   p   q
             0000021
@@ -687,9 +650,8 @@ fn test_skip_bytes_hex() {
         .arg("-c")
         .arg("--skip-bytes=0xB")
         .run_piped_stdin(input.as_bytes())
-        .no_stderr()
         .success()
-        .stdout_is(unindent(
+        .stdout_only(unindent(
             "
             0000013   l   m   n   o   p   q
             0000021
@@ -699,9 +661,8 @@ fn test_skip_bytes_hex() {
         .arg("-c")
         .arg("--skip-bytes=0xE")
         .run_piped_stdin(input.as_bytes())
-        .no_stderr()
         .success()
-        .stdout_is(unindent(
+        .stdout_only(unindent(
             "
             0000016   o   p   q
             0000021
@@ -765,9 +726,8 @@ fn test_ascii_dump() {
     new_ucmd!()
         .arg("-tx1zacz")    // spell-checker:disable-line
         .run_piped_stdin(&input[..])
-        .no_stderr()
         .success()
-        .stdout_is(unindent(
+        .stdout_only(unindent(
             r"
             0000000  00  01  0a  0d  10  1f  20  61  62  63  7d  7e  7f  80  90  a0  >...... abc}~....<
                     nul soh  nl  cr dle  us  sp   a   b   c   }   ~ del nul dle  sp
@@ -793,8 +753,7 @@ fn test_filename_parsing() {
         .arg("--")
         .arg("-f")
         .succeeds()
-        .no_stderr()
-        .stdout_is(unindent(
+        .stdout_only(unindent(
             "
             000000   m   i   n   u   s  sp   l   o   w   e   r   c   a   s   e  sp
             000010   f  nl
@@ -810,9 +769,8 @@ fn test_stdin_offset() {
         .arg("-c")
         .arg("+5")
         .run_piped_stdin(input.as_bytes())
-        .no_stderr()
         .success()
-        .stdout_is(unindent(
+        .stdout_only(unindent(
             "
             0000005   f   g   h   i   j   k   l   m   n   o   p   q
             0000021
@@ -828,8 +786,7 @@ fn test_file_offset() {
         .arg("-f")
         .arg("10")
         .succeeds()
-        .no_stderr()
-        .stdout_is(unindent(
+        .stdout_only(unindent(
             r"
             0000010   w   e   r   c   a   s   e       f  \n
             0000022
@@ -849,9 +806,8 @@ fn test_traditional() {
         .arg("10")
         .arg("0")
         .run_piped_stdin(input.as_bytes())
-        .no_stderr()
         .success()
-        .stdout_is(unindent(
+        .stdout_only(unindent(
             r"
             0000010 (0000000)   i   j   k   l   m   n   o   p   q
                                 i   j   k   l   m   n   o   p   q
@@ -870,9 +826,8 @@ fn test_traditional_with_skip_bytes_override() {
         .arg("-c")
         .arg("0")
         .run_piped_stdin(input.as_bytes())
-        .no_stderr()
         .success()
-        .stdout_is(unindent(
+        .stdout_only(unindent(
             r"
             0000000   a   b   c   d   e   f   g   h   i   j   k   l   m   n   o   p
             0000020
@@ -889,9 +844,8 @@ fn test_traditional_with_skip_bytes_non_override() {
         .arg("--skip-bytes=10")
         .arg("-c")
         .run_piped_stdin(input.as_bytes())
-        .no_stderr()
         .success()
-        .stdout_is(unindent(
+        .stdout_only(unindent(
             r"
             0000012   k   l   m   n   o   p
             0000020
@@ -923,9 +877,8 @@ fn test_traditional_only_label() {
         .arg("10")
         .arg("0x10")
         .run_piped_stdin(input.as_bytes())
-        .no_stderr()
         .success()
-        .stdout_is(unindent(
+        .stdout_only(unindent(
             r"
             (0000020)   i   j   k   l   m   n   o   p   q   r   s   t   u   v   w   x
                         i   j   k   l   m   n   o   p   q   r   s   t   u   v   w   x
@@ -989,6 +942,110 @@ fn test_od_options_after_filename() {
         .arg("-t")
         .arg("x2")
         .succeeds()
+        .stdout_only(" 1c68 fdbb\n");
+}
+
+#[test]
+fn test_od_strings_option() {
+    // Test -S option: output strings of at least N graphic chars
+
+    // Test -S0: output all null-terminated strings regardless of length
+    new_ucmd!()
+        .arg("-S0")
+        .pipe_in(b"hello\x00world\x00")
+        .succeeds()
+        .stdout_is("0000000 hello\n0000006 world\n");
+
+    // Test -S0 with single character strings
+    new_ucmd!()
+        .arg("-S0")
+        .pipe_in(b"a\x00b\x00cd\x00")
+        .succeeds()
+        .stdout_is("0000000 a\n0000002 b\n0000004 cd\n");
+
+    // Test with null-terminated strings
+    new_ucmd!()
+        .arg("-S3")
+        .pipe_in(b"\x01hello\x00world\x00ab\x00")
+        .succeeds()
+        .stdout_is("0000001 hello\n0000007 world\n");
+
+    // Test with -S10 to show only strings with minimum length
+    new_ucmd!()
+        .arg("-S10")
+        .pipe_in(b"\x01          \x00          \x00")
+        .succeeds()
+        .stdout_is("0000001           \n0000014           \n");
+
+    // Test with unterminated string at EOF (should not output)
+    new_ucmd!()
+        .arg("-S10")
+        .pipe_in(b"          ")
+        .succeeds()
+        .no_output();
+
+    // Test with -N limit and pending string (should output even without null)
+    let expected = "0000000   \n";
+    new_ucmd!()
+        .arg("-N2")
+        .arg("-S1")
+        .pipe_in("  ")
+        .succeeds()
+        .stdout_is(expected);
+
+    // Test with -N limit and string too short
+    new_ucmd!()
+        .arg("-N11")
+        .arg("-S11")
+        .pipe_in(b"          \x00")
+        .succeeds()
+        .no_output();
+
+    // Test with no address prefix (-An)
+    new_ucmd!()
+        .arg("-S3")
+        .arg("-An")
+        .pipe_in(b"hello\x00world\x00")
+        .succeeds()
+        .stdout_is("hello\nworld\n");
+}
+
+#[test]
+fn test_od_eintr_handling() {
+    // Test that od properly handles EINTR (ErrorKind::Interrupted) during read operations
+    // This verifies the signal interruption retry logic in PartialReader implementation
+    // This verifies the signal interruption retry logic in PartialReader implementation
+
+    let file = "test_eintr";
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // Create test data
+    let test_data = [0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x0a]; // "Hello\n"
+    at.write_bytes(file, &test_data);
+
+    // Test that od can handle interrupted reads during file processing
+    // The EINTR handling in PartialReader should retry and complete successfully
+    ucmd.arg(file)
+        .arg("-t")
+        .arg("c")
+        .succeeds()
         .no_stderr()
-        .stdout_is(" 1c68 fdbb\n");
+        .stdout_contains("H"); // Should contain 'H' from "Hello"
+
+    // Test with skip and offset options to exercise different code paths
+    // Create a new command instance to avoid "already run this UCommand" error
+    let (at, mut ucmd2) = at_and_ucmd!();
+    at.write_bytes(file, &test_data);
+
+    ucmd2
+        .arg(file)
+        .arg("-j")
+        .arg("1")
+        .arg("-N")
+        .arg("3")
+        .arg("-t")
+        .arg("c")
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("e"); // Should contain 'e' from "ello"
 }

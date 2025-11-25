@@ -2,11 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+//
 // spell-checker:ignore regfile
-use uutests::new_ucmd;
-use uutests::path_concat;
+
 use uutests::util::{TestScenario, get_root_path};
-use uutests::{at_and_ucmd, util_name};
+use uutests::{at_and_ucmd, new_ucmd, path_concat, util_name};
 
 static GIBBERISH: &str = "supercalifragilisticexpialidocious";
 
@@ -14,6 +14,14 @@ static GIBBERISH: &str = "supercalifragilisticexpialidocious";
 static NOT_A_DIRECTORY: &str = "Not a directory";
 #[cfg(windows)]
 static NOT_A_DIRECTORY: &str = "The directory name is invalid.";
+
+#[test]
+fn test_no_args() {
+    new_ucmd!()
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("readlink: missing operand");
+}
 
 #[test]
 fn test_invalid_arg() {
@@ -100,6 +108,21 @@ fn test_symlink_to_itself_verbose() {
     ucmd.args(&["-ev", "a"])
         .fails_with_code(1)
         .stderr_contains("Too many levels of symbolic links");
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_posixly_correct_regular_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("regfile");
+    scene
+        .ucmd()
+        .env("POSIXLY_CORRECT", "1")
+        .arg("regfile")
+        .fails_with_code(1)
+        .stderr_contains("Invalid argument")
+        .no_stdout();
 }
 
 #[test]

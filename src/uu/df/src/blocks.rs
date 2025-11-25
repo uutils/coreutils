@@ -9,7 +9,7 @@ use std::{env, fmt};
 
 use uucore::{
     display::Quotable,
-    parser::parse_size::{ParseSizeError, parse_size_u64},
+    parser::parse_size::{ParseSizeError, parse_size_non_zero_u64, parse_size_u64},
 };
 
 /// The first ten powers of 1024.
@@ -213,7 +213,7 @@ pub(crate) fn read_block_size(matches: &ArgMatches) -> Result<BlockSize, ParseSi
 fn block_size_from_env() -> Option<u64> {
     for env_var in ["DF_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
         if let Ok(env_size) = env::var(env_var) {
-            return parse_size_u64(&env_size).ok();
+            return parse_size_non_zero_u64(&env_size).ok();
         }
     }
 

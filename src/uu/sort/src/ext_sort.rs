@@ -20,7 +20,7 @@ use std::{
 };
 
 use itertools::Itertools;
-use uucore::error::UResult;
+use uucore::error::{UResult, strip_errno};
 
 use crate::Output;
 use crate::chunks::RecycledChunk;
@@ -52,10 +52,37 @@ pub fn ext_sort(
         let settings = settings.clone();
         move || sorter(&recycled_receiver, &sorted_sender, &settings)
     });
-    if settings.compress_prog.is_some() {
+
+    // Test if compression program exists and works, disable if not
+    let mut effective_settings = settings.clone();
+    if let Some(ref prog) = settings.compress_prog {
+        // Test the compression program by trying to spawn it
+        match std::process::Command::new(prog)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        {
+            Ok(mut child) => {
+                // Kill the test process immediately
+                let _ = child.kill();
+            }
+            Err(err) => {
+                // Print the error and disable compression
+                eprintln!(
+                    "sort: could not run compress program '{}': {}",
+                    prog,
+                    strip_errno(&err)
+                );
+                effective_settings.compress_prog = None;
+            }
+        }
+    }
+
+    if effective_settings.compress_prog.is_some() {
         reader_writer::<_, WriteableCompressedTmpFile>(
             files,
-            settings,
+            &effective_settings,
             &sorted_receiver,
             recycled_sender,
             output,
@@ -64,7 +91,7 @@ pub fn ext_sort(
     } else {
         reader_writer::<_, WriteablePlainTmpFile>(
             files,
-            settings,
+            &effective_settings,
             &sorted_receiver,
             recycled_sender,
             output,
@@ -86,9 +113,15 @@ fn reader_writer<
 ) -> UResult<()> {
     let separator = settings.line_ending.into();
 
-    // Heuristically chosen: Dividing by 10 seems to keep our memory usage roughly
-    // around settings.buffer_size as a whole.
-    let buffer_size = settings.buffer_size / 10;
+    // Cap oversized buffer requests to avoid unnecessary allocations and give the automatic
+    // heuristic room to grow when the user does not provide an explicit value.
+    let mut buffer_size = match settings.buffer_size {
+        size if size <= 512 * 1024 * 1024 => size,
+        size => size / 2,
+    };
+    if !settings.buffer_size_is_explicit {
+        buffer_size = buffer_size.max(8 * 1024 * 1024);
+    }
     let read_result: ReadResult<Tmp> = read_write_loop(
         files,
         tmp_dir,

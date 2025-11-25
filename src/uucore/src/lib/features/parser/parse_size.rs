@@ -8,16 +8,17 @@
 
 use std::error::Error;
 use std::fmt;
-#[cfg(target_os = "linux")]
-use std::io::BufRead;
 use std::num::{IntErrorKind, ParseIntError};
 
 use crate::display::Quotable;
+#[cfg(target_os = "linux")]
+use procfs::{Current, Meminfo};
 
 /// Error arising from trying to compute system memory.
 enum SystemError {
     IOError,
     ParseError,
+    #[cfg(not(target_os = "linux"))]
     NotFound,
 }
 
@@ -43,25 +44,37 @@ impl From<ParseIntError> for SystemError {
 /// entry in the file.
 #[cfg(target_os = "linux")]
 fn total_physical_memory() -> Result<u128, SystemError> {
-    // On Linux, the `/proc/meminfo` file has a table with information
-    // about memory usage. For example,
-    //
-    //     MemTotal:        7811500 kB
-    //     MemFree:         1487876 kB
-    //     MemAvailable:    3857232 kB
-    //     ...
-    //
-    // We just need to extract the number of `MemTotal`
-    let table = std::fs::read("/proc/meminfo")?;
-    for line in table.lines() {
-        let line = line?;
-        if line.starts_with("MemTotal:") && line.ends_with("kB") {
-            let num_kilobytes: u128 = line[9..line.len() - 2].trim().parse()?;
-            let num_bytes = 1024 * num_kilobytes;
-            return Ok(num_bytes);
+    let info = Meminfo::current().map_err(|_| SystemError::IOError)?;
+    Ok((info.mem_total as u128).saturating_mul(1024))
+}
+
+/// Return the number of bytes of memory that appear to be currently available.
+#[cfg(target_os = "linux")]
+pub fn available_memory_bytes() -> Option<u128> {
+    let info = Meminfo::current().ok()?;
+
+    if let Some(available_kib) = info.mem_available {
+        let available_bytes = (available_kib as u128).saturating_mul(1024);
+        if available_bytes > 0 {
+            return Some(available_bytes);
         }
     }
-    Err(SystemError::NotFound)
+
+    let fallback_kib = (info.mem_free as u128)
+        .saturating_add(info.buffers as u128)
+        .saturating_add(info.cached as u128);
+
+    if fallback_kib > 0 {
+        Some(fallback_kib.saturating_mul(1024))
+    } else {
+        total_physical_memory().ok()
+    }
+}
+
+/// Return `None` when the platform does not expose Linux-like `/proc/meminfo`.
+#[cfg(not(target_os = "linux"))]
+pub fn available_memory_bytes() -> Option<u128> {
+    None
 }
 
 /// Get the total number of bytes of physical memory.
@@ -359,6 +372,15 @@ pub fn parse_size_u128(size: &str) -> Result<u128, ParseSizeError> {
 /// Same as `parse_size_u128()`, but for u64
 pub fn parse_size_u64(size: &str) -> Result<u64, ParseSizeError> {
     Parser::default().parse_u64(size)
+}
+
+/// Same as `parse_size_u64()`, except 0 fails to parse
+pub fn parse_size_non_zero_u64(size: &str) -> Result<u64, ParseSizeError> {
+    let v = Parser::default().parse_u64(size)?;
+    if v == 0 {
+        return Err(ParseSizeError::ParseFailure("0".to_string()));
+    }
+    Ok(v)
 }
 
 /// Same as `parse_size_u64()` - deprecated
