@@ -492,34 +492,35 @@ fn parse_rows_cols(arg: &str) -> Option<u16> {
 /// The format is colon-separated hexadecimal values:
 /// `input_flags:output_flags:control_flags:local_flags:cc0:cc1:cc2:...`
 ///
-/// - First 4 values are terminal flags (input, output, control, local)
-/// - Remaining values are control characters (optional)
-/// - Empty hex values are treated as 0
-/// - Returns `None` if format is invalid (< 4 parts or non-hex values)
+/// - Must have exactly 36 parts (4 flags + 32 control characters) to match GNU
+/// - All parts must be non-empty valid hex values
+/// - Control characters (parts 5-36) must fit in u8 (0-255)
+/// - Returns `None` if format is invalid
 fn parse_saved_state(arg: &str) -> Option<Vec<u32>> {
     let parts: Vec<&str> = arg.split(':').collect();
 
-    // Need at least 4 parts for the required flags
-    if parts.len() < 4 {
+    // GNU requires exactly 36 parts (4 flags + 32 control characters)
+    if parts.len() != 36 {
         return None;
     }
 
-    // Validate all parts are valid hex (or empty)
-    let is_valid_hex = |s: &&str| s.is_empty() || u32::from_str_radix(s, 16).is_ok();
-    if !parts.iter().all(is_valid_hex) {
-        return None;
-    }
-
-    // Parse hex values, treating empty strings as 0
-    let parse_hex = |part: &&str| {
+    // Validate all parts are non-empty valid hex
+    let mut values = Vec::with_capacity(36);
+    for (i, part) in parts.iter().enumerate() {
         if part.is_empty() {
-            0
-        } else {
-            u32::from_str_radix(part, 16).unwrap()
+            return None; // GNU rejects empty hex values
         }
-    };
+        let val = u32::from_str_radix(part, 16).ok()?;
 
-    Some(parts.iter().map(parse_hex).collect())
+        // Control characters (indices 4-35) must fit in u8
+        if i >= 4 && val > 255 {
+            return None;
+        }
+
+        values.push(val);
+    }
+
+    Some(values)
 }
 
 fn check_flag_group<T>(flag: &Flag<T>, remove: bool) -> bool {

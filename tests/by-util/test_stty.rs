@@ -413,12 +413,12 @@ fn test_saved_state_valid_formats() {
     let (_at, ts) = at_and_ts!();
 
     let valid_states = [
-        "500:5:4bf:8a3b",                                    // 4 hex values (flags only)
-        "500:5:4bf:8a3b:3:1c:7f:15:4:11:0:13:1a:12:17:16:f", // 4+ hex values (flags + control chars)
-        "500::4bf:8a3b",                                     // empty hex values treated as 0
-        "500:5:4BF:8A3B",                                    // uppercase hex
-        "0:0:0:0",                                           // all zeros
-        "ffffffff:ffffffff:ffffffff:ffffffff",               // maximum u32 values
+        "500:5:4bf:8a3b:3:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // 36 parts (4 flags + 32 control chars)
+        "500:5:4BF:8A3B:3:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // uppercase hex
+        "500:5:4bF:8a3B:3:1C:7F:15:4:0:1:0:11:13:1A:0:12:F:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // mixed case
+        "0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // all zeros
+        "0500:05:04bf:8a3b:03:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // leading zeros
+        "ffffffff:ffffffff:ffffffff:ffffffff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff", // maximum values
     ];
 
     for state in &valid_states {
@@ -441,10 +441,15 @@ fn test_saved_state_invalid_formats() {
     let (_at, ts) = at_and_ts!();
 
     let invalid_states = [
-        "500:5:4bf",       // fewer than 4 parts
-        "500",             // only 1 part
-        "500:5:xyz:8a3b",  // non-hex characters
-        "500:5:4bf :8a3b", // spaces in hex values
+        "500:5:4bf",                                         // fewer than 36 parts (3 parts)
+        "500",                                               // only 1 part
+        "500:5:4bf:8a3b",                                    // only 4 parts (not 36)
+        "500:5:4bf:8a3b:3:1c:7f:15:4:11:0:13:1a:12:17:16:f", // only 17 parts
+        "500::4bf:8a3b:3:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // empty hex value
+        "500:5:xyz:8a3b:3:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // non-hex characters
+        "500:5:4bf :8a3b:3:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // space in hex value
+        "500:5:4bf:8a3b:100:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // control char > 255
+        "500:5:4bf:8a3b:3:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:extra", // 37 parts
     ];
 
     for state in &invalid_states {
@@ -470,7 +475,7 @@ fn test_saved_state_with_control_chars() {
         .args(&[
             "--file",
             &path,
-            "500:5:4bf:8a3b:1:2:3:4:5:6:7:8:9:a:b:c:d:e:f:10:11:12:13:14:15:16:17:18:19:1a",
+            "500:5:4bf:8a3b:1:2:3:4:5:6:7:8:9:a:b:c:d:e:f:10:11:12:13:14:15:16:17:18:19:1a:1b:1c:1d:1e:1f:20",
         ])
         .succeeds();
 
@@ -483,29 +488,4 @@ fn test_saved_state_with_control_chars() {
         .stdout_is(exp_result.stdout_str())
         .stderr_is(exp_result.stderr_str())
         .code_is(exp_result.code());
-}
-
-#[test]
-#[cfg(unix)]
-fn test_saved_state_less_than_4_elements() {
-    let (path, _controller, _replica) = pty_path();
-    let (_at, ts) = at_and_ts!();
-
-    let states_with_insufficient_elements = [
-        "500:5:4bf", // 3 elements
-        "500:5",     // 2 elements
-        "500",       // 1 element
-    ];
-
-    for state in &states_with_insufficient_elements {
-        let result = ts.ucmd().args(&["--file", &path, state]).run();
-
-        result.failure().stderr_contains("invalid argument");
-
-        let exp_result = unwrap_or_return!(expected_result(&ts, &["--file", &path, state]));
-        result
-            .stdout_is(exp_result.stdout_str())
-            .stderr_is(exp_result.stderr_str())
-            .code_is(exp_result.code());
-    }
 }
