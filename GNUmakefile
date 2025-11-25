@@ -42,7 +42,7 @@ PROG_PREFIX ?=
 
 # This won't support any directory with spaces in its name, but you can just
 # make a symlink without spaces that points to the directory.
-# CARGO_BUILD_TARGET should be undefined for native (not-cross) build.
+# CARGO_BUILD_TARGET should be undefined for native (non-cross) build.
 BASEDIR       ?= $(shell pwd)
 ifdef CARGO_TARGET_DIR
 BUILDDIR 	  := $(CARGO_TARGET_DIR)/${PROFILE}
