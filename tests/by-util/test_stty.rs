@@ -405,7 +405,7 @@ fn test_save_restore_after_change() {
 }
 
 // These tests both validate what we expect each input to return and their error codes
-// and also use the GNU coreutil results to validate our results match expectations
+// and also use the GNU coreutils results to validate our results match expectations
 #[test]
 #[cfg(unix)]
 fn test_saved_state_valid_formats() {

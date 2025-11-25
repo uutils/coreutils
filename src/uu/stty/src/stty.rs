@@ -30,7 +30,7 @@ use std::num::IntErrorKind;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, RawFd};
-use uucore::error::{UError, UResult, USimpleError};
+use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::translate;
 
@@ -375,7 +375,7 @@ fn stty(opts: &Options) -> UResult<()> {
                                         )
                                     }
                                 };
-                                USimpleError::new(1, message)
+                                UUsageError::new(1, message)
                             })?;
                             valid_args.push(ArgOptions::Mapping((char_index, cc_mapping)));
                         } else {
@@ -437,8 +437,9 @@ fn stty(opts: &Options) -> UResult<()> {
     Ok(())
 }
 
+// The GNU implementation adds the --help message when the args are incorrectly formatted
 fn missing_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
-    Err::<T, Box<dyn UError>>(USimpleError::new(
+    Err(UUsageError::new(
         1,
         translate!(
             "stty-error-missing-argument",
@@ -448,7 +449,7 @@ fn missing_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
 }
 
 fn invalid_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
-    Err::<T, Box<dyn UError>>(USimpleError::new(
+    Err(UUsageError::new(
         1,
         translate!(
             "stty-error-invalid-argument",
@@ -458,7 +459,7 @@ fn invalid_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
 }
 
 fn invalid_integer_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
-    Err::<T, Box<dyn UError>>(USimpleError::new(
+    Err(UUsageError::new(
         1,
         translate!(
             "stty-error-invalid-integer-argument",
