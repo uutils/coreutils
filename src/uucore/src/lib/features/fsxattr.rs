@@ -137,7 +137,8 @@ pub fn has_capability<P: AsRef<Path>>(file: P) -> bool {
 ///
 /// `true` if the thread has a capability, `false` otherwise.
 pub fn current_thread_has_capability() -> bool {
-    if cfg!(target_os = "linux") {
+    #[cfg(target_os = "linux")]
+    {
         use capctl::caps;
 
         static CELL: OnceLock<bool> = OnceLock::new();
