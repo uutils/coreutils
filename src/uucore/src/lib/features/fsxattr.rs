@@ -151,7 +151,10 @@ pub fn current_thread_has_capability() -> bool {
         });
     }
 
-    false
+    #[cfg(not(target_os = "linux"))]
+    {
+        false
+    }
 }
 
 /// Returns the permissions bits of a file or directory which has Access Control List (ACL) entries based on its
