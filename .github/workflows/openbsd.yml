@@ -31,7 +31,7 @@ jobs:
         job:
           - { features: unix }
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - name: Prepare, build and test
@@ -121,7 +121,7 @@ jobs:
         job:
           - { features: unix }
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - name: Prepare, build and test

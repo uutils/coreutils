@@ -19,7 +19,7 @@ path = "src/hashsum.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["checksum", "sum"] }
+uucore = { workspace = true, features = ["checksum", "encoding", "sum"] }
 fluent = { workspace = true }
 
 [[bin]]
