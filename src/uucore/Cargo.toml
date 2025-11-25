@@ -123,7 +123,7 @@ default = []
 # * non-default features
 backup-control = []
 colors = []
-checksum = ["data-encoding", "quoting-style", "sum"]
+checksum = ["quoting-style", "sum", "base64-simd"]
 encoding = ["data-encoding", "data-encoding-macro", "z85", "base64-simd"]
 entries = ["libc"]
 extendedbigdecimal = ["bigdecimal", "num-traits"]
@@ -171,6 +171,7 @@ sum = [
   "blake3",
   "sm3",
   "crc-fast",
+  "data-encoding",
 ]
 update-control = ["parser"]
 utf8 = []

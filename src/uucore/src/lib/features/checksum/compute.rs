@@ -13,7 +13,8 @@ use std::path::Path;
 use crate::checksum::{ChecksumError, SizedAlgoKind, digest_reader, escape_filename};
 use crate::error::{FromIo, UResult, USimpleError};
 use crate::line_ending::LineEnding;
-use crate::{encoding, show, translate};
+use crate::sum::DigestOutput;
+use crate::{show, translate};
 
 /// Use the same buffer size as GNU when reading a file to create a checksum
 /// from it: 32 KiB.
@@ -139,10 +140,11 @@ pub fn figure_out_output_format(
 fn print_legacy_checksum(
     options: &ChecksumComputeOptions,
     filename: &OsStr,
-    sum: &str,
+    sum: &DigestOutput,
     size: usize,
 ) -> UResult<()> {
     debug_assert!(options.algo_kind.is_legacy());
+    debug_assert!(matches!(sum, DigestOutput::U16(_) | DigestOutput::Crc(_)));
 
     let (escaped_filename, prefix) = if options.line_ending == LineEnding::Nul {
         (filename.to_string_lossy().to_string(), "")
@@ -150,28 +152,24 @@ fn print_legacy_checksum(
         escape_filename(filename)
     };
 
-    print!("{prefix}");
-
     // Print the sum
-    match options.algo_kind {
-        SizedAlgoKind::Sysv => print!(
-            "{} {}",
-            sum.parse::<u16>().unwrap(),
+    match (options.algo_kind, sum) {
+        (SizedAlgoKind::Sysv, DigestOutput::U16(sum)) => print!(
+            "{prefix}{sum} {}",
             size.div_ceil(options.algo_kind.bitlen()),
         ),
-        SizedAlgoKind::Bsd => {
+        (SizedAlgoKind::Bsd, DigestOutput::U16(sum)) => {
             // The BSD checksum output is 5 digit integer
             let bsd_width = 5;
             print!(
-                "{:0bsd_width$} {:bsd_width$}",
-                sum.parse::<u16>().unwrap(),
+                "{prefix}{sum:0bsd_width$} {:bsd_width$}",
                 size.div_ceil(options.algo_kind.bitlen()),
             );
         }
-        SizedAlgoKind::Crc | SizedAlgoKind::Crc32b => {
-            print!("{sum} {size}");
+        (SizedAlgoKind::Crc | SizedAlgoKind::Crc32b, DigestOutput::Crc(sum)) => {
+            print!("{prefix}{sum} {size}");
         }
-        _ => unreachable!("Not a legacy algorithm"),
+        (algo, output) => unreachable!("Bug: Invalid legacy checksum ({algo:?}, {output:?})"),
     }
 
     // Print the filename after a space if not stdin
@@ -284,49 +282,39 @@ where
 
         let mut digest = options.algo_kind.create_digest();
 
-        let (sum_hex, sz) = digest_reader(
-            &mut digest,
-            &mut file,
-            options.binary,
-            options.algo_kind.bitlen(),
-        )
-        .map_err_context(|| translate!("cksum-error-failed-to-read-input"))?;
+        let (digest_output, sz) = digest_reader(&mut digest, &mut file, options.binary)
+            .map_err_context(|| translate!("cksum-error-failed-to-read-input"))?;
 
         // Encodes the sum if df is Base64, leaves as-is otherwise.
-        let encode_sum = |sum: String, df: DigestFormat| {
+        let encode_sum = |sum: DigestOutput, df: DigestFormat| {
             if df.is_base64() {
-                encoding::for_cksum::BASE64.encode(&hex::decode(sum).unwrap())
+                sum.to_base64()
             } else {
-                sum
+                sum.to_hex()
             }
         };
 
         match options.output_format {
             OutputFormat::Raw => {
-                let bytes = match options.algo_kind {
-                    SizedAlgoKind::Crc | SizedAlgoKind::Crc32b => {
-                        sum_hex.parse::<u32>().unwrap().to_be_bytes().to_vec()
-                    }
-                    SizedAlgoKind::Sysv | SizedAlgoKind::Bsd => {
-                        sum_hex.parse::<u16>().unwrap().to_be_bytes().to_vec()
-                    }
-                    _ => hex::decode(sum_hex).unwrap(),
-                };
                 // Cannot handle multiple files anyway, output immediately.
-                io::stdout().write_all(&bytes)?;
+                digest_output.write_raw(io::stdout())?;
                 return Ok(());
             }
             OutputFormat::Legacy => {
-                print_legacy_checksum(&options, filename, &sum_hex, sz)?;
+                print_legacy_checksum(&options, filename, &digest_output, sz)?;
             }
             OutputFormat::Tagged(digest_format) => {
-                print_tagged_checksum(&options, filename, &encode_sum(sum_hex, digest_format))?;
+                print_tagged_checksum(
+                    &options,
+                    filename,
+                    &encode_sum(digest_output, digest_format)?,
+                )?;
             }
             OutputFormat::Untagged(digest_format, reading_mode) => {
                 print_untagged_checksum(
                     &options,
                     filename,
-                    &encode_sum(sum_hex, digest_format),
+                    &encode_sum(digest_output, digest_format)?,
                     reading_mode,
                 )?;
             }
