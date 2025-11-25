@@ -322,9 +322,11 @@ jobs:
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/ make PROFILE=release install
-        # Check that the utils are present
-        test -f /tmp/usr/local/bin/tty
+        DESTDIR=/tmp/ make install
+        # Check that make install use release profile by default
+        ./target/release/true
+        # Check that MULTICALL=n LN="ln -s" is default by hashsum
+        [ $(readlink /tmp/usr/local/bin/b2sum) = hashsum ]
         # Check that the manpage is present
         test -f /tmp/usr/local/share/man/man1/md5sum.1
         # Check that the completion is present
@@ -346,21 +348,6 @@ jobs:
         ! test -f /tmp/usr/local/share/zsh/site-functions/_install
         ! test -f /tmp/usr/local/share/bash-completion/completions/head.bash
         ! test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
-    - name: "`make install MULTICALL=n`"
-      shell: bash
-      run: |
-        set -x
-        DESTDIR=/tmp/ make PROFILE=release MULTICALL=n install
-        # Check that the utils are present
-        test -f /tmp/usr/local/bin/hashsum
-        # Check that hashsum symlinks are present
-        test -h /tmp/usr/local/bin/b2sum
-        test -h /tmp/usr/local/bin/md5sum
-        test -h /tmp/usr/local/bin/sha1sum
-        test -h /tmp/usr/local/bin/sha224sum
-        test -h /tmp/usr/local/bin/sha256sum
-        test -h /tmp/usr/local/bin/sha384sum
-        test -h /tmp/usr/local/bin/sha512sum
     - name: "`make install MULTICALL=y LN=ln -svf`"
       shell: bash
       run: |
