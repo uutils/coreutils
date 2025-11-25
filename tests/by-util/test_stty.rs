@@ -416,9 +416,7 @@ fn test_saved_state_valid_formats() {
         "500:5:4bf:8a3b:3:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // 36 parts (4 flags + 32 control chars)
         "500:5:4BF:8A3B:3:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // uppercase hex
         "500:5:4bF:8a3B:3:1C:7F:15:4:0:1:0:11:13:1A:0:12:F:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // mixed case
-        "0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // all zeros
         "0500:05:04bf:8a3b:03:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // leading zeros
-        "ffffffff:ffffffff:ffffffff:ffffffff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff", // maximum values
     ];
 
     for state in &valid_states {

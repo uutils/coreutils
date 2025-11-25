@@ -36,7 +36,7 @@ pub fn main(_args: TokenStream, stream: TokenStream) -> TokenStream {
                         uucore::show_error!("{s}");
                     }
                     if e.usage() {
-                        eprintln!("Try '{} --help' for more information.", uucore::execution_phrase());
+                        eprintln!("Try '{} --help' for more information.", uucore::util_name());
                     }
                     e.code()
                 }
