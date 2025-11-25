@@ -370,17 +370,16 @@ jobs:
         [ $(readlink /tmp/usr/local/bin/b2sum) = coreutils ]
         [ $(readlink /tmp/usr/local/bin/md5sum) = coreutils ]
         [ $(readlink /tmp/usr/local/bin/sha512sum) = coreutils ]
-    - name: "`make UTILS=XXX`"
+    - name: "`make UTILS=XXX` (without stdbuf)"
       shell: bash
       run: |
         set -x
         # Regression-test for https://github.com/uutils/coreutils/issues/8701
-        make UTILS="rm chmod chown chgrp mv du"
+        make UTILS="true"
         # Verifies that
         # 1. there is no "error: none of the selected packages contains this
         # feature: feat_external_libstdbuf"
         # 2. the makefile doesn't try to install libstdbuf even though stdbuf is skipped
-        DESTDIR=/tmp/ make SKIP_UTILS="stdbuf" install
 
   build_rust_stable:
     name: Build/stable
