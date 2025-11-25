@@ -492,27 +492,28 @@ fn parse_rows_cols(arg: &str) -> Option<u16> {
 /// The format is colon-separated hexadecimal values:
 /// `input_flags:output_flags:control_flags:local_flags:cc0:cc1:cc2:...`
 ///
-/// - Must have exactly 36 parts (4 flags + 32 control characters) to match GNU
+/// - Must have exactly 4 + NCCS parts (4 flags + platform-specific control characters)
 /// - All parts must be non-empty valid hex values
-/// - Control characters (parts 5-36) must fit in u8 (0-255)
+/// - Control characters must fit in u8 (0-255)
 /// - Returns `None` if format is invalid
 fn parse_saved_state(arg: &str) -> Option<Vec<u32>> {
     let parts: Vec<&str> = arg.split(':').collect();
+    let expected_parts = 4 + nix::libc::NCCS;
 
-    // GNU requires exactly 36 parts (4 flags + 32 control characters)
-    if parts.len() != 36 {
+    // GNU requires exactly the right number of parts for this platform
+    if parts.len() != expected_parts {
         return None;
     }
 
     // Validate all parts are non-empty valid hex
-    let mut values = Vec::with_capacity(36);
+    let mut values = Vec::with_capacity(expected_parts);
     for (i, part) in parts.iter().enumerate() {
         if part.is_empty() {
             return None; // GNU rejects empty hex values
         }
         let val = u32::from_str_radix(part, 16).ok()?;
 
-        // Control characters (indices 4-35) must fit in u8
+        // Control characters (indices 4+) must fit in u8
         if i >= 4 && val > 255 {
             return None;
         }

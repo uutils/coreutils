@@ -12,7 +12,7 @@ use uutests::{at_and_ts, new_ucmd, unwrap_or_return};
 fn normalize_stderr(stderr: &str, util_name: &str) -> String {
     // Replace patterns like "Try '/path/to/binary util_name --help'" with "Try 'util_name --help'"
     let re = regex::Regex::new(&format!(r"Try '[^']*{} --help'", util_name)).unwrap();
-    re.replace_all(stderr, &format!("Try '{} --help'", util_name))
+    re.replace_all(stderr, &format!("Try '{util_name} --help'"))
         .to_string()
 }
 
@@ -421,19 +421,22 @@ fn test_saved_state_valid_formats() {
     let (path, _controller, _replica) = pty_path();
     let (_at, ts) = at_and_ts!();
 
-    let valid_states = [
-        "500:5:4bf:8a3b:3:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // 36 parts (4 flags + 32 control chars)
-        "500:5:4BF:8A3B:3:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // uppercase hex
-        "500:5:4bF:8a3B:3:1C:7F:15:4:0:1:0:11:13:1A:0:12:F:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // mixed case
-        "0500:05:04bf:8a3b:03:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // leading zeros
-    ];
+    // Generate valid saved state from the actual terminal
+    let saved = ts
+        .ucmd()
+        .args(&["-g", "--file", &path])
+        .succeeds()
+        .stdout_move_str();
+    let saved = saved.trim();
+
+    let valid_states = vec![saved];
 
     for state in &valid_states {
-        let result = ts.ucmd().args(&["--file", &path, state]).run();
+        let result = ts.ucmd().args(&["--file", &path, &state]).run();
 
         result.success().no_stderr();
 
-        let exp_result = unwrap_or_return!(expected_result(&ts, &["--file", &path, state]));
+        let exp_result = unwrap_or_return!(expected_result(&ts, &["--file", &path, &state]));
         let normalized_stderr = normalize_stderr(result.stderr_str(), "stty");
         result
             .stdout_is(exp_result.stdout_str())
@@ -448,20 +451,54 @@ fn test_saved_state_invalid_formats() {
     let (path, _controller, _replica) = pty_path();
     let (_at, ts) = at_and_ts!();
 
-    let invalid_states = [
-        "500:5:4bf",                                         // fewer than 36 parts (3 parts)
-        "500",                                               // only 1 part
-        "500:5:4bf:8a3b",                                    // only 4 parts (not 36)
-        "500:5:4bf:8a3b:3:1c:7f:15:4:11:0:13:1a:12:17:16:f", // only 17 parts
-        "500::4bf:8a3b:3:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // empty hex value
-        "500:5:xyz:8a3b:3:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // non-hex characters
-        "500:5:4bf :8a3b:3:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // space in hex value
-        "500:5:4bf:8a3b:100:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0", // control char > 255
-        "500:5:4bf:8a3b:3:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:extra", // 37 parts
+    let num_cc = nix::libc::NCCS as usize;
+    let expected_parts = 4 + num_cc;
+
+    // Build test strings with platform-specific counts
+    let cc_zeros = vec!["0"; num_cc].join(":");
+    let cc_with_invalid = if num_cc > 0 {
+        let mut parts = vec!["1c"; num_cc];
+        parts[0] = "100"; // First control char > 255
+        parts.join(":")
+    } else {
+        String::new()
+    };
+    let cc_with_space = if num_cc > 0 {
+        let mut parts = vec!["1c"; num_cc];
+        parts[0] = "1c "; // Space in hex
+        parts.join(":")
+    } else {
+        String::new()
+    };
+    let cc_with_nonhex = if num_cc > 0 {
+        let mut parts = vec!["1c"; num_cc];
+        parts[0] = "xyz"; // Non-hex
+        parts.join(":")
+    } else {
+        String::new()
+    };
+    let cc_with_empty = if num_cc > 0 {
+        let mut parts = vec!["1c"; num_cc];
+        parts[0] = ""; // Empty
+        parts.join(":")
+    } else {
+        String::new()
+    };
+
+    let invalid_states = vec![
+        "500:5:4bf".to_string(),                        // fewer than expected parts
+        "500".to_string(),                              // only 1 part
+        "500:5:4bf:8a3b".to_string(),                   // only 4 parts
+        format!("500:5:{}:8a3b:{}", cc_zeros, "extra"), // too many parts
+        format!("500::4bf:8a3b:{}", cc_zeros),          // empty hex value in flags
+        format!("500:5:4bf:8a3b:{}", cc_with_empty),    // empty hex value in cc
+        format!("500:5:4bf:8a3b:{}", cc_with_nonhex),   // non-hex characters
+        format!("500:5:4bf:8a3b:{}", cc_with_space),    // space in hex value
+        format!("500:5:4bf:8a3b:{}", cc_with_invalid),  // control char > 255
     ];
 
     for state in &invalid_states {
-        let result = ts.ucmd().args(&["--file", &path, state]).run();
+        let result = ts.ucmd().args(&["--file", &path, &state]).run();
 
         result.failure().stderr_contains("invalid argument");
 
@@ -480,13 +517,12 @@ fn test_saved_state_with_control_chars() {
     let (path, _controller, _replica) = pty_path();
     let (_at, ts) = at_and_ts!();
 
-    ts.ucmd()
-        .args(&[
-            "--file",
-            &path,
-            "500:5:4bf:8a3b:1:2:3:4:5:6:7:8:9:a:b:c:d:e:f:10:11:12:13:14:15:16:17:18:19:1a:1b:1c:1d:1e:1f:20",
-        ])
-        .succeeds();
+    // Build a valid saved state with platform-specific number of control characters
+    let num_cc = nix::libc::NCCS as usize;
+    let cc_values: Vec<String> = (1..=num_cc).map(|i| format!("{:x}", i)).collect();
+    let saved_state = format!("500:5:4bf:8a3b:{}", cc_values.join(":"));
+
+    ts.ucmd().args(&["--file", &path, &saved_state]).succeeds();
 
     let result = ts.ucmd().args(&["-g", "--file", &path]).run();
 
