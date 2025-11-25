@@ -349,3 +349,56 @@ fn non_negatable_combo() {
         .fails()
         .stderr_contains("invalid argument '-ek'");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_save_and_restore() {
+    let (path, _controller, _replica) = pty_path();
+    let saved = new_ucmd!()
+        .args(&["--save", "--file", &path])
+        .succeeds()
+        .stdout_move_str();
+
+    let saved = saved.trim();
+    assert!(saved.contains(':'));
+
+    new_ucmd!().args(&["--file", &path, saved]).succeeds();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_save_with_g_flag() {
+    let (path, _controller, _replica) = pty_path();
+    let saved = new_ucmd!()
+        .args(&["-g", "--file", &path])
+        .succeeds()
+        .stdout_move_str();
+
+    let saved = saved.trim();
+    assert!(saved.contains(':'));
+
+    new_ucmd!().args(&["--file", &path, saved]).succeeds();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_save_restore_after_change() {
+    let (path, _controller, _replica) = pty_path();
+    let saved = new_ucmd!()
+        .args(&["--save", "--file", &path])
+        .succeeds()
+        .stdout_move_str();
+
+    let saved = saved.trim();
+
+    new_ucmd!()
+        .args(&["--file", &path, "intr", "^A"])
+        .succeeds();
+
+    new_ucmd!().args(&["--file", &path, saved]).succeeds();
+
+    new_ucmd!()
+        .args(&["--file", &path])
+        .succeeds()
+        .stdout_str_check(|s| !s.contains("intr = ^A"));
+}

@@ -150,6 +150,7 @@ enum ArgOptions<'a> {
     Mapping((S, u8)),
     Special(SpecialSetting),
     Print(PrintSetting),
+    SavedState(Vec<u32>),
 }
 
 impl<'a> From<AllFlags<'a>> for ArgOptions<'a> {
@@ -352,8 +353,12 @@ fn stty(opts: &Options) -> UResult<()> {
                     valid_args.push(ArgOptions::Print(PrintSetting::Size));
                 }
                 _ => {
+                    // Try to parse saved format (hex string like "6d02:5:4bf:8a3b:...")
+                    if let Some(state) = parse_saved_state(arg) {
+                        valid_args.push(ArgOptions::SavedState(state));
+                    }
                     // control char
-                    if let Some(char_index) = cc_to_index(arg) {
+                    else if let Some(char_index) = cc_to_index(arg) {
                         if let Some(mapping) = args_iter.next() {
                             let cc_mapping = string_to_control_char(mapping).map_err(|e| {
                                 let message = match e {
@@ -418,6 +423,9 @@ fn stty(opts: &Options) -> UResult<()> {
                 ArgOptions::Print(setting) => {
                     print_special_setting(setting, opts.file.as_raw_fd())?;
                 }
+                ArgOptions::SavedState(state) => {
+                    apply_saved_state(&mut termios, state)?;
+                }
             }
         }
         tcsetattr(opts.file.as_fd(), set_arg, &termios)?;
@@ -476,6 +484,29 @@ fn parse_rows_cols(arg: &str) -> Option<u16> {
         return Some((n % (u16::MAX as u32 + 1)) as u16);
     }
     None
+}
+
+fn parse_saved_state(arg: &str) -> Option<Vec<u32>> {
+    let parts: Vec<&str> = arg.split(':').collect();
+
+    if parts.len() < 4 {
+        return None;
+    }
+
+    let is_valid_hex = |s: &&str| s.is_empty() || u32::from_str_radix(s, 16).is_ok();
+    if !parts.iter().all(is_valid_hex) {
+        return None;
+    }
+
+    let parse_hex = |part: &&str| {
+        if part.is_empty() {
+            0
+        } else {
+            u32::from_str_radix(part, 16).unwrap()
+        }
+    };
+
+    Some(parts.iter().map(parse_hex).collect())
 }
 
 fn check_flag_group<T>(flag: &Flag<T>, remove: bool) -> bool {
@@ -855,6 +886,23 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) {
 
 fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
     termios.control_chars[mapping.0 as usize] = mapping.1;
+}
+
+fn apply_saved_state(termios: &mut Termios, state: &[u32]) -> nix::Result<()> {
+    if state.len() >= 4 {
+        termios.input_flags = InputFlags::from_bits_truncate(state[0]);
+        termios.output_flags = OutputFlags::from_bits_truncate(state[1]);
+        termios.control_flags = ControlFlags::from_bits_truncate(state[2]);
+        termios.local_flags = LocalFlags::from_bits_truncate(state[3]);
+
+        // Apply control characters (stored as u32 but used as u8)
+        for (i, &cc_val) in state.iter().skip(4).enumerate() {
+            if i < termios.control_chars.len() {
+                termios.control_chars[i] = cc_val as u8;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn apply_special_setting(
