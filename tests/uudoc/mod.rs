@@ -1,8 +1,3 @@
-// This file is part of the uutils coreutils package.
-//
-// For the full copyright and license information, please view the LICENSE
-// file that was distributed with this source code.
-
 use std::{env, path::PathBuf, process::Command, sync::OnceLock};
 
 static UUDOC_BINARY_PATH: OnceLock<PathBuf> = OnceLock::new();

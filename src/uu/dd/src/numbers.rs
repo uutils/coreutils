@@ -1,8 +1,3 @@
-// This file is part of the uutils coreutils package.
-//
-// For the full copyright and license information, please view the LICENSE
-// file that was distributed with this source code.
-
 //! Functions for formatting a number as a magnitude and a unit suffix.
 
 /// The first ten powers of 1024.

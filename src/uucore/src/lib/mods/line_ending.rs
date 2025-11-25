@@ -1,7 +1,3 @@
-// This file is part of the uutils coreutils package.
-//
-// For the full copyright and license information, please view the LICENSE
-// file that was distributed with this source code.
 //! Provides consistent newline/zero terminator handling for `-z`/`--zero` flags.
 //!
 //! See the [`LineEnding`] struct for more information.

@@ -1,8 +1,3 @@
-// This file is part of the uutils coreutils package.
-//
-// For the full copyright and license information, please view the LICENSE
-// file that was distributed with this source code.
-
 #[cfg(all(
     unix,
     not(any(target_os = "macos", target_os = "linux", target_os = "android"))

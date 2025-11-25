@@ -1,8 +1,3 @@
-// This file is part of the uutils coreutils package.
-//
-// For the full copyright and license information, please view the LICENSE
-// file that was distributed with this source code.
-
 //! CPU hardware capability detection for performance-sensitive utilities
 //!
 //! This module provides a unified interface for detecting CPU features and

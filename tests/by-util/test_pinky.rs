@@ -1,8 +1,3 @@
-// This file is part of the uutils coreutils package.
-//
-// For the full copyright and license information, please view the LICENSE
-// file that was distributed with this source code.
-
 #[cfg(not(target_os = "openbsd"))]
 use uucore::entries::{Locate, Passwd};
 use uutests::new_ucmd;

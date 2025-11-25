@@ -1,8 +1,3 @@
-// This file is part of the uutils coreutils package.
-//
-// For the full copyright and license information, please view the LICENSE
-// file that was distributed with this source code.
-
 //! Iterating over a file by chunks, either starting at the end of the file with [`ReverseChunks`]
 //! or at the end of piped stdin with [`LinesChunk`] or [`BytesChunk`].
 //!

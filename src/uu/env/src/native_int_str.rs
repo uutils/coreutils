@@ -1,8 +1,3 @@
-// This file is part of the uutils coreutils package.
-//
-// For the full copyright and license information, please view the LICENSE
-// file that was distributed with this source code.
-
 // This module contains classes and functions for dealing with the differences
 // between operating systems regarding the lossless processing of OsStr/OsString.
 // In contrast to existing crates with similar purpose, this module does not use any

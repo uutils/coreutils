@@ -1,7 +1,3 @@
-// This file is part of the uutils coreutils package.
-//
-// For the full copyright and license information, please view the LICENSE
-// file that was distributed with this source code.
 // spell-checker:ignore itotal iused iavail ipcent pcent squashfs
 use crate::{OPT_INODES, OPT_OUTPUT, OPT_PRINT_TYPE};
 use clap::{ArgMatches, parser::ValueSource};

@@ -1,8 +1,3 @@
-// This file is part of the uutils coreutils package.
-//
-// For the full copyright and license information, please view the LICENSE
-// file that was distributed with this source code.
-
 // spell-checker:ignore (strings) anychar combinator Alnum Punct Xdigit alnum punct xdigit cntrl
 
 use crate::unicode_table;

@@ -1,7 +1,3 @@
-// This file is part of the uutils coreutils package.
-//
-// For the full copyright and license information, please view the LICENSE
-// file that was distributed with this source code.
 // spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont
 
 use uutests::at_and_ucmd;

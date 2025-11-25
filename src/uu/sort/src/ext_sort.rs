@@ -1,8 +1,3 @@
-// This file is part of the uutils coreutils package.
-//
-// For the full copyright and license information, please view the LICENSE
-// file that was distributed with this source code.
-
 //! Sort big files by using auxiliary files for storing intermediate chunks.
 //!
 //! Files are read into chunks of memory which are then sorted individually and

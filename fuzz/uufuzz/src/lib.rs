@@ -1,8 +1,3 @@
-// This file is part of the uutils coreutils package.
-//
-// For the full copyright and license information, please view the LICENSE
-// file that was distributed with this source code.
-
 use console::Style;
 use libc::STDIN_FILENO;
 use libc::{STDERR_FILENO, STDOUT_FILENO, close, dup, dup2, pipe};

@@ -1,8 +1,3 @@
-// This file is part of the uutils coreutils package.
-//
-// For the full copyright and license information, please view the LICENSE
-// file that was distributed with this source code.
-
 //! Set of functions to manage regular files, special files, and links.
 
 // spell-checker:ignore backport

@@ -1,7 +1,3 @@
-// This file is part of the uutils coreutils package.
-//
-// For the full copyright and license information, please view the LICENSE
-// file that was distributed with this source code.
 // spell-checker:ignore (ToDO) hdsf ghead gtail ACDBK hexdigit
 
 //! Parser for sizes in SI or IEC units (multiples of 1000 or 1024 bytes).

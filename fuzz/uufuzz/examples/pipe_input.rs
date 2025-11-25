@@ -1,8 +1,3 @@
-// This file is part of the uutils coreutils package.
-//
-// For the full copyright and license information, please view the LICENSE
-// file that was distributed with this source code.
-
 use std::ffi::OsString;
 use std::io::{self, Read};
 use uufuzz::{compare_result, generate_and_run_uumain, run_gnu_cmd};
