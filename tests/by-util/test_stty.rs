@@ -526,3 +526,60 @@ fn test_saved_state_with_control_chars() {
         .stderr_is(exp_result.stderr_str())
         .code_is(exp_result.code());
 }
+
+#[test]
+#[cfg(unix)]
+fn test_columns_env_wrapping() {
+    use std::process::Stdio;
+    let (path, _controller, _replica) = pty_path();
+
+    // Must pipe output so stty uses COLUMNS env instead of actual terminal size
+    for (columns, max_len) in [(20, 20), (40, 40), (50, 50)] {
+        let result = new_ucmd!()
+            .args(&["--all", "--file", &path])
+            .env("COLUMNS", columns.to_string())
+            .set_stdout(Stdio::piped())
+            .succeeds();
+
+        for line in result.stdout_str().lines() {
+            assert!(
+                line.len() <= max_len,
+                "Line exceeds COLUMNS={columns}: '{line}'"
+            );
+        }
+    }
+
+    // Wide columns should allow longer lines
+    let result = new_ucmd!()
+        .args(&["--all", "--file", &path])
+        .env("COLUMNS", "200")
+        .set_stdout(Stdio::piped())
+        .succeeds();
+    let has_long_line = result.stdout_str().lines().any(|line| line.len() > 80);
+    assert!(
+        has_long_line,
+        "Expected at least one line longer than 80 chars with COLUMNS=200"
+    );
+
+    // Invalid values should fall back to default
+    for invalid in ["invalid", "0", "-10"] {
+        new_ucmd!()
+            .args(&["--all", "--file", &path])
+            .env("COLUMNS", invalid)
+            .set_stdout(Stdio::piped())
+            .succeeds();
+    }
+
+    // Without --all flag
+    let result = new_ucmd!()
+        .args(&["--file", &path])
+        .env("COLUMNS", "30")
+        .set_stdout(Stdio::piped())
+        .succeeds();
+    for line in result.stdout_str().lines() {
+        assert!(
+            line.len() <= 30,
+            "Line exceeds COLUMNS=30 without --all: '{line}'"
+        );
+    }
+}
