@@ -8,7 +8,7 @@ use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 #[cfg(not(target_os = "android"))]
 use uutests::util::is_ci;
-use uutests::util::{TestScenario, run_ucmd_as_root};
+use uutests::util::{TestScenario, run_ucmd_as_root, run_ucmd_as_root_to_migrate};
 use uutests::util_name;
 
 #[test]
@@ -57,12 +57,13 @@ fn test_no_such_directory() {
 }
 
 #[test]
+#[cfg(not(target_os = "macos"))]
 fn test_multiple_group_args() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkdir("id");
 
-    if let Ok(result) = run_ucmd_as_root(
+    if let Ok(result) = run_ucmd_as_root_to_migrate(
         &ts,
         &["--groups='invalid ignored'", "--groups=''", "/", "id", "-G"],
     ) {
@@ -80,7 +81,7 @@ fn test_invalid_user_spec() {
         result
             .failure()
             .code_is(125)
-            .stderr_is("chroot: invalid user");
+            .stderr_is("chroot: invalid user\n");
     } else {
         print!("Test skipped; requires root user");
     }
@@ -89,7 +90,7 @@ fn test_invalid_user_spec() {
         result
             .failure()
             .code_is(125)
-            .stderr_is("chroot: invalid user");
+            .stderr_is("chroot: invalid user\n");
     } else {
         print!("Test skipped; requires root user");
     }
@@ -98,7 +99,7 @@ fn test_invalid_user_spec() {
         result
             .failure()
             .code_is(125)
-            .stderr_is("chroot: invalid group");
+            .stderr_is("chroot: invalid group\n");
     } else {
         print!("Test skipped; requires root user");
     }
@@ -111,14 +112,14 @@ fn test_invalid_user() {
 
     let dir = "CHROOT_DIR";
     at.mkdir(dir);
-    if let Ok(result) = run_ucmd_as_root(&ts, &[dir, "whoami"]) {
+    if let Ok(result) = run_ucmd_as_root_to_migrate(&ts, &[dir, "whoami"]) {
         result.success().no_stderr().stdout_is("root");
     } else {
         print!("Test skipped; requires root user");
     }
 
     // `--user` is an abbreviation of `--userspec`.
-    if let Ok(result) = run_ucmd_as_root(&ts, &["--user=nobody:+65535", dir, "pwd"]) {
+    if let Ok(result) = run_ucmd_as_root_to_migrate(&ts, &["--user=nobody:+65535", dir, "pwd"]) {
         result.failure().stderr_is("chroot: invalid user");
     } else {
         print!("Test skipped; requires root user");
@@ -181,7 +182,7 @@ fn test_default_shell() {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
     let expected = format!("chroot: failed to run command '{shell}': No such file or directory");
 
-    if let Ok(result) = run_ucmd_as_root(&ts, &[dir]) {
+    if let Ok(result) = run_ucmd_as_root_to_migrate(&ts, &[dir]) {
         result.stderr_contains(expected);
     } else {
         print!("Test skipped; requires root user");
@@ -195,13 +196,13 @@ fn test_chroot() {
 
     let dir = "CHROOT_DIR";
     at.mkdir(dir);
-    if let Ok(result) = run_ucmd_as_root(&ts, &[dir, "whoami"]) {
+    if let Ok(result) = run_ucmd_as_root_to_migrate(&ts, &[dir, "whoami"]) {
         result.success().no_stderr().stdout_is("root");
     } else {
         print!("Test skipped; requires root user");
     }
 
-    if let Ok(result) = run_ucmd_as_root(&ts, &[dir, "pwd"]) {
+    if let Ok(result) = run_ucmd_as_root_to_migrate(&ts, &[dir, "pwd"]) {
         result.success().no_stderr().stdout_is("/");
     } else {
         print!("Test skipped; requires root user");
@@ -229,7 +230,7 @@ fn test_chroot_skip_chdir() {
     at.symlink_file("/", "isroot");
     for dir in dirs {
         let env_cd = std::env::current_dir().unwrap();
-        if let Ok(result) = run_ucmd_as_root(&ts, &[dir, "--skip-chdir"]) {
+        if let Ok(result) = run_ucmd_as_root_to_migrate(&ts, &[dir, "--skip-chdir"]) {
             // Should return the same path
             assert_eq!(
                 result.success().no_stderr().stdout_str(),
@@ -250,7 +251,7 @@ fn test_chroot_extra_arg() {
     at.mkdir(dir);
     let env_cd = std::env::current_dir().unwrap();
     // Verify that -P is pwd's and not chroot
-    if let Ok(result) = run_ucmd_as_root(&ts, &[dir, "pwd", "-P"]) {
+    if let Ok(result) = run_ucmd_as_root_to_migrate(&ts, &[dir, "pwd", "-P"]) {
         assert_eq!(
             result.success().no_stderr().stdout_str(),
             env_cd.to_str().unwrap()

@@ -6,10 +6,9 @@
 
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
-use std::fs;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
-use std::os::unix::fs::{MetadataExt, PermissionsExt};
+use std::os::unix::fs::PermissionsExt;
 #[cfg(not(windows))]
 use std::process::Command;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -19,7 +18,7 @@ use uucore::process::{getegid, geteuid};
 use uucore::selinux::get_getfattr_output;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-use uutests::util::{TestScenario, is_ci, run_ucmd_as_root};
+use uutests::util::{TestScenario, is_ci};
 use uutests::util_name;
 
 #[test]
@@ -2017,7 +2016,12 @@ fn test_target_file_ends_with_slash() {
 }
 
 #[test]
+#[cfg(not(target_os = "macos"))]
 fn test_install_root_combined() {
+    use std::fs;
+    use std::os::unix::fs::MetadataExt;
+    use uutests::util::run_ucmd_as_root;
+
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.touch("a");

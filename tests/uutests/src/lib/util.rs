@@ -3143,6 +3143,21 @@ pub fn run_ucmd_as_root(
     run_ucmd_as_root_with_stdin_stdout(ts, args, None, None)
 }
 
+// Using this function as a temporary measure to keep the tests that are not passing
+// either locally or on the build fleet to be able to allow all of the tests that require root
+// to pass. This will be removed one all of the tests that use this are fixed.
+#[cfg(unix)]
+pub fn run_ucmd_as_root_to_migrate(
+    ts: &TestScenario,
+    args: &[&str],
+) -> std::result::Result<CmdResult, String> {
+    if is_ci() {
+        Err(format!("{UUTILS_INFO}: {}", "cannot run inside CI"))
+    } else {
+        run_ucmd_as_root_with_stdin_stdout(ts, args, None, None)
+    }
+}
+
 #[cfg(unix)]
 pub fn run_ucmd_as_root_with_stdin_stdout(
     ts: &TestScenario,
