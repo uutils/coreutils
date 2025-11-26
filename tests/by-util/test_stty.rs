@@ -11,7 +11,7 @@ use uutests::{at_and_ts, new_ucmd, unwrap_or_return};
 /// This allows comparison between GNU (which shows "stty") and ours (which shows full path)
 fn normalize_stderr(stderr: &str, util_name: &str) -> String {
     // Replace patterns like "Try '/path/to/binary util_name --help'" with "Try 'util_name --help'"
-    let re = regex::Regex::new(&format!(r"Try '[^']*{} --help'", util_name)).unwrap();
+    let re = regex::Regex::new(&format!(r"Try '[^']*{util_name} --help'")).unwrap();
     re.replace_all(stderr, &format!("Try '{util_name} --help'"))
         .to_string()
 }
@@ -432,11 +432,11 @@ fn test_saved_state_valid_formats() {
     let valid_states = vec![saved];
 
     for state in &valid_states {
-        let result = ts.ucmd().args(&["--file", &path, &state]).run();
+        let result = ts.ucmd().args(&["--file", &path, state]).run();
 
         result.success().no_stderr();
 
-        let exp_result = unwrap_or_return!(expected_result(&ts, &["--file", &path, &state]));
+        let exp_result = unwrap_or_return!(expected_result(&ts, &["--file", &path, state]));
         let normalized_stderr = normalize_stderr(result.stderr_str(), "stty");
         result
             .stdout_is(exp_result.stdout_str())
@@ -451,7 +451,7 @@ fn test_saved_state_invalid_formats() {
     let (path, _controller, _replica) = pty_path();
     let (_at, ts) = at_and_ts!();
 
-    let num_cc = nix::libc::NCCS as usize;
+    let num_cc = nix::libc::NCCS;
 
     // Build test strings with platform-specific counts
     let cc_zeros = vec!["0"; num_cc].join(":");
@@ -497,7 +497,7 @@ fn test_saved_state_invalid_formats() {
     ];
 
     for state in &invalid_states {
-        let result = ts.ucmd().args(&["--file", &path, &state]).run();
+        let result = ts.ucmd().args(&["--file", &path, state]).run();
 
         result.failure().stderr_contains("invalid argument");
 
@@ -517,7 +517,7 @@ fn test_saved_state_with_control_chars() {
     let (_at, ts) = at_and_ts!();
 
     // Build a valid saved state with platform-specific number of control characters
-    let num_cc = nix::libc::NCCS as usize;
+    let num_cc = nix::libc::NCCS;
     let cc_values: Vec<String> = (1..=num_cc).map(|_| format!("{:x}", 0)).collect();
     let saved_state = format!("500:5:4bf:8a3b:{}", cc_values.join(":"));
 
