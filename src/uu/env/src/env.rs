@@ -106,8 +106,15 @@ struct Options<'a> {
 fn print_env(line_ending: LineEnding) {
     let stdout_raw = io::stdout();
     let mut stdout = stdout_raw.lock();
-    for (n, v) in env::vars() {
-        write!(stdout, "{n}={v}{line_ending}").unwrap();
+    // vars_os in case we get some invalid strings
+    for (n, v) in env::vars_os() {
+        write!(
+            stdout,
+            "{}={}{line_ending}",
+            n.to_string_lossy(),
+            v.to_string_lossy()
+        )
+        .unwrap();
     }
 }
 
