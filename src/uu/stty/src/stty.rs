@@ -546,7 +546,7 @@ struct WrappedPrinter {
 }
 
 impl WrappedPrinter {
-    fn new(term_size: &Option<TermSize>) -> Self {
+    fn new(term_size: Option<&TermSize>) -> Self {
         let columns = match term_size {
             Some(term_size) => term_size.columns,
             None => {
@@ -595,8 +595,8 @@ impl WrappedPrinter {
 fn print_terminal_size(
     termios: &Termios,
     opts: &Options,
-    window_size: &Option<TermSize>,
-    term_size: &Option<TermSize>,
+    window_size: Option<&TermSize>,
+    term_size: Option<&TermSize>,
 ) -> nix::Result<()> {
     let speed = cfgetospeed(termios);
     let mut printer = WrappedPrinter::new(window_size);
@@ -610,7 +610,7 @@ fn print_terminal_size(
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
-    print!("{} ", translate!("stty-output-speed", "speed" => speed));
+    printer.print(&translate!("stty-output-speed", "speed" => speed));
 
     // Other platforms need to use the baud rate enum, so printing the right value
     // becomes slightly more complicated.
@@ -815,7 +815,7 @@ fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
 fn print_control_chars(
     termios: &Termios,
     opts: &Options,
-    term_size: &Option<TermSize>,
+    term_size: Option<&TermSize>,
 ) -> nix::Result<()> {
     if !opts.all {
         // Print only control chars that differ from sane defaults
@@ -871,8 +871,7 @@ fn print_settings(termios: &Termios, opts: &Options) -> nix::Result<()> {
         let device_fd = opts.file.as_raw_fd();
         let term_size = {
             let mut term_size = TermSize::default();
-            let term_size =
-                unsafe { tiocgwinsz(device_fd, &raw mut term_size) }.map(|_| term_size);
+            let term_size = unsafe { tiocgwinsz(device_fd, &raw mut term_size) }.map(|_| term_size);
             if opts.all {
                 Some(term_size?)
             } else {
@@ -881,21 +880,21 @@ fn print_settings(termios: &Termios, opts: &Options) -> nix::Result<()> {
         };
 
         let stdout_fd = stdout().as_raw_fd();
-        let window_size = if device_fd != stdout_fd {
+        let window_size = if device_fd == stdout_fd {
+            &term_size
+        } else {
             let mut term_size = TermSize::default();
             &unsafe { tiocgwinsz(stdout_fd, &raw mut term_size) }
                 .map(|_| term_size)
                 .ok()
-        } else {
-            &term_size
         };
 
-        print_terminal_size(termios, opts, &window_size, &term_size)?;
-        print_control_chars(termios, opts, &window_size)?;
-        print_flags(termios, opts, CONTROL_FLAGS, &window_size);
-        print_flags(termios, opts, INPUT_FLAGS, &window_size);
-        print_flags(termios, opts, OUTPUT_FLAGS, &window_size);
-        print_flags(termios, opts, LOCAL_FLAGS, &window_size);
+        print_terminal_size(termios, opts, window_size.as_ref(), term_size.as_ref())?;
+        print_control_chars(termios, opts, window_size.as_ref())?;
+        print_flags(termios, opts, CONTROL_FLAGS, window_size.as_ref());
+        print_flags(termios, opts, INPUT_FLAGS, window_size.as_ref());
+        print_flags(termios, opts, OUTPUT_FLAGS, window_size.as_ref());
+        print_flags(termios, opts, LOCAL_FLAGS, window_size.as_ref());
     }
     Ok(())
 }
@@ -904,7 +903,7 @@ fn print_flags<T: TermiosFlag>(
     termios: &Termios,
     opts: &Options,
     flags: &[Flag<T>],
-    term_size: &Option<TermSize>,
+    term_size: Option<&TermSize>,
 ) {
     let mut printer = WrappedPrinter::new(term_size);
     for &Flag {
