@@ -26,6 +26,9 @@ uucore = { workspace = true, features = ["parser"] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true }
+
 # "feat_external_libstdbuf": use an external libstdbuf.so for stdbuf instead of embedding it into
 # the stdbuf binary.
 # There are 2 use-cases:

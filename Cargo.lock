@@ -3876,6 +3876,7 @@ version = "0.4.0"
 dependencies = [
  "clap",
  "fluent",
+ "nix",
  "tempfile",
  "thiserror 2.0.17",
  "uu_stdbuf_libstdbuf",
