@@ -11,6 +11,25 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_broken_pipe_still_exits_success() {
+    use std::process::Stdio;
+
+    let mut child = new_ucmd!()
+        .args(&["1", "5"])
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+
+    // 出力先が先に閉じられたパイプへ書こうとして Broken pipe を発生させる。
+    child.close_stdout();
+    let result = child.wait().unwrap();
+
+    result
+        .code_is(0)
+        .stderr_contains("write error: Broken pipe");
+}
+
+#[test]
 fn test_no_args() {
     new_ucmd!()
         .fails_with_code(1)
