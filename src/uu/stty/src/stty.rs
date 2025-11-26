@@ -539,6 +539,7 @@ fn print_special_setting(setting: &PrintSetting, fd: i32) -> nix::Result<()> {
     Ok(())
 }
 
+/// Handles line wrapping for stty output to fit within terminal width
 struct WrappedPrinter {
     width: usize,
     current: usize,
@@ -546,6 +547,9 @@ struct WrappedPrinter {
 }
 
 impl WrappedPrinter {
+    /// Creates a new printer with the specified terminal width.
+    /// If term_size is None (typically when output is piped), falls back to
+    /// the COLUMNS environment variable or a default width of 80 columns.
     fn new(term_size: Option<&TermSize>) -> Self {
         let columns = match term_size {
             Some(term_size) => term_size.columns,
@@ -864,29 +868,29 @@ fn print_in_save_format(termios: &Termios) {
     println!();
 }
 
+/// Gets terminal size using the tiocgwinsz ioctl system call.
+/// This queries the kernel for the current terminal window dimensions.
+fn get_terminal_size(fd: RawFd) -> nix::Result<TermSize> {
+    let mut term_size = TermSize::default();
+    unsafe { tiocgwinsz(fd, &raw mut term_size) }.map(|_| term_size)
+}
+
 fn print_settings(termios: &Termios, opts: &Options) -> nix::Result<()> {
     if opts.save {
         print_in_save_format(termios);
     } else {
         let device_fd = opts.file.as_raw_fd();
-        let term_size = {
-            let mut term_size = TermSize::default();
-            let term_size = unsafe { tiocgwinsz(device_fd, &raw mut term_size) }.map(|_| term_size);
-            if opts.all {
-                Some(term_size?)
-            } else {
-                term_size.ok()
-            }
+        let term_size = if opts.all {
+            Some(get_terminal_size(device_fd)?)
+        } else {
+            get_terminal_size(device_fd).ok()
         };
 
         let stdout_fd = stdout().as_raw_fd();
         let window_size = if device_fd == stdout_fd {
             &term_size
         } else {
-            let mut term_size = TermSize::default();
-            &unsafe { tiocgwinsz(stdout_fd, &raw mut term_size) }
-                .map(|_| term_size)
-                .ok()
+            &get_terminal_size(stdout_fd).ok()
         };
 
         print_terminal_size(termios, opts, window_size.as_ref(), term_size.as_ref())?;
