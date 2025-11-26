@@ -9,7 +9,7 @@ use uutests::{at_and_ts, new_ucmd, unwrap_or_return};
 
 /// Normalize stderr by replacing the full binary path with just the utility name
 /// This allows comparison between GNU (which shows "stty" or "gstty") and ours (which shows full path)
-fn normalize_stderr(stderr: &str, util_name: &str) -> String {
+fn normalize_stderr(stderr: &str) -> String {
     // Replace patterns like "Try 'gstty --help'" or "Try '/path/to/stty --help'" with "Try 'stty --help'"
     let re = regex::Regex::new(r"Try '[^']*(?:g)?stty --help'").unwrap();
     re.replace_all(stderr, "Try 'stty --help'").to_string()
@@ -429,7 +429,7 @@ fn test_saved_state_valid_formats() {
     result.success().no_stderr();
 
     let exp_result = unwrap_or_return!(expected_result(&ts, &["--file", &path, saved]));
-    let normalized_stderr = normalize_stderr(result.stderr_str(), "stty");
+    let normalized_stderr = normalize_stderr(result.stderr_str());
     result
         .stdout_is(exp_result.stdout_str())
         .code_is(exp_result.code());
@@ -493,11 +493,12 @@ fn test_saved_state_invalid_formats() {
         result.failure().stderr_contains("invalid argument");
 
         let exp_result = unwrap_or_return!(expected_result(&ts, &["--file", &path, state]));
-        let normalized_stderr = normalize_stderr(result.stderr_str(), "stty");
+        let normalized_stderr = normalize_stderr(result.stderr_str());
+        let exp_normalized_stderr = normalize_stderr(exp_result.stderr_str());
         result
             .stdout_is(exp_result.stdout_str())
             .code_is(exp_result.code());
-        assert_eq!(normalized_stderr, exp_result.stderr_str());
+        assert_eq!(normalized_stderr, exp_normalized_stderr);
     }
 }
 
