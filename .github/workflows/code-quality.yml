@@ -174,7 +174,7 @@ jobs:
     - name: Install/setup prerequisites
       shell: bash
       run: |
-        sudo apt-get -y update ; sudo apt-get -y install npm ; sudo npm install cspell -g ;
+        sudo npm install cspell -g ;
     - name: Run `cspell`
       shell: bash
       run: |
