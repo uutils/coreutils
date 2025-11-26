@@ -163,7 +163,6 @@ pub(crate) fn color_name(
         let has_capabilities = if capabilities.is_none() {
             false
         } else {
-            //uucore::fsxattr::has_capability(&path.p_buf)
             path.has_capability()
         };
 

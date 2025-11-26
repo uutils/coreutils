@@ -1860,6 +1860,7 @@ struct PathData {
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
     de: RefCell<Option<Box<DirEntry>>>,
     security_context: OnceCell<Box<str>>,
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     has_acl: OnceCell<bool>,
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     has_capability: OnceCell<bool>,
@@ -1941,6 +1942,7 @@ impl PathData {
             p_buf,
             must_dereference,
             command_line,
+            #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
             has_acl: OnceCell::new(),
             #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
             has_capability: OnceCell::new(),
@@ -1990,16 +1992,9 @@ impl PathData {
             .as_ref()
     }
 
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     fn has_acl(&self) -> bool {
-        #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        {
-            *self.has_acl.get_or_init(|| fsxattr::has_acl(self.path()))
-        }
-
-        #[cfg(not(all(unix, not(any(target_os = "android", target_os = "macos")))))]
-        {
-            *self.has_acl.get_or_init(|| false)
-        }
+        *self.has_acl.get_or_init(|| fsxattr::has_acl(self.path()))
     }
 
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
@@ -2850,6 +2845,7 @@ fn display_item_long(
         output_display.extend(b"  ");
     }
     if let Some(md) = item.metadata() {
+        #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
         let has_acl = item.has_acl();
 
         output_display.extend(display_permissions(md, true).as_bytes());
@@ -2857,8 +2853,11 @@ fn display_item_long(
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
             output_display.extend(b".");
-        } else if has_acl {
-            output_display.extend(b"+");
+        } else {
+            #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+            if has_acl {
+                output_display.extend(b"+");
+            }
         }
         output_display.extend(b" ");
         output_display.extend_pad_left(&display_symlink_count(md), padding.link_count);

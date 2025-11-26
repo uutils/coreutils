@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore getxattr posix_acl_default
+// spell-checker:ignore getxattr posix_acl_default capctl
 
 //! Set of functions to manage xattr on files and dirs
 use fnv::FnvHashMap as HashMap;
@@ -11,6 +11,9 @@ use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::sync::OnceLock;
 
+// These are the magic xattr keys for POSIX ACLs and file based capabilities,
+// ACLS: The "access" key applies to individual files, and the "default" key is for directory ACLs
+// Caps: AFAIK Modern Linux kernels set file based capabilities via this special xattr, instead of via a syscall
 pub static POSIX_ACL_ACCESS_KEY: &str = "system.posix_acl_access";
 pub static POSIX_ACL_DEFAULT_KEY: &str = "system.posix_acl_default";
 pub static SECURITY_CAPABILITY_KEY: &str = "security.capability";
@@ -141,6 +144,9 @@ pub fn current_thread_has_capability() -> bool {
     {
         use capctl::caps;
 
+        // Why use OnceLock here?  Because as stated above GNU tests need to see a capget call
+        // and we need to call it only once because it applies to the thread only, but needs
+        // to be called only when we are requesting caps
         static CELL: OnceLock<bool> = OnceLock::new();
 
         *CELL.get_or_init(|| {

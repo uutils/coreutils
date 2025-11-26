@@ -1,4 +1,4 @@
-# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal tzdb zoneinfo logind
+# spell-checker:ignore (features) bigdecimal capctl zerocopy extendedbigdecimal tzdb zoneinfo logind
 
 [package]
 name = "uucore"
