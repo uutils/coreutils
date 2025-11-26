@@ -6,13 +6,17 @@
 // spell-checker:ignore (ToDO) tempdir dyld dylib optgrps libstdbuf
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use std::env;
+#[cfg(unix)]
+use std::ffi::CString;
 use std::ffi::OsString;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
-use std::process;
 use tempfile::TempDir;
 use tempfile::tempdir;
 use thiserror::Error;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::parser::parse_size::parse_size_u64;
 use uucore::translate;
@@ -133,13 +137,13 @@ fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramO
     }
 }
 
-fn set_command_env(command: &mut process::Command, buffer_name: &str, buffer_type: &BufferType) {
+fn set_env_var(buffer_name: &str, buffer_type: &BufferType) {
     match buffer_type {
         BufferType::Size(m) => {
-            command.env(buffer_name, m.to_string());
+            unsafe { env::set_var(buffer_name, m.to_string()) };
         }
         BufferType::Line => {
-            command.env(buffer_name, "L");
+            unsafe { env::set_var(buffer_name, "L") };
         }
         BufferType::Default => {}
     }
@@ -193,68 +197,78 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let Some(first_command) = command_values.next() else {
         return Err(UUsageError::new(125, "no command specified".to_string()));
     };
-    let mut command = process::Command::new(first_command);
     let command_params: Vec<&OsString> = command_values.collect();
 
     let tmp_dir = tempdir()
         .map_err(|e| UUsageError::new(125, format!("failed to create temp directory: {e}")))?;
     let (preload_env, libstdbuf) = get_preload_env(&tmp_dir)?;
-    command.env(preload_env, libstdbuf);
-    set_command_env(&mut command, "_STDBUF_I", &options.stdin);
-    set_command_env(&mut command, "_STDBUF_O", &options.stdout);
-    set_command_env(&mut command, "_STDBUF_E", &options.stderr);
-    command.args(command_params);
+    // Set preload and stdbuf env vars in the current process so execvp will inherit them.
+    unsafe { env::set_var(&preload_env, &libstdbuf) };
+    set_env_var("_STDBUF_I", &options.stdin);
+    set_env_var("_STDBUF_O", &options.stdout);
+    set_env_var("_STDBUF_E", &options.stderr);
 
-    let mut process = match command.spawn() {
-        Ok(p) => p,
-        Err(e) => {
-            return match e.kind() {
-                std::io::ErrorKind::PermissionDenied => Err(USimpleError::new(
-                    126,
-                    translate!("stdbuf-error-permission-denied"),
-                )),
-                std::io::ErrorKind::NotFound => Err(USimpleError::new(
-                    127,
-                    translate!("stdbuf-error-no-such-file"),
-                )),
-                _ => Err(USimpleError::new(
-                    1,
-                    translate!("stdbuf-error-failed-to-execute", "error" => e),
-                )),
-            };
-        }
-    };
+    // On Unix, replace the current process with the target program (no fork) using execvp.
+    #[cfg(unix)]
+    {
+        use nix::unistd::execvp;
 
-    let status = process.wait().map_err_context(String::new)?;
-    match status.code() {
-        Some(i) => {
-            if i == 0 {
-                Ok(())
-            } else {
-                Err(i.into())
+        // Convert program and args into CString
+        let prog_bytes = first_command.as_os_str().as_bytes();
+        let Ok(prog_c) = CString::new(prog_bytes) else {
+            return Err(USimpleError::new(
+                127,
+                translate!("stdbuf-error-no-such-file"),
+            ));
+        };
+
+        let mut argv: Vec<CString> = Vec::new();
+        // push arg0
+        let Ok(arg0_c) = CString::new(prog_bytes) else {
+            return Err(USimpleError::new(
+                127,
+                translate!("stdbuf-error-no-such-file"),
+            ));
+        };
+        argv.push(arg0_c);
+
+        for p in &command_params {
+            let bytes = p.as_os_str().as_bytes();
+            match CString::new(bytes) {
+                Ok(c) => argv.push(c),
+                Err(_) => {
+                    return Err(USimpleError::new(
+                        127,
+                        translate!("stdbuf-error-no-such-file"),
+                    ));
+                }
             }
         }
-        None => {
-            #[cfg(unix)]
-            {
-                use std::os::unix::process::ExitStatusExt;
-                let signal_msg = status
-                    .signal()
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "unknown".to_string());
-                Err(USimpleError::new(
-                    1,
-                    translate!("stdbuf-error-killed-by-signal", "signal" => signal_msg),
-                ))
-            }
-            #[cfg(not(unix))]
-            {
-                Err(USimpleError::new(
-                    1,
-                    "process terminated abnormally".to_string(),
-                ))
-            }
+
+        match execvp(&prog_c, &argv) {
+            Err(nix::errno::Errno::ENOENT) => Err(USimpleError::new(
+                127,
+                translate!("stdbuf-error-no-such-file"),
+            )),
+            Err(nix::errno::Errno::EACCES) => Err(USimpleError::new(
+                126,
+                translate!("stdbuf-error-permission-denied"),
+            )),
+            Err(_) => Err(USimpleError::new(
+                1,
+                translate!("stdbuf-error-failed-to-execute", "error" => "execvp failed"),
+            )),
+            Ok(_) => unreachable!("execvp should not return on success"),
         }
+    }
+
+    // On non-Unix platforms, stdbuf is not supported (it relies on LD_PRELOAD/DYLD behavior).
+    #[cfg(not(unix))]
+    {
+        return Err(USimpleError::new(
+            1,
+            translate!("stdbuf-error-command-not-supported"),
+        ));
     }
 }
 
