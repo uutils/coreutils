@@ -475,9 +475,9 @@ fn test_saved_state_invalid_formats() {
         String::new()
     };
 
+    // Cannot test single value since it would be intepreted as baud rate
     let invalid_states = vec![
         "500:5:4bf".to_string(),                        // fewer than expected parts
-        "500".to_string(),                              // only 1 part
         "500:5:4bf:8a3b".to_string(),                   // only 4 parts
         format!("500:5:{}:8a3b:{}", cc_zeros, "extra"), // too many parts
         format!("500::4bf:8a3b:{}", cc_zeros),          // empty hex value in flags
