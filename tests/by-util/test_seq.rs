@@ -20,7 +20,7 @@ fn test_broken_pipe_still_exits_success() {
         .set_stdout(Stdio::piped())
         .run_no_wait();
 
-    // 出力先が先に閉じられたパイプへ書こうとして Broken pipe を発生させる。
+    // Trigger a Broken pipe by writing to a pipe whose reader closed first.
     child.close_stdout();
     let result = child.wait().unwrap();
 
