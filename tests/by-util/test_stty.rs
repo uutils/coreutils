@@ -224,7 +224,7 @@ fn valid_baud_formats() {
 }
 
 #[test]
-#[cfg(unix)]
+#[ignore = "Fails because cargo test does not run in a tty"]
 fn set_mapping() {
     new_ucmd!().args(&["intr", "'"]).succeeds();
     new_ucmd!()
