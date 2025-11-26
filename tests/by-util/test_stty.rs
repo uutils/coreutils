@@ -8,12 +8,11 @@ use uutests::util::{expected_result, pty_path};
 use uutests::{at_and_ts, new_ucmd, unwrap_or_return};
 
 /// Normalize stderr by replacing the full binary path with just the utility name
-/// This allows comparison between GNU (which shows "stty") and ours (which shows full path)
+/// This allows comparison between GNU (which shows "stty" or "gstty") and ours (which shows full path)
 fn normalize_stderr(stderr: &str, util_name: &str) -> String {
-    // Replace patterns like "Try '/path/to/binary util_name --help'" with "Try 'util_name --help'"
-    let re = regex::Regex::new(&format!(r"Try '[^']*{util_name} --help'")).unwrap();
-    re.replace_all(stderr, &format!("Try '{util_name} --help'"))
-        .to_string()
+    // Replace patterns like "Try 'gstty --help'" or "Try '/path/to/stty --help'" with "Try 'stty --help'"
+    let re = regex::Regex::new(r"Try '[^']*(?:g)?stty --help'").unwrap();
+    re.replace_all(stderr, "Try 'stty --help'").to_string()
 }
 
 #[test]
