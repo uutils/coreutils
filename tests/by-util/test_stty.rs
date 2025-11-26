@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore parenb parmrk ixany iuclc onlcr icanon noflsh econl igpar ispeed ospeed
+// spell-checker:ignore parenb parmrk ixany iuclc onlcr icanon noflsh econl igpar ispeed ospeed NCCS nonhex
 
 use uutests::util::{expected_result, pty_path};
 use uutests::{at_and_ts, new_ucmd, unwrap_or_return};
@@ -452,7 +452,6 @@ fn test_saved_state_invalid_formats() {
     let (_at, ts) = at_and_ts!();
 
     let num_cc = nix::libc::NCCS as usize;
-    let expected_parts = 4 + num_cc;
 
     // Build test strings with platform-specific counts
     let cc_zeros = vec!["0"; num_cc].join(":");
@@ -519,7 +518,7 @@ fn test_saved_state_with_control_chars() {
 
     // Build a valid saved state with platform-specific number of control characters
     let num_cc = nix::libc::NCCS as usize;
-    let cc_values: Vec<String> = (1..=num_cc).map(|i| format!("{:x}", i)).collect();
+    let cc_values: Vec<String> = (1..=num_cc).map(|_| format!("{:x}", 0)).collect();
     let saved_state = format!("500:5:4bf:8a3b:{}", cc_values.join(":"));
 
     ts.ucmd().args(&["--file", &path, &saved_state]).succeeds();
