@@ -1,3 +1,4 @@
+ACCMODE
 AFAICT
 alloc
 arity
@@ -118,6 +119,8 @@ primality
 pseudoprime
 pseudoprimes
 quantiles
+RDONLY
+RDWR
 readonly
 reparse
 rposition
@@ -142,6 +145,7 @@ symlinks
 syscall
 syscalls
 sysconf
+sysfs
 tokenize
 toolchain
 totalram
