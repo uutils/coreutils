@@ -2,53 +2,105 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 //! Exit status codes produced by `timeout`.
+
+use nix::errno::Errno;
+use std::error::Error;
+use std::fmt;
+use std::io;
+use std::os::unix::process::ExitStatusExt;
+use std::process::ExitStatus;
 use uucore::error::UError;
+use uucore::translate;
 
-/// Enumerates the exit statuses produced by `timeout`.
-///
-/// Use [`Into::into`] (or [`From::from`]) to convert an enumeration
-/// member into a numeric status code. You can also convert into a
-/// [`UError`].
-///
-/// # Examples
-///
-/// Convert into an [`i32`]:
-///
-/// ```rust,ignore
-/// assert_eq!(i32::from(ExitStatus::CommandTimedOut), 124);
-/// ```
-pub(crate) enum ExitStatus {
-    /// When the child process times out and `--preserve-status` is not specified.
-    CommandTimedOut,
-
-    /// When `timeout` itself fails.
-    TimeoutFailed,
-
-    /// When a signal is sent to the child process or `timeout` itself.
-    SignalSent(usize),
-
-    /// When there is a failure while waiting for the child process to terminate.
-    WaitingFailed,
-
-    /// When `SIGTERM` signal received.
-    Terminated,
+#[derive(Debug)]
+pub(crate) enum TimeoutResult {
+    /// The process exited before the timeout expired
+    Exited(ExitStatus),
+    /// The process was killed after the timeout expired
+    TimedOut(ExitStatus),
 }
 
-impl From<ExitStatus> for i32 {
-    fn from(exit_status: ExitStatus) -> Self {
-        match exit_status {
-            ExitStatus::CommandTimedOut => 124,
-            ExitStatus::TimeoutFailed => 125,
-            ExitStatus::SignalSent(s) => 128 + s as Self,
-            ExitStatus::WaitingFailed => 124,
-            ExitStatus::Terminated => 143,
+impl TimeoutResult {
+    pub(crate) fn to_exit_status(&self, preserve_status: bool) -> ExitStatus {
+        match self {
+            Self::Exited(status) => *status,
+            Self::TimedOut(status) => {
+                if preserve_status {
+                    if let Some(signal) = status.signal() {
+                        // Despite the name of the option, GNU timeout does not actually fully
+                        // preserve the status of the child process if it timed out; it just sets
+                        // the exit code to the sh conventional value
+                        ExitStatus::from_raw((128 + signal) << 8)
+                    } else {
+                        *status
+                    }
+                } else {
+                    ExitStatus::from_raw(124 << 8)
+                }
+            }
         }
     }
 }
 
-impl From<ExitStatus> for Box<dyn UError> {
-    fn from(exit_status: ExitStatus) -> Self {
-        Box::from(i32::from(exit_status))
+#[derive(Debug)]
+pub(crate) enum TimeoutError {
+    /// `timeout` itself failed
+    Failure(Box<dyn UError>),
+    /// Command was found but could not be invoked
+    CommandFailedInvocation(io::Error),
+    /// Command was not found
+    CommandNotFound(io::Error),
+}
+
+impl fmt::Display for TimeoutError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Failure(err) => err.fmt(f),
+            Self::CommandFailedInvocation(err) => {
+                translate!("timeout-error-failed-to-execute-process", "error" => err).fmt(f)
+            }
+            Self::CommandNotFound(err) => {
+                translate!("timeout-error-failed-to-execute-process", "error" => err).fmt(f)
+            }
+        }
+    }
+}
+
+impl Error for TimeoutError {}
+
+impl UError for TimeoutError {
+    fn code(&self) -> i32 {
+        match self {
+            Self::Failure(_) => 125,
+            Self::CommandFailedInvocation(_) => 126,
+            Self::CommandNotFound(_) => 127,
+        }
+    }
+
+    fn usage(&self) -> bool {
+        match self {
+            Self::Failure(err) => err.usage(),
+            _ => false,
+        }
+    }
+}
+
+impl From<Box<dyn UError>> for TimeoutError {
+    fn from(err: Box<dyn UError>) -> Self {
+        Self::Failure(err)
+    }
+}
+
+impl From<io::Error> for TimeoutError {
+    fn from(err: io::Error) -> Self {
+        Self::Failure(err.into())
+    }
+}
+
+impl From<Errno> for TimeoutError {
+    fn from(err: Errno) -> Self {
+        Self::Failure(err.into())
     }
 }
