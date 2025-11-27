@@ -171,11 +171,11 @@ impl MemoryDecoder<'_> {
     /// This ensures that endianness swapping works correctly even if we lose precision.
     pub fn read_long_double(&self, start: usize) -> f64 {
         let bits = self.byte_order.read_u128(&self.data[start..start + 16]);
-        f128_to_f64(bits)
+        u128_to_f64(bits)
     }
 }
 
-fn f128_to_f64(u: u128) -> f64 {
+fn u128_to_f64(u: u128) -> f64 {
     let sign = (u >> 127) as u64;
     let exp = ((u >> 112) & 0x7FFF) as u64;
     let mant = u & ((1 << 112) - 1);
