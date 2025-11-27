@@ -787,11 +787,6 @@ fn option_display_name(args: &[String], option_name: &str, short: Option<char>) 
         }
         short_form
     } else {
-        for arg in args.iter().skip(1) {
-            if arg == &long_form || arg.starts_with(&long_form_with_eq) {
-                return long_form.clone();
-            }
-        }
         long_form
     }
 }
