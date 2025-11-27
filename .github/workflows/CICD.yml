@@ -829,11 +829,22 @@ jobs:
       if: matrix.job.skip-package != true
       shell: bash
       run: |
-        ## Package artifact(s)
-        # binary
+        ## Package artifact(s)          
+        # manpages, completions, and uudoc (if exist)
+        cp 'target/${{ matrix.job.target }}/release/uudoc${{ steps.vars.outputs.EXE_suffix }}' '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/' && \
+          (mkdir -p '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/share/'{man/man1,bash-completion/completions,fish/vendor_completions.d,zsh/site-functions,elvish/lib,powershell}
+          for binary in $(./target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }} --list|grep -v -E '^(\[)$');do
+            ./target/${{ matrix.job.target }}/release/uudoc manpage $binary > ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/share/man/man1/${binary}.1
+            ./target/${{ matrix.job.target }}/release/uudoc completion $binary bash > ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/share/bash-completion/completions/${binary}.bash
+            ./target/${{ matrix.job.target }}/release/uudoc completion $binary fish > ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/share/fish/vendor_completions.d/${binary}.fish
+            ./target/${{ matrix.job.target }}/release/uudoc completion $binary zsh > ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/share/zsh/site-functions/_${binary}.bash
+            ./target/${{ matrix.job.target }}/release/uudoc completion $binary elvish > ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/share/elvish/lib/${binary}.elv
+            ./target/${{ matrix.job.target }}/release/uudoc completion $binary powershell > ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/share/powershell/${binary}.ps
+          done) || :
+        # coreutils  
         cp 'target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}' '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/'
         # `strip` binary (if needed)
-        if [ -n "${{ steps.vars.outputs.STRIP }}" ]; then "${{ steps.vars.outputs.STRIP }}" '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}' ; fi
+        [ -n "${{ steps.vars.outputs.STRIP }}" ] && "${{ steps.vars.outputs.STRIP }}" '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/'*
         # README and LICENSE
         # * spell-checker:ignore EADME ICENSE
         (shopt -s nullglob; for f in [R]"EADME"{,.*}; do cp $f '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/' ; done)
