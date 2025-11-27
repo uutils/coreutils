@@ -673,6 +673,11 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
                     let p = input_decoder.read_bfloat(b);
                     output_text.push_str(&func(p));
                 }
+                FormatWriter::ExtendedBigDecimalWriter(func) => {
+                    let p =
+                        input_decoder.read_extended_big_decimal(b, f.formatter_item_info.byte_size);
+                    output_text.push_str(&func(&p));
+                }
                 FormatWriter::MultibyteWriter(func) => {
                     output_text.push_str(&func(input_decoder.get_full_buffer(b)));
                 }

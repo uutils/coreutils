@@ -3,10 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore bfloat multifile
+// spell-checker:ignore bfloat bigdecimal extendedbigdecimal multifile
 
 use half::{bf16, f16};
 use std::io;
+use uucore::extendedbigdecimal::ExtendedBigDecimal;
 
 use crate::byteorder_io::ByteOrder;
 use crate::multifile_reader::HasError;
@@ -165,6 +166,51 @@ impl MemoryDecoder<'_> {
         let val = f32::from(bf16::from_bits(bits));
         f64::from(val)
     }
+
+    /// Returns an `ExtendedBigDecimal` from the internal buffer at position `start`.
+    /// Only able to parse 16-bytes padded "f80", at least for now
+    pub fn read_extended_big_decimal(&self, start: usize, byte_size: usize) -> ExtendedBigDecimal {
+        assert!(byte_size == 16, "Invalid byte_size: {byte_size}");
+        let data = self.byte_order.read_u128(&self.data[start..start + 16]);
+
+        fn bits(data: u128, offset: usize, size: usize) -> u64 {
+            (data >> offset & (u128::MAX >> (128 - size))) as u64
+        }
+
+        // Parse an f80 number, see https://en.wikipedia.org/wiki/Extended_precision for details.
+        // let _pad = bits(data, 80, 48); // Top 48 bits of padding ignored.
+        let sign = bits(data, 79, 1);
+        let exp = bits(data, 64, 15) as i64;
+        let one = bits(data, 63, 1);
+        // m includes the leading `one`, and needs to be divided by 2**63
+        let m = bits(data, 0, 64);
+
+        let ebd = if exp == 0 {
+            // Can be zero, subnormal or pseudo-subnormal, but the computation is always the same.
+            ExtendedBigDecimal::from_number_exp2(m, -16382 - 63)
+        } else if exp == 0x7fff {
+            if one == 0 {
+                // Pseudo-infinity or Pseudo-NaN, both treated as nan.
+                ExtendedBigDecimal::Nan
+            } else if m == (1u64 << 63) {
+                // one == 1, frac == 0
+                ExtendedBigDecimal::Infinity
+            } else {
+                // one == 1, frac != 0
+                ExtendedBigDecimal::Nan
+            }
+        } else {
+            // exp is not all 0 or 1.
+            if one == 0 {
+                // Un-normal, treat as nan
+                ExtendedBigDecimal::Nan
+            } else {
+                ExtendedBigDecimal::from_number_exp2(m, exp - 16383 - 63)
+            }
+        };
+
+        if sign == 1 { -ebd } else { ebd }
+    }
 }
 
 #[cfg(test)]
@@ -178,30 +224,45 @@ mod tests {
     #[allow(clippy::float_cmp)]
     #[allow(clippy::cognitive_complexity)]
     fn smoke_test() {
-        let data = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0xff, 0xff];
+        let data = [
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0, 0xff, 0xbf, 0xca, 0xfe, 0xca, 0xfe,
+            0xca, 0xfe, 0xff, 0xff,
+        ];
         let mut input = PeekReader::new(Cursor::new(&data));
-        let mut sut = InputDecoder::new(&mut input, 8, 2, ByteOrder::Little);
+        let mut sut = InputDecoder::new(&mut input, 16, 2, ByteOrder::Little);
 
         // Peek normal length
         let mut mem = sut.peek_read().unwrap();
 
-        assert_eq!(8, mem.length());
+        assert_eq!(16, mem.length());
 
         assert_eq!(-2.0, mem.read_float(0, 8));
         assert_eq!(-2.0, mem.read_float(4, 4));
+        // sign = 1 (negative)
+        // exp = 0x3fff
+        assert_eq!(
+            Into::<ExtendedBigDecimal>::into(-1.5),
+            mem.read_extended_big_decimal(0, 16)
+        );
         assert_eq!(0xc000_0000_0000_0000, mem.read_uint(0, 8));
         assert_eq!(0xc000_0000, mem.read_uint(4, 4));
         assert_eq!(0xc000, mem.read_uint(6, 2));
         assert_eq!(0xc0, mem.read_uint(7, 1));
-        assert_eq!(&[0, 0xc0], mem.get_buffer(6));
-        assert_eq!(&[0, 0xc0, 0xff, 0xff], mem.get_full_buffer(6));
+        assert_eq!(&[0xca, 0xfe], mem.get_buffer(14));
+        assert_eq!(&[0xca, 0xfe, 0xff, 0xff], mem.get_full_buffer(14));
 
         let mut copy: Vec<u8> = Vec::new();
         mem.clone_buffer(&mut copy);
-        assert_eq!(vec![0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0], copy);
+        assert_eq!(
+            vec![
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0, 0xff, 0xbf, 0xca, 0xfe, 0xca, 0xfe,
+                0xca, 0xfe
+            ],
+            copy
+        );
 
-        mem.zero_out_buffer(7, 8);
-        assert_eq!(&[0, 0, 0xff, 0xff], mem.get_full_buffer(6));
+        mem.zero_out_buffer(14, 16);
+        assert_eq!(&[0, 0, 0xff, 0xff], mem.get_full_buffer(14));
 
         // Peek tail
         let mem = sut.peek_read().unwrap();

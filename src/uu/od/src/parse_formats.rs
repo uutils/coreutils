@@ -81,6 +81,8 @@ fn od_format_type(type_char: FormatType, byte_size: u8) -> Option<FormatterItemI
         (FormatType::Float, 2) => Some(FORMAT_ITEM_F16),
         (FormatType::Float, 0 | 4) => Some(FORMAT_ITEM_F32),
         (FormatType::Float, 8) => Some(FORMAT_ITEM_F64),
+        // Note: This is actually a `long double`, which is 16-byte padded "f80" on x86.
+        (FormatType::Float, 16) => Some(FORMAT_ITEM_F128),
 
         _ => None,
     }
@@ -238,7 +240,10 @@ fn is_format_size_char(
             *byte_size = 2;
             true
         }
-        // FormatTypeCategory::Float, 'L' => *byte_size = 16, // TODO support f128
+        (FormatTypeCategory::Float, Some('L')) => {
+            *byte_size = 16;
+            true
+        }
         _ => false,
     }
 }

@@ -48,6 +48,7 @@ gen_byte_order_ops! {
     read_u16, write_u16 -> u16,
     read_u32, write_u32 -> u32,
     read_u64, write_u64 -> u64,
+    read_u128, write_u128 -> u128,
     read_i16, write_i16 -> i16,
     read_i32, write_i32 -> i32,
     read_i64, write_i64 -> i64,
