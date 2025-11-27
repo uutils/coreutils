@@ -166,7 +166,6 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, String> {
         return Err((*translate!("od-error-parse-failed").leak()).to_string());
     }
 
-    // Reject strings starting with "++" or "+-"
     if s.starts_with("++") || s.starts_with("+-") {
         return Err((*translate!("od-error-parse-failed").leak()).to_string());
     }
