@@ -637,7 +637,6 @@ jobs:
         case '${{ matrix.job.target }}' in
           aarch64-*) TARGET_ARCH=arm64 ;;
           arm-*-*hf) TARGET_ARCH=armhf ;;
-          i586-*) TARGET_ARCH=i586 ;;
           i686-*) TARGET_ARCH=i686 ;;
           x86_64-*) TARGET_ARCH=x86_64 ;;
         esac;
