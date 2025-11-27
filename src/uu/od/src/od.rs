@@ -137,15 +137,9 @@ impl OdOptions {
             Some(s) => {
                 if matches.value_source(options::WIDTH) == Some(ValueSource::CommandLine) {
                     let width_display = option_display_name(args, options::WIDTH, Some('w'));
-                    let parsed = match parse_number_of_bytes(s) {
-                        Ok(n) => n,
-                        Err(e) => {
-                            return Err(USimpleError::new(
-                                1,
-                                format_error_message(&e, s, &width_display),
-                            ));
-                        }
-                    };
+                    let parsed = parse_number_of_bytes(s).map_err(|e| {
+                        USimpleError::new(1, format_error_message(&e, s, &width_display))
+                    })?;
                     if parsed == 0 {
                         return Err(USimpleError::new(
                             1,
