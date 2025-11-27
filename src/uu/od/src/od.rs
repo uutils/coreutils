@@ -777,7 +777,7 @@ fn option_display_name(args: &[String], option_name: &str, short: Option<char>) 
         let short_form = format!("-{short_char}");
         for arg in args.iter().skip(1) {
             if !arg.starts_with("--") && arg.starts_with(&short_form) {
-                return short_form.clone();
+                return short_form;
             }
         }
         for arg in args.iter().skip(1) {
