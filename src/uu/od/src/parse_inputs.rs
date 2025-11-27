@@ -162,7 +162,6 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, String> {
         return Err((*translate!("od-error-parse-failed").leak()).to_string());
     }
 
-    // Reject strings with spaces (e.g., "+ 0")
     if s.contains(' ') {
         return Err((*translate!("od-error-parse-failed").leak()).to_string());
     }
