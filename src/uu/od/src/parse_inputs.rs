@@ -158,7 +158,6 @@ pub fn parse_inputs_traditional(input_strings: &[&str]) -> Result<CommandLineInp
 
 /// parses format used by offset and label on the command line
 pub fn parse_offset_operand(s: &str) -> Result<u64, String> {
-    // Reject empty strings
     if s.is_empty() {
         return Err((*translate!("od-error-parse-failed").leak()).to_string());
     }
