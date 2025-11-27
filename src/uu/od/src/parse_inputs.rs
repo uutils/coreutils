@@ -159,20 +159,20 @@ pub fn parse_inputs_traditional(input_strings: &[&str]) -> Result<CommandLineInp
 /// parses format used by offset and label on the command line
 pub fn parse_offset_operand(s: &str) -> Result<u64, String> {
     if s.is_empty() {
-        return Err((*translate!("od-error-parse-failed").leak()).to_string());
+        return Err(translate!("od-error-parse-failed"));
     }
 
     if s.contains(' ') {
-        return Err((*translate!("od-error-parse-failed").leak()).to_string());
+        return Err(translate!("od-error-parse-failed"));
     }
 
     if s.starts_with("++") || s.starts_with("+-") {
-        return Err((*translate!("od-error-parse-failed").leak()).to_string());
+        return Err(translate!("od-error-parse-failed"));
     }
 
     // Reject strings starting with "-" (negative numbers not allowed)
     if s.starts_with('-') {
-        return Err((*translate!("od-error-parse-failed").leak()).to_string());
+        return Err(translate!("od-error-parse-failed"));
     }
 
     let mut start = 0;
@@ -200,7 +200,7 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, String> {
 
     // Check if the substring is empty after processing prefixes/suffixes
     if start >= len {
-        return Err((*translate!("od-error-parse-failed").leak()).to_string());
+        return Err(translate!("od-error-parse-failed"));
     }
 
     match u64::from_str_radix(&s[start..len], radix) {
@@ -228,7 +228,7 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, String> {
                     let msg = msg.split(" (os error").next().unwrap_or(&msg).to_string();
                     Err(msg)
                 }
-                _ => Err((*translate!("od-error-parse-failed").leak()).to_string()),
+                _ => Err(translate!("od-error-parse-failed")),
             }
         }
     }
