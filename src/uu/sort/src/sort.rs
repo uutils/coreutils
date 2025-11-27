@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef
 
 mod buffer_hint;
 mod check;
@@ -51,6 +51,7 @@ use uucore::line_ending::LineEnding;
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+use uucore::posix::{MODERN, TRADITIONAL};
 use uucore::show_error;
 use uucore::translate;
 use uucore::version_cmp::version_cmp;
@@ -1085,6 +1086,160 @@ fn get_rlimit() -> UResult<usize> {
 }
 
 const STDIN_FILE: &str = "-";
+
+/// Legacy `+POS1 [-POS2]` syntax is permitted unless `_POSIX2_VERSION` is in
+/// the [TRADITIONAL, MODERN) range (matches GNU behaviour).
+fn allows_traditional_usage() -> bool {
+    !matches!(uucore::posix::posix_version(), Some(ver) if (TRADITIONAL..MODERN).contains(&ver))
+}
+
+#[derive(Debug, Clone)]
+struct LegacyKeyPart {
+    field: usize,
+    char: usize,
+    opts: String,
+}
+
+fn parse_usize_or_max(num: &str) -> Option<usize> {
+    match num.parse::<usize>() {
+        Ok(v) => Some(v),
+        Err(e) if *e.kind() == IntErrorKind::PosOverflow => Some(usize::MAX),
+        Err(_) => None,
+    }
+}
+
+fn parse_legacy_part(spec: &str, default_char: usize) -> Option<LegacyKeyPart> {
+    let mut idx = 0;
+    let bytes = spec.as_bytes();
+    while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+        idx += 1;
+    }
+    if idx == 0 {
+        return None;
+    }
+
+    let field = parse_usize_or_max(&spec[..idx])?;
+    let mut char = default_char;
+    let mut rest = &spec[idx..];
+
+    if let Some(stripped) = rest.strip_prefix('.') {
+        let mut char_idx = 0;
+        let stripped_bytes = stripped.as_bytes();
+        while char_idx < stripped_bytes.len() && stripped_bytes[char_idx].is_ascii_digit() {
+            char_idx += 1;
+        }
+        if char_idx == 0 {
+            return None;
+        }
+        char = parse_usize_or_max(&stripped[..char_idx])?;
+        rest = &stripped[char_idx..];
+    }
+
+    Some(LegacyKeyPart {
+        field,
+        char,
+        opts: rest.to_string(),
+    })
+}
+
+/// Convert legacy +POS1 [-POS2] into a `-k` key specification using saturating arithmetic.
+fn legacy_key_to_k(from: &LegacyKeyPart, to: Option<&LegacyKeyPart>) -> String {
+    let start_field = from.field.saturating_add(1);
+    let start_char = from.char.saturating_add(1);
+
+    let mut keydef = format!(
+        "{}{}{}",
+        start_field,
+        if from.char == 0 {
+            String::new()
+        } else {
+            format!(".{start_char}")
+        },
+        from.opts
+    );
+
+    if let Some(to) = to {
+        let end_field = if to.char == 0 {
+            // When the end character index is zero, GNU keeps the field number as-is.
+            // Clamp to 1 to avoid generating an invalid field 0.
+            to.field.max(1)
+        } else {
+            to.field.saturating_add(1)
+        };
+
+        let mut end_part = end_field.to_string();
+        if to.char != 0 {
+            end_part.push('.');
+            end_part.push_str(&to.char.to_string());
+        }
+        end_part.push_str(&to.opts);
+
+        keydef.push(',');
+        keydef.push_str(&end_part);
+    }
+
+    keydef
+}
+
+/// Preprocess argv to handle legacy +POS1 [-POS2] syntax by converting it into -k forms
+/// before clap sees the arguments.
+fn preprocess_legacy_args<I>(args: I) -> Vec<OsString>
+where
+    I: IntoIterator,
+    I::Item: Into<OsString>,
+{
+    if !allows_traditional_usage() {
+        return args.into_iter().map(Into::into).collect();
+    }
+
+    let mut processed = Vec::new();
+    let mut iter = args.into_iter().map(Into::into).peekable();
+
+    while let Some(arg) = iter.next() {
+        if arg == "--" {
+            processed.push(arg);
+            processed.extend(iter);
+            break;
+        }
+
+        let as_str = arg.to_string_lossy();
+        if let Some(from_spec) = as_str.strip_prefix('+') {
+            if let Some(from) = parse_legacy_part(from_spec, 0) {
+                let mut to_part = None;
+
+                let next_candidate = iter.peek().map(|next| next.to_string_lossy().to_string());
+
+                if let Some(next_str) = next_candidate {
+                    if let Some(stripped) = next_str.strip_prefix('-') {
+                        if stripped
+                            .as_bytes()
+                            .first()
+                            .is_some_and(|c| c.is_ascii_digit())
+                        {
+                            let next_arg = iter.next().unwrap();
+                            if let Some(parsed) = parse_legacy_part(stripped, 0) {
+                                to_part = Some(parsed);
+                            } else {
+                                processed.push(arg);
+                                processed.push(next_arg);
+                                continue;
+                            }
+                        }
+                    }
+                }
+
+                let keydef = legacy_key_to_k(&from, to_part.as_ref());
+                processed.push(OsString::from(format!("-k{keydef}")));
+                continue;
+            }
+        }
+
+        processed.push(arg);
+    }
+
+    processed
+}
+
 #[cfg(target_os = "linux")]
 const LINUX_BATCH_DIVISOR: usize = 4;
 #[cfg(target_os = "linux")]
@@ -1116,7 +1271,11 @@ fn default_merge_batch_size() -> usize {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut settings = GlobalSettings::default();
 
-    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
+    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(
+        uu_app(),
+        preprocess_legacy_args(args),
+        2,
+    )?;
 
     // Prevent -o/--output to be specified multiple times
     if matches
