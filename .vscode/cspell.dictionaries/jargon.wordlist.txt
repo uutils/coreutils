@@ -189,3 +189,16 @@ nofield
 # * clippy
 uninlined
 nonminimal
+
+# * CPU/hardware features
+ASIMD
+asimd
+hwcaps
+PCLMUL
+pclmul
+PCLMULQDQ
+pclmulqdq
+TUNABLES
+tunables
+VMULL
+vmull
