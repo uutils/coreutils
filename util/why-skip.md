@@ -33,9 +33,6 @@
 * tests/cp/no-ctx.sh
 * tests/cp/cp-a-selinux.sh
 
-= failed to set xattr of file =
-* tests/misc/xattr.sh
-
 = timeout returned 142. SIGALRM not handled? =
 * tests/misc/timeout-group.sh
 
@@ -54,18 +51,12 @@
 = not running on GNU/Hurd =
 * tests/id/gnu-zero-uids.sh
 
-= file system cannot represent big timestamps =
-* tests/du/bigtime.sh
-
 = no rootfs in mtab =
 * tests/df/skip-rootfs.sh
 
 = insufficient mount/ext2 support =
 * tests/df/problematic-chars.sh
 * tests/cp/cp-mv-enotsup-xattr.sh
-
-= 512 byte aligned O_DIRECT is not supported on this (file) system =
-* tests/dd/direct.sh
 
 = requires controlling input terminal =
 * tests/misc/stty-pairs.sh
