@@ -712,7 +712,6 @@ jobs:
       shell: bash
       run: |
         ## Create build/work space
-        mkdir -p '${{ steps.vars.outputs.STAGING }}'
         mkdir -p '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}'
     - name: Install/setup prerequisites
       shell: bash
