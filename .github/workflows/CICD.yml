@@ -1119,11 +1119,6 @@ jobs:
             ;;
         esac
 
-        case '${{ matrix.job.os }}' in
-          # Update binutils if MinGW due to https://github.com/rust-lang/rust/issues/112368
-          windows-latest) C:/msys64/usr/bin/pacman.exe -Sy --needed mingw-w64-x86_64-gcc --noconfirm ; echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH ;;
-        esac
-
         ## Install the llvm-tools component to get access to `llvm-profdata`
         rustup component add llvm-tools
 
