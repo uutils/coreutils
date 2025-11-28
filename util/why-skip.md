@@ -48,9 +48,6 @@
 = The Swedish locale with blank thousands separator is unavailable. =
 * tests/misc/sort-h-thousands-sep.sh
 
-= this shell lacks ulimit support =
-* tests/misc/csplit-heap.sh
-
 = multicall binary is disabled =
 * tests/misc/coreutils.sh
 
