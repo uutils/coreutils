@@ -71,9 +71,3 @@
 * tests/misc/stty-pairs.sh
 * tests/misc/stty.sh
 * tests/misc/stty-invalid.sh
-
-= insufficient SEEK_DATA support =
-* tests/cp/sparse-perf.sh
-* tests/cp/sparse-extents.sh
-* tests/cp/sparse-extents-2.sh
-* tests/cp/sparse-2.sh
