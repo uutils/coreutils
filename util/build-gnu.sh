@@ -94,18 +94,22 @@ else
 fi
 cd -
 
-# Pass the feature flags to make, which will pass them to cargo
-"${MAKE}" PROFILE="${PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
+[ "${SELINUX_ENABLED}" != 1 ] && export MULTICALL=y # Reduce time to build
+# The GNU tests rename install to ginstall
+"${MAKE}" UTILS=install MULTICALL=n PROFILE="${PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}" &&  ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall"
+"${MAKE}" SKIP_UTILS=install PROFILE="${PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
+if [ "${MULTICALL}" = y ]; then
+    for b in $("${UU_BUILD_DIR}"/coreutils --list)
+        do ln -vf "${UU_BUILD_DIR}"/coreutils "${UU_BUILD_DIR}/${b}"
+    done
+else
+    ln -f "${UU_BUILD_DIR}"/test "${UU_BUILD_DIR}"/'['
+    for b in {b2,md5}sum sha{1,224,256,384,512}sum
+        do ln -f "${UU_BUILD_DIR}"/hashsum "${UU_BUILD_DIR}/${b}"
+    done
+fi
 # min test for SELinux
 [ "${SELINUX_ENABLED}" = 1 ] && touch g && "${PROFILE}"/stat -c%C g && rm g
-
-cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
-# Create *sum binaries
-for sum in b2sum b3sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum; do
-    sum_path="${UU_BUILD_DIR}/${sum}"
-    test -f "${sum_path}" || (cd ${UU_BUILD_DIR} && ln -s "hashsum" "${sum}")
-done
-test -f "${UU_BUILD_DIR}/[" || (cd ${UU_BUILD_DIR} && ln -s "test" "[")
 
 ##
 
@@ -119,6 +123,7 @@ for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs); do
         cp "${UU_BUILD_DIR}/false" "${bin_path}"
     }
 done
+[ "${SELINUX_ENABLED}" != 1 ] && rm  "${UU_BUILD_DIR}/chcon" "${UU_BUILD_DIR}/runcon"
 
 # Always update the PATH to test the uutils coreutils instead of the GNU coreutils
 # This ensures the correct path is used even if the repository was moved or rebuilt in a different location
