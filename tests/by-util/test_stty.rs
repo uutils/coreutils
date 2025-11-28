@@ -291,6 +291,34 @@ fn row_column_sizes() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_row_column_hex_octal() {
+    let (path, _controller, _replica) = pty_path();
+    let (_at, ts) = at_and_ts!();
+
+    // Test various numeric formats: hex (0x1E), octal (036), uppercase hex (0X1E), decimal (30), and zero
+    let test_cases = [
+        ("rows", "0x1E"),  // hexadecimal = 30
+        ("rows", "036"),   // octal = 30
+        ("cols", "0X1E"),  // uppercase hex = 30
+        ("columns", "30"), // decimal = 30
+        ("rows", "0"),     // zero (not octal prefix)
+    ];
+
+    for (setting, value) in test_cases {
+        let result = ts.ucmd().args(&["--file", &path, setting, value]).run();
+        let exp_result =
+            unwrap_or_return!(expected_result(&ts, &["--file", &path, setting, value]));
+        let normalized_stderr = normalize_stderr(result.stderr_str());
+
+        result
+            .stdout_is(exp_result.stdout_str())
+            .code_is(exp_result.code());
+        assert_eq!(normalized_stderr, exp_result.stderr_str());
+    }
+}
+
+#[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn line() {
     new_ucmd!()
