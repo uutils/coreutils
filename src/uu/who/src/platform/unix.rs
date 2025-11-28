@@ -11,10 +11,9 @@ use crate::uu_app;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
 use uucore::libc::{S_IWGRP, STDIN_FILENO, ttyname};
+#[cfg(not(target_os = "openbsd"))]
+use uucore::process::pid_is_alive;
 use uucore::translate;
-
-use nix::sys::signal::kill;
-use nix::unistd::Pid;
 
 use uucore::utmpx::{self, UtmpxRecord, time};
 
@@ -178,20 +177,6 @@ fn time_string(ut: &UtmpxRecord) -> String {
         time::format_description::parse("[year]-[month]-[day] [hour]:[minute]").unwrap()
     };
     ut.login_time().format(&time_format).unwrap()
-}
-
-#[inline]
-#[cfg(not(target_os = "openbsd"))]
-fn pid_is_alive(pid: i32) -> bool {
-    if pid <= 0 {
-        return true;
-    }
-
-    match kill(Pid::from_raw(pid), None) {
-        Ok(()) => true,
-        Err(nix::errno::Errno::ESRCH) => false,
-        Err(_) => true,
-    }
 }
 
 #[inline]
