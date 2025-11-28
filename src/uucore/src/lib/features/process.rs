@@ -72,8 +72,7 @@ pub fn pid_is_alive(pid: i32) -> bool {
     if pid <= 0 {
         return true;
     }
-
-    unsafe { libc::kill(pid, 0) == 0 || *libc::__errno_location() != libc::ESRCH }
+    unsafe { libc::kill(pid, 0) == 0 || Errno::last() != Errno::ESRCH }
 }
 
 /// `getsid()` returns the session ID of the process with process ID pid.
