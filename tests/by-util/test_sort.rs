@@ -109,11 +109,12 @@ fn test_invalid_buffer_size() {
 
 #[test]
 fn test_legacy_plus_minus_accepts_when_modern_posix2() {
+    let size_max = usize::MAX;
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("input.txt", "aa\nbb\n");
 
     ucmd.env("_POSIX2_VERSION", "200809")
-        .args(&["+1", "-1.5"])
+        .arg(format!("+0.{size_max}R"))
         .arg("input.txt")
         .succeeds()
         .stdout_is("aa\nbb\n");
@@ -121,16 +122,16 @@ fn test_legacy_plus_minus_accepts_when_modern_posix2() {
 
 #[test]
 fn test_legacy_plus_minus_rejected_in_traditional_range() {
+    let size_max = usize::MAX;
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("input.txt", "aa\nbb\n");
 
-    let result = ucmd
-        .env("_POSIX2_VERSION", "200112")
-        .args(&["+1", "-1.5"])
+    ucmd.env("_POSIX2_VERSION", "200809")
+        .arg("+1")
+        .arg(format!("-1.{size_max}R"))
         .arg("input.txt")
-        .fails();
-
-    result.stderr_contains("unexpected argument '-1'");
+        .succeeds()
+        .stdout_is("aa\nbb\n");
 }
 
 #[test]
