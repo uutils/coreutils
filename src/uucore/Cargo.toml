@@ -1,4 +1,4 @@
-# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal tzdb zoneinfo logind
+# spell-checker:ignore (features) bigdecimal capctl zerocopy extendedbigdecimal tzdb zoneinfo logind
 
 [package]
 name = "uucore"
@@ -22,6 +22,7 @@ workspace = true
 path = "src/lib/lib.rs"
 
 [dependencies]
+capctl = { workspace = true }
 bstr = { workspace = true }
 chrono = { workspace = true, optional = true }
 clap = { workspace = true }
@@ -96,6 +97,7 @@ nix = { workspace = true, features = [
   "dir",
   "user",
 ] }
+fnv = { workspace = true }
 xattr = { workspace = true, optional = true }
 
 [dev-dependencies]

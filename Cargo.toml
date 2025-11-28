@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime serde bincode gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs
+# spell-checker:ignore (libs) bigdecimal capctl datetime serde bincode gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs
 
 [package]
 name = "coreutils"
@@ -295,6 +295,7 @@ readme = "README.package.md"
 version = "0.4.0"
 
 [workspace.dependencies]
+capctl = { version = "0.2.4", default-features = false }
 ansi-width = "0.1.0"
 bigdecimal = "0.4"
 binary-heap-plus = "0.5.0"
@@ -530,6 +531,7 @@ yes = { optional = true, version = "0.4.0", package = "uu_yes", path = "src/uu/y
 #pin_cc = { version="1.0.61, < 1.0.62", package="cc" } ## cc v1.0.62 has compiler errors for MinRustV v1.32.0, requires 1.34 (for `std::str::split_ascii_whitespace()`)
 
 [dev-dependencies]
+fnv.workspace = true
 chrono.workspace = true
 ctor.workspace = true
 filetime.workspace = true

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime
+// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime getxattr
 
 #[cfg(unix)]
 use fnv::FnvHashMap as HashMap;
@@ -37,11 +37,11 @@ use glob::{MatchOptions, Pattern};
 use lscolors::{Colorable, LsColors};
 use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
 use thiserror::Error;
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+use uucore::fsxattr;
 
 #[cfg(unix)]
 use uucore::entries;
-#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-use uucore::fsxattr::has_acl;
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 #[cfg(any(
@@ -1851,14 +1851,19 @@ pub fn uu_app() -> Command {
 /// Any data that will be reused several times makes sense to be added to this structure.
 /// Caching data here helps eliminate redundant syscalls to fetch same information.
 #[derive(Debug)]
+#[allow(unused)]
 struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
-    // can be used to avoid reading the filetype. Can be also called d_type:
+    // can be used to avoid reading the metadata. Can be also called d_type:
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
     de: RefCell<Option<Box<DirEntry>>>,
     security_context: OnceCell<Box<str>>,
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    has_acl: OnceCell<bool>,
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    has_capability: OnceCell<bool>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
     // PathBuf that all above data corresponds to
@@ -1937,6 +1942,10 @@ impl PathData {
             p_buf,
             must_dereference,
             command_line,
+            #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+            has_acl: OnceCell::new(),
+            #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+            has_capability: OnceCell::new(),
         }
     }
 
@@ -1981,6 +1990,19 @@ impl PathData {
         self.ft
             .get_or_init(|| self.metadata().map(|md| md.file_type()))
             .as_ref()
+    }
+
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    fn has_acl(&self) -> bool {
+        *self.has_acl.get_or_init(|| fsxattr::has_acl(self.path()))
+    }
+
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    fn has_capability(&self) -> bool {
+        // don't use exacl here, it is doing more getxattr call then needed
+        *self
+            .has_capability
+            .get_or_init(|| fsxattr::has_capability(self.path()))
     }
 
     fn is_dangling_link(&self) -> bool {
@@ -2823,18 +2845,19 @@ fn display_item_long(
         output_display.extend(b"  ");
     }
     if let Some(md) = item.metadata() {
-        #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
-        // TODO: See how Mac should work here
-        let is_acl_set = false;
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let is_acl_set = has_acl(item.path());
+        let has_acl = item.has_acl();
+
         output_display.extend(display_permissions(md, true).as_bytes());
         if item.security_context(config).len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
             output_display.extend(b".");
-        } else if is_acl_set {
-            output_display.extend(b"+");
+        } else {
+            #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+            if has_acl {
+                output_display.extend(b"+");
+            }
         }
         output_display.extend(b" ");
         output_display.extend_pad_left(&display_symlink_count(md), padding.link_count);
@@ -3255,12 +3278,9 @@ fn display_item_name(
                 if let Some(style_manager) = &mut state.style_manager {
                     // We get the absolute path to be able to construct PathData with valid Metadata.
                     // This is because relative symlinks will fail to get_metadata.
-                    let mut absolute_target = target_path.clone();
-                    if target_path.is_relative() {
-                        if let Some(parent) = path.path().parent() {
-                            absolute_target = parent.join(absolute_target);
-                        }
-                    }
+                    let absolute_target = target_path
+                        .canonicalize()
+                        .unwrap_or_else(|_err| target_path.clone());
 
                     let target_data = PathData::new(absolute_target, None, None, config, false);
 
@@ -3268,6 +3288,7 @@ fn display_item_name(
                     // Because we use an absolute path, we can assume this is guaranteed to exist.
                     // Otherwise, we use path.md(), which will guarantee we color to the same
                     // color of non-existent symlinks according to style_for_path_with_metadata.
+
                     if path.metadata().is_none() && target_data.metadata().is_none() {
                         name.push(target_path);
                     } else {
