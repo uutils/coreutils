@@ -955,6 +955,30 @@ fn disallow_equals_sign_on_short_unset_option() {
         .stderr_contains("env: cannot unset '': Invalid argument");
 }
 
+#[test]
+#[cfg(unix)]
+fn test_non_utf8_env_var() {
+    // Test that env doesn't panic with non-UTF-8 environment variables
+    // https://bugs.launchpad.net/ubuntu/+source/rust-coreutils/+bug/2132941
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let mut non_utf8_value = Vec::from(b"foo");
+    non_utf8_value.push(0xA0); // Invalid UTF-8 byte
+    let non_utf8_os_string = OsString::from_vec(non_utf8_value);
+
+    let result = new_ucmd!()
+        .env("FOO_NON_UTF8", non_utf8_os_string)
+        .succeeds();
+
+    assert!(
+        result
+            .stdout_str()
+            .lines()
+            .any(|line| line.starts_with("FOO_NON_UTF8=foo"))
+    );
+}
+
 #[cfg(test)]
 mod tests_split_iterator {
 
