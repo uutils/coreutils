@@ -13,9 +13,6 @@
 = LD_PRELOAD was ineffective? =
 * tests/cp/nfs-removal-race.sh
 
-= failed to create hfs file system =
-* tests/mv/hardlink-case.sh
-
 = temporarily disabled =
 * tests/mkdir/writable-under-readonly.sh
 

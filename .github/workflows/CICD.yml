@@ -839,12 +839,13 @@ jobs:
             ./target/${{ matrix.job.target }}/release/uudoc completion $binary fish > ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/share/fish/vendor_completions.d/${binary}.fish
             ./target/${{ matrix.job.target }}/release/uudoc completion $binary zsh > ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/share/zsh/site-functions/_${binary}.bash
             ./target/${{ matrix.job.target }}/release/uudoc completion $binary elvish > ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/share/elvish/lib/${binary}.elv
-            ./target/${{ matrix.job.target }}/release/uudoc completion $binary powershell > ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/share/powershell/${binary}.ps
+            ./target/${{ matrix.job.target }}/release/uudoc completion $binary powershell > ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/share/powershell/${binary}.ps1
           done) || :
         # coreutils  
         cp 'target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}' '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/'
         # `strip` binary (if needed)
-        [ -n "${{ steps.vars.outputs.STRIP }}" ] && "${{ steps.vars.outputs.STRIP }}" '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/'*
+        [ -n "${{ steps.vars.outputs.STRIP }}" ] && "${{ steps.vars.outputs.STRIP }}" '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/coreutils${{ steps.vars.outputs.EXE_suffix }}
+        [ -n "${{ steps.vars.outputs.STRIP }}" ] && "${{ steps.vars.outputs.STRIP }}" '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/uudoc${{ steps.vars.outputs.EXE_suffix }} || :
         # README and LICENSE
         # * spell-checker:ignore EADME ICENSE
         (shopt -s nullglob; for f in [R]"EADME"{,.*}; do cp $f '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/' ; done)
