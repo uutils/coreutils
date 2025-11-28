@@ -4770,6 +4770,32 @@ fn test_dereference_symlink_file_color() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_symlink_color_follows_target() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    at.relative_symlink_dir(".", "d/X");
+
+    ucmd.env("LS_COLORS", "ln=target:di=01;34")
+        .args(&["--color=always", "d"])
+        .succeeds()
+        .stdout_contains("\u{1b}[01;34mX\u{1b}[0m");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_symlink_color_follows_target_with_classify() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    at.relative_symlink_dir(".", "d/X");
+
+    ucmd.env("LS_COLORS", "ln=target:di=01;34")
+        .args(&["--color=always", "-F", "d"])
+        .succeeds()
+        .stdout_contains("\u{1b}[01;34mX\u{1b}[0m@");
+}
+
+#[test]
 fn test_tabsize_option() {
     let scene = TestScenario::new(util_name!());
 
