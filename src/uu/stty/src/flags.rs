@@ -27,6 +27,12 @@ use nix::sys::termios::{
     SpecialCharacterIndices as S,
 };
 
+pub enum BaudType {
+    Input,
+    Output,
+    Both,
+}
+
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum AllFlags<'a> {
@@ -38,7 +44,7 @@ pub enum AllFlags<'a> {
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
-    Baud(u32),
+    Baud(u32, BaudType),
     #[cfg(not(any(
         target_os = "freebsd",
         target_os = "dragonfly",
@@ -47,7 +53,7 @@ pub enum AllFlags<'a> {
         target_os = "netbsd",
         target_os = "openbsd"
     )))]
-    Baud(BaudRate),
+    Baud(BaudRate, BaudType),
     ControlFlags((&'a Flag<C>, bool)),
     InputFlags((&'a Flag<I>, bool)),
     LocalFlags((&'a Flag<L>, bool)),
