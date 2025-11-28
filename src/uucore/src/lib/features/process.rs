@@ -51,6 +51,31 @@ pub fn getpid() -> pid_t {
     unsafe { libc::getpid() }
 }
 
+/// Check if a process with the given PID is alive.
+///
+/// Uses `kill(pid, 0)` which sends signal 0 (null signal) to check process existence
+/// without actually sending a signal. This is a standard POSIX technique for checking
+/// if a process exists.
+///
+/// Returns `true` if:
+/// - The process exists (kill returns 0)
+/// - We lack permission to signal the process (errno != ESRCH)
+///   This means the process exists but we can't signal it
+///
+/// Returns `false` only if:
+/// - errno is ESRCH (No such process), confirming the process doesn't exist
+///
+/// PIDs <= 0 are considered alive for compatibility with utmp records that may
+/// contain special or invalid PID values.
+#[cfg(not(target_os = "openbsd"))]
+pub fn pid_is_alive(pid: i32) -> bool {
+    if pid <= 0 {
+        return true;
+    }
+
+    unsafe { libc::kill(pid, 0) == 0 || *libc::__errno_location() != libc::ESRCH }
+}
+
 /// `getsid()` returns the session ID of the process with process ID pid.
 ///
 /// If pid is 0, getsid() returns the session ID of the calling process.

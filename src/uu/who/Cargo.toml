@@ -25,9 +25,8 @@ path = "src/who.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["utmpx"] }
+uucore = { workspace = true, features = ["utmpx", "process"] }
 fluent = { workspace = true }
-nix = { workspace = true, features = ["signal"] }
 
 [[bin]]
 name = "who"

@@ -10,12 +10,10 @@ use std::path::Path;
 
 use clap::builder::ValueParser;
 use clap::{Arg, Command};
-#[cfg(not(target_os = "openbsd"))]
-use nix::sys::signal::kill;
-#[cfg(not(target_os = "openbsd"))]
-use nix::unistd::Pid;
 use uucore::error::UResult;
 use uucore::format_usage;
+#[cfg(not(target_os = "openbsd"))]
+use uucore::process::pid_is_alive;
 use uucore::translate;
 
 #[cfg(target_os = "openbsd")]
@@ -35,20 +33,6 @@ fn get_long_usage() -> String {
     let default_path: &str = OPENBSD_UTMP_FILE;
 
     translate!("users-long-usage", "default_path" => default_path)
-}
-
-#[inline]
-#[cfg(not(target_os = "openbsd"))]
-fn pid_is_alive(pid: i32) -> bool {
-    if pid <= 0 {
-        return true;
-    }
-
-    match kill(Pid::from_raw(pid), None) {
-        Ok(()) => true,
-        Err(nix::errno::Errno::ESRCH) => false,
-        Err(_) => true,
-    }
 }
 
 #[uucore::main]
