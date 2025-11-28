@@ -70,9 +70,6 @@
 = 512 byte aligned O_DIRECT is not supported on this (file) system =
 * tests/dd/direct.sh
 
-= skipped test: /usr/bin/touch -m -d '1998-01-15 23:00' didn't work =
-* tests/misc/ls-time.sh
-
 = requires controlling input terminal =
 * tests/misc/stty-pairs.sh
 * tests/misc/stty.sh
