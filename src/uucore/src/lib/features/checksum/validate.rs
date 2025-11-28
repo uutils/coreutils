@@ -371,19 +371,32 @@ impl LineFormat {
             return None;
         }
 
-        let mut parts = checksum.splitn(2, |&b| b == b'=');
-        let main = parts.next().unwrap(); // Always exists since checksum isn't empty
-        let padding = parts.next().unwrap_or_default(); // Empty if no '='
+        let mut is_base64 = false;
 
-        if main.is_empty()
-            || !main
-                .iter()
-                .all(|&b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/')
-        {
-            return None;
+        for index in 0..checksum.len() {
+            match checksum[index..] {
+                // ASCII alphanumeric
+                [b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9', ..] => (),
+                // Base64 special character
+                [b'+' | b'/', ..] => is_base64 = true,
+                // Base64 end of string padding
+                [b'='] | [b'=', b'='] | [b'=', b'=', b'='] => {
+                    is_base64 = true;
+                    break;
+                }
+                // Any other character means the checksum is wrong
+                _ => return None,
+            }
         }
 
-        if padding.len() > 2 || padding.iter().any(|&b| b != b'=') {
+        // If base64 characters were encountered, make sure the checksum has a
+        // length multiple of 4.
+        //
+        // This check is not enough because it may allow base64-encoded
+        // checksums that are fully alphanumeric. Another check happens later
+        // when we are provided with a length hint to detect ambiguous
+        // base64-encoded checksums.
+        if is_base64 && checksum.len() % 4 != 0 {
             return None;
         }
 
@@ -1174,11 +1187,9 @@ mod tests {
 
     #[test]
     fn test_get_expected_digest() {
-        let line = OsString::from("SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=");
-        let mut cached_line_format = None;
-        let line_info = LineInfo::parse(&line, &mut cached_line_format).unwrap();
+        let ck = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=".to_owned();
 
-        let result = get_expected_digest_as_hex_string(&line_info.checksum, None);
+        let result = get_expected_digest_as_hex_string(&ck, None);
 
         assert_eq!(
             result.unwrap(),
@@ -1189,11 +1200,9 @@ mod tests {
     #[test]
     fn test_get_expected_checksum_invalid() {
         // The line misses a '=' at the end to be valid base64
-        let line = OsString::from("SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU");
-        let mut cached_line_format = None;
-        let line_info = LineInfo::parse(&line, &mut cached_line_format).unwrap();
+        let ck = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU".to_owned();
 
-        let result = get_expected_digest_as_hex_string(&line_info.checksum, None);
+        let result = get_expected_digest_as_hex_string(&ck, None);
 
         assert!(result.is_none());
     }
