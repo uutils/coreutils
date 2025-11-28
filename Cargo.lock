@@ -4108,7 +4108,6 @@ version = "0.4.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
  "utmp-classic",
  "uucore",
 ]
@@ -4144,7 +4143,6 @@ version = "0.4.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
  "uucore",
 ]
 

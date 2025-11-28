@@ -24,9 +24,8 @@ path = "src/users.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["utmpx"] }
+uucore = { workspace = true, features = ["utmpx", "process"] }
 fluent = { workspace = true }
-nix = { workspace = true, features = ["signal"] }
 
 [target.'cfg(target_os = "openbsd")'.dependencies]
 utmp-classic = { workspace = true }
