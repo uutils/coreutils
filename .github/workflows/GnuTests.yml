@@ -175,6 +175,12 @@ jobs:
       with:
         name: gnu-root-full-result
         path: ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }}
+    - name: Upload stty json results
+      uses: actions/upload-artifact@v5
+      with:
+        name: gnu-stty-full-result
+        path: ${{ env.TEST_STTY_FULL_SUMMARY_FILE }}
+
     - name: Compress test logs
       shell: bash
       run : |
