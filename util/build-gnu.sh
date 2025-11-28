@@ -4,7 +4,8 @@
 
 # spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
 # spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink texinfo CARGOFLAGS
-# spell-checker:ignore openat TOCTOU
+# spell-checker:ignore openat TOCTOU CFLAGS
+# spell-checker:ignore hfsplus casefold chattr
 
 set -e
 
@@ -131,11 +132,11 @@ else
     # Disable useless checks
     "${SED}" -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
     ./bootstrap --skip-po
-    ./configure --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
+    # Use CFLAGS for best build time since we discard GNU coreutils
+    CFLAGS="${CFLAGS} -pipe -O0 -s" ./configure --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
       "$([ "${SELINUX_ENABLED}" = 1 ] && echo --with-selinux || echo --without-selinux)"
     #Add timeout to to protect against hangs
     "${SED}" -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
-    "${SED}" -i 's| tr | /usr/bin/tr |' tests/init.sh
     # Use a better diff
     "${SED}" -i 's|diff -c|diff -u|g' tests/Coreutils.pm
     "${MAKE}" -j "$("${NPROC}")"
@@ -166,6 +167,9 @@ fi
 grep -rl 'path_prepend_' tests/* | xargs -r "${SED}" -i 's| path_prepend_ ./src||'
 # path_prepend_ sets $abs_path_dir_: set it manually instead.
 grep -rl '\$abs_path_dir_' tests/*/*.sh | xargs -r "${SED}" -i "s|\$abs_path_dir_|${UU_BUILD_DIR//\//\\/}|g"
+
+# Remove hfs dependency (should be merged to upstream)
+"${SED}" -i -e "s|hfsplus|ext4 -O casefold|" -e "s|cd mnt|rm -d mnt/lost+found;chattr +F mnt;cd mnt|" tests/mv/hardlink-case.sh
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 "${SED}" -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
@@ -342,11 +346,6 @@ test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
 
 # Slightly different error message
 "${SED}" -i 's/not supported/unexpected argument/' tests/mv/mv-exchange.sh
-# Most tests check that `/usr/bin/tr` is working correctly before running.
-# However in NixOS/Nix-based distros, the tr util is located somewhere in
-# /nix/store/xxxxxxxxxxxx...xxxx/bin/tr
-# We just replace the references to `/usr/bin/tr`
-"${SED}" -i  's/\/usr\/bin\/tr/$(command -v tr)/' tests/init.sh
 
 # upstream doesn't having the program name in the error message
 # but we do. We should keep it that way.
