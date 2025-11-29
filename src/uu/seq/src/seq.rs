@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat biguint
 use std::ffi::{OsStr, OsString};
-use std::io::{BufWriter, ErrorKind, Write, stdout};
+use std::io::{BufWriter, Write, stdout};
 #[cfg(unix)]
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -211,7 +211,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         padding,
     );
 
-    let sigpipe_ignored = sigpipe_is_ignored();
+    let _sigpipe_ignored = sigpipe_is_ignored();
     match result {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
