@@ -8,7 +8,7 @@
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::{File, metadata};
-use std::io::{self, BufRead, BufReader, Read, Stdin, stdin};
+use std::io::{self, BufRead, BufReader, Read, StdinLock, stdin};
 use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
@@ -55,8 +55,18 @@ struct OrderChecker {
 }
 
 enum Input {
-    Stdin(Stdin),
+    Stdin(StdinLock<'static>),
     FileIn(BufReader<File>),
+}
+
+impl Input {
+    fn stdin() -> Self {
+        Self::Stdin(stdin().lock())
+    }
+
+    fn from_file(f: File) -> Self {
+        Self::FileIn(BufReader::new(f))
+    }
 }
 
 struct LineReader {
@@ -73,7 +83,7 @@ impl LineReader {
         let line_ending = self.line_ending.into();
 
         let result = match &mut self.input {
-            Input::Stdin(r) => r.lock().read_until(line_ending, buf),
+            Input::Stdin(r) => r.read_until(line_ending, buf),
             Input::FileIn(r) => r.read_until(line_ending, buf),
         };
 
@@ -135,8 +145,24 @@ pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
     let mut buffer2 = [0; 8192];
 
     loop {
-        let bytes1 = reader1.read(&mut buffer1)?;
-        let bytes2 = reader2.read(&mut buffer2)?;
+        // Read from first file with EINTR retry handling
+        // This loop retries the read operation if it's interrupted by signals (e.g., SIGUSR1)
+        // instead of failing, which is the POSIX-compliant way to handle interrupted I/O
+        let bytes1 = loop {
+            match reader1.read(&mut buffer1) {
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                result => break result?,
+            }
+        };
+
+        // Read from second file with EINTR retry handling
+        // Same retry logic as above for the second file to ensure consistent behavior
+        let bytes2 = loop {
+            match reader2.read(&mut buffer2) {
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                result => break result?,
+            }
+        };
 
         if bytes1 != bytes2 {
             return Ok(false);
@@ -267,16 +293,13 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
 
 fn open_file(name: &OsString, line_ending: LineEnding) -> io::Result<LineReader> {
     if name == "-" {
-        Ok(LineReader::new(Input::Stdin(stdin()), line_ending))
+        Ok(LineReader::new(Input::stdin(), line_ending))
     } else {
         if metadata(name)?.is_dir() {
             return Err(io::Error::other(translate!("comm-error-is-directory")));
         }
         let f = File::open(name)?;
-        Ok(LineReader::new(
-            Input::FileIn(BufReader::new(f)),
-            line_ending,
-        ))
+        Ok(LineReader::new(Input::from_file(f), line_ending))
     }
 }
 

@@ -12,7 +12,6 @@ RUN apt-get update \
        gcc \
        gdb \
        gperf \
-       jq \
        libacl1-dev \
        libattr1-dev \
        libcap-dev \

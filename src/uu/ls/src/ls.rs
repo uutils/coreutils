@@ -2305,7 +2305,7 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
 #[allow(clippy::cognitive_complexity)]
 fn enter_directory(
     path_data: &PathData,
-    read_dir: ReadDir,
+    mut read_dir: ReadDir,
     config: &Config,
     state: &mut ListState,
     listed_ancestors: &mut HashSet<FileInformation>,
@@ -2334,7 +2334,7 @@ fn enter_directory(
     };
 
     // Convert those entries to the PathData struct
-    for raw_entry in read_dir {
+    for raw_entry in read_dir.by_ref() {
         let dir_entry = match raw_entry {
             Ok(path) => path,
             Err(err) => {
@@ -2827,7 +2827,7 @@ fn display_item_long(
         // TODO: See how Mac should work here
         let is_acl_set = false;
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let is_acl_set = has_acl(item.display_name());
+        let is_acl_set = has_acl(item.path());
         output_display.extend(display_permissions(md, true).as_bytes());
         if item.security_context(config).len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,

@@ -107,17 +107,12 @@ macro_rules! test_digest {
             at.write("a", "file1\n");
             at.write("c", "file3\n");
 
-            #[cfg(unix)]
-            let file_not_found_str = "No such file or directory";
-            #[cfg(not(unix))]
-            let file_not_found_str = "The system cannot find the file specified";
-
             ts.ucmd()
                 .args(&[DIGEST_ARG, BITS_ARG, "a", "b", "c"])
                 .fails()
                 .stdout_contains("a\n")
                 .stdout_contains("c\n")
-                .stderr_contains(format!("b: {file_not_found_str}"));
+                .stderr_contains("b: No such file or directory");
         }
     }
     )*)
@@ -873,6 +868,38 @@ fn test_check_directory_error() {
 }
 
 #[test]
+#[cfg(not(windows))]
+fn test_continue_after_directory_error() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("d");
+    at.touch("file");
+    at.touch("no_read_perms");
+    at.set_mode("no_read_perms", 200);
+
+    let (out, err_msg) = (
+        "d41d8cd98f00b204e9800998ecf8427e  file\n",
+        [
+            "md5sum: d: Is a directory",
+            "md5sum: dne: No such file or directory",
+            "md5sum: no_read_perms: Permission denied\n",
+        ]
+        .join("\n"),
+    );
+
+    scene
+        .ccmd("md5sum")
+        .arg("d")
+        .arg("dne")
+        .arg("no_read_perms")
+        .arg("file")
+        .fails()
+        .stdout_is(out)
+        .stderr_is(err_msg);
+}
+
+#[test]
 fn test_check_quiet() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1065,11 +1092,11 @@ fn test_sha256_stdin_binary() {
     );
 }
 
+// This test is currently disabled on windows
 #[test]
+#[cfg_attr(windows, ignore = "Discussion is in #9168")]
 fn test_check_sha256_binary() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd()
+    new_ucmd!()
         .args(&[
             "--sha256",
             "--bits=256",
@@ -1108,14 +1135,6 @@ fn test_help_shows_correct_utility_name() {
         .arg("--help")
         .succeeds()
         .stdout_contains("Usage: b2sum")
-        .stdout_does_not_contain("Usage: hashsum");
-
-    // Test b3sum
-    scene
-        .ccmd("b3sum")
-        .arg("--help")
-        .succeeds()
-        .stdout_contains("Usage: b3sum")
         .stdout_does_not_contain("Usage: hashsum");
 
     // Test that generic hashsum still shows the correct usage

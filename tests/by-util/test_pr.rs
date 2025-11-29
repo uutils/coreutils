@@ -559,6 +559,49 @@ fn test_value_for_number_lines() {
 }
 
 #[test]
+fn test_header_formatting_with_custom_date_format() {
+    // This test verifies that the header is properly formatted with:
+    // - Date/time on the left
+    // - Filename centered
+    // - "Page X" on the right
+    // This matches GNU pr behavior for the time-style test
+
+    let test_file_path = "test_one_page.log";
+
+    // Set a specific date format like in the GNU test
+    let output = new_ucmd!()
+        .args(&["-D", "+%Y-%m-%d %H:%M:%S %z (%Z)", test_file_path])
+        .succeeds()
+        .stdout_move_str();
+
+    // Extract the header line (3rd line of output)
+    let lines: Vec<&str> = output.lines().collect();
+    assert!(
+        lines.len() >= 5,
+        "Output should have at least 5 lines for header"
+    );
+
+    let header_line = lines[2];
+
+    // The header should be 72 characters wide (default page width)
+    assert_eq!(header_line.chars().count(), 72);
+
+    // Check that it contains the expected parts
+    assert!(header_line.contains(test_file_path));
+    assert!(header_line.contains("Page 1"));
+
+    // Verify the filename is roughly centered
+    let filename_pos = header_line.find(test_file_path).unwrap();
+    let page_pos = header_line.find("Page 1").unwrap();
+
+    // Filename should be somewhere in the middle third of the line
+    assert!(filename_pos > 24 && filename_pos < 48);
+
+    // Page should be right-aligned (near the end)
+    assert!(page_pos >= 60);
+}
+
+#[test]
 fn test_help() {
     new_ucmd!().arg("--help").succeeds();
 }

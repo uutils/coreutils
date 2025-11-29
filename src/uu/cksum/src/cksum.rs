@@ -3,185 +3,49 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) fname, algo
+// spell-checker:ignore (ToDO) fname, algo, bitlen
 
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, Command, value_parser};
+use clap::{Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
-use std::fs::File;
-use std::io::{BufReader, Read, Write, stdin, stdout};
 use std::iter;
-use std::path::Path;
+use uucore::checksum::compute::{
+    ChecksumComputeOptions, figure_out_output_format, perform_checksum_computation,
+};
+use uucore::checksum::validate::{
+    ChecksumValidateOptions, ChecksumVerbose, perform_checksum_validation,
+};
 use uucore::checksum::{
-    ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC,
-    ALGORITHM_OPTIONS_CRC32B, ALGORITHM_OPTIONS_SYSV, ChecksumError, ChecksumOptions,
-    ChecksumVerbose, SUPPORTED_ALGORITHMS, calculate_blake2b_length, detect_algo, digest_reader,
-    perform_checksum_validation,
+    AlgoKind, ChecksumError, SUPPORTED_ALGORITHMS, SizedAlgoKind, calculate_blake2b_length_str,
+    sanitize_sha2_sha3_length_str,
 };
-use uucore::translate;
+use uucore::error::UResult;
+use uucore::hardware::CpuFeatures;
+use uucore::line_ending::LineEnding;
+use uucore::{format_usage, translate};
 
-use uucore::{
-    encoding,
-    error::{FromIo, UResult, USimpleError},
-    format_usage,
-    line_ending::LineEnding,
-    os_str_as_bytes, show,
-    sum::Digest,
-};
+/// Print CPU hardware capability detection information to stderr
+/// This matches GNU cksum's --debug behavior
+fn print_cpu_debug_info() {
+    let features = CpuFeatures::detect();
 
-#[derive(Debug, PartialEq)]
-enum OutputFormat {
-    Hexadecimal,
-    Raw,
-    Base64,
-}
-
-struct Options {
-    algo_name: &'static str,
-    digest: Box<dyn Digest + 'static>,
-    output_bits: usize,
-    tag: bool, // will cover the --untagged option
-    length: Option<usize>,
-    output_format: OutputFormat,
-    asterisk: bool, // if we display an asterisk or not (--binary/--text)
-    line_ending: LineEnding,
-}
-
-/// Calculate checksum
-///
-/// # Arguments
-///
-/// * `options` - CLI options for the assigning checksum algorithm
-/// * `files` - A iterator of [`OsStr`] which is a bunch of files that are using for calculating checksum
-#[allow(clippy::cognitive_complexity)]
-fn cksum<'a, I>(mut options: Options, files: I) -> UResult<()>
-where
-    I: Iterator<Item = &'a OsStr>,
-{
-    let files: Vec<_> = files.collect();
-    if options.output_format == OutputFormat::Raw && files.len() > 1 {
-        return Err(Box::new(ChecksumError::RawMultipleFiles));
-    }
-
-    for filename in files {
-        let filename = Path::new(filename);
-        let stdin_buf;
-        let file_buf;
-        let is_stdin = filename == OsStr::new("-");
-
-        if filename.is_dir() {
-            show!(USimpleError::new(
-                1,
-                translate!("cksum-error-is-directory", "file" => filename.display())
-            ));
-            continue;
-        }
-
-        // Handle the file input
-        let mut file = BufReader::new(if is_stdin {
-            stdin_buf = stdin();
-            Box::new(stdin_buf) as Box<dyn Read>
+    fn print_feature(name: &str, available: bool) {
+        if available {
+            eprintln!("cksum: using {name} hardware support");
         } else {
-            file_buf = match File::open(filename) {
-                Ok(file) => file,
-                Err(err) => {
-                    show!(err.map_err_context(|| filename.to_string_lossy().to_string()));
-                    continue;
-                }
-            };
-            Box::new(file_buf) as Box<dyn Read>
-        });
-
-        let (sum_hex, sz) =
-            digest_reader(&mut options.digest, &mut file, false, options.output_bits)
-                .map_err_context(|| translate!("cksum-error-failed-to-read-input"))?;
-
-        let sum = match options.output_format {
-            OutputFormat::Raw => {
-                let bytes = match options.algo_name {
-                    ALGORITHM_OPTIONS_CRC => sum_hex.parse::<u32>().unwrap().to_be_bytes().to_vec(),
-                    ALGORITHM_OPTIONS_SYSV | ALGORITHM_OPTIONS_BSD => {
-                        sum_hex.parse::<u16>().unwrap().to_be_bytes().to_vec()
-                    }
-                    _ => hex::decode(sum_hex).unwrap(),
-                };
-                // Cannot handle multiple files anyway, output immediately.
-                stdout().write_all(&bytes)?;
-                return Ok(());
-            }
-            OutputFormat::Hexadecimal => sum_hex,
-            OutputFormat::Base64 => match options.algo_name {
-                ALGORITHM_OPTIONS_CRC
-                | ALGORITHM_OPTIONS_CRC32B
-                | ALGORITHM_OPTIONS_SYSV
-                | ALGORITHM_OPTIONS_BSD => sum_hex,
-                _ => encoding::for_cksum::BASE64.encode(&hex::decode(sum_hex).unwrap()),
-            },
-        };
-
-        // The BSD checksum output is 5 digit integer
-        let bsd_width = 5;
-        let (before_filename, should_print_filename, after_filename) = match options.algo_name {
-            ALGORITHM_OPTIONS_SYSV => (
-                format!(
-                    "{} {}{}",
-                    sum.parse::<u16>().unwrap(),
-                    sz.div_ceil(options.output_bits),
-                    if is_stdin { "" } else { " " }
-                ),
-                !is_stdin,
-                String::new(),
-            ),
-            ALGORITHM_OPTIONS_BSD => (
-                format!(
-                    "{:0bsd_width$} {:bsd_width$}{}",
-                    sum.parse::<u16>().unwrap(),
-                    sz.div_ceil(options.output_bits),
-                    if is_stdin { "" } else { " " }
-                ),
-                !is_stdin,
-                String::new(),
-            ),
-            ALGORITHM_OPTIONS_CRC | ALGORITHM_OPTIONS_CRC32B => (
-                format!("{sum} {sz}{}", if is_stdin { "" } else { " " }),
-                !is_stdin,
-                String::new(),
-            ),
-            ALGORITHM_OPTIONS_BLAKE2B if options.tag => {
-                (
-                    if let Some(length) = options.length {
-                        // Multiply by 8 here, as we want to print the length in bits.
-                        format!("BLAKE2b-{} (", length * 8)
-                    } else {
-                        "BLAKE2b (".to_owned()
-                    },
-                    true,
-                    format!(") = {sum}"),
-                )
-            }
-            _ => {
-                if options.tag {
-                    (
-                        format!("{} (", options.algo_name.to_ascii_uppercase()),
-                        true,
-                        format!(") = {sum}"),
-                    )
-                } else {
-                    let prefix = if options.asterisk { "*" } else { " " };
-                    (format!("{sum} {prefix}"), true, String::new())
-                }
-            }
-        };
-
-        print!("{before_filename}");
-        if should_print_filename {
-            // The filename might not be valid UTF-8, and filename.display() would mangle the names.
-            // Therefore, emit the bytes directly to stdout, without any attempt at encoding them.
-            let _dropped_result = stdout().write_all(os_str_as_bytes(filename.as_os_str())?);
+            eprintln!("cksum: {name} support not detected");
         }
-        print!("{after_filename}{}", options.line_ending);
     }
-    Ok(())
+
+    // x86/x86_64
+    print_feature("avx512", features.has_avx512());
+    print_feature("avx2", features.has_avx2());
+    print_feature("pclmul", features.has_pclmul());
+
+    // ARM aarch64
+    if cfg!(target_arch = "aarch64") {
+        print_feature("vmull", features.has_vmull());
+    }
 }
 
 mod options {
@@ -201,35 +65,73 @@ mod options {
     pub const IGNORE_MISSING: &str = "ignore-missing";
     pub const QUIET: &str = "quiet";
     pub const ZERO: &str = "zero";
+    pub const DEBUG: &str = "debug";
 }
 
-/***
- * cksum has a bunch of legacy behavior.
- * We handle this in this function to make sure they are self contained
- * and "easier" to understand
- */
+/// cksum has a bunch of legacy behavior. We handle this in this function to
+/// make sure they are self contained and "easier" to understand.
+///
+/// Returns a pair of boolean. The first one indicates if we should use tagged
+/// output format, the second one indicates if we should use the binary flag in
+/// the untagged case.
 fn handle_tag_text_binary_flags<S: AsRef<OsStr>>(
     args: impl Iterator<Item = S>,
 ) -> UResult<(bool, bool)> {
     let mut tag = true;
     let mut binary = false;
+    let mut text = false;
 
     // --binary, --tag and --untagged are tight together: none of them
-    // conflicts with each other but --tag will reset "binary" and set "tag".
+    // conflicts with each other but --tag will reset "binary" and "text" and
+    // set "tag".
 
     for arg in args {
         let arg = arg.as_ref();
         if arg == "-b" || arg == "--binary" {
+            text = false;
             binary = true;
+        } else if arg == "--text" {
+            text = true;
+            binary = false;
         } else if arg == "--tag" {
             tag = true;
             binary = false;
+            text = false;
         } else if arg == "--untagged" {
             tag = false;
         }
     }
 
-    Ok((tag, !tag && binary))
+    // Specifying --text without ever mentioning --untagged fails.
+    if text && tag {
+        return Err(ChecksumError::TextWithoutUntagged.into());
+    }
+
+    Ok((tag, binary))
+}
+
+/// Sanitize the `--length` argument depending on `--algorithm` and `--length`.
+fn maybe_sanitize_length(
+    algo_cli: Option<AlgoKind>,
+    input_length: Option<&str>,
+) -> UResult<Option<usize>> {
+    match (algo_cli, input_length) {
+        // No provided length is not a problem so far.
+        (_, None) => Ok(None),
+
+        // For SHA2 and SHA3, if a length is provided, ensure it is correct.
+        (Some(algo @ (AlgoKind::Sha2 | AlgoKind::Sha3)), Some(s_len)) => {
+            sanitize_sha2_sha3_length_str(algo, s_len).map(Some)
+        }
+
+        // For BLAKE2b, if a length is provided, validate it.
+        (Some(AlgoKind::Blake2b), Some(len)) => calculate_blake2b_length_str(len),
+
+        // For any other provided algorithm, check if length is 0.
+        // Otherwise, this is an error.
+        (_, Some(len)) if len.parse::<u32>() == Ok(0_u32) => Ok(None),
+        (_, Some(_)) => Err(ChecksumError::LengthOnlyForBlake2bSha2Sha3.into()),
+    }
 }
 
 #[uucore::main]
@@ -238,36 +140,30 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let check = matches.get_flag(options::CHECK);
 
-    let algo_name: &str = match matches.get_one::<String>(options::ALGORITHM) {
-        Some(v) => v,
-        None => {
-            if check {
-                // if we are doing a --check, we should not default to crc
-                ""
-            } else {
-                ALGORITHM_OPTIONS_CRC
-            }
-        }
-    };
+    let algo_cli = matches
+        .get_one::<String>(options::ALGORITHM)
+        .map(AlgoKind::from_cksum)
+        .transpose()?;
 
-    let input_length = matches.get_one::<usize>(options::LENGTH);
+    let input_length = matches
+        .get_one::<String>(options::LENGTH)
+        .map(String::as_str);
 
-    let length = match input_length {
-        Some(length) => {
-            if algo_name == ALGORITHM_OPTIONS_BLAKE2B {
-                calculate_blake2b_length(*length)?
-            } else {
-                return Err(ChecksumError::LengthOnlyForBlake2b.into());
-            }
-        }
-        None => None,
-    };
+    let length = maybe_sanitize_length(algo_cli, input_length)?;
 
-    if ["bsd", "crc", "sysv", "crc32b"].contains(&algo_name) && check {
-        return Err(ChecksumError::AlgorithmNotSupportedWithCheck.into());
-    }
+    let files = matches.get_many::<OsString>(options::FILE).map_or_else(
+        // No files given, read from stdin.
+        || Box::new(iter::once(OsStr::new("-"))) as Box<dyn Iterator<Item = &OsStr>>,
+        // At least one file given, read from them.
+        |files| Box::new(files.map(OsStr::new)) as Box<dyn Iterator<Item = &OsStr>>,
+    );
 
     if check {
+        // cksum does not support '--check'ing legacy algorithms
+        if algo_cli.is_some_and(AlgoKind::is_legacy) {
+            return Err(ChecksumError::AlgorithmNotSupportedWithCheck.into());
+        }
+
         let text_flag = matches.get_flag(options::TEXT);
         let binary_flag = matches.get_flag(options::BINARY);
         let strict = matches.get_flag(options::STRICT);
@@ -281,59 +177,50 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             return Err(ChecksumError::BinaryTextConflict.into());
         }
 
-        // Determine the appropriate algorithm option to pass
-        let algo_option = if algo_name.is_empty() {
-            None
-        } else {
-            Some(algo_name)
-        };
-
         // Execute the checksum validation based on the presence of files or the use of stdin
 
-        let files = matches.get_many::<OsString>(options::FILE).map_or_else(
-            || iter::once(OsStr::new("-")).collect::<Vec<_>>(),
-            |files| files.map(OsStr::new).collect::<Vec<_>>(),
-        );
-
         let verbose = ChecksumVerbose::new(status, quiet, warn);
-        let opts = ChecksumOptions {
-            binary: binary_flag,
+        let opts = ChecksumValidateOptions {
             ignore_missing,
             strict,
             verbose,
         };
 
-        return perform_checksum_validation(files.iter().copied(), algo_option, length, opts);
+        return perform_checksum_validation(files, algo_cli, length, opts);
     }
 
-    let (tag, asterisk) = handle_tag_text_binary_flags(std::env::args_os())?;
+    // Not --check
 
-    let algo = detect_algo(algo_name, length)?;
+    // Set the default algorithm to CRC when not '--check'ing.
+    let algo_kind = algo_cli.unwrap_or(AlgoKind::Crc);
+
+    let (tag, binary) = handle_tag_text_binary_flags(std::env::args_os())?;
+
+    let algo = SizedAlgoKind::from_unsized(algo_kind, length)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
-    let output_format = if matches.get_flag(options::RAW) {
-        OutputFormat::Raw
-    } else if matches.get_flag(options::BASE64) {
-        OutputFormat::Base64
-    } else {
-        OutputFormat::Hexadecimal
-    };
-
-    let opts = Options {
-        algo_name: algo.name,
-        digest: (algo.create_fn)(),
-        output_bits: algo.bits,
-        length,
+    let output_format = figure_out_output_format(
+        algo,
         tag,
+        binary,
+        matches.get_flag(options::RAW),
+        matches.get_flag(options::BASE64),
+    );
+
+    // Print hardware debug info if requested
+    if matches.get_flag(options::DEBUG) {
+        print_cpu_debug_info();
+    }
+
+    let opts = ChecksumComputeOptions {
+        algo_kind: algo,
         output_format,
-        asterisk,
         line_ending,
+        binary: false,
+        no_names: false,
     };
 
-    match matches.get_many::<OsString>(options::FILE) {
-        Some(files) => cksum(opts, files.map(OsStr::new))?,
-        None => cksum(opts, iter::once(OsStr::new("-")))?,
-    }
+    perform_checksum_computation(opts, files)?;
 
     Ok(())
 }
@@ -378,7 +265,6 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::LENGTH)
                 .long(options::LENGTH)
-                .value_parser(value_parser!(usize))
                 .short('l')
                 .help(translate!("cksum-help-length"))
                 .action(ArgAction::Set),
@@ -460,6 +346,12 @@ pub fn uu_app() -> Command {
                 .long(options::ZERO)
                 .short('z')
                 .help(translate!("cksum-help-zero"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::DEBUG)
+                .long(options::DEBUG)
+                .help(translate!("cksum-help-debug"))
                 .action(ArgAction::SetTrue),
         )
         .after_help(translate!("cksum-after-help"))

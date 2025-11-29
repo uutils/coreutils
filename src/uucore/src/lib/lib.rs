@@ -54,6 +54,8 @@ pub use crate::features::fast_inc;
 pub use crate::features::format;
 #[cfg(feature = "fs")]
 pub use crate::features::fs;
+#[cfg(feature = "hardware")]
+pub use crate::features::hardware;
 #[cfg(feature = "i18n-common")]
 pub use crate::features::i18n;
 #[cfg(feature = "lines")]

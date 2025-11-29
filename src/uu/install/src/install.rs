@@ -25,7 +25,6 @@ use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::fs::dir_strip_dot_for_creation;
-use uucore::mode::get_umask;
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 use uucore::process::{getegid, geteuid};
 #[cfg(feature = "selinux")]
@@ -339,7 +338,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     let specified_mode: Option<u32> = if matches.contains_id(OPT_MODE) {
         let x = matches.get_one::<String>(OPT_MODE).ok_or(1)?;
-        Some(mode::parse(x, considering_dir, get_umask()).map_err(|err| {
+        Some(mode::parse(x, considering_dir, 0).map_err(|err| {
             show_error!(
                 "{}",
                 translate!("install-error-invalid-mode", "error" => err)
@@ -472,7 +471,7 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                 // the default mode. Hence it is safe to use fs::create_dir_all
                 // and then only modify the target's dir mode.
                 if let Err(e) = fs::create_dir_all(path_to_create.as_path())
-                    .map_err_context(|| path_to_create.as_path().maybe_quote().to_string())
+                    .map_err_context(|| translate!("install-error-create-dir-failed", "path" => path_to_create.as_path().quote()))
                 {
                     show!(e);
                     continue;

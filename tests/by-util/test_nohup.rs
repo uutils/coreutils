@@ -3,7 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore winsize Openpty openpty xpixel ypixel ptyprocess
-#[cfg(not(target_os = "openbsd"))]
 use std::thread::sleep;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -24,6 +23,7 @@ fn test_invalid_arg() {
     target_os = "linux",
     target_os = "android",
     target_os = "freebsd",
+    target_os = "openbsd",
     target_vendor = "apple"
 ))]
 fn test_nohup_multiple_args_and_flags() {
@@ -42,6 +42,7 @@ fn test_nohup_multiple_args_and_flags() {
     target_os = "linux",
     target_os = "android",
     target_os = "freebsd",
+    target_os = "openbsd",
     target_vendor = "apple"
 ))]
 fn test_nohup_with_pseudo_terminal_emulation_on_stdin_stdout_stderr_get_replaced() {
@@ -77,6 +78,7 @@ fn test_nohup_with_pseudo_terminal_emulation_on_stdin_stdout_stderr_get_replaced
     target_os = "linux",
     target_os = "android",
     target_os = "freebsd",
+    target_os = "openbsd",
     target_vendor = "apple"
 ))]
 fn test_nohup_creates_output_in_cwd() {
@@ -103,6 +105,7 @@ fn test_nohup_creates_output_in_cwd() {
     target_os = "linux",
     target_os = "android",
     target_os = "freebsd",
+    target_os = "openbsd",
     target_vendor = "apple"
 ))]
 fn test_nohup_appends_to_existing_file() {
@@ -128,7 +131,12 @@ fn test_nohup_appends_to_existing_file() {
 // Test that nohup falls back to $HOME/nohup.out when cwd is not writable
 // Skipped on macOS as the permissions test is unreliable
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "freebsd",
+    target_os = "openbsd"
+))]
 fn test_nohup_fallback_to_home() {
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
@@ -204,6 +212,7 @@ fn test_nohup_command_not_found() {
     target_os = "linux",
     target_os = "android",
     target_os = "freebsd",
+    target_os = "openbsd",
     target_vendor = "apple"
 ))]
 fn test_nohup_stderr_to_stdout() {

@@ -29,12 +29,19 @@ denoland
 deque
 dequeue
 dev
+EINTR
+eintr
+nextest
+SIGUSR
+nonprinting
+multibyte
 devs
 discoverability
 duplicative
 dsync
 endianness
 enqueue
+ERANGE
 errored
 executable
 executables
@@ -115,6 +122,7 @@ pseudoprimes
 quantiles
 readonly
 reparse
+rposition
 seedable
 semver
 semiprime
@@ -182,3 +190,16 @@ nofield
 # * clippy
 uninlined
 nonminimal
+
+# * CPU/hardware features
+ASIMD
+asimd
+hwcaps
+PCLMUL
+pclmul
+PCLMULQDQ
+pclmulqdq
+TUNABLES
+tunables
+VMULL
+vmull
