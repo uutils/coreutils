@@ -74,6 +74,8 @@ pub mod tty;
 
 #[cfg(all(unix, feature = "fsxattr"))]
 pub mod fsxattr;
+#[cfg(feature = "hardware")]
+pub mod hardware;
 #[cfg(all(target_os = "linux", feature = "selinux"))]
 pub mod selinux;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]

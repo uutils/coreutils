@@ -511,7 +511,8 @@ impl WriteableTmpFile for WriteableCompressedTmpFile {
         let mut child = command
             .spawn()
             .map_err(|err| SortError::CompressProgExecutionFailed {
-                code: err.raw_os_error().unwrap(),
+                prog: compress_prog.to_owned(),
+                error: err,
             })?;
         let child_stdin = child.stdin.take().unwrap();
         Ok(Self {
@@ -545,7 +546,8 @@ impl ClosedTmpFile for ClosedCompressedTmpFile {
         let mut child = command
             .spawn()
             .map_err(|err| SortError::CompressProgExecutionFailed {
-                code: err.raw_os_error().unwrap(),
+                prog: self.compress_prog.clone(),
+                error: err,
             })?;
         let child_stdout = child.stdout.take().unwrap();
         Ok(CompressedTmpMergeInput {
