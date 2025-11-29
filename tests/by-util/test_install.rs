@@ -2489,3 +2489,35 @@ fn test_install_non_utf8_paths() {
 
     ucmd.arg("-D").arg(source_file).arg(&target_path).succeeds();
 }
+
+#[test]
+fn test_install_unprivileged_option_u_skips_chown() {
+    // This test only makes sense when not running as root.
+    if geteuid() == 0 {
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let src = "source_file";
+    let dst_fail = "target_fail";
+    let dst_ok = "target_ok";
+    at.touch(src);
+
+    // Without -U, attempting to chown to root should fail for an unprivileged user.
+    let res = scene.ucmd().args(&["--owner=root", src, dst_fail]).run();
+
+    res.failure();
+
+    // With -U, install should not require elevated privileges for owner/group changes,
+    // meaning it should succeed and leave ownership as the current user.
+    scene
+        .ucmd()
+        .args(&["-U", "--owner=root", src, dst_ok])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(dst_ok));
+    assert_eq!(at.metadata(dst_ok).uid(), geteuid());
+}

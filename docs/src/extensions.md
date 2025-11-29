@@ -204,3 +204,7 @@ With `-U`/`--no-utf8`, you can interpret input files as 8-bit ASCII rather than 
 ## `expand`
 
 `expand` also offers the `-U`/`--no-utf8` option to interpret input files as 8-bit ASCII instead of UTF-8.
+
+## `install`
+
+`install` offers FreeBSD's `-U` unprivileged option to not change the owner, the group, or the file flags of the destination.
