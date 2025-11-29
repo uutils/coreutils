@@ -414,7 +414,7 @@ jobs:
         path_UUTILS='uutils'
 
         json_count=$(ls -l results/*.json | wc -l)
-        if [[ "$json_count" -ne 4 ]]; then
+        if [[ "$json_count" -ne 5 ]]; then
           echo "::error ::Failed to download all results json files (expected 4 files, found $json_count); failing early"
           ls -lR results || true
           exit 1
