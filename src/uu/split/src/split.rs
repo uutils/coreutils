@@ -20,6 +20,7 @@ use std::io;
 use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
 use std::path::Path;
 use thiserror::Error;
+use uucore::clap_localization::{ArgHelpLocalization, CommandHelpLocalization};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
 use uucore::translate;
@@ -227,7 +228,6 @@ fn handle_preceding_options(
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("split-about"))
         .after_help(translate!("split-after-help"))
         .override_usage(format_usage(&translate!("split-usage")))
@@ -239,7 +239,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_BYTES)
                 .allow_hyphen_values(true)
                 .value_name("SIZE")
-                .help(translate!("split-help-bytes")),
+                .help_localized(translate!("split-help-bytes")),
         )
         .arg(
             Arg::new(OPT_LINE_BYTES)
@@ -247,7 +247,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_LINE_BYTES)
                 .allow_hyphen_values(true)
                 .value_name("SIZE")
-                .help(translate!("split-help-line-bytes")),
+                .help_localized(translate!("split-help-line-bytes")),
         )
         .arg(
             Arg::new(OPT_LINES)
@@ -256,7 +256,7 @@ pub fn uu_app() -> Command {
                 .allow_hyphen_values(true)
                 .value_name("NUMBER")
                 .default_value("1000")
-                .help(translate!("split-help-lines")),
+                .help_localized(translate!("split-help-lines")),
         )
         .arg(
             Arg::new(OPT_NUMBER)
@@ -264,7 +264,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_NUMBER)
                 .allow_hyphen_values(true)
                 .value_name("CHUNKS")
-                .help(translate!("split-help-number")),
+                .help_localized(translate!("split-help-number")),
         )
         // rest of the arguments
         .arg(
@@ -274,7 +274,7 @@ pub fn uu_app() -> Command {
                 .value_name("SUFFIX")
                 .default_value("")
                 .value_parser(clap::value_parser!(OsString))
-                .help(translate!("split-help-additional-suffix")),
+                .help_localized(translate!("split-help-additional-suffix")),
         )
         .arg(
             Arg::new(OPT_FILTER)
@@ -282,13 +282,13 @@ pub fn uu_app() -> Command {
                 .allow_hyphen_values(true)
                 .value_name("COMMAND")
                 .value_hint(ValueHint::CommandName)
-                .help(translate!("split-help-filter")),
+                .help_localized(translate!("split-help-filter")),
         )
         .arg(
             Arg::new(OPT_ELIDE_EMPTY_FILES)
                 .long(OPT_ELIDE_EMPTY_FILES)
                 .short('e')
-                .help(translate!("split-help-elide-empty-files"))
+                .help_localized(translate!("split-help-elide-empty-files"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -301,7 +301,7 @@ pub fn uu_app() -> Command {
                     OPT_HEX_SUFFIXES,
                     OPT_HEX_SUFFIXES_SHORT,
                 ])
-                .help(translate!("split-help-numeric-suffixes-short")),
+                .help_localized(translate!("split-help-numeric-suffixes-short")),
         )
         .arg(
             Arg::new(OPT_NUMERIC_SUFFIXES)
@@ -315,7 +315,7 @@ pub fn uu_app() -> Command {
                     OPT_HEX_SUFFIXES_SHORT,
                 ])
                 .value_name("FROM")
-                .help(translate!("split-help-numeric-suffixes")),
+                .help_localized(translate!("split-help-numeric-suffixes")),
         )
         .arg(
             Arg::new(OPT_HEX_SUFFIXES_SHORT)
@@ -327,7 +327,7 @@ pub fn uu_app() -> Command {
                     OPT_HEX_SUFFIXES,
                     OPT_HEX_SUFFIXES_SHORT,
                 ])
-                .help(translate!("split-help-hex-suffixes-short")),
+                .help_localized(translate!("split-help-hex-suffixes-short")),
         )
         .arg(
             Arg::new(OPT_HEX_SUFFIXES)
@@ -341,7 +341,7 @@ pub fn uu_app() -> Command {
                     OPT_HEX_SUFFIXES_SHORT,
                 ])
                 .value_name("FROM")
-                .help(translate!("split-help-hex-suffixes")),
+                .help_localized(translate!("split-help-hex-suffixes")),
         )
         .arg(
             Arg::new(OPT_SUFFIX_LENGTH)
@@ -349,12 +349,12 @@ pub fn uu_app() -> Command {
                 .long(OPT_SUFFIX_LENGTH)
                 .allow_hyphen_values(true)
                 .value_name("N")
-                .help(translate!("split-help-suffix-length")),
+                .help_localized(translate!("split-help-suffix-length")),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
                 .long(OPT_VERBOSE)
-                .help(translate!("split-help-verbose"))
+                .help_localized(translate!("split-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -364,7 +364,7 @@ pub fn uu_app() -> Command {
                 .allow_hyphen_values(true)
                 .value_name("SEP")
                 .action(ArgAction::Append)
-                .help(translate!("split-help-separator")),
+                .help_localized(translate!("split-help-separator")),
         )
         .arg(
             Arg::new(OPT_IO_BLKSIZE)
@@ -376,13 +376,17 @@ pub fn uu_app() -> Command {
             Arg::new(ARG_INPUT)
                 .default_value("-")
                 .value_hint(ValueHint::FilePath)
-                .value_parser(clap::value_parser!(OsString)),
+                .value_parser(clap::value_parser!(OsString))
+                .help_localized(""),
         )
         .arg(
             Arg::new(ARG_PREFIX)
                 .default_value("x")
-                .value_parser(clap::value_parser!(OsString)),
+                .value_parser(clap::value_parser!(OsString))
+                .help_localized(""),
         )
+        .localize_help_and_version()
+        .localize_help_template()
 }
 
 /// Parameters that control how a file gets split.
