@@ -385,6 +385,13 @@ jobs:
         name: gnu-root-full-result
         path: results
         merge-multiple: true
+    - name: Download stty json results
+      uses: actions/download-artifact@v6
+      with:
+        name: gnu-stty-full-result
+        path: results
+        merge-multiple: true
+
     - name: Download selinux json results
       uses: actions/download-artifact@v6
       with:
