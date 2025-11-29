@@ -135,7 +135,10 @@ fn format_f64_exp_precision(f: f64, width: usize, precision: usize) -> String {
 pub fn format_item_bf16(f: f64) -> String {
     let bf = bf16::from_f32(f as f32);
     let raw = format_binary16_like(f, 15, 8, is_subnormal_bf16(bf));
-    format!(" {}", pad_float_repr(&raw, FORMAT_ITEM_BF16.print_width - 1))
+    format!(
+        " {}",
+        pad_float_repr(&raw, FORMAT_ITEM_BF16.print_width - 1)
+    )
 }
 
 fn format_f16(f: f16) -> String {
