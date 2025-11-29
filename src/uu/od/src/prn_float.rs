@@ -42,7 +42,7 @@ pub static FORMAT_ITEM_BF16: FormatterItemInfo = FormatterItemInfo {
 /// behavior of other float formatters (`f32`, `f64`) and keeps the output
 /// stable across platforms.
 fn pad_float_repr(raw: &str, width: usize) -> String {
-    format!("{raw:>width$}", width = width)
+    format!("{raw:>width$}")
 }
 
 pub fn format_item_f16(f: f64) -> String {
