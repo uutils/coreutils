@@ -70,6 +70,15 @@ fn sleep(args: &[&str]) -> UResult<()> {
     if arg_error {
         return Err(UUsageError::new(1, ""));
     }
+
+    #[cfg(unix)]
+    {
+        if sleep_dur == Duration::MAX {
+            nix::unistd::pause();
+            return Ok(());
+        }
+    }
+
     thread::sleep(sleep_dur);
     Ok(())
 }
