@@ -219,9 +219,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let err = err.map_err_context(|| "write error".into());
             uucore::show_error!("{err}");
             return if sigpipe_ignored { Err(err) } else { Ok(()) };
-        } else {
-            return Err(err.map_err_context(|| "write error".into()));
         }
+        return Err(err.map_err_context(|| "write error".into()));
     }
     Ok(())
 }
