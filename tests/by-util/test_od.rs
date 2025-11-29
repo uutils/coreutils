@@ -197,6 +197,32 @@ fn test_hex32() {
         .stdout_only(expected_output);
 }
 
+// Regression: 16-bit IEEE half should print compactly (no spurious digits)
+#[test]
+fn test_float16_compact() {
+    let input: [u8; 4] = [0x3c, 0x00, 0x3c, 0x00]; // two times 1.0 in big-endian half
+    new_ucmd!()
+        .arg("--endian=big")
+        .arg("-An")
+        .arg("-tfH")
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_only("               1               1\n");
+}
+
+// Regression: 16-bit bfloat should print compactly (no spurious digits)
+#[test]
+fn test_bfloat16_compact() {
+    let input: [u8; 4] = [0x3f, 0x80, 0x3f, 0x80]; // two times 1.0 in big-endian bfloat16
+    new_ucmd!()
+        .arg("--endian=big")
+        .arg("-An")
+        .arg("-tfB")
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_only("               1               1\n");
+}
+
 #[test]
 fn test_f16() {
     let input: [u8; 14] = [
