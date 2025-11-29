@@ -355,3 +355,10 @@ test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
 # * the selinux crate is handling errors
 # * the test says "maybe we should not fail when no context available"
 "${SED}" -i -e "s|returns_ 1||g" tests/cp/no-ctx.sh
+
+# Create a file not owned by current user in the /tmp folder. This is because 
+# the tests/rm/fail-eperm.xpl test will skip the test if it cannot find a file that 
+# the run as user did not create. This file needs to be created outside of the tests.
+if command -v sudo >/dev/null 2>&1; then
+    sudo touch /tmp/root-owned-file 2>/dev/null || true
+fi
