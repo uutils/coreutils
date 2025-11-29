@@ -25,7 +25,7 @@ use clap::{Arg, ArgAction, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 use nix::libc;
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{Rng, rng};
@@ -1072,7 +1072,7 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
         )
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
     let mut limit = libc::rlimit {
         rlim_cur: 0,
@@ -1092,7 +1092,7 @@ pub(crate) fn fd_soft_limit() -> Option<usize> {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(not(target_os = "linux"))]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
     None
 }
