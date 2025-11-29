@@ -2489,3 +2489,49 @@ fn test_install_non_utf8_paths() {
 
     ucmd.arg("-D").arg(source_file).arg(&target_path).succeeds();
 }
+
+#[test]
+fn test_install_unprivileged_combined() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let uid = geteuid();
+    let gid = getegid();
+
+    let run_and_check =
+        |args: &[&str], target: &str, expected_uid: u32, expected_gid: u32, expected_mode: u32| {
+            if let Ok(result) = run_ucmd_as_root(&ts, args) {
+                result.success();
+                assert!(at.file_exists(target) || at.dir_exists(target));
+
+                let metadata = fs::metadata(at.plus(target)).unwrap();
+                assert_eq!(metadata.uid(), expected_uid);
+                assert_eq!(metadata.gid(), expected_gid);
+                println!("Expected mode: {:o}", expected_mode);
+                println!("Actual mode:   {:o}", metadata.mode());
+                assert_eq!(metadata.mode() & 0o7777, expected_mode);
+            } else {
+                print!("Test skipped; requires root user");
+            }
+        };
+
+    // uid/gid should not change when run as unprivileged user
+    run_and_check(
+        &["-UCv", "-m644", "-o1", "-g1", "a", "b"],
+        "b",
+        uid,
+        gid,
+        0o644,
+    );
+    // mode changes should still apply
+    run_and_check(&["-Cv", "-m666", "a", "d"], "d", uid, gid, 0o666);
+
+    // Same on directories
+    run_and_check(
+        &["-UCv", "-m755", "-o1", "-g1", "-d", "dir1/dir2"],
+        "dir1/dir2",
+        uid,
+        gid,
+        0o755,
+    );
+}
