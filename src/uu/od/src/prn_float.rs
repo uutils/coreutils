@@ -37,53 +37,12 @@ pub static FORMAT_ITEM_BF16: FormatterItemInfo = FormatterItemInfo {
     formatter: FormatWriter::BFloatWriter(format_item_bf16),
 };
 
-/// Trim trailing zeroes (and an optional decimal dot) from a floating-point
-/// string representation while keeping the sign and any exponent suffix.
-fn trim_float_repr(s: &str) -> String {
-    let s = s.trim();
-
-    // Fast path for special values
-    if s.eq_ignore_ascii_case("nan")
-        || s.eq_ignore_ascii_case("inf")
-        || s.eq_ignore_ascii_case("-inf")
-        || s == "0"
-        || s == "-0"
-    {
-        return s.to_string();
-    }
-
-    // Split mantissa and exponent if present
-    let (mantissa, exponent) = match s.find(['e', 'E']) {
-        Some(pos) => (&s[..pos], Some(&s[pos..])),
-        None => (s, None),
-    };
-
-    let mut mantissa = mantissa.to_string();
-
-    // Remove trailing zeroes from the mantissa's fractional part
-    if let Some(dot_pos) = mantissa.find('.') {
-        while mantissa.ends_with('0') {
-            mantissa.pop();
-        }
-        if mantissa.ends_with('.') && mantissa.len() > dot_pos {
-            mantissa.pop();
-        }
-        if mantissa.is_empty() {
-            mantissa.push('0');
-        }
-    }
-
-    if let Some(exp) = exponent {
-        mantissa.push_str(exp);
-    }
-
-    mantissa
-}
-
-/// Pad a trimmed floating value to a fixed width for column alignment.
+/// Pad a floating value to a fixed width for column alignment while keeping
+/// the original precision (including trailing zeros). This mirrors the
+/// behavior of other float formatters (`f32`, `f64`) and keeps the output
+/// stable across platforms.
 fn pad_float_repr(raw: &str, width: usize) -> String {
-    let trimmed = trim_float_repr(raw);
-    format!("{trimmed:>width$}", width = width)
+    format!("{raw:>width$}", width = width)
 }
 
 pub fn format_item_f16(f: f64) -> String {

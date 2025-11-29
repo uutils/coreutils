@@ -197,7 +197,7 @@ fn test_hex32() {
         .stdout_only(expected_output);
 }
 
-// Regression: 16-bit IEEE half should print compactly (no spurious digits)
+// Regression: 16-bit IEEE half should print with canonical precision (no spurious digits)
 #[test]
 fn test_float16_compact() {
     let input: [u8; 4] = [0x3c, 0x00, 0x3c, 0x00]; // two times 1.0 in big-endian half
@@ -207,10 +207,10 @@ fn test_float16_compact() {
         .arg("-tfH")
         .run_piped_stdin(&input[..])
         .success()
-        .stdout_only("               1               1\n");
+        .stdout_only("       1.0000000       1.0000000\n");
 }
 
-// Regression: 16-bit bfloat should print compactly (no spurious digits)
+// Regression: 16-bit bfloat should print with canonical precision (no spurious digits)
 #[test]
 fn test_bfloat16_compact() {
     let input: [u8; 4] = [0x3f, 0x80, 0x3f, 0x80]; // two times 1.0 in big-endian bfloat16
@@ -220,7 +220,7 @@ fn test_bfloat16_compact() {
         .arg("-tfB")
         .run_piped_stdin(&input[..])
         .success()
-        .stdout_only("               1               1\n");
+        .stdout_only("       1.0000000       1.0000000\n");
 }
 
 #[test]
