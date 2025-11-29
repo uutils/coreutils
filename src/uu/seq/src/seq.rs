@@ -211,17 +211,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         padding,
     );
 
-    let _sigpipe_ignored = sigpipe_is_ignored();
-    match result {
-        Ok(()) => Ok(()),
-        Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
+    let sigpipe_ignored = sigpipe_is_ignored();
+    if let Err(err) = result {
+        if err.kind() == std::io::ErrorKind::BrokenPipe {
             // GNU seq prints the Broken pipe message but still exits with status 0
+            // unless SIGPIPE was explicitly ignored, in which case it should fail.
             let err = err.map_err_context(|| "write error".into());
             uucore::show_error!("{err}");
-            Ok(())
+            return if sigpipe_ignored { Err(err) } else { Ok(()) };
+        } else {
+            return Err(err.map_err_context(|| "write error".into()));
         }
-        Err(err) => Err(err.map_err_context(|| "write error".into())),
     }
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
