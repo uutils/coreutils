@@ -14,7 +14,7 @@ wc-help-total = when to print a line with total counts;
 wc-help-words = print the word counts
 
 # Error messages
-wc-error-files-disabled = extra operand '{ $extra }'
+wc-error-files-disabled = extra operand { $extra }
   file operands cannot be combined with --files0-from
 wc-error-stdin-repr-not-allowed = when reading file names from standard input, no file name of '-' allowed
 wc-error-zero-length-filename = invalid zero-length file name

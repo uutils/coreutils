@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::OnceLock;
 
+use os_display::Quotable;
 use thiserror::Error;
 use unic_langid::LanguageIdentifier;
 
@@ -458,8 +459,8 @@ fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
 
         Err(LocalizationError::LocalesDirNotFound(format!(
             "Development locales directory not found at {} or {}",
-            dev_path.display(),
-            fallback_dev_path.display()
+            dev_path.quote(),
+            fallback_dev_path.quote()
         )))
     }
 
@@ -481,7 +482,7 @@ fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
 
         Err(LocalizationError::LocalesDirNotFound(format!(
             "Release locales directory not found starting from {}",
-            exe_dir.display()
+            exe_dir.quote()
         )))
     }
 }
@@ -576,7 +577,7 @@ mod tests {
 
         Err(LocalizationError::LocalesDirNotFound(format!(
             "No localization strings found for {locale} in {}",
-            test_locales_dir.display()
+            test_locales_dir.quote()
         )))
     }
 
