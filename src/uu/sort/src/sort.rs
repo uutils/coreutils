@@ -671,14 +671,19 @@ impl<'a> Line<'a> {
                 _ => {}
             }
 
+            // Don't let embedded NUL bytes influence column alignment in the
+            // debug underline output, since they are often filtered out (e.g.
+            // via `tr -d '\0'`) before inspection.
             let select = &line[..selection.start];
-            write!(writer, "{}", " ".repeat(select.len()))?;
+            let indent = select.iter().filter(|&&c| c != b'\0').count();
+            write!(writer, "{}", " ".repeat(indent))?;
 
             if selection.is_empty() {
                 writeln!(writer, "{}", translate!("sort-error-no-match-for-key"))?;
             } else {
                 let select = &line[selection];
-                writeln!(writer, "{}", "_".repeat(select.len()))?;
+                let underline_len = select.iter().filter(|&&c| c != b'\0').count();
+                writeln!(writer, "{}", "_".repeat(underline_len))?;
             }
         }
 
