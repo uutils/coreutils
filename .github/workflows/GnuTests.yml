@@ -122,6 +122,7 @@ jobs:
         ## Run GNU tests
         path_GNU='gnu'
         path_UUTILS='uutils'
+        sudo touch /tmp/file-not-owned-by-you-for-fail-eperm.xpl
         bash "uutils/util/run-gnu-test.sh"
     - name: Extract testing info from individual logs into JSON
       shell: bash
