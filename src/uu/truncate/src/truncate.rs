@@ -79,6 +79,11 @@ impl TruncateMode {
         }
     }
 
+    /// Determine if mode is absolute
+    ///
+    /// # Returns
+    ///
+    /// `true` is self matches Self::Absolute(_), `false` otherwise.
     fn is_absolute(&self) -> bool {
         matches!(self, Self::Absolute(_))
     }
@@ -301,13 +306,12 @@ fn is_modifier(c: char) -> bool {
 ///
 /// # Panics
 ///
-/// If `size_string` is empty, or if no number could be parsed from the
-/// given string (for example, if the string were `"abc"`).
+/// If `size_string` is empty.
 ///
 /// # Examples
 ///
 /// ```rust,ignore
-/// assert_eq!(parse_mode_and_size("+123"), (TruncateMode::Extend, 123));
+/// assert_eq!(parse_mode_and_size("+123"), Ok(TruncateMode::Extend(123)));
 /// ```
 fn parse_mode_and_size(size_string: &str) -> Result<TruncateMode, ParseSizeError> {
     // Trim any whitespace.
