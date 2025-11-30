@@ -45,11 +45,58 @@ fn pad_float_repr(raw: &str, width: usize) -> String {
     format!("{raw:>width$}")
 }
 
+/// Strip trailing zeros and any redundant decimal point from `format_float` output.
+/// GNU `od` prints 16-bit floats in a minimal `%g`-like form inside a fixed width,
+/// so we trim the padding zeros added by `format_float` to match that layout.
+fn trim_trailing_zeros(raw: &str) -> String {
+    // Leave special values untouched
+    if raw.eq_ignore_ascii_case("nan")
+        || raw.eq_ignore_ascii_case("inf")
+        || raw.eq_ignore_ascii_case("-inf")
+    {
+        return raw.to_string();
+    }
+
+    // Split mantissa/exponent when an exponent exists
+    let (mut mantissa, exp) = match raw.find(['e', 'E']) {
+        Some(pos) => (raw[..pos].to_string(), Some(&raw[pos..])),
+        None => (raw.to_string(), None),
+    };
+
+    if let Some(_dot_pos) = mantissa.find('.') {
+        // Remove trailing zeros after the decimal point
+        while mantissa.ends_with('0') {
+            mantissa.pop();
+        }
+        // Drop a lone trailing decimal point
+        if mantissa.ends_with('.') {
+            mantissa.pop();
+        }
+
+        // Guard against trimming all the way down to "-0"
+        if mantissa.is_empty() {
+            mantissa.push('0');
+        } else if mantissa == "-" {
+            mantissa.push_str("0");
+        }
+    }
+
+    if let Some(exp_part) = exp {
+        mantissa.push_str(exp_part);
+    }
+
+    mantissa
+}
+
 pub fn format_item_f16(f: f64) -> String {
     // Keep the width used by FORMAT_ITEM_F16 (minus the leading space we add here),
     // but print a compact representation to match GNU od output for 16‑bit floats.
     let raw = format_f16(f16::from_f64(f));
-    format!(" {}", pad_float_repr(&raw, FORMAT_ITEM_F16.print_width - 1))
+    let trimmed = trim_trailing_zeros(&raw);
+    format!(
+        " {}",
+        pad_float_repr(&trimmed, FORMAT_ITEM_F16.print_width - 1)
+    )
 }
 
 pub fn format_item_f32(f: f64) -> String {
@@ -94,9 +141,10 @@ fn format_f64_exp_precision(f: f64, width: usize, precision: usize) -> String {
 pub fn format_item_bf16(f: f64) -> String {
     let bf = bf16::from_f32(f as f32);
     let raw = format_binary16_like(f, 15, 8, is_subnormal_bf16(bf));
+    let trimmed = trim_trailing_zeros(&raw);
     format!(
         " {}",
-        pad_float_repr(&raw, FORMAT_ITEM_BF16.print_width - 1)
+        pad_float_repr(&trimmed, FORMAT_ITEM_BF16.print_width - 1)
     )
 }
 
