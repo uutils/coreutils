@@ -13,9 +13,6 @@
 = LD_PRELOAD was ineffective? =
 * tests/cp/nfs-removal-race.sh
 
-= temporarily disabled =
-* tests/mkdir/writable-under-readonly.sh
-
 = this system lacks SMACK support =
 * tests/mkdir/smack-root.sh
 * tests/mkdir/smack-no-root.sh
@@ -53,9 +50,6 @@
 
 = no rootfs in mtab =
 * tests/df/skip-rootfs.sh
-
-= insufficient mount/ext2 support =
-* tests/cp/cp-mv-enotsup-xattr.sh
 
 = requires controlling input terminal =
 * tests/misc/stty-pairs.sh
