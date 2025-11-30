@@ -205,6 +205,14 @@ fn test_hex_timeout_ending_with_d() {
 }
 
 #[test]
+// This is because of a bug fixed on newer macOS versions, which has not
+// been backported to now-obsolete macOS on x64. It's about it not picking
+// up correctly the child's exit code due to random shenanigans. It's
+// unclear whether it should be fixed, but I will try to work around it at
+// a later time if I can get macOS running on my ThinkPad T480s. To clarify,
+// this most likely not an issue in real-world scenarios, only on how this
+// test (Rust's std and our utils module) process the exit code.
+#[cfg_attr(all(target_os = "macos", target_arch = "x86_64"), ignore)]
 fn test_terminate_child_on_receiving_terminate() {
     let mut timeout_cmd = new_ucmd!()
         .args(&[

@@ -8,15 +8,15 @@ mod status;
 
 use crate::status::ExitStatus;
 use clap::{Arg, ArgAction, Command};
+use nix::sys::signal::Signal;
 use std::io::ErrorKind;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
-use std::sync::atomic::{self, AtomicBool};
 use std::time::Duration;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parser::parse_time;
-use uucore::process::ChildExt;
+use uucore::process::{ChildExt, CommandExt, SelfPipe, WaitOrTimeoutRet};
 use uucore::translate;
 
 #[cfg(unix)]
@@ -176,34 +176,6 @@ pub fn uu_app() -> Command {
         .after_help(translate!("timeout-after-help"))
 }
 
-/// Remove pre-existing SIGCHLD handlers that would make waiting for the child's exit code fail.
-fn unblock_sigchld() {
-    unsafe {
-        nix::sys::signal::signal(
-            nix::sys::signal::Signal::SIGCHLD,
-            nix::sys::signal::SigHandler::SigDfl,
-        )
-        .unwrap();
-    }
-}
-
-/// We should terminate child process when receiving TERM signal.
-static SIGNALED: AtomicBool = AtomicBool::new(false);
-
-fn catch_sigterm() {
-    use nix::sys::signal;
-
-    extern "C" fn handle_sigterm(signal: libc::c_int) {
-        let signal = signal::Signal::try_from(signal).unwrap();
-        if signal == signal::Signal::SIGTERM {
-            SIGNALED.store(true, atomic::Ordering::Relaxed);
-        }
-    }
-
-    let handler = signal::SigHandler::Handler(handle_sigterm);
-    unsafe { signal::signal(signal::Signal::SIGTERM, handler) }.unwrap();
-}
-
 /// Report that a signal is being sent if the verbose flag is set.
 fn report_if_verbose(signal: usize, cmd: &str, verbose: bool) {
     if verbose {
@@ -258,23 +230,27 @@ fn wait_or_kill_process(
     preserve_status: bool,
     foreground: bool,
     verbose: bool,
+    self_pipe: &mut SelfPipe,
 ) -> std::io::Result<i32> {
     // ignore `SIGTERM` here
-    match process.wait_or_timeout(duration, None) {
-        Ok(Some(status)) => {
+    self_pipe.unset_other()?;
+
+    match process.wait_or_timeout(duration, self_pipe) {
+        Ok(WaitOrTimeoutRet::InTime(status)) => {
             if preserve_status {
                 Ok(status.code().unwrap_or_else(|| status.signal().unwrap()))
             } else {
                 Ok(ExitStatus::TimeoutFailed.into())
             }
         }
-        Ok(None) => {
+        Ok(WaitOrTimeoutRet::TimedOut) => {
             let signal = signal_by_name_or_value("KILL").unwrap();
             report_if_verbose(signal, cmd, verbose);
             send_signal(process, signal, foreground);
             process.wait()?;
             Ok(ExitStatus::SignalSent(signal).into())
         }
+        Ok(WaitOrTimeoutRet::CustomSignaled) => unreachable!(), // We did not set it up.
         Err(_) => Ok(ExitStatus::WaitingFailed.into()),
     }
 }
@@ -321,52 +297,49 @@ fn timeout(
     #[cfg(unix)]
     enable_pipe_errors()?;
 
-    let process = &mut process::Command::new(&cmd[0])
+    let mut command = process::Command::new(&cmd[0]);
+    command
         .args(&cmd[1..])
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .map_err(|err| {
-            let status_code = if err.kind() == ErrorKind::NotFound {
-                // FIXME: not sure which to use
-                127
-            } else {
-                // FIXME: this may not be 100% correct...
-                126
-            };
-            USimpleError::new(
-                status_code,
-                translate!("timeout-error-failed-to-execute-process", "error" => err),
-            )
-        })?;
-    unblock_sigchld();
-    catch_sigterm();
+        .stderr(Stdio::inherit());
+    let mut self_pipe = command.set_up_timeout(Some(Signal::SIGTERM))?;
+    let process = &mut command.spawn().map_err(|err| {
+        let status_code = if err.kind() == ErrorKind::NotFound {
+            // FIXME: not sure which to use
+            127
+        } else {
+            // FIXME: this may not be 100% correct...
+            126
+        };
+        USimpleError::new(
+            status_code,
+            translate!("timeout-error-failed-to-execute-process", "error" => err),
+        )
+    })?;
     // Wait for the child process for the specified time period.
-    //
-    // If the process exits within the specified time period (the
-    // `Ok(Some(_))` arm), then return the appropriate status code.
-    //
-    // If the process does not exit within that time (the `Ok(None)`
-    // arm) and `kill_after` is specified, then try sending `SIGKILL`.
     //
     // TODO The structure of this block is extremely similar to the
     // structure of `wait_or_kill_process()`. They can probably be
     // refactored into some common function.
-    match process.wait_or_timeout(duration, Some(&SIGNALED)) {
-        Ok(Some(status)) => Err(status
+    match process.wait_or_timeout(duration, &mut self_pipe) {
+        Ok(WaitOrTimeoutRet::InTime(status)) => Err(status
             .code()
             .unwrap_or_else(|| preserve_signal_info(status.signal().unwrap()))
             .into()),
-        Ok(None) => {
+        Ok(WaitOrTimeoutRet::CustomSignaled) => {
+            report_if_verbose(signal, &cmd[0], verbose);
+            send_signal(process, signal, foreground);
+            process.wait()?;
+            Err(ExitStatus::Terminated.into())
+        }
+        Ok(WaitOrTimeoutRet::TimedOut) => {
             report_if_verbose(signal, &cmd[0], verbose);
             send_signal(process, signal, foreground);
             match kill_after {
                 None => {
                     let status = process.wait()?;
-                    if SIGNALED.load(atomic::Ordering::Relaxed) {
-                        Err(ExitStatus::Terminated.into())
-                    } else if preserve_status {
+                    if preserve_status {
                         if let Some(ec) = status.code() {
                             Err(ec.into())
                         } else if let Some(sc) = status.signal() {
@@ -386,6 +359,7 @@ fn timeout(
                         preserve_status,
                         foreground,
                         verbose,
+                        &mut self_pipe,
                     ) {
                         Ok(status) => Err(status.into()),
                         Err(e) => Err(USimpleError::new(
