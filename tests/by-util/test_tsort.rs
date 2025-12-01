@@ -77,7 +77,7 @@ fn test_multiple_arguments() {
         .arg("call_graph.txt")
         .arg("invalid_file")
         .fails()
-        .stderr_contains("unexpected argument 'invalid_file' found");
+        .stderr_contains("extra operand 'invalid_file'");
 }
 
 #[test]
@@ -157,7 +157,7 @@ fn test_loop_for_iterative_dfs_correctness() {
 const TSORT_LOOP_STDERR: &str = "tsort: f: input contains a loop:\ntsort: s\ntsort: t\n";
 const TSORT_LOOP_STDERR_AC: &str = "tsort: f: input contains a loop:\ntsort: a\ntsort: b\ntsort: f: input contains a loop:\ntsort: a\ntsort: c\n";
 const TSORT_ODD_ERROR: &str = "tsort: -: input contains an odd number of tokens\n";
-const TSORT_UNEXPECTED_ARG_ERROR: &str = "tsort: error: unexpected argument 'g' found\n\nUsage: tsort [OPTIONS] FILE\n\nFor more information, try '--help'.\n";
+const TSORT_EXTRA_OPERAND_ERROR: &str = "tsort: extra operand 'g'\nTry 'tsort --help' for more information.\n";
 
 #[test]
 fn test_cycle_loop_from_file() {
@@ -233,7 +233,6 @@ fn test_odd_number_of_tokens() {
 }
 
 #[test]
-#[ignore = "After correcting the error message, execute."]
 fn test_only_one_input_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("f", "");
@@ -243,5 +242,5 @@ fn test_only_one_input_file() {
         .arg("g")
         .fails_with_code(1)
         .stdout_is("")
-        .stderr_is(TSORT_UNEXPECTED_ARG_ERROR);
+        .stderr_is(TSORT_EXTRA_OPERAND_ERROR);
 }

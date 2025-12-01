@@ -10,7 +10,7 @@ use std::ffi::OsString;
 use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult};
+use uucore::error::{UError, UResult, USimpleError};
 use uucore::{format_usage, show};
 
 use uucore::translate;
@@ -49,15 +49,33 @@ impl UError for LoopNode<'_> {}
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let input = matches
-        .get_one::<OsString>(options::FILE)
-        .expect("Value is required by clap");
+    let mut inputs: Vec<OsString> = matches
+        .get_many::<OsString>(options::FILE)
+        .map(|vals| vals.cloned().collect())
+        .unwrap_or_default();
+
+    if inputs.is_empty() {
+        inputs.push(OsString::from("-"));
+    }
+
+    if inputs.len() > 1 {
+        return Err(USimpleError::new(
+            1,
+            format!(
+                "extra operand {}\nTry 'tsort --help' for more information.",
+                inputs[1].quote()
+            ),
+        )
+        .into());
+    }
+
+    let input = inputs.into_iter().next().expect("at least one input");
 
     let data = if input == "-" {
         let stdin = std::io::stdin();
         std::io::read_to_string(stdin)?
     } else {
-        let path = Path::new(input);
+        let path = Path::new(&input);
         if path.is_dir() {
             return Err(TsortError::IsDir(input.to_string_lossy().to_string()).into());
         }
@@ -104,10 +122,11 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::FILE)
-                .default_value("-")
                 .hide(true)
                 .value_parser(clap::value_parser!(OsString))
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .num_args(0..)
+                .action(ArgAction::Append),
         )
 }
 
