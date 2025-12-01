@@ -18,7 +18,7 @@ use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use crate::sum::DigestOutput;
 use crate::{
     os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_error, show_warning_caps,
-    util_name,
+    translate,
 };
 
 /// To what level should checksum validation print logging info.
@@ -147,37 +147,45 @@ impl From<ChecksumError> for FileCheckError {
     }
 }
 
-#[allow(clippy::comparison_chain)]
 fn print_cksum_report(res: &ChecksumResult) {
-    if res.bad_format == 1 {
-        show_warning_caps!("{} line is improperly formatted", res.bad_format);
-    } else if res.bad_format > 1 {
-        show_warning_caps!("{} lines are improperly formatted", res.bad_format);
+    if res.bad_format > 0 {
+        show_warning_caps!(
+            "{}",
+            translate!("checksum-bad-format", "count" => res.bad_format)
+        );
     }
 
-    if res.failed_cksum == 1 {
-        show_warning_caps!("{} computed checksum did NOT match", res.failed_cksum);
-    } else if res.failed_cksum > 1 {
-        show_warning_caps!("{} computed checksums did NOT match", res.failed_cksum);
+    if res.failed_cksum > 0 {
+        show_warning_caps!(
+            "{}",
+            translate!("checksum-failed-cksum", "count" => res.failed_cksum)
+        );
     }
 
-    if res.failed_open_file == 1 {
-        show_warning_caps!("{} listed file could not be read", res.failed_open_file);
-    } else if res.failed_open_file > 1 {
-        show_warning_caps!("{} listed files could not be read", res.failed_open_file);
+    if res.failed_open_file > 0 {
+        show_warning_caps!(
+            "{}",
+            translate!("checksum-failed-open-file", "count" => res.failed_open_file)
+        );
     }
 }
 
 /// Print a "no properly formatted lines" message in stderr
 #[inline]
 fn log_no_properly_formatted(filename: impl Display) {
-    show_error!("{filename}: no properly formatted checksum lines found");
+    show_error!(
+        "{}",
+        translate!("checksum-no-properly-formatted", "checksum_file" => filename)
+    );
 }
 
 /// Print a "no file was verified" message in stderr
 #[inline]
 fn log_no_file_verified(filename: impl Display) {
-    show_error!("{filename}: no file was verified");
+    show_error!(
+        "{}",
+        translate!("checksum-no-file-verified", "checksum_file" => filename)
+    );
 }
 
 /// Represents the different outcomes that can happen to a file
@@ -576,17 +584,18 @@ fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
     match File::open(filename) {
         Ok(f) => {
             if f.metadata()?.is_dir() {
-                Err(
-                    io::Error::other(format!("{}: Is a directory", filename.to_string_lossy()))
-                        .into(),
+                Err(io::Error::other(
+                    translate!("error-is-a-directory", "file" => filename.to_string_lossy()),
                 )
+                .into())
             } else {
                 Ok(Box::new(f))
             }
         }
         Err(_) => Err(io::Error::other(format!(
-            "{}: No such file or directory",
-            filename.to_string_lossy()
+            "{}: {}",
+            filename.to_string_lossy(),
+            translate!("error-file-not-found")
         ))
         .into()),
     }
@@ -864,11 +873,9 @@ fn process_checksum_file(
                     } else {
                         "Unknown algorithm"
                     };
-                    eprintln!(
-                        "{}: {}: {}: improperly formatted {algo} checksum line",
-                        util_name(),
-                        filename_input.maybe_quote(),
-                        i + 1,
+                    show_error!(
+                        "{}",
+                        translate!("checksum-error-algo-bad-format", "file" => filename_input.maybe_quote(), "line" => i + 1, "algo" => algo)
                     );
                 }
             }

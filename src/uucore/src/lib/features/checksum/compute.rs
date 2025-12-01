@@ -255,9 +255,7 @@ where
         if filepath.is_dir() {
             show!(USimpleError::new(
                 1,
-                // TODO: Rework translation, which is broken since this code moved to uucore
-                // translate!("cksum-error-is-directory", "file" => filepath.display())
-                format!("{}: Is a directory", filepath.display())
+                translate!("error-is-a-directory", "file" => filepath.display())
             ));
             continue;
         }
@@ -283,7 +281,7 @@ where
         let mut digest = options.algo_kind.create_digest();
 
         let (digest_output, sz) = digest_reader(&mut digest, &mut file, options.binary)
-            .map_err_context(|| translate!("cksum-error-failed-to-read-input"))?;
+            .map_err_context(|| translate!("checksum-error-failed-to-read-input"))?;
 
         // Encodes the sum if df is Base64, leaves as-is otherwise.
         let encode_sum = |sum: DigestOutput, df: DigestFormat| {
