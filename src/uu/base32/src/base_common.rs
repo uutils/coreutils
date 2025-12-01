@@ -8,11 +8,11 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufWriter, ErrorKind, Read, Seek, Write};
+use std::io::{self, ErrorKind, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::encoding::{
-    BASE2LSBF, BASE2MSBF, Base58Wrapper, Base64SimdWrapper, EncodingWrapper, Format,
+    BASE2LSBF, BASE2MSBF, Base32Wrapper, Base58Wrapper, Base64SimdWrapper, EncodingWrapper, Format,
     SupportsFastDecodeAndEncode, Z85Wrapper,
     for_base_common::{BASE32, BASE32HEX, BASE64URL, HEXUPPER_PERMISSIVE},
 };
@@ -34,7 +34,6 @@ pub struct Config {
     pub ignore_garbage: bool,
     pub wrap_cols: Option<usize>,
     pub to_read: Option<PathBuf>,
-    pub output_file: Option<PathBuf>,
 }
 
 pub mod options {
@@ -42,7 +41,6 @@ pub mod options {
     pub static WRAP: &str = "wrap";
     pub static IGNORE_GARBAGE: &str = "ignore-garbage";
     pub static FILE: &str = "file";
-    pub static OUTPUT_FILE: &str = "output_file";
 }
 
 impl Config {
@@ -88,17 +86,11 @@ impl Config {
             })
             .transpose()?;
 
-        let output_file = match options.get_one::<OsString>(options::OUTPUT_FILE) {
-            Some(value) if value != "-" => Some(Path::new(value).to_owned()),
-            _ => None,
-        };
-
         Ok(Self {
             decode: options.get_flag(options::DECODE),
             ignore_garbage: options.get_flag(options::IGNORE_GARBAGE),
             wrap_cols,
             to_read,
-            output_file,
         })
     }
 }
@@ -146,14 +138,6 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
                 .help(translate!("base-common-help-wrap", "default" => WRAP_DEFAULT))
                 .overrides_with(options::WRAP),
         )
-        .arg(
-            Arg::new(options::OUTPUT_FILE)
-                .short('o')
-                .long(options::OUTPUT_FILE)
-                .help(translate!("base-common-help-output-file"))
-                .value_parser(clap::value_parser!(OsString))
-                .value_hint(clap::ValueHint::FilePath),
-        )
         // "multiple" arguments are used to check whether there is more than one
         // file passed in.
         .arg(
@@ -187,18 +171,16 @@ pub fn get_input(config: &Config) -> UResult<Box<dyn ReadSeek>> {
     }
 }
 
-/// Determines if the input buffer ends with padding ('=') after trimming trailing whitespace.
+/// Determines if the input buffer contains any padding ('=') ignoring trailing whitespace.
 fn read_and_has_padding<R: Read>(input: &mut R) -> UResult<(bool, Vec<u8>)> {
     let mut buf = Vec::new();
     input
         .read_to_end(&mut buf)
         .map_err(|err| USimpleError::new(1, format_read_error(err.kind())))?;
 
-    // Reverse iterator and skip trailing whitespace without extra collections
-    let has_padding = buf
-        .iter()
-        .rfind(|&&byte| !byte.is_ascii_whitespace())
-        .is_some_and(|&byte| byte == b'=');
+    // Treat the stream as padded if any '=' exists (GNU coreutils continues decoding
+    // even when padding bytes are followed by more data).
+    let has_padding = buf.contains(&b'=');
 
     Ok((has_padding, buf))
 }
@@ -210,11 +192,8 @@ pub fn handle_input<R: Read + Seek>(input: &mut R, format: Format, config: Confi
         get_supports_fast_decode_and_encode(format, config.decode, has_padding);
 
     let supports_fast_decode_and_encode_ref = supports_fast_decode_and_encode.as_ref();
-    let mut stdout_lock: Box<dyn Write> = match &config.output_file {
-        Some(path) => Box::new(BufWriter::new(File::create(path)?)),
-        None => Box::new(io::stdout().lock()),
-    };
-    if config.decode {
+    let mut stdout_lock = io::stdout().lock();
+    let result = if config.decode {
         fast_decode::fast_decode(
             read,
             &mut stdout_lock,
@@ -228,6 +207,14 @@ pub fn handle_input<R: Read + Seek>(input: &mut R, format: Format, config: Confi
             supports_fast_decode_and_encode_ref,
             config.wrap_cols,
         )
+    };
+
+    // Ensure any pending stdout buffer is flushed even if decoding failed; GNU basenc
+    // keeps already-decoded bytes visible before reporting the error.
+    match (result, stdout_lock.flush()) {
+        (res, Ok(())) => res,
+        (Ok(_), Err(err)) => Err(err.into()),
+        (Err(original), Err(_)) => Err(original),
     }
 }
 
@@ -268,14 +255,14 @@ pub fn get_supports_fast_decode_and_encode(
             // spell-checker:disable-next-line
             b"01",
         )),
-        Format::Base32 => Box::from(EncodingWrapper::new(
+        Format::Base32 => Box::from(Base32Wrapper::new(
             BASE32,
             BASE32_VALID_DECODING_MULTIPLE,
             BASE32_UNPADDED_MULTIPLE,
             // spell-checker:disable-next-line
             b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567=",
         )),
-        Format::Base32Hex => Box::from(EncodingWrapper::new(
+        Format::Base32Hex => Box::from(Base32Wrapper::new(
             BASE32HEX,
             BASE32_VALID_DECODING_MULTIPLE,
             BASE32_UNPADDED_MULTIPLE,
@@ -523,43 +510,21 @@ pub mod fast_encode {
 
 pub mod fast_decode {
     use std::io::{self, Write};
-    use uucore::{encoding::SupportsFastDecodeAndEncode, error::UResult};
+    use uucore::{
+        encoding::SupportsFastDecodeAndEncode,
+        error::{UResult, USimpleError},
+    };
 
     // Start of helper functions
-    fn alphabet_to_table(alphabet: &[u8], ignore_garbage: bool) -> [bool; 256] {
-        // If `ignore_garbage` is enabled, all characters outside the alphabet are ignored
-        // If it is not enabled, only '\n' and '\r' are ignored
-        if ignore_garbage {
-            // Note: "false" here
-            let mut table = [false; 256];
+    fn alphabet_lookup(alphabet: &[u8]) -> [bool; 256] {
+        // Precompute O(1) membership checks so we can validate every byte before decoding.
+        let mut table = [false; 256];
 
-            // Pass through no characters except those in the alphabet
-            for ue in alphabet {
-                let us = usize::from(*ue);
-
-                // Should not have been set yet
-                assert!(!table[us]);
-
-                table[us] = true;
-            }
-
-            table
-        } else {
-            // Note: "true" here
-            let mut table = [true; 256];
-
-            // Pass through all characters except '\n' and '\r'
-            for ue in [b'\n', b'\r'] {
-                let us = usize::from(ue);
-
-                // Should not have been set yet
-                assert!(table[us]);
-
-                table[us] = false;
-            }
-
-            table
+        for &byte in alphabet {
+            table[usize::from(byte)] = true;
         }
+
+        table
     }
 
     fn decode_in_chunks_to_buffer(
@@ -574,8 +539,41 @@ pub mod fast_decode {
     fn write_to_output(decoded_buffer: &mut Vec<u8>, output: &mut dyn Write) -> io::Result<()> {
         // Write all data in `decoded_buffer` to `output`
         output.write_all(decoded_buffer.as_slice())?;
+        output.flush()?;
 
         decoded_buffer.clear();
+
+        Ok(())
+    }
+
+    fn flush_ready_chunks(
+        buffer: &mut Vec<u8>,
+        block_limit: usize,
+        valid_multiple: usize,
+        supports_fast_decode_and_encode: &dyn SupportsFastDecodeAndEncode,
+        decoded_buffer: &mut Vec<u8>,
+        output: &mut dyn Write,
+    ) -> UResult<()> {
+        // While at least one full decode block is buffered, keep draining
+        // it and never yield more than block_limit per chunk.
+        while buffer.len() >= valid_multiple {
+            let take = buffer.len().min(block_limit);
+            let aligned_take = take - (take % valid_multiple);
+
+            if aligned_take < valid_multiple {
+                break;
+            }
+
+            decode_in_chunks_to_buffer(
+                supports_fast_decode_and_encode,
+                &buffer[..aligned_take],
+                decoded_buffer,
+            )?;
+
+            write_to_output(decoded_buffer, output)?;
+
+            buffer.drain(..aligned_take);
+        }
 
         Ok(())
     }
@@ -590,22 +588,12 @@ pub mod fast_decode {
         const DECODE_IN_CHUNKS_OF_SIZE_MULTIPLE: usize = 1_024;
 
         let alphabet = supports_fast_decode_and_encode.alphabet();
-        let decode_in_chunks_of_size = supports_fast_decode_and_encode.valid_decoding_multiple()
-            * DECODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
+        let alphabet_table = alphabet_lookup(alphabet);
+        let valid_multiple = supports_fast_decode_and_encode.valid_decoding_multiple();
+        let decode_in_chunks_of_size = valid_multiple * DECODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
 
         assert!(decode_in_chunks_of_size > 0);
-
-        // Note that it's not worth using "data-encoding"'s ignore functionality if `ignore_garbage` is true, because
-        // "data-encoding"'s ignore functionality cannot discard non-ASCII bytes. The data has to be filtered before
-        // passing it to "data-encoding", so there is no point in doing any filtering in "data-encoding". This also
-        // allows execution to stay on the happy path in "data-encoding":
-        // https://github.com/ia0/data-encoding/blob/4f42ad7ef242f6d243e4de90cd1b46a57690d00e/lib/src/lib.rs#L754-L756
-        // It is also not worth using "data-encoding"'s ignore functionality when `ignore_garbage` is
-        // false.
-        // Note that the alphabet constants above already include the padding characters
-        // TODO
-        // Precompute this
-        let table = alphabet_to_table(alphabet, ignore_garbage);
+        assert!(valid_multiple > 0);
 
         // Start of buffers
 
@@ -616,35 +604,69 @@ pub mod fast_decode {
 
         let mut buffer = Vec::with_capacity(decode_in_chunks_of_size);
 
-        input
-            .iter()
-            .filter(|ch| table[usize::from(**ch)])
-            .for_each(|ch| {
-                buffer.push(*ch);
-                // How many bytes to steal from `read_buffer` to get
-                // `leftover_buffer` to the right size
-                if buffer.len() == decode_in_chunks_of_size {
-                    assert_eq!(decode_in_chunks_of_size, buffer.len());
-                    // Decode data in chunks, then place it in `decoded_buffer`
-                    decode_in_chunks_to_buffer(
-                        supports_fast_decode_and_encode,
-                        &buffer,
-                        &mut decoded_buffer,
-                    )
-                    .unwrap();
-                    // Write all data in `decoded_buffer` to `output`
-                    write_to_output(&mut decoded_buffer, output).unwrap();
-                    buffer.clear();
-                }
-            });
-        // Cleanup
-        // `input` has finished producing data, so the data remaining in the buffers needs to be decoded and printed
-        {
-            // Decode all remaining encoded bytes, placing them in `decoded_buffer`
-            supports_fast_decode_and_encode.decode_into_vec(&buffer, &mut decoded_buffer)?;
+        let supports_partial_decode = supports_fast_decode_and_encode.supports_partial_decode();
 
-            // Write all data in `decoded_buffer` to `output`
+        for &byte in &input {
+            if byte == b'\n' || byte == b'\r' {
+                continue;
+            }
+
+            if alphabet_table[usize::from(byte)] {
+                buffer.push(byte);
+            } else if ignore_garbage {
+                continue;
+            } else {
+                return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+            }
+
+            if supports_partial_decode {
+                flush_ready_chunks(
+                    &mut buffer,
+                    decode_in_chunks_of_size,
+                    valid_multiple,
+                    supports_fast_decode_and_encode,
+                    &mut decoded_buffer,
+                    output,
+                )?;
+            } else if buffer.len() == decode_in_chunks_of_size {
+                decode_in_chunks_to_buffer(
+                    supports_fast_decode_and_encode,
+                    &buffer,
+                    &mut decoded_buffer,
+                )?;
+                write_to_output(&mut decoded_buffer, output)?;
+                buffer.clear();
+            }
+        }
+
+        if supports_partial_decode {
+            flush_ready_chunks(
+                &mut buffer,
+                decode_in_chunks_of_size,
+                valid_multiple,
+                supports_fast_decode_and_encode,
+                &mut decoded_buffer,
+                output,
+            )?;
+        }
+
+        if !buffer.is_empty() {
+            let mut owned_chunk: Option<Vec<u8>> = None;
+            let mut had_invalid_tail = false;
+
+            if let Some(pad_result) = supports_fast_decode_and_encode.pad_remainder(&buffer) {
+                had_invalid_tail = pad_result.had_invalid_tail;
+                owned_chunk = Some(pad_result.chunk);
+            }
+
+            let final_chunk = owned_chunk.as_deref().unwrap_or(&buffer);
+
+            supports_fast_decode_and_encode.decode_into_vec(final_chunk, &mut decoded_buffer)?;
             write_to_output(&mut decoded_buffer, output)?;
+
+            if had_invalid_tail {
+                return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+            }
         }
 
         Ok(())
@@ -684,6 +706,8 @@ mod tests {
             ("aGVsbG8sIHdvcmxkIQ== \n", true),
             ("aGVsbG8sIHdvcmxkIQ=", true),
             ("aGVsbG8sIHdvcmxkIQ= ", true),
+            ("MTIzNA==MTIzNA", true),
+            ("MTIzNA==\nMTIzNA", true),
             ("aGVsbG8sIHdvcmxkIQ \n", false),
             ("aGVsbG8sIHdvcmxkIQ", false),
         ];

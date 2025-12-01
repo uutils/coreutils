@@ -57,4 +57,3 @@ base-common-read-error = read error: {$error}
 base-common-help-decode = decode data
 base-common-help-ignore-garbage = when decoding, ignore non-alphabetic characters
 base-common-help-wrap = wrap encoded lines after COLS character (default {$default}, 0 to disable wrapping)
-base-common-help-output-file = output to OUTPUT_FILE instead of stdout
