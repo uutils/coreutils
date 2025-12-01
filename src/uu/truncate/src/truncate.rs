@@ -178,7 +178,7 @@ fn file_truncate(filename: &OsString, create: bool, size: u64) -> UResult<()> {
         if metadata.file_type().is_fifo() {
             return Err(USimpleError::new(
                 1,
-                translate!("truncate-error-cannot-open-no-device", "filename" => filename.to_string_lossy().quote()),
+                translate!("truncate-error-cannot-open-no-device", "filename" => filename.quote()),
             ));
         }
     }
@@ -328,7 +328,7 @@ fn truncate_size_only(size_string: &str, filenames: &[OsString], create: bool) -
                 if m.file_type().is_fifo() {
                     return Err(USimpleError::new(
                         1,
-                        translate!("truncate-error-cannot-open-no-device", "filename" => filename.to_string_lossy().quote()),
+                        translate!("truncate-error-cannot-open-no-device", "filename" => filename.quote()),
                     ));
                 }
                 m.len()

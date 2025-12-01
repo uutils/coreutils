@@ -13,8 +13,9 @@ use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
 use std::num::TryFromIntError;
 #[cfg(unix)]
 use std::os::fd::{AsRawFd, FromRawFd};
+use std::path::PathBuf;
 use thiserror::Error;
-use uucore::display::Quotable;
+use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult};
 use uucore::line_ending::LineEnding;
 use uucore::translate;
@@ -41,8 +42,8 @@ use take::take_lines;
 #[derive(Error, Debug)]
 enum HeadError {
     /// Wrapper around `io::Error`
-    #[error("{}", translate!("head-error-reading-file", "name" => name.clone(), "err" => err))]
-    Io { name: String, err: io::Error },
+    #[error("{}", translate!("head-error-reading-file", "name" => name.quote(), "err" => err))]
+    Io { name: PathBuf, err: io::Error },
 
     #[error("{}", translate!("head-error-parse-error", "err" => 0))]
     ParseError(String),
@@ -513,7 +514,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 Ok(f) => f,
                 Err(err) => {
                     show!(err.map_err_context(
-                        || translate!("head-error-cannot-open", "name" => file.to_string_lossy().quote())
+                        || translate!("head-error-cannot-open", "name" => file.quote())
                     ));
                     continue;
                 }
@@ -522,19 +523,18 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 if !first {
                     println!();
                 }
-                match file.to_str() {
-                    Some(name) => println!("==> {name} <=="),
-                    None => println!("==> {} <==", file.to_string_lossy()),
-                }
+                print!("==> ");
+                print_verbatim(file).unwrap();
+                println!(" <==");
             }
             head_file(&mut file_handle, options)?;
             Ok(())
         };
         if let Err(err) = res {
             let name = if file == "-" {
-                "standard input".to_string()
+                "standard input".into()
             } else {
-                file.to_string_lossy().into_owned()
+                file.into()
             };
             return Err(HeadError::Io { name, err }.into());
         }
