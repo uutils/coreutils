@@ -121,7 +121,7 @@ fn test_legacy_plus_minus_accepts_when_modern_posix2() {
 }
 
 #[test]
-fn test_legacy_plus_minus_rejected_in_traditional_range() {
+fn test_legacy_plus_minus_accepts_with_size_max() {
     let size_max = usize::MAX;
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("input.txt", "aa\nbb\n");
