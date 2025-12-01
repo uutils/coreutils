@@ -52,5 +52,6 @@ gen_byte_order_ops! {
     read_i32, write_i32 -> i32,
     read_i64, write_i64 -> i64,
     read_f32, write_f32 -> f32,
-    read_f64, write_f64 -> f64
+    read_f64, write_f64 -> f64,
+    read_u128, write_u128 -> u128
 }

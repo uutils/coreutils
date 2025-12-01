@@ -37,7 +37,7 @@ jobs:
     steps:
     #### Get the code, setup cache
     - name: Checkout code (uutils)
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         path: 'uutils'
         persist-credentials: false
@@ -59,7 +59,7 @@ jobs:
       with:
         workspaces: "./uutils -> target"
     - name: Checkout code (GNU coreutils)
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         repository: 'coreutils/coreutils'
         path: 'gnu'
@@ -80,7 +80,8 @@ jobs:
       run: |
         ## Install dependencies
         sudo apt-get update
-        sudo apt-get install -y autopoint gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev libselinux1-dev attr quilt
+        ## Check that build-gnu.sh works on the non SELinux system by installing libselinux only on lima
+        sudo apt-get install -y autopoint gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev attr quilt
     - name: Add various locales
       shell: bash
       run: |
@@ -98,6 +99,9 @@ jobs:
         sudo locale-gen --keep-existing en_US
         sudo locale-gen --keep-existing en_US.UTF-8
         sudo locale-gen --keep-existing ru_RU.KOI8-R
+        sudo locale-gen --keep-existing fa_IR.UTF-8 # Iran
+        sudo locale-gen --keep-existing am_ET.UTF-8 # Ethiopia
+        sudo locale-gen --keep-existing th_TH.UTF-8 # Thailand
 
         sudo update-locale
         echo "After:"
@@ -109,7 +113,7 @@ jobs:
       run: |
         ## Build binaries
         cd 'uutils'
-        bash util/build-gnu.sh --release-build
+        env PROFILE=release-small bash util/build-gnu.sh
 
     ### Run tests as user
     - name: Run GNU tests
@@ -169,7 +173,7 @@ jobs:
     steps:
     #### Get the code, setup cache
     - name: Checkout code (uutils)
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         path: 'uutils'
         persist-credentials: false
@@ -191,7 +195,7 @@ jobs:
       with:
         workspaces: "./uutils -> target"
     - name: Checkout code (GNU coreutils)
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         repository: 'coreutils/coreutils'
         path: 'gnu'
@@ -235,7 +239,7 @@ jobs:
     - name: Install dependencies in VM
       run: |
         lima sudo dnf -y update
-        lima sudo dnf -y install git autoconf autopoint bison texinfo gperf gcc gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel texinfo-tex wget automake patch quilt
+        lima sudo dnf -y install git autoconf autopoint bison texinfo gperf gcc gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel texinfo-tex automake patch quilt
         lima rustup-init -y --default-toolchain stable
     - name: Copy the sources to VM
       run: |
@@ -244,7 +248,7 @@ jobs:
     ### Build
     - name: Build binaries
       run: |
-        lima bash -c "cd ~/work/uutils/ && SELINUX_ENABLED=1 bash util/build-gnu.sh --release-build"
+        lima bash -c "cd ~/work/uutils/ && SELINUX_ENABLED=1 PROFILE=release-small bash util/build-gnu.sh"
 
     ### Run tests as user
     - name: Generate SELinux tests list
@@ -328,7 +332,7 @@ jobs:
 
         outputs TEST_SUMMARY_FILE AGGREGATED_SUMMARY_FILE
     - name: Checkout code (uutils)
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         path: 'uutils'
         persist-credentials: false

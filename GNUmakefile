@@ -450,7 +450,7 @@ install: build install-manpages install-completions install-locales
 	mkdir -p $(INSTALLDIR_BIN)
 ifneq (,$(and $(findstring stdbuf,$(UTILS)),$(findstring feat_external_libstdbuf,$(CARGOFLAGS))))
 	mkdir -p $(DESTDIR)$(LIBSTDBUF_DIR)
-	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf* $(DESTDIR)$(LIBSTDBUF_DIR)/
+	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf.* $(DESTDIR)$(LIBSTDBUF_DIR)/
 endif
 ifeq (${MULTICALL}, y)
 	$(INSTALL) -m 755 $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
@@ -473,7 +473,7 @@ endif
 
 uninstall:
 ifneq ($(OS),Windows_NT)
-	rm -f $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf*
+	rm -f $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf.*
 	-rm -d $(DESTDIR)$(LIBSTDBUF_DIR) 2>/dev/null || true
 endif
 ifeq (${MULTICALL}, y)

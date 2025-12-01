@@ -374,6 +374,7 @@ textwrap = { version = "0.16.1", features = ["terminal_size"] }
 thiserror = "2.0.3"
 time = { version = "0.3.36" }
 unicode-width = "0.2.0"
+unit-prefix = "0.5"
 utmp-classic = "0.1.6"
 uutils_term_grid = "0.7"
 walkdir = "2.5"

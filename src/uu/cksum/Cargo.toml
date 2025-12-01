@@ -19,7 +19,12 @@ path = "src/cksum.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["checksum", "encoding", "sum"] }
+uucore = { workspace = true, features = [
+  "checksum",
+  "encoding",
+  "sum",
+  "hardware",
+] }
 hex = { workspace = true }
 fluent = { workspace = true }
 
