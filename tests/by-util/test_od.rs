@@ -207,7 +207,7 @@ fn test_float16_compact() {
         .arg("-tfH")
         .run_piped_stdin(&input[..])
         .success()
-        .stdout_only("       1.0000000       1.0000000\n");
+        .stdout_only("               1               1\n");
 }
 
 // Regression: 16-bit bfloat should print with canonical precision (no spurious digits)
@@ -220,7 +220,7 @@ fn test_bfloat16_compact() {
         .arg("-tfB")
         .run_piped_stdin(&input[..])
         .success()
-        .stdout_only("       1.0000000       1.0000000\n");
+        .stdout_only("               1               1\n");
 }
 
 #[test]
@@ -236,7 +236,7 @@ fn test_f16() {
     ]; // 0x8400 -6.104e-5
     let expected_output = unindent(
         "
-            0000000       1.0000000               0              -0             inf
+            0000000               1               0              -0             inf
             0000010            -inf             NaN   -6.1035156e-5
             0000016
             ",
@@ -263,7 +263,7 @@ fn test_fh() {
     ]; // 0x8400 -6.1035156e-5
     let expected_output = unindent(
         "
-            0000000       1.0000000               0              -0             inf
+            0000000               1               0              -0             inf
             0000010            -inf             NaN   -6.1035156e-5
             0000016
         ",
@@ -290,7 +290,7 @@ fn test_fb() {
     ]; // -6.1035156e-5
     let expected_output = unindent(
         "
-            0000000       1.0000000               0              -0             inf
+            0000000               1               0              -0             inf
             0000010            -inf             NaN   -6.1035156e-5
             0000016
         ",

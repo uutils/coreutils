@@ -37,6 +37,46 @@ pub static FORMAT_ITEM_BF16: FormatterItemInfo = FormatterItemInfo {
     formatter: FormatWriter::BFloatWriter(format_item_bf16),
 };
 
+/// Clean up a normalized float string by removing unnecessary padding and digits.
+/// - Strip leading spaces.
+/// - Trim trailing zeros after the decimal point (and the dot itself if empty).
+/// - Leave the exponent part (e/E...) untouched.
+fn trim_float_repr(raw: &str) -> String {
+    // Drop padding added by `format!` width specification
+    let mut s = raw.trim_start().to_string();
+
+    // Keep NaN/Inf representations as-is
+    let lower = s.to_ascii_lowercase();
+    if lower == "nan" || lower == "inf" || lower == "-inf" {
+        return s;
+    }
+
+    // Separate exponent from mantissa
+    let mut exp_part = String::new();
+    if let Some(idx) = s.find(['e', 'E']) {
+        exp_part = s[idx..].to_string();
+        s.truncate(idx);
+    }
+
+    // Trim trailing zeros in mantissa, then remove trailing dot if left alone
+    if let Some(_) = s.find('.') {
+        while s.ends_with('0') {
+            s.pop();
+        }
+        if s.ends_with('.') {
+            s.pop();
+        }
+    }
+
+    // If everything was trimmed, leave a single zero
+    if s.is_empty() || s == "-" || s == "+" {
+        s.push('0');
+    }
+
+    s.push_str(&exp_part);
+    s
+}
+
 /// Pad a floating value to a fixed width for column alignment while keeping
 /// the original precision (including trailing zeros). This mirrors the
 /// behavior of other float formatters (`f32`, `f64`) and keeps the output
@@ -46,10 +86,12 @@ fn pad_float_repr(raw: &str, width: usize) -> String {
 }
 
 pub fn format_item_f16(f: f64) -> String {
-    // 16-bit floats should use the canonical 7-digit representation (matching GNU od)
-    // and keep trailing zeros so column widths stay stable.
-    let raw = format_f16(f16::from_f64(f));
-    format!(" {}", pad_float_repr(&raw, FORMAT_ITEM_F16.print_width - 1))
+    let value = f16::from_f64(f);
+    let width = FORMAT_ITEM_F16.print_width - 1;
+    // Format once, trim redundant zeros, then re-pad to the canonical width
+    let raw = format_f16(value);
+    let trimmed = trim_float_repr(&raw);
+    format!(" {}", pad_float_repr(&trimmed, width))
 }
 
 pub fn format_item_f32(f: f64) -> String {
@@ -93,11 +135,10 @@ fn format_f64_exp_precision(f: f64, width: usize, precision: usize) -> String {
 
 pub fn format_item_bf16(f: f64) -> String {
     let bf = bf16::from_f32(f as f32);
-    let raw = format_binary16_like(f, 15, 8, is_subnormal_bf16(bf));
-    format!(
-        " {}",
-        pad_float_repr(&raw, FORMAT_ITEM_BF16.print_width - 1)
-    )
+    let width = FORMAT_ITEM_BF16.print_width - 1;
+    let raw = format_binary16_like(f64::from(bf), width, 8, is_subnormal_bf16(bf));
+    let trimmed = trim_float_repr(&raw);
+    format!(" {}", pad_float_repr(&trimmed, width))
 }
 
 fn format_f16(f: f16) -> String {
