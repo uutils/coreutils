@@ -205,6 +205,23 @@ fn tail_stdin(
     input: &Input,
     observer: &mut Observer,
 ) -> UResult<()> {
+    // Check if stdin is a directory before proceeding
+    // This handles cases where stdin is redirected from a directory: tail < dir
+    // On non-macOS systems, use is_stdin_directory() which works correctly
+    #[cfg(not(target_os = "macos"))]
+    {
+        if uucore::fs::is_stdin_directory(&stdin()) {
+            set_exit_code(1);
+            header_printer.print_input(input);
+            let err_msg = translate!("tail-is-a-directory");
+            show_error!(
+                "{}",
+                translate!("tail-error-reading-file", "file" => translate!("tail-stdin-header"), "error" => err_msg)
+            );
+            return Ok(());
+        }
+    }
+
     // on macOS, resolve() will always return None for stdin,
     // we need to detect if stdin is a directory ourselves.
     // fstat-ing certain descriptors under /dev/fd fails with
