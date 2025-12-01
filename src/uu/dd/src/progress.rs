@@ -147,7 +147,7 @@ impl ProgUpdate {
         // Compute the throughput (bytes per second) as a string.
         let duration = self.duration.as_secs_f64();
         let safe_millis = std::cmp::max(1, self.duration.as_millis());
-        let rate = 1000 * btotal / safe_millis;
+        let rate = (1000u128 * btotal) / safe_millis;
         let transfer_rate = to_magnitude_and_suffix(rate, SuffixType::Si);
 
         // If we are rewriting the progress line, do write a carriage
