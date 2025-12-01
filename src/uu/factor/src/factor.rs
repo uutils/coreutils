@@ -18,7 +18,7 @@ use std::io::{self, Write, stdin, stdout};
 
 use clap::{Arg, ArgAction, Command};
 use num_bigint::BigUint;
-use num_traits::{FromPrimitive, One, Zero};
+use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, set_exit_code};
 use uucore::translate;
@@ -442,7 +442,7 @@ fn factor_biguint_recursive(n: &BigUint, factors: &mut Vec<BigUint>) -> bool {
 
     // If n is small enough, use num_prime's factorize128 for speed.
     if n.bits() <= 128 {
-        if let Ok(x128) = n.to_string().parse::<u128>() {
+        if let Some(x128) = n.to_u128() {
             let pf = num_prime::nt_funcs::factorize128(x128);
             if !pf.is_empty() {
                 for (p, e) in pf {
