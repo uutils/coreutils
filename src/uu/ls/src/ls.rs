@@ -2354,7 +2354,7 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
 #[allow(clippy::cognitive_complexity)]
 fn enter_directory(
     path_data: &PathData,
-    read_dir: ReadDir,
+    mut read_dir: ReadDir,
     config: &Config,
     state: &mut ListState,
     listed_ancestors: &mut HashSet<FileInformation>,
@@ -2383,7 +2383,7 @@ fn enter_directory(
     };
 
     // Convert those entries to the PathData struct
-    for raw_entry in read_dir {
+    for raw_entry in read_dir.by_ref() {
         let dir_entry = match raw_entry {
             Ok(path) => path,
             Err(err) => {

@@ -34,7 +34,7 @@ jobs:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
@@ -43,7 +43,7 @@ jobs:
       with:
         disable_annotations: true
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.2.7
+      uses: vmactions/freebsd-vm@v1.2.8
       with:
         usesh: true
         sync: rsync
@@ -130,7 +130,7 @@ jobs:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
@@ -139,7 +139,7 @@ jobs:
       with:
         disable_annotations: true
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.2.7
+      uses: vmactions/freebsd-vm@v1.2.8
       with:
         usesh: true
         sync: rsync
