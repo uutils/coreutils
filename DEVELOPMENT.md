@@ -291,7 +291,6 @@ brew install \
   coreutils \
   autoconf \
   gettext \
-  wget \
   texinfo \
   xz \
   automake \
