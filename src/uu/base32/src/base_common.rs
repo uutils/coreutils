@@ -173,7 +173,7 @@ pub fn handle_input<R: Read>(input: &mut R, format: Format, config: Config) -> U
     let mut stdout_lock = io::stdout().lock();
     let result = match (format, config.decode) {
         // Base58 must process the entire input as one big integer; keep the
-        // historical behaviour of buffering everything for this format only.
+        // historical behavior of buffering everything for this format only.
         (Format::Base58, _) => {
             let mut buffered = Vec::new();
             input
@@ -511,6 +511,18 @@ pub mod fast_encode {
         Ok(())
     }
 
+    /// Encodes all data read from `input` into Base32 using a fast, chunked
+    /// implementation and writes the result to `output`.
+    ///
+    /// The `supports_fast_decode_and_encode` parameter supplies an optimized
+    /// encoder and determines the chunk size used for bulk processing. When
+    /// `wrap` is:
+    /// - `Some(0)`: no line wrapping is performed,
+    /// - `Some(n)`: lines are wrapped every `n` characters,
+    /// - `None`: the default wrap width is applied.
+    ///
+    /// Remaining bytes are encoded and flushed at the end. I/O or encoding
+    /// failures are propagated via `UResult`.
     pub fn fast_encode_stream(
         input: &mut dyn Read,
         output: &mut dyn Write,
