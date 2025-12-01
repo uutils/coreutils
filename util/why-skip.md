@@ -55,7 +55,6 @@
 * tests/df/skip-rootfs.sh
 
 = insufficient mount/ext2 support =
-* tests/df/problematic-chars.sh
 * tests/cp/cp-mv-enotsup-xattr.sh
 
 = requires controlling input terminal =
