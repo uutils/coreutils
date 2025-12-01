@@ -87,6 +87,17 @@ fn test_stdbuf_no_buffer_option_fails() {
         .stderr_contains("the following required arguments were not provided:");
 }
 
+#[cfg(not(target_os = "windows"))]
+#[test]
+fn test_stdbuf_no_command_fails_with_125() {
+    // Test that missing command fails with exit code 125 (stdbuf error)
+    // This verifies proper error handling without unwrap panic
+    new_ucmd!()
+        .args(&["-o1"])
+        .fails_with_code(125)
+        .stderr_contains("the following required arguments were not provided:");
+}
+
 // Disabled on x86_64-unknown-linux-musl because the cross-rs Docker image for this target
 // does not provide musl-compiled system utilities (like tail), leading to dynamic linker errors
 // when preloading musl-compiled libstdbuf.so into glibc-compiled binaries. Same thing for FreeBSD.

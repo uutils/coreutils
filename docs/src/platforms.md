@@ -1,6 +1,6 @@
 # Platform support
 
-<!-- markdownlint-disable MD033 -->
+<!-- markdownlint-disable MD033 MD060 -->
 
 uutils aims to be as "universal" as possible, meaning that we try to support
 many platforms. However, it is infeasible for us to guarantee that every
@@ -19,13 +19,13 @@ platform support, with different guarantees. We support two tiers of platforms:
 
 The platforms in tier 1 and the platforms that we test in CI are listed below.
 
-| Operating system | Tested targets |
-| ---------------- | -------------- |
+| Operating system | Tested targets           |
+| ---------------- | ------------------------ |
 | **Linux**        | `x86_64-unknown-linux-gnu` <br> `x86_64-unknown-linux-musl` <br> `arm-unknown-linux-gnueabihf` <br> `i686-unknown-linux-gnu` <br> `aarch64-unknown-linux-gnu` |
-| **macOS**        | `x86_64-apple-darwin` |
+| **macOS**        | `x86_64-apple-darwin`    |
 | **Windows**      | `i686-pc-windows-msvc` <br> `x86_64-pc-windows-gnu` <br> `x86_64-pc-windows-msvc` |
 | **FreeBSD**      | `x86_64-unknown-freebsd` |
-| **Android**      | `i686-linux-android` |
+| **Android**      | `i686-linux-android`     |
 
 The platforms in tier 2 are more vague, but include:
 

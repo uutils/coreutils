@@ -1,15 +1,15 @@
 # spell-checker:ignore (misc) testsuite runtest findstring (targets) busytest toybox distclean pkgs nextest ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MULTICALL DATAROOTDIR TESTDIR manpages
 
 # Config options
+ifneq (,$(filter install, $(MAKECMDGOALS)))
+ PROFILE?=release
+endif
 PROFILE         ?= debug
 MULTICALL       ?= n
 COMPLETIONS     ?= y
 MANPAGES        ?= y
 LOCALES         ?= y
 INSTALL         ?= install
-ifneq (,$(filter install, $(MAKECMDGOALS)))
-override PROFILE:=release
-endif
 
 # Needed for the foreach loops to split each loop into a separate command
 define newline
@@ -17,9 +17,9 @@ define newline
 
 endef
 
-PROFILE_CMD :=
-ifeq ($(PROFILE),release)
-	PROFILE_CMD = --release
+PROFILE_CMD := --profile=${PROFILE}
+ifeq ($(PROFILE),debug)
+	PROFILE_CMD =
 endif
 
 # Binaries
@@ -74,19 +74,6 @@ ifeq ($(OS),Windows_NT)
 	LN ?= ln -f
 endif
 LN ?= ln -sf
-
-ifdef SELINUX_ENABLED
-	override SELINUX_ENABLED := 0
-# Now check if we should enable it (only on non-Windows)
-	ifneq ($(OS),Windows_NT)
-		ifeq ($(shell if [ -x /sbin/selinuxenabled ] && /sbin/selinuxenabled 2>/dev/null; then echo 0; else echo 1; fi),0)
-			override SELINUX_ENABLED := 1
-$(info /sbin/selinuxenabled successful)
-	    else
-$(info SELINUX_ENABLED=1 but /sbin/selinuxenabled failed)
-		endif
-	endif
-endif
 
 # Possible programs
 PROGS       := \
@@ -208,15 +195,11 @@ HASHSUM_PROGS := \
 
 $(info Detected OS = $(OS))
 
-# Don't build the SELinux programs on macOS (Darwin) and FreeBSD
-ifeq ($(filter $(OS),Darwin FreeBSD),$(OS))
-	SELINUX_PROGS :=
-endif
-
 ifneq ($(OS),Windows_NT)
-	PROGS := $(PROGS) $(UNIX_PROGS)
-# Build the selinux command even if not on the system
-	PROGS := $(PROGS) $(SELINUX_PROGS)
+	PROGS += $(UNIX_PROGS)
+endif
+ifeq ($(SELINUX_ENABLED),1)
+	PROGS += $(SELINUX_PROGS)
 endif
 
 UTILS ?= $(filter-out $(SKIP_UTILS),$(PROGS))
@@ -330,8 +313,6 @@ endif
 
 all: build
 
-use_default := 1
-
 build-pkgs:
 ifneq (${MULTICALL}, y)
 ifdef BUILD_SPEC_FEATURE
@@ -349,10 +330,10 @@ build: build-coreutils build-pkgs locales
 $(foreach test,$(UTILS),$(eval $(call TEST_BUSYBOX,$(test))))
 
 test:
-	${CARGO} test ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
+	${CARGO} test ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" $(PROFILE_CMD) --no-default-features $(TEST_NO_FAIL_FAST)
 
 nextest:
-	${CARGO} nextest run ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
+	${CARGO} nextest run ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" $(PROFILE_CMD) --no-default-features $(TEST_NO_FAIL_FAST)
 
 test_toybox:
 	-(cd $(TOYBOX_SRC)/ && make tests)
@@ -360,7 +341,7 @@ test_toybox:
 toybox-src:
 	if [ ! -e "$(TOYBOX_SRC)" ] ; then \
 		mkdir -p "$(TOYBOX_ROOT)" ; \
-		wget "https://github.com/landley/toybox/archive/refs/tags/$(TOYBOX_VER).tar.gz" -P "$(TOYBOX_ROOT)" ; \
+		curl -Ls "https://github.com/landley/toybox/archive/refs/tags/$(TOYBOX_VER).tar.gz" -o "$(TOYBOX_ROOT)/$(TOYBOX_VER).tar.gz" ; \
 		tar -C "$(TOYBOX_ROOT)" -xf "$(TOYBOX_ROOT)/$(TOYBOX_VER).tar.gz" ; \
 		sed -i -e "s|TESTDIR=\".*\"|TESTDIR=\"$(BUILDDIR)\"|g" $(TOYBOX_SRC)/scripts/test.sh; \
 		sed -i -e "s/ || exit 1//g" $(TOYBOX_SRC)/scripts/test.sh; \
@@ -369,8 +350,8 @@ toybox-src:
 busybox-src:
 	if [ ! -e "$(BUSYBOX_SRC)" ] ; then \
 		mkdir -p "$(BUSYBOX_ROOT)" ; \
-		wget "https://busybox.net/downloads/busybox-$(BUSYBOX_VER).tar.bz2" -P "$(BUSYBOX_ROOT)" ; \
-		tar -C "$(BUSYBOX_ROOT)" -xf "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.bz2" ; \
+		curl -Ls "https://github.com/mirror/busybox/archive/refs/tags/$(subst .,_,$(BUSYBOX_VER)).tar.gz" -o "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.gz" ; \
+		tar -C "$(BUSYBOX_ROOT)" -xf "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.gz" ; \
 	fi ;
 
 # This is a busybox-specific config file their test suite wants to parse.
@@ -469,7 +450,7 @@ install: build install-manpages install-completions install-locales
 	mkdir -p $(INSTALLDIR_BIN)
 ifneq (,$(and $(findstring stdbuf,$(UTILS)),$(findstring feat_external_libstdbuf,$(CARGOFLAGS))))
 	mkdir -p $(DESTDIR)$(LIBSTDBUF_DIR)
-	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf* $(DESTDIR)$(LIBSTDBUF_DIR)/
+	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf.* $(DESTDIR)$(LIBSTDBUF_DIR)/
 endif
 ifeq (${MULTICALL}, y)
 	$(INSTALL) -m 755 $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
@@ -492,7 +473,7 @@ endif
 
 uninstall:
 ifneq ($(OS),Windows_NT)
-	rm -f $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf*
+	rm -f $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf.*
 	-rm -d $(DESTDIR)$(LIBSTDBUF_DIR) 2>/dev/null || true
 endif
 ifeq (${MULTICALL}, y)
