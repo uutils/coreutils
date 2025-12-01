@@ -22,7 +22,12 @@ bytecount = { workspace = true, features = ["runtime-dispatch-simd"] }
 clap = { workspace = true }
 fluent = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = ["hardware", "parser", "pipes", "quoting-style"] }
+uucore = { workspace = true, features = [
+  "hardware",
+  "parser",
+  "pipes",
+  "quoting-style",
+] }
 unicode-width = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
