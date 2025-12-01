@@ -157,7 +157,8 @@ fn test_loop_for_iterative_dfs_correctness() {
 const TSORT_LOOP_STDERR: &str = "tsort: f: input contains a loop:\ntsort: s\ntsort: t\n";
 const TSORT_LOOP_STDERR_AC: &str = "tsort: f: input contains a loop:\ntsort: a\ntsort: b\ntsort: f: input contains a loop:\ntsort: a\ntsort: c\n";
 const TSORT_ODD_ERROR: &str = "tsort: -: input contains an odd number of tokens\n";
-const TSORT_EXTRA_OPERAND_ERROR: &str = "tsort: extra operand 'g'\nTry 'tsort --help' for more information.\n";
+const TSORT_EXTRA_OPERAND_ERROR: &str =
+    "tsort: extra operand 'g'\nTry 'tsort --help' for more information.\n";
 
 #[test]
 fn test_cycle_loop_from_file() {
