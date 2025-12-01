@@ -49,10 +49,7 @@ pub fn format_item_f16(f: f64) -> String {
     // 16-bit floats should use the canonical 7-digit representation (matching GNU od)
     // and keep trailing zeros so column widths stay stable.
     let raw = format_f16(f16::from_f64(f));
-    format!(
-        " {}",
-        pad_float_repr(&raw, FORMAT_ITEM_F16.print_width - 1)
-    )
+    format!(" {}", pad_float_repr(&raw, FORMAT_ITEM_F16.print_width - 1))
 }
 
 pub fn format_item_f32(f: f64) -> String {
