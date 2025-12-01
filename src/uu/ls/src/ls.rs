@@ -1960,8 +1960,18 @@ impl PathData {
                 }
             }
 
-            if let Ok(ft_de) = de.file_type() {
-                ft.get_or_init(|| Some(ft_de));
+            // DirEntry::file_type() is a cheap way to learn the type without
+            // an extra stat, but for `-L`/`--dereference` we *must* base the
+            // type on the dereferenced metadata.  If we were to cache the
+            // non-dereferenced type (which will be `symlink` for a symlinked
+            // directory), later calls to `file_type()` would return that
+            // cached value and skip dereferencing, breaking behaviours such as
+            // `ls -FLR` which should follow symlinks to directories.  So only
+            // cache the DirEntry type when we are not required to dereference.
+            if !must_dereference {
+                if let Ok(ft_de) = de.file_type() {
+                    ft.get_or_init(|| Some(ft_de));
+                }
             }
 
             RefCell::new(Some(de.into()))
