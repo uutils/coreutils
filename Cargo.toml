@@ -280,7 +280,6 @@ members = [
   "src/uu/stdbuf/src/libstdbuf",
   "src/uucore",
   "src/uucore_procs",
-  "tests/benches/factor",
   "tests/uutests",
   # "fuzz",  # TODO
 ]
@@ -350,7 +349,6 @@ notify = { version = "=8.2.0", features = ["macos_kqueue"] }
 num-bigint = "0.4.4"
 num-prime = "0.4.4"
 num-traits = "0.2.19"
-number_prefix = "0.4"
 onig = { version = "~6.5.1", default-features = false }
 parse_datetime = "0.13.0"
 phf = "0.13.1"
@@ -374,6 +372,7 @@ textwrap = { version = "0.16.1", features = ["terminal_size"] }
 thiserror = "2.0.3"
 time = { version = "0.3.36" }
 unicode-width = "0.2.0"
+unit-prefix = "0.5"
 utmp-classic = "0.1.6"
 uutils_term_grid = "0.7"
 walkdir = "2.5"

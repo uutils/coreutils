@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel
+// spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel Secho
 #![allow(clippy::missing_errors_doc)]
 
 #[cfg(unix)]
@@ -1800,4 +1800,65 @@ fn test_shebang_error() {
         .arg("\'-v \'")
         .fails()
         .stderr_contains("use -[v]S to pass options in shebang lines");
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_braced_variable_with_default_value() {
+    new_ucmd!()
+        .arg("-Secho ${UNSET_VAR_UNLIKELY_12345:fallback}")
+        .succeeds()
+        .stdout_is("fallback\n");
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_braced_variable_with_default_when_set() {
+    new_ucmd!()
+        .env("TEST_VAR_12345", "actual")
+        .arg("-Secho ${TEST_VAR_12345:fallback}")
+        .succeeds()
+        .stdout_is("actual\n");
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_simple_braced_variable() {
+    new_ucmd!()
+        .env("TEST_VAR_12345", "value")
+        .arg("-Secho ${TEST_VAR_12345}")
+        .succeeds()
+        .stdout_is("value\n");
+}
+
+#[test]
+fn test_braced_variable_error_missing_closing_brace() {
+    new_ucmd!()
+        .arg("-Secho ${FOO")
+        .fails_with_code(125)
+        .stderr_contains("Missing closing brace");
+}
+
+#[test]
+fn test_braced_variable_error_missing_closing_brace_after_default() {
+    new_ucmd!()
+        .arg("-Secho ${FOO:-value")
+        .fails_with_code(125)
+        .stderr_contains("Missing closing brace after default value");
+}
+
+#[test]
+fn test_braced_variable_error_starts_with_digit() {
+    new_ucmd!()
+        .arg("-Secho ${1FOO}")
+        .fails_with_code(125)
+        .stderr_contains("Unexpected character: '1'");
+}
+
+#[test]
+fn test_braced_variable_error_unexpected_character() {
+    new_ucmd!()
+        .arg("-Secho ${FOO?}")
+        .fails_with_code(125)
+        .stderr_contains("Unexpected character: '?'");
 }

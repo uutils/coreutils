@@ -4,9 +4,9 @@
 // file that was distributed with this source code.
 use std::fmt;
 
-pub const SI_BASES: [f64; 10] = [1., 1e3, 1e6, 1e9, 1e12, 1e15, 1e18, 1e21, 1e24, 1e27];
+pub const SI_BASES: [f64; 11] = [1., 1e3, 1e6, 1e9, 1e12, 1e15, 1e18, 1e21, 1e24, 1e27, 1e30];
 
-pub const IEC_BASES: [f64; 10] = [
+pub const IEC_BASES: [f64; 11] = [
     1.,
     1_024.,
     1_048_576.,
@@ -17,6 +17,7 @@ pub const IEC_BASES: [f64; 10] = [
     1_180_591_620_717_411_303_424.,
     1_208_925_819_614_629_174_706_176.,
     1_237_940_039_285_380_274_899_124_224.,
+    1_267_650_600_228_229_401_496_703_205_376.,
 ];
 
 pub type WithI = bool;
@@ -41,6 +42,8 @@ pub enum RawSuffix {
     E,
     Z,
     Y,
+    R,
+    Q,
 }
 
 pub type Suffix = (RawSuffix, WithI);
@@ -60,6 +63,8 @@ impl fmt::Display for DisplayableSuffix {
             (RawSuffix::E, _) => write!(f, "E"),
             (RawSuffix::Z, _) => write!(f, "Z"),
             (RawSuffix::Y, _) => write!(f, "Y"),
+            (RawSuffix::R, _) => write!(f, "R"),
+            (RawSuffix::Q, _) => write!(f, "Q"),
         }
         .and_then(|()| match with_i {
             true => write!(f, "i"),
