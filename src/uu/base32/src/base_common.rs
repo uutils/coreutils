@@ -302,7 +302,10 @@ pub mod fast_encode {
         io::{self, Read, Write},
         num::NonZeroUsize,
     };
-    use uucore::{encoding::SupportsFastDecodeAndEncode, error::UResult};
+    use uucore::{
+        encoding::SupportsFastDecodeAndEncode,
+        error::{UResult, USimpleError},
+    };
 
     struct LineWrapping {
         line_length: NonZeroUsize,
@@ -538,7 +541,9 @@ pub mod fast_encode {
         let mut read_buffer = vec![0u8; encode_in_chunks_of_size.max(8_192)];
 
         loop {
-            let read = input.read(&mut read_buffer)?;
+            let read = input
+                .read(&mut read_buffer)
+                .map_err(|err| USimpleError::new(1, super::format_read_error(err.kind())))?;
             if read == 0 {
                 break;
             }
@@ -771,7 +776,9 @@ pub mod fast_decode {
         let mut read_buffer = [0u8; 8_192];
 
         loop {
-            let read = input.read(&mut read_buffer)?;
+            let read = input
+                .read(&mut read_buffer)
+                .map_err(|err| USimpleError::new(1, super::format_read_error(err.kind())))?;
             if read == 0 {
                 break;
             }
@@ -786,28 +793,46 @@ pub mod fast_decode {
                 } else if ignore_garbage {
                     continue;
                 } else {
+                    if supports_partial_decode {
+                        flush_ready_chunks(
+                            &mut buffer,
+                            decode_in_chunks_of_size,
+                            valid_multiple,
+                            supports_fast_decode_and_encode,
+                            &mut decoded_buffer,
+                            output,
+                        )?;
+                    } else {
+                        while buffer.len() >= decode_in_chunks_of_size {
+                            decode_in_chunks_to_buffer(
+                                supports_fast_decode_and_encode,
+                                &buffer[..decode_in_chunks_of_size],
+                                &mut decoded_buffer,
+                            )?;
+                            write_to_output(&mut decoded_buffer, output)?;
+                            buffer.drain(..decode_in_chunks_of_size);
+                        }
+                    }
                     return Err(USimpleError::new(1, "error: invalid input".to_owned()));
                 }
-            }
 
-            if supports_partial_decode {
-                flush_ready_chunks(
-                    &mut buffer,
-                    decode_in_chunks_of_size,
-                    valid_multiple,
-                    supports_fast_decode_and_encode,
-                    &mut decoded_buffer,
-                    output,
-                )?;
-            } else {
-                while buffer.len() >= decode_in_chunks_of_size {
+                if supports_partial_decode {
+                    flush_ready_chunks(
+                        &mut buffer,
+                        decode_in_chunks_of_size,
+                        valid_multiple,
+                        supports_fast_decode_and_encode,
+                        &mut decoded_buffer,
+                        output,
+                    )?;
+                } else if buffer.len() == decode_in_chunks_of_size {
                     decode_in_chunks_to_buffer(
                         supports_fast_decode_and_encode,
-                        &buffer[..decode_in_chunks_of_size],
+                        &buffer,
                         &mut decoded_buffer,
                     )?;
                     write_to_output(&mut decoded_buffer, output)?;
-                    buffer.drain(..decode_in_chunks_of_size);
+                    buffer.clear();
                 }
             }
         }
