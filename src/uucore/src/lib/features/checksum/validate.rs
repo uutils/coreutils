@@ -170,8 +170,14 @@ fn print_cksum_report(res: &ChecksumResult) {
 
 /// Print a "no properly formatted lines" message in stderr
 #[inline]
-fn log_no_properly_formatted(filename: String) {
+fn log_no_properly_formatted(filename: impl Display) {
     show_error!("{filename}: no properly formatted checksum lines found");
+}
+
+/// Print a "no file was verified" message in stderr
+#[inline]
+fn log_no_file_verified(filename: impl Display) {
+    show_error!("{filename}: no file was verified");
 }
 
 /// Represents the different outcomes that can happen to a file
@@ -465,16 +471,6 @@ impl LineInfo {
             None
         }
     }
-}
-
-fn get_filename_for_output(filename: &OsStr, input_is_stdin: bool) -> String {
-    if input_is_stdin {
-        "standard input"
-    } else {
-        filename.to_str().unwrap()
-    }
-    .maybe_quote()
-    .to_string()
 }
 
 /// Extract the expected digest from the checksum string and decode it
@@ -882,11 +878,19 @@ fn process_checksum_file(
         }
     }
 
+    let filename_display = || {
+        if input_is_stdin {
+            "standard input".maybe_quote()
+        } else {
+            filename_input.maybe_quote()
+        }
+    };
+
     // not a single line correctly formatted found
     // return an error
     if res.total_properly_formatted() == 0 {
         if opts.verbose.over_status() {
-            log_no_properly_formatted(get_filename_for_output(filename_input, input_is_stdin));
+            log_no_properly_formatted(filename_display());
         }
         return Err(FileCheckError::Failed);
     }
@@ -900,11 +904,7 @@ fn process_checksum_file(
         // we have only bad format
         // and we had ignore-missing
         if opts.verbose.over_status() {
-            eprintln!(
-                "{}: {}: no file was verified",
-                util_name(),
-                filename_input.maybe_quote(),
-            );
+            log_no_file_verified(filename_display());
         }
         return Err(FileCheckError::Failed);
     }
