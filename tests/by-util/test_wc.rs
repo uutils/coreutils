@@ -830,8 +830,13 @@ fn test_simd_respects_glibc_tunables() {
 
     // WC results should be identical with and without GLIBC_TUNABLES overrides
     let sample_sizes = [0usize, 1, 7, 128, 513, 999];
+    use std::fmt::Write as _;
     for &lines in &sample_sizes {
-        let content: String = (0..lines).map(|i| format!("{i}\n")).collect();
+        let content: String = (0..lines).fold(String::new(), |mut acc, i| {
+            // Build the input buffer efficiently without allocating per line.
+            let _ = writeln!(acc, "{i}");
+            acc
+        });
 
         let base = new_ucmd!()
             .arg("-l")
