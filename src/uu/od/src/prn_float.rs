@@ -59,7 +59,7 @@ fn trim_float_repr(raw: &str) -> String {
     }
 
     // Trim trailing zeros in mantissa, then remove trailing dot if left alone
-    if s.find('.').is_some() {
+    if s.contains('.') {
         while s.ends_with('0') {
             s.pop();
         }
