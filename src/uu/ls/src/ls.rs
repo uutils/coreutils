@@ -1943,19 +1943,17 @@ impl PathData {
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
         let de: RefCell<Option<Box<DirEntry>>> = if let Some(de) = dir_entry {
-            if must_dereference {
+            // Defer dereferencing for non-command-line entries so that
+            // short listings with -L do not fail on broken links. We only
+            // probe immediately for command-line paths.
+            if must_dereference && command_line {
                 match p_buf.metadata() {
                     Ok(md_pb) => {
                         md.get_or_init(|| Some(md_pb.clone()));
                         ft.get_or_init(|| Some(md_pb.file_type()));
                     }
                     Err(err) => {
-                        // GNU ls reports an error (and sets exit status to 1)
-                        // when --dereference is in effect and a symlink target
-                        // cannot be reached while traversing a directory.
-                        // Emit the error here so even short listings (no -l)
-                        // behave the same, and mark metadata as probed to avoid
-                        // duplicate diagnostics later.
+                        // コマンドライン引数の場合のみここでエラーを報告する。
                         show!(LsError::IOErrorContext(p_buf.clone(), err, command_line));
                         let _ = md.set(None);
                     }
