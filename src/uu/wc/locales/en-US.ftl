@@ -31,3 +31,9 @@ decoder-error-io = underlying bytestream error: { $error }
 # Other messages
 wc-standard-input = standard input
 wc-total = total
+
+# Debug messages
+wc-debug-hw-unavailable = wc: debug: hardware support unavailable on this CPU
+wc-debug-hw-using = wc: debug: using hardware support (features: { $features })
+wc-debug-hw-disabled-env = wc: debug: hardware support disabled by environment
+wc-debug-hw-disabled-glibc = wc: debug: hardware support disabled by GLIBC_TUNABLES ({ $features })
