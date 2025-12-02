@@ -1891,6 +1891,12 @@ struct PathData {
     // can be used to avoid reading the filetype. Can be also called d_type:
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
     de: RefCell<Option<Box<DirEntry>>>,
+    // Remember if metadata lookup failed while dereferencing (e.g. dangling link or loop)
+    md_deref_error: std::cell::Cell<bool>,
+    // Track whether the above error was already reported
+    md_deref_error_reported: std::cell::Cell<bool>,
+    // Store the actual I/O error to report later if needed
+    md_deref_error_io: OnceCell<std::io::Error>,
     security_context: OnceCell<Box<str>>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
@@ -1943,6 +1949,9 @@ impl PathData {
         let ft: OnceCell<Option<FileType>> = OnceCell::new();
         let md: OnceCell<Option<Metadata>> = OnceCell::new();
         let security_context: OnceCell<Box<str>> = OnceCell::new();
+        let md_deref_error = std::cell::Cell::new(false);
+        let md_deref_error_reported = std::cell::Cell::new(false);
+        let md_deref_error_io: OnceCell<std::io::Error> = OnceCell::new();
 
         let de: RefCell<Option<Box<DirEntry>>> = if let Some(de) = dir_entry {
             // Defer dereferencing for non-command-line entries so that
@@ -1985,6 +1994,9 @@ impl PathData {
             md,
             ft,
             de,
+            md_deref_error,
+            md_deref_error_reported,
+            md_deref_error_io,
             security_context,
             display_name,
             p_buf,
@@ -2024,13 +2036,9 @@ impl PathData {
                             && !self.command_line
                             && (err.kind() == ErrorKind::NotFound || is_loop)
                         {
-                            // Even while following links during directory traversal,
-                            // GNU ls keeps broken symlinks in the listing and prints a warning once.
-                            show!(LsError::IOErrorContext(
-                                self.path().to_path_buf(),
-                                err,
-                                self.command_line
-                            ));
+                            // Keep the entry but remember the deref error for exit-code purposes.
+                            self.md_deref_error.set(true);
+                            let _ = self.md_deref_error_io.set(err);
                             return None;
                         }
                         // a bad fd will throw an error when dereferenced,
@@ -2083,6 +2091,24 @@ impl PathData {
 
     fn display_name(&self) -> &OsStr {
         &self.display_name
+    }
+
+    fn had_deref_error(&self) -> bool {
+        self.md_deref_error.get()
+    }
+
+    fn report_deref_error_if_needed(&self) {
+        if self.had_deref_error() && !self.md_deref_error_reported.get() {
+            if let Some(err) = self.md_deref_error_io.get() {
+                let cloned_err = std::io::Error::new(err.kind(), err.to_string());
+                show!(LsError::IOErrorContext(
+                    self.path().to_path_buf(),
+                    cloned_err,
+                    self.command_line
+                ));
+            }
+            self.md_deref_error_reported.set(true);
+        }
     }
 }
 
@@ -2596,6 +2622,10 @@ fn display_additional_leading_info(
             let i = if let Some(md) = item.metadata() {
                 get_inode(md)
             } else {
+                if item.had_deref_error() {
+                    item.report_deref_error_if_needed();
+                    set_exit_code(1);
+                }
                 "?".to_owned()
             };
             write!(result, "{} ", pad_left(&i, padding.inode)).unwrap();
@@ -2606,6 +2636,10 @@ fn display_additional_leading_info(
         let s = if let Some(md) = item.metadata() {
             display_size(get_block_size(md, config), config)
         } else {
+            if item.had_deref_error() {
+                item.report_deref_error_if_needed();
+                set_exit_code(1);
+            }
             "?".to_owned()
         };
         // extra space is insert to align the sizes, as needed for all formats, except for the comma format.
@@ -2655,6 +2689,10 @@ fn display_items(
         let mut longest_context_len = 1;
         let prefix_context = if config.context {
             for item in items {
+                if item.had_deref_error() && item.metadata().is_none() {
+                    item.report_deref_error_if_needed();
+                    set_exit_code(1);
+                }
                 let context_len = item.security_context(config).len();
                 longest_context_len = context_len.max(longest_context_len);
             }
@@ -3008,6 +3046,10 @@ fn display_item_long(
         write_os_str(&mut output_display, &displayed_item)?;
         output_display.extend(config.line_ending.to_string().as_bytes());
     } else {
+        if item.had_deref_error() {
+            item.report_deref_error_if_needed();
+            set_exit_code(1);
+        }
         #[cfg(unix)]
         let leading_char = {
             if let Some(ft) = item.file_type() {
