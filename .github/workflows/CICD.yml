@@ -637,7 +637,6 @@ jobs:
         case '${{ matrix.job.target }}' in
           aarch64-*) TARGET_ARCH=arm64 ;;
           arm-*-*hf) TARGET_ARCH=armhf ;;
-          i586-*) TARGET_ARCH=i586 ;;
           i686-*) TARGET_ARCH=i686 ;;
           x86_64-*) TARGET_ARCH=x86_64 ;;
         esac;
@@ -713,7 +712,6 @@ jobs:
       shell: bash
       run: |
         ## Create build/work space
-        mkdir -p '${{ steps.vars.outputs.STAGING }}'
         mkdir -p '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}'
     - name: Install/setup prerequisites
       shell: bash
@@ -1119,11 +1117,6 @@ jobs:
             echo 200:x:2000:2000::/home/200:/bin/bash | sudo tee -a /etc/passwd
             echo 200:x:2000: | sudo tee -a /etc/group
             ;;
-        esac
-
-        case '${{ matrix.job.os }}' in
-          # Update binutils if MinGW due to https://github.com/rust-lang/rust/issues/112368
-          windows-latest) C:/msys64/usr/bin/pacman.exe -Sy --needed mingw-w64-x86_64-gcc --noconfirm ; echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH ;;
         esac
 
         ## Install the llvm-tools component to get access to `llvm-profdata`

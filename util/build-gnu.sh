@@ -5,6 +5,7 @@
 # spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
 # spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink texinfo CARGOFLAGS
 # spell-checker:ignore openat TOCTOU CFLAGS
+# spell-checker:ignore hfsplus casefold chattr
 
 set -e
 
@@ -130,6 +131,7 @@ if test -f gnu-built; then
 else
     # Disable useless checks
     "${SED}" -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
+    "${SED}" -i '/^wget.*/d' bootstrap.conf # wget is used to DL po. Remove the dep.
     ./bootstrap --skip-po
     # Use CFLAGS for best build time since we discard GNU coreutils
     CFLAGS="${CFLAGS} -pipe -O0 -s" ./configure --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
@@ -166,6 +168,9 @@ fi
 grep -rl 'path_prepend_' tests/* | xargs -r "${SED}" -i 's| path_prepend_ ./src||'
 # path_prepend_ sets $abs_path_dir_: set it manually instead.
 grep -rl '\$abs_path_dir_' tests/*/*.sh | xargs -r "${SED}" -i "s|\$abs_path_dir_|${UU_BUILD_DIR//\//\\/}|g"
+
+# Remove hfs dependency (should be merged to upstream)
+"${SED}" -i -e "s|hfsplus|ext4 -O casefold|" -e "s|cd mnt|rm -d mnt/lost+found;chattr +F mnt;cd mnt|" tests/mv/hardlink-case.sh
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 "${SED}" -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
