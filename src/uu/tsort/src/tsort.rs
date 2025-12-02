@@ -65,8 +65,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 "extra operand {}\nTry 'tsort --help' for more information.",
                 inputs[1].quote()
             ),
-        )
-        .into());
+        ));
     }
 
     let input = inputs.into_iter().next().expect("at least one input");
