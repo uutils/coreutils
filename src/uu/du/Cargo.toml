@@ -30,6 +30,7 @@ uucore = { workspace = true, features = [
 ] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
+rayon = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true, features = [
