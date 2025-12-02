@@ -328,17 +328,25 @@ pub fn get_supports_fast_decode_and_encode(
     }
 }
 
+fn read_with_retry(input: &mut dyn Read, buffer: &mut [u8]) -> UResult<usize> {
+    loop {
+        match input.read(buffer) {
+            Ok(count) => return Ok(count),
+            Err(err) if err.kind() == ErrorKind::Interrupted => continue,
+            Err(err) => return Err(USimpleError::new(1, format_read_error(err.kind()))),
+        }
+    }
+}
+
 pub mod fast_encode {
     use crate::base_common::WRAP_DEFAULT;
+    use super::read_with_retry;
     use std::{
         collections::VecDeque,
-        io::{self, ErrorKind, Read, Write},
+        io::{self, Read, Write},
         num::NonZeroUsize,
     };
-    use uucore::{
-        encoding::SupportsFastDecodeAndEncode,
-        error::{UResult, USimpleError},
-    };
+    use uucore::{encoding::SupportsFastDecodeAndEncode, error::UResult};
 
     struct LineWrapping {
         line_length: NonZeroUsize,
@@ -485,15 +493,7 @@ pub mod fast_encode {
         let mut read_buffer = vec![0u8; read_buffer_size];
 
         loop {
-            let read_bytes = loop {
-                match input.read(&mut read_buffer) {
-                    Ok(count) => break count,
-                    Err(err) if err.kind() == ErrorKind::Interrupted => continue,
-                    Err(err) => {
-                        return Err(USimpleError::new(1, super::format_read_error(err.kind())));
-                    }
-                }
-            };
+            let read_bytes = read_with_retry(input, &mut read_buffer)?;
 
             if read_bytes == 0 {
                 break;
@@ -545,7 +545,8 @@ pub mod fast_encode {
 }
 
 pub mod fast_decode {
-    use std::io::{self, ErrorKind, Read, Write};
+    use super::read_with_retry;
+    use std::io::{self, Read, Write};
     use uucore::{
         encoding::SupportsFastDecodeAndEncode,
         error::{UResult, USimpleError},
@@ -644,15 +645,7 @@ pub mod fast_decode {
         let supports_partial_decode = supports_fast_decode_and_encode.supports_partial_decode();
 
         loop {
-            let read_bytes = loop {
-                match input.read(&mut read_buffer) {
-                    Ok(count) => break count,
-                    Err(err) if err.kind() == ErrorKind::Interrupted => continue,
-                    Err(err) => {
-                        return Err(USimpleError::new(1, super::format_read_error(err.kind())));
-                    }
-                }
-            };
+            let read_bytes = read_with_retry(input, &mut read_buffer)?;
 
             if read_bytes == 0 {
                 break;
