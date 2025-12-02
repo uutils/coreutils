@@ -4712,6 +4712,40 @@ fn test_ls_quoting_color() {
 }
 
 #[test]
+fn test_ls_follow_symlink_with_l_short_listing() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir");
+    at.mkdir("dir/sub");
+    at.mkdir("dir1");
+    at.relative_symlink_file("link", "dir/link");
+    at.relative_symlink_dir("../../dir1", "dir/sub/link-to-dir");
+
+    scene
+        .ucmd()
+        .current_dir(at.plus("dir"))
+        .args(&["-L", "link"])
+        .fails_with_code(2);
+
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .current_dir(at.plus("dir"))
+        .arg("-L")
+        .succeeds()
+        .stdout_is("link\nsub\n");
+
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .current_dir(at.plus("dir"))
+        .args(&["-FLR", "sub"])
+        .succeeds()
+        .stdout_is("sub:\nlink-to-dir/\n\nsub/link-to-dir:\n");
+}
+
+#[test]
 fn test_ls_dereference_looped_symlinks_recursive() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -4767,6 +4801,32 @@ fn test_dereference_symlink_file_color() {
     ucmd.args(&["-L", "--color", "dir1"])
         .succeeds()
         .stdout_is(out_exp);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_symlink_color_follows_target() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    at.relative_symlink_dir(".", "d/X");
+
+    ucmd.env("LS_COLORS", "ln=target:di=01;34")
+        .args(&["--color=always", "d"])
+        .succeeds()
+        .stdout_contains("\u{1b}[01;34mX\u{1b}[0m");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_symlink_color_follows_target_with_classify() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    at.relative_symlink_dir(".", "d/X");
+
+    ucmd.env("LS_COLORS", "ln=target:di=01;34")
+        .args(&["--color=always", "-F", "d"])
+        .succeeds()
+        .stdout_contains("\u{1b}[01;34mX\u{1b}[0m@");
 }
 
 #[test]

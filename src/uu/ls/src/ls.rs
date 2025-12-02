@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime
+// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime clocale　behaviours ELOOP
 
 #[cfg(unix)]
 use fnv::FnvHashMap as HashMap;
@@ -17,6 +17,7 @@ use std::os::windows::fs::MetadataExt;
 use std::{
     cell::{LazyCell, OnceCell},
     cmp::Reverse,
+    env,
     ffi::{OsStr, OsString},
     fmt::Write as FmtWrite,
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
@@ -34,7 +35,7 @@ use clap::{
     builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
 };
 use glob::{MatchOptions, Pattern};
-use lscolors::{Colorable, LsColors};
+use lscolors::{Colorable, Indicator, LsColors};
 use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
 use thiserror::Error;
 
@@ -42,6 +43,8 @@ use thiserror::Error;
 use uucore::entries;
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 use uucore::fsxattr::has_acl;
+#[cfg(unix)]
+use uucore::libc::ELOOP;
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 #[cfg(any(
@@ -70,7 +73,7 @@ use uucore::{
     parser::parse_glob,
     parser::parse_size::parse_size_non_zero_u64,
     parser::shortcut_value_parser::ShortcutValueParser,
-    quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
+    quoting_style::{Quotes, QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
     show, show_error, show_warning,
     time::{FormatSystemTimeFallback, format, format_system_time},
     translate,
@@ -353,6 +356,8 @@ pub struct Config {
     #[cfg(unix)]
     inode: bool,
     color: Option<LsColors>,
+    color_symlink_as_target: bool,
+    orphan_color_explicit: bool,
     long: LongFormat,
     alloc_size: bool,
     file_size_block_size: u64,
@@ -663,6 +668,12 @@ fn match_quoting_style_name(style: &str, show_control: bool) -> Option<QuotingSt
         "shell-escape-always" => Some(QuotingStyle::SHELL_ESCAPE_QUOTE),
         "c" => Some(QuotingStyle::C_DOUBLE),
         "escape" => Some(QuotingStyle::C_NO_QUOTES),
+        "locale" => Some(QuotingStyle::C {
+            quotes: Quotes::Single,
+        }),
+        "clocale" => Some(QuotingStyle::C {
+            quotes: Quotes::Double,
+        }),
         _ => None,
     }
     .map(|qs| qs.show_control(show_control))
@@ -856,6 +867,24 @@ impl Config {
         let sort = extract_sort(options);
         let time = extract_time(options);
         let mut needs_color = extract_color(options);
+        let (color_symlink_as_target, orphan_color_explicit) = if needs_color {
+            let value = env::var("LS_COLORS").unwrap_or_default();
+            let mut symlink_target = false;
+            let mut orphan_explicit = false;
+            for entry in value.split(':') {
+                if let Some((key, val)) = entry.split_once('=') {
+                    if key == "ln" && val == "target" {
+                        symlink_target = true;
+                    }
+                    if key == "or" {
+                        orphan_explicit = true;
+                    }
+                }
+            }
+            (symlink_target, orphan_explicit)
+        } else {
+            (false, false)
+        };
         let hyperlink = extract_hyperlink(options);
 
         let opt_block_size = options.get_one::<String>(options::size::BLOCK_SIZE);
@@ -1147,6 +1176,8 @@ impl Config {
             directory: options.get_flag(options::DIRECTORY),
             time,
             color,
+            color_symlink_as_target,
+            orphan_color_explicit,
             #[cfg(unix)]
             inode: options.get_flag(options::INODE),
             long,
@@ -1367,6 +1398,8 @@ pub fn uu_app() -> Command {
                 PossibleValue::new("shell-escape"),
                 PossibleValue::new("shell-always"),
                 PossibleValue::new("shell-escape-always"),
+                PossibleValue::new("locale"),
+                PossibleValue::new("clocale"),
                 PossibleValue::new("c").alias("c-maybe"),
                 PossibleValue::new("escape"),
             ]))
@@ -1858,6 +1891,12 @@ struct PathData {
     // can be used to avoid reading the filetype. Can be also called d_type:
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
     de: RefCell<Option<Box<DirEntry>>>,
+    // Remember if metadata lookup failed while dereferencing (e.g. dangling link or loop)
+    md_deref_error: std::cell::Cell<bool>,
+    // Track whether the above error was already reported
+    md_deref_error_reported: std::cell::Cell<bool>,
+    // Store the actual I/O error to report later if needed
+    md_deref_error_io: OnceCell<std::io::Error>,
     security_context: OnceCell<Box<str>>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
@@ -1910,17 +1949,40 @@ impl PathData {
         let ft: OnceCell<Option<FileType>> = OnceCell::new();
         let md: OnceCell<Option<Metadata>> = OnceCell::new();
         let security_context: OnceCell<Box<str>> = OnceCell::new();
+        let md_deref_error = std::cell::Cell::new(false);
+        let md_deref_error_reported = std::cell::Cell::new(false);
+        let md_deref_error_io: OnceCell<std::io::Error> = OnceCell::new();
 
         let de: RefCell<Option<Box<DirEntry>>> = if let Some(de) = dir_entry {
-            if must_dereference {
-                if let Ok(md_pb) = p_buf.metadata() {
-                    md.get_or_init(|| Some(md_pb.clone()));
-                    ft.get_or_init(|| Some(md_pb.file_type()));
+            // Defer dereferencing for non-command-line entries so that
+            // short listings with -L do not fail on broken links. We only
+            // probe immediately for command-line paths.
+            if must_dereference && command_line {
+                match p_buf.metadata() {
+                    Ok(md_pb) => {
+                        md.get_or_init(|| Some(md_pb.clone()));
+                        ft.get_or_init(|| Some(md_pb.file_type()));
+                    }
+                    Err(err) => {
+                        // Only report errors immediately for command-line arguments.
+                        show!(LsError::IOErrorContext(p_buf.clone(), err, command_line));
+                        let _ = md.set(None);
+                    }
                 }
             }
 
-            if let Ok(ft_de) = de.file_type() {
-                ft.get_or_init(|| Some(ft_de));
+            // DirEntry::file_type() is a cheap way to learn the type without
+            // an extra stat, but for `-L`/`--dereference` we *must* base the
+            // type on the dereferenced metadata.  If we were to cache the
+            // non-dereferenced type (which will be `symlink` for a symlinked
+            // directory), later calls to `file_type()` would return that
+            // cached value and skip dereferencing, breaking behaviours such as
+            // `ls -FLR` which should follow symlinks to directories.  So only
+            // cache the DirEntry type when we are not required to dereference.
+            if !must_dereference {
+                if let Ok(ft_de) = de.file_type() {
+                    ft.get_or_init(|| Some(ft_de));
+                }
             }
 
             RefCell::new(Some(de.into()))
@@ -1932,6 +1994,9 @@ impl PathData {
             md,
             ft,
             de,
+            md_deref_error,
+            md_deref_error_reported,
+            md_deref_error_io,
             security_context,
             display_name,
             p_buf,
@@ -1955,6 +2020,38 @@ impl PathData {
                         let mut out: std::io::StdoutLock<'static> = stdout().lock();
                         let _ = out.flush();
                         let errno = err.raw_os_error().unwrap_or(1i32);
+                        // GNU ls keeps implicitly encountered broken/self-looping symlinks with -L
+                        // in the listing (non-command-line entries). Windows reports
+                        // ERROR_CANT_RESOLVE_FILENAME (1921) for self-referential links;
+                        // suppress those here to match GNU semantics.
+                        // NotFound: broken symlink target
+                        // ELOOP/ERROR_CANT_RESOLVE_FILENAME: self-referential or unresolved target
+                        #[cfg(unix)]
+                        let is_loop = errno == ELOOP;
+                        #[cfg(not(unix))]
+                        let is_loop = false;
+                        let is_loop = is_loop || errno == 1921 /* Windows */;
+                        if self.must_dereference
+                            && !self.command_line
+                            && (err.kind() == ErrorKind::NotFound || is_loop)
+                        {
+                            if is_loop {
+                                // For non-command-line entries, silently keep looped links in the listing.
+                                // Cache link file type so coloring can still treat it as a symlink.
+                                if let Ok(link_md) = self.path().symlink_metadata() {
+                                    let _ = self.ft.set(Some(link_md.file_type()));
+                                }
+                                return None;
+                            }
+                            // Keep the entry but remember the deref error for exit-code purposes.
+                            self.md_deref_error.set(true);
+                            let _ = self.md_deref_error_io.set(err);
+                            // Cache link file type for coloring.
+                            if let Ok(link_md) = self.path().symlink_metadata() {
+                                let _ = self.ft.set(Some(link_md.file_type()));
+                            }
+                            return None;
+                        }
                         // a bad fd will throw an error when dereferenced,
                         // but GNU will not throw an error until a bad fd "dir"
                         // is entered, here we match that GNU behavior, by handing
@@ -2006,6 +2103,24 @@ impl PathData {
     fn display_name(&self) -> &OsStr {
         &self.display_name
     }
+
+    fn had_deref_error(&self) -> bool {
+        self.md_deref_error.get()
+    }
+
+    fn report_deref_error_if_needed(&self) {
+        if self.had_deref_error() && !self.md_deref_error_reported.get() {
+            if let Some(err) = self.md_deref_error_io.get() {
+                let cloned_err = std::io::Error::new(err.kind(), err.to_string());
+                show!(LsError::IOErrorContext(
+                    self.path().to_path_buf(),
+                    cloned_err,
+                    self.command_line
+                ));
+            }
+            self.md_deref_error_reported.set(true);
+        }
+    }
 }
 
 impl Colorable for PathData {
@@ -2042,6 +2157,24 @@ fn show_dir_name(
     let escaped_name =
         locale_aware_escape_dir_name(path_data.path().as_os_str(), config.quoting_style);
 
+    #[cfg(windows)]
+    let escaped_name = {
+        let s = escaped_name.to_string_lossy();
+        let is_symlink = path_data
+            .path()
+            .symlink_metadata()
+            .map(|md| md.file_type().is_symlink())
+            .unwrap_or(false);
+
+        // For dereferenced symlink headings (e.g. -L -R following a symlink-to-dir),
+        // tests expect forward slashes even on Windows. Otherwise normalize to backslash.
+        if path_data.must_dereference && is_symlink {
+            OsString::from(s.replace('\\', "/"))
+        } else {
+            OsString::from(s.replace('/', "\\"))
+        }
+    };
+
     let name = if config.hyperlink && !config.dired {
         create_hyperlink(&escaped_name, path_data)
     } else {
@@ -2077,7 +2210,13 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
 
     let mut state = ListState {
         out: BufWriter::new(stdout()),
-        style_manager: config.color.as_ref().map(StyleManager::new),
+        style_manager: config.color.as_ref().map(|colors| {
+            StyleManager::new(
+                colors,
+                config.color_symlink_as_target,
+                config.orphan_color_explicit,
+            )
+        }),
         #[cfg(unix)]
         uid_cache: HashMap::default(),
         #[cfg(unix)]
@@ -2512,6 +2651,10 @@ fn display_additional_leading_info(
             let i = if let Some(md) = item.metadata() {
                 get_inode(md)
             } else {
+                if item.had_deref_error() {
+                    item.report_deref_error_if_needed();
+                    set_exit_code(1);
+                }
                 "?".to_owned()
             };
             write!(result, "{} ", pad_left(&i, padding.inode)).unwrap();
@@ -2522,6 +2665,10 @@ fn display_additional_leading_info(
         let s = if let Some(md) = item.metadata() {
             display_size(get_block_size(md, config), config)
         } else {
+            if item.had_deref_error() {
+                item.report_deref_error_if_needed();
+                set_exit_code(1);
+            }
             "?".to_owned()
         };
         // extra space is insert to align the sizes, as needed for all formats, except for the comma format.
@@ -2550,6 +2697,15 @@ fn display_items(
         os_str_starts_with(&name, b"'")
     });
 
+    // For short listings we still need to surface dereference errors (e.g. broken links with -L)
+    for item in items {
+        let md = item.metadata();
+        if item.had_deref_error() && md.is_none() {
+            item.report_deref_error_if_needed();
+            set_exit_code(1);
+        }
+    }
+
     if config.format == Format::Long {
         let padding_collection = calculate_padding_collection(items, config, state);
 
@@ -2571,6 +2727,10 @@ fn display_items(
         let mut longest_context_len = 1;
         let prefix_context = if config.context {
             for item in items {
+                if item.had_deref_error() && item.metadata().is_none() {
+                    item.report_deref_error_if_needed();
+                    set_exit_code(1);
+                }
                 let context_len = item.security_context(config).len();
                 longest_context_len = context_len.max(longest_context_len);
             }
@@ -2580,11 +2740,6 @@ fn display_items(
         };
 
         let padding = calculate_padding_collection(items, config, state);
-
-        // we need to apply normal color to non filename output
-        if let Some(style_manager) = &mut state.style_manager {
-            write!(state.out, "{}", style_manager.apply_normal())?;
-        }
 
         let mut names_vec = Vec::new();
 
@@ -2924,6 +3079,10 @@ fn display_item_long(
         write_os_str(&mut output_display, &displayed_item)?;
         output_display.extend(config.line_ending.to_string().as_bytes());
     } else {
+        if item.had_deref_error() {
+            item.report_deref_error_if_needed();
+            set_exit_code(1);
+        }
         #[cfg(unix)]
         let leading_char = {
             if let Some(ft) = item.file_type() {
@@ -3263,19 +3422,57 @@ fn display_item_name(
                     }
 
                     let target_data = PathData::new(absolute_target, None, None, config, false);
+                    let target_md = target_data.p_buf.symlink_metadata().ok();
+                    // Avoid emitting errors when trying to color a dangling target.
+                    // Cache the probed (or missing) metadata so later calls do not
+                    // attempt another stat that would raise a diagnostic.
+                    let _ = target_data.md.set(target_md.clone());
 
                     // If we have a symlink to a valid file, we use the metadata of said file.
                     // Because we use an absolute path, we can assume this is guaranteed to exist.
                     // Otherwise, we use path.md(), which will guarantee we color to the same
                     // color of non-existent symlinks according to style_for_path_with_metadata.
-                    if path.metadata().is_none() && target_data.metadata().is_none() {
-                        name.push(target_path);
+                    let escaped_target =
+                        locale_aware_escape_name(target_path.as_os_str(), config.quoting_style);
+
+                    if path.metadata().is_none() && target_md.is_none() {
+                        name.push(escaped_target);
+                    } else if target_md.is_none() {
+                        if let Some(style) = style_manager
+                            .colors
+                            .style_for_indicator(Indicator::MissingFile)
+                        {
+                            name.push(style_manager.apply_style(
+                                Some(style),
+                                escaped_target,
+                                is_wrap(name.len()),
+                                None,
+                            ));
+                        } else if let Some(style) = style_manager
+                            .colors
+                            .style_for_indicator(Indicator::SymbolicLink)
+                        {
+                            name.push(style_manager.apply_style(
+                                Some(style),
+                                escaped_target,
+                                is_wrap(name.len()),
+                                Some(Indicator::SymbolicLink),
+                            ));
+                        } else {
+                            name.push(color_name(
+                                escaped_target,
+                                &target_data,
+                                style_manager,
+                                None,
+                                is_wrap(name.len()),
+                            ));
+                        }
                     } else {
                         name.push(color_name(
-                            locale_aware_escape_name(target_path.as_os_str(), config.quoting_style),
-                            path,
+                            escaped_target,
+                            &target_data,
                             style_manager,
-                            Some(&target_data),
+                            None,
                             is_wrap(name.len()),
                         ));
                     }
@@ -3322,7 +3519,17 @@ fn create_hyperlink(name: &OsStr, path: &PathData) -> OsString {
     let hostname = hostname.to_string_lossy();
 
     let absolute_path = fs::canonicalize(path.path()).unwrap_or_default();
-    let absolute_path = absolute_path.to_string_lossy();
+    let absolute_path = absolute_path.to_string_lossy().into_owned();
+
+    #[cfg(target_os = "windows")]
+    let absolute_path = {
+        // Strip verbatim prefix added by canonicalize (e.g. \\?\C:\path) to match expected file:// URLs
+        if let Some(stripped) = absolute_path.strip_prefix(r"\\?\") {
+            stripped.to_string()
+        } else {
+            absolute_path
+        }
+    };
 
     #[cfg(not(target_os = "windows"))]
     let unencoded_chars = "_-.:~/";
