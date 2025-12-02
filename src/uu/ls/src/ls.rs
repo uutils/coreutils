@@ -45,6 +45,8 @@ use uucore::entries;
 use uucore::fsxattr::has_acl;
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
+#[cfg(unix)]
+use uucore::libc::ELOOP;
 #[cfg(any(
     target_os = "linux",
     target_os = "macos",
@@ -2006,6 +2008,25 @@ impl PathData {
                         let mut out: std::io::StdoutLock<'static> = stdout().lock();
                         let _ = out.flush();
                         let errno = err.raw_os_error().unwrap_or(1i32);
+                        // GNU ls は -L で暗黙的に遭遇した壊れたシンボリックリンクでは
+                        // エラー終了にせず項目をそのまま一覧に残す。Windows では自己参照
+                        // シンボリックリンクに対して ERROR_CANT_RESOLVE_FILENAME(1921)
+                        // が返るため、非コマンドライン項目ではこの種の循環/存在しない
+                        // ターゲットのエラーを握りつぶす。
+                        // NotFound: 破損シンボリックリンク
+                        // ELOOP/ERROR_CANT_RESOLVE_FILENAME: 自己参照などで解決不能
+                        #[cfg(unix)]
+                        let is_loop = errno == ELOOP;
+                        #[cfg(not(unix))]
+                        let is_loop = false;
+                        let is_loop = is_loop || errno == 1921 /* Windows */;
+                        if self.must_dereference
+                            && !self.command_line
+                            && (err.kind() == ErrorKind::NotFound || is_loop)
+                        {
+                            let _ = self.md.set(None);
+                            return None;
+                        }
                         // a bad fd will throw an error when dereferenced,
                         // but GNU will not throw an error until a bad fd "dir"
                         // is entered, here we match that GNU behavior, by handing
