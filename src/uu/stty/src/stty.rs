@@ -846,7 +846,7 @@ fn parse_save_format(s: &str, termios: &mut Termios) -> Result<(), Box<dyn UErro
     // Expect four flag values + a variable-length sequence of cc_t values (at least one).
     let parts: Vec<&str> = s.split(':').collect();
     if parts.len() < 5 {
-        return Err(USimpleError::new(
+        return Err(UUsageError::new(
             1,
             translate!("stty-error-invalid-argument", "arg" => s.to_string()),
         ));
@@ -855,7 +855,7 @@ fn parse_save_format(s: &str, termios: &mut Termios) -> Result<(), Box<dyn UErro
     // Parse a hex string into tcflag_t (shared helper) to match the underlying bitflag type.
     fn parse_hex_tcflag(x: &str, original: &str) -> Result<nix::libc::tcflag_t, Box<dyn UError>> {
         nix::libc::tcflag_t::from_str_radix(x, 16).map_err(|_| {
-            USimpleError::new(
+            UUsageError::new(
                 1,
                 translate!("stty-error-invalid-argument", "arg" => original.to_string()),
             )
@@ -883,7 +883,7 @@ fn parse_save_format(s: &str, termios: &mut Termios) -> Result<(), Box<dyn UErro
             break;
         }
         let val = u32::from_str_radix(hex, 16).map_err(|_| {
-            USimpleError::new(
+            UUsageError::new(
                 1,
                 translate!("stty-error-invalid-argument", "arg" => s.to_string()),
             )
