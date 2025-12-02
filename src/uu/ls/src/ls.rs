@@ -1964,7 +1964,7 @@ impl PathData {
                         ft.get_or_init(|| Some(md_pb.file_type()));
                     }
                     Err(err) => {
-                        // コマンドライン引数の場合のみここでエラーを報告する。
+                        // Only report errors immediately for command-line arguments.
                         show!(LsError::IOErrorContext(p_buf.clone(), err, command_line));
                         let _ = md.set(None);
                     }
@@ -2020,13 +2020,12 @@ impl PathData {
                         let mut out: std::io::StdoutLock<'static> = stdout().lock();
                         let _ = out.flush();
                         let errno = err.raw_os_error().unwrap_or(1i32);
-                        // GNU ls は -L で暗黙的に遭遇した壊れたシンボリックリンクでは
-                        // エラー終了にせず項目をそのまま一覧に残す。Windows では自己参照
-                        // シンボリックリンクに対して ERROR_CANT_RESOLVE_FILENAME(1921)
-                        // が返るため、非コマンドライン項目ではこの種の循環/存在しない
-                        // ターゲットのエラーを握りつぶす。
-                        // NotFound: 破損シンボリックリンク
-                        // ELOOP/ERROR_CANT_RESOLVE_FILENAME: 自己参照などで解決不能
+                        // GNU ls keeps implicitly encountered broken/self-looping symlinks with -L
+                        // in the listing (non-command-line entries). Windows reports
+                        // ERROR_CANT_RESOLVE_FILENAME (1921) for self-referential links;
+                        // suppress those here to match GNU semantics.
+                        // NotFound: broken symlink target
+                        // ELOOP/ERROR_CANT_RESOLVE_FILENAME: self-referential or unresolved target
                         #[cfg(unix)]
                         let is_loop = errno == ELOOP;
                         #[cfg(not(unix))]
@@ -2152,20 +2151,19 @@ fn show_dir_name(
 
     #[cfg(windows)]
     let escaped_name = {
-        use std::os::windows::fs::MetadataExt;
         let s = escaped_name.to_string_lossy();
-        // Dired expects forward slashes to match GNU output.
-        let force_slash = config.dired
-            // Also use forward slashes for symlink headings when dereferencing (-L/-H)
-            || path_data
-                .path()
-                .symlink_metadata()
-                .map(|md| md.file_type().is_symlink())
-                .unwrap_or(false);
-        if force_slash {
+        let is_symlink = path_data
+            .path()
+            .symlink_metadata()
+            .map(|md| md.file_type().is_symlink())
+            .unwrap_or(false);
+
+        // For dereferenced symlink headings (e.g. -L -R following a symlink-to-dir),
+        // tests expect forward slashes even on Windows. Otherwise normalize to backslash.
+        if path_data.must_dereference && is_symlink {
             OsString::from(s.replace('\\', "/"))
         } else {
-            OsString::from(s.as_ref())
+            OsString::from(s.replace('/', "\\"))
         }
     };
 

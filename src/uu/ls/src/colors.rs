@@ -312,9 +312,11 @@ pub(crate) fn color_name(
     }
 
     if !path.must_dereference {
-        // If we need to dereference (follow) a symlink, we will need to get the metadata
-        // There is a DirEntry, we don't need to get the metadata for the color
-        return style_manager.apply_style_based_on_colorable(path, name, wrap, symlink_indicator);
+        // Avoid triggering metadata/stat when d_type is available; rely solely on the path and d_type.
+        let style = style_manager
+            .colors
+            .style_for_path_with_metadata(&path.p_buf, None);
+        return style_manager.apply_style(style, name, wrap, symlink_indicator);
     }
 
     if let Some(target) = target_symlink {
