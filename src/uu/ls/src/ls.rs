@@ -2037,11 +2037,19 @@ impl PathData {
                         {
                             if is_loop {
                                 // For non-command-line entries, silently keep looped links in the listing.
+                                // Cache link file type so coloring can still treat it as a symlink.
+                                if let Ok(link_md) = self.path().symlink_metadata() {
+                                    let _ = self.ft.set(Some(link_md.file_type()));
+                                }
                                 return None;
                             }
                             // Keep the entry but remember the deref error for exit-code purposes.
                             self.md_deref_error.set(true);
                             let _ = self.md_deref_error_io.set(err);
+                            // Cache link file type for coloring.
+                            if let Ok(link_md) = self.path().symlink_metadata() {
+                                let _ = self.ft.set(Some(link_md.file_type()));
+                            }
                             return None;
                         }
                         // a bad fd will throw an error when dereferenced,
@@ -2732,11 +2740,6 @@ fn display_items(
         };
 
         let padding = calculate_padding_collection(items, config, state);
-
-        // we need to apply normal color to non filename output
-        if let Some(style_manager) = &mut state.style_manager {
-            write!(state.out, "{}", style_manager.apply_normal())?;
-        }
 
         let mut names_vec = Vec::new();
 

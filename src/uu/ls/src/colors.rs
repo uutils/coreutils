@@ -330,6 +330,21 @@ pub(crate) fn color_name(
             .cloned()
             .or_else(|| path.p_buf.symlink_metadata().ok());
 
+        // If dereferencing failed (no metadata) but we know it's a symlink, fall back to
+        // styling the link itself rather than treating it as missing.
+        if md_option.is_none()
+            && path
+                .file_type()
+                .is_some_and(|ft| ft.is_symlink())
+        {
+            return style_manager.apply_style_based_on_colorable(
+                path,
+                name,
+                wrap,
+                Some(Indicator::SymbolicLink),
+            );
+        }
+
         style_manager.apply_style_based_on_metadata(
             path,
             md_option.as_ref(),
