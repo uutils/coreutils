@@ -4712,6 +4712,40 @@ fn test_ls_quoting_color() {
 }
 
 #[test]
+fn test_ls_follow_symlink_with_l_short_listing() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir");
+    at.mkdir("dir/sub");
+    at.mkdir("dir1");
+    at.relative_symlink_file("link", "dir/link");
+    at.relative_symlink_dir("../../dir1", "dir/sub/link-to-dir");
+
+    scene
+        .ucmd()
+        .current_dir(at.plus("dir"))
+        .args(&["-L", "link"])
+        .fails_with_code(2);
+
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .current_dir(at.plus("dir"))
+        .arg("-L")
+        .succeeds()
+        .stdout_is("link\nsub\n");
+
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .current_dir(at.plus("dir"))
+        .args(&["-FLR", "sub"])
+        .succeeds()
+        .stdout_is("sub:\nlink-to-dir/\n\nsub/link-to-dir:\n");
+}
+
+#[test]
 fn test_ls_dereference_looped_symlinks_recursive() {
     let (at, mut ucmd) = at_and_ucmd!();
 
