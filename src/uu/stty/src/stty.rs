@@ -288,18 +288,21 @@ fn stty(opts: &Options) -> UResult<()> {
 
     if let Some(args) = &opts.settings {
         if let Some((first, rest)) = args.split_first() {
-            let base = get_base_termios(opts.file.as_fd())?;
-            let mut restored = base.clone();
-            match parse_save_format(first, &mut restored) {
-                Ok(()) => {
-                    restored_from_save = Some(restored);
-                    settings_iter = Box::new(rest.iter().copied());
+            if first.contains(':') {
+                // Only attempt to parse saved state when the first arg actually looks like one.
+                let base = get_base_termios(opts.file.as_fd())?;
+                let mut restored = base.clone();
+                match parse_save_format(first, &mut restored) {
+                    Ok(()) => {
+                        restored_from_save = Some(restored);
+                        settings_iter = Box::new(rest.iter().copied());
+                    }
+                    // GNU stty errors immediately when the first argument looks like save format but cannot be parsed
+                    Err(e) => return Err(e),
                 }
-                // GNU stty errors immediately when the first argument looks like save format but cannot be parsed
-                Err(e) if first.contains(':') => return Err(e),
-                Err(_) => {
-                    settings_iter = Box::new(args.iter().map(|s| &**s));
-                }
+            } else {
+                // First argument is not a saved state; treat the whole list as regular settings.
+                settings_iter = Box::new(args.iter().map(|s| &**s));
             }
         }
     }
