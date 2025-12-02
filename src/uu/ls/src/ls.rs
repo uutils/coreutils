@@ -1955,18 +1955,6 @@ impl PathData {
                         let mut out: std::io::StdoutLock<'static> = stdout().lock();
                         let _ = out.flush();
                         let errno = err.raw_os_error().unwrap_or(1i32);
-                        #[cfg(windows)]
-                        {
-                            // Windows can surface `ERROR_CANT_RESOLVE_FILENAME` (FilesystemLoop)
-                            // when dereferencing certain reparse points (e.g. junctions that point
-                            // back to themselves).  GNU ls still lists the entry in this case, so
-                            // fall back to the link metadata instead of failing the entire command.
-                            if self.must_dereference && err.kind() == ErrorKind::FilesystemLoop {
-                                if let Ok(md) = self.path().symlink_metadata() {
-                                    return Some(md);
-                                }
-                            }
-                        }
                         // a bad fd will throw an error when dereferenced,
                         // but GNU will not throw an error until a bad fd "dir"
                         // is entered, here we match that GNU behavior, by handing
