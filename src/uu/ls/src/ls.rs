@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime clocale　behaviours
+// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime clocale　behaviours ELOOP
 
 #[cfg(unix)]
 use fnv::FnvHashMap as HashMap;
@@ -44,9 +44,9 @@ use uucore::entries;
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 use uucore::fsxattr::has_acl;
 #[cfg(unix)]
-use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
-#[cfg(unix)]
 use uucore::libc::ELOOP;
+#[cfg(unix)]
+use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 #[cfg(any(
     target_os = "linux",
     target_os = "macos",
