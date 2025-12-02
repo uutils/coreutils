@@ -266,7 +266,7 @@ fn stty(opts: &Options) -> UResult<()> {
         ));
     }
 
-    // termios を最初に必要になるまで遅延取得し、1 度だけキャッシュする
+    // Lazily fetch termios when first needed and cache it for reuse
     let mut base_termios: Option<Termios> = None;
     let mut get_base_termios = |fd: BorrowedFd<'_>| -> nix::Result<Termios> {
         if let Some(ref termios) = base_termios {
