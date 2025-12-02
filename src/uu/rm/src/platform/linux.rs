@@ -10,6 +10,8 @@
 use indicatif::ProgressBar;
 use std::ffi::OsStr;
 use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
@@ -18,8 +20,8 @@ use uucore::show_error;
 use uucore::translate;
 
 use super::super::{
-    InteractiveMode, Options, is_dir_empty, is_readable_metadata, prompt_descend, prompt_dir,
-    prompt_file, remove_file, show_permission_denied_error, show_removal_error,
+    InteractiveMode, Options, RmError, is_dir_empty, is_readable_metadata, prompt_descend,
+    prompt_dir, prompt_file, remove_file, show_permission_denied_error, show_removal_error,
     verbose_removed_directory, verbose_removed_file,
 };
 
@@ -193,6 +195,7 @@ pub fn safe_remove_dir_recursive(
     path: &Path,
     options: &Options,
     progress_bar: Option<&ProgressBar>,
+    current_dev_id: Option<u64>,
 ) -> bool {
     // Base case 1: this is a file or a symbolic link.
     // Use lstat to avoid race condition between check and use
@@ -205,6 +208,16 @@ pub fn safe_remove_dir_recursive(
             return show_removal_error(e, path);
         }
     }
+
+    let check_device = options.one_fs || options.preserve_root_all;
+    #[cfg(unix)]
+    let current_dev_id = if check_device {
+        current_dev_id.or_else(|| path.symlink_metadata().ok().map(|m| m.dev()))
+    } else {
+        None
+    };
+    #[cfg(not(unix))]
+    let current_dev_id: Option<u64> = None;
 
     // Try to open the directory using DirFd for secure traversal
     let dir_fd = match DirFd::open(path) {
@@ -226,7 +239,12 @@ pub fn safe_remove_dir_recursive(
         }
     };
 
-    let error = safe_remove_dir_recursive_impl(path, &dir_fd, options);
+    let error = safe_remove_dir_recursive_impl(
+        path,
+        &dir_fd,
+        options,
+        if check_device { current_dev_id } else { None },
+    );
 
     // After processing all children, remove the directory itself
     if error {
@@ -256,7 +274,12 @@ pub fn safe_remove_dir_recursive(
     }
 }
 
-pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Options) -> bool {
+pub fn safe_remove_dir_recursive_impl(
+    path: &Path,
+    dir_fd: &DirFd,
+    options: &Options,
+    parent_dev_id: Option<u64>,
+) -> bool {
     // Read directory entries using safe traversal
     let entries = match dir_fd.read_dir() {
         Ok(entries) => entries,
@@ -272,6 +295,7 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
     };
 
     let mut error = false;
+    let check_device = options.one_fs || options.preserve_root_all;
 
     // Process each entry
     for entry_name in entries {
@@ -290,6 +314,23 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
         let is_dir = (entry_stat.st_mode & libc::S_IFMT) == libc::S_IFDIR;
 
         if is_dir {
+            if check_device {
+                if let Some(parent_dev_id) = parent_dev_id {
+                    if entry_stat.st_dev != parent_dev_id {
+                        show_error!(
+                            "{}",
+                            RmError::SkippingDirectoryOnDifferentDevice(
+                                entry_path.as_os_str().to_os_string()
+                            )
+                        );
+                        if options.preserve_root_all {
+                            show_error!("{}", RmError::PreserveRootAllInEffect);
+                        }
+                        error = true;
+                        continue;
+                    }
+                }
+            }
             // Ask user if they want to descend into this directory
             if options.interactive == InteractiveMode::Always
                 && !is_dir_empty(&entry_path)
@@ -318,7 +359,16 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
                 }
             };
 
-            let child_error = safe_remove_dir_recursive_impl(&entry_path, &child_dir_fd, options);
+            let child_error = safe_remove_dir_recursive_impl(
+                &entry_path,
+                &child_dir_fd,
+                options,
+                if check_device {
+                    Some(entry_stat.st_dev)
+                } else {
+                    None
+                },
+            );
             error = error || child_error;
 
             // Ask user permission if needed for this subdirectory
