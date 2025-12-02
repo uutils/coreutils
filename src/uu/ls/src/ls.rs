@@ -2152,9 +2152,14 @@ fn show_dir_name(
 
     #[cfg(windows)]
     let escaped_name = {
-        // Match GNU coreutils output: use forward slashes in recursive headings.
-        let replaced = escaped_name.to_string_lossy().replace('\\', "/");
-        OsString::from(replaced)
+        // On Windows keep native separators for normal headings, but when dereferencing
+        // (-L) align with GNU behavior by showing forward slashes for followed symlink paths.
+        let s = escaped_name.to_string_lossy();
+        if path_data.must_dereference {
+            OsString::from(s.replace('\\', "/"))
+        } else {
+            OsString::from(s.as_ref())
+        }
     };
 
     let name = if config.hyperlink && !config.dired {
@@ -3506,7 +3511,17 @@ fn create_hyperlink(name: &OsStr, path: &PathData) -> OsString {
     let hostname = hostname.to_string_lossy();
 
     let absolute_path = fs::canonicalize(path.path()).unwrap_or_default();
-    let absolute_path = absolute_path.to_string_lossy();
+    let absolute_path = absolute_path.to_string_lossy().into_owned();
+
+    #[cfg(target_os = "windows")]
+    let absolute_path = {
+        // Strip verbatim prefix added by canonicalize (e.g. \\?\C:\path) to match expected file:// URLs
+        if let Some(stripped) = absolute_path.strip_prefix(r"\\?\") {
+            stripped.to_string()
+        } else {
+            absolute_path
+        }
+    };
 
     #[cfg(not(target_os = "windows"))]
     let unencoded_chars = "_-.:~/";
