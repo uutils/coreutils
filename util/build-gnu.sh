@@ -283,6 +283,8 @@ test -f "${UU_BUILD_DIR}/getlimits" || cp src/getlimits "${UU_BUILD_DIR}"
 
 "${SED}" -i -e "s/du: invalid -t argument/du: invalid --threshold argument/" -e "s/du: option requires an argument/error: a value is required for '--threshold <SIZE>' but none was supplied/" -e "s/Try 'du --help' for more information./\nFor more information, try '--help'./" tests/du/threshold.sh
 
+curl https://raw.githubusercontent.com/coreutils/coreutils/refs/heads/master/tests/mkdir/writable-under-readonly.sh > tests/mkdir/writable-under-readonly.sh
+
 # Remove the extra output check
 "${SED}" -i -e "s|Try '\$prog --help' for more information.\\\n||" tests/du/files0-from.pl
 "${SED}" -i -e "s|when reading file names from stdin, no file name of\"|-: No such file or directory\n\"|" -e "s| '-' allowed\\\n||" tests/du/files0-from.pl
