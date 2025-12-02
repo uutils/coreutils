@@ -163,7 +163,7 @@ pub(crate) fn color_name(
         let has_capabilities = if capabilities.is_none() {
             false
         } else {
-            uucore::fsxattr::has_acl(path.p_buf.as_path())
+            uucore::fsxattr::has_capability(path.p_buf.as_path())
         };
 
         // If the file has capabilities, use a specific style for `ca` (capabilities)
@@ -180,7 +180,7 @@ pub(crate) fn color_name(
 
     if let Some(target) = target_symlink {
         // use the optional target_symlink
-        // Use fn symlink_metadata directly instead of get_metadata() here because ls
+        // Use fn symlink_metadata directly instead of metadata here because ls
         // should not exit with an err, if we are unable to obtain the target_metadata
         style_manager.apply_style_based_on_colorable(target, name, wrap)
     } else {
