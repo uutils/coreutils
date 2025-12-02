@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore rsplit hexdigit bitlen bytelen invalidchecksum inva idchecksum xffname
+// spell-checker:ignore rsplit hexdigit bitlen invalidchecksum inva idchecksum xffname
 
 use std::borrow::Cow;
 use std::ffi::OsStr;
@@ -11,7 +11,6 @@ use std::fmt::Display;
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write, stdin};
 
-use data_encoding::BASE64;
 use os_display::Quotable;
 
 use crate::checksum::{AlgoKind, ChecksumError, SizedAlgoKind, digest_reader, unescape_filename};
@@ -467,35 +466,45 @@ fn get_filename_for_output(filename: &OsStr, input_is_stdin: bool) -> String {
 
 /// Extract the expected digest from the checksum string
 fn get_expected_digest_as_hex_string(
-    line_info: &LineInfo,
-    len_hint: Option<usize>,
+    checksum: &String,
+    byte_len_hint: Option<usize>,
 ) -> Option<Cow<'_, str>> {
-    let ck = &line_info.checksum;
-
-    let against_hint = |len| len_hint.is_none_or(|l| l == len);
-
-    if ck.len() % 2 != 0 {
+    if checksum.len() % 2 != 0 {
         // If the length of the digest is not a multiple of 2, then it
         // must be improperly formatted (1 hex digit is 2 characters)
         return None;
     }
 
-    // If the digest can be decoded as hexadecimal AND its length matches the
-    // one expected (in case it's given), just go with it.
-    if ck.as_bytes().iter().all(u8::is_ascii_hexdigit) && against_hint(ck.len()) {
-        return Some(Cow::Borrowed(ck));
+    let checks_hint = |len| byte_len_hint.is_none_or(|hint| hint == len);
+
+    // If the digest can be decoded as hexadecimal AND its byte length matches
+    // the one expected (in case it's given), just go with it.
+    if checksum.as_bytes().iter().all(u8::is_ascii_hexdigit) && checks_hint(checksum.len() / 2) {
+        return Some(checksum.as_str().into());
     }
 
-    // If hexadecimal digest fails for any reason, interpret the digest as base 64.
-    BASE64
-        .decode(ck.as_bytes()) // Decode the string as encoded base64
-        .map(hex::encode) // Encode it back as hexadecimal
-        .map(Cow::<str>::Owned)
-        .ok()
-        .and_then(|s| {
-            // Check the digest length
-            if against_hint(s.len()) { Some(s) } else { None }
-        })
+    // If hexadecimal digest fails for any reason, interpret the digest as base
+    // 64.
+
+    // But first, verify the encoded checksum length, which should be a
+    // multiple of 4.
+    if checksum.len() % 4 != 0 {
+        return None;
+    }
+
+    // Perform the decoding and be FORGIVING about it, to allow for checksums
+    // with invalid padding to still be decoded. This is enforced by
+    // `test_untagged_base64_matching_tag` in `test_cksum.rs`
+    //
+    // TODO: Ideally, we should not re-encode the result in hexadecimal, to avoid
+    // un-necessary computation.
+
+    match base64_simd::forgiving_decode_to_vec(checksum.as_bytes()) {
+        Ok(buffer) if checks_hint(buffer.len()) => Some(hex::encode(buffer).into()),
+        // The resulting length is not as expected
+        Ok(_) => None,
+        Err(_) => None,
+    }
 }
 
 /// Returns a reader that reads from the specified file, or from stdin if `filename_to_check` is "-".
@@ -691,12 +700,13 @@ fn process_algo_based_line(
     // If the digest bitlen is known, we can check the format of the expected
     // checksum with it.
     let digest_char_length_hint = match (algo_kind, algo_byte_len) {
-        (AlgoKind::Blake2b, Some(bytelen)) => Some(bytelen * 2),
+        (AlgoKind::Blake2b, Some(byte_len)) => Some(byte_len),
         _ => None,
     };
 
-    let expected_checksum = get_expected_digest_as_hex_string(line_info, digest_char_length_hint)
-        .ok_or(LineCheckError::ImproperlyFormatted)?;
+    let expected_checksum =
+        get_expected_digest_as_hex_string(&line_info.checksum, digest_char_length_hint)
+            .ok_or(LineCheckError::ImproperlyFormatted)?;
 
     let algo = SizedAlgoKind::from_unsized(algo_kind, algo_byte_len)?;
 
@@ -719,7 +729,7 @@ fn process_non_algo_based_line(
         // Remove the leading asterisk if present - only for the first line
         filename_to_check = &filename_to_check[1..];
     }
-    let expected_checksum = get_expected_digest_as_hex_string(line_info, None)
+    let expected_checksum = get_expected_digest_as_hex_string(&line_info.checksum, None)
         .ok_or(LineCheckError::ImproperlyFormatted)?;
 
     // When a specific algorithm name is input, use it and use the provided
@@ -1173,7 +1183,7 @@ mod tests {
         let mut cached_line_format = None;
         let line_info = LineInfo::parse(&line, &mut cached_line_format).unwrap();
 
-        let result = get_expected_digest_as_hex_string(&line_info, None);
+        let result = get_expected_digest_as_hex_string(&line_info.checksum, None);
 
         assert_eq!(
             result.unwrap(),
@@ -1188,7 +1198,7 @@ mod tests {
         let mut cached_line_format = None;
         let line_info = LineInfo::parse(&line, &mut cached_line_format).unwrap();
 
-        let result = get_expected_digest_as_hex_string(&line_info, None);
+        let result = get_expected_digest_as_hex_string(&line_info.checksum, None);
 
         assert!(result.is_none());
     }
