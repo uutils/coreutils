@@ -33,7 +33,9 @@ path_GNU="$("${READLINK}" -fm -- "${path_GNU:-${path_UUTILS}/../gnu}")"
 
 ###
 
-release_tag_GNU="v9.9"
+#temporarily bump commit to enable some tests e.g. writable-under-readonly.sh
+release_tag_GNU=d5a75a2f93aef30fe6b99eead74f8c0f11203e43
+#release_tag_GNU="v9.9"
 
 # check if the GNU coreutils has been cloned, if not print instructions
 # note: the ${path_GNU} might already exist, so we check for the .git directory
@@ -167,12 +169,6 @@ fi
 grep -rl 'path_prepend_' tests/* | xargs -r "${SED}" -i 's| path_prepend_ ./src||'
 # path_prepend_ sets $abs_path_dir_: set it manually instead.
 grep -rl '\$abs_path_dir_' tests/*/*.sh | xargs -r "${SED}" -i "s|\$abs_path_dir_|${UU_BUILD_DIR//\//\\/}|g"
-
-# Backport tests fixed at GNU coreutils > 9.9
-curl https://raw.githubusercontent.com/coreutils/coreutils/refs/heads/master/tests/mv/hardlink-case.sh > tests/mv/hardlink-case.sh
-# spell-checker:ignore enotsup
-curl https://raw.githubusercontent.com/coreutils/coreutils/refs/heads/master/tests/cp/cp-mv-enotsup-xattr.sh > tests/cp/cp-mv-enotsup-xattr.sh
-curl https://raw.githubusercontent.com/coreutils/coreutils/refs/heads/master/tests/mkdir/writable-under-readonly.sh > tests/mkdir/writable-under-readonly.sh
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 "${SED}" -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
