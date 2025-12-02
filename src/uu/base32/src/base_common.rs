@@ -339,8 +339,8 @@ fn read_with_retry(input: &mut dyn Read, buffer: &mut [u8]) -> UResult<usize> {
 }
 
 pub mod fast_encode {
-    use crate::base_common::WRAP_DEFAULT;
     use super::read_with_retry;
+    use crate::base_common::WRAP_DEFAULT;
     use std::{
         collections::VecDeque,
         io::{self, Read, Write},
