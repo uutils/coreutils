@@ -148,6 +148,14 @@ fn invalid_setting() {
 }
 
 #[test]
+fn invalid_free_word_fails_immediately() {
+    new_ucmd!()
+        .args(&["foo", "bar"])
+        .fails()
+        .stderr_contains("invalid argument 'foo'");
+}
+
+#[test]
 fn invalid_baud_setting() {
     #[cfg(not(any(
         target_os = "freebsd",
