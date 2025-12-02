@@ -572,11 +572,6 @@ impl<'a> Line<'a> {
             );
             line_data.filtered_line_ranges.push((start, len));
         }
-        if settings.precomputed.fast_lexicographic {
-            line_data.utf8_cache.push(std::str::from_utf8(line).ok());
-        } else {
-            line_data.utf8_cache.push(None);
-        }
         Self { line, index }
     }
 
@@ -1741,24 +1736,7 @@ fn compare_by<'a>(
     b_line_data: &LineData<'a>,
 ) -> Ordering {
     if global_settings.precomputed.fast_lexicographic {
-        let cmp = if let (Some(a_str), Some(b_str)) = (
-            a_line_data
-                .utf8_cache
-                .get(a.index)
-                .and_then(|cached| *cached),
-            b_line_data
-                .utf8_cache
-                .get(b.index)
-                .and_then(|cached| *cached),
-        ) {
-            a_str.cmp(b_str)
-        } else if let (Ok(a_str), Ok(b_str)) =
-            (std::str::from_utf8(a.line), std::str::from_utf8(b.line))
-        {
-            a_str.cmp(b_str)
-        } else {
-            b.line.cmp(a.line)
-        };
+        let cmp = a.line.cmp(b.line);
         return if global_settings.reverse {
             cmp.reverse()
         } else {

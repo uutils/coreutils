@@ -43,7 +43,6 @@ pub struct LineData<'a> {
     pub num_infos: Vec<NumInfo>,
     pub parsed_floats: Vec<GeneralBigDecimalParseResult>,
     pub line_num_floats: Vec<Option<f64>>,
-    pub utf8_cache: Vec<Option<&'a str>>,
     pub filtered_lines_data: Vec<u8>,
     pub filtered_line_ranges: Vec<(usize, usize)>,
 }
@@ -64,7 +63,6 @@ impl Chunk {
             contents.line_data.num_infos.clear();
             contents.line_data.parsed_floats.clear();
             contents.line_data.line_num_floats.clear();
-            contents.line_data.utf8_cache.clear();
             contents.line_data.filtered_lines_data.clear();
             contents.line_data.filtered_line_ranges.clear();
             let lines = unsafe {
@@ -205,7 +203,6 @@ pub fn read<T: Read>(
                 num_infos,
                 parsed_floats,
                 line_num_floats,
-                utf8_cache: Vec::new(),
                 filtered_lines_data: Vec::new(),
                 filtered_line_ranges: Vec::new(),
             };
