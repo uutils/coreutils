@@ -2024,7 +2024,13 @@ impl PathData {
                             && !self.command_line
                             && (err.kind() == ErrorKind::NotFound || is_loop)
                         {
-                            let _ = self.md.set(None);
+                            // Even while following links during directory traversal,
+                            // GNU ls keeps broken symlinks in the listing and prints a warning once.
+                            show!(LsError::IOErrorContext(
+                                self.path().to_path_buf(),
+                                err,
+                                self.command_line
+                            ));
                             return None;
                         }
                         // a bad fd will throw an error when dereferenced,
