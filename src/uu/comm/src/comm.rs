@@ -136,6 +136,11 @@ pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
         return Ok(false);
     }
 
+    // only proceed if both are regular files
+    if !metadata1.is_file() || !metadata2.is_file() {
+        return Ok(false);
+    }
+
     let file1 = File::open(path1)?;
     let file2 = File::open(path2)?;
 
