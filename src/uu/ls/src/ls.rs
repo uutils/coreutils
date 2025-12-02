@@ -2150,6 +2150,13 @@ fn show_dir_name(
     let escaped_name =
         locale_aware_escape_dir_name(path_data.path().as_os_str(), config.quoting_style);
 
+    #[cfg(windows)]
+    let escaped_name = {
+        // Match GNU coreutils output: use forward slashes in recursive headings.
+        let replaced = escaped_name.to_string_lossy().replace('\\', "/");
+        OsString::from(replaced)
+    };
+
     let name = if config.hyperlink && !config.dired {
         create_hyperlink(&escaped_name, path_data)
     } else {
