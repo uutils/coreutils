@@ -843,9 +843,11 @@ fn print_in_save_format(termios: &Termios) {
 /// GNU stty -g compatibility: restore Termios from the colon-separated hexadecimal representation
 /// produced by print_in_save_format. Caller clones before passing and this function overwrites it.
 fn parse_save_format(s: &str, termios: &mut Termios) -> Result<(), Box<dyn UError>> {
-    // Expect four flag values + a variable-length sequence of cc_t values (at least one).
+    // Expect exactly four flag values + NCCS control chars (no more, no less).
     let parts: Vec<&str> = s.split(':').collect();
-    if parts.len() < 5 {
+    let expected_cc = termios.control_chars.len();
+    let expected_parts = 4 + expected_cc;
+    if parts.len() != expected_parts {
         return Err(UUsageError::new(
             1,
             translate!("stty-error-invalid-argument", "arg" => s.to_string()),
@@ -888,7 +890,13 @@ fn parse_save_format(s: &str, termios: &mut Termios) -> Result<(), Box<dyn UErro
                 translate!("stty-error-invalid-argument", "arg" => s.to_string()),
             )
         })?;
-        termios.control_chars[i] = (val & 0xff) as u8;
+        if val > u8::MAX as u32 {
+            return Err(UUsageError::new(
+                1,
+                translate!("stty-error-invalid-argument", "arg" => s.to_string()),
+            ));
+        }
+        termios.control_chars[i] = val as u8;
     }
 
     Ok(())
