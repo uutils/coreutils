@@ -2152,10 +2152,17 @@ fn show_dir_name(
 
     #[cfg(windows)]
     let escaped_name = {
-        // On Windows keep native separators for normal headings, but when dereferencing
-        // (-L) align with GNU behavior by showing forward slashes for followed symlink paths.
+        use std::os::windows::fs::MetadataExt;
         let s = escaped_name.to_string_lossy();
-        if path_data.must_dereference {
+        // Dired expects forward slashes to match GNU output.
+        let force_slash = config.dired
+            // Also use forward slashes for symlink headings when dereferencing (-L/-H)
+            || path_data
+                .path()
+                .symlink_metadata()
+                .map(|md| md.file_type().is_symlink())
+                .unwrap_or(false);
+        if force_slash {
             OsString::from(s.replace('\\', "/"))
         } else {
             OsString::from(s.as_ref())
