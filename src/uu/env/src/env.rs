@@ -102,7 +102,6 @@ struct Options<'a> {
 }
 
 /// print `name=value` env pairs on screen
-/// if null is true, separate pairs with a \0, \n otherwise
 fn print_env(line_ending: LineEnding) {
     let stdout_raw = io::stdout();
     let mut stdout = stdout_raw.lock();

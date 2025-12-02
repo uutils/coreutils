@@ -23,6 +23,7 @@ clap = { workspace = true }
 half = { workspace = true }
 uucore = { workspace = true, features = ["parser"] }
 fluent = { workspace = true }
+libc.workspace = true
 
 [[bin]]
 name = "od"
