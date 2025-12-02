@@ -2036,6 +2036,10 @@ impl PathData {
                             && !self.command_line
                             && (err.kind() == ErrorKind::NotFound || is_loop)
                         {
+                            if is_loop {
+                                // For non-command-line entries, silently keep looped links in the listing.
+                                return None;
+                            }
                             // Keep the entry but remember the deref error for exit-code purposes.
                             self.md_deref_error.set(true);
                             let _ = self.md_deref_error_io.set(err);
@@ -2667,6 +2671,15 @@ fn display_items(
         let name = locale_aware_escape_name(item.display_name(), config.quoting_style);
         os_str_starts_with(&name, b"'")
     });
+
+    // For short listings we still need to surface dereference errors (e.g. broken links with -L)
+    for item in items {
+        let md = item.metadata();
+        if item.had_deref_error() && md.is_none() {
+            item.report_deref_error_if_needed();
+            set_exit_code(1);
+        }
+    }
 
     if config.format == Format::Long {
         let padding_collection = calculate_padding_collection(items, config, state);
