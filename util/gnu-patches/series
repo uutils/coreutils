@@ -7,7 +7,6 @@ tests_env_env-S.pl.patch
 tests_invalid_opt.patch
 tests_ls_no_cap.patch
 tests_sort_merge.pl.patch
-tests_tsort.patch
 tests_du_move_dir_while_traversing.patch
 test_mkdir_restorecon.patch
 error_msg_uniq.diff
