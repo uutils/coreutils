@@ -61,14 +61,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if inputs.len() > 1 {
         return Err(USimpleError::new(
             1,
-            format!(
-                "extra operand {}\nTry 'tsort --help' for more information.",
-                inputs[1].quote()
+            translate!(
+                "tsort-error-extra-operand",
+                "operand" => inputs[1].quote(),
+                "util" => uucore::util_name()
             ),
         ));
     }
 
-    let input = inputs.into_iter().next().expect("at least one input");
+    let input = inputs
+        .into_iter()
+        .next()
+        .expect(translate!("tsort-error-at-least-one-input"));
 
     let data = if input == "-" {
         let stdin = std::io::stdin();
