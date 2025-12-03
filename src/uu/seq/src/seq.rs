@@ -290,8 +290,8 @@ fn fast_print_seq(
     // Format the first number.
     let first_str = first.to_string();
 
-    // Makeshift log10.ceil
-    let last_length = last.to_string().len();
+    // Approximate length of the last number in base 10.
+    let last_length = (last.bits() as f64 / std::f64::consts::LOG2_10).ceil() as usize;
 
     // Allocate a large u8 buffer, that contains a preformatted string
     // of the number followed by the `separator`.
