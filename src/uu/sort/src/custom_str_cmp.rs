@@ -60,3 +60,25 @@ pub fn custom_str_cmp(
         }
     }
 }
+
+pub fn append_filtered_line_to(
+    line: &[u8],
+    ignore_non_printing: bool,
+    ignore_non_dictionary: bool,
+    ignore_case: bool,
+    output: &mut Vec<u8>,
+) -> usize {
+    let start = output.len();
+    output.reserve(line.len());
+    for &c in line {
+        if !filter_char(c, ignore_non_printing, ignore_non_dictionary) {
+            continue;
+        }
+        output.push(if ignore_case {
+            c.to_ascii_uppercase()
+        } else {
+            c
+        });
+    }
+    output.len() - start
+}
