@@ -1737,7 +1737,6 @@ dependencies = [
  "bigdecimal",
  "blake2b_simd",
  "blake3",
- "bstr",
  "clap",
  "crc-fast",
  "data-encoding",

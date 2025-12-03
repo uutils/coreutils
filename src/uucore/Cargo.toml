@@ -22,7 +22,7 @@ workspace = true
 path = "src/lib/lib.rs"
 
 [dependencies]
-bstr = { workspace = true }
+bstr = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
 clap = { workspace = true }
 uucore_procs = { workspace = true }
@@ -101,7 +101,7 @@ xattr = { workspace = true, optional = true }
 tempfile = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-procfs = { workspace = true }
+procfs = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 wild = "2.2.1"
@@ -129,7 +129,7 @@ entries = ["libc"]
 extendedbigdecimal = ["bigdecimal", "num-traits"]
 fast-inc = []
 fs = ["dunce", "libc", "winapi-util", "windows-sys"]
-fsext = ["libc", "windows-sys"]
+fsext = ["libc", "windows-sys", "bstr"]
 fsxattr = ["xattr"]
 hardware = []
 lines = []
@@ -138,7 +138,7 @@ format = [
   "bigdecimal",
   "extendedbigdecimal",
   "itertools",
-  "parser",
+  "parser-num",
   "num-traits",
   "quoting-style",
   "unit-prefix",
@@ -150,7 +150,10 @@ i18n-decimal = ["i18n-common", "icu_decimal", "icu_provider"]
 mode = ["libc"]
 perms = ["entries", "libc", "walkdir"]
 buf-copy = []
-parser = ["extendedbigdecimal", "glob", "num-traits"]
+parser-num = ["extendedbigdecimal", "num-traits"]
+parser-size = ["parser-num", "procfs"]
+parser-glob = ["glob"]
+parser = ["parser-num", "parser-size", "parser-glob"]
 pipes = []
 process = ["libc"]
 proc-info = ["tty", "walkdir"]
