@@ -34,7 +34,9 @@ path_GNU="$("${READLINK}" -fm -- "${path_GNU:-${path_UUTILS}/../gnu}")"
 
 ###
 
-release_tag_GNU="v9.9"
+# Allow to run with any tags and commits
+release_tag_GNU_default="v9.9"
+: ${release_tag_GNU:="${release_tag_GNU_default}"}
 
 # check if the GNU coreutils has been cloned, if not print instructions
 # note: the ${path_GNU} might already exist, so we check for the .git directory
@@ -45,7 +47,7 @@ if test ! -d "${path_GNU}/.git"; then
     echo "Afterwards, checkout the latest release tag:"
     echo "  cd \"${path_GNU}\""
     echo "  git fetch --all --tags"
-    echo "  git checkout tags/${release_tag_GNU}"
+    echo "  git checkout ${release_tag_GNU}"
     exit 1
 fi
 

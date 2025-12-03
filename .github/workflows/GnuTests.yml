@@ -180,7 +180,7 @@ jobs:
     - name: Extract GNU version from build-gnu.sh
       id: gnu-version-selinux
       run: |
-        GNU_VERSION=$(grep '^release_tag_GNU=' uutils/util/build-gnu.sh | cut -d'"' -f2)
+        GNU_VERSION=$(grep '^release_tag_GNU_default=' uutils/util/build-gnu.sh | cut -d'"' -f2)
         if [ -z "$GNU_VERSION" ]; then
           echo "Error: Failed to extract GNU version from build-gnu.sh"
           exit 1
