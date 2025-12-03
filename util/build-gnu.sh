@@ -34,7 +34,7 @@ path_GNU="$("${READLINK}" -fm -- "${path_GNU:-${path_UUTILS}/../gnu}")"
 ###
 
 #temporarily bump commit to enable some tests e.g. writable-under-readonly.sh
-release_tag_GNU=d5a75a2f93aef30fe6b99eead74f8c0f11203e43
+release_tag_GNU="d5a75a2f93aef30fe6b99eead74f8c0f11203e43"
 #release_tag_GNU="v9.9"
 
 # check if the GNU coreutils has been cloned, if not print instructions
@@ -136,6 +136,7 @@ else
     ./bootstrap --skip-po
     # Use CFLAGS for best build time since we discard GNU coreutils
     CFLAGS="${CFLAGS} -pipe -O0 -s" ./configure --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
+      --enable-install-program="kill,uptime,hostname" \
       "$([ "${SELINUX_ENABLED}" = 1 ] && echo --with-selinux || echo --without-selinux)"
     #Add timeout to to protect against hangs
     "${SED}" -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
