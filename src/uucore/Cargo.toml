@@ -26,11 +26,10 @@ bstr = { workspace = true }
 chrono = { workspace = true, optional = true }
 clap = { workspace = true }
 uucore_procs = { workspace = true }
-unit-prefix = { workspace = true }
+unit-prefix = { workspace = true, optional = true }
 phf = { workspace = true }
 dns-lookup = { workspace = true, optional = true }
 dunce = { version = "1.0.4", optional = true }
-wild = "2.2.1"
 glob = { workspace = true, optional = true }
 itertools = { workspace = true, optional = true }
 jiff = { workspace = true, optional = true, features = [
@@ -105,6 +104,7 @@ tempfile = { workspace = true }
 procfs = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
+wild = "2.2.1"
 winapi-util = { workspace = true, optional = true }
 windows-sys = { workspace = true, optional = true, default-features = false, features = [
   "Wdk_System_SystemInformation",
@@ -141,6 +141,7 @@ format = [
   "parser",
   "num-traits",
   "quoting-style",
+  "unit-prefix",
 ]
 i18n-all = ["i18n-collator", "i18n-decimal"]
 i18n-common = ["icu_locale"]
