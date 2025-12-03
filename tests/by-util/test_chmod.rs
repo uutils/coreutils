@@ -1280,6 +1280,46 @@ fn test_chmod_non_utf8_paths() {
     );
 }
 
+#[cfg(all(target_os = "linux", feature = "chmod"))]
+#[test]
+fn test_chmod_recursive_uses_dirfd_for_subdirs() {
+    use std::process::Command;
+    use uutests::get_tests_binary;
+
+    // Skip test if strace is not available
+    if Command::new("strace").arg("-V").output().is_err() {
+        eprintln!("strace not found; skipping test_chmod_recursive_uses_dirfd_for_subdirs");
+        return;
+    }
+
+    let (at, _ucmd) = at_and_ucmd!();
+    at.mkdir("x");
+    at.mkdir("x/y");
+    at.mkdir("x/y/z");
+
+    let log_path = at.plus_as_string("strace.log");
+
+    let status = Command::new("strace")
+        .arg("-e")
+        .arg("openat")
+        .arg("-o")
+        .arg(&log_path)
+        .arg(get_tests_binary!())
+        .args(["chmod", "-R", "+x", "x"])
+        .current_dir(&at.subdir)
+        .status()
+        .expect("failed to run strace");
+    assert!(status.success(), "strace run failed");
+
+    let log = at.read("strace.log");
+
+    // Regression guard: ensure recursion uses dirfd-relative openat instead of AT_FDCWD with a multi-component path
+    assert!(
+        !log.contains("openat(AT_FDCWD, \"x/y"),
+        "chmod recursed using AT_FDCWD with a multi-component path; expected dirfd-relative openat"
+    );
+}
+
 #[test]
 fn test_chmod_colored_output() {
     // Test colored help message
