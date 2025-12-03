@@ -112,6 +112,7 @@ impl FileInformation {
         self.0.file_index()
     }
 
+    #[allow(clippy::useless_conversion)] // TODO: fix warning on FreeBSD
     pub fn number_of_links(&self) -> u64 {
         #[cfg(all(
             unix,
@@ -157,6 +158,7 @@ impl FileInformation {
     }
 
     #[cfg(unix)]
+    #[allow(clippy::useless_conversion)] // TODO: fix warning on FreeBSD
     pub fn inode(&self) -> u64 {
         #[cfg(all(
             not(any(target_os = "freebsd", target_os = "netbsd")),
