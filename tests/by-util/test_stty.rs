@@ -299,6 +299,8 @@ fn test_row_column_hex_octal() {
     // Test various numeric formats: hex (0x1E), octal (036), uppercase hex (0X1E), decimal (30), and zero
     let test_cases = [
         ("rows", "0x1E"),  // hexadecimal = 30
+        ("rows", "0x1e"),  // lowercase hexadecimal = 30
+        ("rows", "0X1e"),  // upper and lowercase hexadecimal = 30
         ("rows", "036"),   // octal = 30
         ("cols", "0X1E"),  // uppercase hex = 30
         ("columns", "30"), // decimal = 30
