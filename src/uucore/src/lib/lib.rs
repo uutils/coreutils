@@ -60,7 +60,12 @@ pub use crate::features::hardware;
 pub use crate::features::i18n;
 #[cfg(feature = "lines")]
 pub use crate::features::lines;
-#[cfg(feature = "parser")]
+#[cfg(any(
+    feature = "parser",
+    feature = "parser-num",
+    feature = "parser-size",
+    feature = "parser-glob"
+))]
 pub use crate::features::parser;
 #[cfg(feature = "quoting-style")]
 pub use crate::features::quoting_style;
