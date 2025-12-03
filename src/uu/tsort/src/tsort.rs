@@ -72,7 +72,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let input = inputs
         .into_iter()
         .next()
-        .expect(translate!("tsort-error-at-least-one-input"));
+        .expect(translate!("tsort-error-at-least-one-input").as_str());
 
     let data = if input == "-" {
         let stdin = std::io::stdin();
