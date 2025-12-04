@@ -161,20 +161,24 @@ jobs:
 
           echo "Running SMACK-related GNU tests (mkdir + id)..."
           set +e
-          $SSH_BASE '
-            dnf -y install coreutils
-            mkdir --version
-            c=arbitrary-smack-label
-            for cmd in 'mkdir dir' 'mknod b p' 'mkfifo f'; do
-              $cmd --context="$c" || { fail=1; continue; }
-              set -- $cmd
-              ls -dZ $2 > out || fail=1
-              test "$(cut -f1 -d' ' out)" = "$c" || { cat out; fail=1; }
-            done
-          '
-          RC=$?
-          set -e
-          echo "SMACK GNU tests exit code: $RC"
+          $SSH_BASE 'bash -s' <<'EOF'
+          set -euo pipefail
+          dnf -y install coreutils
+          mkdir --version
+          
+          c=arbitrary-smack-label
+          fail=0
+          
+          for cmd in 'mkdir dir' 'mknod b p' 'mkfifo f'; do
+            $cmd --context="$c" || { fail=1; continue; }
+            set -- $cmd
+            ls -dZ "$2" > out || fail=1
+            test "$(cut -f1 -d' ' out)" = "$c" || { cat out; fail=1; }
+          done
+          
+          exit "$fail"
+          EOF
+          echo "SMACK GNU tests exit code: $?"
 
           echo "Shutting down QEMU..."
           if [ -f /tmp/qemu-smack.pid ]; then
