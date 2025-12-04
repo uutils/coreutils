@@ -26,7 +26,7 @@ use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
 #[cfg(target_os = "linux")]
-use nix::libc::{RLIMIT_NOFILE, getrlimit, rlimit};
+use nix::libc;
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{Rng, rng};
 use rayon::prelude::*;
@@ -1073,15 +1073,28 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
 }
 
 #[cfg(target_os = "linux")]
-fn get_rlimit() -> UResult<usize> {
-    let mut limit = rlimit {
+pub(crate) fn fd_soft_limit() -> Option<usize> {
+    let mut limit = libc::rlimit {
         rlim_cur: 0,
         rlim_max: 0,
     };
-    match unsafe { getrlimit(RLIMIT_NOFILE, &raw mut limit) } {
-        0 => Ok(limit.rlim_cur as usize),
-        _ => Err(UUsageError::new(2, translate!("sort-failed-fetch-rlimit"))),
+
+    let result = unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &raw mut limit) };
+    if result == 0 {
+        let current = limit.rlim_cur;
+        if current == libc::RLIM_INFINITY {
+            None
+        } else {
+            usize::try_from(current).ok()
+        }
+    } else {
+        None
     }
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn fd_soft_limit() -> Option<usize> {
+    None
 }
 
 const STDIN_FILE: &str = "-";
@@ -1096,12 +1109,12 @@ fn default_merge_batch_size() -> usize {
     #[cfg(target_os = "linux")]
     {
         // Adjust merge batch size dynamically based on available file descriptors.
-        match get_rlimit() {
-            Ok(limit) => {
+        match fd_soft_limit() {
+            Some(limit) => {
                 let usable_limit = limit.saturating_div(LINUX_BATCH_DIVISOR);
                 usable_limit.clamp(LINUX_BATCH_MIN, LINUX_BATCH_MAX)
             }
-            Err(_) => 64,
+            None => 64,
         }
     }
 
@@ -1279,7 +1292,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
                         translate!(
                             "sort-maximum-batch-size-rlimit",
-                            "rlimit" =>  get_rlimit()?
+                            "rlimit" => {
+                                let Some(rlimit) = fd_soft_limit() else {
+                                    return Err(UUsageError::new(
+                                        2,
+                                        translate!("sort-failed-fetch-rlimit"),
+                                    ));
+                                };
+                                rlimit
+                            }
                         )
                     }
                     #[cfg(not(target_os = "linux"))]
