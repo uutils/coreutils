@@ -1,0 +1,197 @@
+name: GNU SMACK tests (redpesk)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+# End the current execution if there is a new changeset in the PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  gnu-smack-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:    
+      #### Build environment setup
+      - name: Install dependencies
+        shell: bash
+        run: |
+          ## Install dependencies
+          sudo apt-get update
+          ## Check that build-gnu.sh works on the non SELinux system by installing libselinux only on lima
+          sudo apt-get install -y autopoint gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev attr quilt
+
+      - name: Install host dependencies (GNU harness + QEMU + OVMF + sshpass)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            autoconf automake libtool \
+            gettext texinfo \
+            gawk bison \
+            pkg-config \
+            qemu-system-x86 \
+            ovmf \
+            sshpass
+        
+      - name: Download redpesk SMACK minimal x86_64 image
+        working-directory: /tmp
+        run: |
+          set -euo pipefail
+
+          mkdir -p redpeskimage
+          cd redpeskimage
+
+          # Download a specific SMACK minimal x86_64 image (corn-3.0-update LTS)
+          # Directory listing shows image.raw.tar.xz and its checksum here:
+          # https://download.redpesk.bzh/redpesk-lts/corn-3.0-update/images/smack/minimal/x86_64/generic/
+          wget -q \
+            https://download.redpesk.bzh/redpesk-lts/corn-3.0-update/images/smack/minimal/x86_64/generic/redpesk-lts-corn-3.0-update-smack-minimal-x86_64-generic-2025_11_21_1557.tar.xz \
+            https://download.redpesk.bzh/redpesk-lts/corn-3.0-update/images/smack/minimal/x86_64/generic/redpesk-lts-corn-3.0-update-smack-minimal-x86_64-generic-2025_11_21_1557.tar.xz.sha256
+
+          # Verify integrity
+          sha256sum -c redpesk-lts-corn-3.0-update-smack-minimal-x86_64-generic-2025_11_21_1557.tar.xz.sha256
+
+          # Extract; this drops a disk image, typically named Redpesk-OS.img
+          tar xJf redpesk-lts-corn-3.0-update-smack-minimal-x86_64-generic-2025_11_21_1557.tar.xz
+
+          echo "Contents of redpeskimage:"
+          ls -lh
+
+      - name: Launch redpesk SMACK QEMU guest
+        working-directory: /tmp/redpeskimage
+        run: |
+          set -euo pipefail
+
+          DISK_IMAGE=$(ls Redpesk-OS*.img 2>/dev/null || ls *.img)
+          echo "Using disk image: $DISK_IMAGE"
+
+          OVMF="/usr/share/qemu/OVMF.fd"
+          PORT_SSH=3333
+
+          echo "Starting QEMU in TCG mode (no KVM)..."
+
+          qemu-system-x86_64 \
+            -machine accel=tcg \
+            -drive file="$DISK_IMAGE",if=virtio,format=raw \
+            -m 2048 \
+            -smp 2 \
+            -cpu Skylake-Client-v4 \
+            -vga virtio \
+            -device virtio-rng-pci \
+            -serial mon:stdio \
+            -serial null \
+            -net nic \
+            -net user,hostfwd=tcp::$PORT_SSH-:22 \
+            -bios "$OVMF" \
+            -nographic \
+            > /tmp/qemu-smack.log 2>&1 &
+          echo $! > /tmp/qemu-smack.pid
+          echo "QEMU started with PID $(cat /tmp/qemu-smack.pid)"
+
+          
+      - name: Wait for SSH in guest
+        run: |
+          set -euo pipefail
+
+          PORT_SSH=3333
+          SSH_BASE="sshpass -p root ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $PORT_SSH root@localhost"
+
+          if [ ! -f /tmp/qemu-smack.pid ]; then
+            echo "ERROR: /tmp/qemu-smack.pid not found – QEMU did not start?"
+            exit 1
+          fi
+
+          QEMU_PID=$(cat /tmp/qemu-smack.pid)
+          echo "Waiting for SSH to become available in the redpesk guest (PID $QEMU_PID)..."
+
+          for i in $(seq 1 60); do
+            # If QEMU died, show why and bail out
+            if ! kill -0 "$QEMU_PID" 2>/dev/null; then
+              echo "ERROR: QEMU process $QEMU_PID is no longer running."
+              if [ -f /tmp/qemu-smack.log ]; then
+                echo "===== QEMU SMACK guest log (tail) ====="
+                tail -n 100 /tmp/qemu-smack.log || true
+              fi
+              exit 1
+            fi
+
+            if $SSH_BASE 'echo ready' >/dev/null 2>&1; then
+              echo "SSH is up."
+              exit 0
+            fi
+            # Inline QEMU log tail on each failed attempt
+            if [ -f /tmp/qemu-smack.log ]; then
+              echo "----- QEMU SMACK guest log tail (attempt $i) -----"
+              tail -n 80 /tmp/qemu-smack.log || true
+              echo "-----------------------------------------------"
+            fi
+
+
+            echo "SSH not ready yet (attempt $i)..."
+            sleep 5
+          done
+
+          echo "ERROR: SSH did not become ready in time."
+          if [ -f /tmp/qemu-smack.log ]; then
+            echo "===== QEMU SMACK guest log (tail) ====="
+            tail -n 100 /tmp/qemu-smack.log || true
+          fi
+
+          kill "$QEMU_PID" || true
+          exit 1
+
+
+            
+      - name: Run SMACK GNU tests inside guest
+        run: |
+          set -euo pipefail
+
+          PORT_SSH=3333
+          SSH_BASE="sshpass -p root ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $PORT_SSH root@localhost"
+
+          echo "Checking that SMACK is active in the guest..."
+          $SSH_BASE 'grep smackfs /proc/filesystems || (echo "smackfs not present"; exit 1)'
+
+          echo "Running SMACK-related GNU tests (mkdir + id)..."
+          set +e
+          $SSH_BASE 'bash -s' <<'EOF'
+          set -euo pipefail
+          dnf -y install coreutils
+          mkdir --version
+          
+          c=arbitrary-smack-label
+          fail=0
+          
+          for cmd in 'mkdir dir' 'mknod b p' 'mkfifo f'; do
+            $cmd --context="$c" || { fail=1; continue; }
+            set -- $cmd
+            ls -dZ "$2" > out || fail=1
+            test "$(cut -f1 -d' ' out)" = "$c" || { cat out; fail=1; }
+          done
+          
+          exit "$fail"
+          EOF
+          echo "SMACK GNU tests exit code: $?"
+
+          echo "Shutting down QEMU..."
+          if [ -f /tmp/qemu-smack.pid ]; then
+            kill "$(cat /tmp/qemu-smack.pid)" || true
+          fi
+
+          exit $RC
+      - name: Dump QEMU log on failure
+        if: failure()
+        run: |
+          echo "===== QEMU SMACK guest log ====="
+          if [ -f /tmp/qemu-smack.log ]; then
+            sed -n '1,400p' /tmp/qemu-smack.log || true
+          else
+            echo "No QEMU log file found."
+          fi
