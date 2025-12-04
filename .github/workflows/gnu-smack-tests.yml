@@ -78,7 +78,6 @@ jobs:
           echo "Starting QEMU in TCG mode (no KVM)..."
 
           qemu-system-x86_64 \
-            -machine accel=tcg \
             -accel tcg,thread=multi \
             -drive file="$DISK_IMAGE",if=virtio,format=raw \
             -m 2048 \
