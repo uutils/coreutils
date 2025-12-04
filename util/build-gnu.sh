@@ -136,7 +136,6 @@ else
     ./bootstrap --skip-po
     # Use CFLAGS for best build time since we discard GNU coreutils
     CFLAGS="${CFLAGS} -pipe -O0 -s" ./configure --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
-      --enable-install-program="kill,uptime,hostname" \
       "$([ "${SELINUX_ENABLED}" = 1 ] && echo --with-selinux || echo --without-selinux)"
     #Add timeout to to protect against hangs
     "${SED}" -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
