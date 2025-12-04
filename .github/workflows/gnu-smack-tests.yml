@@ -79,14 +79,14 @@ jobs:
 
           qemu-system-x86_64 \
             -machine accel=tcg \
+            -accel tcg,thread=multi \
             -drive file="$DISK_IMAGE",if=virtio,format=raw \
             -m 2048 \
             -smp 2 \
-            -cpu Skylake-Client-v4 \
-            -vga virtio \
+            -cpu max \
+            -display none
             -device virtio-rng-pci \
             -serial mon:stdio \
-            -serial null \
             -net nic \
             -net user,hostfwd=tcp::$PORT_SSH-:22 \
             -bios "$OVMF" \
@@ -163,6 +163,8 @@ jobs:
           echo "Running SMACK-related GNU tests (mkdir + id)..."
           set +e
           $SSH_BASE '
+            dnf -y install coreutils
+            mkdir --version
             c=arbitrary-smack-label
             for cmd in 'mkdir dir' 'mknod b p' 'mkfifo f'; do
               $cmd --context="$c" || { fail=1; continue; }
