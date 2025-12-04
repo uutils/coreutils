@@ -78,20 +78,20 @@ jobs:
           echo "Starting QEMU in TCG mode (no KVM)..."
 
           qemu-system-x86_64 \
-            -accel tcg,thread=multi \
+            -machine accel=tcg \
             -drive file="$DISK_IMAGE",if=virtio,format=raw \
             -m 2048 \
             -smp 2 \
-            -cpu max \
-            -display none
+            -cpu Skylake-Client-v4 \
+            -vga virtio \
             -device virtio-rng-pci \
             -serial mon:stdio \
+            -serial null \
             -net nic \
             -net user,hostfwd=tcp::$PORT_SSH-:22 \
             -bios "$OVMF" \
             -nographic \
             > /tmp/qemu-smack.log 2>&1 &
-
           echo $! > /tmp/qemu-smack.pid
           echo "QEMU started with PID $(cat /tmp/qemu-smack.pid)"
 
