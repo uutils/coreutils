@@ -1,6 +1,6 @@
 name: WSL2
 
-# spell-checker:ignore nextest noprofile norc
+# spell-checker:ignore nextest noprofile norc　noninteractive
 
 on:
   pull_request:
@@ -37,6 +37,11 @@ jobs:
         distribution: ${{ matrix.job.distribution }}
         use-cache: 'true'
         wsl-version: 2
+    - name: Install strace in WSL2
+      shell: wsl-bash {0}
+      run: |
+        apt-get update
+        DEBIAN_FRONTEND=noninteractive apt-get install -y strace
     - name: Set up WSL2 user
       shell: wsl-bash {0}
       run: |
@@ -57,11 +62,6 @@ jobs:
         curl https://sh.rustup.rs -sSf --output rustup.sh
         sh rustup.sh -y --profile=minimal
         curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C "$HOME/.cargo/bin"
-    - name: Install strace in WSL2 (root)
-      shell: wsl-bash-root {0}
-      run: |
-        apt-get update
-        DEBIAN_FRONTEND=noninteractive apt-get install -y strace
     - name: Test
       shell: wsl-bash {0}
       run: |
