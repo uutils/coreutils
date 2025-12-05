@@ -1287,11 +1287,15 @@ fn test_chmod_recursive_uses_dirfd_for_subdirs() {
     use std::process::Command;
     use uutests::get_tests_binary;
 
-    // Skip test if strace is not available
-    if Command::new("strace").arg("-V").output().is_err() {
-        eprintln!("strace not found; skipping test_chmod_recursive_uses_dirfd_for_subdirs");
-        return;
-    }
+    // strace is required; fail fast if it is missing or not runnable
+    let output = Command::new("strace")
+        .arg("-V")
+        .output()
+        .expect("strace not found; install strace to run this test");
+    assert!(
+        output.status.success(),
+        "strace -V failed; ensure strace is installed and usable"
+    );
 
     let (at, _ucmd) = at_and_ucmd!();
     at.mkdir("x");
