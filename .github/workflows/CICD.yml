@@ -202,7 +202,7 @@ jobs:
       shell: bash
       run: |
         # Install a package for one of the tests
-        sudo apt-get -y update ; sudo apt-get -y install attr strace
+        sudo apt-get -y update ; sudo apt-get -y install attr
     - name: Info
       shell: bash
       run: |
@@ -276,10 +276,6 @@ jobs:
     # Test build on the system missing libselinux (don't install libselinux1-dev at here)
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
-    - name: Install strace (Linux only)
-      if: matrix.job.os == 'ubuntu-latest'
-      shell: bash
-      run: sudo apt-get update && sudo apt-get install -y strace
     - name: "`make build`"
         # Also check that target/CACHEDIR.TAG is created on a fresh checkout
       shell: bash
@@ -410,9 +406,6 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
-    - name: Install strace (Linux only)
-      if: matrix.job.os == 'ubuntu-latest'
-      run: sudo apt-get update && sudo apt-get install -y strace
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
@@ -442,9 +435,6 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
-    - name: Install strace (Linux only)
-      if: matrix.job.os == 'ubuntu-latest'
-      run: sudo apt-get update && sudo apt-get install -y strace
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
@@ -748,7 +738,7 @@ jobs:
           ubuntu-*)
             # selinux and systemd headers needed to build tests
             sudo apt-get -y update
-            sudo apt-get -y install libselinux1-dev libsystemd-dev strace
+            sudo apt-get -y install libselinux1-dev libsystemd-dev
             # pinky is a tool to show logged-in users from utmp, and gecos fields from /etc/passwd.
             # In GitHub Action *nix VMs, no accounts log in, even the "runner" account that runs the commands, and "system boot" entry is missing.
             # The account also has empty gecos fields.
@@ -1109,7 +1099,7 @@ jobs:
 
         case '${{ matrix.job.os }}' in
           ubuntu-latest)
-            sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev strace
+            sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
             # pinky is a tool to show logged-in users from utmp, and gecos fields from /etc/passwd.
             # In GitHub Action *nix VMs, no accounts log in, even the "runner" account that runs the commands, and "system boot" entry is missing.
             # The account also has empty gecos fields.
@@ -1172,9 +1162,6 @@ jobs:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
-    - name: Install strace (Linux only)
-      if: matrix.job.os == 'ubuntu-latest'
-      run: sudo apt-get update && sudo apt-get install -y strace
     - name: build and test all programs individually
       shell: bash
       run: |
@@ -1202,9 +1189,6 @@ jobs:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
-    - name: Install strace (Linux only)
-      if: matrix.job.os == 'ubuntu-latest'
-      run: sudo apt-get update && sudo apt-get install -y strace
     - name: build and test all features individually
       shell: bash
       run: |
@@ -1289,8 +1273,6 @@ jobs:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
-    - name: Install strace
-      run: sudo apt-get update && sudo apt-get install -y strace
     - name: Build utilities with safe traversal
       run: cargo build --release -p uu_rm -p uu_chmod -p uu_chown -p uu_chgrp -p uu_mv -p uu_du
     - name: Run safe traversal verification

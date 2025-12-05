@@ -1,17 +1,7 @@
 # spell-checker:ignore (misc) dpkg noninteractive tzdata　elif
 [build]
 pre-build = [
-  # Install tzdata and strace in both Debian/Ubuntu-based and Alpine-based cross images.
-  # Some cross targets (e.g., *-musl) use Alpine, which lacks apt-get.
-  """
-  if command -v apt-get >/dev/null 2>&1; then
-       apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y tzdata strace;
-   elif command -v apk >/dev/null 2>&1; then
-       apk update && apk add --no-cache tzdata strace;
-   else
-       echo 'WARNING: unknown package manager; strace not installed';
-   fi
-  """,
+  "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install tzdata",
 ]
 [build.env]
 passthrough = ["CI", "RUST_BACKTRACE", "CARGO_TERM_COLOR"]
