@@ -28,7 +28,3 @@ cksum-help-quiet = don't print OK for each successfully verified file
 cksum-help-ignore-missing = don't fail or report status for missing files
 cksum-help-zero = end each output line with NUL, not newline, and disable file name escaping
 cksum-help-debug = print CPU hardware capability detection info used by cksum
-
-# Error messages
-cksum-error-is-directory = { $file }: Is a directory
-cksum-error-failed-to-read-input = failed to read input

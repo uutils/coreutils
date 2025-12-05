@@ -1257,6 +1257,7 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::APPARENT_SIZE)
+                .short('A')
                 .long(options::APPARENT_SIZE)
                 .help(translate!("du-help-apparent-size"))
                 .action(ArgAction::SetTrue),
