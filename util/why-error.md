@@ -13,6 +13,7 @@ This file documents why some tests are failing:
 * gnu/tests/ls/ls-misc.pl
 * gnu/tests/ls/stat-free-symlinks.sh
 * gnu/tests/misc/close-stdout.sh
+* gnu/tests/misc/coreutils.sh
 * gnu/tests/misc/nohup.sh
 * gnu/tests/numfmt/numfmt.pl - https://github.com/uutils/coreutils/issues/7219 / https://github.com/uutils/coreutils/issues/7221
 * gnu/tests/misc/stdbuf.sh - https://github.com/uutils/coreutils/issues/7072
