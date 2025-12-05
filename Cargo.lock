@@ -3927,6 +3927,7 @@ dependencies = [
  "fluent",
  "memchr",
  "memmap2",
+ "nix",
  "regex",
  "thiserror 2.0.17",
  "uucore",
