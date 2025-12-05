@@ -1,6 +1,6 @@
 name: WSL2
 
-# spell-checker:ignore nextest noprofile norc　noninteractive
+# spell-checker:ignore nextest noprofile norc
 
 on:
   pull_request:
