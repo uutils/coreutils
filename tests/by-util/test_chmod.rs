@@ -1283,6 +1283,7 @@ fn test_chmod_non_utf8_paths() {
 
 #[cfg(all(target_os = "linux", feature = "chmod"))]
 #[test]
+#[ignore = "covered by util/check-safe-traversal.sh"]
 fn test_chmod_recursive_uses_dirfd_for_subdirs() {
     use std::process::Command;
     use uutests::get_tests_binary;
