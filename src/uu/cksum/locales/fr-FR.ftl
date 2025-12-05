@@ -28,7 +28,3 @@ cksum-help-quiet = ne pas afficher OK pour chaque fichier vérifié avec succès
 cksum-help-ignore-missing = ne pas échouer ou signaler le statut pour les fichiers manquants
 cksum-help-zero = terminer chaque ligne de sortie avec NUL, pas un saut de ligne, et désactiver l'échappement des noms de fichiers
 cksum-help-debug = afficher les informations de débogage sur la détection de la prise en charge matérielle du processeur
-
-# Messages d'erreur
-cksum-error-is-directory = { $file } : Est un répertoire
-cksum-error-failed-to-read-input = échec de la lecture de l'entrée

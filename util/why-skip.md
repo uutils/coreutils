@@ -1,5 +1,4 @@
-# spell-checker:ignore epipe readdir restorecon SIGALRM capget bigtime rootfs enotsup
-
+<!-- spell-checker:ignore epipe readdir restorecon SIGALRM capget bigtime rootfs enotsup -->
 = skipped test: breakpoint not hit =
 * tests/tail-2/inotify-race2.sh
 * tail-2/inotify-race.sh
@@ -55,7 +54,6 @@
 * tests/df/skip-rootfs.sh
 
 = insufficient mount/ext2 support =
-* tests/df/problematic-chars.sh
 * tests/cp/cp-mv-enotsup-xattr.sh
 
 = requires controlling input terminal =

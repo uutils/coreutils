@@ -7,9 +7,9 @@
 
 // spell-checker:ignore DATETIME getmntinfo subsecond (fs) cifs smbfs
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
 const LINUX_MTAB: &str = "/etc/mtab";
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
 const LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
 #[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 static MOUNT_OPT_BIND: &str = "bind";
@@ -94,7 +94,8 @@ pub use libc::statfs as StatFs;
     target_os = "dragonfly",
     target_os = "illumos",
     target_os = "solaris",
-    target_os = "redox"
+    target_os = "redox",
+    target_os = "cygwin",
 ))]
 pub use libc::statvfs as StatFs;
 
@@ -112,7 +113,8 @@ pub use libc::statfs as statfs_fn;
     target_os = "illumos",
     target_os = "solaris",
     target_os = "dragonfly",
-    target_os = "redox"
+    target_os = "redox",
+    target_os = "cygwin",
 ))]
 pub use libc::statvfs as statfs_fn;
 
@@ -189,7 +191,7 @@ pub struct MountInfo {
     pub dummy: bool,
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
 fn replace_special_chars(s: &[u8]) -> Vec<u8> {
     use bstr::ByteSlice;
 
@@ -205,7 +207,7 @@ fn replace_special_chars(s: &[u8]) -> Vec<u8> {
 }
 
 impl MountInfo {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
     fn new(file_name: &str, raw: &[&[u8]]) -> Option<Self> {
         use std::ffi::OsStr;
         use std::os::unix::ffi::OsStrExt;
@@ -459,9 +461,9 @@ use crate::error::UResult;
     target_os = "windows"
 ))]
 use crate::error::USimpleError;
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
 use std::fs::File;
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
 use std::io::{BufRead, BufReader};
 #[cfg(any(
     target_vendor = "apple",
@@ -481,7 +483,7 @@ use std::slice;
 
 /// Read file system list.
 pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
     {
         let (file_name, f) = File::open(LINUX_MOUNTINFO)
             .map(|f| (LINUX_MOUNTINFO, f))
@@ -722,6 +724,7 @@ impl FsMeta for StatFs {
             not(target_os = "solaris"),
             not(target_os = "redox"),
             not(target_arch = "s390x"),
+            not(target_os = "cygwin"),
             target_pointer_width = "64"
         ))]
         return self.f_bsize;
@@ -730,6 +733,7 @@ impl FsMeta for StatFs {
             not(target_os = "freebsd"),
             not(target_os = "netbsd"),
             not(target_os = "redox"),
+            not(target_os = "cygwin"),
             any(
                 target_arch = "s390x",
                 target_vendor = "apple",
@@ -747,6 +751,7 @@ impl FsMeta for StatFs {
             target_os = "illumos",
             target_os = "solaris",
             target_os = "redox",
+            target_os = "cygwin",
             all(target_os = "android", target_pointer_width = "64"),
         ))]
         return self.f_bsize.try_into().unwrap();
