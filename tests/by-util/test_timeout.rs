@@ -223,3 +223,18 @@ fn test_terminate_child_on_receiving_terminate() {
         .code_is(143)
         .stdout_contains("child received TERM");
 }
+
+#[test]
+fn test_command_not_found() {
+    // Test exit code 127 when command doesn't exist
+    new_ucmd!()
+        .args(&["1", "/this/command/definitely/does/not/exist"])
+        .fails_with_code(127);
+}
+
+#[test]
+fn test_command_cannot_invoke() {
+    // Test exit code 126 when command exists but cannot be invoked
+    // Try to execute a directory (should give permission denied or similar)
+    new_ucmd!().args(&["1", "/"]).fails_with_code(126);
+}
