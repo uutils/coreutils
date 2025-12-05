@@ -289,7 +289,9 @@ impl SizedAlgoKind {
             }
             // [`calculate_blake2b_length`] expects a length in bits but we
             // have a length in bytes.
-            (ak::Blake2b, Some(l)) => Ok(Self::Blake2b(calculate_blake2b_length(8 * l)?)),
+            (ak::Blake2b, Some(l)) => Ok(Self::Blake2b(calculate_blake2b_length_str(
+                &(8 * l).to_string(),
+            )?)),
             (ak::Blake2b, None) => Ok(Self::Blake2b(None)),
 
             (ak::Sha224, None) => Ok(Self::Sha2(ShaLength::Len224)),
@@ -443,11 +445,6 @@ pub fn digest_reader<T: Read>(
 }
 
 /// Calculates the length of the digest.
-pub fn calculate_blake2b_length(bit_length: usize) -> UResult<Option<usize>> {
-    calculate_blake2b_length_str(bit_length.to_string().as_str())
-}
-
-/// Calculates the length of the digest.
 pub fn calculate_blake2b_length_str(bit_length: &str) -> UResult<Option<usize>> {
     // Blake2b's length is parsed in an u64.
     match bit_length.parse::<usize>() {
@@ -596,10 +593,10 @@ mod tests {
 
     #[test]
     fn test_calculate_blake2b_length() {
-        assert_eq!(calculate_blake2b_length(0).unwrap(), None);
-        assert!(calculate_blake2b_length(10).is_err());
-        assert!(calculate_blake2b_length(520).is_err());
-        assert_eq!(calculate_blake2b_length(512).unwrap(), None);
-        assert_eq!(calculate_blake2b_length(256).unwrap(), Some(32));
+        assert_eq!(calculate_blake2b_length_str("0").unwrap(), None);
+        assert!(calculate_blake2b_length_str("10").is_err());
+        assert!(calculate_blake2b_length_str("520").is_err());
+        assert_eq!(calculate_blake2b_length_str("512").unwrap(), None);
+        assert_eq!(calculate_blake2b_length_str("256").unwrap(), Some(32));
     }
 }
