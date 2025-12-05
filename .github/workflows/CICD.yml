@@ -202,7 +202,7 @@ jobs:
       shell: bash
       run: |
         # Install a package for one of the tests
-        sudo apt-get -y update ; sudo apt-get -y install attr
+        sudo apt-get -y update ; sudo apt-get -y install attr strace
     - name: Info
       shell: bash
       run: |
@@ -276,6 +276,10 @@ jobs:
     # Test build on the system missing libselinux (don't install libselinux1-dev at here)
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
+    - name: Install strace (Linux only)
+      if: matrix.job.os == 'ubuntu-latest'
+      shell: bash
+      run: sudo apt-get update && sudo apt-get install -y strace
     - name: "`make build`"
         # Also check that target/CACHEDIR.TAG is created on a fresh checkout
       shell: bash
@@ -406,6 +410,9 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
+    - name: Install strace (Linux only)
+      if: matrix.job.os == 'ubuntu-latest'
+      run: sudo apt-get update && sudo apt-get install -y strace
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
@@ -435,6 +442,9 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
+    - name: Install strace (Linux only)
+      if: matrix.job.os == 'ubuntu-latest'
+      run: sudo apt-get update && sudo apt-get install -y strace
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
@@ -738,7 +748,7 @@ jobs:
           ubuntu-*)
             # selinux and systemd headers needed to build tests
             sudo apt-get -y update
-            sudo apt-get -y install libselinux1-dev libsystemd-dev
+            sudo apt-get -y install libselinux1-dev libsystemd-dev strace
             # pinky is a tool to show logged-in users from utmp, and gecos fields from /etc/passwd.
             # In GitHub Action *nix VMs, no accounts log in, even the "runner" account that runs the commands, and "system boot" entry is missing.
             # The account also has empty gecos fields.
