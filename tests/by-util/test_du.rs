@@ -21,9 +21,9 @@ const SUB_DIR: &str = "subdir/deeper";
 const SUB_DEEPER_DIR: &str = "subdir/deeper/deeper_dir";
 const SUB_DIR_LINKS: &str = "subdir/links";
 const SUB_DIR_LINKS_DEEPER_SYM_DIR: &str = "subdir/links/deeper_dir";
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(all(not(target_os = "android"), not(target_os = "openbsd")))]
 const SUB_FILE: &str = "subdir/links/subwords.txt";
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(all(not(target_os = "android"), not(target_os = "openbsd")))]
 const SUB_LINK: &str = "subdir/links/sublink.txt";
 
 #[test]
@@ -68,7 +68,11 @@ fn du_basics(s: &str) {
     assert_eq!(s, answer);
 }
 
-#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "openbsd")
+))]
 fn du_basics(s: &str) {
     let answer = concat!(
         "8\t./subdir/deeper/deeper_dir\n",
@@ -118,7 +122,8 @@ fn du_basics_subdir(s: &str) {
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "windows"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 fn du_basics_subdir(s: &str) {
     // MS-WSL linux has altered expected output
@@ -446,7 +451,8 @@ fn du_d_flag(s: &str) {
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "windows"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 fn du_d_flag(s: &str) {
     // MS-WSL linux has altered expected output
@@ -519,7 +525,8 @@ fn du_dereference(s: &str) {
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "windows"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 fn du_dereference(s: &str) {
     // MS-WSL linux has altered expected output

@@ -519,6 +519,7 @@ fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
                     .write_all(&buf[..n])
                     .inspect_err(handle_broken_pipe)?;
             }
+            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
             Err(e) => return Err(e.into()),
         }
     }
@@ -545,10 +546,13 @@ fn write_lines<R: FdReadable>(
     // Add a 32K buffer for stdout - this greatly improves performance.
     let mut writer = BufWriter::with_capacity(32 * 1024, stdout);
 
-    while let Ok(n) = handle.reader.read(&mut in_buf) {
-        if n == 0 {
-            break;
-        }
+    loop {
+        let n = match handle.reader.read(&mut in_buf) {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e.into()),
+        };
         let in_buf = &in_buf[..n];
         let mut pos = 0;
         while pos < n {

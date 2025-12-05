@@ -129,26 +129,6 @@ fn sort_german_locale(bencher: Bencher) {
     });
 }
 
-/// Benchmark random strings of different lengths
-#[divan::bench]
-fn sort_random_strings(bencher: Bencher) {
-    let data = text_data::generate_random_strings(50_000, 50);
-    let file_path = setup_test_file(&data);
-    // Reuse the same output file across iterations to reduce filesystem variance
-    let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap().to_string();
-
-    bencher.bench(|| {
-        unsafe {
-            env::set_var("LC_ALL", "en_US.UTF-8");
-        }
-        black_box(run_util_function(
-            uumain,
-            &["-o", &output_path, file_path.to_str().unwrap()],
-        ));
-    });
-}
-
 /// Benchmark numeric sorting performance
 #[divan::bench]
 fn sort_numeric(bencher: Bencher) {

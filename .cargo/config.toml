@@ -4,6 +4,8 @@
 
 [target.x86_64-unknown-redox]
 linker = "x86_64-unknown-redox-gcc"
+[target.aarch64-unknown-linux-gnu]
+linker = "aarch64-linux-gnu-gcc"
 
 [env]
 # See feat_external_libstdbuf in src/uu/stdbuf/Cargo.toml

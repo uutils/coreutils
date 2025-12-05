@@ -125,7 +125,7 @@ pub fn wrap_chown<P: AsRef<Path>>(
                             entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                         )
                     };
-                };
+                }
             }
         }
         return Err(out);
@@ -157,7 +157,7 @@ pub fn wrap_chown<P: AsRef<Path>>(
                 };
             }
             _ => (),
-        };
+        }
     } else if verbosity.level == VerbosityLevel::Verbose {
         out = if verbosity.groups_only {
             format!(
