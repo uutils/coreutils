@@ -15,8 +15,8 @@ use thiserror::Error;
 use crate::error::{UError, UResult};
 use crate::show_error;
 use crate::sum::{
-    Blake2b, Blake3, Bsd, CRC32B, Crc, Digest, DigestWriter, Md5, Sha1, Sha3_224, Sha3_256,
-    Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256, Sm3, SysV,
+    Blake2b, Blake3, Bsd, CRC32B, Crc, Digest, DigestOutput, DigestWriter, Md5, Sha1, Sha3_224,
+    Sha3_256, Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256, Sm3, SysV,
 };
 
 pub mod compute;
@@ -420,8 +420,7 @@ pub fn digest_reader<T: Read>(
     digest: &mut Box<dyn Digest>,
     reader: &mut T,
     binary: bool,
-    output_bits: usize,
-) -> io::Result<(String, usize)> {
+) -> io::Result<(DigestOutput, usize)> {
     digest.reset();
 
     // Read bytes from `reader` and write those bytes to `digest`.
@@ -440,14 +439,7 @@ pub fn digest_reader<T: Read>(
     let output_size = std::io::copy(reader, &mut digest_writer)? as usize;
     digest_writer.finalize();
 
-    if digest.output_bits() > 0 {
-        Ok((digest.result_str(), output_size))
-    } else {
-        // Assume it's SHAKE.  result_str() doesn't work with shake (as of 8/30/2016)
-        let mut bytes = vec![0; output_bits.div_ceil(8)];
-        digest.hash_finalize(&mut bytes);
-        Ok((hex::encode(bytes), output_size))
-    }
+    Ok((digest.result(), output_size))
 }
 
 /// Calculates the length of the digest.

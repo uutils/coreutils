@@ -5,7 +5,6 @@
 
 // spell-checker:ignore rsplit hexdigit bitlen invalidchecksum inva idchecksum xffname
 
-use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fs::File;
@@ -16,9 +15,10 @@ use os_display::Quotable;
 use crate::checksum::{AlgoKind, ChecksumError, SizedAlgoKind, digest_reader, unescape_filename};
 use crate::error::{FromIo, UError, UResult, USimpleError};
 use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
+use crate::sum::DigestOutput;
 use crate::{
     os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_error, show_warning_caps,
-    util_name,
+    translate,
 };
 
 /// To what level should checksum validation print logging info.
@@ -147,31 +147,45 @@ impl From<ChecksumError> for FileCheckError {
     }
 }
 
-#[allow(clippy::comparison_chain)]
 fn print_cksum_report(res: &ChecksumResult) {
-    if res.bad_format == 1 {
-        show_warning_caps!("{} line is improperly formatted", res.bad_format);
-    } else if res.bad_format > 1 {
-        show_warning_caps!("{} lines are improperly formatted", res.bad_format);
+    if res.bad_format > 0 {
+        show_warning_caps!(
+            "{}",
+            translate!("checksum-bad-format", "count" => res.bad_format)
+        );
     }
 
-    if res.failed_cksum == 1 {
-        show_warning_caps!("{} computed checksum did NOT match", res.failed_cksum);
-    } else if res.failed_cksum > 1 {
-        show_warning_caps!("{} computed checksums did NOT match", res.failed_cksum);
+    if res.failed_cksum > 0 {
+        show_warning_caps!(
+            "{}",
+            translate!("checksum-failed-cksum", "count" => res.failed_cksum)
+        );
     }
 
-    if res.failed_open_file == 1 {
-        show_warning_caps!("{} listed file could not be read", res.failed_open_file);
-    } else if res.failed_open_file > 1 {
-        show_warning_caps!("{} listed files could not be read", res.failed_open_file);
+    if res.failed_open_file > 0 {
+        show_warning_caps!(
+            "{}",
+            translate!("checksum-failed-open-file", "count" => res.failed_open_file)
+        );
     }
 }
 
 /// Print a "no properly formatted lines" message in stderr
 #[inline]
-fn log_no_properly_formatted(filename: String) {
-    show_error!("{filename}: no properly formatted checksum lines found");
+fn log_no_properly_formatted(filename: impl Display) {
+    show_error!(
+        "{}",
+        translate!("checksum-no-properly-formatted", "checksum_file" => filename)
+    );
+}
+
+/// Print a "no file was verified" message in stderr
+#[inline]
+fn log_no_file_verified(filename: impl Display) {
+    show_error!(
+        "{}",
+        translate!("checksum-no-file-verified", "checksum_file" => filename)
+    );
 }
 
 /// Represents the different outcomes that can happen to a file
@@ -371,19 +385,32 @@ impl LineFormat {
             return None;
         }
 
-        let mut parts = checksum.splitn(2, |&b| b == b'=');
-        let main = parts.next().unwrap(); // Always exists since checksum isn't empty
-        let padding = parts.next().unwrap_or_default(); // Empty if no '='
+        let mut is_base64 = false;
 
-        if main.is_empty()
-            || !main
-                .iter()
-                .all(|&b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/')
-        {
-            return None;
+        for index in 0..checksum.len() {
+            match checksum[index..] {
+                // ASCII alphanumeric
+                [b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9', ..] => (),
+                // Base64 special character
+                [b'+' | b'/', ..] => is_base64 = true,
+                // Base64 end of string padding
+                [b'='] | [b'=', b'='] | [b'=', b'=', b'='] => {
+                    is_base64 = true;
+                    break;
+                }
+                // Any other character means the checksum is wrong
+                _ => return None,
+            }
         }
 
-        if padding.len() > 2 || padding.iter().any(|&b| b != b'=') {
+        // If base64 characters were encountered, make sure the checksum has a
+        // length multiple of 4.
+        //
+        // This check is not enough because it may allow base64-encoded
+        // checksums that are fully alphanumeric. Another check happens later
+        // when we are provided with a length hint to detect ambiguous
+        // base64-encoded checksums.
+        if is_base64 && checksum.len() % 4 != 0 {
             return None;
         }
 
@@ -454,57 +481,45 @@ impl LineInfo {
     }
 }
 
-fn get_filename_for_output(filename: &OsStr, input_is_stdin: bool) -> String {
-    if input_is_stdin {
-        "standard input"
-    } else {
-        filename.to_str().unwrap()
-    }
-    .maybe_quote()
-    .to_string()
-}
-
-/// Extract the expected digest from the checksum string
-fn get_expected_digest_as_hex_string(
-    checksum: &String,
-    byte_len_hint: Option<usize>,
-) -> Option<Cow<'_, str>> {
+/// Extract the expected digest from the checksum string and decode it
+fn get_raw_expected_digest(checksum: &str, byte_len_hint: Option<usize>) -> Option<Vec<u8>> {
+    // If the length of the digest is not a multiple of 2, then it must be
+    // improperly formatted (1 byte is 2 hex digits, and base64 strings should
+    // always be a multiple of 4).
     if checksum.len() % 2 != 0 {
-        // If the length of the digest is not a multiple of 2, then it
-        // must be improperly formatted (1 hex digit is 2 characters)
         return None;
     }
 
     let checks_hint = |len| byte_len_hint.is_none_or(|hint| hint == len);
 
-    // If the digest can be decoded as hexadecimal AND its byte length matches
-    // the one expected (in case it's given), just go with it.
-    if checksum.as_bytes().iter().all(u8::is_ascii_hexdigit) && checks_hint(checksum.len() / 2) {
-        return Some(checksum.as_str().into());
+    // If the length of the string matches the one to be expected (in case it's
+    // given) AND the digest can be decoded as hexadecimal, just go with it.
+    if checks_hint(checksum.len() / 2) {
+        if let Ok(raw_ck) = hex::decode(checksum) {
+            return Some(raw_ck);
+        }
     }
 
-    // If hexadecimal digest fails for any reason, interpret the digest as base
-    // 64.
+    // If the checksum cannot be decoded as hexadecimal, interpret it as Base64
+    // instead.
 
     // But first, verify the encoded checksum length, which should be a
     // multiple of 4.
+    //
+    // It is important to check it before trying to decode, because the
+    // forgiving mode of decoding will ignore if padding characters '=' are
+    // MISSING, but to match GNU's behavior, we must reject it.
     if checksum.len() % 4 != 0 {
         return None;
     }
 
     // Perform the decoding and be FORGIVING about it, to allow for checksums
-    // with invalid padding to still be decoded. This is enforced by
+    // with INVALID padding to still be decoded. This is enforced by
     // `test_untagged_base64_matching_tag` in `test_cksum.rs`
-    //
-    // TODO: Ideally, we should not re-encode the result in hexadecimal, to avoid
-    // un-necessary computation.
 
-    match base64_simd::forgiving_decode_to_vec(checksum.as_bytes()) {
-        Ok(buffer) if checks_hint(buffer.len()) => Some(hex::encode(buffer).into()),
-        // The resulting length is not as expected
-        Ok(_) => None,
-        Err(_) => None,
-    }
+    base64_simd::forgiving_decode_to_vec(checksum.as_bytes())
+        .ok()
+        .filter(|raw| checks_hint(raw.len()))
 }
 
 /// Returns a reader that reads from the specified file, or from stdin if `filename_to_check` is "-".
@@ -569,17 +584,18 @@ fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
     match File::open(filename) {
         Ok(f) => {
             if f.metadata()?.is_dir() {
-                Err(
-                    io::Error::other(format!("{}: Is a directory", filename.to_string_lossy()))
-                        .into(),
+                Err(io::Error::other(
+                    translate!("error-is-a-directory", "file" => filename.to_string_lossy()),
                 )
+                .into())
             } else {
                 Ok(Box::new(f))
             }
         }
         Err(_) => Err(io::Error::other(format!(
-            "{}: No such file or directory",
-            filename.to_string_lossy()
+            "{}: {}",
+            filename.to_string_lossy(),
+            translate!("error-file-not-found")
         ))
         .into()),
     }
@@ -644,7 +660,7 @@ fn identify_algo_name_and_length(
 /// the expected one.
 fn compute_and_check_digest_from_file(
     filename: &[u8],
-    expected_checksum: &str,
+    expected_checksum: &[u8],
     algo: SizedAlgoKind,
     opts: ChecksumValidateOptions,
 ) -> Result<(), LineCheckError> {
@@ -660,16 +676,15 @@ fn compute_and_check_digest_from_file(
 
     // TODO: improve function signature to use ReadingMode instead of binary bool
     // Set binary to false because --binary is not supported with --check
-    let (calculated_checksum, _) = digest_reader(
-        &mut digest,
-        &mut file_reader,
-        /* binary */ false,
-        algo.bitlen(),
-    )
-    .unwrap();
+    let (calculated_checksum, _) =
+        digest_reader(&mut digest, &mut file_reader, /* binary */ false).unwrap();
 
     // Do the checksum validation
-    let checksum_correct = expected_checksum == calculated_checksum;
+    let checksum_correct = match calculated_checksum {
+        DigestOutput::Vec(data) => data == expected_checksum,
+        DigestOutput::Crc(n) => n.to_be_bytes() == expected_checksum,
+        DigestOutput::U16(n) => n.to_be_bytes() == expected_checksum,
+    };
     print_file_report(
         std::io::stdout(),
         filename,
@@ -704,9 +719,8 @@ fn process_algo_based_line(
         _ => None,
     };
 
-    let expected_checksum =
-        get_expected_digest_as_hex_string(&line_info.checksum, digest_char_length_hint)
-            .ok_or(LineCheckError::ImproperlyFormatted)?;
+    let expected_checksum = get_raw_expected_digest(&line_info.checksum, digest_char_length_hint)
+        .ok_or(LineCheckError::ImproperlyFormatted)?;
 
     let algo = SizedAlgoKind::from_unsized(algo_kind, algo_byte_len)?;
 
@@ -729,22 +743,17 @@ fn process_non_algo_based_line(
         // Remove the leading asterisk if present - only for the first line
         filename_to_check = &filename_to_check[1..];
     }
-    let expected_checksum = get_expected_digest_as_hex_string(&line_info.checksum, None)
+    let expected_checksum = get_raw_expected_digest(&line_info.checksum, None)
         .ok_or(LineCheckError::ImproperlyFormatted)?;
 
     // When a specific algorithm name is input, use it and use the provided
     // bits except when dealing with blake2b, sha2 and sha3, where we will
     // detect the length.
     let (algo_kind, algo_byte_len) = match cli_algo_kind {
-        AlgoKind::Blake2b => {
-            // division by 2 converts the length of the Blake2b checksum from
-            // hexadecimal characters to bytes, as each byte is represented by
-            // two hexadecimal characters.
-            (AlgoKind::Blake2b, Some(expected_checksum.len() / 2))
-        }
+        AlgoKind::Blake2b => (AlgoKind::Blake2b, Some(expected_checksum.len())),
         algo @ (AlgoKind::Sha2 | AlgoKind::Sha3) => {
-            // multiplication by 4 to get the number of bits
-            (algo, Some(expected_checksum.len() * 4))
+            // multiplication by 8 to get the number of bits
+            (algo, Some(expected_checksum.len() * 8))
         }
         _ => (cli_algo_kind, cli_algo_length),
     };
@@ -864,11 +873,9 @@ fn process_checksum_file(
                     } else {
                         "Unknown algorithm"
                     };
-                    eprintln!(
-                        "{}: {}: {}: improperly formatted {algo} checksum line",
-                        util_name(),
-                        filename_input.maybe_quote(),
-                        i + 1,
+                    show_error!(
+                        "{}",
+                        translate!("checksum-error-algo-bad-format", "file" => filename_input.maybe_quote(), "line" => i + 1, "algo" => algo)
                     );
                 }
             }
@@ -878,11 +885,19 @@ fn process_checksum_file(
         }
     }
 
+    let filename_display = || {
+        if input_is_stdin {
+            "standard input".maybe_quote()
+        } else {
+            filename_input.maybe_quote()
+        }
+    };
+
     // not a single line correctly formatted found
     // return an error
     if res.total_properly_formatted() == 0 {
         if opts.verbose.over_status() {
-            log_no_properly_formatted(get_filename_for_output(filename_input, input_is_stdin));
+            log_no_properly_formatted(filename_display());
         }
         return Err(FileCheckError::Failed);
     }
@@ -896,11 +911,7 @@ fn process_checksum_file(
         // we have only bad format
         // and we had ignore-missing
         if opts.verbose.over_status() {
-            eprintln!(
-                "{}: {}: no file was verified",
-                util_name(),
-                filename_input.maybe_quote(),
-            );
+            log_no_file_verified(filename_display());
         }
         return Err(FileCheckError::Failed);
     }
@@ -1179,26 +1190,23 @@ mod tests {
 
     #[test]
     fn test_get_expected_digest() {
-        let line = OsString::from("SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=");
-        let mut cached_line_format = None;
-        let line_info = LineInfo::parse(&line, &mut cached_line_format).unwrap();
+        let ck = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=".to_owned();
 
-        let result = get_expected_digest_as_hex_string(&line_info.checksum, None);
+        let result = get_raw_expected_digest(&ck, None);
 
         assert_eq!(
             result.unwrap(),
-            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            hex::decode(b"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+                .unwrap()
         );
     }
 
     #[test]
     fn test_get_expected_checksum_invalid() {
         // The line misses a '=' at the end to be valid base64
-        let line = OsString::from("SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU");
-        let mut cached_line_format = None;
-        let line_info = LineInfo::parse(&line, &mut cached_line_format).unwrap();
+        let ck = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU".to_owned();
 
-        let result = get_expected_digest_as_hex_string(&line_info.checksum, None);
+        let result = get_raw_expected_digest(&ck, None);
 
         assert!(result.is_none());
     }
