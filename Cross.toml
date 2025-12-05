@@ -1,4 +1,4 @@
-# spell-checker:ignore (misc) dpkg noninteractive tzdata
+# spell-checker:ignore (misc) dpkg noninteractive tzdata　elif
 [build]
 pre-build = [
   # Install tzdata and strace in both Debian/Ubuntu-based and Alpine-based cross images.

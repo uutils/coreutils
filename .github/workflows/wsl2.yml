@@ -57,6 +57,11 @@ jobs:
         curl https://sh.rustup.rs -sSf --output rustup.sh
         sh rustup.sh -y --profile=minimal
         curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C "$HOME/.cargo/bin"
+    - name: Install strace in WSL2
+      shell: wsl-bash {0}
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y strace
     - name: Test
       shell: wsl-bash {0}
       run: |
