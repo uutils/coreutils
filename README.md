@@ -33,7 +33,10 @@ To install it:
 
 ```shell
 cargo install coreutils
-~/.cargo/bin/coreutils
+cd ~/.cargo/bin
+for b in $(./coreutils --list);do ln -sf coreutils $b;done
+# to install a util only e.g. true: cargo install uu_true
+~/.cargo/bin/true --version
 ```
 
 </div>
