@@ -62,6 +62,7 @@ pub struct Behavior {
     preserve_context: bool,
     context: Option<String>,
     default_context: bool,
+    unprivileged: bool,
 }
 
 #[derive(Error, Debug)]
@@ -163,6 +164,7 @@ static OPT_VERBOSE: &str = "verbose";
 static OPT_PRESERVE_CONTEXT: &str = "preserve-context";
 static OPT_CONTEXT: &str = "context";
 static OPT_DEFAULT_CONTEXT: &str = "default-context";
+static OPT_UNPRIVILEGED: &str = "unprivileged";
 
 static ARG_FILES: &str = "files";
 
@@ -317,6 +319,13 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::AnyPath)
                 .value_parser(clap::value_parser!(OsString)),
         )
+        .arg(
+            Arg::new(OPT_UNPRIVILEGED)
+                .short('U')
+                .long(OPT_UNPRIVILEGED)
+                .help(translate!("install-help-unprivileged"))
+                .action(ArgAction::SetTrue),
+        )
 }
 
 /// Determine behavior, given command line arguments.
@@ -416,6 +425,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     let context = matches.get_one::<String>(OPT_CONTEXT).cloned();
     let default_context = matches.get_flag(OPT_DEFAULT_CONTEXT);
+    let unprivileged = matches.get_flag(OPT_UNPRIVILEGED);
 
     Ok(Behavior {
         main_function,
@@ -439,6 +449,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         preserve_context: matches.get_flag(OPT_PRESERVE_CONTEXT),
         context,
         default_context,
+        unprivileged,
     })
 }
 
@@ -498,7 +509,9 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                 continue;
             }
 
-            show_if_err!(chown_optional_user_group(path, b));
+            if !b.unprivileged {
+                show_if_err!(chown_optional_user_group(path, b));
+            }
 
             // Set SELinux context for directory if needed
             #[cfg(feature = "selinux")]
@@ -918,7 +931,9 @@ fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
         return Err(InstallError::ChmodFailed(to.to_path_buf()).into());
     }
 
-    chown_optional_user_group(to, b)?;
+    if !b.unprivileged {
+        chown_optional_user_group(to, b)?;
+    }
 
     Ok(())
 }
@@ -1015,7 +1030,7 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
 
 #[cfg(feature = "selinux")]
 fn get_context_for_selinux(b: &Behavior) -> Option<&String> {
-    if b.default_context {
+    if b.unprivileged || b.default_context {
         None
     } else {
         b.context.as_ref()
@@ -1121,17 +1136,17 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
 
     // Check if the owner ID is specified and differs from the destination file's owner.
     if let Some(owner_id) = b.owner_id {
-        if owner_id != to_meta.uid() {
+        if !b.unprivileged && owner_id != to_meta.uid() {
             return true;
         }
     }
 
     // Check if the group ID is specified and differs from the destination file's group.
     if let Some(group_id) = b.group_id {
-        if group_id != to_meta.gid() {
+        if !b.unprivileged && group_id != to_meta.gid() {
             return true;
         }
-    } else if needs_copy_for_ownership(to, &to_meta) {
+    } else if !b.unprivileged && needs_copy_for_ownership(to, &to_meta) {
         return true;
     }
 
