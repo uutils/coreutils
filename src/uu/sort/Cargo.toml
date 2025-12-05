@@ -34,10 +34,8 @@ self_cell = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 unicode-width = { workspace = true }
-uucore = { workspace = true, features = ["fs", "parser", "version-cmp"] }
+uucore = { workspace = true, features = ["fs", "parser-size", "version-cmp"] }
 fluent = { workspace = true }
-
-[target.'cfg(target_os = "linux")'.dependencies]
 nix = { workspace = true }
 
 [dev-dependencies]
@@ -46,7 +44,7 @@ tempfile = { workspace = true }
 uucore = { workspace = true, features = [
   "benchmark",
   "fs",
-  "parser",
+  "parser-size",
   "version-cmp",
   "i18n-collator",
 ] }

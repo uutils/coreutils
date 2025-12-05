@@ -72,7 +72,7 @@ pub enum EnvError {
 
 impl From<string_parser::Error> for EnvError {
     fn from(value: string_parser::Error) -> Self {
-        EnvError::EnvInternalError(value.peek_position, value)
+        Self::EnvInternalError(value.peek_position, value)
     }
 }
 
@@ -102,7 +102,6 @@ struct Options<'a> {
 }
 
 /// print `name=value` env pairs on screen
-/// if null is true, separate pairs with a \0, \n otherwise
 fn print_env(line_ending: LineEnding) {
     let stdout_raw = io::stdout();
     let mut stdout = stdout_raw.lock();

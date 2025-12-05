@@ -69,7 +69,7 @@ static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
 use uutests::util::compare_xattrs;
 
 /// Assert that mode, ownership, and permissions of two metadata objects match.
-#[cfg(all(not(windows), not(target_os = "freebsd")))]
+#[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
 macro_rules! assert_metadata_eq {
     ($m1:expr, $m2:expr) => {{
         assert_eq!($m1.mode(), $m2.mode(), "mode is different");
@@ -140,6 +140,41 @@ fn test_cp_duplicate_folder() {
             "source directory '{TEST_COPY_FROM_FOLDER}' specified more than once"
         ));
     assert!(at.dir_exists(format!("{TEST_COPY_TO_FOLDER}/{TEST_COPY_FROM_FOLDER}").as_str()));
+}
+
+#[test]
+fn test_cp_duplicate_directories_merge() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // Source directory 1
+    at.mkdir_all("src_dir/subdir");
+    at.write("src_dir/subdir/file1.txt", "content1");
+    at.write("src_dir/subdir/file2.txt", "content2");
+
+    // Source directory 2
+    at.mkdir_all("src_dir2/subdir");
+    at.write("src_dir2/subdir/file1.txt", "content3");
+
+    // Destination
+    at.mkdir("dest");
+
+    // Perform merge copy
+    ucmd.arg("-r")
+        .arg("src_dir/subdir")
+        .arg("src_dir2/subdir")
+        .arg("dest")
+        .succeeds();
+
+    // Verify directory exists
+    assert!(at.dir_exists("dest/subdir"));
+
+    // file1.txt should be overwritten by src_dir2/subdir/file1.txt
+    assert!(at.file_exists("dest/subdir/file1.txt"));
+    assert_eq!(at.read("dest/subdir/file1.txt"), "content3");
+
+    // file2.txt should remain from first copy
+    assert!(at.file_exists("dest/subdir/file2.txt"));
+    assert_eq!(at.read("dest/subdir/file2.txt"), "content2");
 }
 
 #[test]
@@ -385,7 +420,6 @@ fn test_cp_arg_no_target_directory_with_recursive() {
 }
 
 #[test]
-#[ignore = "disabled until https://github.com/uutils/coreutils/issues/7455 is fixed"]
 fn test_cp_arg_no_target_directory_with_recursive_target_does_not_exists() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -768,7 +802,7 @@ fn test_cp_f_i_verbose_non_writeable_destination_y() {
         .pipe_in("y")
         .succeeds()
         .stderr_is("cp: replace 'b', overriding mode 0000 (---------)? ")
-        .stdout_is("'a' -> 'b'\n");
+        .stdout_is("removed 'b'\n'a' -> 'b'\n");
 }
 
 #[test]
@@ -1554,7 +1588,7 @@ fn test_cp_parents_with_permissions_copy_file() {
         .arg(dir)
         .succeeds();
 
-    #[cfg(all(unix, not(target_os = "freebsd")))]
+    #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
     {
         let p1_metadata = at.metadata("p1");
         let p2_metadata = at.metadata("p1/p2");
@@ -1597,7 +1631,7 @@ fn test_cp_parents_with_permissions_copy_dir() {
         .arg(dir1)
         .succeeds();
 
-    #[cfg(all(unix, not(target_os = "freebsd")))]
+    #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
     {
         let p1_metadata = at.metadata("p1");
         let p2_metadata = at.metadata("p1/p2");
@@ -1642,7 +1676,7 @@ fn test_cp_preserve_no_args() {
         .arg("--preserve")
         .succeeds();
 
-    #[cfg(all(unix, not(target_os = "freebsd")))]
+    #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
     {
         // Assert that the mode, ownership, and timestamps are preserved
         // NOTICE: the ownership is not modified on the src file, because that requires root permissions
@@ -1670,7 +1704,7 @@ fn test_cp_preserve_no_args_before_opts() {
         .arg(dst_file)
         .succeeds();
 
-    #[cfg(all(unix, not(target_os = "freebsd")))]
+    #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
     {
         // Assert that the mode, ownership, and timestamps are preserved
         // NOTICE: the ownership is not modified on the src file, because that requires root permissions
@@ -1696,7 +1730,7 @@ fn test_cp_preserve_all() {
         // Copy
         ucmd.arg(src_file).arg(dst_file).arg(argument).succeeds();
 
-        #[cfg(all(unix, not(target_os = "freebsd")))]
+        #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
         {
             // Assert that the mode, ownership, and timestamps are preserved
             // NOTICE: the ownership is not modified on the src file, because that requires root permissions
@@ -2374,7 +2408,11 @@ fn test_cp_no_preserve_timestamps() {
     println!("creation {creation:?} / {creation2:?}");
 
     assert_ne!(creation, creation2);
-    let res = creation.elapsed().unwrap() - creation2.elapsed().unwrap();
+    let res = creation
+        .elapsed()
+        .unwrap()
+        .checked_sub(creation2.elapsed().unwrap())
+        .unwrap();
     // Some margins with time check
     assert!(res.as_secs() > 3595);
     assert!(res.as_secs() < 3605);
@@ -3025,7 +3063,7 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     assert!(at.symlink_exists("d2"), "symlink wasn't created");
 
     // `-p` means `--preserve=mode,ownership,timestamps`
-    #[cfg(all(unix, not(target_os = "freebsd")))]
+    #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
     {
         let metadata1 = at.symlink_metadata("dangle");
         let metadata2 = at.symlink_metadata("d2");
@@ -3746,7 +3784,7 @@ fn test_preserve_hardlink_attributes_in_directory() {
     //
     // A hard link should have the same inode as the target file.
     at.file_exists("dest/src/link");
-    #[cfg(all(unix, not(target_os = "freebsd")))]
+    #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
     assert_eq!(
         at.metadata("dest/src/f").ino(),
         at.metadata("dest/src/link").ino()
@@ -3762,7 +3800,7 @@ fn test_hard_link_file() {
     ucmd.args(&["-f", "--link", "src", "dest"])
         .succeeds()
         .no_output();
-    #[cfg(all(unix, not(target_os = "freebsd")))]
+    #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
     assert_eq!(at.metadata("src").ino(), at.metadata("dest").ino());
 }
 
@@ -4066,7 +4104,7 @@ fn test_cp_dest_no_permissions() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "freebsd")))]
+#[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
 fn test_cp_attributes_only() {
     let (at, mut ucmd) = at_and_ucmd!();
     let a = "file_a";
@@ -6534,7 +6572,7 @@ fn test_cp_preserve_selinux() {
             selinux_perm_dest
         );
 
-        #[cfg(all(unix, not(target_os = "freebsd")))]
+        #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
         {
             // Assert that the mode, ownership, and timestamps are preserved
             // NOTICE: the ownership is not modified on the src file, because that requires root permissions
@@ -6946,7 +6984,7 @@ fn test_cp_current_directory_verbose() {
 // Test copying current directory (.) with preserve attributes.
 // This ensures attributes are preserved when copying the current directory.
 #[test]
-#[cfg(all(not(windows), not(target_os = "freebsd")))]
+#[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
 fn test_cp_current_directory_preserve_attributes() {
     use filetime::FileTime;
     use std::os::unix::prelude::MetadataExt;
@@ -7089,4 +7127,138 @@ fn test_cp_recursive_files_ending_in_backslash() {
     at.touch("a/foo\\");
     ts.ucmd().args(&["-r", "a", "b"]).succeeds();
     assert!(at.file_exists("b/foo\\"));
+}
+
+#[test]
+fn test_cp_no_preserve_target_directory() {
+    /* Expected result:
+    ├── a
+    │   └── b
+    │       └── c
+    │           └── d
+    │               └── f1
+    ├── d
+    │   └── f1
+    └── e
+        ├── b
+        │   └── c
+        │       └── d
+        │           ├── c
+        │           │   └── d
+        │           │       └── f1
+        │           └── f1
+        ├── d
+        │   └── f1
+        ├── f2
+        └── f3
+     */
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir_all("a/b/c/d");
+    at.touch("a/b/c/d/f1");
+    ts.ucmd().args(&["-rT", "a", "e"]).succeeds();
+    at.touch("e/f2");
+    ts.ucmd().args(&["-rT", "a/", "e/"]).succeeds();
+    at.touch("e/f3");
+    ts.ucmd().args(&["-rvT", "a/b/c", "e/"]).succeeds();
+    ts.ucmd().args(&["-rvT", "a/b/", "e/b/c/d/"]).succeeds();
+    ts.ucmd().args(&["-rT", "a/b/c", "."]).succeeds();
+    assert!(!at.dir_exists("e/a"));
+    assert!(at.file_exists("e/b/c/d/f1"));
+    assert!(at.file_exists("e/b/c/d/c/d/f1"));
+    assert!(!at.dir_exists("e/c"));
+    assert!(!at.dir_exists("e/c/d/b"));
+    assert!(at.file_exists("e/d/f1"));
+    assert!(at.file_exists("./d/f1"));
+    assert!(at.file_exists("e/f2"));
+    assert!(at.file_exists("e/f3"));
+}
+
+#[test]
+fn test_cp_recurse_verbose_output() {
+    let source_dir = "source_dir";
+    let target_dir = "target_dir";
+    let file = "file";
+    #[cfg(not(windows))]
+    let output = format!(
+        "'{source_dir}' -> '{target_dir}/'\n'{source_dir}/{file}' -> '{target_dir}/{file}'\n"
+    );
+    #[cfg(windows)]
+    let output = format!(
+        "'{source_dir}' -> '{target_dir}\\'\n'{source_dir}\\{file}' -> '{target_dir}\\{file}'\n"
+    );
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir(source_dir);
+    at.touch(format!("{source_dir}/{file}"));
+
+    ucmd.arg(source_dir)
+        .arg(target_dir)
+        .arg("-r")
+        .arg("--verbose")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(output);
+}
+
+#[test]
+fn test_cp_recurse_verbose_output_with_symlink() {
+    let source_dir = "source_dir";
+    let target_dir = "target_dir";
+    let file = "file";
+    let symlink = "symlink";
+    #[cfg(not(windows))]
+    let output = format!(
+        "'{source_dir}' -> '{target_dir}/'\n'{source_dir}/{symlink}' -> '{target_dir}/{symlink}'\n"
+    );
+    #[cfg(windows)]
+    let output = format!(
+        "'{source_dir}' -> '{target_dir}\\'\n'{source_dir}\\{symlink}' -> '{target_dir}\\{symlink}'\n"
+    );
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir(source_dir);
+    at.touch(file);
+    at.symlink_file(file, format!("{source_dir}/{symlink}").as_str());
+
+    ucmd.arg(source_dir)
+        .arg(target_dir)
+        .arg("-r")
+        .arg("--verbose")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(output);
+}
+
+#[test]
+fn test_cp_recurse_verbose_output_with_symlink_already_exists() {
+    let source_dir = "source_dir";
+    let target_dir = "target_dir";
+    let file = "file";
+    let symlink = "symlink";
+    #[cfg(not(windows))]
+    let output = format!(
+        "removed '{target_dir}/{symlink}'\n'{source_dir}/{symlink}' -> '{target_dir}/{symlink}'\n"
+    );
+    #[cfg(windows)]
+    let output = format!(
+        "removed '{target_dir}\\{symlink}'\n'{source_dir}\\{symlink}' -> '{target_dir}\\{symlink}'\n"
+    );
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir(source_dir);
+    at.touch(file);
+    at.symlink_file(file, format!("{source_dir}/{symlink}").as_str());
+    at.mkdir(target_dir);
+    at.symlink_file(file, format!("{target_dir}/{symlink}").as_str());
+
+    ucmd.arg(source_dir)
+        .arg(target_dir)
+        .arg("-r")
+        .arg("--verbose")
+        .arg("-T")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(output);
 }

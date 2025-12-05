@@ -20,10 +20,19 @@ path = "src/split.rs"
 [dependencies]
 clap = { workspace = true }
 memchr = { workspace = true }
-uucore = { workspace = true, features = ["fs", "parser"] }
+uucore = { workspace = true, features = ["fs", "parser-size"] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 
 [[bin]]
 name = "split"
 path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "split_bench"
+harness = false

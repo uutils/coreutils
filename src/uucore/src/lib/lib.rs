@@ -54,11 +54,18 @@ pub use crate::features::fast_inc;
 pub use crate::features::format;
 #[cfg(feature = "fs")]
 pub use crate::features::fs;
+#[cfg(feature = "hardware")]
+pub use crate::features::hardware;
 #[cfg(feature = "i18n-common")]
 pub use crate::features::i18n;
 #[cfg(feature = "lines")]
 pub use crate::features::lines;
-#[cfg(feature = "parser")]
+#[cfg(any(
+    feature = "parser",
+    feature = "parser-num",
+    feature = "parser-size",
+    feature = "parser-glob"
+))]
 pub use crate::features::parser;
 #[cfg(feature = "quoting-style")]
 pub use crate::features::quoting_style;
@@ -321,14 +328,24 @@ pub fn set_utility_is_second_arg() {
 
 // args_os() can be expensive to call, it copies all of argv before iterating.
 // So if we want only the first arg or so it's overkill. We cache it.
+#[cfg(windows)]
 static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| wild::args_os().collect());
+#[cfg(not(windows))]
+static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| std::env::args_os().collect());
 
 static UTIL_NAME: LazyLock<String> = LazyLock::new(|| {
     let base_index = usize::from(get_utility_is_second_arg());
     let is_man = usize::from(ARGV[base_index].eq("manpage"));
     let argv_index = base_index + is_man;
 
-    ARGV[argv_index].to_string_lossy().into_owned()
+    // Strip directory path to show only utility name
+    // (e.g., "mkdir" instead of "./target/debug/mkdir")
+    // in version output, error messages, and other user-facing output
+    std::path::Path::new(&ARGV[argv_index])
+        .file_name()
+        .unwrap_or(&ARGV[argv_index])
+        .to_string_lossy()
+        .into_owned()
 });
 
 /// Derive the utility name.
@@ -375,6 +392,13 @@ impl<T: Iterator<Item = OsString> + Sized> Args for T {}
 /// args_os() can be expensive to call
 pub fn args_os() -> impl Iterator<Item = OsString> {
     ARGV.iter().cloned()
+}
+
+/// Returns an iterator over the command line arguments as `OsString`s, filtering out empty arguments.
+/// This is useful for handling cases where extra whitespace or empty arguments are present.
+/// args_os_filtered() can be expensive to call
+pub fn args_os_filtered() -> impl Iterator<Item = OsString> {
+    ARGV.iter().filter(|arg| !arg.is_empty()).cloned()
 }
 
 /// Read a line from stdin and check whether the first character is `'y'` or `'Y'`
@@ -559,19 +583,19 @@ pub enum CharByte {
 
 impl From<char> for CharByte {
     fn from(value: char) -> Self {
-        CharByte::Char(value)
+        Self::Char(value)
     }
 }
 
 impl From<u8> for CharByte {
     fn from(value: u8) -> Self {
-        CharByte::Byte(value)
+        Self::Byte(value)
     }
 }
 
 impl From<&u8> for CharByte {
     fn from(value: &u8) -> Self {
-        CharByte::Byte(*value)
+        Self::Byte(*value)
     }
 }
 
@@ -588,7 +612,7 @@ impl Iterator for Utf8ChunkIterator<'_> {
 }
 
 impl<'a> From<Utf8Chunk<'a>> for Utf8ChunkIterator<'a> {
-    fn from(chk: Utf8Chunk<'a>) -> Utf8ChunkIterator<'a> {
+    fn from(chk: Utf8Chunk<'a>) -> Self {
         Self {
             iter: Box::new(
                 chk.valid()
@@ -609,7 +633,7 @@ pub struct CharByteIterator<'a> {
 impl<'a> CharByteIterator<'a> {
     /// Make a `CharByteIterator` from a byte slice.
     /// [`CharByteIterator`]
-    pub fn new(input: &'a [u8]) -> CharByteIterator<'a> {
+    pub fn new(input: &'a [u8]) -> Self {
         Self {
             iter: Box::new(input.utf8_chunks().flat_map(Utf8ChunkIterator::from)),
         }

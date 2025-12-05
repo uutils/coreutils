@@ -62,6 +62,9 @@ enum LnError {
 
     #[error("{}", translate!("ln-error-extra-operand", "operand" => _0.to_string_lossy(), "program" => _1.clone()))]
     ExtraOperand(OsString, String),
+
+    #[error("{}", translate!("ln-failed-to-create-hard-link-dir", "source" => _0.to_string_lossy()))]
+    FailedToCreateHardLinkDir(PathBuf),
 }
 
 impl UError for LnError {
@@ -410,7 +413,17 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
             }
             OverwriteMode::Force => {
                 if !dst.is_symlink() && paths_refer_to_same_file(src, dst, true) {
-                    return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
+                    // Even in force overwrite mode, verify we are not targeting the same entry and return a SameFile error if so
+                    let same_entry = match (
+                        canonicalize(src, MissingHandling::Missing, ResolveMode::Physical),
+                        canonicalize(dst, MissingHandling::Missing, ResolveMode::Physical),
+                    ) {
+                        (Ok(src), Ok(dst)) => src == dst,
+                        _ => true,
+                    };
+                    if same_entry {
+                        return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
+                    }
                 }
                 if fs::remove_file(dst).is_ok() {}
                 // In case of error, don't do anything
@@ -421,6 +434,12 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     if settings.symbolic {
         symlink(&source, dst)?;
     } else {
+        // Cannot create hard link to a directory directly
+        // We can however create hard link to a symlink that points to a directory, so long as -L is not passed
+        if src.is_dir() && (!src.is_symlink() || settings.logical) {
+            return Err(LnError::FailedToCreateHardLinkDir(source.to_path_buf()).into());
+        }
+
         let p = if settings.logical && source.is_symlink() {
             // if we want to have an hard link,
             // source is a symlink and -L is passed

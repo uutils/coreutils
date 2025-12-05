@@ -133,7 +133,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let cmode = if let Some(parsed_cmode) = parsed_cmode {
         parsed_cmode
     } else {
-        modes.unwrap().to_string() // modes is required
+        modes.unwrap().to_owned() // modes is required
     };
     let mut files: Vec<OsString> = matches
         .get_many::<OsString>(options::FILE)
@@ -522,9 +522,24 @@ impl Chmoder {
                     .safe_chmod_file(&entry_path, dir_fd, &entry_name, meta.mode() & 0o7777)
                     .and(r);
 
-                // Recurse into subdirectories
+                // Recurse into subdirectories using the existing directory fd
                 if meta.is_dir() {
-                    r = self.walk_dir_with_context(&entry_path, false).and(r);
+                    match dir_fd.open_subdir(&entry_name) {
+                        Ok(child_dir_fd) => {
+                            r = self.safe_traverse_dir(&child_dir_fd, &entry_path).and(r);
+                        }
+                        Err(err) => {
+                            let error = if err.kind() == std::io::ErrorKind::PermissionDenied {
+                                ChmodError::PermissionDenied(
+                                    entry_path.to_string_lossy().to_string(),
+                                )
+                                .into()
+                            } else {
+                                err.into()
+                            };
+                            r = r.and(Err(error));
+                        }
+                    }
                 }
             }
         }

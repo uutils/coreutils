@@ -177,8 +177,10 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
                 } else {
                     println!("{}", &hostname[ci.0 + 1..]);
                 }
-                return Ok(());
+            } else if matches.get_flag(OPT_SHORT) {
+                println!("{hostname}");
             }
+            return Ok(());
         }
 
         println!("{hostname}");

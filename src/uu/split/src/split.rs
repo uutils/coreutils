@@ -485,9 +485,9 @@ impl Settings {
 
         let io_blksize: Option<u64> = if let Some(s) = matches.get_one::<String>(OPT_IO_BLKSIZE) {
             match parse_size_u64(s) {
-                Ok(0) => return Err(SettingsError::InvalidIOBlockSize(s.to_string())),
+                Ok(0) => return Err(SettingsError::InvalidIOBlockSize(s.to_owned())),
                 Ok(n) if n <= uucore::fs::sane_blksize::MAX => Some(n),
-                _ => return Err(SettingsError::InvalidIOBlockSize(s.to_string())),
+                _ => return Err(SettingsError::InvalidIOBlockSize(s.to_owned())),
             }
         } else {
             None

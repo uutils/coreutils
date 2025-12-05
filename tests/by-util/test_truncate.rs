@@ -386,6 +386,17 @@ fn test_underflow_relative_size() {
     assert!(at.read_bytes(FILE1).is_empty());
 }
 
+#[test]
+fn test_negative_size_with_space() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-s", "-1", FILE1])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(at.file_exists(FILE1));
+    assert!(at.read_bytes(FILE1).is_empty());
+}
+
 #[cfg(not(windows))]
 #[test]
 fn test_fifo_error_size_only() {

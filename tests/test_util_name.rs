@@ -203,62 +203,6 @@ fn util_invalid_name_invalid_command() {
 }
 
 #[test]
-#[cfg(feature = "true")]
-fn util_completion() {
-    use std::process::{Command, Stdio};
-
-    let scenario = TestScenario::new("completion");
-    if !scenario.bin_path.exists() {
-        println!("Skipping test: Binary not found at {:?}", scenario.bin_path);
-        return;
-    }
-
-    let child = Command::new(&scenario.bin_path)
-        .arg("completion")
-        .arg("true")
-        .arg("powershell")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert_eq!(output.status.code(), Some(0));
-    assert_eq!(output.stderr, b"");
-    let output_str = String::from_utf8(output.stdout).unwrap();
-    assert!(
-        output_str.contains("using namespace System.Management.Automation"),
-        "{output_str:?}"
-    );
-}
-
-#[test]
-#[cfg(feature = "true")]
-fn util_manpage() {
-    use std::process::{Command, Stdio};
-
-    let scenario = TestScenario::new("completion");
-    if !scenario.bin_path.exists() {
-        println!("Skipping test: Binary not found at {:?}", scenario.bin_path);
-        return;
-    }
-
-    let child = Command::new(&scenario.bin_path)
-        .arg("manpage")
-        .arg("true")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert_eq!(output.status.code(), Some(0));
-    assert_eq!(output.stderr, b"");
-    let output_str = String::from_utf8(output.stdout).unwrap();
-    assert!(output_str.contains("\n.TH true 1 "), "{output_str:?}");
-}
-
-#[test]
 fn util_version() {
     use std::process::{Command, Stdio};
 

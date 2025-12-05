@@ -122,18 +122,14 @@ impl<'a> FormatArguments<'a> {
     {
         // If this fails (this can only happens on Windows), then just
         // return NotNumeric.
-        let s = match os_str_as_bytes(os) {
-            Ok(s) => s,
-            Err(_) => return Err(ExtendedParserError::NotNumeric),
+        let Ok(s) = os_str_as_bytes(os) else {
+            return Err(ExtendedParserError::NotNumeric);
         };
 
-        let bytes = match s.split_first() {
-            Some((b'"', bytes)) | Some((b'\'', bytes)) => bytes,
-            _ => {
-                // This really can't happen, the string we are given must start with '/".
-                debug_assert!(false);
-                return Err(ExtendedParserError::NotNumeric);
-            }
+        let (Some((b'"', bytes)) | Some((b'\'', bytes))) = s.split_first() else {
+            // This really can't happen, the string we are given must start with '/".
+            debug_assert!(false);
+            return Err(ExtendedParserError::NotNumeric);
         };
 
         if bytes.is_empty() {

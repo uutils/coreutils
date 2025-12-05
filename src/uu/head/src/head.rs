@@ -530,17 +530,13 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
             head_file(&mut file_handle, options)?;
             Ok(())
         };
-        if let Err(e) = res {
+        if let Err(err) = res {
             let name = if file == "-" {
                 "standard input".to_string()
             } else {
                 file.to_string_lossy().into_owned()
             };
-            return Err(HeadError::Io {
-                name: name.to_string(),
-                err: e,
-            }
-            .into());
+            return Err(HeadError::Io { name, err }.into());
         }
         first = false;
     }

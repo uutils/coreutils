@@ -214,7 +214,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 
     let delimiter = args.get_one::<String>(DELIMITER).map_or(Ok(None), |arg| {
         if arg.len() == 1 {
-            Ok(Some(arg.to_string()))
+            Ok(Some(arg.to_owned()))
         } else {
             Err(translate!(
                 "numfmt-error-delimiter-must-be-single-character"
@@ -460,9 +460,9 @@ mod tests {
         let result_display = format!("{result}");
         assert_eq!(
             result_debug,
-            "FormattingError(\"numfmt-error-invalid-suffix\")"
+            "FormattingError(\"numfmt-error-invalid-number\")"
         );
-        assert_eq!(result_display, "numfmt-error-invalid-suffix");
+        assert_eq!(result_display, "numfmt-error-invalid-number");
         assert_eq!(result.code(), 2);
     }
 

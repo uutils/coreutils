@@ -1780,3 +1780,53 @@ fn test_wrong_number_err_msg() {
         .fails()
         .stderr_contains("dd: invalid number: '1kBb555'\n");
 }
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_oflag_direct_partial_block() {
+    // Test for issue #9003: dd should handle partial blocks with oflag=direct
+    // This reproduces the scenario where writing a partial block with O_DIRECT fails
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // Create input file with size that's not a multiple of block size
+    // This will trigger the partial block write issue
+    let input_file = "test_direct_input.iso";
+    let output_file = "test_direct_output.img";
+    let block_size = 8192; // 8K blocks
+    let input_size = block_size * 3 + 511; // 3 full blocks + 511 byte partial block
+
+    // Create test input file with known pattern
+    let input_data = vec![0x42; input_size]; // Use non-zero pattern for better verification
+    at.write_bytes(input_file, &input_data);
+
+    // Get full paths for the dd command
+    let input_path = at.plus(input_file);
+    let output_path = at.plus(output_file);
+
+    // Test with oflag=direct - should succeed with the fix
+    new_ucmd!()
+        .args(&[
+            format!("if={}", input_path.display()),
+            format!("of={}", output_path.display()),
+            "oflag=direct".to_string(),
+            format!("bs={block_size}"),
+            "status=none".to_string(),
+        ])
+        .succeeds()
+        .stdout_is("")
+        .stderr_is("");
+    assert!(output_path.exists());
+    let output_size = output_path.metadata().unwrap().len() as usize;
+    assert_eq!(output_size, input_size);
+
+    // Verify content matches input
+    let output_content = std::fs::read(&output_path).unwrap();
+    assert_eq!(output_content.len(), input_size);
+    assert_eq!(output_content, input_data);
+
+    // Clean up
+    at.remove(input_file);
+    at.remove(output_file);
+}

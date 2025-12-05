@@ -152,7 +152,7 @@ impl WordFilter {
                     if v.is_empty() {
                         None
                     } else {
-                        Some(v.to_string())
+                        Some(v.to_owned())
                     }
                 }
                 None => None,
@@ -224,19 +224,19 @@ fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
     }
     config.auto_ref = matches.get_flag(options::AUTO_REFERENCE);
     config.input_ref = matches.get_flag(options::REFERENCES);
-    config.right_ref &= matches.get_flag(options::RIGHT_SIDE_REFS);
+    config.right_ref = matches.get_flag(options::RIGHT_SIDE_REFS);
     config.ignore_case = matches.get_flag(options::IGNORE_CASE);
     if matches.contains_id(options::MACRO_NAME) {
-        config.macro_name = matches
+        matches
             .get_one::<String>(options::MACRO_NAME)
             .expect(err_msg)
-            .to_string();
+            .clone_into(&mut config.macro_name);
     }
     if matches.contains_id(options::FLAG_TRUNCATION) {
-        config.trunc_str = matches
+        matches
             .get_one::<String>(options::FLAG_TRUNCATION)
             .expect(err_msg)
-            .to_string();
+            .clone_into(&mut config.trunc_str);
     }
     if matches.contains_id(options::WIDTH) {
         config.line_width = matches
@@ -661,7 +661,7 @@ fn prepare_line_chunks(
 }
 
 fn write_traditional_output(
-    config: &Config,
+    config: &mut Config,
     file_map: &FileMap,
     words: &BTreeSet<WordRef>,
     output_filename: &OsStr,
@@ -676,6 +676,15 @@ fn write_traditional_output(
         });
 
     let context_reg = Regex::new(&config.context_regex).unwrap();
+
+    if !config.right_ref {
+        let max_ref_len = if config.auto_ref {
+            get_auto_max_reference_len(words)
+        } else {
+            0
+        };
+        config.line_width -= max_ref_len;
+    }
 
     for word_ref in words {
         let file_map_value: &FileContent = file_map
@@ -722,6 +731,31 @@ fn write_traditional_output(
     Ok(())
 }
 
+fn get_auto_max_reference_len(words: &BTreeSet<WordRef>) -> usize {
+    //Get the maximum length of the reference field
+    let line_num = words
+        .iter()
+        .map(|w| {
+            if w.local_line_nr == 0 {
+                1
+            } else {
+                (w.local_line_nr as f64).log10() as usize + 1
+            }
+        })
+        .max()
+        .unwrap_or(0);
+
+    let filename_len = words
+        .iter()
+        .filter(|w| w.filename != "-")
+        .map(|w| w.filename.maybe_quote().to_string().len())
+        .max()
+        .unwrap_or(0);
+
+    // +1 for the colon
+    line_num + filename_len + 1
+}
+
 mod options {
     pub mod format {
         pub static ROFF: &str = "roff";
@@ -749,7 +783,7 @@ mod options {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
-    let config = get_config(&matches)?;
+    let mut config = get_config(&matches)?;
 
     let input_files;
     let output_file: OsString;
@@ -783,7 +817,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let word_filter = WordFilter::new(&matches, &config)?;
     let file_map = read_input(&input_files).map_err_context(String::new)?;
     let word_set = create_word_set(&config, &word_filter, &file_map);
-    write_traditional_output(&config, &file_map, &word_set, &output_file)
+    write_traditional_output(&mut config, &file_map, &word_set, &output_file)
 }
 
 pub fn uu_app() -> Command {

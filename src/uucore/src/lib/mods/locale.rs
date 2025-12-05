@@ -42,7 +42,7 @@ pub enum LocalizationError {
 
 impl From<std::io::Error> for LocalizationError {
     fn from(error: std::io::Error) -> Self {
-        LocalizationError::Io {
+        Self::Io {
             source: error,
             path: PathBuf::from("<unknown>"),
         }
@@ -1068,7 +1068,6 @@ invalid-syntax = This is { $missing
     #[test]
     fn test_arabic_localization_with_macro() {
         std::thread::spawn(|| {
-            use self::translate;
             let temp_dir = create_test_locales_dir();
             let locale = LanguageIdentifier::from_str("ar-SA").unwrap();
 

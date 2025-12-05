@@ -22,6 +22,9 @@ We support a third way:
 $ ls -w=80
 ```
 
+With GNU coreutils, `--help` usually prints the help message and `--version` prints the version.
+We also commonly provide short options: `-h` for help and `-V` for version.
+
 ## `env`
 
 GNU `env` allows the empty string to be used as an environment variable name.
@@ -40,19 +43,16 @@ packages.
 
 `mv` can display a progress bar when the `-g`/`--progress` flag is set.
 
-## `hashsum`
+## `rm`
+
+`rm` can display a progress bar when the `-g`/`--progress` flag is set.
+
+## `hashsum` (deprecated)
 
 This utility does not exist in GNU coreutils. `hashsum` is a utility that
 supports computing the checksums with several algorithms. The flags and options
 are identical to the `*sum` family of utils (`sha1sum`, `sha256sum`, `b2sum`,
-etc.).
-
-## `b3sum`
-
-This utility does not exist in GNU coreutils. The behavior is modeled after both
-the `b2sum` utility of GNU and the
-[`b3sum`](https://github.com/BLAKE3-team/BLAKE3) utility by the BLAKE3 team. It also 
-supports the `--no-names` option, that does not appear in the GNU utility.
+etc.). This utility will be removed in the future and it is advised to use `cksum --untagged` instead.
 
 ## `more`
 
