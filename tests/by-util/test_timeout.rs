@@ -15,9 +15,6 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(125);
 }
 
-// FIXME: this depends on the system having true and false in PATH
-//        the best solution is probably to generate some test binaries that we can call for any
-//        utility that requires executing another program (kill, for instance)
 #[test]
 fn test_subcommand_return_code() {
     new_ucmd!().arg("1").arg("true").succeeds();
