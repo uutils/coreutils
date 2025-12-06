@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) dirfd subdirs openat FDCWD
+// spell-checker:ignore (words) dirfd subdirs openat FDCWD NOFILE getrlimit setrlimit rlim
 
 use std::fs::{OpenOptions, Permissions, metadata, set_permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
@@ -1411,32 +1411,8 @@ fn test_chmod_recursive_uses_dirfd_for_subdirs() {
 #[cfg(unix)]
 #[test]
 fn test_chmod_recursive_does_not_exhaust_fds() {
-    use libc::{RLIMIT_NOFILE, getrlimit, rlimit, setrlimit};
+    use rlimit::Resource;
     use std::path::PathBuf;
-
-    // Lower soft limit so deep recursion would fail if descriptors stack up
-    let mut old = rlimit {
-        rlim_cur: 0,
-        rlim_max: 0,
-    };
-    unsafe { assert_eq!(0, getrlimit(RLIMIT_NOFILE, &mut old)) };
-
-    let new_soft = old.rlim_max.min(64);
-    struct Restore(rlimit);
-    impl Drop for Restore {
-        fn drop(&mut self) {
-            unsafe {
-                setrlimit(RLIMIT_NOFILE, &self.0);
-            }
-        }
-    }
-    let _restore = Restore(old);
-
-    let lowered = rlimit {
-        rlim_cur: new_soft,
-        rlim_max: old.rlim_max,
-    };
-    unsafe { assert_eq!(0, setrlimit(RLIMIT_NOFILE, &lowered)) };
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1450,7 +1426,14 @@ fn test_chmod_recursive_does_not_exhaust_fds() {
         at.mkdir(&current);
     }
 
-    scene.ucmd().arg("-R").arg("777").arg("deep").succeeds();
+    // Constrain NOFILE only for the child process under test
+    scene
+        .ucmd()
+        .limit(Resource::NOFILE, 64, 64)
+        .arg("-R")
+        .arg("777")
+        .arg("deep")
+        .succeeds();
 }
 
 #[test]
