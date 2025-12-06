@@ -99,6 +99,8 @@ fn test_create_fifo_with_mode_and_umask() {
     test_fifo_creation("u-r,g-w,o+x", 0o022, "p-w-r--rwx"); // spell-checker:disable-line
     test_fifo_creation("a=rwx,o-w", 0o022, "prwxrwxr-x"); // spell-checker:disable-line
     test_fifo_creation("=rwx,o-w", 0o022, "prwxr-xr-x"); // spell-checker:disable-line
+    test_fifo_creation("ug+rw,o+r", 0o022, "prw-rw-rw-"); // spell-checker:disable-line
+    test_fifo_creation("u=rwx,g=rx,o=", 0o022, "prwxr-x---"); // spell-checker:disable-line
 }
 
 #[test]
