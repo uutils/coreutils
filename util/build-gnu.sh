@@ -95,13 +95,13 @@ fi
 cd -
 
 # Pass the feature flags to make, which will pass them to cargo
-"${MAKE}" PROFILE="${PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
+"${MAKE}" PROFILE="${PROFILE}" SKIP_UTILS=more CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
 # min test for SELinux
 [ "${SELINUX_ENABLED}" = 1 ] && touch g && "${PROFILE}"/stat -c%C g && rm g
 
 cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
 # Create *sum binaries
-for sum in b2sum b3sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum; do
+for sum in b2sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum; do
     sum_path="${UU_BUILD_DIR}/${sum}"
     test -f "${sum_path}" || (cd ${UU_BUILD_DIR} && ln -s "hashsum" "${sum}")
 done
