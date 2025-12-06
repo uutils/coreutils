@@ -10,7 +10,7 @@
 // spell-checker:ignore isig icanon iexten echoe crterase echok echonl noflsh xcase tostop echoprt prterase echoctl ctlecho echoke crtkill flusho extproc
 // spell-checker:ignore lnext rprnt susp swtch vdiscard veof veol verase vintr vkill vlnext vquit vreprint vstart vstop vsusp vswtc vwerase werase
 // spell-checker:ignore sigquit sigtstp
-// spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain
+// spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain exta extb NCCS
 // spell-checker:ignore notaflag notacombo notabaud
 
 mod flags;
@@ -24,13 +24,14 @@ use nix::sys::termios::{
     Termios, cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
+use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, Stdout, stdout};
 use std::num::IntErrorKind;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, RawFd};
-use uucore::error::{UError, UResult, USimpleError};
+use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::translate;
 
@@ -151,6 +152,7 @@ enum ArgOptions<'a> {
     Mapping((S, u8)),
     Special(SpecialSetting),
     Print(PrintSetting),
+    SavedState(Vec<u32>),
 }
 
 impl<'a> From<AllFlags<'a>> for ArgOptions<'a> {
@@ -353,8 +355,12 @@ fn stty(opts: &Options) -> UResult<()> {
                     valid_args.push(ArgOptions::Print(PrintSetting::Size));
                 }
                 _ => {
+                    // Try to parse saved format (hex string like "6d02:5:4bf:8a3b:...")
+                    if let Some(state) = parse_saved_state(arg) {
+                        valid_args.push(ArgOptions::SavedState(state));
+                    }
                     // control char
-                    if let Some(char_index) = cc_to_index(arg) {
+                    else if let Some(char_index) = cc_to_index(arg) {
                         if let Some(mapping) = args_iter.next() {
                             let cc_mapping = string_to_control_char(mapping).map_err(|e| {
                                 let message = match e {
@@ -371,7 +377,7 @@ fn stty(opts: &Options) -> UResult<()> {
                                         )
                                     }
                                 };
-                                USimpleError::new(1, message)
+                                UUsageError::new(1, message)
                             })?;
                             valid_args.push(ArgOptions::Mapping((char_index, cc_mapping)));
                         } else {
@@ -419,6 +425,9 @@ fn stty(opts: &Options) -> UResult<()> {
                 ArgOptions::Print(setting) => {
                     print_special_setting(setting, opts.file.as_raw_fd())?;
                 }
+                ArgOptions::SavedState(state) => {
+                    apply_saved_state(&mut termios, state)?;
+                }
             }
         }
         tcsetattr(opts.file.as_fd(), set_arg, &termios)?;
@@ -430,8 +439,9 @@ fn stty(opts: &Options) -> UResult<()> {
     Ok(())
 }
 
+// The GNU implementation adds the --help message when the args are incorrectly formatted
 fn missing_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
-    Err::<T, Box<dyn UError>>(USimpleError::new(
+    Err(UUsageError::new(
         1,
         translate!(
             "stty-error-missing-argument",
@@ -441,7 +451,7 @@ fn missing_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
 }
 
 fn invalid_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
-    Err::<T, Box<dyn UError>>(USimpleError::new(
+    Err(UUsageError::new(
         1,
         translate!(
             "stty-error-invalid-argument",
@@ -451,7 +461,7 @@ fn invalid_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
 }
 
 fn invalid_integer_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
-    Err::<T, Box<dyn UError>>(USimpleError::new(
+    Err(UUsageError::new(
         1,
         translate!(
             "stty-error-invalid-integer-argument",
@@ -477,6 +487,43 @@ fn parse_rows_cols(arg: &str) -> Option<u16> {
         return Some((n % (u16::MAX as u32 + 1)) as u16);
     }
     None
+}
+
+/// Parse a saved terminal state string in stty format.
+///
+/// The format is colon-separated hexadecimal values:
+/// `input_flags:output_flags:control_flags:local_flags:cc0:cc1:cc2:...`
+///
+/// - Must have exactly 4 + NCCS parts (4 flags + platform-specific control characters)
+/// - All parts must be non-empty valid hex values
+/// - Control characters must fit in u8 (0-255)
+/// - Returns `None` if format is invalid
+fn parse_saved_state(arg: &str) -> Option<Vec<u32>> {
+    let parts: Vec<&str> = arg.split(':').collect();
+    let expected_parts = 4 + nix::libc::NCCS;
+
+    // GNU requires exactly the right number of parts for this platform
+    if parts.len() != expected_parts {
+        return None;
+    }
+
+    // Validate all parts are non-empty valid hex
+    let mut values = Vec::with_capacity(expected_parts);
+    for (i, part) in parts.iter().enumerate() {
+        if part.is_empty() {
+            return None; // GNU rejects empty hex values
+        }
+        let val = u32::from_str_radix(part, 16).ok()?;
+
+        // Control characters (indices 4+) must fit in u8
+        if i >= 4 && val > 255 {
+            return None;
+        }
+
+        values.push(val);
+    }
+
+    Some(values)
 }
 
 fn check_flag_group<T>(flag: &Flag<T>, remove: bool) -> bool {
@@ -565,7 +612,69 @@ fn string_to_combo(arg: &str) -> Option<&str> {
         .map(|_| arg)
 }
 
+/// Parse and round a baud rate value using GNU stty's custom rounding algorithm.
+///
+/// Accepts decimal values with the following rounding rules:
+/// - If first digit after decimal > 5: round up
+/// - If first digit after decimal < 5: round down
+/// - If first digit after decimal == 5:
+///   - If followed by any non-zero digit: round up
+///   - If followed only by zeros (or nothing): banker's rounding (round to nearest even)
+///
+/// Examples: "9600.49" -> 9600, "9600.51" -> 9600, "9600.5" -> 9600 (even), "9601.5" -> 9602 (even)
+/// TODO: there are two special cases "exta" → B19200 and "extb" → B38400
+fn parse_baud_with_rounding(normalized: &str) -> Option<u32> {
+    let (int_part, frac_part) = match normalized.split_once('.') {
+        Some((i, f)) => (i, Some(f)),
+        None => (normalized, None),
+    };
+
+    let mut value = int_part.parse::<u32>().ok()?;
+
+    if let Some(frac) = frac_part {
+        let mut chars = frac.chars();
+        let first_digit = chars.next()?.to_digit(10)?;
+
+        // Validate all remaining chars are digits
+        let rest: Vec<_> = chars.collect();
+        if !rest.iter().all(|c| c.is_ascii_digit()) {
+            return None;
+        }
+
+        match first_digit.cmp(&5) {
+            Ordering::Greater => value += 1,
+            Ordering::Equal => {
+                // Check if any non-zero digit follows
+                if rest.iter().any(|&c| c != '0') {
+                    value += 1;
+                } else {
+                    // Banker's rounding: round to nearest even
+                    value += value & 1;
+                }
+            }
+            Ordering::Less => {} // Round down, already validated
+        }
+    }
+
+    Some(value)
+}
+
 fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
+    // Reject invalid formats
+    if arg != arg.trim_end()
+        || arg.trim().starts_with('-')
+        || arg.trim().starts_with("++")
+        || arg.contains('E')
+        || arg.contains('e')
+        || arg.matches('.').count() > 1
+    {
+        return None;
+    }
+
+    let normalized = arg.trim().trim_start_matches('+');
+    let normalized = normalized.strip_suffix('.').unwrap_or(normalized);
+    let value = parse_baud_with_rounding(normalized)?;
+
     // BSDs use a u32 for the baud rate, so any decimal number applies.
     #[cfg(any(
         target_os = "freebsd",
@@ -575,9 +684,7 @@ fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
-    if let Ok(n) = arg.parse::<u32>() {
-        return Some(AllFlags::Baud(n));
-    }
+    return Some(AllFlags::Baud(value));
 
     #[cfg(not(any(
         target_os = "freebsd",
@@ -587,12 +694,14 @@ fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
         target_os = "netbsd",
         target_os = "openbsd"
     )))]
-    for (text, baud_rate) in BAUD_RATES {
-        if *text == arg {
-            return Some(AllFlags::Baud(*baud_rate));
+    {
+        for (text, baud_rate) in BAUD_RATES {
+            if text.parse::<u32>().ok() == Some(value) {
+                return Some(AllFlags::Baud(*baud_rate));
+            }
         }
+        None
     }
-    None
 }
 
 /// return `Some(flag)` if the input is a valid flag, `None` if not
@@ -794,6 +903,39 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) {
 
 fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
     termios.control_chars[mapping.0 as usize] = mapping.1;
+}
+
+/// Apply a saved terminal state to the current termios.
+///
+/// The state array contains:
+/// - `state[0]`: input flags
+/// - `state[1]`: output flags  
+/// - `state[2]`: control flags
+/// - `state[3]`: local flags
+/// - `state[4..]`: control characters (optional)
+///
+/// If state has fewer than 4 elements, no changes are applied. This is a defensive
+/// check that should never trigger since `parse_saved_state` rejects such states.
+fn apply_saved_state(termios: &mut Termios, state: &[u32]) -> nix::Result<()> {
+    // Require at least 4 elements for the flags (defensive check)
+    if state.len() < 4 {
+        return Ok(()); // No-op for invalid state (already validated by parser)
+    }
+
+    // Apply the four flag groups, done (as _) for MacOS size compatibility
+    termios.input_flags = InputFlags::from_bits_truncate(state[0] as _);
+    termios.output_flags = OutputFlags::from_bits_truncate(state[1] as _);
+    termios.control_flags = ControlFlags::from_bits_truncate(state[2] as _);
+    termios.local_flags = LocalFlags::from_bits_truncate(state[3] as _);
+
+    // Apply control characters if present (stored as u32 but used as u8)
+    for (i, &cc_val) in state.iter().skip(4).enumerate() {
+        if i < termios.control_chars.len() {
+            termios.control_chars[i] = cc_val as u8;
+        }
+    }
+
+    Ok(())
 }
 
 fn apply_special_setting(
