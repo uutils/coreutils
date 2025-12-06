@@ -137,39 +137,42 @@ fn parse_change(mode: &str, fperm: u32, considering_dir: bool) -> (u32, usize) {
     (srwx, pos)
 }
 
-/// Takes a user-supplied string and tries to parse to u16 mode bitmask.
+/// Modify a file mode based on a user-supplied string.
 /// Supports comma-separated mode strings like "ug+rwX,o+rX" (same as chmod).
-pub fn parse(mode_string: &str, considering_dir: bool, umask: u32) -> Result<u32, String> {
-    // Split by commas and process each mode part sequentially
-    let mut current_mode: u32 = 0;
+pub fn parse_chmod(
+    current_mode: u32,
+    mode_string: &str,
+    considering_dir: bool,
+    umask: u32,
+) -> Result<u32, String> {
+    let mut new_mode: u32 = current_mode;
 
+    // Split by commas and process each mode part sequentially
     for mode_part in mode_string.split(',') {
         let mode_part = mode_part.trim();
         if mode_part.is_empty() {
             continue;
         }
 
-        current_mode = if mode_part.chars().any(|c| c.is_ascii_digit()) {
-            parse_numeric(current_mode, mode_part, considering_dir)?
+        new_mode = if mode_part.chars().any(|c| c.is_ascii_digit()) {
+            parse_numeric(new_mode, mode_part, considering_dir)?
         } else {
-            parse_symbolic(current_mode, mode_part, umask, considering_dir)?
+            parse_symbolic(new_mode, mode_part, umask, considering_dir)?
         };
     }
 
-    Ok(current_mode)
+    Ok(new_mode)
+}
+
+/// Takes a user-supplied string and tries to parse to u32 mode bitmask.
+pub fn parse(mode_string: &str, considering_dir: bool, umask: u32) -> Result<u32, String> {
+    parse_chmod(0, mode_string, considering_dir, umask)
 }
 
 #[allow(clippy::unnecessary_cast)]
 pub fn parse_mode(mode: &str) -> Result<mode_t, String> {
     let mut new_mode = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
-
-    for mode_chunk in mode.split(',') {
-        new_mode = if mode_chunk.chars().any(|c| c.is_ascii_digit()) {
-            parse_numeric(new_mode, mode_chunk, true)?
-        } else {
-            parse_symbolic(new_mode, mode_chunk, get_umask(), true)?
-        };
-    }
+    new_mode = parse_chmod(new_mode, mode, true, get_umask())?;
     Ok(new_mode as mode_t)
 }
 
@@ -203,23 +206,25 @@ pub fn get_umask() -> u32 {
 mod tests {
 
     use super::parse;
+    use super::parse_chmod;
+    use super::parse_mode;
 
     #[test]
-    fn symbolic_modes() {
-        assert_eq!(super::parse_mode("u+x").unwrap(), 0o766);
+    fn test_symbolic_modes() {
+        assert_eq!(parse_mode("u+x").unwrap(), 0o766);
         assert_eq!(
-            super::parse_mode("+x").unwrap(),
+            parse_mode("+x").unwrap(),
             if crate::os::is_wsl_1() { 0o776 } else { 0o777 }
         );
-        assert_eq!(super::parse_mode("a-w").unwrap(), 0o444);
-        assert_eq!(super::parse_mode("g-r").unwrap(), 0o626);
+        assert_eq!(parse_mode("a-w").unwrap(), 0o444);
+        assert_eq!(parse_mode("g-r").unwrap(), 0o626);
     }
 
     #[test]
-    fn numeric_modes() {
-        assert_eq!(super::parse_mode("644").unwrap(), 0o644);
-        assert_eq!(super::parse_mode("+100").unwrap(), 0o766);
-        assert_eq!(super::parse_mode("-4").unwrap(), 0o662);
+    fn test_numeric_modes() {
+        assert_eq!(parse_mode("644").unwrap(), 0o644);
+        assert_eq!(parse_mode("+100").unwrap(), 0o766);
+        assert_eq!(parse_mode("-4").unwrap(), 0o662);
     }
 
     #[test]
@@ -339,5 +344,20 @@ mod tests {
 
         // First add user write, then set to 755 (should override)
         assert_eq!(parse("u+w,755", false, 0).unwrap(), 0o755);
+    }
+
+    #[test]
+    fn test_chmod_symbolic_modes() {
+        assert_eq!(parse_chmod(0o666, "u+x", false, 0).unwrap(), 0o766);
+        assert_eq!(parse_chmod(0o666, "+x", false, 0).unwrap(), 0o777);
+        assert_eq!(parse_chmod(0o666, "a-w", false, 0).unwrap(), 0o444);
+        assert_eq!(parse_chmod(0o666, "g-r", false, 0).unwrap(), 0o626);
+    }
+
+    #[test]
+    fn test_chmod_numeric_modes() {
+        assert_eq!(parse_chmod(0o666, "644", false, 0).unwrap(), 0o644);
+        assert_eq!(parse_chmod(0o666, "+100", false, 0).unwrap(), 0o766);
+        assert_eq!(parse_chmod(0o666, "-4", false, 0).unwrap(), 0o662);
     }
 }
