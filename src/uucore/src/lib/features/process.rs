@@ -8,7 +8,6 @@
 // spell-checker:ignore pgrep pwait snice getpgrp
 
 use libc::{gid_t, pid_t, uid_t};
-#[cfg(not(target_os = "redox"))]
 use nix::errno::Errno;
 use std::io;
 use std::process::Child;
@@ -49,6 +48,30 @@ pub fn getuid() -> uid_t {
 /// `getpid()` returns the pid of the calling process.
 pub fn getpid() -> pid_t {
     unsafe { libc::getpid() }
+}
+
+/// Check if a process with the given PID is alive.
+///
+/// Uses `kill(pid, 0)` which sends signal 0 (null signal) to check process existence
+/// without actually sending a signal. This is a standard POSIX technique for checking
+/// if a process exists.
+///
+/// Returns `true` if:
+/// - The process exists (kill returns 0)
+/// - We lack permission to signal the process (errno != ESRCH)
+///   This means the process exists but we can't signal it
+///
+/// Returns `false` only if:
+/// - errno is ESRCH (No such process), confirming the process doesn't exist
+///
+/// PIDs <= 0 are considered alive for compatibility with utmp records that may
+/// contain special or invalid PID values.
+#[cfg(not(target_os = "openbsd"))]
+pub fn pid_is_alive(pid: i32) -> bool {
+    if pid <= 0 {
+        return true;
+    }
+    unsafe { libc::kill(pid, 0) == 0 || Errno::last() != Errno::ESRCH }
 }
 
 /// `getsid()` returns the session ID of the process with process ID pid.
