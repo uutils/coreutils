@@ -461,7 +461,7 @@ impl ChownExecutor {
     #[cfg(target_os = "linux")]
     fn safe_traverse_dir(&self, dir_fd: DirFd, dir_path: &Path, ret: &mut i32) {
         // Iterative depth-first traversal to avoid stacking directory FDs.
-        let mut stack: Vec<(DirFd, std::path::PathBuf)> = vec![(dir_fd, dir_path.to_path_buf())];
+        let mut stack: Vec<(DirFd, PathBuf)> = vec![(dir_fd, dir_path.to_path_buf())];
 
         while let Some((dir_fd, dir_path)) = stack.pop() {
             // Read directory entries
