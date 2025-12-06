@@ -10,9 +10,9 @@
 use indicatif::ProgressBar;
 use std::ffi::OsStr;
 use std::fs;
-use std::io::{self, stdin, IsTerminal};
-use std::path::Path;
+use std::io::{self, IsTerminal, stdin};
 use std::os::unix::fs::PermissionsExt;
+use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::prompt_yes;
@@ -65,7 +65,10 @@ fn prompt_file_with_stat(path: &Path, stat: &libc::stat, options: &Options) -> b
         (false, _) if options.interactive == InteractiveMode::PromptProtected => true,
         (_, true) => true,
         (_, false) if len == 0 => {
-            prompt_yes!("remove write-protected regular empty file {}?", path.quote())
+            prompt_yes!(
+                "remove write-protected regular empty file {}?",
+                path.quote()
+            )
         }
         _ => prompt_yes!("remove write-protected regular file {}?", path.quote()),
     }
@@ -84,9 +87,15 @@ fn prompt_dir_with_mode(path: &Path, mode: libc::mode_t, options: &Options) -> b
     match (stdin_ok, readable, writable, options.interactive) {
         (false, _, _, InteractiveMode::PromptProtected) => true,
         (false, false, false, InteractiveMode::Never) => true,
-        (_, false, false, _) => prompt_yes!("attempt removal of inaccessible directory {}?", path.quote()),
+        (_, false, false, _) => prompt_yes!(
+            "attempt removal of inaccessible directory {}?",
+            path.quote()
+        ),
         (_, false, true, InteractiveMode::Always) => {
-            prompt_yes!("attempt removal of inaccessible directory {}?", path.quote())
+            prompt_yes!(
+                "attempt removal of inaccessible directory {}?",
+                path.quote()
+            )
         }
         (_, true, false, _) => prompt_yes!("remove write-protected directory {}?", path.quote()),
         (_, _, _, InteractiveMode::Always) => prompt_yes!("remove directory {}?", path.quote()),
