@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (vars) fperm srwx
 
-use libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR, mode_t, umask};
+use libc::umask;
 
 pub fn parse_numeric(fperm: u32, mut mode: &str, considering_dir: bool) -> Result<u32, String> {
     let (op, pos) = parse_op(mode).map_or_else(|_| (None, 0), |(op, pos)| (Some(op), pos));
@@ -169,13 +169,6 @@ pub fn parse(mode_string: &str, considering_dir: bool, umask: u32) -> Result<u32
     parse_chmod(0, mode_string, considering_dir, umask)
 }
 
-#[allow(clippy::unnecessary_cast)]
-pub fn parse_mode(mode: &str) -> Result<mode_t, String> {
-    let mut new_mode = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
-    new_mode = parse_chmod(new_mode, mode, true, get_umask())?;
-    Ok(new_mode as mode_t)
-}
-
 pub fn get_umask() -> u32 {
     // There's no portable way to read the umask without changing it.
     // We have to replace it and then quickly set it back, hopefully before
@@ -207,24 +200,20 @@ mod tests {
 
     use super::parse;
     use super::parse_chmod;
-    use super::parse_mode;
 
     #[test]
-    fn test_symbolic_modes() {
-        assert_eq!(parse_mode("u+x").unwrap(), 0o766);
-        assert_eq!(
-            parse_mode("+x").unwrap(),
-            if crate::os::is_wsl_1() { 0o776 } else { 0o777 }
-        );
-        assert_eq!(parse_mode("a-w").unwrap(), 0o444);
-        assert_eq!(parse_mode("g-r").unwrap(), 0o626);
+    fn test_chmod_symbolic_modes() {
+        assert_eq!(parse_chmod(0o666, "u+x", false, 0).unwrap(), 0o766);
+        assert_eq!(parse_chmod(0o666, "+x", false, 0).unwrap(), 0o777);
+        assert_eq!(parse_chmod(0o666, "a-w", false, 0).unwrap(), 0o444);
+        assert_eq!(parse_chmod(0o666, "g-r", false, 0).unwrap(), 0o626);
     }
 
     #[test]
-    fn test_numeric_modes() {
-        assert_eq!(parse_mode("644").unwrap(), 0o644);
-        assert_eq!(parse_mode("+100").unwrap(), 0o766);
-        assert_eq!(parse_mode("-4").unwrap(), 0o662);
+    fn test_chmod_numeric_modes() {
+        assert_eq!(parse_chmod(0o666, "644", false, 0).unwrap(), 0o644);
+        assert_eq!(parse_chmod(0o666, "+100", false, 0).unwrap(), 0o766);
+        assert_eq!(parse_chmod(0o666, "-4", false, 0).unwrap(), 0o662);
     }
 
     #[test]
@@ -344,20 +333,5 @@ mod tests {
 
         // First add user write, then set to 755 (should override)
         assert_eq!(parse("u+w,755", false, 0).unwrap(), 0o755);
-    }
-
-    #[test]
-    fn test_chmod_symbolic_modes() {
-        assert_eq!(parse_chmod(0o666, "u+x", false, 0).unwrap(), 0o766);
-        assert_eq!(parse_chmod(0o666, "+x", false, 0).unwrap(), 0o777);
-        assert_eq!(parse_chmod(0o666, "a-w", false, 0).unwrap(), 0o444);
-        assert_eq!(parse_chmod(0o666, "g-r", false, 0).unwrap(), 0o626);
-    }
-
-    #[test]
-    fn test_chmod_numeric_modes() {
-        assert_eq!(parse_chmod(0o666, "644", false, 0).unwrap(), 0o644);
-        assert_eq!(parse_chmod(0o666, "+100", false, 0).unwrap(), 0o766);
-        assert_eq!(parse_chmod(0o666, "-4", false, 0).unwrap(), 0o662);
     }
 }
