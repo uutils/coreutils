@@ -75,7 +75,7 @@ impl TruncateMode {
             Self::AtMost(size) => Some(fsize.min(*size)),
             Self::AtLeast(size) => Some(fsize.max(*size)),
             Self::RoundDown(size) => fsize.checked_rem(*size).map(|remainder| fsize - remainder),
-            Self::RoundUp(size) => fsize.checked_rem(*size).map(|remainder| fsize + remainder),
+            Self::RoundUp(size) => fsize.checked_next_multiple_of(*size),
         }
     }
 
@@ -359,6 +359,8 @@ mod tests {
         assert_eq!(TruncateMode::Reduce(5).to_size(10), Some(5));
         assert_eq!(TruncateMode::Reduce(5).to_size(3), Some(0));
         assert_eq!(TruncateMode::RoundDown(4).to_size(13), Some(12));
+        assert_eq!(TruncateMode::RoundDown(4).to_size(16), Some(16));
+        assert_eq!(TruncateMode::RoundUp(8).to_size(10), Some(16));
         assert_eq!(TruncateMode::RoundUp(8).to_size(16), Some(16));
         assert_eq!(TruncateMode::RoundDown(0).to_size(123), None);
     }
