@@ -10,7 +10,7 @@
 use indicatif::ProgressBar;
 use std::ffi::OsStr;
 use std::fs;
-use std::io::{self, IsTerminal, stdin};
+use std::io::{IsTerminal, stdin};
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use uucore::display::Quotable;
