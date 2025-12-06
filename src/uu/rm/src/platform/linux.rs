@@ -5,7 +5,7 @@
 
 // Linux-specific implementations for the rm utility
 
-// spell-checker:ignore fstatat unlinkat
+// spell-checker:ignore fstatat unlinkat statx behaviour
 
 use indicatif::ProgressBar;
 use std::ffi::OsStr;
