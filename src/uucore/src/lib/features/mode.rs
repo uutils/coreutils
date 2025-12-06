@@ -139,21 +139,16 @@ fn parse_change(mode: &str, fperm: u32, considering_dir: bool) -> (u32, usize) {
 
 #[allow(clippy::unnecessary_cast)]
 pub fn parse_mode(mode: &str) -> Result<mode_t, String> {
-    #[cfg(all(
-        not(target_os = "freebsd"),
-        not(target_vendor = "apple"),
-        not(target_os = "android")
-    ))]
-    let fperm = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
-    #[cfg(any(target_os = "freebsd", target_vendor = "apple", target_os = "android"))]
-    let fperm = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
+    let mut new_mode = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
 
-    let result = if mode.chars().any(|c| c.is_ascii_digit()) {
-        parse_numeric(fperm as u32, mode, true)
-    } else {
-        parse_symbolic(fperm as u32, mode, get_umask(), true)
-    };
-    result.map(|mode| mode as mode_t)
+    for mode_chunk in mode.split(',') {
+        new_mode = if mode_chunk.chars().any(|c| c.is_ascii_digit()) {
+            parse_numeric(new_mode, mode_chunk, true)?
+        } else {
+            parse_symbolic(new_mode, mode_chunk, get_umask(), true)?
+        };
+    }
+    Ok(new_mode as mode_t)
 }
 
 pub fn get_umask() -> u32 {
@@ -201,5 +196,10 @@ mod test {
         assert_eq!(super::parse_mode("644").unwrap(), 0o644);
         assert_eq!(super::parse_mode("+100").unwrap(), 0o766);
         assert_eq!(super::parse_mode("-4").unwrap(), 0o662);
+    }
+
+    #[test]
+    fn multiple_modes() {
+        assert_eq!(super::parse_mode("+100,+010").unwrap(), 0o776);
     }
 }
