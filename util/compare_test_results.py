@@ -50,14 +50,14 @@ def identify_test_changes(current_flat, reference_flat):
         reference_flat (dict): Flattened dictionary of reference test results
 
     Returns:
-        tuple: Four lists containing regressions, fixes, newly_skipped, and newly_passing tests
+        tuple: Five lists containing regressions, fixes, newly_skipped, newly_passing, and newly_failing tests
     """
     # Find regressions (tests that were passing but now failing)
     regressions = []
     for test_path, status in current_flat.items():
         if status in ("FAIL", "ERROR"):
             if test_path in reference_flat:
-                if reference_flat[test_path] in ("PASS", "SKIP"):
+                if reference_flat[test_path] == "PASS":
                     regressions.append(test_path)
 
     # Find fixes (tests that were failing but now passing)
@@ -88,7 +88,17 @@ def identify_test_changes(current_flat, reference_flat):
         ):
             newly_passing.append(test_path)
 
-    return regressions, fixes, newly_skipped, newly_passing
+    # Find newly failing tests (were skipped, now failing)
+    newly_failing = []
+    for test_path, status in current_flat.items():
+        if (
+            status in ("FAIL", "ERROR")
+            and test_path in reference_flat
+            and reference_flat[test_path] == "SKIP"
+        ):
+            newly_failing.append(test_path)
+
+    return regressions, fixes, newly_skipped, newly_passing, newly_failing
 
 
 def main():
@@ -135,8 +145,8 @@ def main():
     reference_flat = flatten_test_results(reference_results)
 
     # Identify different categories of test changes
-    regressions, fixes, newly_skipped, newly_passing = identify_test_changes(
-        current_flat, reference_flat
+    regressions, fixes, newly_skipped, newly_passing, newly_failing = (
+        identify_test_changes(current_flat, reference_flat)
     )
 
     # Filter out intermittent issues from regressions
@@ -147,6 +157,10 @@ def main():
     real_fixes = [f for f in fixes if f not in ignore_list]
     intermittent_fixes = [f for f in fixes if f in ignore_list]
 
+    # Filter out intermittent issues from newly failing
+    real_newly_failing = [n for n in newly_failing if n not in ignore_list]
+    intermittent_newly_failing = [n for n in newly_failing if n in ignore_list]
+
     # Print summary stats
     print(f"Total tests in current run: {len(current_flat)}")
     print(f"Total tests in reference: {len(reference_flat)}")
@@ -156,6 +170,8 @@ def main():
     print(f"Intermittent fixes: {len(intermittent_fixes)}")
     print(f"Newly skipped tests: {len(newly_skipped)}")
     print(f"Newly passing tests (previously skipped): {len(newly_passing)}")
+    print(f"Newly failing tests (previously skipped): {len(real_newly_failing)}")
+    print(f"Intermittent newly failing: {len(intermittent_newly_failing)}")
 
     output_lines = []
 
@@ -203,6 +219,21 @@ def main():
         print("\nNEWLY PASSING TESTS (previously skipped):", file=sys.stderr)
         for test in sorted(newly_passing):
             msg = f"Congrats! The gnu test {test} is now passing!"
+            print(f"::notice ::{msg}", file=sys.stderr)
+            output_lines.append(msg)
+
+    # Report newly failing tests (were skipped, now failing)
+    if real_newly_failing:
+        print("\nNEWLY FAILING TESTS (previously skipped):", file=sys.stderr)
+        for test in sorted(real_newly_failing):
+            msg = f"Note: The gnu test {test} was skipped on 'main' but is now failing."
+            print(f"::warning ::{msg}", file=sys.stderr)
+            output_lines.append(msg)
+
+    if intermittent_newly_failing:
+        print("\nINTERMITTENT NEWLY FAILING (ignored):", file=sys.stderr)
+        for test in sorted(intermittent_newly_failing):
+            msg = f"Skip an intermittent issue {test} (was skipped on 'main', now failing)"
             print(f"::notice ::{msg}", file=sys.stderr)
             output_lines.append(msg)
 

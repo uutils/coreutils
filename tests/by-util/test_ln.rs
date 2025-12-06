@@ -934,3 +934,17 @@ fn test_ln_non_utf8_paths() {
     let symlink_path = at.plus(symlink_name);
     assert!(symlink_path.is_symlink());
 }
+
+#[test]
+fn test_ln_hard_link_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir");
+
+    scene
+        .ucmd()
+        .args(&["dir", "dir_link"])
+        .fails()
+        .stderr_contains("hard link not allowed for directory");
+}

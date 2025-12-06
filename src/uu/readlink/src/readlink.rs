@@ -10,8 +10,9 @@ use std::ffi::OsString;
 use std::fs;
 use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UResult, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
+use uucore::libc::EINVAL;
 use uucore::line_ending::LineEnding;
 use uucore::translate;
 use uucore::{format_usage, show_error};
@@ -88,15 +89,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 show(&path, line_ending).map_err_context(String::new)?;
             }
             Err(err) => {
-                return if verbose {
-                    Err(USimpleError::new(
-                        1,
-                        err.map_err_context(move || p.to_string_lossy().to_string())
-                            .to_string(),
-                    ))
+                if silent && !verbose {
+                    return Err(1.into());
+                }
+
+                let path = p.to_string_lossy().into_owned();
+                let message = if err.raw_os_error() == Some(EINVAL) {
+                    translate!("readlink-error-invalid-argument", "path" => path.clone())
                 } else {
-                    Err(1.into())
+                    err.map_err_context(|| path.clone()).to_string()
                 };
+                show_error!("{message}");
+                return Err(1.into());
             }
         }
     }

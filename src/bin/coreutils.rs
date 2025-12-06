@@ -3,14 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use clap::Command;
+use coreutils::validation;
 use std::cmp;
 use std::ffi::OsString;
 use std::io::{self, Write};
 use std::process;
-
-use clap::Command;
-
-use coreutils::validation;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -19,7 +17,14 @@ include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     println!("{name} {VERSION} (multi-call binary)\n");
     println!("Usage: {name} [function [arguments...]]");
-    println!("       {name} --list\n");
+    println!("       {name} --list");
+    println!();
+    #[cfg(feature = "feat_common_core")]
+    {
+        println!("Functions:");
+        println!("      '<uutils>' [arguments...]");
+        println!();
+    }
     println!("Options:");
     println!("      --list    lists all defined functions, one per row\n");
     println!("Currently defined functions:\n");

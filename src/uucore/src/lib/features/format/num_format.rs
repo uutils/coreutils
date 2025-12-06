@@ -276,7 +276,7 @@ impl Formatter<&ExtendedBigDecimal> for Float {
                 // Pad non-finite numbers with spaces, not zeros.
                 if alignment == NumberAlignment::RightZero {
                     alignment = NumberAlignment::RightSpace;
-                };
+                }
                 format_float_non_finite(&abs, self.case)
             }
         };
@@ -519,7 +519,7 @@ fn format_float_shortest(
             output.push_str(first_digits);
             output.push('.');
             output.push_str(remaining_digits);
-        };
+        }
 
         if force_decimal == ForceDecimal::No {
             strip_fractional_zeroes_and_dot(&mut output);
@@ -636,7 +636,7 @@ fn format_float_hexadecimal(
         }
     } else {
         frac2 <<= wanted_bits - bits;
-    };
+    }
 
     // Convert "XXX" to "X.XX": that divides by 16^precision = 2^(4*precision), so add that to the exponent.
     let mut digits = frac2.to_str_radix(16);
@@ -693,7 +693,7 @@ fn strip_fractional_zeroes_and_dot(s: &mut String) {
 fn write_output(
     mut writer: impl Write,
     sign_indicator: String,
-    mut s: String,
+    s: String,
     width: usize,
     alignment: NumberAlignment,
 ) -> std::io::Result<()> {
@@ -706,13 +706,17 @@ fn write_output(
     // by storing remaining_width indicating the actual width needed.
     // Using min() because self.width could be 0, 0usize - 1usize should be avoided
     let remaining_width = width - min(width, sign_indicator.len());
+
+    // Check if the width is too large for formatting
+    super::check_width(remaining_width)?;
+
     match alignment {
         NumberAlignment::Left => write!(writer, "{sign_indicator}{s:<remaining_width$}"),
         NumberAlignment::RightSpace => {
             let is_sign = sign_indicator.starts_with('-') || sign_indicator.starts_with('+'); // When sign_indicator is in ['-', '+']
             if is_sign && remaining_width > 0 {
                 // Make sure sign_indicator is just next to number, e.g. "% +5.1f" 1 ==> $ +1.0
-                s = sign_indicator + s.as_str();
+                let s = sign_indicator + s.as_str();
                 write!(writer, "{s:>width$}", width = remaining_width + 1) // Since we now add sign_indicator and s together, plus 1
             } else {
                 write!(writer, "{sign_indicator}{s:>remaining_width$}")

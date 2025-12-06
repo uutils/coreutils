@@ -244,6 +244,75 @@ fn test_install_mode_symbolic() {
 }
 
 #[test]
+fn test_install_mode_comma_separated() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "target_dir";
+    let file = "source_file";
+    // Test comma-separated mode like chmod: ug+rwX,o+rX
+    let mode_arg = "--mode=ug+rwX,o+rX";
+
+    at.touch(file);
+    at.mkdir(dir);
+    ucmd.arg(file).arg(dir).arg(mode_arg).succeeds().no_stderr();
+
+    let dest_file = &format!("{dir}/{file}");
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(dest_file));
+    let permissions = at.metadata(dest_file).permissions();
+    // ug+rwX: For files, X only adds execute if file already has execute (it doesn't here, starting at 0)
+    //         So this adds rw to user and group = 0o660
+    // o+rX: For files, X doesn't add execute, so this adds r to others = 0o004
+    // Total: 0o664 for file (0o100_664)
+    assert_eq!(0o100_664_u32, PermissionsExt::mode(&permissions));
+}
+
+#[test]
+fn test_install_mode_comma_separated_directory() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir = "test_dir";
+    // Test comma-separated mode for directory creation: ug+rwX,o+rX
+    let mode_arg = "--mode=ug+rwX,o+rX";
+
+    scene
+        .ucmd()
+        .arg("-d")
+        .arg(dir)
+        .arg(mode_arg)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.dir_exists(dir));
+    let permissions = at.metadata(dir).permissions();
+    // ug+rwX sets user and group to rwx (0o770), o+rX sets others to r-x (0o005)
+    // Total: 0o775 for directory (0o040_775)
+    assert_eq!(0o040_775_u32, PermissionsExt::mode(&permissions));
+}
+
+#[test]
+fn test_install_mode_symbolic_ignore_umask() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "target_dir";
+    let file = "source_file";
+    let mode_arg = "--mode=+w";
+
+    at.touch(file);
+    at.mkdir(dir);
+    ucmd.arg(file)
+        .arg(dir)
+        .arg(mode_arg)
+        .umask(0o022)
+        .succeeds()
+        .no_stderr();
+
+    let dest_file = &format!("{dir}/{file}");
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(dest_file));
+    let permissions = at.metadata(dest_file).permissions();
+    assert_eq!(0o100_222_u32, PermissionsExt::mode(&permissions));
+}
+
+#[test]
 fn test_install_mode_failing() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "target_dir";
@@ -1013,7 +1082,7 @@ fn test_install_creating_leading_dir_fails_on_long_name() {
         .arg(source)
         .arg(at.plus(target.as_str()))
         .fails()
-        .stderr_contains("failed to create");
+        .stderr_contains("cannot create directory");
 }
 
 #[test]
