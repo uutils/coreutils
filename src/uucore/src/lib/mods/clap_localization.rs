@@ -14,8 +14,9 @@
 use crate::error::UResult;
 use crate::locale::translate;
 
+use clap::builder::{IntoResettable, Resettable, StyledStr};
 use clap::error::{ContextKind, ErrorKind};
-use clap::{ArgMatches, Command, Error};
+use clap::{Arg, ArgAction, ArgMatches, Command, Error};
 
 use std::error::Error as StdError;
 use std::ffi::OsString;
@@ -515,50 +516,88 @@ pub fn handle_clap_error_with_exit_code(err: Error, exit_code: i32) -> ! {
     formatter.print_error_and_exit(&err, exit_code);
 }
 
-/// Configures a clap `Command` with proper localization and color settings.
-///
-/// This function sets up a `Command` with:
-/// - Appropriate color settings based on environment variables (`NO_COLOR`, `CLICOLOR_FORCE`, etc.)
-/// - Localized help template with proper formatting
-/// - TTY detection for automatic color enabling/disabling
-///
-/// # Arguments
-///
-/// * `cmd` - The clap `Command` to configure
-///
-/// # Returns
-///
-/// The configured `Command` with localization and color settings applied.
-///
-/// # Environment Variables
-///
-/// The following environment variables affect color output:
-/// - `NO_COLOR` - Disables all color output
-/// - `CLICOLOR_FORCE` or `FORCE_COLOR` - Forces color output even when not in a TTY
-/// - `TERM` - If set to "dumb", colors are disabled in auto mode
-///
-/// # Examples
-///
-/// ```no_run
-/// use clap::Command;
-/// use uucore::clap_localization::configure_localized_command;
-///
-/// let cmd = Command::new("myutil")
-///     .arg(clap::Arg::new("input").short('i'));
-/// let configured_cmd = configure_localized_command(cmd);
-/// ```
-pub fn configure_localized_command(mut cmd: Command) -> Command {
-    let color_choice = get_color_choice();
-    cmd = cmd.color(color_choice);
+pub trait CommandHelpLocalization {
+    /// Replaces default --help and --version with localized versions
+    fn localize_help_and_version(self) -> Self;
+    /// Wrapper for localizing command help template
+    fn localize_help_template(self) -> Self;
+}
 
-    // For help output (stdout), we check stdout TTY status
-    let colors_enabled = should_use_color_for_stream(&std::io::stdout());
+impl CommandHelpLocalization for Command {
+    fn localize_help_and_version(self) -> Self {
+        let mut cmd = self.disable_help_flag(true).arg(
+            Arg::new("help")
+                .short('h')
+                .long("help")
+                .action(ArgAction::Help)
+                .help(translate!("help-flag-help"))
+                .global(true),
+        );
 
-    cmd = cmd.help_template(crate::localized_help_template_with_colors(
-        crate::util_name(),
-        colors_enabled,
-    ));
-    cmd
+        // Only set version flag if version is denied.
+        // ArgAction panic if no version string is provided for the command.
+        if cmd.get_version().is_some() {
+            cmd = cmd.disable_version_flag(true).arg(
+                Arg::new("version")
+                    .short('V')
+                    .long("version")
+                    .action(ArgAction::Version)
+                    .help(translate!("help-flag-version"))
+                    .global(true),
+            );
+        }
+
+        cmd
+    }
+
+    fn localize_help_template(self) -> Self {
+        let util_name = self.get_name();
+        let template = crate::localized_help_template(util_name, &self);
+        self.help_template(template)
+    }
+}
+
+pub trait ArgHelpLocalization {
+    /// Add translation of "default" keyword for options with defaults.
+    /// Also support options without defaults with the same output as normal .help()
+    fn help_localized(self, description: impl IntoResettable<StyledStr>) -> Self;
+}
+
+impl ArgHelpLocalization for Arg {
+    fn help_localized(self, description: impl IntoResettable<StyledStr>) -> Self {
+        use std::fmt::Write;
+
+        let mut template = clap::builder::StyledStr::new();
+        let mut has_description = false;
+
+        // Manually extract the Option from Resettable because ".into_option()" is private
+        if let Resettable::Value(description_str) = description.into_resettable() {
+            write!(template, "{}", description_str).unwrap();
+            has_description = true;
+        }
+
+        let defaults: Vec<String> = self
+            .get_default_values()
+            .iter()
+            .filter_map(|v| v.to_str().map(String::from))
+            .map(|s| format!("\"{}\"", s))
+            .collect();
+        if !defaults.is_empty() {
+            if has_description {
+                // Space between description and [Default: ...]
+                write!(template, " ").unwrap();
+            }
+
+            let default_label = translate!("common-default");
+            let defaults_str = defaults.join(" ");
+            write!(template, "[{default_label}: {defaults_str}]").unwrap();
+
+            // Only hide default value if replaced otherwise clap throw an error
+            self.hide_default_value(true).help(template)
+        } else {
+            self.help(template)
+        }
+    }
 }
 
 /* spell-checker: disable */
@@ -627,15 +666,6 @@ mod tests {
         assert!(result.is_ok());
         let matches = result.unwrap();
         assert_eq!(matches.get_one::<String>("output").unwrap(), "out.txt");
-    }
-
-    #[test]
-    fn test_configure_localized_command() {
-        let cmd = Command::new("test");
-        let configured = configure_localized_command(cmd);
-        // The command should have color and help template configured
-        // We can't easily test the internal state, but we can verify it doesn't panic
-        assert_eq!(configured.get_name(), "test");
     }
 
     #[test]

@@ -11,6 +11,7 @@ use std::io::ErrorKind;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
+use uucore::clap_localization::{ArgHelpLocalization, CommandHelpLocalization};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
@@ -109,25 +110,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    let cmd = Command::new(uucore::util_name())
+    Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .about(translate!("truncate-about"))
         .override_usage(format_usage(&translate!("truncate-usage")))
         .after_help(translate!("truncate-after-help"))
-        .infer_long_args(true);
-    uucore::clap_localization::configure_localized_command(cmd)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::IO_BLOCKS)
                 .short('o')
                 .long(options::IO_BLOCKS)
-                .help(translate!("truncate-help-io-blocks"))
+                .help_localized(translate!("truncate-help-io-blocks"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_CREATE)
                 .short('c')
                 .long(options::NO_CREATE)
-                .help(translate!("truncate-help-no-create"))
+                .help_localized(translate!("truncate-help-no-create"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -135,7 +135,7 @@ pub fn uu_app() -> Command {
                 .short('r')
                 .long(options::REFERENCE)
                 .required_unless_present(options::SIZE)
-                .help(translate!("truncate-help-reference"))
+                .help_localized(translate!("truncate-help-reference"))
                 .value_name("RFILE")
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -144,7 +144,7 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(options::SIZE)
                 .required_unless_present(options::REFERENCE)
-                .help(translate!("truncate-help-size"))
+                .help_localized(translate!("truncate-help-size"))
                 .allow_hyphen_values(true)
                 .value_name("SIZE"),
         )
@@ -156,6 +156,8 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::FilePath)
                 .value_parser(clap::value_parser!(OsString)),
         )
+        .localize_help_and_version()
+        .localize_help_template()
 }
 
 /// Truncate the named file to the specified size.
