@@ -1,13 +1,10 @@
-#!/usr/bin/env bash
+#!/usr/bin/env bash -e
 # `build-gnu.bash` ~ builds GNU coreutils (from supplied sources)
-#
 
 # spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
 # spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink texinfo CARGOFLAGS
 # spell-checker:ignore openat TOCTOU CFLAGS
 # spell-checker:ignore hfsplus casefold chattr
-
-set -e
 
 # Use system's GNU version for make, nproc, readlink and sed on *BSD and macOS
 MAKE=$(command -v gmake||command -v make)
