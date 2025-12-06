@@ -90,9 +90,15 @@ run_test_and_aggregate() {
 
 for UTIL in ${UTIL_LIST}; do
 
-    run_test_and_aggregate \
-        "${UTIL}" \
-        "-p coreutils -E test(/^test_${UTIL}::/) ${FEATURES_OPTION}"
+    if [ "${UTIL}" = "stty" ]; then
+        run_test_and_aggregate \
+            "${UTIL}" \
+            "-p coreutils -p uu_${UTIL} -E test(/^test_${UTIL}::/) ${FEATURES_OPTION}"
+    else
+        run_test_and_aggregate \
+            "${UTIL}" \
+            "-p coreutils -E test(/^test_${UTIL}::/) ${FEATURES_OPTION}"
+    fi
 
     echo "## Clear the trace directory to free up space"
     rm -rf "${PROFRAW_DIR}" && mkdir -p "${PROFRAW_DIR}"
