@@ -68,7 +68,10 @@ fn prompt_file_with_stat(path: &Path, stat: &libc::stat, options: &Options) -> b
     match (stdin_ok, writable, len == 0) {
         (false, _, _) if options.interactive == InteractiveMode::PromptProtected => true,
         (_, true, _) => true,
-        (_, false, true) => prompt_yes!("remove write-protected regular empty file {}?", path.quote()),
+        (_, false, true) => prompt_yes!(
+            "remove write-protected regular empty file {}?",
+            path.quote()
+        ),
         _ => prompt_yes!("remove write-protected regular file {}?", path.quote()),
     }
 }
