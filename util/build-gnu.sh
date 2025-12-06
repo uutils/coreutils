@@ -203,6 +203,11 @@ grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r "${SED}
 
 "${SED}" -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
+if test "$(grep -c 'rm: skipping '  tests/rm/one-file-system.sh)" -eq 1; then
+     # Do it only once.
+     sed -i -e "s/ >> exp/ > exp/g"  -e "s|rm: and --preserve-root=all is in effect|rm: skipping 'a/b', since it's on a different device\nrm: and --preserve-root=all is in effect|g" tests/rm/one-file-system.sh
+fi
+
 # 'rel' doesn't exist. Our implementation is giving a better message.
 "${SED}" -i -e "s|rm: cannot remove 'rel': Permission denied|rm: cannot remove 'rel': No such file or directory|g" tests/rm/inaccessible.sh
 

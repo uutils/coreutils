@@ -18,11 +18,16 @@ workspace = true
 path = "src/rm.rs"
 
 [dependencies]
-thiserror = { workspace = true }
 clap = { workspace = true }
-uucore = { workspace = true, features = ["fs", "parser", "safe-traversal"] }
 fluent = { workspace = true }
 indicatif = { workspace = true }
+thiserror = { workspace = true }
+uucore = { workspace = true, features = [
+  "fs",
+  "fsext",
+  "parser",
+  "safe-traversal",
+] }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
