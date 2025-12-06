@@ -15,6 +15,14 @@ fn seq_integers(bencher: Bencher) {
     });
 }
 
+/// Benchmark large integer
+#[divan::bench]
+fn seq_large_integers(bencher: Bencher) {
+    bencher.bench(|| {
+        black_box(run_util_function(uumain, &["4e10003", "4e10003"]));
+    });
+}
+
 /// Benchmark sequence with custom separator
 #[divan::bench]
 fn seq_custom_separator(bencher: Bencher) {
