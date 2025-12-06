@@ -33,6 +33,9 @@ use std::os::unix::fs::MetadataExt;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{MAIN_SEPARATOR, Path};
 
+#[cfg(target_os = "linux")]
+use std::path::PathBuf;
+
 /// The various level of verbosity
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum VerbosityLevel {
@@ -450,96 +453,40 @@ impl ChownExecutor {
         };
 
         let mut ret = 0;
-        self.safe_traverse_dir(&dir_fd, root, &mut ret);
+        self.safe_traverse_dir(dir_fd, root, &mut ret);
         ret
     }
 
     #[cfg(target_os = "linux")]
-    fn safe_traverse_dir(&self, dir_fd: &DirFd, dir_path: &Path, ret: &mut i32) {
-        // Read directory entries
-        let entries = match dir_fd.read_dir() {
-            Ok(entries) => entries,
-            Err(e) => {
-                *ret = 1;
-                if self.verbosity.level != VerbosityLevel::Silent {
-                    show_error!(
-                        "cannot read directory {}: {}",
-                        dir_path.quote(),
-                        strip_errno(&e)
-                    );
-                }
-                return;
-            }
-        };
+    fn safe_traverse_dir(&self, dir_fd: DirFd, dir_path: &Path, ret: &mut i32) {
+        // Iterative depth-first traversal to avoid stacking directory FDs.
+        let mut stack: Vec<(DirFd, PathBuf)> = vec![(dir_fd, dir_path.to_path_buf())];
 
-        for entry_name in entries {
-            let entry_path = dir_path.join(&entry_name);
-
-            // Get metadata for the entry
-            let follow = self.traverse_symlinks == TraverseSymlinks::All;
-
-            let meta = match dir_fd.metadata_at(&entry_name, follow) {
-                Ok(m) => m,
+        while let Some((dir_fd, dir_path)) = stack.pop() {
+            // Read directory entries
+            let entries = match dir_fd.read_dir() {
+                Ok(entries) => entries,
                 Err(e) => {
                     *ret = 1;
                     if self.verbosity.level != VerbosityLevel::Silent {
-                        show_error!("cannot access {}: {}", entry_path.quote(), strip_errno(&e));
+                        show_error!(
+                            "cannot read directory {}: {}",
+                            dir_path.quote(),
+                            strip_errno(&e)
+                        );
                     }
                     continue;
                 }
             };
 
-            if self.preserve_root
-                && is_root(&entry_path, self.traverse_symlinks == TraverseSymlinks::All)
-            {
-                *ret = 1;
-                return;
-            }
+            for entry_name in entries {
+                let entry_path = dir_path.join(&entry_name);
 
-            // Check if we should chown this entry
-            if self.matched(meta.uid(), meta.gid()) {
-                // Use fchownat for the actual ownership change
-                let follow_symlinks =
-                    self.dereference || self.traverse_symlinks == TraverseSymlinks::All;
+                // Get metadata for the entry
+                let follow = self.traverse_symlinks == TraverseSymlinks::All;
 
-                // Only pass the IDs that should actually be changed
-                let chown_uid = self.dest_uid;
-                let chown_gid = self.dest_gid;
-
-                if let Err(e) = dir_fd.chown_at(&entry_name, chown_uid, chown_gid, follow_symlinks)
-                {
-                    *ret = 1;
-                    if self.verbosity.level != VerbosityLevel::Silent {
-                        let msg = format!(
-                            "changing {} of {}: {}",
-                            if self.verbosity.groups_only {
-                                "group"
-                            } else {
-                                "ownership"
-                            },
-                            entry_path.quote(),
-                            strip_errno(&e)
-                        );
-                        show_error!("{msg}");
-                    }
-                } else {
-                    // Report the successful ownership change using the shared helper
-                    self.report_ownership_change_success(&entry_path, meta.uid(), meta.gid());
-                }
-            } else {
-                self.print_verbose_ownership_retained_as(
-                    &entry_path,
-                    meta.uid(),
-                    self.dest_gid.map(|_| meta.gid()),
-                );
-            }
-
-            // Recurse into subdirectories
-            if meta.is_dir() && (follow || !meta.file_type().is_symlink()) {
-                match dir_fd.open_subdir(&entry_name) {
-                    Ok(subdir_fd) => {
-                        self.safe_traverse_dir(&subdir_fd, &entry_path, ret);
-                    }
+                let meta = match dir_fd.metadata_at(&entry_name, follow) {
+                    Ok(m) => m,
                     Err(e) => {
                         *ret = 1;
                         if self.verbosity.level != VerbosityLevel::Silent {
@@ -549,9 +496,76 @@ impl ChownExecutor {
                                 strip_errno(&e)
                             );
                         }
+                        continue;
+                    }
+                };
+
+                if self.preserve_root
+                    && is_root(&entry_path, self.traverse_symlinks == TraverseSymlinks::All)
+                {
+                    *ret = 1;
+                    return;
+                }
+
+                // Check if we should chown this entry
+                if self.matched(meta.uid(), meta.gid()) {
+                    // Use fchownat for the actual ownership change
+                    let follow_symlinks =
+                        self.dereference || self.traverse_symlinks == TraverseSymlinks::All;
+
+                    // Only pass the IDs that should actually be changed
+                    let chown_uid = self.dest_uid;
+                    let chown_gid = self.dest_gid;
+
+                    if let Err(e) =
+                        dir_fd.chown_at(&entry_name, chown_uid, chown_gid, follow_symlinks)
+                    {
+                        *ret = 1;
+                        if self.verbosity.level != VerbosityLevel::Silent {
+                            let msg = format!(
+                                "changing {} of {}: {}",
+                                if self.verbosity.groups_only {
+                                    "group"
+                                } else {
+                                    "ownership"
+                                },
+                                entry_path.quote(),
+                                strip_errno(&e)
+                            );
+                            show_error!("{}", msg);
+                        }
+                    } else {
+                        // Report the successful ownership change using the shared helper
+                        self.report_ownership_change_success(&entry_path, meta.uid(), meta.gid());
+                    }
+                } else {
+                    self.print_verbose_ownership_retained_as(
+                        &entry_path,
+                        meta.uid(),
+                        self.dest_gid.map(|_| meta.gid()),
+                    );
+                }
+
+                // Recurse into subdirectories iteratively
+                if meta.is_dir() && (follow || !meta.file_type().is_symlink()) {
+                    match dir_fd.open_subdir(&entry_name) {
+                        Ok(subdir_fd) => {
+                            stack.push((subdir_fd, entry_path.clone()));
+                        }
+                        Err(e) => {
+                            *ret = 1;
+                            if self.verbosity.level != VerbosityLevel::Silent {
+                                show_error!(
+                                    "cannot access {}: {}",
+                                    entry_path.quote(),
+                                    strip_errno(&e)
+                                );
+                            }
+                        }
                     }
                 }
             }
+            // dir_fd dropped here, releasing the descriptor before descending further
         }
     }
 
