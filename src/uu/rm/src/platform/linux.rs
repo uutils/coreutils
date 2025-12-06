@@ -48,28 +48,27 @@ fn prompt_file_with_stat(path: &Path, stat: &libc::stat, options: &Options) -> b
     let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
 
     // Match original behaviour:
-    // - Interactive::Always: always prompt (with symlink/file specific message)
-    // - Otherwise: prompt only when write-protected
+    // - Interactive::Always: always prompt; use non-protected wording when writable,
+    //   otherwise fall through to protected wording.
     if options.interactive == InteractiveMode::Always {
         if is_symlink {
             return prompt_yes!("remove symbolic link {}?", path.quote());
         }
-        if len == 0 {
-            return prompt_yes!("remove regular empty file {}?", path.quote());
+        if writable {
+            return if len == 0 {
+                prompt_yes!("remove regular empty file {}?", path.quote())
+            } else {
+                prompt_yes!("remove file {}?", path.quote())
+            };
         }
-        return prompt_yes!("remove file {}?", path.quote());
+        // Not writable: use protected wording below
     }
 
-    // Interactive::Once or ::PromptProtected paths
-    match (stdin_ok, writable) {
-        (false, _) if options.interactive == InteractiveMode::PromptProtected => true,
-        (_, true) => true,
-        (_, false) if len == 0 => {
-            prompt_yes!(
-                "remove write-protected regular empty file {}?",
-                path.quote()
-            )
-        }
+    // Interactive::Once or ::PromptProtected (and non-writable Always) paths
+    match (stdin_ok, writable, len == 0) {
+        (false, _, _) if options.interactive == InteractiveMode::PromptProtected => true,
+        (_, true, _) => true,
+        (_, false, true) => prompt_yes!("remove write-protected regular empty file {}?", path.quote()),
         _ => prompt_yes!("remove write-protected regular file {}?", path.quote()),
     }
 }
