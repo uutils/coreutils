@@ -1326,6 +1326,51 @@ fn test_chmod_recursive_uses_dirfd_for_subdirs() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn test_chmod_recursive_does_not_exhaust_fds() {
+    use libc::{RLIMIT_NOFILE, getrlimit, rlimit, setrlimit};
+    use std::path::PathBuf;
+
+    // Lower soft limit so deep recursion would fail if descriptors stack up
+    let mut old = rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    unsafe { assert_eq!(0, getrlimit(RLIMIT_NOFILE, &mut old)) };
+
+    let new_soft = old.rlim_max.min(64);
+    struct Restore(rlimit);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            unsafe {
+                setrlimit(RLIMIT_NOFILE, &self.0);
+            }
+        }
+    }
+    let _restore = Restore(old);
+
+    let lowered = rlimit {
+        rlim_cur: new_soft,
+        rlim_max: old.rlim_max,
+    };
+    unsafe { assert_eq!(0, setrlimit(RLIMIT_NOFILE, &lowered)) };
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Build a deep single-branch directory tree
+    let depth = 256;
+    let mut current = PathBuf::from("deep");
+    at.mkdir(&current);
+    for _ in 0..depth {
+        current.push("d");
+        at.mkdir(&current);
+    }
+
+    scene.ucmd().arg("-R").arg("777").arg("deep").succeeds();
+}
+
 #[test]
 fn test_chmod_colored_output() {
     // Test colored help message

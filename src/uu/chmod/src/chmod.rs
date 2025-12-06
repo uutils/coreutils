@@ -10,6 +10,9 @@ use std::ffi::OsString;
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
+
+#[cfg(target_os = "linux")]
+use std::path::PathBuf;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code};
@@ -436,7 +439,11 @@ impl Chmoder {
 
         // If the path is a directory (or we should follow symlinks), recurse into it
         if (!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir() {
-            for dir_entry in file_path.read_dir()? {
+            // `read_dir` keeps a file descriptor open for the directory while
+            // the iterator is alive. Collect the entries first so the iterator
+            // (and thus the FD) is dropped before we recurse into children.
+            let entries: Vec<_> = file_path.read_dir()?.collect();
+            for dir_entry in entries {
                 let path = match dir_entry {
                     Ok(entry) => entry.path(),
                     Err(err) => {
@@ -469,7 +476,7 @@ impl Chmoder {
         if (!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir() {
             match DirFd::open(file_path) {
                 Ok(dir_fd) => {
-                    r = self.safe_traverse_dir(&dir_fd, file_path).and(r);
+                    r = self.safe_traverse_dir(dir_fd, file_path).and(r);
                 }
                 Err(err) => {
                     // Handle permission denied errors with proper file path context
@@ -488,60 +495,66 @@ impl Chmoder {
     }
 
     #[cfg(target_os = "linux")]
-    fn safe_traverse_dir(&self, dir_fd: &DirFd, dir_path: &Path) -> UResult<()> {
+    fn safe_traverse_dir(&self, dir_fd: DirFd, dir_path: &Path) -> UResult<()> {
         let mut r = Ok(());
-
-        let entries = dir_fd.read_dir()?;
+        // Depth-first traversal without recursive calls to avoid stacking FDs.
+        let mut stack: Vec<(DirFd, std::path::PathBuf)> = vec![(dir_fd, dir_path.to_path_buf())];
 
         // Determine if we should follow symlinks (doesn't depend on entry_name)
         let should_follow_symlink = self.traverse_symlinks == TraverseSymlinks::All;
 
-        for entry_name in entries {
-            let entry_path = dir_path.join(&entry_name);
+        while let Some((dir_fd, dir_path)) = stack.pop() {
+            let entries = dir_fd.read_dir()?;
 
-            let dir_meta = dir_fd.metadata_at(&entry_name, should_follow_symlink);
-            let Ok(meta) = dir_meta else {
-                // Handle permission denied with proper file path context
-                let e = dir_meta.unwrap_err();
-                let error = if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    ChmodError::PermissionDenied(entry_path.to_string_lossy().to_string()).into()
-                } else {
-                    e.into()
+            for entry_name in entries {
+                let entry_path = dir_path.join(&entry_name);
+
+                let dir_meta = dir_fd.metadata_at(&entry_name, should_follow_symlink);
+                let Ok(meta) = dir_meta else {
+                    // Handle permission denied with proper file path context
+                    let e = dir_meta.unwrap_err();
+                    let error = if e.kind() == std::io::ErrorKind::PermissionDenied {
+                        ChmodError::PermissionDenied(entry_path.to_string_lossy().to_string())
+                            .into()
+                    } else {
+                        e.into()
+                    };
+                    r = r.and(Err(error));
+                    continue;
                 };
-                r = r.and(Err(error));
-                continue;
-            };
 
-            if entry_path.is_symlink() {
-                r = self
-                    .handle_symlink_during_safe_recursion(&entry_path, dir_fd, &entry_name)
-                    .and(r);
-            } else {
-                // For regular files and directories, chmod them
-                r = self
-                    .safe_chmod_file(&entry_path, dir_fd, &entry_name, meta.mode() & 0o7777)
-                    .and(r);
+                if entry_path.is_symlink() {
+                    r = self
+                        .handle_symlink_during_safe_recursion(&entry_path, &dir_fd, &entry_name)
+                        .and(r);
+                } else {
+                    // For regular files and directories, chmod them
+                    r = self
+                        .safe_chmod_file(&entry_path, &dir_fd, &entry_name, meta.mode() & 0o7777)
+                        .and(r);
 
-                // Recurse into subdirectories using the existing directory fd
-                if meta.is_dir() {
-                    match dir_fd.open_subdir(&entry_name) {
-                        Ok(child_dir_fd) => {
-                            r = self.safe_traverse_dir(&child_dir_fd, &entry_path).and(r);
-                        }
-                        Err(err) => {
-                            let error = if err.kind() == std::io::ErrorKind::PermissionDenied {
-                                ChmodError::PermissionDenied(
-                                    entry_path.to_string_lossy().to_string(),
-                                )
-                                .into()
-                            } else {
-                                err.into()
-                            };
-                            r = r.and(Err(error));
+                    // Queue subdirectories; parent dir_fd can be dropped before processing children.
+                    if meta.is_dir() {
+                        match dir_fd.open_subdir(&entry_name) {
+                            Ok(child_dir_fd) => {
+                                stack.push((child_dir_fd, entry_path.clone()));
+                            }
+                            Err(err) => {
+                                let error = if err.kind() == std::io::ErrorKind::PermissionDenied {
+                                    ChmodError::PermissionDenied(
+                                        entry_path.to_string_lossy().to_string(),
+                                    )
+                                    .into()
+                                } else {
+                                    err.into()
+                                };
+                                r = r.and(Err(error));
+                            }
                         }
                     }
                 }
             }
+            // dir_fd is dropped here, releasing its file descriptor before the next depth step.
         }
         r
     }
