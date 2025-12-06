@@ -2,16 +2,15 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+//
 // spell-checker:ignore fstatat openat dirfd
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::Pattern;
 use std::collections::HashSet;
 use std::env;
-use std::ffi::OsStr;
-use std::ffi::OsString;
-use std::fs::Metadata;
-use std::fs::{self, DirEntry, File};
+use std::ffi::{OsStr, OsString};
+use std::fs::{self, DirEntry, File, Metadata};
 use std::io::{BufRead, BufReader, stdout};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
@@ -941,6 +940,9 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
                 "{}",
                 translate!("du-error-invalid-zero-length-file-name", "file" => file_name.to_string_lossy(), "line" => line_number)
             );
+            set_exit_code(1);
+        } else if path == b"-" && file_name == "-" {
+            show_error!("{}", translate!("du-error-hyphen-file-name-not-allowed"));
             set_exit_code(1);
         } else {
             let p = PathBuf::from(&*uucore::os_str_from_bytes(&path).unwrap());
