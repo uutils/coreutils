@@ -10,6 +10,13 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_missing_operand() {
+    // Test calling dirname with no arguments - should fail
+    // This covers the error path at line 80-82 in dirname.rs
+    new_ucmd!().fails_with_code(1);
+}
+
+#[test]
 fn test_path_with_trailing_slashes() {
     new_ucmd!()
         .arg("/root/alpha/beta/gamma/delta/epsilon/omega//")
@@ -156,7 +163,7 @@ fn test_trailing_dot_edge_cases() {
     new_ucmd!()
         .arg("/home/dos//.")
         .succeeds()
-        .stdout_is("/home/dos/\n");
+        .stdout_is("/home/dos\n");
 
     // Path with . in middle (should use normal logic)
     new_ucmd!()
@@ -215,4 +222,63 @@ fn test_existing_behavior_preserved() {
         .arg("/home/dos/..")
         .succeeds()
         .stdout_is("/home/dos\n");
+}
+
+#[test]
+fn test_multiple_paths_comprehensive() {
+    // Comprehensive test for multiple paths in single invocation
+    new_ucmd!()
+        .args(&[
+            "/home/dos/.",
+            "/var/log",
+            ".",
+            "/tmp/.",
+            "",
+            "/",
+            "relative/path",
+        ])
+        .succeeds()
+        .stdout_is("/home/dos\n/var\n.\n/tmp\n.\n/\nrelative\n");
+}
+
+#[test]
+fn test_all_dot_slash_variations() {
+    // Tests for all the cases mentioned in issue #8910 comment
+    // https://github.com/uutils/coreutils/issues/8910#issuecomment-3408735720
+
+    new_ucmd!().arg("foo//.").succeeds().stdout_is("foo\n");
+
+    new_ucmd!().arg("foo///.").succeeds().stdout_is("foo\n");
+
+    new_ucmd!().arg("foo/./").succeeds().stdout_is("foo\n");
+
+    new_ucmd!()
+        .arg("foo/bar/./")
+        .succeeds()
+        .stdout_is("foo/bar\n");
+
+    new_ucmd!().arg("foo/./bar").succeeds().stdout_is("foo/.\n");
+}
+
+#[test]
+fn test_dot_slash_component_preservation() {
+    // Ensure that /. components in the middle are preserved
+    // These should NOT be normalized away
+
+    new_ucmd!().arg("a/./b").succeeds().stdout_is("a/.\n");
+
+    new_ucmd!()
+        .arg("a/./b/./c")
+        .succeeds()
+        .stdout_is("a/./b/.\n");
+
+    new_ucmd!()
+        .arg("foo/./bar/baz")
+        .succeeds()
+        .stdout_is("foo/./bar\n");
+
+    new_ucmd!()
+        .arg("/path/./to/file")
+        .succeeds()
+        .stdout_is("/path/./to\n");
 }
