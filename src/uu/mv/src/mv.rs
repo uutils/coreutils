@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized
+// spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized unwritable
 
 mod error;
 #[cfg(unix)]
@@ -40,10 +40,12 @@ use uucore::backup_control::{self, source_is_target_backup};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code};
 #[cfg(unix)]
+use uucore::fs::display_permissions_unix;
+#[cfg(unix)]
 use uucore::fs::make_fifo;
 use uucore::fs::{
     MissingHandling, ResolveMode, are_hardlinks_or_one_way_symlink_to_same_file,
-    are_hardlinks_to_same_file, canonicalize, display_permissions_unix, path_ends_with_terminator,
+    are_hardlinks_to_same_file, canonicalize, path_ends_with_terminator,
 };
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
 use uucore::fsxattr;
@@ -437,13 +439,14 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
             }
             OverwriteMode::Force => {}
             OverwriteMode::Default => {
-                if std::io::stdin().is_terminal() && !is_writable(target) {
-                    if !prompt_yes!(
+                if std::io::stdin().is_terminal()
+                    && !is_writable(target)
+                    && !prompt_yes!(
                         "{}",
                         translate!("mv-prompt-overwrite", "target" => target.quote())
-                    ) {
-                        return Err(io::Error::other("").into());
-                    }
+                    )
+                {
+                    return Err(io::Error::other("").into());
                 }
             }
         }
@@ -1253,9 +1256,8 @@ fn get_interactive_prompt(to: &Path) -> String {
         // Check if file is not writable by user
         if (mode & 0o200) == 0 {
             let perms = display_permissions_unix(mode as mode_t, false);
-            // Prepend space to prevent translate macro from parsing as number
-            let mode_str = format!(" {:04o}", file_mode);
-            return translate!("mv-prompt-overwrite-mode", "target" => to.quote(), "mode_str" => mode_str, "perms" => perms);
+            let mode_info = format!("{file_mode:04o} ({perms})");
+            return translate!("mv-prompt-overwrite-mode", "target" => to.quote(), "mode_info" => mode_info);
         }
     }
     translate!("mv-prompt-overwrite", "target" => to.quote())
