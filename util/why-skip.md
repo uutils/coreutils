@@ -35,9 +35,6 @@
 = timeout returned 142. SIGALRM not handled? =
 * tests/misc/timeout-group.sh
 
-= FULL_PARTITION_TMPDIR not defined =
-* tests/misc/tac-continue.sh
-
 = can't get window size =
 * tests/misc/stty-row-col.sh
 

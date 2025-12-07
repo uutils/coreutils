@@ -1,6 +1,6 @@
 name: GnuTests
 
-# spell-checker:ignore (abbrev/names) CodeCov gnulib GnuTests Swatinem
+# spell-checker:ignore (abbrev/names) CodeCov gnulib GnuTests Swatinem tmpfs
 # spell-checker:ignore (jargon) submodules devel
 # spell-checker:ignore (libs/utils) autopoint chksum getenforce gperf lcov libexpect limactl pyinotify setenforce shopt texinfo valgrind libattr libcap taiki-e
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
@@ -114,6 +114,16 @@ jobs:
         ## Build binaries
         cd 'uutils'
         env PROFILE=release-small bash util/build-gnu.sh
+
+    ### Test environment setup
+    - name: Setup specific GNU tests environment
+      shell: bash
+      run: |
+        # for tac/tac-continue test
+        export FULL_PARTITION_TMPDIR=/mnt/full_partition
+        sudo mount --mkdir=0777 --types tmpfs --options size=1M tmpfs $FULL_PARTITION_TMPDIR
+        dd if=/dev/zero of=$FULL_PARTITION_TMPDIR/data bs=1M count=1
+        echo "FULL_PARTITION_TMPDIR=$FULL_PARTITION_TMPDIR" >> $GITHUB_ENV
 
     ### Run tests as user
     - name: Run GNU tests
