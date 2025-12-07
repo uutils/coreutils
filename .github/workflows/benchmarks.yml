@@ -37,6 +37,7 @@ jobs:
           - { package: uu_numfmt }
           - { package: uu_rm }
           - { package: uu_seq }
+          - { package: uu_shuf }
           - { package: uu_sort }
           - { package: uu_split }
           - { package: uu_tsort }
@@ -45,7 +46,7 @@ jobs:
           - { package: uu_wc }
           - { package: uu_factor }
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
 

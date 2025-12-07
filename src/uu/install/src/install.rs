@@ -25,7 +25,6 @@ use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::fs::dir_strip_dot_for_creation;
-use uucore::mode::get_umask;
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 use uucore::process::{getegid, geteuid};
 #[cfg(feature = "selinux")]
@@ -339,7 +338,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     let specified_mode: Option<u32> = if matches.contains_id(OPT_MODE) {
         let x = matches.get_one::<String>(OPT_MODE).ok_or(1)?;
-        Some(mode::parse(x, considering_dir, get_umask()).map_err(|err| {
+        Some(uucore::mode::parse(x, considering_dir, 0).map_err(|err| {
             show_error!(
                 "{}",
                 translate!("install-error-invalid-mode", "error" => err)
@@ -712,10 +711,9 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
     Ok(())
 }
 
-/// Handle incomplete user/group parings for chown.
+/// Handle ownership changes when -o/--owner or -g/--group flags are used.
 ///
 /// Returns a Result type with the Err variant containing the error message.
-/// If the user is root, revert the uid & gid
 ///
 /// # Parameters
 ///
@@ -736,11 +734,8 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
     // Determine the owner and group IDs to be used for chown.
     let (owner_id, group_id) = if b.owner_id.is_some() || b.group_id.is_some() {
         (b.owner_id, b.group_id)
-    } else if geteuid() == 0 {
-        // Special case for root user.
-        (Some(0), Some(0))
     } else {
-        // No chown operation needed.
+        // No chown operation needed - file ownership comes from process naturally.
         return Ok(());
     };
 
