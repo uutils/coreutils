@@ -138,7 +138,6 @@ jobs:
         path_GNU='gnu'
         path_UUTILS='uutils'
         bash "uutils/util/run-gnu-test.sh" run-root
-        ### Run tests as root
 
     - name: Extract testing info from individual logs (run as root) into JSON
       shell: bash
@@ -146,17 +145,20 @@ jobs:
         path_UUTILS='uutils'
         python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }}
 
+    ### This shell has been changed from "bash" to this command
+    ### "script" will start a pty and the -q command removes the "script" initiation log
+    ### the -e flag makes it propagate the error code and -c runs the command in a pty
+    ### the primary purpose of this change is to run the tty GNU tests
+    ### The reason its separated from the rest of the tests is because one test can corrupt the other
+    ### tests through the use of the shared terminal and it changes the environment that the other
+    ### tests are run in, which can cause different results.
     - name: Run GNU stty tests
       shell: 'script -q -e -c "bash {0}"'
       run: |
         ## Run GNU root tests
         path_GNU='gnu'
         path_UUTILS='uutils'
-        bash "uutils/util/run-gnu-test.sh" tests/stty/stty-row-col
-        bash "uutils/util/run-gnu-test.sh" tests/stty/stty-pairs
-        bash "uutils/util/run-gnu-test.sh" tests/stty/stty-invalid
-        bash "uutils/util/run-gnu-test.sh" tests/stty/stty
-        bash "uutils/util/run-gnu-test.sh" tests/stty/bad-speed
+        bash "uutils/util/run-gnu-test.sh" run-tty
 
     - name: Extract testing info from individual logs (stty) into JSON
       shell: bash
