@@ -27,8 +27,6 @@ use std::os::unix;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 #[cfg(windows)]
 use std::os::windows;
-#[cfg(windows)]
-use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf, absolute};
 
 #[cfg(unix)]
