@@ -10,6 +10,10 @@
 use libc::{gid_t, pid_t, uid_t};
 #[cfg(not(target_os = "redox"))]
 use nix::errno::Errno;
+#[cfg(not(target_os = "openbsd"))]
+use nix::sys::signal::kill;
+#[cfg(not(target_os = "openbsd"))]
+use nix::unistd::Pid;
 use std::io;
 use std::process::Child;
 use std::process::ExitStatus;
@@ -72,7 +76,7 @@ pub fn pid_is_alive(pid: i32) -> bool {
     if pid <= 0 {
         return true;
     }
-    unsafe { libc::kill(pid, 0) == 0 || Errno::last() != Errno::ESRCH }
+    kill(Pid::from_raw(pid), None).is_ok() || Errno::last() != Errno::ESRCH
 }
 
 /// `getsid()` returns the session ID of the process with process ID pid.
