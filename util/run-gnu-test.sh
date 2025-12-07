@@ -55,11 +55,15 @@ if test $# -ge 1; then
 fi
 
 if [[ "$1" == "run-tty" ]]; then
-    # Handle TTY tests - dynamically find tests requiring TTY
+    # Handle TTY tests - dynamically find tests requiring TTY and run each individually
     shift
-    TTY_TESTS=$(grep -r "require_controlling_input_terminal" tests --include="*.sh" --include="*.pl" -l 2>/dev/null | tr '\n' ' ')
-    echo "Running TTY tests: $TTY_TESTS"
-    script -qec "timeout -sKILL 1h '${MAKE}' -j '$(${NPROC})' check TESTS='$TTY_TESTS' SUBDIRS=. RUN_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit='' srcdir='${path_GNU}' TEST_SUITE_LOG='tests/test-suite-tty.log'" /dev/null || :
+    TTY_TESTS=$(grep -r "require_controlling_input_terminal" tests --include="*.sh" --include="*.pl" -l 2>/dev/null)
+    echo "Running TTY tests individually:"
+    # If a test fails, it can break the implementation of the other tty tests. By running them seperately this stops the different tests from being able to break each other
+    for test in $TTY_TESTS; do
+        echo "  Running: $test"
+        script -qec "timeout -sKILL 5m '${MAKE}' check TESTS='$test' SUBDIRS=. RUN_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit='' srcdir='${path_GNU}'" /dev/null || :
+    done
     exit 0
 elif [[ "$1" == "run-root" && "$has_selinux_tests" == true ]]; then
     # Handle SELinux root tests separately
