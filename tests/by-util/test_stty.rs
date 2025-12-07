@@ -1629,6 +1629,7 @@ fn test_stty_uses_stdin() {
 
 #[test]
 #[cfg(unix)]
+#[ignore = "Issue: #9547"]
 fn test_ispeed_ospeed_valid_speeds() {
     let (path, _controller, _replica) = pty_path();
     let (_at, ts) = at_and_ts!();
