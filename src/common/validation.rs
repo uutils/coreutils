@@ -25,7 +25,7 @@ pub fn get_all_utilities<T: Args>(
 
 /// Prints a "utility not found" error and exits
 pub fn not_found(util: &OsStr) -> ! {
-    println!("{}: function/utility not found", util.maybe_quote());
+    eprintln!("{}: function/utility not found", util.maybe_quote());
     process::exit(1);
 }
 
