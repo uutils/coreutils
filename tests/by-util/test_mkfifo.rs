@@ -127,6 +127,32 @@ fn test_create_fifo_with_umask() {
 }
 
 #[test]
+fn test_create_fifo_permission_denied() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let no_exec_dir = "owner_no_exec_dir";
+    let named_pipe = "owner_no_exec_dir/mkfifo_err";
+
+    at.mkdir(no_exec_dir);
+    at.set_mode(no_exec_dir, 0o644);
+
+    let err_msg = format!(
+        "mkfifo: cannot create fifo '{named_pipe}': File exists
+mkfifo: cannot set permissions on '{named_pipe}': Permission denied (os error 13)
+"
+    );
+
+    scene
+        .ucmd()
+        .arg(named_pipe)
+        .arg("-m")
+        .arg("666")
+        .fails()
+        .stderr_is(err_msg.as_str());
+}
+
+#[test]
 #[cfg(feature = "feat_selinux")]
 fn test_mkfifo_selinux() {
     let ts = TestScenario::new(util_name!());
