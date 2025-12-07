@@ -59,7 +59,7 @@ if [[ "$1" == "run-tty" ]]; then
     shift
     TTY_TESTS=$(grep -r "require_controlling_input_terminal" tests --include="*.sh" --include="*.pl" -l 2>/dev/null)
     echo "Running TTY tests individually:"
-    # If a test fails, it can break the implementation of the other tty tests. By running them seperately this stops the different tests from being able to break each other
+    # If a test fails, it can break the implementation of the other tty tests. By running them separately this stops the different tests from being able to break each other
     for test in $TTY_TESTS; do
         echo "  Running: $test"
         script -qec "timeout -sKILL 5m '${MAKE}' check TESTS='$test' SUBDIRS=. RUN_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit='' srcdir='${path_GNU}'" /dev/null || :
