@@ -548,13 +548,37 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
         }
 
         let mut paths = vec![]; // Paths worth checking for new content to print
+
+        // Helper closure to process a single event
+        let process_event = |observer: &mut Observer,
+                             event: notify::Event,
+                             settings: &Settings,
+                             paths: &mut Vec<PathBuf>|
+         -> UResult<()> {
+            if let Some(event_path) = event.paths.first() {
+                if observer.files.contains_key(event_path) {
+                    // Handle Event if it is about a path that we are monitoring
+                    let new_paths = observer.handle_event(&event, settings)?;
+                    for p in new_paths {
+                        if !paths.contains(&p) {
+                            paths.push(p);
+                        }
+                    }
+                }
+            }
+            Ok(())
+        };
+
         match rx_result {
             Ok(Ok(event)) => {
-                if let Some(event_path) = event.paths.first() {
-                    if observer.files.contains_key(event_path) {
-                        // Handle Event if it is about a path that we are monitoring
-                        paths = observer.handle_event(&event, settings)?;
-                    }
+                process_event(&mut observer, event, settings, &mut paths)?;
+
+                // Drain any additional pending events to batch them together.
+                // This prevents redundant headers when multiple inotify events
+                // are queued (e.g., after resuming from SIGSTOP).
+                while let Ok(Ok(event)) = observer.watcher_rx.as_mut().unwrap().receiver.try_recv()
+                {
+                    process_event(&mut observer, event, settings, &mut paths)?;
                 }
             }
             Ok(Err(notify::Error {

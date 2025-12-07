@@ -21,7 +21,7 @@ path = "src/od.rs"
 byteorder = { workspace = true }
 clap = { workspace = true }
 half = { workspace = true }
-uucore = { workspace = true, features = ["parser"] }
+uucore = { workspace = true, features = ["parser-size"] }
 fluent = { workspace = true }
 libc.workspace = true
 

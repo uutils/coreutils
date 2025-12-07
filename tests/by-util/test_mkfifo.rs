@@ -99,6 +99,8 @@ fn test_create_fifo_with_mode_and_umask() {
     test_fifo_creation("u-r,g-w,o+x", 0o022, "p-w-r--rwx"); // spell-checker:disable-line
     test_fifo_creation("a=rwx,o-w", 0o022, "prwxrwxr-x"); // spell-checker:disable-line
     test_fifo_creation("=rwx,o-w", 0o022, "prwxr-xr-x"); // spell-checker:disable-line
+    test_fifo_creation("ug+rw,o+r", 0o022, "prw-rw-rw-"); // spell-checker:disable-line
+    test_fifo_creation("u=rwx,g=rx,o=", 0o022, "prwxr-x---"); // spell-checker:disable-line
 }
 
 #[test]
@@ -122,6 +124,32 @@ fn test_create_fifo_with_umask() {
 
     test_fifo_creation(0o022, "prw-r--r--"); // spell-checker:disable-line
     test_fifo_creation(0o777, "p---------"); // spell-checker:disable-line
+}
+
+#[test]
+fn test_create_fifo_permission_denied() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let no_exec_dir = "owner_no_exec_dir";
+    let named_pipe = "owner_no_exec_dir/mkfifo_err";
+
+    at.mkdir(no_exec_dir);
+    at.set_mode(no_exec_dir, 0o644);
+
+    let err_msg = format!(
+        "mkfifo: cannot create fifo '{named_pipe}': File exists
+mkfifo: cannot set permissions on '{named_pipe}': Permission denied (os error 13)
+"
+    );
+
+    scene
+        .ucmd()
+        .arg(named_pipe)
+        .arg("-m")
+        .arg("666")
+        .fails()
+        .stderr_is(err_msg.as_str());
 }
 
 #[test]
