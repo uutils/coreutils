@@ -51,9 +51,9 @@ fn get_canonical_util_name(util_name: &str) -> &str {
         "[" => "test",
 
         // hashsum aliases - all these hash commands are aliases for hashsum
-        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum"
-        | "sha3sum" | "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum"
-        | "shake128sum" | "shake256sum" | "b2sum" | "b3sum" => "hashsum",
+        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" | "b2sum" => {
+            "hashsum"
+        }
 
         "dir" => "ls", // dir is an alias for ls
 
