@@ -1,0 +1,24 @@
+Index: gnu/tests/tac/tac-continue.sh
+===================================================================
+--- gnu.orig/tests/tac/tac-continue.sh
++++ gnu/tests/tac/tac-continue.sh
+@@ -59,11 +59,17 @@ seq 5 > in
+
+ # Give tac a fifo command line argument.
+ # This makes it try to create a temporary file in $TMPDIR.
++
++# uutils does not create this temporary file in $TMPDIR, so the expected result is different
++# there is just no difference from normal operation
++# that means tac returns with success and the expected output the reverse of inputs
++
+ mkfifo_or_skip_ fifo
+ seq 1000 > fifo & pid=$!
+-TMPDIR=$FULL_PARTITION_TMPDIR tac fifo in >out 2>err && fail=1
++TMPDIR=$FULL_PARTITION_TMPDIR tac fifo in >out 2>err || fail=1
+
+-cat <<\EOF > exp || framework_failure_
++seq 1000 -1 1 > exp || framework_failure_
++cat <<\EOF >> exp || framework_failure_
+ 5
+ 4
+ 3
