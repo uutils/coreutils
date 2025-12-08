@@ -5,6 +5,7 @@
 # spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
 # spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) greadlink gsed multihardlink texinfo CARGOFLAGS
 # spell-checker:ignore openat TOCTOU CFLAGS tmpfs gnproc
+# spell-checker:ignore hfsplus casefold chattr dirp
 
 set -e
 
@@ -364,17 +365,13 @@ sed -i 's/echo "changing security context/echo "chcon: changing security context
 # * the test says "maybe we should not fail when no context available"
 "${SED}" -i -e "s|returns_ 1||g" tests/cp/no-ctx.sh
 
-# The rm-readdir-fail.sh test hooks readdir() but uutils rm uses nix library which calls readdir64_r().
-# readdir64_r has a different signature: int readdir64_r(DIR*, struct dirent64*, struct dirent64**)
-"${SED}" -i \
-    -e 's/struct dirent \*readdir (DIR \*dirp)/int readdir64_r(DIR *dirp, struct dirent64 *entry, struct dirent64 **result)/' \
-    -e 's/struct dirent \*(\*real_readdir)(DIR \*dirp)/int (*real_func)(DIR *, struct dirent64 *, struct dirent64 **)/' \
-    -e 's/real_readdir/real_func/g' \
-    -e 's/dlsym (RTLD_NEXT, "readdir")/dlsym(RTLD_NEXT, "readdir64_r")/' \
-    -e 's/struct dirent\* d;/int ret;/' \
-    -e 's/! (d = real_func (dirp))/(ret = real_func(dirp, entry, result)) != 0 || !*result/' \
-    -e 's/d->d_name/entry->d_name/g' \
-    -e 's/d->d_namlen/entry->d_namlen/g' \
-    -e 's/return d;/return 0;/' \
-    -e 's/return NULL;/*result = NULL; return EIO;/' \
-    tests/rm/rm-readdir-fail.sh
+# uutils rm uses nix which calls readdir64_r, so add a wrapper that delegates to the readdir hook
+"${SED}" -i '/^struct dirent \*readdir/i\
+int readdir64_r(DIR *dirp, struct dirent64 *entry, struct dirent64 **result) {\
+  struct dirent *d = readdir(dirp);\
+  if (!d) { *result = NULL; return errno ? EIO : 0; }\
+  memcpy(entry, d, sizeof(*d));\
+  *result = entry;\
+  return 0;\
+}
+' tests/rm/rm-readdir-fail.sh
