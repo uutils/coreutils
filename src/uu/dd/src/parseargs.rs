@@ -47,6 +47,8 @@ pub enum ParseError {
     BsOutOfRange(String),
     #[error("{}", translate!("dd-error-invalid-number", "input" => .0.clone()))]
     InvalidNumber(String),
+    #[error("invalid number: ‘{0}’: {1}")]
+    InvalidNumberWithErrMsg(String, String),
 }
 
 /// Contains a temporary state during parsing of the arguments
@@ -243,11 +245,25 @@ impl Parser {
             .skip
             .force_bytes_if(self.iflag.skip_bytes)
             .to_bytes(ibs as u64);
+        // GNU coreutils has a limit of i64 (intmax_t)
+        if skip > i64::MAX as u64 {
+            return Err(ParseError::InvalidNumberWithErrMsg(
+                format!("{skip}"),
+                "Value too large for defined data type".to_string(),
+            ));
+        }
 
         let seek = self
             .seek
             .force_bytes_if(self.oflag.seek_bytes)
             .to_bytes(obs as u64);
+        // GNU coreutils has a limit of i64 (intmax_t)
+        if seek > i64::MAX as u64 {
+            return Err(ParseError::InvalidNumberWithErrMsg(
+                format!("{seek}"),
+                "Value too large for defined data type".to_string(),
+            ));
+        }
 
         let count = self.count.map(|c| c.force_bytes_if(self.iflag.count_bytes));
 
