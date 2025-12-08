@@ -44,9 +44,6 @@
 = The Swedish locale with blank thousands separator is unavailable. =
 * tests/misc/sort-h-thousands-sep.sh
 
-= multicall binary is disabled =
-* tests/misc/coreutils.sh
-
 = not running on GNU/Hurd =
 * tests/id/gnu-zero-uids.sh
 
