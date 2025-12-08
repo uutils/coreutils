@@ -140,7 +140,9 @@ fn print_tldr_error() {
         "To include examples in the documentation, download the tldr archive and put it in the docs/ folder."
     );
     eprintln!();
-    eprintln!("  curl https://tldr.sh/assets/tldr.zip -o docs/tldr.zip");
+    eprintln!(
+        "  curl -L https://github.com/tldr-pages/tldr/releases/latest/download/tldr.zip -o docs/tldr.zip"
+    );
     eprintln!();
 }
 
