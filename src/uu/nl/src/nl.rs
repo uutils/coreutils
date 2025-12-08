@@ -409,16 +409,24 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                         translate!("nl-error-line-number-overflow"),
                     ));
                 };
-                writeln!(
-                    writer,
-                    "{}{}{}",
+                let mut buf = Vec::with_capacity(
+                    settings.number_width + settings.number_separator.len() + line.len() + 1,
+                );
+
+                buf.extend(
                     settings
                         .number_format
-                        .format(line_number, settings.number_width),
-                    settings.number_separator.to_string_lossy(),
-                    String::from_utf8_lossy(&line),
-                )
-                .map_err_context(|| translate!("nl-error-could-not-write"))?;
+                        .format(line_number, settings.number_width)
+                        .as_bytes(),
+                );
+                buf.extend(settings.number_separator.as_encoded_bytes());
+                buf.extend(String::from_utf8_lossy(&line).as_bytes());
+                buf.push(b'\n');
+
+                writer
+                    .write_all(&buf)
+                    .map_err_context(|| translate!("nl-error-could-not-write"))?;
+
                 // update line number for the potential next line
                 match line_number.checked_add(settings.line_increment) {
                     Some(new_line_number) => stats.line_number = Some(new_line_number),
