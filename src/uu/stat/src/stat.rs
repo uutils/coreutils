@@ -306,7 +306,7 @@ fn major(n: u64) -> u64 {
     (n >> 8) & 0xFF
 }
 
-// Keeps minor part of an integer
+/// Keeps minor part of an integer
 fn minor(n: u64) -> u64 {
     n & 0xFF
 }
