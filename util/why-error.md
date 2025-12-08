@@ -1,5 +1,5 @@
 This file documents why some tests are failing:
-
+* gnu/tests/cp/cp-a-selinux.sh
 * gnu/tests/cp/preserve-gid.sh
 * gnu/tests/date/date-debug.sh
 * gnu/tests/date/date.pl
