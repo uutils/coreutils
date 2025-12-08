@@ -365,7 +365,11 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
     // Check if readdir failed partway through (partial read)
     if let Some(err) = take_errno() {
         if !entries.is_empty() {
-            show_error!("{}: {}", translate!("rm-error-traversal-failed", "path" => path.display()), err);
+            show_error!(
+                "{}: {}",
+                translate!("rm-error-traversal-failed", "path" => path.display()),
+                err
+            );
             return true;
         }
     }
