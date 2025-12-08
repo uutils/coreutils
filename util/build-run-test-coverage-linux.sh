@@ -104,7 +104,7 @@ run_test_and_aggregate "uucore" "-p uucore --all-features"
 echo "# Aggregating all the profraw files under ${REPORT_PATH}"
 grcov \
     "${PROFDATA_DIR}" \
-    --binary-path "${REPO_main_dir}/target/debug/coreutils" \
+    --binary-path "${REPO_main_dir}/target/debug/" \
     --output-types lcov \
     --output-path ${REPORT_PATH} \
     --llvm \
