@@ -796,10 +796,14 @@ fn test_file_with_non_utf8_content() {
 
     at.write_bytes(filename, content);
 
-    ucmd.arg(filename).succeeds().stdout_is(format!(
-        "     1\ta\n     2\t{}\n     3\tb\n",
-        String::from_utf8_lossy(invalid_utf8)
-    ));
+    let mut expected = Vec::with_capacity(30);
+    expected.extend(b"     1\ta\n");
+    expected.extend(b"     2\t");
+    expected.extend(invalid_utf8);
+    expected.extend(b"\n");
+    expected.extend(b"     3\tb\n");
+
+    ucmd.arg(filename).succeeds().stdout_is_bytes(expected);
 }
 
 // Regression tests for issue #9132: repeated flags should use last value

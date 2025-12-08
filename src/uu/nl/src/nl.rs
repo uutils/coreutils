@@ -420,7 +420,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                         .as_bytes(),
                 );
                 buf.extend(settings.number_separator.as_encoded_bytes());
-                buf.extend(String::from_utf8_lossy(&line).as_bytes());
+                buf.extend(&line);
                 buf.push(b'\n');
 
                 writer
