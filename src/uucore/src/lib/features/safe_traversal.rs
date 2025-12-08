@@ -81,14 +81,14 @@ impl From<SafeTraversalError> for io::Error {
 }
 
 /// Clear errno and return any error that was set after an operation
-/// This is used because the nix library does not propogate folder reading errors correctly
+/// This is used because the nix library does not propagate folder reading errors correctly
 pub fn take_errno() -> Option<io::Error> {
     let errno = Errno::last();
     Errno::clear();
     (errno != Errno::from_raw(0)).then(|| io::Error::from_raw_os_error(errno as i32))
 }
 
-/// Clear errno before an operation, required to read error messages not propogated by nix from reading folders
+/// Clear errno before an operation, required to read error messages not propagated by nix from reading folders
 pub fn clear_errno() {
     Errno::clear();
 }
