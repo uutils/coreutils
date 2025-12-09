@@ -13,7 +13,7 @@ use std::io::{Error, ErrorKind};
 use std::os::unix::prelude::OsStrExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::Command as ProcessCommand;
+use std::process;
 use uucore::entries::{Locate, Passwd, grp2gid, usr2uid};
 use uucore::error::{UResult, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
@@ -210,7 +210,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // NOTE: Tests can only trigger code beyond this point if they're invoked with root permissions
     set_context(&options)?;
 
-    let err = ProcessCommand::new(chroot_command)
+    let err = process::Command::new(chroot_command)
         .args(&command[1..])
         .exec();
 
