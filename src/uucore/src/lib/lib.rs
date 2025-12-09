@@ -190,20 +190,13 @@ macro_rules! bin {
     ($util:ident) => {
         pub fn main() {
             use std::io::Write;
-            use uucore::locale;
             // suppress extraneous error output for SIGPIPE failures/panics
             uucore::panic::mute_sigpipe_panic();
-            locale::setup_localization(uucore::get_canonical_util_name(stringify!($util)))
-                .unwrap_or_else(|err| {
-                    match err {
-                        uucore::locale::LocalizationError::ParseResource {
-                            error: err_msg,
-                            snippet,
-                        } => eprintln!("Localization parse error at {snippet}: {err_msg:?}"),
-                        other => eprintln!("Could not init the localization system: {other}"),
-                    }
-                    std::process::exit(99)
-                });
+
+            // Store util name for lazy localization initialization
+            uucore::locale::set_util_name_for_lazy_init(
+                uucore::get_canonical_util_name(stringify!($util)),
+            );
 
             // execute utility code
             let code = $util::uumain(uucore::args_os());
