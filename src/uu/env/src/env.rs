@@ -628,6 +628,9 @@ impl EnvAppData {
                 argv.push(arg_cstring);
             }
 
+            // FIXME: libc::execvp() can be replaced with Command::exec() once https://github.com/rust-lang/rust/issues/97889#issuecomment-2007391597
+            // is merged into rust stable.
+
             // Execute the program using execvp. this replaces the current
             // process. The execvp function takes care of appending a NULL
             // argument to the argument list so that we don't have to.
