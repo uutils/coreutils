@@ -498,7 +498,7 @@ impl Chmoder {
     fn safe_traverse_dir(&self, dir_fd: DirFd, dir_path: &Path) -> UResult<()> {
         let mut r = Ok(());
         // Depth-first traversal without recursive calls to avoid stacking FDs.
-        let mut stack: Vec<(DirFd, std::path::PathBuf)> = vec![(dir_fd, dir_path.to_path_buf())];
+        let mut stack: Vec<(DirFd, PathBuf)> = vec![(dir_fd, dir_path.to_path_buf())];
 
         // Determine if we should follow symlinks (doesn't depend on entry_name)
         let should_follow_symlink = self.traverse_symlinks == TraverseSymlinks::All;
