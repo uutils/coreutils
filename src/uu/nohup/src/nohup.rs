@@ -76,6 +76,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut args: Vec<*const c_char> = cstrs.iter().map(|s| s.as_ptr()).collect();
     args.push(std::ptr::null());
 
+    // FIXME: libc::execvp can be replaced with Command::exec() once https://github.com/rust-lang/rust/issues/97889#issuecomment-2010074982
+    // is fixed in a stable rust version.
     let ret = unsafe { execvp(args[0], args.as_mut_ptr()) };
     match ret {
         libc::ENOENT => set_exit_code(EXIT_ENOENT),
