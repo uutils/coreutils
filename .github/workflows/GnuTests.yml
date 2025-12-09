@@ -27,6 +27,7 @@ env:
   DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
   TEST_FULL_SUMMARY_FILE: 'gnu-full-result.json'
   TEST_ROOT_FULL_SUMMARY_FILE: 'gnu-root-full-result.json'
+  TEST_STTY_FULL_SUMMARY_FILE: 'gnu-stty-full-result.json'
   TEST_SELINUX_FULL_SUMMARY_FILE: 'selinux-gnu-full-result.json'
   TEST_SELINUX_ROOT_FULL_SUMMARY_FILE: 'selinux-root-gnu-full-result.json'
 
@@ -137,11 +138,33 @@ jobs:
         path_GNU='gnu'
         path_UUTILS='uutils'
         bash "uutils/util/run-gnu-test.sh" run-root
+
     - name: Extract testing info from individual logs (run as root) into JSON
       shell: bash
       run : |
         path_UUTILS='uutils'
         python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }}
+
+    ### This shell has been changed from "bash" to this command
+    ### "script" will start a pty and the -q command removes the "script" initiation log
+    ### the -e flag makes it propagate the error code and -c runs the command in a pty
+    ### the primary purpose of this change is to run the tty GNU tests
+    ### The reason its separated from the rest of the tests is because one test can corrupt the other
+    ### tests through the use of the shared terminal and it changes the environment that the other
+    ### tests are run in, which can cause different results.
+    - name: Run GNU stty tests
+      shell: 'script -q -e -c "bash {0}"'
+      run: |
+        ## Run GNU root tests
+        path_GNU='gnu'
+        path_UUTILS='uutils'
+        bash "uutils/util/run-gnu-test.sh" run-tty
+
+    - name: Extract testing info from individual logs (stty) into JSON
+      shell: bash
+      run : |
+        path_UUTILS='uutils'
+        python uutils/util/gnu-json-result.py gnu/tests > ${{ env.TEST_STTY_FULL_SUMMARY_FILE }}
 
     ### Upload artifacts
     - name: Upload full json results
@@ -154,6 +177,12 @@ jobs:
       with:
         name: gnu-root-full-result
         path: ${{ env.TEST_ROOT_FULL_SUMMARY_FILE }}
+    - name: Upload stty json results
+      uses: actions/upload-artifact@v5
+      with:
+        name: gnu-stty-full-result
+        path: ${{ env.TEST_STTY_FULL_SUMMARY_FILE }}
+
     - name: Compress test logs
       shell: bash
       run : |
@@ -358,6 +387,13 @@ jobs:
         name: gnu-root-full-result
         path: results
         merge-multiple: true
+    - name: Download stty json results
+      uses: actions/download-artifact@v6
+      with:
+        name: gnu-stty-full-result
+        path: results
+        merge-multiple: true
+
     - name: Download selinux json results
       uses: actions/download-artifact@v6
       with:
@@ -380,7 +416,7 @@ jobs:
         path_UUTILS='uutils'
 
         json_count=$(ls -l results/*.json | wc -l)
-        if [[ "$json_count" -ne 4 ]]; then
+        if [[ "$json_count" -ne 5 ]]; then
           echo "::error ::Failed to download all results json files (expected 4 files, found $json_count); failing early"
           ls -lR results || true
           exit 1

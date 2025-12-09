@@ -1,5 +1,4 @@
-# spell-checker:ignore epipe readdir restorecon SIGALRM capget bigtime rootfs enotsup
-
+<!-- spell-checker:ignore epipe readdir restorecon SIGALRM capget bigtime rootfs enotsup -->
 = skipped test: breakpoint not hit =
 * tests/tail-2/inotify-race2.sh
 * tail-2/inotify-race.sh
@@ -44,9 +43,6 @@
 
 = The Swedish locale with blank thousands separator is unavailable. =
 * tests/misc/sort-h-thousands-sep.sh
-
-= multicall binary is disabled =
-* tests/misc/coreutils.sh
 
 = not running on GNU/Hurd =
 * tests/id/gnu-zero-uids.sh
