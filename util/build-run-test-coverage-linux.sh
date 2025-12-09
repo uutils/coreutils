@@ -108,6 +108,8 @@ grcov \
     --output-types lcov \
     --output-path ${REPORT_PATH} \
     --llvm \
+    --excl-start "^mod test.*\{" \
+    --excl-stop "^\}" \
     --keep-only "${REPO_main_dir}"'/src/*'
 
 
