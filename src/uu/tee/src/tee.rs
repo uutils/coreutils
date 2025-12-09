@@ -19,7 +19,7 @@ use uucore::{format_usage, show_error};
 // spell-checker:ignore nopipe
 
 #[cfg(unix)]
-use uucore::signals::{enable_pipe_errors, ignore_interrupts};
+use uucore::signals::{enable_pipe_errors, ignore_interrupts, ignore_pipe};
 
 mod options {
     pub const APPEND: &str = "append";
@@ -164,6 +164,9 @@ fn tee(options: &Options) -> Result<()> {
         }
         if options.output_error.is_none() {
             enable_pipe_errors().map_err(|_| Error::from(ErrorKind::Other))?;
+        } else {
+            // When --output-error is set, ignore SIGPIPE to handle broken pipes gracefully
+            ignore_pipe().map_err(|_| Error::from(ErrorKind::Other))?;
         }
     }
     let mut writers: Vec<NamedWriter> = options
