@@ -335,3 +335,20 @@ fn test_failed_write_is_reported() {
         .fails()
         .stderr_is("tac: failed to write to stdout: No space left on device (os error 28)\n");
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_infinite_pipe() {
+    use std::time::Duration;
+
+    let mut child = new_ucmd!().arg("/dev/zero").run_no_wait();
+
+    // Wait for a while
+    std::thread::sleep(Duration::from_secs(5));
+
+    // The process should not have exited, as the stream is infinite
+    assert!(child.is_alive());
+
+    // Clean up
+    child.kill();
+}
