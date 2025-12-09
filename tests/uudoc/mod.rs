@@ -29,14 +29,14 @@ fn test_manpage_generation() {
         output.status
     );
     assert!(
-        output.stderr.is_empty(),
-        "stderr should be empty but got: {}",
-        String::from_utf8_lossy(&output.stderr)
+        String::from_utf8_lossy(&output.stderr).contains("Warning: No tldr archive found"),
+        "stderr should contains tldr alert",
     );
 
     let output_str = String::from_utf8_lossy(&output.stdout);
-    assert!(output_str.contains("\n.TH"), "{output_str}");
+    assert!(output_str.contains("\n.TH ls"), "{output_str}");
     assert!(output_str.contains('1'), "{output_str}");
+    assert!(output_str.contains("\n.SH NAME\nls"), "{output_str}");
 }
 
 #[test]
@@ -53,14 +53,14 @@ fn test_manpage_coreutils() {
         output.status
     );
     assert!(
-        output.stderr.is_empty(),
-        "stderr should be empty but got: {}",
-        String::from_utf8_lossy(&output.stderr)
+        String::from_utf8_lossy(&output.stderr).contains("Warning: No tldr archive found"),
+        "stderr should contains tldr alert",
     );
 
     let output_str = String::from_utf8_lossy(&output.stdout);
-    assert!(output_str.contains("\n.TH"), "{output_str}");
+    assert!(output_str.contains("\n.TH coreutils"), "{output_str}");
     assert!(output_str.contains("coreutils"), "{output_str}");
+    assert!(output_str.contains("\n.SH NAME\ncoreutils"), "{output_str}");
 }
 
 #[test]
@@ -124,9 +124,8 @@ fn test_manpage_base64() {
         output.status
     );
     assert!(
-        output.stderr.is_empty(),
-        "stderr should be empty but got: {}",
-        String::from_utf8_lossy(&output.stderr)
+        String::from_utf8_lossy(&output.stderr).contains("Warning: No tldr archive found"),
+        "stderr should contains tldr alert",
     );
 
     let output_str = String::from_utf8_lossy(&output.stdout);

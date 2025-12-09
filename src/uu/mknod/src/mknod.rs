@@ -225,8 +225,10 @@ pub fn uu_app() -> Command {
         )
 }
 
+#[allow(clippy::unnecessary_cast)]
 fn parse_mode(str_mode: &str) -> Result<mode_t, String> {
-    uucore::mode::parse_mode(str_mode)
+    let default_mode = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
+    uucore::mode::parse_chmod(default_mode, str_mode, true, uucore::mode::get_umask())
         .map_err(|e| {
             translate!(
                 "mknod-error-invalid-mode",
@@ -237,7 +239,7 @@ fn parse_mode(str_mode: &str) -> Result<mode_t, String> {
             if mode > 0o777 {
                 Err(translate!("mknod-error-mode-permission-bits-only"))
             } else {
-                Ok(mode)
+                Ok(mode as mode_t)
             }
         })
 }

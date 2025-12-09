@@ -280,7 +280,7 @@ impl SplitWriter<'_> {
     }
 
     /// Writes the line to the current split.
-    /// If [`self.dev_null`] is true, then the line is discarded.
+    /// If `self.dev_null` is true, then the line is discarded.
     ///
     /// # Errors
     ///
@@ -572,7 +572,7 @@ where
         self.size = size;
     }
 
-    /// Add a line to the buffer. If the buffer has [`self.size`] elements, then its head is removed and
+    /// Add a line to the buffer. If the buffer has `self.size` elements, then its head is removed and
     /// the new line is pushed to the buffer. The removed head is then available in the returned
     /// option.
     fn add_line_to_buffer(&mut self, ln: usize, line: String) -> Option<String> {

@@ -59,8 +59,6 @@ skip = [
   { name = "windows-sys", version = "0.59.0" },
   # various crates
   { name = "windows-sys", version = "0.60.2" },
-  # various crates
-  { name = "windows-link", version = "0.1.3" },
   # parking_lot_core
   { name = "windows-targets", version = "0.52.6" },
   # windows-targets
@@ -107,6 +105,8 @@ skip = [
   { name = "zerocopy", version = "0.7.35" },
   # zerocopy
   { name = "zerocopy-derive", version = "0.7.35" },
+  # rustix
+  { name = "linux-raw-sys", version = "0.11.0" },
 ]
 # spell-checker: enable
 

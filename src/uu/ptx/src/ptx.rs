@@ -197,9 +197,6 @@ struct WordRef {
 
 #[derive(Debug, Error)]
 enum PtxError {
-    #[error("{}", translate!("ptx-error-dumb-format"))]
-    DumbFormat,
-
     #[error("{}", translate!("ptx-error-not-implemented", "feature" => (*.0)))]
     NotImplemented(&'static str),
 
@@ -216,8 +213,6 @@ fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
         config.gnu_ext = false;
         config.format = OutFormat::Roff;
         "[^ \t\n]+".clone_into(&mut config.context_regex);
-    } else {
-        return Err(PtxError::NotImplemented("GNU extensions").into());
     }
     if matches.contains_id(options::SENTENCE_REGEXP) {
         return Err(PtxError::NotImplemented("-S").into());
@@ -589,6 +584,69 @@ fn format_tex_line(
     output
 }
 
+fn format_dumb_line(
+    config: &Config,
+    word_ref: &WordRef,
+    line: &str,
+    chars_line: &[char],
+    reference: &str,
+) -> String {
+    let (tail, before, keyword, after, head) =
+        prepare_line_chunks(config, word_ref, line, chars_line, reference);
+
+    // Calculate the position for the left part
+    // The left part consists of tail (if present) + space + before
+    let left_part = if tail.is_empty() {
+        before
+    } else if before.is_empty() {
+        tail
+    } else {
+        format!("{tail} {before}")
+    };
+
+    // Calculate the position for the right part
+    let right_part = if head.is_empty() {
+        after
+    } else if after.is_empty() {
+        head
+    } else {
+        format!("{after} {head}")
+    };
+
+    // Calculate the width for the left half (before the keyword)
+    let half_width = config.line_width / 2;
+
+    // Right-justify the left part within the left half
+    let padding = if left_part.len() < half_width {
+        half_width - left_part.len()
+    } else {
+        0
+    };
+
+    // Build the output line with padding, left part, gap, keyword, and right part
+    let mut output = String::new();
+    output.push_str(&" ".repeat(padding));
+    output.push_str(&left_part);
+
+    // Add gap before keyword
+    output.push_str(&" ".repeat(config.gap_size));
+
+    output.push_str(&keyword);
+    output.push_str(&right_part);
+
+    // Add reference if needed
+    if config.auto_ref || config.input_ref {
+        if config.right_ref {
+            output.push(' ');
+            output.push_str(reference);
+        } else {
+            output = format!("{reference} {output}");
+        }
+    }
+
+    output
+}
+
 fn format_roff_field(s: &str) -> String {
     s.replace('\"', "\"\"")
 }
@@ -716,9 +774,13 @@ fn write_traditional_output(
                 &chars_lines[word_ref.local_line_nr],
                 &reference,
             ),
-            OutFormat::Dumb => {
-                return Err(PtxError::DumbFormat.into());
-            }
+            OutFormat::Dumb => format_dumb_line(
+                config,
+                word_ref,
+                &lines[word_ref.local_line_nr],
+                &chars_lines[word_ref.local_line_nr],
+                &reference,
+            ),
         };
         writeln!(writer, "{output_line}")
             .map_err_context(|| translate!("ptx-error-write-failed"))?;

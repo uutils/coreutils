@@ -2,6 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+// spell-checker:ignore fullwidth
+
 use uutests::new_ucmd;
 
 #[test]
@@ -39,6 +41,24 @@ fn test_default_wrap_with_newlines() {
         .arg("lorem_ipsum_new_line.txt")
         .succeeds()
         .stdout_is_fixture("lorem_ipsum_new_line_80_column.expected");
+}
+
+#[test]
+fn test_wide_characters_in_column_mode() {
+    new_ucmd!()
+        .args(&["-w", "5"])
+        .pipe_in("\u{B250}\u{B250}\u{B250}\n")
+        .succeeds()
+        .stdout_is("\u{B250}\u{B250}\n\u{B250}\n");
+}
+
+#[test]
+fn test_wide_characters_with_characters_option() {
+    new_ucmd!()
+        .args(&["--characters", "-w", "5"])
+        .pipe_in("\u{B250}\u{B250}\u{B250}\n")
+        .succeeds()
+        .stdout_is("\u{B250}\u{B250}\u{B250}\n");
 }
 
 #[test]
@@ -578,4 +598,37 @@ fn test_all_tab_advances_at_non_utf8_character() {
         .arg("non_utf8_tab_stops.input")
         .succeeds()
         .stdout_is_fixture_bytes("non_utf8_tab_stops_w16.expected");
+}
+
+#[test]
+fn test_combining_characters_nfc() {
+    // e acute NFC form (single character)
+    let e_acute_nfc = "\u{00E9}"; // é as single character
+    new_ucmd!()
+        .arg("-w2")
+        .pipe_in(format!("{e_acute_nfc}{e_acute_nfc}{e_acute_nfc}"))
+        .succeeds()
+        .stdout_is(format!("{e_acute_nfc}{e_acute_nfc}\n{e_acute_nfc}"));
+}
+
+#[test]
+fn test_combining_characters_nfd() {
+    // e acute NFD form (base + combining acute)
+    let e_acute_nfd = "e\u{0301}"; // e + combining acute accent
+    new_ucmd!()
+        .arg("-w2")
+        .pipe_in(format!("{e_acute_nfd}{e_acute_nfd}{e_acute_nfd}"))
+        .succeeds()
+        .stdout_is(format!("{e_acute_nfd}{e_acute_nfd}\n{e_acute_nfd}"));
+}
+
+#[test]
+fn test_fullwidth_characters() {
+    // e fullwidth (takes 2 columns)
+    let e_fullwidth = "\u{FF45}"; // ｅ
+    new_ucmd!()
+        .arg("-w2")
+        .pipe_in(format!("{e_fullwidth}{e_fullwidth}"))
+        .succeeds()
+        .stdout_is(format!("{e_fullwidth}\n{e_fullwidth}"));
 }
