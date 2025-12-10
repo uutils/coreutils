@@ -8,10 +8,6 @@ use std::path::PathBuf;
 use uutests::{at_and_ts, at_and_ucmd, new_ucmd};
 
 #[cfg(unix)]
-use std::ffi::OsStr;
-#[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
-#[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 
 #[test]
@@ -931,9 +927,11 @@ fn test_ln_extra_operand() {
         .stderr_contains("--help");
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[test]
 fn test_ln_cannot_stat_non_utf8() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
     let (at, ts) = at_and_ts!();
     at.mkdir("target_dir");
     at.touch(OsStr::from_bytes(b"file_\xFF"));
