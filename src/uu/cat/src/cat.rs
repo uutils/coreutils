@@ -728,9 +728,12 @@ fn write_end_of_line<W: Write>(
     Ok(())
 }
 
+/// Handle broken pipe errors by exiting with code 13 on Windows.
+/// On Unix, SIGPIPE handles this (configured in uumain), so this is a no-op.
+#[allow(unused_variables)]
 fn handle_broken_pipe(error: &io::Error) {
-    // SIGPIPE is not available on Windows.
-    if cfg!(target_os = "windows") && error.kind() == ErrorKind::BrokenPipe {
+    #[cfg(target_os = "windows")]
+    if error.kind() == ErrorKind::BrokenPipe {
         std::process::exit(13);
     }
 }

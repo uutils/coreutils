@@ -576,11 +576,9 @@ fn test_write_fast_fallthrough_uses_flush() {
 
 #[test]
 #[cfg(unix)]
-#[ignore = ""]
 fn test_domain_socket() {
     use std::io::prelude::*;
     use std::os::unix::net::UnixListener;
-    use std::sync::{Arc, Barrier};
     use std::thread;
 
     let dir = tempfile::Builder::new()
@@ -590,24 +588,22 @@ fn test_domain_socket() {
     let socket_path = dir.path().join("sock");
     let listener = UnixListener::bind(&socket_path).expect("failed to create socket");
 
-    // use a barrier to ensure we don't run cat before the listener is setup
-    let barrier = Arc::new(Barrier::new(2));
-    let barrier2 = Arc::clone(&barrier);
-
     let thread = thread::spawn(move || {
-        let mut stream = listener.accept().expect("failed to accept connection").0;
-        barrier2.wait();
+        let (mut stream, _) = listener.accept().expect("failed to accept connection");
         stream
             .write_all(b"a\tb")
             .expect("failed to write test data");
+        // Dropping stream closes the write end, signaling EOF to cat
     });
 
-    let child = new_ucmd!().args(&[socket_path]).run_no_wait();
-    barrier.wait();
-    child.wait().unwrap().stdout_is("a\tb");
+    new_ucmd!()
+        .args(&[socket_path])
+        .succeeds()
+        .stdout_only("a\tb");
 
     thread.join().unwrap();
 }
+
 
 #[test]
 fn test_write_to_self_empty() {
