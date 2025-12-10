@@ -174,7 +174,6 @@ fn open_nohup_file(path: &Path) -> std::io::Result<File> {
     let old_umask = umask(Mode::from_bits_truncate(0));
 
     let result = OpenOptions::new()
-        .write(true)
         .create(true)
         .append(true)
         .mode(0o600)
