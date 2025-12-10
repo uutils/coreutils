@@ -20,7 +20,11 @@ uucore = { workspace = true }
 memchr = { workspace = true }
 num-bigint = { workspace = true }
 num-prime = { workspace = true }
+num-traits = { workspace = true }
 fluent = { workspace = true }
+num-integer = { workspace = true }
+rand = { workspace = true }
+crypto-bigint = { workspace = true }
 
 [[bin]]
 name = "factor"
