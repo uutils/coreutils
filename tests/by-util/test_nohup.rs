@@ -3,20 +3,17 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore winsize Openpty openpty xpixel ypixel ptyprocess
+use std::os::unix::fs::PermissionsExt;
 use std::thread::sleep;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
+use uutests::util::TerminalSimulation;
 use uutests::util::TestScenario;
 use uutests::util_name;
 
 // General observation: nohup.out will not be created in tests run by cargo test
 // because stdin/stdout is not attached to a TTY.
 // All that can be tested is the side-effects.
-
-#[test]
-fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails_with_code(125);
-}
 
 #[test]
 #[cfg(any(
@@ -237,4 +234,129 @@ fn test_nohup_stderr_to_stdout() {
     let content = std::fs::read_to_string(at.plus_as_string("nohup.out")).unwrap();
     assert!(content.contains("stdout message"));
     assert!(content.contains("stderr message"));
+}
+
+#[test]
+fn test_nohup_file_permissions_ignore_umask_always_o600() {
+    for umask_val in [0o077, 0o000] {
+        let ts = TestScenario::new(util_name!());
+        ts.ucmd()
+            .terminal_sim_stdio(TerminalSimulation {
+                stdin: true,
+                stdout: true,
+                stderr: true,
+                size: None,
+            })
+            .umask(umask_val)
+            .args(&["echo", "test"])
+            .succeeds();
+
+        sleep(std::time::Duration::from_millis(10));
+        let mode = std::fs::metadata(ts.fixtures.plus_as_string("nohup.out"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(
+            mode, 0o600,
+            "with umask {:o}, got mode {:o}",
+            umask_val, mode
+        );
+    }
+}
+
+#[test]
+fn test_nohup_exit_codes() {
+    // No args: 125 default, 127 with POSIXLY_CORRECT
+    new_ucmd!().fails_with_code(125);
+    new_ucmd!().env("POSIXLY_CORRECT", "1").fails_with_code(127);
+
+    // Invalid arg: 125 default, 127 with POSIXLY_CORRECT
+    new_ucmd!().arg("--invalid").fails_with_code(125);
+    new_ucmd!()
+        .env("POSIXLY_CORRECT", "1")
+        .arg("--invalid")
+        .fails_with_code(127);
+}
+
+#[test]
+fn test_nohup_messages_by_terminal_state() {
+    let cases = [
+        (true, true, "ignoring input and appending output to", ""),
+        (false, true, "appending output to", "ignoring input"),
+        (true, false, "ignoring input", "appending output"),
+    ];
+
+    for (stdin_tty, stdout_tty, expected, not_expected) in cases {
+        let ts = TestScenario::new(util_name!());
+        let result = ts
+            .ucmd()
+            .terminal_sim_stdio(TerminalSimulation {
+                stdin: stdin_tty,
+                stdout: stdout_tty,
+                stderr: true,
+                size: None,
+            })
+            .args(&["echo", "test"])
+            .succeeds();
+
+        let stderr = String::from_utf8_lossy(result.stderr());
+        assert!(
+            stderr.contains(expected),
+            "stdin={stdin_tty}, stdout={stdout_tty}: expected '{expected}'"
+        );
+        if !not_expected.is_empty() {
+            assert!(
+                !stderr.contains(not_expected),
+                "stdin={stdin_tty}, stdout={stdout_tty}: unexpected '{not_expected}'"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_nohup_no_message_without_tty() {
+    new_ucmd!()
+        .args(&["echo", "test"])
+        .succeeds()
+        .stderr_does_not_contain("ignoring input")
+        .stderr_does_not_contain("appending output");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_nohup_stderr_write_failure() {
+    use std::fs::OpenOptions;
+
+    if !std::path::Path::new("/dev/full").exists() {
+        return;
+    }
+
+    for (posixly_correct, expected_code) in [(false, 125), (true, 127)] {
+        let dev_full = match OpenOptions::new().write(true).open("/dev/full") {
+            Ok(f) => f,
+            Err(_) => return,
+        };
+
+        let mut cmd = new_ucmd!();
+        if posixly_correct {
+            cmd.env("POSIXLY_CORRECT", "1");
+        }
+        let result = cmd
+            .terminal_sim_stdio(TerminalSimulation {
+                stdin: true,
+                stdout: true,
+                stderr: false,
+                size: None,
+            })
+            .set_stderr(dev_full)
+            .args(&["echo", "test"])
+            .fails();
+
+        assert_eq!(
+            result.try_exit_status().and_then(|s| s.code()),
+            Some(expected_code),
+            "POSIXLY_CORRECT={posixly_correct}"
+        );
+    }
 }

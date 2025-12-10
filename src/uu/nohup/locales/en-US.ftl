@@ -14,4 +14,6 @@ nohup-error-open-failed-both = failed to open { $first_path }: { $first_err }
   failed to open { $second_path }: { $second_err }
 
 # Status messages
+nohup-ignoring-input = ignoring input
+nohup-appending-output = appending output to { $path }
 nohup-ignoring-input-appending-output = ignoring input and appending output to { $path }
