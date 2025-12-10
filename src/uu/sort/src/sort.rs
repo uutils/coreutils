@@ -22,7 +22,7 @@ use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
-use custom_str_cmp::custom_str_cmp;
+use custom_str_cmp::{append_filtered_line_to, custom_str_cmp};
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
 #[cfg(target_os = "linux")]
@@ -41,6 +41,7 @@ use std::ops::Range;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
+use std::thread;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
@@ -291,6 +292,8 @@ pub struct GlobalSettings {
     compress_prog: Option<String>,
     merge_batch_size: usize,
     precomputed: Precomputed,
+    pipeline_depth: usize,
+    pipeline_depth_is_explicit: bool,
 }
 
 /// Data needed for sorting. Should be computed once before starting to sort
@@ -303,6 +306,7 @@ struct Precomputed {
     selections_per_line: usize,
     fast_lexicographic: bool,
     fast_ascii_insensitive: bool,
+    needs_filtered_view: bool,
 }
 
 impl GlobalSettings {
@@ -346,6 +350,7 @@ impl GlobalSettings {
 
         self.precomputed.fast_lexicographic = self.can_use_fast_lexicographic();
         self.precomputed.fast_ascii_insensitive = self.can_use_fast_ascii_insensitive();
+        self.precomputed.needs_filtered_view = self.can_use_filtered_view();
     }
 
     /// Returns true when the fast lexicographic path can be used safely.
@@ -385,6 +390,12 @@ impl GlobalSettings {
                     && !selector.settings.ignore_blanks
             }
     }
+
+    fn can_use_filtered_view(&self) -> bool {
+        self.mode == SortMode::Default
+            && self.selectors.is_empty()
+            && (self.ignore_case || self.dictionary_order || self.ignore_non_printing)
+    }
 }
 
 impl Default for GlobalSettings {
@@ -412,6 +423,8 @@ impl Default for GlobalSettings {
             compress_prog: None,
             merge_batch_size: default_merge_batch_size(),
             precomputed: Precomputed::default(),
+            pipeline_depth: default_pipeline_depth(),
+            pipeline_depth_is_explicit: false,
         }
     }
 }
@@ -547,6 +560,17 @@ impl<'a> Line<'a> {
                     }
                 }
             }
+        }
+        if settings.precomputed.needs_filtered_view {
+            let start = line_data.filtered_lines_data.len();
+            let len = append_filtered_line_to(
+                line,
+                settings.ignore_non_printing,
+                settings.dictionary_order,
+                settings.ignore_case,
+                &mut line_data.filtered_lines_data,
+            );
+            line_data.filtered_line_ranges.push((start, len));
         }
         Self { line, index }
     }
@@ -1111,6 +1135,26 @@ fn default_merge_batch_size() -> usize {
     }
 }
 
+const MIN_PIPELINE_DEPTH: usize = 2;
+const MAX_PIPELINE_DEPTH: usize = 8;
+
+fn default_pipeline_depth() -> usize {
+    thread::available_parallelism()
+        .map(|n| n.get().clamp(MIN_PIPELINE_DEPTH, MAX_PIPELINE_DEPTH))
+        .unwrap_or(MIN_PIPELINE_DEPTH)
+}
+
+fn pipeline_depth_from_parallel_arg(arg: Option<&String>) -> usize {
+    if let Some(raw) = arg {
+        if let Ok(parsed) = raw.parse::<usize>() {
+            if parsed > 0 {
+                return parsed.clamp(MIN_PIPELINE_DEPTH, MAX_PIPELINE_DEPTH);
+            }
+        }
+    }
+    default_pipeline_depth()
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -1221,7 +1265,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     settings.dictionary_order = matches.get_flag(options::DICTIONARY_ORDER);
     settings.ignore_non_printing = matches.get_flag(options::IGNORE_NONPRINTING);
-    if matches.contains_id(options::PARALLEL) {
+    let parallel_override = matches.contains_id(options::PARALLEL);
+    if parallel_override {
         // "0" is default - threads = num of cores
         settings.threads = matches
             .get_one::<String>(options::PARALLEL)
@@ -1230,6 +1275,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             env::set_var("RAYON_NUM_THREADS", &settings.threads);
         }
     }
+
+    settings.pipeline_depth =
+        pipeline_depth_from_parallel_arg(matches.get_one::<String>(options::PARALLEL));
+    settings.pipeline_depth_is_explicit = parallel_override;
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
         settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|e| {
@@ -1697,6 +1746,19 @@ fn compare_by<'a>(
 
     if global_settings.precomputed.fast_ascii_insensitive {
         let cmp = ascii_case_insensitive_cmp(a.line, b.line);
+        if cmp != Ordering::Equal || a.line == b.line {
+            return if global_settings.reverse {
+                cmp.reverse()
+            } else {
+                cmp
+            };
+        }
+    }
+
+    if global_settings.precomputed.needs_filtered_view {
+        let a_filtered = a_line_data.filtered_line(a.index);
+        let b_filtered = b_line_data.filtered_line(b.index);
+        let cmp = a_filtered.cmp(b_filtered);
         if cmp != Ordering::Equal || a.line == b.line {
             return if global_settings.reverse {
                 cmp.reverse()
