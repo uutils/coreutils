@@ -257,11 +257,7 @@ fn test_nohup_file_permissions_ignore_umask_always_o600() {
             .permissions()
             .mode()
             & 0o777;
-        assert_eq!(
-            mode, 0o600,
-            "with umask {:o}, got mode {:o}",
-            umask_val, mode
-        );
+        assert_eq!(mode, 0o600, "with umask {umask_val:o}, got mode {mode:o}");
     }
 }
 
@@ -333,11 +329,9 @@ fn test_nohup_stderr_write_failure() {
     }
 
     for (posixly_correct, expected_code) in [(false, 125), (true, 127)] {
-        let dev_full = match OpenOptions::new().write(true).open("/dev/full") {
-            Ok(f) => f,
-            Err(_) => return,
+        let Ok(dev_full) = OpenOptions::new().write(true).open("/dev/full") else {
+            return;
         };
-
         let mut cmd = new_ucmd!();
         if posixly_correct {
             cmd.env("POSIXLY_CORRECT", "1");
