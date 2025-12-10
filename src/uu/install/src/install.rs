@@ -454,59 +454,184 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
         Err(InstallError::DirNeedsArg.into())
     } else {
         for path in paths.iter().map(Path::new) {
-            // if the path already exist, don't try to create it again
-            if !path.exists() {
-                // Special case to match GNU's behavior:
-                // install -d foo/. should work and just create foo/
-                // std::fs::create_dir("foo/."); fails in pure Rust
-                // See also mkdir.rs for another occurrence of this
-                let path_to_create = dir_strip_dot_for_creation(path);
-                // Differently than the primary functionality
-                // (MainFunction::Standard), the directory functionality should
-                // create all ancestors (or components) of a directory
-                // regardless of the presence of the "-D" flag.
-                //
-                // NOTE: the GNU "install" sets the expected mode only for the
-                // target directory. All created ancestor directories will have
-                // the default mode. Hence it is safe to use fs::create_dir_all
-                // and then only modify the target's dir mode.
-                if let Err(e) = fs::create_dir_all(path_to_create.as_path())
-                    .map_err_context(|| translate!("install-error-create-dir-failed", "path" => path_to_create.as_path().quote()))
-                {
-                    show!(e);
+            // Special case to match GNU's behavior:
+            // install -d foo/. should work and just create foo/
+            // std::fs::create_dir("foo/."); fails in pure Rust
+            // See also mkdir.rs for another occurrence of this
+            let path_to_create = dir_strip_dot_for_creation(path);
+
+            // Differently than the primary functionality (MainFunction::Standard),
+            // the directory functionality should create all ancestors (or components)
+            // of a directory regardless of the presence of the "-D" flag.
+            //
+            // GNU "install -d -m MODE" sets the specified mode on ALL newly created
+            // directories in the path, not just the final target. For example:
+            //   install -m 755 -d path/to/dir
+            // sets mode 755 on 'path', 'path/to', and 'path/to/dir'.
+            //
+            // To match GNU behavior, we use a two-pass approach:
+            // 1. Create all directories first (with default permissions that allow traversal)
+            // 2. Then set the specified mode on all newly created directories
+            //
+            // This two-pass approach is necessary because some modes (e.g., 200 = --w-------)
+            // don't include execute permission, which would prevent entering the directory
+            // to create subdirectories. By creating all directories first, we ensure we can
+            // traverse the entire path before applying restrictive permissions.
+            if path_to_create.exists() {
+                // Path already exists: update mode, ownership, and SELinux context
+                // to match the specified behavior, but don't create new directories.
+                if mode::chmod(path, b.mode()).is_err() {
+                    // Error messages are printed by the mode::chmod function!
+                    uucore::error::set_exit_code(1);
                     continue;
                 }
 
-                // Set SELinux context for all created directories if needed
+                show_if_err!(chown_optional_user_group(path, b));
+
+                // Set SELinux context for directory if needed
                 #[cfg(feature = "selinux")]
-                if b.context.is_some() || b.default_context {
+                if b.default_context {
+                    show_if_err!(set_selinux_default_context(path));
+                } else if b.context.is_some() {
                     let context = get_context_for_selinux(b);
-                    set_selinux_context_for_directories_install(path_to_create.as_path(), context);
+                    show_if_err!(set_selinux_security_context(path, context));
+                }
+            } else {
+                // Path doesn't exist: create all intermediate directories and the target.
+                // Step 1: Collect all directories that need to be created, from root to leaf.
+                let mut dirs_to_create = Vec::new();
+                let mut current = path_to_create.clone();
+
+                // Walk up the path, collecting all directories in the path that don't exist.
+                // We collect by walking from the target up to the root, adding each
+                // directory component that doesn't exist.
+                loop {
+                    // Add the current directory if it doesn't exist
+                    if !current.exists() {
+                        dirs_to_create.push(current.clone());
+                    }
+
+                    // Get the parent directory
+                    let Some(parent) = current.parent() else {
+                        break;
+                    };
+
+                    // Stop at filesystem root
+                    if parent == Path::new("/") {
+                        break;
+                    }
+                    // Stop at current directory (empty path) - we've reached the base
+                    if parent == Path::new("") {
+                        break;
+                    }
+
+                    current = parent.to_path_buf();
                 }
 
-                if b.verbose {
-                    println!(
-                        "{}",
-                        translate!("install-verbose-creating-directory", "path" => path_to_create.quote())
-                    );
+                // Reverse to get creation order from root to leaf (e.g., [ancestor1, ancestor1/ancestor2, ancestor1/ancestor2/target_dir])
+                dirs_to_create.reverse();
+
+                // Step 2: Create all directories with default permissions.
+                // Default permissions include execute permission, which is necessary to
+                // traverse into directories when creating nested subdirectories.
+                let mut created_dirs = Vec::new();
+                for dir in &dirs_to_create {
+                    if !dir.exists() {
+                        // Ensure parent directory exists before creating this directory.
+                        // If parent doesn't exist, it means we failed to create it earlier.
+                        // Skip check if parent is empty (current directory) - it always exists.
+                        if let Some(parent) = dir.parent() {
+                            if parent != Path::new("") && !parent.exists() {
+                                show_error!(
+                                    "{}",
+                                    translate!("install-error-create-dir-failed", "path" => dir.as_path().quote())
+                                );
+                                uucore::error::set_exit_code(1);
+                                continue;
+                            }
+                        }
+
+                        match fs::create_dir(dir) {
+                            Ok(()) => {
+                                // Directory created successfully
+                            }
+                            Err(e) => {
+                                // Check if error is because parent doesn't exist
+                                if e.kind() == std::io::ErrorKind::NotFound {
+                                    // This shouldn't happen if our logic is correct, but handle it
+                                    show_error!(
+                                        "{}",
+                                        translate!("install-error-create-dir-failed", "path" => dir.as_path().quote())
+                                    );
+                                    uucore::error::set_exit_code(1);
+                                    continue;
+                                }
+                                // Other error (permission denied, etc.)
+                                let err = InstallError::CreateDirFailed(dir.clone(), e);
+                                show!(err);
+                                uucore::error::set_exit_code(1);
+                                continue;
+                            }
+                        }
+                        // Track which directories we actually created (they might have existed
+                        // due to race conditions or other processes)
+                        created_dirs.push(dir.clone());
+
+                        if b.verbose {
+                            println!(
+                                "{}",
+                                translate!("install-verbose-creating-directory", "path" => dir.as_path().quote())
+                            );
+                        }
+                    }
                 }
-            }
 
-            if mode::chmod(path, b.mode()).is_err() {
-                // Error messages are printed by the mode::chmod function!
-                uucore::error::set_exit_code(1);
-                continue;
-            }
+                // Step 3: Apply specified mode, ownership, and SELinux context
+                // to newly created directories. This happens after all directories are
+                // created, ensuring we can traverse the entire path.
+                //
+                // GNU install behavior:
+                // - For normal modes (with execute permission): Set mode on ALL directories
+                // - For restrictive modes (without execute permission): Set mode ONLY on
+                //   the final directory, leave intermediates with default permissions
+                //
+                // This prevents locking yourself out of intermediate directories when using
+                // restrictive modes like 200 (--w-------).
+                let mode = b.mode();
+                let is_restrictive = (mode & 0o111) == 0; // No execute bits set
 
-            show_if_err!(chown_optional_user_group(path, b));
+                let dirs_to_chmod = if is_restrictive {
+                    // For restrictive modes, only set mode on the final directory
+                    // (the last one in created_dirs, which is the target)
+                    created_dirs.last().into_iter().collect::<Vec<_>>()
+                } else {
+                    // For normal modes, set mode on all directories (in reverse order
+                    // to ensure we can access parents when setting mode on children)
+                    created_dirs.iter().rev().collect::<Vec<_>>()
+                };
 
-            // Set SELinux context for directory if needed
-            #[cfg(feature = "selinux")]
-            if b.default_context {
-                show_if_err!(set_selinux_default_context(path));
-            } else if b.context.is_some() {
-                let context = get_context_for_selinux(b);
-                show_if_err!(set_selinux_security_context(path, context));
+                for dir in dirs_to_chmod {
+                    // Set the specified mode on the newly created directory
+                    if mode::chmod(dir, mode).is_err() {
+                        // Error messages are printed by the mode::chmod function!
+                        uucore::error::set_exit_code(1);
+                        continue;
+                    }
+
+                    // Set ownership (user/group) on the newly created directory
+                    show_if_err!(chown_optional_user_group(dir, b));
+
+                    // Set SELinux security context for the newly created directory if needed
+                    #[cfg(feature = "selinux")]
+                    if b.default_context {
+                        // Use -Z flag behavior: derive default context from SELinux policy
+                        show_if_err!(set_selinux_default_context(dir));
+                    } else if b.context.is_some() {
+                        // Use --context flag: set the explicitly specified context
+                        let context = get_context_for_selinux(b);
+                        show_if_err!(set_selinux_security_context(dir, context));
+                    }
+                }
             }
         }
         // If the exit code was set, or show! has been called at least once
