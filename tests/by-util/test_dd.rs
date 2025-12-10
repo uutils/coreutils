@@ -1251,20 +1251,13 @@ fn test_final_stats_more_than_one_kb() {
 
 #[test]
 fn test_final_stats_three_char_limit() {
-    // Use of=/dev/null to avoid SIGPIPE when stdout pipe closes before dd finishes writing
-    let result = new_ucmd!()
-        .arg("of=/dev/null")
-        .pipe_in("0".repeat(10_000))
-        .succeeds();
+    let result = new_ucmd!().pipe_in("0".repeat(10_000)).succeeds();
     let s = result.stderr_str();
     assert!(
         s.starts_with("19+1 records in\n19+1 records out\n10000 bytes (10 kB, 9.8 KiB) copied,")
     );
 
-    let result = new_ucmd!()
-        .arg("of=/dev/null")
-        .pipe_in("0".repeat(100_000))
-        .succeeds();
+    let result = new_ucmd!().pipe_in("0".repeat(100_000)).succeeds();
     let s = result.stderr_str();
     assert!(
         s.starts_with("195+1 records in\n195+1 records out\n100000 bytes (100 kB, 98 KiB) copied,")
