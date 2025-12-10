@@ -7120,6 +7120,25 @@ fn test_cp_no_dereference_symlink_with_parents() {
 
 #[test]
 #[cfg(unix)]
+fn test_cp_recursive_no_dereference_symlink_to_directory() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("source_dir");
+    at.touch("source_dir/file.txt");
+    at.symlink_file("source_dir", "symlink_to_dir");
+
+    // Copy with -r --no-dereference (or -rP): should copy the symlink, not the directory contents
+    ts.ucmd()
+        .args(&["-r", "--no-dereference", "symlink_to_dir", "dest"])
+        .succeeds();
+
+    assert!(at.is_symlink("dest"));
+    assert_eq!(at.resolve_link("dest"), "source_dir");
+}
+
+#[test]
+#[cfg(unix)]
 fn test_cp_recursive_files_ending_in_backslash() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
