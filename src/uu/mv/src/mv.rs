@@ -427,24 +427,11 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
     } else if target.exists() && source_is_dir {
         match opts.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
-            OverwriteMode::Interactive => {
-                if !prompt_yes!(
-                    "{}",
-                    translate!("mv-prompt-overwrite", "target" => target.quote())
-                ) {
-                    return Err(io::Error::other("").into());
-                }
-            }
+            OverwriteMode::Interactive => prompt_overwrite(target)?,
             OverwriteMode::Force => {}
             OverwriteMode::Default => {
-                if std::io::stdin().is_terminal()
-                    && !is_writable(target)
-                    && !prompt_yes!(
-                        "{}",
-                        translate!("mv-prompt-overwrite", "target" => target.quote())
-                    )
-                {
-                    return Err(io::Error::other("").into());
+                if std::io::stdin().is_terminal() && !is_writable(target) {
+                    prompt_overwrite(target)?;
                 }
             }
         }
@@ -741,13 +728,6 @@ fn rename(
             return Err(io::Error::other(err_msg));
         }
 
-        let prompt_and_check = || -> io::Result<()> {
-            if !prompt_yes!("{}", get_interactive_prompt(to)) {
-                return Err(io::Error::other(""));
-            }
-            Ok(())
-        };
-
         match opts.overwrite {
             OverwriteMode::NoClobber => {
                 if opts.debug {
@@ -755,12 +735,12 @@ fn rename(
                 }
                 return Ok(());
             }
-            OverwriteMode::Interactive => prompt_and_check()?,
+            OverwriteMode::Interactive => prompt_overwrite(to)?,
             OverwriteMode::Force => {}
             OverwriteMode::Default => {
                 // GNU mv prompts when stdin is a TTY and target is not writable
                 if std::io::stdin().is_terminal() && !is_writable(to) {
-                    prompt_and_check()?;
+                    prompt_overwrite(to)?;
                 }
             }
         }
@@ -1263,6 +1243,14 @@ fn get_interactive_prompt(to: &Path) -> String {
 #[cfg(not(unix))]
 fn get_interactive_prompt(to: &Path) -> String {
     translate!("mv-prompt-overwrite", "target" => to.quote())
+}
+
+/// Prompts the user for confirmation and returns an error if declined.
+fn prompt_overwrite(to: &Path) -> io::Result<()> {
+    if !prompt_yes!("{}", get_interactive_prompt(to)) {
+        return Err(io::Error::other(""));
+    }
+    Ok(())
 }
 
 /// Checks if a file can be deleted by attempting to open it with delete permissions.
