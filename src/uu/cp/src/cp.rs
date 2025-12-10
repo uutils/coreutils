@@ -1989,6 +1989,16 @@ fn delete_dest_if_needed_and_allowed(
 }
 
 fn delete_path(path: &Path, options: &Options) -> CopyResult<()> {
+    // Windows requires clearing readonly attribute before deletion when using --force
+    #[cfg(windows)]
+    if options.force() {
+        if let Ok(mut perms) = fs::metadata(path).map(|m| m.permissions()) {
+            #[allow(clippy::permissions_set_readonly_false)]
+            perms.set_readonly(false);
+            let _ = fs::set_permissions(path, perms);
+        }
+    }
+
     match fs::remove_file(path) {
         Ok(()) => {
             if options.verbose {
