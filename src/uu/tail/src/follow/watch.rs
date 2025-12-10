@@ -576,9 +576,17 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                 // Drain any additional pending events to batch them together.
                 // This prevents redundant headers when multiple inotify events
                 // are queued (e.g., after resuming from SIGSTOP).
-                while let Ok(Ok(event)) = observer.watcher_rx.as_mut().unwrap().receiver.try_recv()
-                {
-                    process_event(&mut observer, event, settings, &mut paths)?;
+                // Multiple iterations with spin_loop hints give the notify
+                // background thread chances to deliver pending events.
+                for _ in 0..100 {
+                    while let Ok(Ok(event)) =
+                        observer.watcher_rx.as_mut().unwrap().receiver.try_recv()
+                    {
+                        process_event(&mut observer, event, settings, &mut paths)?;
+                    }
+                    // Use both yield and spin hint for broader CPU support
+                    std::thread::yield_now();
+                    std::hint::spin_loop();
                 }
             }
             Ok(Err(notify::Error {
