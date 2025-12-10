@@ -552,7 +552,13 @@ pub mod fast_encode {
         let mut leftover_buffer = VecDeque::<u8>::new();
         let mut encoded_buffer = VecDeque::<u8>::new();
 
-        let mut read_buffer = vec![0u8; encode_in_chunks_of_size.max(DEFAULT_BUFFER_SIZE)];
+        let read_buffer_capacity = encode_in_chunks_of_size.max(DEFAULT_BUFFER_SIZE);
+        let mut read_buffer = Vec::with_capacity(read_buffer_capacity);
+        // SAFETY: We immediately pass the whole slice to `Read::read`, which
+        // writes up to `read_buffer_capacity` bytes. We then only access the
+        // prefix `[0..read]` reported by `read`, so uninitialized tail bytes
+        // are never read.
+        unsafe { read_buffer.set_len(read_buffer_capacity) };
 
         loop {
             let read = input
@@ -788,7 +794,10 @@ pub mod fast_decode {
 
         let mut buffer = Vec::with_capacity(decode_in_chunks_of_size);
         let mut decoded_buffer = Vec::<u8>::new();
-        let mut read_buffer = [0u8; DEFAULT_BUFFER_SIZE];
+        let mut read_buffer = Vec::with_capacity(DEFAULT_BUFFER_SIZE);
+        // SAFETY: Same rationale as in `fast_encode_stream`; we only read the
+        // initialized prefix returned by `Read::read`.
+        unsafe { read_buffer.set_len(DEFAULT_BUFFER_SIZE) };
 
         loop {
             let read = input
