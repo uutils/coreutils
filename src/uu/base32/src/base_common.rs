@@ -301,6 +301,7 @@ pub mod fast_encode {
     use std::{
         cmp::min,
         collections::VecDeque,
+        mem::MaybeUninit,
         io::{self, Read, Write},
         num::NonZeroUsize,
     };
@@ -553,22 +554,22 @@ pub mod fast_encode {
         let mut encoded_buffer = VecDeque::<u8>::new();
 
         let read_buffer_capacity = encode_in_chunks_of_size.max(DEFAULT_BUFFER_SIZE);
-        let mut read_buffer = Vec::with_capacity(read_buffer_capacity);
-        // SAFETY: We immediately pass the whole slice to `Read::read`, which
-        // writes up to `read_buffer_capacity` bytes. We then only access the
-        // prefix `[0..read]` reported by `read`, so uninitialized tail bytes
-        // are never read.
-        unsafe { read_buffer.set_len(read_buffer_capacity) };
+        let mut read_buffer = Vec::<u8>::with_capacity(read_buffer_capacity);
 
         loop {
+            let spare = read_buffer.spare_capacity_mut();
             let read = input
-                .read(&mut read_buffer)
+                .read(unsafe { MaybeUninit::slice_assume_init_mut(spare) })
                 .map_err(|err| USimpleError::new(1, super::format_read_error(err.kind())))?;
             if read == 0 {
                 break;
             }
 
+            // SAFETY: `read` bytes have just been initialized by `read`.
+            unsafe { read_buffer.set_len(read_buffer.len() + read) };
+
             leftover_buffer.extend(&read_buffer[..read]);
+            read_buffer.clear();
 
             while leftover_buffer.len() >= encode_in_chunks_of_size {
                 {
@@ -612,6 +613,7 @@ pub mod fast_encode {
 pub mod fast_decode {
     use crate::base_common::DEFAULT_BUFFER_SIZE;
     use std::io::{self, Read, Write};
+    use std::mem::MaybeUninit;
     use uucore::{
         encoding::SupportsFastDecodeAndEncode,
         error::{UResult, USimpleError},
@@ -794,18 +796,18 @@ pub mod fast_decode {
 
         let mut buffer = Vec::with_capacity(decode_in_chunks_of_size);
         let mut decoded_buffer = Vec::<u8>::new();
-        let mut read_buffer = Vec::with_capacity(DEFAULT_BUFFER_SIZE);
-        // SAFETY: Same rationale as in `fast_encode_stream`; we only read the
-        // initialized prefix returned by `Read::read`.
-        unsafe { read_buffer.set_len(DEFAULT_BUFFER_SIZE) };
+        let mut read_buffer = Vec::<u8>::with_capacity(DEFAULT_BUFFER_SIZE);
 
         loop {
+            let spare = read_buffer.spare_capacity_mut();
             let read = input
-                .read(&mut read_buffer)
+                .read(unsafe { MaybeUninit::slice_assume_init_mut(spare) })
                 .map_err(|err| USimpleError::new(1, super::format_read_error(err.kind())))?;
             if read == 0 {
                 break;
             }
+
+            unsafe { read_buffer.set_len(read_buffer.len() + read) };
 
             for &byte in &read_buffer[..read] {
                 if byte == b'\n' || byte == b'\r' {
@@ -859,6 +861,8 @@ pub mod fast_decode {
                     buffer.clear();
                 }
             }
+
+            read_buffer.clear();
         }
 
         if supports_partial_decode {
