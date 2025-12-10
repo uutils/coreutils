@@ -74,6 +74,15 @@ jobs:
         git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
         git submodule update --init --recursive --depth 1
       working-directory: gnu
+    - name: Restore config.cache
+      uses: actions/cache@v4
+      id: cache-config-gnu
+      with:
+        path: gnu/config.cache
+        key: ${{ runner.os }}-gnu-config-${{ env.REPO_GNU_REF }}-${{ hashFiles('gnu/configure') }}
+        restore-keys: |
+          ${{ runner.os }}-gnu-config-${{ env.REPO_GNU_REF }}-
+          ${{ runner.os }}-gnu-config-
 
     #### Build environment setup
     - name: Install dependencies
@@ -115,6 +124,13 @@ jobs:
         ## Build binaries
         cd 'uutils'
         env PROFILE=release-small bash util/build-gnu.sh
+        
+    - name: Save config.cache
+      uses: actions/cache/save@v4
+      if: always() && steps.cache-config-gnu.outputs.cache-hit != 'true'
+      with:
+        path: gnu/config.cache
+        key: ${{ runner.os }}-gnu-config-${{ env.REPO_GNU_REF }}-${{ hashFiles('gnu/configure') }}
 
     ### Run tests as user
     - name: Run GNU tests
