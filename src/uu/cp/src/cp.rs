@@ -987,8 +987,6 @@ impl Options {
         let not_implemented_opts = vec![
             #[cfg(not(any(windows, unix)))]
             options::ONE_FILE_SYSTEM,
-            #[cfg(windows)]
-            options::FORCE,
         ];
 
         for not_implemented_opt in not_implemented_opts {

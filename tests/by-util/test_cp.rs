@@ -11,7 +11,6 @@ use uucore::selinux::get_getfattr_output;
 use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, new_ucmd, path_concat, util_name};
 
-#[cfg(not(windows))]
 use std::fs::set_permissions;
 
 use std::io::Write;
@@ -972,7 +971,6 @@ fn test_cp_arg_no_clobber_twice() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_cp_arg_force() {
     let (at, mut ucmd) = at_and_ucmd!();
 
