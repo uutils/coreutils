@@ -301,7 +301,7 @@ pub mod fast_encode {
     use std::{
         cmp::min,
         collections::VecDeque,
-        mem::MaybeUninit,
+        slice,
         io::{self, Read, Write},
         num::NonZeroUsize,
     };
@@ -559,7 +559,12 @@ pub mod fast_encode {
         loop {
             let spare = read_buffer.spare_capacity_mut();
             let read = input
-                .read(unsafe { MaybeUninit::slice_assume_init_mut(spare) })
+                .read(unsafe {
+                    // SAFETY: `spare` points to uninitialized capacity of `read_buffer`.
+                    // We transmute it to `[u8]` for the read call; only the first `read`
+                    // bytes become initialized and we set_len accordingly below.
+                    slice::from_raw_parts_mut(spare.as_mut_ptr() as *mut u8, spare.len())
+                })
                 .map_err(|err| USimpleError::new(1, super::format_read_error(err.kind())))?;
             if read == 0 {
                 break;
@@ -613,7 +618,7 @@ pub mod fast_encode {
 pub mod fast_decode {
     use crate::base_common::DEFAULT_BUFFER_SIZE;
     use std::io::{self, Read, Write};
-    use std::mem::MaybeUninit;
+    use std::slice;
     use uucore::{
         encoding::SupportsFastDecodeAndEncode,
         error::{UResult, USimpleError},
@@ -801,7 +806,11 @@ pub mod fast_decode {
         loop {
             let spare = read_buffer.spare_capacity_mut();
             let read = input
-                .read(unsafe { MaybeUninit::slice_assume_init_mut(spare) })
+                .read(unsafe {
+                    // SAFETY: `spare` is the uninitialized tail of `read_buffer`; we
+                    // transmute it to `[u8]` for reading, then set the initialized len.
+                    slice::from_raw_parts_mut(spare.as_mut_ptr() as *mut u8, spare.len())
+                })
                 .map_err(|err| USimpleError::new(1, super::format_read_error(err.kind())))?;
             if read == 0 {
                 break;
