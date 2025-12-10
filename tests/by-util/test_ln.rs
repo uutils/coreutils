@@ -5,10 +5,14 @@
 #![allow(clippy::similar_names)]
 
 use std::path::PathBuf;
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
+use uutests::{at_and_ts, at_and_ucmd, new_ucmd};
+
+#[cfg(unix)]
+use std::ffi::OsStr;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 
 #[test]
 fn test_invalid_arg() {
@@ -113,16 +117,14 @@ fn test_symlink_overwrite_force() {
 
 #[test]
 fn test_symlink_interactive() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, ts) = at_and_ts!();
     let file = "test_symlink_interactive_file";
     let link = "test_symlink_interactive_file_link";
 
     at.touch(file);
     at.touch(link);
 
-    scene
-        .ucmd()
+    ts.ucmd()
         .args(&["-i", "-s", file, link])
         .pipe_in("n")
         .fails()
@@ -131,8 +133,7 @@ fn test_symlink_interactive() {
     assert!(at.file_exists(file));
     assert!(!at.is_symlink(link));
 
-    scene
-        .ucmd()
+    ts.ucmd()
         .args(&["-i", "-s", file, link])
         .pipe_in("Yesh") // spell-checker:disable-line
         .succeeds()
@@ -392,23 +393,20 @@ fn test_symlink_errors() {
 
 #[test]
 fn test_symlink_verbose() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, ts) = at_and_ts!();
     let file_a = "test_symlink_verbose_file_a";
     let file_b = "test_symlink_verbose_file_b";
 
     at.touch(file_a);
 
-    scene
-        .ucmd()
+    ts.ucmd()
         .args(&["-s", "-v", file_a, file_b])
         .succeeds()
         .stdout_only(format!("'{file_b}' -> '{file_a}'\n"));
 
     at.touch(file_b);
 
-    scene
-        .ucmd()
+    ts.ucmd()
         .args(&["-s", "-v", "-b", file_a, file_b])
         .succeeds()
         .stdout_only(format!("'{file_b}' -> '{file_a}' (backup: '{file_b}~')\n"));
@@ -540,8 +538,7 @@ fn test_symlink_relative_dir() {
 
 #[test]
 fn test_symlink_no_deref_dir() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, ts) = at_and_ts!();
 
     let dir1 = "foo";
     let dir2 = "bar";
@@ -549,36 +546,24 @@ fn test_symlink_no_deref_dir() {
 
     at.mkdir(dir1);
     at.mkdir(dir2);
-    scene
-        .ucmd()
-        .args(&["-s", dir2, link])
-        .succeeds()
-        .no_stderr();
+    ts.ucmd().args(&["-s", dir2, link]).succeeds().no_stderr();
     assert!(at.dir_exists(dir1));
     assert!(at.dir_exists(dir2));
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), dir2);
 
     // try the normal behavior
-    scene
-        .ucmd()
-        .args(&["-sf", dir1, link])
-        .succeeds()
-        .no_stderr();
+    ts.ucmd().args(&["-sf", dir1, link]).succeeds().no_stderr();
     assert!(at.dir_exists(dir1));
     assert!(at.dir_exists(dir2));
     assert!(at.is_symlink("baz/foo"));
     assert_eq!(at.resolve_link("baz/foo"), dir1);
 
     // Doesn't work without the force
-    scene.ucmd().args(&["-sn", dir1, link]).fails();
+    ts.ucmd().args(&["-sn", dir1, link]).fails();
 
     // Try with the no-deref
-    scene
-        .ucmd()
-        .args(&["-sfn", dir1, link])
-        .succeeds()
-        .no_stderr();
+    ts.ucmd().args(&["-sfn", dir1, link]).succeeds().no_stderr();
     assert!(at.dir_exists(dir1));
     assert!(at.dir_exists(dir2));
     assert!(at.is_symlink(link));
@@ -587,8 +572,7 @@ fn test_symlink_no_deref_dir() {
 
 #[test]
 fn test_symlink_no_deref_file_in_destination_dir() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, ts) = at_and_ts!();
 
     let file1 = "foo";
     let file2 = "bar";
@@ -607,36 +591,26 @@ fn test_symlink_no_deref_file_in_destination_dir() {
     assert!(at.dir_exists(dest));
 
     // -n and -f should work alone
-    scene
-        .ucmd()
-        .args(&["-sn", file1, dest])
-        .succeeds()
-        .no_stderr();
+    ts.ucmd().args(&["-sn", file1, dest]).succeeds().no_stderr();
     assert!(at.is_symlink(link1));
     assert_eq!(at.resolve_link(link1), file1);
 
-    scene
-        .ucmd()
-        .args(&["-sf", file1, dest])
-        .succeeds()
-        .no_stderr();
+    ts.ucmd().args(&["-sf", file1, dest]).succeeds().no_stderr();
     assert!(at.is_symlink(link1));
     assert_eq!(at.resolve_link(link1), file1);
 
     // -n alone should fail if destination exists already (it should now)
-    scene.ucmd().args(&["-sn", file1, dest]).fails();
+    ts.ucmd().args(&["-sn", file1, dest]).fails();
 
     // -nf should also work
-    scene
-        .ucmd()
+    ts.ucmd()
         .args(&["-snf", file1, dest])
         .succeeds()
         .no_stderr();
     assert!(at.is_symlink(link1));
     assert_eq!(at.resolve_link(link1), file1);
 
-    scene
-        .ucmd()
+    ts.ucmd()
         .args(&["-snf", file1, file2, dest])
         .succeeds()
         .no_stderr();
@@ -648,8 +622,7 @@ fn test_symlink_no_deref_file_in_destination_dir() {
 
 #[test]
 fn test_symlink_no_deref_file() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, ts) = at_and_ts!();
 
     let file1 = "foo";
     let file2 = "bar";
@@ -657,32 +630,24 @@ fn test_symlink_no_deref_file() {
 
     at.touch(file1);
     at.touch(file2);
-    scene
-        .ucmd()
-        .args(&["-s", file2, link])
-        .succeeds()
-        .no_stderr();
+    ts.ucmd().args(&["-s", file2, link]).succeeds().no_stderr();
     assert!(at.file_exists(file1));
     assert!(at.file_exists(file2));
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file2);
 
     // try the normal behavior
-    scene
-        .ucmd()
-        .args(&["-sf", file1, link])
-        .succeeds()
-        .no_stderr();
+    ts.ucmd().args(&["-sf", file1, link]).succeeds().no_stderr();
     assert!(at.file_exists(file1));
     assert!(at.file_exists(file2));
     assert!(at.is_symlink("baz"));
     assert_eq!(at.resolve_link("baz"), file1);
 
     // Doesn't work without the force
-    scene.ucmd().args(&["-sn", file1, link]).fails();
+    ts.ucmd().args(&["-sn", file1, link]).fails();
 
     // Try with the no-deref
-    scene.ucmd().args(&["-sfn", file1, link]).succeeds();
+    ts.ucmd().args(&["-sfn", file1, link]).succeeds();
     assert!(at.file_exists(file1));
     assert!(at.file_exists(file2));
     assert!(at.is_symlink(link));
@@ -731,18 +696,16 @@ fn test_backup_same_file() {
 
 #[test]
 fn test_backup_force() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, ts) = at_and_ts!();
 
     at.write("a", "a\n");
     at.write("b", "b2\n");
 
-    scene.ucmd().args(&["-s", "b", "b~"]).succeeds().no_stderr();
+    ts.ucmd().args(&["-s", "b", "b~"]).succeeds().no_stderr();
     assert!(at.file_exists("a"));
     assert!(at.file_exists("b"));
     assert!(at.file_exists("b~"));
-    scene
-        .ucmd()
+    ts.ucmd()
         .args(&["-s", "-f", "--b=simple", "a", "b"])
         .succeeds()
         .no_stderr();
@@ -774,36 +737,31 @@ fn test_hard_logical() {
 
 #[test]
 fn test_hard_logical_non_exit_fail() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
 
     let file_a = "/no-such-dir";
     let link = "hard-to-dangle";
 
     at.relative_symlink_dir(file_a, "no-such-dir");
 
-    scene
-        .ucmd()
-        .args(&["-L", "no-such-dir", link])
+    ucmd.args(&["-L", "no-such-dir", link])
         .fails()
         .stderr_contains("failed to access 'no-such-dir'");
 }
 
 #[test]
 fn test_hard_logical_dir_fail() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, ts) = at_and_ts!();
     let dir = "d";
     at.mkdir(dir);
     let target = "link-to-dir";
 
-    scene.ucmd().args(&["-s", dir, target]);
+    ts.ucmd().args(&["-s", dir, target]).succeeds();
 
-    scene
-        .ucmd()
+    ts.ucmd()
         .args(&["-L", target, "hard-to-dir-link"])
         .fails()
-        .stderr_contains("failed to create hard link 'link-to-dir'");
+        .stderr_contains("hard link not allowed for directory");
 }
 
 #[test]
@@ -835,17 +793,15 @@ fn test_force_same_file_detected_after_canonicalization() {
 #[test]
 #[cfg(not(target_os = "android"))]
 fn test_force_ln_existing_hard_link_entry() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, ts) = at_and_ts!();
 
     at.write("file", "hardlink\n");
     at.mkdir("dir");
 
-    scene.ucmd().args(&["file", "dir"]).succeeds().no_stderr();
+    ts.ucmd().args(&["file", "dir"]).succeeds().no_stderr();
     assert!(at.file_exists("dir/file"));
 
-    scene
-        .ucmd()
+    ts.ucmd()
         .args(&["-f", "file", "dir"])
         .succeeds()
         .no_stderr();
@@ -857,7 +813,6 @@ fn test_force_ln_existing_hard_link_entry() {
 
     #[cfg(unix)]
     {
-        use std::os::unix::fs::MetadataExt;
         let source_inode = at.metadata("file").ino();
         let target_inode = at.metadata("dir/file").ino();
         assert_eq!(source_inode, target_inode);
@@ -867,8 +822,7 @@ fn test_force_ln_existing_hard_link_entry() {
 #[test]
 #[cfg(not(target_os = "android"))]
 fn test_ln_seen_file() {
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
 
     at.mkdir("a");
     at.mkdir("b");
@@ -876,7 +830,7 @@ fn test_ln_seen_file() {
     at.write("a/f", "a");
     at.write("b/f", "b");
 
-    let result = ts.ucmd().arg("a/f").arg("b/f").arg("c").fails();
+    let result = ucmd.arg("a/f").arg("b/f").arg("c").fails();
 
     #[cfg(not(unix))]
     assert!(
@@ -898,7 +852,6 @@ fn test_ln_seen_file() {
     assert!(at.plus("a").join("f").exists());
     #[cfg(unix)]
     {
-        use std::os::unix::fs::MetadataExt;
         // Check inode numbers
         let inode_a_f = at.plus("a").join("f").metadata().unwrap().ino();
         let inode_b_f = at.plus("b").join("f").metadata().unwrap().ino();
@@ -921,8 +874,7 @@ fn test_ln_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
 
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, ts) = at_and_ts!();
 
     // Create a test file with non-UTF-8 bytes in the name
     let non_utf8_bytes = b"test_\xFF\xFE.txt";
@@ -934,8 +886,7 @@ fn test_ln_non_utf8_paths() {
     at.touch(non_utf8_name);
 
     // Test creating a hard link with non-UTF-8 file names
-    scene
-        .ucmd()
+    ts.ucmd()
         .arg(non_utf8_name)
         .arg(non_utf8_link_name)
         .succeeds();
@@ -948,8 +899,7 @@ fn test_ln_non_utf8_paths() {
     let symlink_bytes = b"symlink_\xFF\xFE.txt";
     let symlink_name = OsStr::from_bytes(symlink_bytes);
 
-    scene
-        .ucmd()
+    ts.ucmd()
         .args(&["-s"])
         .arg(non_utf8_name)
         .arg(symlink_name)
@@ -962,14 +912,35 @@ fn test_ln_non_utf8_paths() {
 
 #[test]
 fn test_ln_hard_link_dir() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
+    let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
-
-    scene
-        .ucmd()
-        .args(&["dir", "dir_link"])
+    ucmd.args(&["dir", "dir_link"])
         .fails()
         .stderr_contains("hard link not allowed for directory");
+}
+
+#[test]
+fn test_ln_extra_operand() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+    at.touch("c");
+    ucmd.args(&["-T", "a", "b", "c"])
+        .fails_with_code(1)
+        .stderr_contains("extra operand c")
+        .stderr_contains("--help");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_ln_cannot_stat_non_utf8() {
+    let (at, ts) = at_and_ts!();
+    at.mkdir("target_dir");
+    at.touch(OsStr::from_bytes(b"file_\xFF"));
+    ts.ucmd()
+        .arg("-s")
+        .arg(OsStr::from_bytes(b"file_\xFF"))
+        .arg("target_dir")
+        .fails_with_code(1)
+        .stderr_contains("cannot stat");
 }

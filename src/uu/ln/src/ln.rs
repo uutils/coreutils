@@ -101,8 +101,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(PathBuf::from)
         .collect();
 
-    let symbolic = matches.get_flag(options::SYMBOLIC);
-
     let overwrite_mode = if matches.get_flag(options::FORCE) {
         OverwriteMode::Force
     } else if matches.get_flag(options::INTERACTIVE) {
@@ -114,15 +112,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let backup_mode = backup_control::determine_backup_mode(&matches)?;
     let backup_suffix = backup_control::determine_backup_suffix(&matches);
 
-    // When we have "-L" or "-L -P", false otherwise
-    let logical = matches.get_flag(options::LOGICAL);
-
     let settings = Settings {
         overwrite: overwrite_mode,
         backup: backup_mode,
         suffix: OsString::from(backup_suffix),
-        symbolic,
-        logical,
+        symbolic: matches.get_flag(options::SYMBOLIC),
+        // When we have "-L" or "-L -P", false otherwise
+        logical: matches.get_flag(options::LOGICAL),
         relative: matches.get_flag(options::RELATIVE),
         target_dir: matches
             .get_one::<OsString>(options::TARGET_DIRECTORY)
@@ -132,7 +128,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         verbose: matches.get_flag(options::VERBOSE),
     };
 
-    exec(&paths[..], &settings)
+    exec(&paths, &settings)
 }
 
 pub fn uu_app() -> Command {
@@ -295,8 +291,10 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
             && matches!(settings.overwrite, OverwriteMode::Force)
             && target_dir.is_symlink()
         {
-            // In that case, we don't want to do link resolution
-            // We need to clean the target
+            // We don't want to do link resolution, we need to clean the target.
+            // Unreachable on Unix: target_dir is a symlink to a directory here,
+            // so is_file() is always false.
+            #[cfg(windows)]
             if target_dir.is_file() {
                 if let Err(e) = fs::remove_file(target_dir) {
                     show_error!(
