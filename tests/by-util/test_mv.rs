@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore mydir hardlinked tmpfs unwritable notty
+// spell-checker:ignore mydir hardlinked tmpfs notty
 
 use filetime::FileTime;
 use rstest::rstest;
@@ -13,6 +13,8 @@ use std::path::Path;
 #[cfg(feature = "feat_selinux")]
 use uucore::selinux::get_getfattr_output;
 use uutests::new_ucmd;
+#[cfg(unix)]
+use uutests::util::TerminalSimulation;
 use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, util_name};
 
@@ -2738,19 +2740,14 @@ fn test_mv_verbose_directory_recursive() {
 
 #[cfg(unix)]
 #[test]
-fn test_mv_prompt_unwritable_file_when_using_tty() {
-    use uutests::util::TerminalSimulation;
-
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+fn test_mv_prompt_unwriteable_file_when_using_tty() {
+    let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("source");
     at.touch("target");
     at.set_mode("target", 0o000);
 
-    let result = scene
-        .ucmd()
-        .arg("source")
+    ucmd.arg("source")
         .arg("target")
         .terminal_sim_stdio(TerminalSimulation {
             stdin: true,
@@ -2759,32 +2756,22 @@ fn test_mv_prompt_unwritable_file_when_using_tty() {
             ..Default::default()
         })
         .pipe_in("n\n")
-        .fails();
-
-    assert!(
-        result
-            .stderr_str()
-            .contains("replace 'target', overriding mode 0000")
-    );
+        .fails()
+        .stderr_contains("replace 'target', overriding mode 0000");
 
     assert!(at.file_exists("source"));
 }
 
 #[cfg(unix)]
 #[test]
-fn test_mv_force_no_prompt_unwritable_file() {
-    use uutests::util::TerminalSimulation;
-
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+fn test_mv_force_no_prompt_unwriteable_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("source_f");
     at.touch("target_f");
     at.set_mode("target_f", 0o000);
 
-    scene
-        .ucmd()
-        .arg("-f")
+    ucmd.arg("-f")
         .arg("source_f")
         .arg("target_f")
         .terminal_sim_stdio(TerminalSimulation {
@@ -2802,7 +2789,7 @@ fn test_mv_force_no_prompt_unwritable_file() {
 
 #[cfg(unix)]
 #[test]
-fn test_mv_no_prompt_unwritable_file_with_no_tty() {
+fn test_mv_no_prompt_unwriteable_file_with_no_tty() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("source_notty");

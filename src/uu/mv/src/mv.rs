@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized unwritable
+// spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized
 
 mod error;
 #[cfg(unix)]
@@ -136,7 +136,7 @@ pub enum OverwriteMode {
     Interactive,
     ///'-f' '--force'         overwrite without prompt
     Force,
-    /// No flag specified - prompt for unwritable files when stdin is TTY
+    /// No flag specified - prompt for unwriteable files when stdin is TTY
     #[default]
     Default,
 }
@@ -741,6 +741,13 @@ fn rename(
             return Err(io::Error::other(err_msg));
         }
 
+        let prompt_and_check = || -> io::Result<()> {
+            if !prompt_yes!("{}", get_interactive_prompt(to)) {
+                return Err(io::Error::other(""));
+            }
+            Ok(())
+        };
+
         match opts.overwrite {
             OverwriteMode::NoClobber => {
                 if opts.debug {
@@ -748,20 +755,12 @@ fn rename(
                 }
                 return Ok(());
             }
-            OverwriteMode::Interactive => {
-                let prompt_msg = get_interactive_prompt(to);
-                if !prompt_yes!("{}", prompt_msg) {
-                    return Err(io::Error::other(""));
-                }
-            }
+            OverwriteMode::Interactive => prompt_and_check()?,
             OverwriteMode::Force => {}
             OverwriteMode::Default => {
                 // GNU mv prompts when stdin is a TTY and target is not writable
                 if std::io::stdin().is_terminal() && !is_writable(to) {
-                    let prompt_msg = get_interactive_prompt(to);
-                    if !prompt_yes!("{}", prompt_msg) {
-                        return Err(io::Error::other(""));
-                    }
+                    prompt_and_check()?;
                 }
             }
         }
