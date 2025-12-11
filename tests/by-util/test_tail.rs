@@ -657,7 +657,7 @@ fn test_follow_name_multiple() {
         child
             .make_assertion_with_delay(delay)
             .is_alive()
-            .with_current_output()
+            .with_all_output()
             .stdout_only_fixture("foobar_follow_multiple.expected");
 
         let first_append = "trois\n";
