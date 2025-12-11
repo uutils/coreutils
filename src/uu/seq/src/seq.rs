@@ -211,12 +211,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match result {
         Ok(()) => Ok(()),
-        Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
-            // GNU seq prints the Broken pipe message but still exits with status 0
-            let err = err.map_err_context(|| "write error".into());
-            uucore::show_error!("{err}");
-            Ok(())
-        }
         Err(err) => Err(err.map_err_context(|| "write error".into())),
     }
 }
