@@ -2,7 +2,7 @@ name: GnuTests
 
 # spell-checker:ignore (abbrev/names) CodeCov gnulib GnuTests Swatinem
 # spell-checker:ignore (jargon) submodules devel
-# spell-checker:ignore (libs/utils) autopoint chksum getenforce gperf lcov libexpect limactl pyinotify setenforce shopt texinfo valgrind libattr libcap taiki-e
+# spell-checker:ignore (libs/utils) autopoint chksum getenforce getlimits gperf lcov libexpect limactl pyinotify setenforce shopt texinfo valgrind libattr libcap taiki-e
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
 # spell-checker:ignore (people) Dawid Dziurla * dawidd dtolnay
 # spell-checker:ignore (vars) FILESET SUBDIRS XPASS
@@ -74,11 +74,13 @@ jobs:
         git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
         git submodule update --init --recursive --depth 1
       working-directory: gnu
-    - name: Restore config.cache
+    - name: Restore files for faster configure and skipping make
       uses: actions/cache@v4
       id: cache-config-gnu
       with:
-        path: gnu/config.cache
+        path: |
+          gnu/config.cache
+          gnu/src/getlimits
         key: ${{ runner.os }}-gnu-config-${{ env.REPO_GNU_REF }}-${{ hashFiles('gnu/configure') }}
         restore-keys: |
           ${{ runner.os }}-gnu-config-${{ env.REPO_GNU_REF }}-
@@ -125,11 +127,13 @@ jobs:
         cd 'uutils'
         env PROFILE=release-small bash util/build-gnu.sh
         
-    - name: Save config.cache
+    - name: Save files for faster configure and skipping make
       uses: actions/cache/save@v4
       if: always() && steps.cache-config-gnu.outputs.cache-hit != 'true'
       with:
-        path: gnu/config.cache
+        path: |
+          gnu/config.cache
+          gnu/src/getlimits
         key: ${{ runner.os }}-gnu-config-${{ env.REPO_GNU_REF }}-${{ hashFiles('gnu/configure') }}
 
     ### Run tests as user
