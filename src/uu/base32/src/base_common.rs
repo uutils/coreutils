@@ -301,9 +301,9 @@ pub mod fast_encode {
     use std::{
         cmp::min,
         collections::VecDeque,
-        slice,
         io::{self, Read, Write},
         num::NonZeroUsize,
+        slice,
     };
     use uucore::{
         encoding::SupportsFastDecodeAndEncode,
