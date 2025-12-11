@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore regfile
+// spell-checker:ignore regfile parentdir
 
 use uutests::util::{TestScenario, get_root_path};
 use uutests::{at_and_ucmd, new_ucmd, path_concat, util_name};
