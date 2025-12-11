@@ -69,6 +69,21 @@ fn test_canonicalize_missing() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_canonicalize_symlink_before_parentdir() {
+    // GNU readlink follows the symlink first and only then evaluates `..`.
+    // Logical resolution would collapse `link/..` up front and return the current directory instead.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("real");
+    at.mkdir("real/sub");
+    at.relative_symlink_dir("real/sub", "link");
+
+    let actual = ucmd.args(&["-f", "link/.."]).succeeds().stdout_move_str();
+    let expect = format!("{}/real\n", at.root_dir_resolved());
+    assert_eq!(actual, expect);
+}
+
+#[test]
 fn test_long_redirection_to_current_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     // Create a 256-character path to current directory
