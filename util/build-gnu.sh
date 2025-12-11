@@ -126,7 +126,7 @@ done
 
 if test -f gnu-built; then
     echo "GNU build already found. Skip"
-    echo "'rm -f $(pwd)/gnu-built' to force the build"
+    echo "'rm -f $(pwd)/{gnu-built,src/getlimits}' to force the build"
     echo "Note: the customization of the tests will still happen"
 else
     # Disable useless checks
@@ -141,7 +141,7 @@ else
     "${SED}" -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
     # Use a better diff
     "${SED}" -i 's|diff -c|diff -u|g' tests/Coreutils.pm
-    # Allow to omit make by reusing getlimits
+    # Skip make if possible
     test -f src/getlimits || "${MAKE}" -j "$("${NPROC}")"
     cp -f src/getlimits "${UU_BUILD_DIR}"
 

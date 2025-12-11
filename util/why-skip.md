@@ -20,9 +20,6 @@
 = timeout returned 142. SIGALRM not handled? =
 * tests/misc/timeout-group.sh
 
-= can't get window size =
-* tests/misc/stty-row-col.sh
-
 = The Swedish locale with blank thousands separator is unavailable. =
 * tests/misc/sort-h-thousands-sep.sh
 
@@ -31,11 +28,6 @@
 
 = no rootfs in mtab =
 * tests/df/skip-rootfs.sh
-
-= requires controlling input terminal =
-* tests/misc/stty-pairs.sh
-* tests/misc/stty.sh
-* tests/misc/stty-invalid.sh
 
 = Disabled. Enabled at GNU coreutils > 9.9 =
 * tests/misc/tac-continue.sh
