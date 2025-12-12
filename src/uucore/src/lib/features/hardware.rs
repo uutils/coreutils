@@ -8,6 +8,11 @@
 //! This module provides a unified interface for detecting CPU features and
 //! respecting environment-based SIMD policies (e.g., GLIBC_TUNABLES).
 //!
+//! It provides 2 structures, from which we can get capabilities:
+//! - [`CpuFeatures`], which contains the raw available CPU features;
+//! - [`SimdPolicy`], which relies on [`CpuFeatures`] and the `GLIBC_TUNABLES`
+//!   environment variable to get the *enabled* CPU features
+//!
 //! # Use Cases
 //!
 //! - `cksum --debug`: Report hardware acceleration capabilities
@@ -17,16 +22,19 @@
 //! # Examples
 //!
 //! ```no_run
-//! use uucore::hardware::{CpuFeatures, simd_policy};
+//! use uucore::hardware::{CpuFeatures, SimdPolicy, HasHardwareFeatures as _};
 //!
 //! // Simple hardware detection
 //! let features = CpuFeatures::detect();
 //! if features.has_avx2() {
-//!     println!("AVX2 is available");
+//!     println!("CPU has AVX2 support");
 //! }
 //!
 //! // Check SIMD policy (respects GLIBC_TUNABLES)
-//! let policy = simd_policy();
+//! let policy = SimdPolicy::detect();
+//! if policy.has_avx2() {
+//!     println!("CPU has AVX2 support and it is not disabled by env");
+//! }
 //! if policy.allows_simd() {
 //!     // Use SIMD-accelerated path
 //! } else {
@@ -34,113 +42,130 @@
 //! }
 //! ```
 
+use std::collections::BTreeSet;
 use std::env;
 use std::sync::OnceLock;
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+pub enum HardwareFeature {
+    /// AVX-512 support (x86/x86_64 only)
+    Avx512,
+    /// AVX2 support (x86/x86_64 only)
+    Avx2,
+    /// PCLMULQDQ support for CRC acceleration (x86/x86_64 only)
+    PclMul,
+    /// VMULL support for CRC acceleration (ARM only)
+    Vmull,
+    /// SSE2 support (x86/x86_64 only)
+    Sse2,
+    /// ARM ASIMD/NEON support (aarch64 only)
+    Asimd,
+}
+
+pub struct InvalidHardwareFeature;
+
+impl TryFrom<&str> for HardwareFeature {
+    type Error = InvalidHardwareFeature;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        use HardwareFeature::*;
+        match value {
+            "AVX512" | "AVX512F" => Ok(Avx512),
+            "AVX2" => Ok(Avx2),
+            "PCLMUL" | "PMULL" => Ok(PclMul),
+            "VMULL" => Ok(Vmull),
+            "SSE2" => Ok(Sse2),
+            "ASIMD" => Ok(Asimd),
+            _ => Err(InvalidHardwareFeature),
+        }
+    }
+}
+
+/// Trait for implementing common hardware feature checks.
+///
+/// This is used for the `CpuFeatures` struct, that holds the CPU capabilities,
+/// and for the `SimdPolicy` type that computes the enabled features with the
+/// environment variables.
+pub trait HasHardwareFeatures {
+    fn has_feature(&self, feat: HardwareFeature) -> bool;
+
+    fn iter_features(&self) -> impl Iterator<Item = HardwareFeature>;
+
+    /// Check if AVX-512 is available (x86/x86_64 only)
+    #[inline]
+    fn has_avx512(&self) -> bool {
+        self.has_feature(HardwareFeature::Avx512)
+    }
+
+    /// Check if AVX2 is available (x86/x86_64 only)
+    #[inline]
+    fn has_avx2(&self) -> bool {
+        self.has_feature(HardwareFeature::Avx2)
+    }
+
+    /// Check if PCLMULQDQ is available (x86/x86_64 only)
+    #[inline]
+    fn has_pclmul(&self) -> bool {
+        self.has_feature(HardwareFeature::PclMul)
+    }
+
+    /// Check if VMULL is available (ARM only)
+    #[inline]
+    fn has_vmull(&self) -> bool {
+        self.has_feature(HardwareFeature::Vmull)
+    }
+
+    /// Check if SSE2 is available (x86/x86_64 only)
+    #[inline]
+    fn has_sse2(&self) -> bool {
+        self.has_feature(HardwareFeature::Sse2)
+    }
+
+    /// Check if ARM ASIMD/NEON is available (aarch64 only)
+    #[inline]
+    fn has_asimd(&self) -> bool {
+        self.has_feature(HardwareFeature::Asimd)
+    }
+}
 
 /// CPU hardware features that affect performance
 ///
 /// Provides platform-specific CPU feature detection with caching.
 /// Detection is performed once and cached for the lifetime of the process.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct CpuFeatures {
-    /// AVX-512 support (x86/x86_64 only)
-    avx512: bool,
-    /// AVX2 support (x86/x86_64 only)
-    avx2: bool,
-    /// PCLMULQDQ support for CRC acceleration (x86/x86_64 only)
-    pclmul: bool,
-    /// VMULL support for CRC acceleration (ARM only)
-    vmull: bool,
-    /// SSE2 support (x86/x86_64 only)
-    sse2: bool,
-    /// ARM ASIMD/NEON support (aarch64 only)
-    asimd: bool,
+    set: BTreeSet<HardwareFeature>,
 }
-
 impl CpuFeatures {
-    /// Detect available CPU features (cached after first call)
-    ///
-    /// This function uses a singleton pattern to ensure feature detection
-    /// happens only once per process. Thread-safe.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use uucore::hardware::CpuFeatures;
-    ///
-    /// let features = CpuFeatures::detect();
-    /// println!("AVX2: {}", features.has_avx2());
-    /// ```
-    pub fn detect() -> Self {
+    pub fn detect() -> &'static Self {
         static FEATURES: OnceLock<CpuFeatures> = OnceLock::new();
-        *FEATURES.get_or_init(Self::detect_impl)
+        FEATURES.get_or_init(Self::detect_impl)
     }
 
     fn detect_impl() -> Self {
-        Self {
-            avx512: detect_avx512(),
-            avx2: detect_avx2(),
-            pclmul: detect_pclmul(),
-            vmull: detect_vmull(),
-            sse2: detect_sse2(),
-            asimd: detect_asimd(),
-        }
+        let set = [
+            (HardwareFeature::Avx512, detect_avx512 as fn() -> bool),
+            (HardwareFeature::Avx2, detect_avx2),
+            (HardwareFeature::PclMul, detect_pclmul),
+            (HardwareFeature::Vmull, detect_vmull),
+            (HardwareFeature::Sse2, detect_sse2),
+            (HardwareFeature::Asimd, detect_asimd),
+        ]
+        .into_iter()
+        .filter_map(|(feat, detect)| detect().then_some(feat))
+        .collect();
+
+        Self { set }
+    }
+}
+
+impl HasHardwareFeatures for CpuFeatures {
+    fn has_feature(&self, feat: HardwareFeature) -> bool {
+        self.set.contains(&feat)
     }
 
-    /// Check if AVX-512 is available (x86/x86_64 only)
-    pub fn has_avx512(&self) -> bool {
-        self.avx512
-    }
-
-    /// Check if AVX2 is available (x86/x86_64 only)
-    pub fn has_avx2(&self) -> bool {
-        self.avx2
-    }
-
-    /// Check if PCLMULQDQ is available (x86/x86_64 only)
-    pub fn has_pclmul(&self) -> bool {
-        self.pclmul
-    }
-
-    /// Check if VMULL is available (ARM only)
-    pub fn has_vmull(&self) -> bool {
-        self.vmull
-    }
-
-    /// Check if SSE2 is available (x86/x86_64 only)
-    pub fn has_sse2(&self) -> bool {
-        self.sse2
-    }
-
-    /// Check if ARM ASIMD/NEON is available (aarch64 only)
-    pub fn has_asimd(&self) -> bool {
-        self.asimd
-    }
-
-    /// Get list of available features as strings
-    ///
-    /// Returns uppercase feature names (e.g., "AVX2", "SSE2", "ASIMD")
-    pub fn available_features(&self) -> Vec<&'static str> {
-        let mut features = Vec::new();
-        if self.avx512 {
-            features.push("AVX512");
-        }
-        if self.avx2 {
-            features.push("AVX2");
-        }
-        if self.pclmul {
-            features.push("PCLMUL");
-        }
-        if self.vmull {
-            features.push("VMULL");
-        }
-        if self.sse2 {
-            features.push("SSE2");
-        }
-        if self.asimd {
-            features.push("ASIMD");
-        }
-        features
+    fn iter_features(&self) -> impl Iterator<Item = HardwareFeature> {
+        self.set.iter().copied()
     }
 }
 
@@ -151,14 +176,34 @@ impl CpuFeatures {
 #[derive(Debug, Clone)]
 pub struct SimdPolicy {
     /// Features disabled via GLIBC_TUNABLES (e.g., ["AVX2", "AVX512F"])
-    disabled_by_env: Vec<String>,
-    /// Hardware features actually available
-    hardware_features: CpuFeatures,
+    disabled_by_env: BTreeSet<HardwareFeature>,
+    hardware_features: &'static CpuFeatures,
 }
 
 impl SimdPolicy {
-    /// Create a new SIMD policy by checking environment and hardware
-    fn new() -> Self {
+    /// Get the global SIMD policy (cached)
+    ///
+    /// This checks both hardware capabilities and the GLIBC_TUNABLES environment
+    /// variable. The result is cached for the lifetime of the process.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use uucore::hardware::SimdPolicy;
+    ///
+    /// let policy = SimdPolicy::detect();
+    /// if policy.allows_simd() {
+    ///     println!("SIMD is enabled");
+    /// } else {
+    ///     println!("SIMD disabled by: {:?}", policy.disabled_features());
+    /// }
+    /// ```
+    pub fn detect() -> &'static Self {
+        static POLICY: OnceLock<SimdPolicy> = OnceLock::new();
+        POLICY.get_or_init(Self::detect_impl)
+    }
+
+    fn detect_impl() -> Self {
         let tunables = env::var("GLIBC_TUNABLES").unwrap_or_default();
         let disabled_by_env = parse_disabled_features(&tunables);
         let hardware_features = CpuFeatures::detect();
@@ -169,66 +214,26 @@ impl SimdPolicy {
         }
     }
 
-    /// Check if SIMD operations are allowed
-    ///
-    /// Returns `false` if any features are disabled via GLIBC_TUNABLES,
-    /// regardless of what's available in hardware.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use uucore::hardware::simd_policy;
-    ///
-    /// let policy = simd_policy();
-    /// if policy.allows_simd() {
-    ///     // Use SIMD-accelerated bytecount
-    /// } else {
-    ///     // Use scalar fallback
-    /// }
-    /// ```
     pub fn allows_simd(&self) -> bool {
         self.disabled_by_env.is_empty()
     }
 
-    /// Get list of features disabled by environment
-    pub fn disabled_features(&self) -> &[String] {
-        &self.disabled_by_env
-    }
-
-    /// Get available hardware features
-    pub fn hardware_features(&self) -> &CpuFeatures {
-        &self.hardware_features
-    }
-
-    /// Get list of features that are both available and not disabled
-    pub fn enabled_features(&self) -> Vec<&'static str> {
-        if !self.allows_simd() {
-            return Vec::new();
-        }
-        self.hardware_features.available_features()
+    pub fn disabled_features(&self) -> Vec<HardwareFeature> {
+        self.disabled_by_env.iter().copied().collect()
     }
 }
 
-/// Get the global SIMD policy (cached)
-///
-/// This checks both hardware capabilities and the GLIBC_TUNABLES environment
-/// variable. The result is cached for the lifetime of the process.
-///
-/// # Examples
-///
-/// ```no_run
-/// use uucore::hardware::simd_policy;
-///
-/// let policy = simd_policy();
-/// if policy.allows_simd() {
-///     println!("SIMD is enabled");
-/// } else {
-///     println!("SIMD disabled by: {:?}", policy.disabled_features());
-/// }
-/// ```
-pub fn simd_policy() -> &'static SimdPolicy {
-    static POLICY: OnceLock<SimdPolicy> = OnceLock::new();
-    POLICY.get_or_init(SimdPolicy::new)
+impl HasHardwareFeatures for SimdPolicy {
+    fn has_feature(&self, feat: HardwareFeature) -> bool {
+        self.hardware_features.has_feature(feat) && !self.disabled_by_env.contains(&feat)
+    }
+
+    fn iter_features(&self) -> impl Iterator<Item = HardwareFeature> {
+        self.hardware_features
+            .set
+            .difference(&self.disabled_by_env)
+            .copied()
+    }
 }
 
 // Platform-specific feature detection
@@ -322,12 +327,12 @@ fn detect_vmull() -> bool {
 ///
 /// Format: `glibc.cpu.hwcaps=-AVX2,-AVX512F`
 /// Multiple tunable sections can be separated by colons.
-fn parse_disabled_features(tunables: &str) -> Vec<String> {
+fn parse_disabled_features(tunables: &str) -> BTreeSet<HardwareFeature> {
     if tunables.is_empty() {
-        return Vec::new();
+        return BTreeSet::new();
     }
 
-    let mut disabled = Vec::new();
+    let mut disabled = BTreeSet::new();
 
     // GLIBC_TUNABLES format: "tunable1=value1:tunable2=value2"
     for entry in tunables.split(':') {
@@ -345,9 +350,10 @@ fn parse_disabled_features(tunables: &str) -> Vec<String> {
         for token in raw_value.split(',') {
             let token = token.trim();
             if let Some(feature) = token.strip_prefix('-') {
-                let feature = feature.trim().to_ascii_uppercase();
-                if !feature.is_empty() {
-                    disabled.push(feature);
+                let feature =
+                    HardwareFeature::try_from(feature.trim().to_ascii_uppercase().as_str());
+                if let Ok(feature) = feature {
+                    disabled.insert(feature);
                 }
             }
         }
@@ -369,64 +375,77 @@ mod tests {
     }
 
     #[test]
-    fn test_available_features() {
-        let features = CpuFeatures::detect();
-        let available = features.available_features();
-        // Should return a list (may be empty on some platforms)
-        assert!(available.iter().all(|s| !s.is_empty()));
-    }
-
-    #[test]
     fn test_parse_disabled_features_empty() {
-        assert_eq!(parse_disabled_features(""), Vec::<String>::new());
+        assert_eq!(parse_disabled_features(""), BTreeSet::new());
     }
 
     #[test]
     fn test_parse_disabled_features_single() {
         let result = parse_disabled_features("glibc.cpu.hwcaps=-AVX2");
-        assert_eq!(result, vec!["AVX2"]);
+        let mut expected = BTreeSet::new();
+
+        expected.insert(HardwareFeature::Avx2);
+
+        assert_eq!(result, expected);
     }
 
     #[test]
     fn test_parse_disabled_features_multiple() {
         let result = parse_disabled_features("glibc.cpu.hwcaps=-AVX2,-AVX512F");
-        assert_eq!(result, vec!["AVX2", "AVX512F"]);
+        let mut expected = BTreeSet::new();
+
+        expected.insert(HardwareFeature::Avx2);
+        expected.insert(HardwareFeature::Avx512);
+
+        assert_eq!(result, expected);
     }
 
     #[test]
     fn test_parse_disabled_features_mixed() {
         let result = parse_disabled_features("glibc.cpu.hwcaps=-AVX2,SSE2,-AVX512F");
+        let mut expected = BTreeSet::new();
+
+        expected.insert(HardwareFeature::Avx2);
+        expected.insert(HardwareFeature::Avx512);
+
         // Only features with '-' prefix are disabled
-        assert_eq!(result, vec!["AVX2", "AVX512F"]);
+        assert_eq!(result, expected);
     }
 
     #[test]
     fn test_parse_disabled_features_with_other_tunables() {
         let result =
             parse_disabled_features("glibc.malloc.check=1:glibc.cpu.hwcaps=-AVX2:other=value");
-        assert_eq!(result, vec!["AVX2"]);
+        let mut expected = BTreeSet::new();
+
+        expected.insert(HardwareFeature::Avx2);
+
+        assert_eq!(result, expected);
     }
 
     #[test]
     fn test_parse_disabled_features_case_insensitive() {
         let result = parse_disabled_features("glibc.cpu.hwcaps=-avx2,-Avx512f");
-        // Should normalize to uppercase
-        assert_eq!(result, vec!["AVX2", "AVX512F"]);
+        let mut expected = BTreeSet::new();
+
+        expected.insert(HardwareFeature::Avx2);
+        expected.insert(HardwareFeature::Avx512);
+
+        // Only features with '-' prefix are disabled
+        assert_eq!(result, expected);
     }
 
     #[test]
     fn test_simd_policy() {
-        let policy = simd_policy();
+        let policy = SimdPolicy::detect();
         // Just verify it works
         let _ = policy.allows_simd();
-        let _ = policy.disabled_features();
-        let _ = policy.enabled_features();
     }
 
     #[test]
     fn test_simd_policy_caching() {
-        let policy1 = simd_policy();
-        let policy2 = simd_policy();
+        let policy1 = SimdPolicy::detect();
+        let policy2 = SimdPolicy::detect();
         // Should be same instance (pointer equality)
         assert!(std::ptr::eq(policy1, policy2));
     }
