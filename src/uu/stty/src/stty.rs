@@ -32,6 +32,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, RawFd};
 use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
+use uucore::parser::parse_int::parse_u16_wrapped;
 use uucore::translate;
 
 #[cfg(not(any(
@@ -323,7 +324,7 @@ fn stty(opts: &Options) -> UResult<()> {
                 },
                 "rows" => {
                     if let Some(rows) = args_iter.next() {
-                        if let Some(n) = parse_rows_cols(rows) {
+                        if let Some(n) = parse_u16_wrapped(rows) {
                             valid_args.push(ArgOptions::Special(SpecialSetting::Rows(n)));
                         } else {
                             return invalid_integer_arg(rows);
@@ -334,7 +335,7 @@ fn stty(opts: &Options) -> UResult<()> {
                 }
                 "columns" | "cols" => {
                     if let Some(cols) = args_iter.next() {
-                        if let Some(n) = parse_rows_cols(cols) {
+                        if let Some(n) = parse_u16_wrapped(cols) {
                             valid_args.push(ArgOptions::Special(SpecialSetting::Cols(n)));
                         } else {
                             return invalid_integer_arg(cols);
@@ -476,15 +477,6 @@ fn parse_u8_or_err(arg: &str) -> Result<u8, String> {
         _ => translate!("stty-error-invalid-integer-argument",
                         "value" => format!("'{arg}'")),
     })
-}
-
-/// GNU uses an unsigned 32-bit integer for row/col sizes, but then wraps around 16 bits
-/// this function returns Some(n), where n is a u16 row/col size, or None if the string arg cannot be parsed as a u32
-fn parse_rows_cols(arg: &str) -> Option<u16> {
-    if let Ok(n) = arg.parse::<u32>() {
-        return Some((n % (u16::MAX as u32 + 1)) as u16);
-    }
-    None
 }
 
 /// Parse a saved terminal state string in stty format.
