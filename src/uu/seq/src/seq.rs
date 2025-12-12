@@ -17,6 +17,9 @@ use uucore::format::num_format::FloatVariant;
 use uucore::format::{Format, num_format};
 use uucore::{fast_inc::fast_inc, format_usage};
 
+#[cfg(unix)]
+use uucore::signals::ignore_pipe;
+
 mod error;
 
 // public to allow fuzzing
@@ -92,6 +95,13 @@ fn select_precision(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    #[cfg(unix)]
+    {
+        // Ignore SIGPIPE so that broken pipes return EPIPE errors instead of
+        // killing the process. This allows seq to handle broken pipes gracefully
+        // (printing an error message but exiting with status 0, matching GNU seq behavior).
+        ignore_pipe().map_err(|_| SeqError::SignalHandler)?;
+    }
     let matches =
         uucore::clap_localization::handle_clap_result(uu_app(), split_short_args_with_value(args))?;
 

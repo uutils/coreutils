@@ -12,12 +12,22 @@ use uucore::format_usage;
 
 use uucore::translate;
 
+#[cfg(unix)]
+use uucore::signals::ignore_pipe;
+
 mod options {
     pub const SILENT: &str = "silent";
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    #[cfg(unix)]
+    {
+        // Ignore SIGPIPE so that broken pipes return EPIPE errors instead of
+        // killing the process. This allows tty to handle write failures gracefully
+        // and exit with code 3 when stdout fails, matching GNU tty behavior.
+        ignore_pipe().ok();
+    }
     let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
 
     let silent = matches.get_flag(options::SILENT);

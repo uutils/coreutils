@@ -426,6 +426,14 @@ pub fn ignore_interrupts() -> Result<(), Errno> {
     unsafe { signal(SIGINT, SigIgn) }.map(|_| ())
 }
 
+/// Ignores the SIGPIPE signal.
+#[cfg(unix)]
+pub fn ignore_pipe() -> Result<(), Errno> {
+    // We pass the error as is, the return value would just be Ok(SigIgn), so we can safely ignore it.
+    // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
+    unsafe { signal(SIGPIPE, SigIgn) }.map(|_| ())
+}
+
 #[test]
 fn signal_by_value() {
     assert_eq!(signal_by_name_or_value("0"), Some(0));

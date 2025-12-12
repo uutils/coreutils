@@ -18,8 +18,6 @@ use native_int_str::{
     Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation_owned,
 };
 #[cfg(unix)]
-use nix::libc;
-#[cfg(unix)]
 use nix::sys::signal::{SigHandler::SigIgn, Signal, signal};
 use std::borrow::Cow;
 use std::env;
@@ -845,12 +843,6 @@ fn ignore_signal(sig: Signal) -> UResult<()> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // Rust ignores SIGPIPE (see https://github.com/rust-lang/rust/issues/62569).
-    // We restore its default action here.
-    #[cfg(unix)]
-    unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
-    }
     EnvAppData::default().run_env(args)
 }
 

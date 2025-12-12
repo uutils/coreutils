@@ -36,6 +36,11 @@ pub enum SeqError {
         translate!("seq-error-format-and-equal-width")
     )]
     FormatAndEqualWidth,
+
+    /// Failed to set signal handler
+    #[cfg(unix)]
+    #[error("failed to set signal handler")]
+    SignalHandler,
 }
 
 fn parse_error_type(e: &ParseNumberError) -> String {
