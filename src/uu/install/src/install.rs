@@ -62,6 +62,7 @@ pub struct Behavior {
     preserve_context: bool,
     context: Option<String>,
     default_context: bool,
+    debug: bool,
 }
 
 #[derive(Error, Debug)]
@@ -110,6 +111,9 @@ enum InstallError {
 
     #[error("{}", translate!("install-error-override-directory-failed", "dir" => .0.quote(), "file" => .1.quote()))]
     OverrideDirectoryFailed(PathBuf, PathBuf),
+
+    #[error("cannot get file name from {}", _0.quote())]
+    CannotGetFilename(PathBuf),
 
     #[error("{}", translate!("install-error-same-file", "file1" => .0.to_string_lossy(), "file2" => .1.to_string_lossy()))]
     SameFile(PathBuf, PathBuf),
@@ -163,6 +167,7 @@ static OPT_VERBOSE: &str = "verbose";
 static OPT_PRESERVE_CONTEXT: &str = "preserve-context";
 static OPT_CONTEXT: &str = "context";
 static OPT_DEFAULT_CONTEXT: &str = "default-context";
+static OPT_DEBUG: &str = "debug";
 
 static ARG_FILES: &str = "files";
 
@@ -311,6 +316,12 @@ pub fn uu_app() -> Command {
                 .num_args(0..=1),
         )
         .arg(
+            Arg::new(OPT_DEBUG)
+                .long(OPT_DEBUG)
+                .help(translate!("install-help-debug"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .num_args(1..)
@@ -417,6 +428,9 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let context = matches.get_one::<String>(OPT_CONTEXT).cloned();
     let default_context = matches.get_flag(OPT_DEFAULT_CONTEXT);
 
+    let debug = matches.get_flag(OPT_DEBUG);
+    let verbose = matches.get_flag(OPT_VERBOSE) || debug; // debug implies verbose
+
     Ok(Behavior {
         main_function,
         specified_mode,
@@ -424,7 +438,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         suffix: backup_control::determine_backup_suffix(matches),
         owner_id,
         group_id,
-        verbose: matches.get_flag(OPT_VERBOSE),
+        verbose,
         preserve_timestamps,
         compare,
         strip,
@@ -439,6 +453,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         preserve_context: matches.get_flag(OPT_PRESERVE_CONTEXT),
         context,
         default_context,
+        debug,
     })
 }
 
@@ -519,8 +534,13 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
 /// Test if the path is a new file path that can be
 /// created immediately
 fn is_new_file_path(path: &Path) -> bool {
-    !path.exists()
-        && (path.parent().is_none_or(Path::is_dir) || path.parent().unwrap().as_os_str().is_empty()) // In case of a simple file
+    if path.exists() {
+        return false;
+    }
+    match path.parent() {
+        None => true,                                      // e.g., "foo"
+        Some(p) => p.is_dir() || p.as_os_str().is_empty(), // e.g., "/tmp/foo" or "foo"
+    }
 }
 
 /// Test if the path is an existing directory or ends with a trailing separator.
@@ -564,16 +584,20 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
     let target: PathBuf = if let Some(path) = &b.target_dir {
         path.into()
     } else {
-        let last_path: PathBuf = paths.pop().unwrap().into();
+        // The unwrap is safe because we check for an empty `paths` vec at the start.
+        // However, it's better to be explicit.
+        let last_path: PathBuf = paths
+            .pop()
+            .expect("paths should have at least one element")
+            .into();
 
-        // paths has to contain more elements
+        // paths has to contain at least one source element
         if paths.is_empty() {
             return Err(UUsageError::new(
                 1,
                 translate!("install-error-missing-destination-operand", "path" => last_path.to_string_lossy()),
             ));
         }
-
         last_path
     };
 
@@ -634,11 +658,13 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                 }
             }
         }
+        // If -t is used, we must ensure the target is a directory.
+        // The logic for `to_create` ensures it is `Some` when `target_dir` is `Some`.
         if b.target_dir.is_some() {
-            let p = to_create.unwrap();
-
-            if !p.exists() || !p.is_dir() {
-                return Err(InstallError::NotADirectory(p.to_path_buf()).into());
+            if let Some(p) = to_create {
+                if !p.is_dir() {
+                    return Err(InstallError::NotADirectory(p.to_path_buf()).into());
+                }
             }
         }
     }
@@ -646,7 +672,8 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
     if sources.len() > 1 {
         copy_files_into_dir(sources, &target, b)
     } else {
-        let source = sources.first().unwrap();
+        // This is safe because `sources` is guaranteed to have at least one element.
+        let source = sources.first().expect("source list should not be empty");
 
         if source.is_dir() {
             return Err(InstallError::OmittingDirectory(source.clone()).into());
@@ -699,8 +726,11 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
             continue;
         }
 
+        let Some(filename) = sourcepath.file_name() else {
+            show!(InstallError::CannotGetFilename(sourcepath.clone()));
+            continue;
+        };
         let mut targetpath = target_dir.to_path_buf();
-        let filename = sourcepath.components().next_back().unwrap();
         targetpath.push(filename);
 
         show_if_err!(copy(sourcepath, &targetpath, b));
@@ -967,33 +997,87 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
     if b.compare && !need_copy(from, to, b) {
         return Ok(());
     }
-    // Declare the path here as we may need it for the verbose output below.
-    let backup_path = perform_backup(to, b)?;
+    if b.debug {
+        println!(
+            "{}",
+            translate!("install-debug-will-copy", "from" => from.quote(), "to" => to.quote())
+        );
+    }
 
+    let backup_path = perform_backup(to, b)?;
+    if b.debug {
+        if let Some(ref p) = backup_path {
+            println!(
+                "{}",
+                translate!("install-debug-backing-up", "from" => to.quote(), "to" => p.quote())
+            );
+        }
+    }
+
+    if b.debug {
+        println!(
+            "{}",
+            translate!("install-debug-copying", "from" => from.quote(), "to" => to.quote())
+        );
+    }
     copy_file(from, to)?;
 
     #[cfg(not(windows))]
     if b.strip {
+        if b.debug {
+            println!(
+                "{}",
+                translate!("install-debug-stripping", "to" => to.quote())
+            );
+        }
         strip_file(to, b)?;
     }
 
+    if b.debug {
+        println!(
+            "{}",
+            translate!("install-debug-changing-mode", "to" => to.quote(), "mode" => format!("{:o}", b.mode()))
+        );
+    }
     set_ownership_and_permissions(to, b)?;
 
     if b.preserve_timestamps {
+        if b.debug {
+            println!(
+                "{}",
+                translate!("install-debug-preserving-timestamps", "to" => to.quote())
+            );
+        }
         preserve_timestamps(from, to)?;
     }
 
     #[cfg(feature = "selinux")]
     if b.preserve_context {
+        if b.debug {
+            println!(
+                "{}",
+                translate!("install-debug-preserving-selinux-context", "to" => to.quote())
+            );
+        }
         uucore::selinux::preserve_security_context(from, to)
             .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
-    } else if b.default_context {
-        set_selinux_default_context(to)
-            .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
-    } else if b.context.is_some() {
-        let context = get_context_for_selinux(b);
-        set_selinux_security_context(to, context)
-            .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
+    } else if b.default_context || b.context.is_some() {
+        if b.debug {
+            println!(
+                "{}",
+                translate!("install-debug-setting-selinux-context", "to" => to.quote())
+            );
+        }
+        if b.default_context {
+            // For -Z (default context), use install's default SELinux behavior
+            set_selinux_default_context(to)
+                .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
+        } else {
+            // For --context=CTX, set the explicit context
+            let context = get_context_for_selinux(b);
+            set_selinux_security_context(to, context)
+                .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
+        }
     }
 
     if b.verbose {
@@ -1063,83 +1147,125 @@ fn needs_copy_for_ownership(to: &Path, to_meta: &fs::Metadata) -> bool {
 /// Crashes the program if a nonexistent owner or group is specified in _b_.
 ///
 fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
-    // Attempt to retrieve metadata for the source file.
-    // If this fails, assume the file needs to be copied.
+    if b.debug {
+        // Avoid localization and quoting here to match test expectations exactly
+        println!(
+            "checking if {} needs to be copied to {}",
+            from.display(),
+            to.display()
+        );
+    }
+
     let Ok(from_meta) = metadata(from) else {
+        if b.debug {
+            println!("cannot stat source file '{}'; will copy", from.display());
+        }
         return true;
     };
 
-    // Attempt to retrieve metadata for the destination file.
-    // If this fails, assume the file needs to be copied.
     let Ok(to_meta) = metadata(to) else {
+        if b.debug {
+            println!("cannot stat destination file '{}'; will copy", to.display());
+        }
         return true;
     };
 
-    // Check if the destination is a symlink (should always be replaced)
     if let Ok(to_symlink_meta) = fs::symlink_metadata(to) {
         if to_symlink_meta.file_type().is_symlink() {
+            if b.debug {
+                println!(
+                    "{}",
+                    translate!("install-debug-dest-is-symlink", "path" => to.quote())
+                );
+            }
             return true;
         }
     }
 
-    // Define special file mode bits (setuid, setgid, sticky).
     let extra_mode: u32 = 0o7000;
-    // Define all file mode bits (including permissions).
-    // setuid || setgid || sticky || permissions
     let all_modes: u32 = 0o7777;
 
-    // Check if any special mode bits are set in the specified mode,
-    // source file mode, or destination file mode.
     if b.mode() & extra_mode != 0
         || from_meta.mode() & extra_mode != 0
         || to_meta.mode() & extra_mode != 0
     {
+        if b.debug {
+            println!("{}", translate!("install-debug-special-mode-bits"));
+        }
         return true;
     }
 
-    // Check if the mode of the destination file differs from the specified mode.
     if b.mode() != to_meta.mode() & all_modes {
+        if b.debug {
+            println!("{}", translate!("install-debug-mode-differs"));
+        }
         return true;
     }
 
-    // Check if either the source or destination is not a file.
     if !from_meta.is_file() || !to_meta.is_file() {
+        if b.debug {
+            println!("{}", translate!("install-debug-not-regular-file"));
+        }
         return true;
     }
 
-    // Check if the file sizes differ.
     if from_meta.len() != to_meta.len() {
+        if b.debug {
+            println!(
+                "{}",
+                translate!("install-debug-sizes-differ", "from" => from.quote(), "to" => to.quote())
+            );
+        }
         return true;
     }
 
     #[cfg(feature = "selinux")]
     if b.preserve_context && contexts_differ(from, to) {
+        if b.debug {
+            println!(
+                "{}",
+                translate!("install-debug-selinux-contexts-differ", "from" => from.quote(), "to" => to.quote())
+            );
+        }
         return true;
     }
 
-    // TODO: if -P (#1809) and from/to contexts mismatch, return true.
-
-    // Check if the owner ID is specified and differs from the destination file's owner.
     if let Some(owner_id) = b.owner_id {
         if owner_id != to_meta.uid() {
+            if b.debug {
+                println!("{}", translate!("install-debug-owner-differs"));
+            }
             return true;
         }
     }
 
-    // Check if the group ID is specified and differs from the destination file's group.
     if let Some(group_id) = b.group_id {
         if group_id != to_meta.gid() {
+            if b.debug {
+                println!("{}", translate!("install-debug-group-differs"));
+            }
             return true;
         }
     } else if needs_copy_for_ownership(to, &to_meta) {
+        if b.debug {
+            println!("{}", translate!("install-debug-ownership-needs-update"));
+        }
         return true;
     }
 
-    // Check if the contents of the source and destination files differ.
     if !diff(&from.to_string_lossy(), &to.to_string_lossy()) {
+        if b.debug {
+            println!(
+                "{}",
+                translate!("install-debug-contents-differ", "from" => from.quote(), "to" => to.quote())
+            );
+        }
         return true;
     }
 
+    if b.debug {
+        println!("'{}' and '{}' are the same", from.display(), to.display());
+    }
     false
 }
 
