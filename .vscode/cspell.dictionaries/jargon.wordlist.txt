@@ -129,6 +129,7 @@ semiprimes
 setcap
 setfacl
 setfattr
+SETFL
 shortcode
 shortcodes
 siginfo
