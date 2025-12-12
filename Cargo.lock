@@ -537,6 +537,7 @@ name = "coreutils"
 version = "0.5.0"
 dependencies = [
  "bincode",
+ "bytecount",
  "chrono",
  "clap",
  "clap_complete",
@@ -563,6 +564,7 @@ dependencies = [
  "tempfile",
  "textwrap",
  "time",
+ "unicode-width 0.2.2",
  "unindent",
  "uu_arch",
  "uu_base32",
