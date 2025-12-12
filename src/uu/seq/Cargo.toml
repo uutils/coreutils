@@ -21,6 +21,7 @@ path = "src/seq.rs"
 [dependencies]
 bigdecimal = { workspace = true }
 clap = { workspace = true }
+nix = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 thiserror = { workspace = true }

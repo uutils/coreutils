@@ -209,16 +209,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         padding,
     );
 
-    match result {
-        Ok(()) => Ok(()),
-        Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
+    let sigpipe_ignored = sigpipe_is_ignored();
+    if let Err(err) = result {
+        if err.kind() == std::io::ErrorKind::BrokenPipe {
             // GNU seq prints the Broken pipe message but still exits with status 0
+            // unless SIGPIPE was explicitly ignored, in which case it should fail.
             let err = err.map_err_context(|| "write error".into());
             uucore::show_error!("{err}");
-            Ok(())
+            return if sigpipe_ignored { Err(err) } else { Ok(()) };
+        } else {
+            return Err(err.map_err_context(|| "write error".into()));
         }
-        Err(err) => Err(err.map_err_context(|| "write error".into())),
     }
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
@@ -330,6 +333,44 @@ fn fast_print_seq(
     stdout.write_all(terminator.as_encoded_bytes())?;
     stdout.flush()?;
     Ok(())
+}
+
+#[cfg(unix)]
+static SIGPIPE_WAS_IGNORED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(unix)]
+/// # Safety
+/// This function runs once at process initialization and only observes the
+/// current `SIGPIPE` handler, so there are no extra safety requirements for callers.
+unsafe extern "C" fn capture_sigpipe_state() {
+    use nix::libc;
+    use std::{mem::MaybeUninit, ptr};
+
+    let mut current = MaybeUninit::<libc::sigaction>::uninit();
+    if unsafe { libc::sigaction(libc::SIGPIPE, ptr::null(), current.as_mut_ptr()) } == 0 {
+        let ignored = unsafe { current.assume_init() }.sa_sigaction == libc::SIG_IGN;
+        SIGPIPE_WAS_IGNORED.store(ignored, Ordering::Relaxed);
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+#[used]
+#[unsafe(link_section = ".init_array")]
+static CAPTURE_SIGPIPE_STATE: unsafe extern "C" fn() = capture_sigpipe_state;
+
+#[cfg(all(unix, target_os = "macos"))]
+#[used]
+#[unsafe(link_section = "__DATA,__mod_init_func")]
+static CAPTURE_SIGPIPE_STATE_APPLE: unsafe extern "C" fn() = capture_sigpipe_state;
+
+#[cfg(unix)]
+fn sigpipe_is_ignored() -> bool {
+    SIGPIPE_WAS_IGNORED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(unix))]
+const fn sigpipe_is_ignored() -> bool {
+    false
 }
 
 fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> bool {
