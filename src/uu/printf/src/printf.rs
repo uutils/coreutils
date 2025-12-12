@@ -4,15 +4,38 @@
 // file that was distributed with this source code.
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
-use std::io::stdout;
+use std::io::{Write, stdout};
 use std::ops::ControlFlow;
-use uucore::error::{UResult, UUsageError};
+use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::format::{FormatArgument, FormatArguments, FormatItem, parse_spec_and_escape};
+use uucore::signals::stdout_was_closed;
 use uucore::translate;
 use uucore::{format_usage, os_str_as_bytes, show_warning};
 
+// Capture stdout state at process startup (before Rust's runtime may reopen closed fds)
+uucore::init_sigpipe_capture!();
+
 const VERSION: &str = "version";
 const HELP: &str = "help";
+
+/// Check for stdout write errors after output has been written.
+/// This handles both /dev/full (flush error) and closed stdout (reopened as /dev/null).
+fn check_stdout_errors() -> UResult<()> {
+    // Check for stdout write errors (e.g., /dev/full)
+    if let Err(e) = stdout().flush() {
+        return Err(USimpleError::new(1, e.to_string()));
+    }
+
+    // Check if stdout was closed before Rust's runtime reopened it as /dev/null.
+    // Uses the early-capture mechanism from init_sigpipe_capture!() to detect this
+    // at process startup, not at runtime (which would incorrectly trigger on
+    // legitimate redirects to /dev/null).
+    if stdout_was_closed() {
+        return Err(USimpleError::new(1, "write error"));
+    }
+
+    Ok(())
+}
 
 mod options {
     pub const FORMAT: &str = "FORMAT";
@@ -64,6 +87,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 )
             );
         }
+        // Check for write errors if we wrote any output
+        if !format.is_empty() {
+            check_stdout_errors()?;
+        }
         return Ok(());
     }
 
@@ -77,7 +104,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         args.start_next_batch();
     }
 
-    Ok(())
+    // Check for write errors (format is always non-empty here since we would have
+    // returned early above if !format_seen and there were no format specs)
+    check_stdout_errors()
 }
 
 pub fn uu_app() -> Command {

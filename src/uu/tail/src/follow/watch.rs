@@ -10,7 +10,7 @@ use crate::follow::files::{FileHandling, PathData};
 use crate::paths::{Input, InputKind, MetadataExtTail, PathExtTail};
 use crate::{platform, text};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
-use std::io::BufRead;
+use std::io::{BufRead, stdout};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, channel};
 use uucore::display::Quotable;
@@ -96,6 +96,24 @@ pub struct Observer {
     /// change during runtime it is moved out of [`Settings`].
     pub use_polling: bool,
 
+    /// If true, monitor stdout so we exit if pipe reader terminates.
+    /// This is set when stdout is a pipe or FIFO.
+    pub monitor_output: bool,
+
+    /// Set to true when stdin was a pipe that we processed.
+    /// Pipes can't be followed, so we read them but don't add to observer.
+    /// This is used to avoid printing "no files remaining" after processing
+    /// a stdin pipe when there are no other valid files.
+    pub stdin_pipe_processed: bool,
+
+    /// Set to true when stdin was detected as bad (closed/invalid fd).
+    /// This is used to ensure follow() is called to print "no files remaining".
+    pub stdin_bad: bool,
+
+    /// Set to true when we had a bad path (permanent error, e.g., directory without --retry).
+    /// This is used to ensure follow() is called to print "no files remaining".
+    pub had_bad_path: bool,
+
     pub watcher_rx: Option<WatcherRx>,
     pub orphans: Vec<PathBuf>,
     pub files: FileHandling,
@@ -117,10 +135,33 @@ impl Observer {
             0
         };
 
+        // If stdout is a pipe or FIFO, monitor it so we exit if reader terminates.
+        // This matches GNU coreutils behavior (see isapipe.c).
+        // On some systems (like Darwin), pipes are sockets, so check both.
+        #[cfg(unix)]
+        let monitor_output = {
+            use std::os::unix::io::AsRawFd;
+            let stdout_fd = stdout().as_raw_fd();
+            let mut stat: libc::stat = unsafe { std::mem::zeroed() };
+            if unsafe { libc::fstat(stdout_fd, &mut stat) } == 0 {
+                let mode = stat.st_mode & libc::S_IFMT;
+                // Check for FIFO/pipe or socket (pipes are sockets on some systems)
+                mode == libc::S_IFIFO || mode == libc::S_IFSOCK
+            } else {
+                false
+            }
+        };
+        #[cfg(not(unix))]
+        let monitor_output = false;
+
         Self {
             retry,
             follow,
             use_polling,
+            monitor_output,
+            stdin_pipe_processed: false,
+            stdin_bad: false,
+            had_bad_path: false,
             watcher_rx: None,
             orphans: Vec::new(),
             files,
@@ -162,24 +203,6 @@ impl Observer {
         Ok(())
     }
 
-    pub fn add_stdin(
-        &mut self,
-        display_name: &str,
-        reader: Option<Box<dyn BufRead>>,
-        update_last: bool,
-    ) -> UResult<()> {
-        if self.follow == Some(FollowMode::Descriptor) {
-            return self.add_path(
-                &PathBuf::from(text::DEV_STDIN),
-                display_name,
-                reader,
-                update_last,
-            );
-        }
-
-        Ok(())
-    }
-
     pub fn add_bad_path(
         &mut self,
         path: &Path,
@@ -188,6 +211,12 @@ impl Observer {
     ) -> UResult<()> {
         if self.retry && self.follow.is_some() {
             return self.add_path(path, display_name, None, update_last);
+        }
+
+        // Track that we had a bad path so follow() gets called to print
+        // "no files remaining" if all paths failed.
+        if self.follow.is_some() {
+            self.had_bad_path = true;
         }
 
         Ok(())
@@ -488,7 +517,14 @@ impl Observer {
 
 #[allow(clippy::cognitive_complexity)]
 pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
+    // Check if there are no files to follow
     if observer.files.no_files_remaining(settings) && !observer.files.only_stdin_remaining() {
+        // If stdin was a pipe that we processed, just exit silently.
+        // Pipes can't be followed, so there's nothing more to do.
+        // Any errors about missing files were already printed.
+        if observer.stdin_pipe_processed {
+            return Ok(());
+        }
         return Err(USimpleError::new(1, translate!("tail-no-files-remaining")));
     }
 
@@ -627,6 +663,35 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
             // This is a workaround because `Notify::PollWatcher`
             // does not recognize the "renaming" of files.
             paths = observer.files.keys().cloned().collect::<Vec<_>>();
+        }
+
+        // Check if stdout is still connected (broken pipe detection).
+        // This is needed to detect when the pipe reader (e.g., head) has exited.
+        // When SIGPIPE is ignored, we won't get a signal, so we need to detect
+        // the broken pipe via poll(). GNU coreutils uses POLLRDBAND and checks
+        // for POLLERR/POLLHUP/POLLNVAL in revents.
+        #[cfg(unix)]
+        if observer.monitor_output {
+            use std::os::unix::io::AsRawFd;
+            let stdout_fd = std::io::stdout().as_raw_fd();
+            // Use POLLRDBAND like GNU coreutils iopoll.c
+            let mut pollfd = libc::pollfd {
+                fd: stdout_fd,
+                events: libc::POLLRDBAND,
+                revents: 0,
+            };
+            // Poll with 0 timeout - just check the status
+            let ret = unsafe { libc::poll(&mut pollfd, 1, 0) };
+            if ret >= 0 && (pollfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL)) != 0
+            {
+                // Pipe is broken - reader has exited
+                set_exit_code(1);
+                show_error!(
+                    "{}",
+                    translate!("tail-error-stdout", "error" => translate!("tail-bad-fd"))
+                );
+                break;
+            }
         }
 
         // main print loop

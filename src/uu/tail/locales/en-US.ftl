@@ -42,6 +42,7 @@ tail-error-backend-cannot-be-used-too-many-files = { $backend } cannot be used, 
 tail-error-backend-resources-exhausted = { $backend } resources exhausted
 tail-error-notify-error = NotifyError: { $error }
 tail-error-recv-timeout-error = RecvTimeoutError: { $error }
+tail-error-stdout = standard output: { $error }
 
 # Warning messages
 tail-warning-retry-ignored = --retry ignored; --retry is useful only when following

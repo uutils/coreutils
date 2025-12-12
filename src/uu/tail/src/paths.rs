@@ -230,13 +230,15 @@ pub fn path_is_tailable(path: &Path) -> bool {
 
 #[inline]
 pub fn stdin_is_bad_fd() -> bool {
-    // FIXME : Rust's stdlib is reopening fds as /dev/null
-    // see also: https://github.com/uutils/coreutils/issues/2873
-    // (gnu/tests/tail-2/follow-stdin.sh fails because of this)
-    //#[cfg(unix)]
+    // Use the early-capture mechanism from uucore to detect if stdin was closed
+    // before Rust's runtime reopened it as /dev/null.
+    // See: https://github.com/uutils/coreutils/issues/2873
+    #[cfg(unix)]
     {
-        //platform::stdin_is_bad_fd()
+        uucore::signals::stdin_was_closed()
     }
-    //#[cfg(not(unix))]
-    false
+    #[cfg(not(unix))]
+    {
+        false
+    }
 }

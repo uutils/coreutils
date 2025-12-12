@@ -191,6 +191,21 @@ nofield
 uninlined
 nonminimal
 
+# * poll/signal constants
+GETFD
+iopoll
+isapipe
+pollfd
+POLLERR
+POLLHUP
+POLLNVAL
+POLLRDBAND
+revents
+Sigmask
+sigprocmask
+sigset
+SIGTTIN
+
 # * CPU/hardware features
 ASIMD
 asimd

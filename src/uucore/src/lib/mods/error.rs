@@ -210,6 +210,15 @@ pub trait UError: Error + Send {
         1
     }
 
+    /// Check if this error is caused by a broken pipe (EPIPE).
+    ///
+    /// When writing to a closed pipe, programs should exit silently with status 0
+    /// rather than printing an error message. This method allows utilities to
+    /// detect BrokenPipe errors and handle them appropriately.
+    fn is_broken_pipe(&self) -> bool {
+        false
+    }
+
     /// Print usage help to a custom error.
     ///
     /// Return true or false to control whether a short usage help is printed
@@ -399,7 +408,11 @@ impl UIoError {
     }
 }
 
-impl UError for UIoError {}
+impl UError for UIoError {
+    fn is_broken_pipe(&self) -> bool {
+        self.inner.kind() == std::io::ErrorKind::BrokenPipe
+    }
+}
 
 impl Error for UIoError {}
 
@@ -493,6 +506,25 @@ impl FromIo<Box<UIoError>> for std::io::ErrorKind {
             inner: std::io::Error::new(self, ""),
         })
     }
+}
+
+/// Check if stdout was closed before Rust's runtime reopened it as /dev/null.
+///
+/// When a process is started with stdout closed (e.g., `cmd >&-`), Rust's runtime
+/// will reopen file descriptor 1 as /dev/null to avoid issues with libraries that
+/// assume stdout is always valid. This function detects this condition by checking
+/// if /proc/self/fd/1 points to /dev/null.
+///
+/// See <https://github.com/uutils/coreutils/issues/2873>
+#[cfg(unix)]
+pub fn is_stdout_closed() -> bool {
+    std::fs::read_link("/proc/self/fd/1").is_ok_and(|p| p == std::path::Path::new("/dev/null"))
+}
+
+/// Non-Unix stub that always returns false.
+#[cfg(not(unix))]
+pub fn is_stdout_closed() -> bool {
+    false
 }
 
 impl From<std::io::Error> for UIoError {

@@ -7,6 +7,9 @@ use std::ffi::{OsStr, OsString};
 use std::io::{BufWriter, Write, stdout};
 
 use clap::{Arg, ArgAction, Command};
+
+// Initialize SIGPIPE state capture at process startup
+uucore::init_sigpipe_capture!();
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use num_traits::Zero;
@@ -92,6 +95,14 @@ fn select_precision(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // Restore SIGPIPE to default if it wasn't explicitly ignored by parent.
+    // The Rust runtime ignores SIGPIPE, but we need to respect the parent's
+    // signal disposition for proper pipeline behavior (GNU compatibility).
+    #[cfg(unix)]
+    if !uucore::signals::sigpipe_was_ignored() {
+        let _ = uucore::signals::enable_pipe_errors();
+    }
+
     let matches =
         uucore::clap_localization::handle_clap_result(uu_app(), split_short_args_with_value(args))?;
 
@@ -209,17 +220,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         padding,
     );
 
-    let sigpipe_ignored = sigpipe_is_ignored();
+    let sigpipe_ignored = uucore::signals::sigpipe_was_ignored();
     if let Err(err) = result {
         if err.kind() == std::io::ErrorKind::BrokenPipe {
             // GNU seq prints the Broken pipe message but still exits with status 0
             // unless SIGPIPE was explicitly ignored, in which case it should fail.
             let err = err.map_err_context(|| "write error".into());
             uucore::show_error!("{err}");
-            return if sigpipe_ignored { Err(err) } else { Ok(()) };
-        } else {
-            return Err(err.map_err_context(|| "write error".into()));
+            if sigpipe_ignored {
+                uucore::error::set_exit_code(1);
+            }
+            return Ok(());
         }
+        return Err(err.map_err_context(|| "write error".into()));
     }
     Ok(())
 }
@@ -333,44 +346,6 @@ fn fast_print_seq(
     stdout.write_all(terminator.as_encoded_bytes())?;
     stdout.flush()?;
     Ok(())
-}
-
-#[cfg(unix)]
-static SIGPIPE_WAS_IGNORED: AtomicBool = AtomicBool::new(false);
-
-#[cfg(unix)]
-/// # Safety
-/// This function runs once at process initialization and only observes the
-/// current `SIGPIPE` handler, so there are no extra safety requirements for callers.
-unsafe extern "C" fn capture_sigpipe_state() {
-    use nix::libc;
-    use std::{mem::MaybeUninit, ptr};
-
-    let mut current = MaybeUninit::<libc::sigaction>::uninit();
-    if unsafe { libc::sigaction(libc::SIGPIPE, ptr::null(), current.as_mut_ptr()) } == 0 {
-        let ignored = unsafe { current.assume_init() }.sa_sigaction == libc::SIG_IGN;
-        SIGPIPE_WAS_IGNORED.store(ignored, Ordering::Relaxed);
-    }
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-#[used]
-#[unsafe(link_section = ".init_array")]
-static CAPTURE_SIGPIPE_STATE: unsafe extern "C" fn() = capture_sigpipe_state;
-
-#[cfg(all(unix, target_os = "macos"))]
-#[used]
-#[unsafe(link_section = "__DATA,__mod_init_func")]
-static CAPTURE_SIGPIPE_STATE_APPLE: unsafe extern "C" fn() = capture_sigpipe_state;
-
-#[cfg(unix)]
-fn sigpipe_is_ignored() -> bool {
-    SIGPIPE_WAS_IGNORED.load(Ordering::Relaxed)
-}
-
-#[cfg(not(unix))]
-const fn sigpipe_is_ignored() -> bool {
-    false
 }
 
 fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> bool {
