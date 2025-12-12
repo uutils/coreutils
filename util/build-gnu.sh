@@ -361,3 +361,6 @@ test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
 # * the selinux crate is handling errors
 # * the test says "maybe we should not fail when no context available"
 "${SED}" -i -e "s|returns_ 1||g" tests/cp/no-ctx.sh
+
+# Skip bad-speed test if not interactive (requires controlling terminal)
+"${SED}" -i '/print_ver_ stty/a require_controlling_input_terminal_' tests/stty/bad-speed.sh
