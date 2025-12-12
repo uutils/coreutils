@@ -110,7 +110,7 @@ jobs:
         shared-key: "cargo-fuzz-cache-key"
         cache-directories: "fuzz/target"
     - name: Restore Cached Corpus
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v5
       with:
         key: corpus-cache-${{ matrix.test-target.name }}
         path: |
@@ -192,7 +192,7 @@ jobs:
 
         echo "" >> $GITHUB_STEP_SUMMARY
     - name: Save Corpus Cache
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       with:
         key: corpus-cache-${{ matrix.test-target.name }}
         path: |
