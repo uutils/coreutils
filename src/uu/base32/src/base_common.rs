@@ -97,21 +97,16 @@ impl Config {
     }
 }
 
-pub fn parse_base_cmd_args(
-    args: impl uucore::Args,
-    about: &'static str,
-    usage: &str,
-) -> UResult<Config> {
-    let command = base_app(about, usage);
+pub fn parse_base_cmd_args(args: impl uucore::Args, command: Command) -> UResult<Config> {
     let matches = uucore::clap_localization::handle_clap_result(command, args)?;
     Config::from(&matches)
 }
 
-pub fn base_app(about: &'static str, usage: &str) -> Command {
+pub fn base_app(about: String, usage: String) -> Command {
     let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .about(about)
-        .override_usage(format_usage(usage))
+        .override_usage(format_usage(&usage))
         .infer_long_args(true);
     uucore::clap_localization::configure_localized_command(cmd)
         // Format arguments.
