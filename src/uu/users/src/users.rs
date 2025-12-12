@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (paths) wtmp
+// spell-checker:ignore (paths) wtmp ESRCH
 
 use std::ffi::OsString;
 use std::path::Path;
@@ -12,6 +12,8 @@ use clap::builder::ValueParser;
 use clap::{Arg, Command};
 use uucore::error::UResult;
 use uucore::format_usage;
+#[cfg(not(target_os = "openbsd"))]
+use uucore::process::pid_is_alive;
 use uucore::translate;
 
 #[cfg(target_os = "openbsd")]
@@ -66,7 +68,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let filename = maybe_file.unwrap_or(utmpx::DEFAULT_FILE.as_ref());
 
         users = Utmpx::iter_all_records_from(filename)
-            .filter(|ut| ut.is_user_process())
+            .filter(|ut| ut.is_user_process() && pid_is_alive(ut.pid()))
             .map(|ut| ut.user())
             .collect::<Vec<_>>();
     };
