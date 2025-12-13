@@ -9,8 +9,18 @@ mod error;
 use clap::{Arg, ArgAction, Command};
 use memchr::memmem;
 use memmap2::Mmap;
+#[cfg(unix)]
+use nix::{
+    errno::Errno,
+    fcntl::{FcntlArg, OFlag, fcntl, open},
+    sys::stat::{FileStat, Mode},
+};
+#[cfg(unix)]
+use std::ffi::CString;
 use std::ffi::OsString;
 use std::io::{BufWriter, Read, Write, stdin, stdout};
+#[cfg(unix)]
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 use std::{
     fs::{File, read},
     path::Path,
@@ -237,6 +247,12 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
         let buf;
 
         let data: &[u8] = if filename == "-" {
+            if let Err(e) = ensure_stdin_open() {
+                let e: Box<dyn UError> = TacError::ReadError(OsString::from("stdin"), e).into();
+                show!(e);
+                continue;
+            }
+
             if let Some(mmap1) = try_mmap_stdin() {
                 mmap = mmap1;
                 &mmap
@@ -252,21 +268,32 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
             }
         } else {
             let path = Path::new(filename);
-            if path.is_dir() {
+            let Ok(metadata) = path.metadata() else {
+                let e: Box<dyn UError> = TacError::FileNotFound(filename.clone()).into();
+                show!(e);
+                continue;
+            };
+
+            if metadata.is_dir() {
                 let e: Box<dyn UError> = TacError::InvalidArgument(filename.clone()).into();
                 show!(e);
                 continue;
             }
 
-            if path.metadata().is_err() {
-                let e: Box<dyn UError> = TacError::FileNotFound(filename.clone()).into();
-                show!(e);
-                continue;
+            let mut maybe_data: Option<&[u8]> = None;
+            // Avoid mmap when the reported size is zero; procfs/sysfs files often
+            // claim length 0 while still producing data, and mapping them would
+            // yield an empty buffer (GNU tac-2-nonseekable).
+            let should_mmap = metadata.is_file() && metadata.len() > 0;
+            if should_mmap {
+                if let Some(mmap1) = try_mmap_path(path) {
+                    mmap = mmap1;
+                    maybe_data = Some(&mmap[..]);
+                }
             }
 
-            if let Some(mmap1) = try_mmap_path(path) {
-                mmap = mmap1;
-                &mmap
+            if let Some(data_slice) = maybe_data {
+                data_slice
             } else {
                 match read(path) {
                     Ok(buf1) => {
@@ -311,4 +338,52 @@ fn try_mmap_path(path: &Path) -> Option<Mmap> {
     let mmap = unsafe { Mmap::map(&file).ok()? };
 
     Some(mmap)
+}
+
+#[cfg(unix)]
+fn stdin_closed_or_reopened_null() -> std::io::Result<bool> {
+    let stdin_fd = unsafe { BorrowedFd::borrow_raw(stdin().as_raw_fd()) };
+    match fcntl(stdin_fd, FcntlArg::F_GETFL) {
+        Ok(flags) => stdin_is_reopened_dev_null(OFlag::from_bits_truncate(flags)),
+        Err(_) => Ok(true),
+    }
+}
+
+#[cfg(unix)]
+fn stdin_is_reopened_dev_null(flags: OFlag) -> std::io::Result<bool> {
+    if flags & OFlag::O_ACCMODE != OFlag::O_RDWR {
+        return Ok(false);
+    }
+
+    let stdin_stat = fstat_fd(unsafe { BorrowedFd::borrow_raw(stdin().as_raw_fd()) })?;
+    let dev_null_stat = stat_dev_null()?;
+
+    Ok(stdin_stat.st_dev == dev_null_stat.st_dev && stdin_stat.st_ino == dev_null_stat.st_ino)
+}
+
+#[cfg(unix)]
+fn fstat_fd(fd: BorrowedFd<'_>) -> std::io::Result<FileStat> {
+    nix::sys::stat::fstat(fd).map_err(nix_error_to_io)
+}
+
+#[cfg(unix)]
+fn stat_dev_null() -> std::io::Result<FileStat> {
+    let dev_null = CString::new("/dev/null").expect("static literal without interior NUL");
+    let fd = open(dev_null.as_c_str(), OFlag::O_RDONLY, Mode::empty()).map_err(nix_error_to_io)?;
+    fstat_fd(fd.as_fd())
+}
+
+fn ensure_stdin_open() -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        if stdin_closed_or_reopened_null()? {
+            return Err(nix_error_to_io(Errno::EBADF));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn nix_error_to_io(errno: Errno) -> std::io::Error {
+    std::io::Error::from_raw_os_error(errno as i32)
 }
