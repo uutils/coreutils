@@ -1653,6 +1653,7 @@ dependencies = [
  "bigdecimal",
  "clap",
  "fluent",
+ "nix",
  "num-bigint",
  "num-traits",
  "thiserror",

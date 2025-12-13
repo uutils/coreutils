@@ -131,6 +131,7 @@ setfacl
 setfattr
 shortcode
 shortcodes
+sigaction
 siginfo
 sigusr
 strcasecmp
