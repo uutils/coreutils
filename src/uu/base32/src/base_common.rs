@@ -298,7 +298,6 @@ pub mod fast_encode {
         collections::VecDeque,
         io::{self, Read, Write},
         num::NonZeroUsize,
-        slice,
     };
     use uucore::{
         encoding::SupportsFastDecodeAndEncode,
@@ -549,27 +548,17 @@ pub mod fast_encode {
         let mut encoded_buffer = VecDeque::<u8>::new();
 
         let read_buffer_capacity = encode_in_chunks_of_size.max(DEFAULT_BUFFER_SIZE);
-        let mut read_buffer = Vec::<u8>::with_capacity(read_buffer_capacity);
+        let mut read_buffer = vec![0u8; read_buffer_capacity];
 
         loop {
-            let spare = read_buffer.spare_capacity_mut();
             let read = input
-                .read(unsafe {
-                    // SAFETY: `spare` points to uninitialized capacity of `read_buffer`.
-                    // We transmute it to `[u8]` for the read call; only the first `read`
-                    // bytes become initialized and we set_len accordingly below.
-                    slice::from_raw_parts_mut(spare.as_mut_ptr() as *mut u8, spare.len())
-                })
+                .read(&mut read_buffer)
                 .map_err(|err| USimpleError::new(1, super::format_read_error(err.kind())))?;
             if read == 0 {
                 break;
             }
 
-            // SAFETY: `read` bytes have just been initialized by `read`.
-            unsafe { read_buffer.set_len(read_buffer.len() + read) };
-
             leftover_buffer.extend(&read_buffer[..read]);
-            read_buffer.clear();
 
             while leftover_buffer.len() >= encode_in_chunks_of_size {
                 {
@@ -613,7 +602,6 @@ pub mod fast_encode {
 pub mod fast_decode {
     use crate::base_common::DEFAULT_BUFFER_SIZE;
     use std::io::{self, Read, Write};
-    use std::slice;
     use uucore::{
         encoding::SupportsFastDecodeAndEncode,
         error::{UResult, USimpleError},
@@ -796,22 +784,15 @@ pub mod fast_decode {
 
         let mut buffer = Vec::with_capacity(decode_in_chunks_of_size);
         let mut decoded_buffer = Vec::<u8>::new();
-        let mut read_buffer = Vec::<u8>::with_capacity(DEFAULT_BUFFER_SIZE);
+        let mut read_buffer = vec![0u8; DEFAULT_BUFFER_SIZE];
 
         loop {
-            let spare = read_buffer.spare_capacity_mut();
             let read = input
-                .read(unsafe {
-                    // SAFETY: `spare` is the uninitialized tail of `read_buffer`; we
-                    // transmute it to `[u8]` for reading, then set the initialized len.
-                    slice::from_raw_parts_mut(spare.as_mut_ptr() as *mut u8, spare.len())
-                })
+                .read(&mut read_buffer)
                 .map_err(|err| USimpleError::new(1, super::format_read_error(err.kind())))?;
             if read == 0 {
                 break;
             }
-
-            unsafe { read_buffer.set_len(read_buffer.len() + read) };
 
             for &byte in &read_buffer[..read] {
                 if byte == b'\n' || byte == b'\r' {
@@ -865,8 +846,6 @@ pub mod fast_decode {
                     buffer.clear();
                 }
             }
-
-            read_buffer.clear();
         }
 
         if supports_partial_decode {
