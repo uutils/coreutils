@@ -5,7 +5,7 @@
 # spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
 # spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink texinfo CARGOFLAGS
 # spell-checker:ignore openat TOCTOU CFLAGS
-# spell-checker:ignore hfsplus casefold chattr
+# spell-checker:ignore hfsplus casefold chattr dirp memcpy
 
 set -e
 
@@ -361,3 +361,14 @@ test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
 # * the selinux crate is handling errors
 # * the test says "maybe we should not fail when no context available"
 "${SED}" -i -e "s|returns_ 1||g" tests/cp/no-ctx.sh
+
+# uutils rm uses nix which calls readdir64_r, so add a wrapper that delegates to the readdir hook
+"${SED}" -i '/^struct dirent \*readdir/i\
+int readdir64_r(DIR *dirp, struct dirent64 *entry, struct dirent64 **result) {\
+  struct dirent *d = readdir(dirp);\
+  if (!d) { *result = NULL; return errno ? EIO : 0; }\
+  memcpy(entry, d, sizeof(*d));\
+  *result = entry;\
+  return 0;\
+}
+' tests/rm/rm-readdir-fail.sh
