@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) dirfd subdirs openat FDCWD
+// spell-checker:ignore (words) dirfd subdirs openat FDCWD NOFILE getrlimit setrlimit rlim
 
 use std::fs::{OpenOptions, Permissions, metadata, set_permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
@@ -1324,6 +1324,34 @@ fn test_chmod_recursive_uses_dirfd_for_subdirs() {
         !log.contains("openat(AT_FDCWD, \"x/y"),
         "chmod recursed using AT_FDCWD with a multi-component path; expected dirfd-relative openat"
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn test_chmod_recursive_does_not_exhaust_fds() {
+    use rlimit::Resource;
+    use std::path::PathBuf;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Build a deep single-branch directory tree
+    let depth = 256;
+    let mut current = PathBuf::from("deep");
+    at.mkdir(&current);
+    for _ in 0..depth {
+        current.push("d");
+        at.mkdir(&current);
+    }
+
+    // Constrain NOFILE only for the child process under test
+    scene
+        .ucmd()
+        .limit(Resource::NOFILE, 64, 64)
+        .arg("-R")
+        .arg("777")
+        .arg("deep")
+        .succeeds();
 }
 
 #[test]
