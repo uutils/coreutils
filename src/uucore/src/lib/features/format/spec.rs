@@ -15,7 +15,6 @@ use super::{
 };
 use crate::{
     format::FormatArguments,
-    i18n::UEncoding,
     os_str_as_bytes,
     quoting_style::{QuotingStyle, escape_name},
 };
@@ -411,7 +410,11 @@ impl Spec {
                     show_control: false,
                     commit_dollar_mode: true, // printf %q style
                 };
-                let s = escape_name(args.next_string(position), printf_style, UEncoding::Utf8);
+                let s = escape_name(
+                    args.next_string(position),
+                    printf_style,
+                    crate::i18n::get_locale_encoding(),
+                );
                 let bytes = os_str_as_bytes(&s)?;
                 writer.write_all(bytes).map_err(FormatError::IoError)
             }
