@@ -8,9 +8,17 @@
 use clap::builder::{TypedValueParser, ValueParserFactory};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use uucore::display::{Quotable, println_verbatim};
-use uucore::error::{FromIo, UError, UResult, UUsageError};
+use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
+#[cfg(unix)]
+use uucore::signals::stdout_was_closed;
 use uucore::translate;
+
+// Capture stdout state at process startup (before Rust's runtime may reopen closed fds)
+#[cfg(unix)]
+uucore::init_sigpipe_capture!();
+
+use std::io::{Write, stdout};
 
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -335,6 +343,25 @@ impl ValueParserFactory for OptionalPathBufParser {
     }
 }
 
+/// Check if stdout is valid (not closed and reopened as /dev/null by Rust's runtime).
+/// Returns an error if stdout is not writable.
+/// Uses the early-capture mechanism from init_sigpipe_capture!() to detect this
+/// at process startup, not at runtime (which would incorrectly trigger on
+/// legitimate redirects to /dev/null).
+/// On Windows, this check is not applicable as the signals module is Unix-only.
+#[cfg(unix)]
+fn check_stdout_valid() -> UResult<()> {
+    if stdout_was_closed() {
+        return Err(USimpleError::new(1, "write error"));
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn check_stdout_valid() -> UResult<()> {
+    Ok(())
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<_> = args.collect();
@@ -386,6 +413,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         suffix,
     } = Params::from(options)?;
 
+    // Check stdout is valid before creating the temp file.
+    // If stdout is closed (reopened as /dev/null by Rust), we should fail early
+    // so that no temp file is created that would be orphaned.
+    check_stdout_valid()?;
+
     // Create the temporary file or directory, or simulate creating it.
     let res = if dry_run {
         dry_exec(&tmpdir, &prefix, rand, &suffix)
@@ -399,7 +431,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         res
     };
-    println_verbatim(res?).map_err_context(|| translate!("mktemp-error-failed-print"))
+    println_verbatim(res?).map_err_context(|| translate!("mktemp-error-failed-print"))?;
+
+    // Check for stdout write errors (e.g., /dev/full)
+    if let Err(e) = stdout().flush() {
+        return Err(USimpleError::new(1, e.to_string()));
+    }
+
+    Ok(())
 }
 
 pub fn uu_app() -> Command {

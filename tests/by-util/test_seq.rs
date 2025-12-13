@@ -4,31 +4,14 @@
 // file that was distributed with this source code.
 // spell-checker:ignore lmnop xlmnop
 use uutests::new_ucmd;
+#[cfg(unix)]
+use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
-}
-
-#[test]
-#[cfg(unix)]
-fn test_broken_pipe_still_exits_success() {
-    use std::process::Stdio;
-
-    let mut child = new_ucmd!()
-        // Use an infinite sequence so a burst of output happens immediately after spawn.
-        // With small output the process can finish before stdout is closed and the Broken pipe never occurs.
-        .args(&["inf"])
-        .set_stdout(Stdio::piped())
-        .run_no_wait();
-
-    // Trigger a Broken pipe by writing to a pipe whose reader closed first.
-    child.close_stdout();
-    let result = child.wait().unwrap();
-
-    result
-        .code_is(0)
-        .stderr_contains("write error: Broken pipe");
 }
 
 #[test]
@@ -201,6 +184,24 @@ fn test_width_invalid_float() {
         .fails()
         .no_stdout()
         .usage_error("invalid floating point argument: '1e2.3'");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_sigpipe_ignored_reports_write_error() {
+    let scene = TestScenario::new(util_name!());
+    let seq_bin = scene.bin_path.clone().into_os_string();
+    let script = "trap '' PIPE; { \"$SEQ_BIN\" seq inf 2>err; echo $? >code; } | head -n1";
+    let result = scene.cmd_shell(script).env("SEQ_BIN", &seq_bin).succeeds();
+
+    assert_eq!(result.stdout_str(), "1\n");
+
+    let err_contents = scene.fixtures.read("err");
+    assert!(
+        err_contents.contains("seq: write error: Broken pipe"),
+        "stderr missing write error message: {err_contents:?}"
+    );
+    assert_eq!(scene.fixtures.read("code"), "1\n");
 }
 
 // ---- Tests for the big integer based path ----
@@ -653,7 +654,7 @@ fn test_neg_inf() {
     new_ucmd!()
         .args(&["--", "-inf", "0"])
         .run_stdout_starts_with(b"-inf\n-inf\n-inf\n")
-        .success();
+        .signal_name_is("PIPE");
 }
 
 #[test]
@@ -661,7 +662,7 @@ fn test_neg_infinity() {
     new_ucmd!()
         .args(&["--", "-infinity", "0"])
         .run_stdout_starts_with(b"-inf\n-inf\n-inf\n")
-        .success();
+        .signal_name_is("PIPE");
 }
 
 #[test]
@@ -669,7 +670,7 @@ fn test_inf() {
     new_ucmd!()
         .args(&["inf"])
         .run_stdout_starts_with(b"1\n2\n3\n")
-        .success();
+        .signal_name_is("PIPE");
 }
 
 #[test]
@@ -677,7 +678,7 @@ fn test_infinity() {
     new_ucmd!()
         .args(&["infinity"])
         .run_stdout_starts_with(b"1\n2\n3\n")
-        .success();
+        .signal_name_is("PIPE");
 }
 
 #[test]
@@ -685,7 +686,7 @@ fn test_inf_width() {
     new_ucmd!()
         .args(&["-w", "1.000", "inf", "inf"])
         .run_stdout_starts_with(b"1.000\n  inf\n  inf\n  inf\n")
-        .success();
+        .signal_name_is("PIPE");
 }
 
 #[test]
@@ -693,7 +694,7 @@ fn test_neg_inf_width() {
     new_ucmd!()
         .args(&["-w", "1.000", "-inf", "-inf"])
         .run_stdout_starts_with(b"1.000\n -inf\n -inf\n -inf\n")
-        .success();
+        .signal_name_is("PIPE");
 }
 
 #[test]
@@ -1078,7 +1079,7 @@ fn test_precision_corner_cases() {
     new_ucmd!()
         .args(&["1", "1.2", "inf"])
         .run_stdout_starts_with(b"1.0\n2.2\n3.4\n")
-        .success();
+        .signal_name_is("PIPE");
 }
 
 // GNU `seq` manual only makes guarantees about `-w` working if the
@@ -1141,5 +1142,5 @@ fn test_equalize_widths_corner_cases() {
     new_ucmd!()
         .args(&["-w", "1", "1.2", "inf"])
         .run_stdout_starts_with(b"1.0\n2.2\n3.4\n")
-        .success();
+        .signal_name_is("PIPE");
 }

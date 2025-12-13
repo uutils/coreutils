@@ -13,6 +13,10 @@
 // spell-checker:ignore (shell/tools)
 // spell-checker:ignore (misc)
 
+// Initialize SIGPIPE state capture at process startup
+#[cfg(unix)]
+uucore::init_sigpipe_capture!();
+
 pub mod args;
 pub mod chunks;
 mod follow;
@@ -33,20 +37,26 @@ use std::fs::File;
 use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin, stdout};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, get_exit_code, set_exit_code};
+use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
 use uucore::translate;
 
 use uucore::{show, show_error};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // When we receive a SIGPIPE signal, we want to terminate the process so
-    // that we don't print any error messages to stderr. Rust ignores SIGPIPE
-    // (see https://github.com/rust-lang/rust/issues/62569), so we restore it's
-    // default action here.
-    #[cfg(not(target_os = "windows"))]
+    // Restore SIGPIPE to default if it wasn't explicitly ignored by parent.
+    // The Rust runtime ignores SIGPIPE, but we need to respect the parent's
+    // signal disposition for proper pipeline behavior (GNU compatibility).
+    #[cfg(unix)]
+    if !uucore::signals::sigpipe_was_ignored() {
+        let _ = uucore::signals::enable_pipe_errors();
+    }
+
+    // Ignore SIGTTIN to prevent tail from being stopped when running in
+    // background and reading from /dev/tty (GNU compatibility).
+    #[cfg(unix)]
     unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+        libc::signal(libc::SIGTTIN, libc::SIG_IGN);
     }
 
     let settings = parse_args(args)?;
@@ -100,13 +110,33 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
         the input file is not a FIFO, pipe, or regular file, it is unspecified whether or
         not the -f option shall be ignored.
         */
-        if !settings.has_only_stdin() || settings.pid != 0 {
+
+        // Check if stdout was closed at process startup (e.g., `>&-` redirection).
+        // We use stdout_was_closed() because Rust's runtime reopens closed fds
+        // as /dev/null before our code runs, so we need to capture the state
+        // in .init_array before Rust's runtime.
+        // If stdout was closed, we can't follow, so exit with error.
+        #[cfg(unix)]
+        if uucore::signals::stdout_was_closed() {
+            set_exit_code(1);
+            return Ok(());
+        }
+
+        // Call follow() when:
+        // - There are files to follow (observer has files), OR
+        // - There's a --pid option, OR
+        // - Stdin was bad (to print "no files remaining"), OR
+        // - We had a bad path (e.g., directory without --retry, to print "no files remaining")
+        // Note: When stdin is a regular file (not a pipe), it gets added to observer.files
+        // via tail_file(), so we check if the observer has files rather than checking
+        // has_only_stdin().
+        if !observer.files.is_empty()
+            || settings.pid != 0
+            || observer.stdin_bad
+            || observer.had_bad_path
+        {
             follow::follow(observer, settings)?;
         }
-    }
-
-    if get_exit_code() > 0 && paths::stdin_is_bad_fd() {
-        show_error!("{}: {}", text::DASH, translate!("tail-bad-fd"));
     }
 
     Ok(())
@@ -148,13 +178,34 @@ fn tail_file(
                 translate!("tail-error-cannot-follow-file-type", "file" => input.display_name.clone(), "msg" => msg)
             );
         }
+        // Always add_bad_path to track that we had a bad path for "no files remaining"
+        observer.add_bad_path(path, input.display_name.as_str(), false)?;
         if !observer.follow_name_retry() {
             // skip directory if not retry
             return Ok(());
         }
-        observer.add_bad_path(path, input.display_name.as_str(), false)?;
     } else {
-        match File::open(path) {
+        // Open fifos with O_NONBLOCK to avoid blocking when there's no writer.
+        // This allows tail to check --pid status while waiting for a writer.
+        #[cfg(unix)]
+        let open_result = {
+            use std::fs::OpenOptions;
+            use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
+            let meta = path.metadata().ok();
+            let is_fifo = meta.as_ref().is_some_and(|m| m.file_type().is_fifo());
+            if is_fifo {
+                OpenOptions::new()
+                    .read(true)
+                    .custom_flags(libc::O_NONBLOCK)
+                    .open(path)
+            } else {
+                File::open(path)
+            }
+        };
+        #[cfg(not(unix))]
+        let open_result = File::open(path);
+
+        match open_result {
             Ok(mut file) => {
                 let st = file.metadata()?;
                 let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
@@ -168,6 +219,28 @@ fn tail_file(
                     reader = BufReader::new(file);
                 } else {
                     reader = BufReader::new(file);
+                    // Check for EIO before reading - happens when SIGTTIN is ignored
+                    // and we're a background process reading from controlling terminal.
+                    #[cfg(unix)]
+                    {
+                        use std::io::BufRead;
+                        match reader.fill_buf() {
+                            Ok(_) => {}
+                            Err(e) if e.raw_os_error() == Some(libc::EIO) => {
+                                // Skip initial read, just proceed to follow mode
+                                if input.is_tailable() {
+                                    observer.add_path(
+                                        path,
+                                        input.display_name.as_str(),
+                                        Some(Box::new(reader)),
+                                        true,
+                                    )?;
+                                }
+                                return Ok(());
+                            }
+                            Err(e) => return Err(e.into()),
+                        }
+                    }
                     unbounded_tail(&mut reader, settings)?;
                 }
                 if input.is_tailable() {
@@ -205,6 +278,29 @@ fn tail_stdin(
     input: &Input,
     observer: &mut Observer,
 ) -> UResult<()> {
+    // Check if stdin was closed before Rust's runtime reopened it as /dev/null.
+    #[cfg(unix)]
+    let stdin_bad = paths::stdin_is_bad_fd()
+        || std::fs::read_link("/proc/self/fd/0")
+            .is_ok_and(|p| p == std::path::Path::new("/dev/null"));
+    #[cfg(not(unix))]
+    let stdin_bad = paths::stdin_is_bad_fd();
+
+    if stdin_bad {
+        set_exit_code(1);
+        let stdin_name = translate!("tail-stdin-header");
+        show_error!(
+            "{}",
+            translate!("tail-error-cannot-fstat", "file" => stdin_name.quote().to_string(), "error" => translate!("tail-bad-fd"))
+        );
+        // Mark stdin as bad so follow() will be called to print "no files remaining".
+        // Don't set stdin_pipe_processed here - a bad stdin is different from
+        // a valid pipe. For a bad stdin, we DO want "no files remaining" if
+        // there are no other valid files to follow.
+        observer.stdin_bad = true;
+        return Ok(());
+    }
+
     // on macOS, resolve() will always return None for stdin,
     // we need to detect if stdin is a directory ourselves.
     // fstat-ing certain descriptors under /dev/fd fails with
@@ -249,7 +345,11 @@ fn tail_stdin(
                 stdin_offset,
             )?;
         }
-        // pipe
+        // pipe - stdin is a pipe, not a FIFO or regular file
+        // Pipes can't be followed because they can't have data appended after EOF.
+        // Per POSIX: "If no file operand is specified and standard input is a
+        // pipe or FIFO, the -f option shall be ignored."
+        // We read the data but don't add stdin to the follow observer.
         None => {
             header_printer.print_input(input);
             if paths::stdin_is_bad_fd() {
@@ -267,7 +367,11 @@ fn tail_stdin(
             } else {
                 let mut reader = BufReader::new(stdin());
                 unbounded_tail(&mut reader, settings)?;
-                observer.add_stdin(input.display_name.as_str(), Some(Box::new(reader)), true)?;
+                // Don't add stdin to the follow observer when it's a pipe.
+                // Pipes can't be followed - once EOF is reached, there's no more data.
+                // Mark that we processed stdin as a pipe so follow() knows not
+                // to print "no files remaining" if there are no other files.
+                observer.stdin_pipe_processed = true;
             }
         }
     }
@@ -527,6 +631,9 @@ where
     } else {
         io::copy(file, &mut stdout).unwrap();
     }
+    // Flush to ensure output is visible immediately (important when stdout
+    // is redirected to a file and tail will enter follow mode).
+    let _ = stdout.flush();
 }
 
 #[cfg(test)]

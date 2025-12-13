@@ -23,7 +23,7 @@ clap = { workspace = true }
 libc = { workspace = true }
 memchr = { workspace = true }
 notify = { workspace = true }
-uucore = { workspace = true, features = ["fs", "parser-size"] }
+uucore = { workspace = true, features = ["fs", "parser-size", "signals"] }
 same-file = { workspace = true }
 fluent = { workspace = true }
 

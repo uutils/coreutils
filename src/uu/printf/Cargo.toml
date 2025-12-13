@@ -19,7 +19,7 @@ path = "src/printf.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["format", "quoting-style"] }
+uucore = { workspace = true, features = ["format", "quoting-style", "signals"] }
 fluent = { workspace = true }
 
 [[bin]]

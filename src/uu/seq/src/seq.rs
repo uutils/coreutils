@@ -7,6 +7,9 @@ use std::ffi::{OsStr, OsString};
 use std::io::{BufWriter, Write, stdout};
 
 use clap::{Arg, ArgAction, Command};
+
+// Initialize SIGPIPE state capture at process startup
+uucore::init_sigpipe_capture!();
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use num_traits::Zero;
@@ -92,6 +95,14 @@ fn select_precision(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // Restore SIGPIPE to default if it wasn't explicitly ignored by parent.
+    // The Rust runtime ignores SIGPIPE, but we need to respect the parent's
+    // signal disposition for proper pipeline behavior (GNU compatibility).
+    #[cfg(unix)]
+    if !uucore::signals::sigpipe_was_ignored() {
+        let _ = uucore::signals::enable_pipe_errors();
+    }
+
     let matches =
         uucore::clap_localization::handle_clap_result(uu_app(), split_short_args_with_value(args))?;
 
@@ -209,16 +220,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         padding,
     );
 
-    match result {
-        Ok(()) => Ok(()),
-        Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
+    let sigpipe_ignored = uucore::signals::sigpipe_was_ignored();
+    if let Err(err) = result {
+        if err.kind() == std::io::ErrorKind::BrokenPipe {
             // GNU seq prints the Broken pipe message but still exits with status 0
+            // unless SIGPIPE was explicitly ignored, in which case it should fail.
             let err = err.map_err_context(|| "write error".into());
             uucore::show_error!("{err}");
-            Ok(())
+            if sigpipe_ignored {
+                uucore::error::set_exit_code(1);
+            }
+            return Ok(());
         }
-        Err(err) => Err(err.map_err_context(|| "write error".into())),
+        return Err(err.map_err_context(|| "write error".into()));
     }
+    Ok(())
 }
 
 pub fn uu_app() -> Command {

@@ -426,6 +426,132 @@ pub fn ignore_interrupts() -> Result<(), Errno> {
     unsafe { signal(SIGINT, SigIgn) }.map(|_| ())
 }
 
+// ============================================================================
+// SIGPIPE state capture functionality
+// ============================================================================
+
+#[cfg(unix)]
+use std::sync::atomic::{AtomicBool, Ordering};
+
+#[cfg(unix)]
+static SIGPIPE_WAS_IGNORED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(unix)]
+static STDOUT_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(unix)]
+static STDIN_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(unix)]
+/// # Safety
+/// This function runs once at process initialization and only observes the
+/// current `SIGPIPE` handler and stdout state, so there are no extra safety
+/// requirements for callers.
+pub unsafe extern "C" fn capture_sigpipe_state() {
+    use nix::libc;
+    use std::mem::MaybeUninit;
+    use std::ptr;
+
+    // Capture SIGPIPE state
+    let mut current = MaybeUninit::<libc::sigaction>::uninit();
+    if unsafe { libc::sigaction(libc::SIGPIPE, ptr::null(), current.as_mut_ptr()) } == 0 {
+        let ignored = unsafe { current.assume_init() }.sa_sigaction == libc::SIG_IGN;
+        SIGPIPE_WAS_IGNORED.store(ignored, Ordering::Relaxed);
+    }
+
+    // Capture stdout state (before Rust's runtime potentially reopens it)
+    // F_GETFD returns -1 with EBADF if fd is not valid
+    let stdout_valid = unsafe { libc::fcntl(libc::STDOUT_FILENO, libc::F_GETFD) } != -1;
+    STDOUT_WAS_CLOSED.store(!stdout_valid, Ordering::Relaxed);
+
+    // Capture stdin state (before Rust's runtime potentially reopens it)
+    let stdin_valid = unsafe { libc::fcntl(libc::STDIN_FILENO, libc::F_GETFD) } != -1;
+    STDIN_WAS_CLOSED.store(!stdin_valid, Ordering::Relaxed);
+}
+
+/// Initializes SIGPIPE state capture for the calling binary.
+///
+/// This macro sets up the necessary link section attributes to ensure
+/// `capture_sigpipe_state` runs at process initialization, before `main()`.
+///
+/// # Usage
+///
+/// Call this macro once at the crate root level of any utility that needs
+/// to detect whether SIGPIPE was ignored:
+///
+/// ```ignore
+/// uucore::init_sigpipe_capture!();
+/// ```
+#[macro_export]
+#[cfg(unix)]
+macro_rules! init_sigpipe_capture {
+    () => {
+        #[cfg(all(unix, not(target_os = "macos")))]
+        #[used]
+        #[unsafe(link_section = ".init_array")]
+        static CAPTURE_SIGPIPE_STATE: unsafe extern "C" fn() =
+            $crate::signals::capture_sigpipe_state;
+
+        #[cfg(all(unix, target_os = "macos"))]
+        #[used]
+        #[unsafe(link_section = "__DATA,__mod_init_func")]
+        static CAPTURE_SIGPIPE_STATE: unsafe extern "C" fn() =
+            $crate::signals::capture_sigpipe_state;
+    };
+}
+
+#[macro_export]
+#[cfg(not(unix))]
+macro_rules! init_sigpipe_capture {
+    () => {};
+}
+
+/// Returns whether SIGPIPE was ignored at process startup.
+///
+/// This requires [`init_sigpipe_capture!`] to have been invoked at the crate root.
+#[cfg(unix)]
+pub fn sigpipe_was_ignored() -> bool {
+    SIGPIPE_WAS_IGNORED.load(Ordering::Relaxed)
+}
+
+/// Non-Unix stub: Always returns `false` since SIGPIPE doesn't exist on non-Unix platforms.
+#[cfg(not(unix))]
+pub const fn sigpipe_was_ignored() -> bool {
+    false
+}
+
+/// Returns whether stdout was closed at process startup.
+///
+/// This requires [`init_sigpipe_capture!`] to have been invoked at the crate root.
+/// This is useful for detecting `>&-` redirection before Rust's runtime
+/// potentially reopens closed fds as /dev/null.
+#[cfg(unix)]
+pub fn stdout_was_closed() -> bool {
+    STDOUT_WAS_CLOSED.load(Ordering::Relaxed)
+}
+
+/// Non-Unix stub: Always returns `false`.
+#[cfg(not(unix))]
+pub const fn stdout_was_closed() -> bool {
+    false
+}
+
+/// Returns whether stdin was closed at process startup.
+///
+/// This requires [`init_sigpipe_capture!`] to have been invoked at the crate root.
+/// This is useful for detecting `<&-` redirection before Rust's runtime
+/// potentially reopens closed fds as /dev/null.
+#[cfg(unix)]
+pub fn stdin_was_closed() -> bool {
+    STDIN_WAS_CLOSED.load(Ordering::Relaxed)
+}
+
+/// Non-Unix stub: Always returns `false`.
+#[cfg(not(unix))]
+pub const fn stdin_was_closed() -> bool {
+    false
+}
+
 #[test]
 fn signal_by_value() {
     assert_eq!(signal_by_name_or_value("0"), Some(0));

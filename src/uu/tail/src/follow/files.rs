@@ -91,6 +91,11 @@ impl FileHandling {
         self.map.len() == 1 && (self.map.contains_key(Path::new(text::DASH)))
     }
 
+    /// Return true if the files map is empty
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+
     /// Return true if there is at least one "tailable" path (or stdin) remaining
     pub fn files_remaining(&self) -> bool {
         for path in self.map.keys() {
@@ -138,6 +143,24 @@ impl FileHandling {
     pub fn tail_file(&mut self, path: &Path, verbose: bool) -> UResult<bool> {
         let mut chunks = BytesChunkBuffer::new(u64::MAX);
         if let Some(reader) = self.get_mut(path).reader.as_mut() {
+            // First, try a peek to check for EIO (happens when SIGTTIN is ignored
+            // and we're a background process trying to read from controlling terminal).
+            #[cfg(unix)]
+            {
+                use std::io::ErrorKind;
+                match reader.fill_buf() {
+                    Ok(_) => {}
+                    Err(e) if e.raw_os_error() == Some(libc::EIO) => {
+                        // Treat EIO as "no data available" (GNU compatibility)
+                        return Ok(false);
+                    }
+                    Err(e) if e.kind() == ErrorKind::Interrupted => {
+                        // Interrupted, try again later
+                        return Ok(false);
+                    }
+                    Err(e) => return Err(e.into()),
+                }
+            }
             chunks.fill(reader)?;
         }
         if chunks.has_data() {
