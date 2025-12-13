@@ -547,7 +547,8 @@ pub mod fast_encode {
         let mut leftover_buffer = VecDeque::<u8>::new();
         let mut encoded_buffer = VecDeque::<u8>::new();
 
-        let mut read_buffer = vec![0u8; encode_in_chunks_of_size.max(DEFAULT_BUFFER_SIZE)];
+        let read_buffer_capacity = encode_in_chunks_of_size.max(DEFAULT_BUFFER_SIZE);
+        let mut read_buffer = vec![0u8; read_buffer_capacity];
 
         loop {
             let read = input
@@ -783,7 +784,7 @@ pub mod fast_decode {
 
         let mut buffer = Vec::with_capacity(decode_in_chunks_of_size);
         let mut decoded_buffer = Vec::<u8>::new();
-        let mut read_buffer = [0u8; DEFAULT_BUFFER_SIZE];
+        let mut read_buffer = vec![0u8; DEFAULT_BUFFER_SIZE];
 
         loop {
             let read = input
