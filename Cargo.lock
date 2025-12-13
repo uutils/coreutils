@@ -3603,6 +3603,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
+ "nix",
  "thiserror 2.0.17",
  "uucore",
 ]
