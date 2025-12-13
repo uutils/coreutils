@@ -561,6 +561,109 @@ pub fn configure_localized_command(mut cmd: Command) -> Command {
     cmd
 }
 
+/// Localizes a clap `Command` by translating all keys to actual strings.
+///
+/// This function is the "layer between clap and translations". It takes a Command
+/// that was built with translation keys (not translated strings) and converts
+/// those keys to actual translated strings just before displaying help.
+///
+/// # Arguments
+///
+/// * `cmd` - The clap `Command` with translation keys in about/help fields
+///
+/// # Returns
+///
+/// A new `Command` with all keys translated and proper formatting applied.
+///
+/// # Example
+///
+/// ```no_run
+/// use clap::{Arg, ArgAction, Command};
+/// use uucore::clap_localization::localize_command;
+///
+/// // Build command with keys (not translated strings)
+/// let cmd = Command::new("myutil")
+///     .about("myutil-about")  // key, not translated
+///     .arg(Arg::new("verbose")
+///         .short('v')
+///         .help("myutil-help-verbose"));  // key
+///
+/// // Only translate when actually displaying help
+/// if user_requested_help {
+///     localize_command(cmd).print_help().unwrap();
+/// }
+/// ```
+pub fn localize_command(mut cmd: Command) -> Command {
+    let util_name = crate::util_name();
+
+    // Translate about text
+    if let Some(about) = cmd.get_about().map(|s| s.to_string()) {
+        cmd = cmd.about(translate!(&about));
+    }
+
+    // Translate after_help text
+    if let Some(after_help) = cmd.get_after_help().map(|s| s.to_string()) {
+        cmd = cmd.after_help(translate!(&after_help));
+    }
+
+    // Set localized usage
+    let usage_key = format!("{util_name}-usage");
+    cmd = cmd.override_usage(crate::format_usage(&translate!(&usage_key)));
+
+    // Translate arg help texts
+    let arg_ids: Vec<_> = cmd.get_arguments().map(|a| a.get_id().clone()).collect();
+    for id in arg_ids {
+        cmd = cmd.mut_arg(&id, |arg| {
+            let mut arg = arg;
+            if let Some(help_key) = arg.get_help().map(|s| s.to_string()) {
+                arg = arg.help(translate!(&help_key));
+            }
+            if let Some(long_help_key) = arg.get_long_help().map(|s| s.to_string()) {
+                arg = arg.long_help(translate!(&long_help_key));
+            }
+            arg
+        });
+    }
+
+    // Apply color and help template
+    configure_localized_command(cmd)
+}
+
+/// Converts a clap Error to a UError for use in UResult return types.
+///
+/// This is useful when manually handling clap parsing and needing to
+/// return errors through the UResult system.
+pub fn clap_error_to_uerror(err: Error) -> Box<dyn crate::error::UError> {
+    Box::new(ClapErrorWrapper(err))
+}
+
+/// Wrapper to convert clap::Error into UError
+struct ClapErrorWrapper(Error);
+
+impl std::fmt::Display for ClapErrorWrapper {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::fmt::Debug for ClapErrorWrapper {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
+impl std::error::Error for ClapErrorWrapper {}
+
+impl crate::error::UError for ClapErrorWrapper {
+    fn code(&self) -> i32 {
+        if self.0.exit_code() == 0 { 0 } else { 1 }
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
+}
+
 /* spell-checker: disable */
 #[cfg(test)]
 mod tests {

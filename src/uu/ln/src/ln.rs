@@ -10,7 +10,8 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::fs::{make_path_relative_to, paths_refer_to_same_file};
 use uucore::translate;
-use uucore::{format_usage, prompt_yes, show_error};
+use uucore::{prompt_yes, show_error};
+use uucore::clap_localization::localize_command;
 
 use std::borrow::Cow;
 use std::collections::HashSet;
@@ -91,7 +92,36 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let cmd = uu_app();
+    let matches = cmd.clone().try_get_matches_from(args);
+
+    let matches = match matches {
+        Ok(m) => {
+            if m.get_flag("help") {
+                localize_command(cmd).print_help().unwrap();
+                println!();
+                return Ok(());
+            }
+            m
+        }
+        Err(e) => {
+            use clap::error::ErrorKind;
+            match e.kind() {
+                ErrorKind::DisplayHelp => {
+                    localize_command(cmd).print_help().unwrap();
+                    println!();
+                    return Ok(());
+                }
+                ErrorKind::DisplayVersion => {
+                    print!("{}", e.render());
+                    return Ok(());
+                }
+                _ => {
+                    return Err(uucore::clap_localization::clap_error_to_uerror(e));
+                }
+            }
+        }
+    };
 
     /* the list of files */
 
@@ -135,71 +165,65 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     exec(&paths[..], &settings)
 }
 
+/// Build the clap Command with translation keys (not translated strings).
+/// Translation only happens when help is actually displayed.
 pub fn uu_app() -> Command {
-    let after_help = format!(
-        "{}\n\n{}",
-        translate!("ln-after-help"),
-        backup_control::BACKUP_CONTROL_LONG_HELP
-    );
-
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
-        .about(translate!("ln-about"))
-        .override_usage(format_usage(&translate!("ln-usage")))
+        .disable_help_flag(true)
+        .about("ln-about") // key, not translated
+        .after_help("ln-after-help") // key
         .infer_long_args(true)
-        .after_help(after_help)
+        .arg(
+            Arg::new("help")
+                .short('h')
+                .long("help")
+                .help("help-help") // key
+                .action(ArgAction::SetTrue),
+        )
         .arg(backup_control::arguments::backup())
         .arg(backup_control::arguments::backup_no_args())
-        /*.arg(
-            Arg::new(options::DIRECTORY)
-                .short('d')
-                .long(options::DIRECTORY)
-                .help("allow users with appropriate privileges to attempt to make hard links to directories")
-        )*/
         .arg(
             Arg::new(options::FORCE)
                 .short('f')
                 .long(options::FORCE)
-                .help(translate!("ln-help-force"))
+                .help("ln-help-force") // key
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::INTERACTIVE)
                 .short('i')
                 .long(options::INTERACTIVE)
-                .help(translate!("ln-help-interactive"))
+                .help("ln-help-interactive") // key
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_DEREFERENCE)
                 .short('n')
                 .long(options::NO_DEREFERENCE)
-                .help(translate!("ln-help-no-dereference"))
+                .help("ln-help-no-dereference") // key
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::LOGICAL)
                 .short('L')
                 .long(options::LOGICAL)
-                .help(translate!("ln-help-logical"))
+                .help("ln-help-logical") // key
                 .overrides_with(options::PHYSICAL)
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            // Not implemented yet
             Arg::new(options::PHYSICAL)
                 .short('P')
                 .long(options::PHYSICAL)
-                .help(translate!("ln-help-physical"))
+                .help("ln-help-physical") // key
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SYMBOLIC)
                 .short('s')
                 .long(options::SYMBOLIC)
-                .help(translate!("ln-help-symbolic"))
-                // override added for https://github.com/uutils/coreutils/issues/2359
+                .help("ln-help-symbolic") // key
                 .overrides_with(options::SYMBOLIC)
                 .action(ArgAction::SetTrue),
         )
@@ -208,7 +232,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::TARGET_DIRECTORY)
                 .short('t')
                 .long(options::TARGET_DIRECTORY)
-                .help(translate!("ln-help-target-directory"))
+                .help("ln-help-target-directory") // key
                 .value_name("DIRECTORY")
                 .value_hint(clap::ValueHint::DirPath)
                 .value_parser(clap::value_parser!(OsString))
@@ -218,14 +242,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::NO_TARGET_DIRECTORY)
                 .short('T')
                 .long(options::NO_TARGET_DIRECTORY)
-                .help(translate!("ln-help-no-target-directory"))
+                .help("ln-help-no-target-directory") // key
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::RELATIVE)
                 .short('r')
                 .long(options::RELATIVE)
-                .help(translate!("ln-help-relative"))
+                .help("ln-help-relative") // key
                 .requires(options::SYMBOLIC)
                 .action(ArgAction::SetTrue),
         )
@@ -233,7 +257,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::VERBOSE)
                 .short('v')
                 .long(options::VERBOSE)
-                .help(translate!("ln-help-verbose"))
+                .help("ln-help-verbose") // key
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -241,7 +265,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath)
                 .value_parser(clap::value_parser!(OsString))
-                .required(true)
+                .required_unless_present("help")
                 .num_args(1..),
         )
 }

@@ -110,6 +110,27 @@ thread_local! {
     static LOCALIZER: OnceLock<Localizer> = const { OnceLock::new() };
 }
 
+// Store util name for lazy initialization
+static UTIL_NAME_FOR_LAZY_INIT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// Store the utility name for lazy localization initialization.
+/// Called from bin! macro before uumain.
+pub fn set_util_name_for_lazy_init(name: &str) {
+    let _ = UTIL_NAME_FOR_LAZY_INIT.set(name.to_string());
+}
+
+/// Ensure localization is initialized (lazy initialization).
+/// Called automatically by translate! macro when needed.
+fn ensure_initialized() {
+    LOCALIZER.with(|lock| {
+        if lock.get().is_none() {
+            if let Some(util_name) = UTIL_NAME_FOR_LAZY_INIT.get() {
+                let _ = setup_localization(util_name);
+            }
+        }
+    });
+}
+
 /// Helper function to find the uucore locales directory from a utility's locales directory
 fn find_uucore_locales_dir(utility_locales_dir: &Path) -> Option<PathBuf> {
     // Normalize the path to get absolute path
@@ -262,6 +283,7 @@ fn create_english_bundle_from_embedded(
 }
 
 fn get_message_internal(id: &str, args: Option<FluentArgs>) -> String {
+    ensure_initialized();
     LOCALIZER.with(|lock| {
         lock.get()
             .map(|loc| loc.format(id, args.as_ref()))
