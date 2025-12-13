@@ -209,23 +209,24 @@ fn test_number_separator() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_number_separator_non_utf8() {
-    use std::{
-        ffi::{OsStr, OsString},
-        os::unix::ffi::{OsStrExt, OsStringExt},
-    };
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
     let separator_bytes = [0xFF, 0xFE];
     let mut v = b"--number-separator=".to_vec();
     v.extend_from_slice(&separator_bytes);
 
     let arg = OsString::from_vec(v);
-    let separator = OsStr::from_bytes(&separator_bytes);
+
+    let mut expected = Vec::with_capacity(14);
+    expected.extend(b"     1");
+    expected.extend(separator_bytes);
+    expected.extend(b"test\n");
 
     new_ucmd!()
         .arg(arg)
         .pipe_in("test")
         .succeeds()
-        .stdout_is(format!("     1{}test\n", separator.to_string_lossy()));
+        .stdout_is_bytes(expected);
 }
 
 #[test]
@@ -795,10 +796,14 @@ fn test_file_with_non_utf8_content() {
 
     at.write_bytes(filename, content);
 
-    ucmd.arg(filename).succeeds().stdout_is(format!(
-        "     1\ta\n     2\t{}\n     3\tb\n",
-        String::from_utf8_lossy(invalid_utf8)
-    ));
+    let mut expected = Vec::with_capacity(30);
+    expected.extend(b"     1\ta\n");
+    expected.extend(b"     2\t");
+    expected.extend(invalid_utf8);
+    expected.extend(b"\n");
+    expected.extend(b"     3\tb\n");
+
+    ucmd.arg(filename).succeeds().stdout_is_bytes(expected);
 }
 
 // Regression tests for issue #9132: repeated flags should use last value
