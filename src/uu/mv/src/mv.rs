@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized
+// spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized unwriteable
 
 mod error;
 #[cfg(unix)]
@@ -20,11 +20,11 @@ use std::collections::HashSet;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
-use std::io;
+use std::io::{self, IsTerminal};
 #[cfg(unix)]
 use std::os::unix;
 #[cfg(unix)]
-use std::os::unix::fs::FileTypeExt;
+use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf, absolute};
@@ -37,6 +37,8 @@ use crate::hardlink::{
 use uucore::backup_control::{self, source_is_target_backup};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code};
+#[cfg(unix)]
+use uucore::fs::display_permissions_unix;
 #[cfg(unix)]
 use uucore::fs::make_fifo;
 use uucore::fs::{
@@ -133,8 +135,10 @@ pub enum OverwriteMode {
     /// '-i' '--interactive'  prompt before overwrite
     Interactive,
     ///'-f' '--force'         overwrite without prompt
-    #[default]
     Force,
+    /// No flag specified - prompt for unwriteable files when stdin is TTY
+    #[default]
+    Default,
 }
 
 static OPT_FORCE: &str = "force";
@@ -341,8 +345,10 @@ fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
         OverwriteMode::NoClobber
     } else if matches.get_flag(OPT_INTERACTIVE) {
         OverwriteMode::Interactive
-    } else {
+    } else if matches.get_flag(OPT_FORCE) {
         OverwriteMode::Force
+    } else {
+        OverwriteMode::Default
     }
 }
 
@@ -421,15 +427,13 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
     } else if target.exists() && source_is_dir {
         match opts.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
-            OverwriteMode::Interactive => {
-                if !prompt_yes!(
-                    "{}",
-                    translate!("mv-prompt-overwrite", "target" => target.quote())
-                ) {
-                    return Err(io::Error::other("").into());
+            OverwriteMode::Interactive => prompt_overwrite(target)?,
+            OverwriteMode::Force => {}
+            OverwriteMode::Default => {
+                if std::io::stdin().is_terminal() && !is_writable(target) {
+                    prompt_overwrite(target)?;
                 }
             }
-            OverwriteMode::Force => {}
         }
         Err(MvError::NonDirectoryToDirectory(
             source.quote().to_string(),
@@ -731,15 +735,14 @@ fn rename(
                 }
                 return Ok(());
             }
-            OverwriteMode::Interactive => {
-                if !prompt_yes!(
-                    "{}",
-                    translate!("mv-prompt-overwrite", "target" => to.quote())
-                ) {
-                    return Err(io::Error::other(""));
+            OverwriteMode::Interactive => prompt_overwrite(to)?,
+            OverwriteMode::Force => {}
+            OverwriteMode::Default => {
+                // GNU mv prompts when stdin is a TTY and target is not writable
+                if std::io::stdin().is_terminal() && !is_writable(to) {
+                    prompt_overwrite(to)?;
                 }
             }
-            OverwriteMode::Force => {}
         }
 
         backup_path = backup_control::get_backup_path(opts.backup, to, &opts.suffix);
@@ -1199,6 +1202,55 @@ fn rename_file_fallback(
 
 fn is_empty_dir(path: &Path) -> bool {
     fs::read_dir(path).is_ok_and(|mut contents| contents.next().is_none())
+}
+
+#[cfg(unix)]
+fn is_writable(path: &Path) -> bool {
+    if let Ok(metadata) = path.metadata() {
+        let mode = metadata.permissions().mode();
+        // Check if user write bit is set
+        (mode & 0o200) != 0
+    } else {
+        true // If we can't get metadata, assume writable
+    }
+}
+
+#[cfg(not(unix))]
+fn is_writable(path: &Path) -> bool {
+    if let Ok(metadata) = path.metadata() {
+        !metadata.permissions().readonly()
+    } else {
+        true
+    }
+}
+
+#[cfg(unix)]
+fn get_interactive_prompt(to: &Path) -> String {
+    use libc::mode_t;
+    if let Ok(metadata) = to.metadata() {
+        let mode = metadata.permissions().mode();
+        let file_mode = mode & 0o777;
+        // Check if file is not writable by user
+        if (mode & 0o200) == 0 {
+            let perms = display_permissions_unix(mode as mode_t, false);
+            let mode_info = format!("{file_mode:04o} ({perms})");
+            return translate!("mv-prompt-overwrite-mode", "target" => to.quote(), "mode_info" => mode_info);
+        }
+    }
+    translate!("mv-prompt-overwrite", "target" => to.quote())
+}
+
+#[cfg(not(unix))]
+fn get_interactive_prompt(to: &Path) -> String {
+    translate!("mv-prompt-overwrite", "target" => to.quote())
+}
+
+/// Prompts the user for confirmation and returns an error if declined.
+fn prompt_overwrite(to: &Path) -> io::Result<()> {
+    if !prompt_yes!("{}", get_interactive_prompt(to)) {
+        return Err(io::Error::other(""));
+    }
+    Ok(())
 }
 
 /// Checks if a file can be deleted by attempting to open it with delete permissions.
