@@ -306,6 +306,8 @@ jobs:
       run: |
         set -x
         DESTDIR=/tmp/ make PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n install
+        # Check that our binary does not break system
+        sudo -E make PREFIX=/usr PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n install
         # Check that utils are built with given profile
         ./target/release-fast/true
         # Check that the utils are present
