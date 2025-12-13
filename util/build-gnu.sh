@@ -3,16 +3,15 @@
 #
 
 # spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
-# spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink texinfo CARGOFLAGS
+# spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) greadlink gsed multihardlink texinfo CARGOFLAGS
 # spell-checker:ignore openat TOCTOU CFLAGS
 # spell-checker:ignore hfsplus casefold chattr
 
 set -e
 
-# Use system's GNU version for make, nproc, readlink and sed on *BSD and macOS
+# Use GNU make, readlink and sed on *BSD and macOS
 MAKE=$(command -v gmake||command -v make)
-NPROC=$(command -v gnproc||command -v nproc)
-READLINK=$(command -v greadlink||command -v readlink)
+READLINK=$(command -v greadlink||command -v readlink) # Use our readlink to remove a dependency
 SED=$(command -v gsed||command -v sed)
 
 SYSTEM_TIMEOUT=$(command -v timeout)
@@ -141,7 +140,8 @@ else
     "${SED}" -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
     # Use a better diff
     "${SED}" -i 's|diff -c|diff -u|g' tests/Coreutils.pm
-    "${MAKE}" -j "$("${NPROC}")"
+    # Use our nproc for *BSD and macOS
+    "${MAKE}" -j "$("${UU_BUILD_DIR}/nproc")"
 
     # Handle generated factor tests
     t_first=00
