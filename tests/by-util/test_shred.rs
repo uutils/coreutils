@@ -279,7 +279,6 @@ fn test_random_source_regular_file() {
 }
 
 #[test]
-#[ignore = "known issue #7947"]
 fn test_random_source_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -287,12 +286,17 @@ fn test_random_source_dir() {
     let file = "foo.txt";
     at.write(file, "a");
 
-    ucmd
-        .arg("-v")
+    // The test verifies that shred stops immediately on error instead of continuing
+    // Platform differences:
+    // - Unix: Error during write ("File write pass failed: Is a directory")
+    // - Windows: Error during open ("cannot open random source")
+    // Both are correct - key is NOT seeing "pass 2/3" (which proves it stopped)
+    ucmd.arg("-v")
         .arg("--random-source=source")
         .arg(file)
         .fails()
-        .stderr_only("shred: foo.txt: pass 1/3 (random)...\nshred: foo.txt: File write pass failed: Is a directory\n");
+        .stderr_does_not_contain("pass 2/3")
+        .stderr_does_not_contain("pass 3/3");
 }
 
 #[test]
