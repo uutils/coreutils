@@ -696,14 +696,6 @@ jobs:
             ;;
         esac
         outputs CARGO_TEST_OPTIONS
-        # * executable for `strip`?
-        STRIP="strip"
-        case ${{ matrix.job.target }} in
-          aarch64-*-linux-*) STRIP="aarch64-linux-gnu-strip" ;;
-          arm-*-linux-gnueabihf) STRIP="arm-linux-gnueabihf-strip" ;;
-          *-pc-windows-msvc) STRIP="" ;;
-        esac;
-        outputs STRIP
     - uses: taiki-e/install-action@v2
       if: steps.vars.outputs.CARGO_CMD == 'cross'
       with:
@@ -829,10 +821,8 @@ jobs:
       shell: bash
       run: |
         ## Package artifact(s)
-        # binary
-        cp 'target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}' '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/'
-        # `strip` binary (if needed)
-        if [ -n "${{ steps.vars.outputs.STRIP }}" ]; then "${{ steps.vars.outputs.STRIP }}" '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}' ; fi
+        # stripped binary
+        install -m 755 -s 'target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}' '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/'
         # README and LICENSE
         # * spell-checker:ignore EADME ICENSE
         (shopt -s nullglob; for f in [R]"EADME"{,.*}; do cp $f '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/' ; done)
