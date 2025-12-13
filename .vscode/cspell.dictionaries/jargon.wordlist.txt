@@ -84,6 +84,8 @@ lossily
 lstat
 mebi
 mebibytes
+metacharacter
+metacharacters
 mergeable
 microbenchmark
 microbenchmarks
