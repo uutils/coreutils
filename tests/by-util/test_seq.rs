@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore lmnop xlmnop
+// spell-checker:ignore lmnop xlmnop EPIPE
 use uutests::new_ucmd;
 
 #[test]
@@ -12,7 +12,7 @@ fn test_invalid_arg() {
 
 #[test]
 #[cfg(unix)]
-fn test_broken_pipe_still_exits_success() {
+fn test_broken_pipe_exits_with_error() {
     use std::process::Stdio;
 
     let mut child = new_ucmd!()
@@ -26,8 +26,9 @@ fn test_broken_pipe_still_exits_success() {
     child.close_stdout();
     let result = child.wait().unwrap();
 
+    // GNU seq exits with code 1 on write error (when SIGPIPE is ignored/handled)
     result
-        .code_is(0)
+        .code_is(1)
         .stderr_contains("write error: Broken pipe");
 }
 
@@ -653,7 +654,7 @@ fn test_neg_inf() {
     new_ucmd!()
         .args(&["--", "-inf", "0"])
         .run_stdout_starts_with(b"-inf\n-inf\n-inf\n")
-        .success();
+        .code_is(1);
 }
 
 #[test]
@@ -661,15 +662,16 @@ fn test_neg_infinity() {
     new_ucmd!()
         .args(&["--", "-infinity", "0"])
         .run_stdout_starts_with(b"-inf\n-inf\n-inf\n")
-        .success();
+        .code_is(1);
 }
 
 #[test]
 fn test_inf() {
+    // Note: run_stdout_starts_with closes stdout early, causing EPIPE and exit code 1
     new_ucmd!()
         .args(&["inf"])
         .run_stdout_starts_with(b"1\n2\n3\n")
-        .success();
+        .code_is(1);
 }
 
 #[test]
@@ -677,7 +679,7 @@ fn test_infinity() {
     new_ucmd!()
         .args(&["infinity"])
         .run_stdout_starts_with(b"1\n2\n3\n")
-        .success();
+        .code_is(1);
 }
 
 #[test]
@@ -685,7 +687,7 @@ fn test_inf_width() {
     new_ucmd!()
         .args(&["-w", "1.000", "inf", "inf"])
         .run_stdout_starts_with(b"1.000\n  inf\n  inf\n  inf\n")
-        .success();
+        .code_is(1);
 }
 
 #[test]
@@ -693,7 +695,7 @@ fn test_neg_inf_width() {
     new_ucmd!()
         .args(&["-w", "1.000", "-inf", "-inf"])
         .run_stdout_starts_with(b"1.000\n -inf\n -inf\n -inf\n")
-        .success();
+        .code_is(1);
 }
 
 #[test]
@@ -1074,11 +1076,11 @@ fn test_precision_corner_cases() {
         .succeeds()
         .stdout_is("1.00\n2.20\n");
 
-    // Infinity is ignored
+    // Infinity is ignored (exits with code 1 due to EPIPE when stdout closes)
     new_ucmd!()
         .args(&["1", "1.2", "inf"])
         .run_stdout_starts_with(b"1.0\n2.2\n3.4\n")
-        .success();
+        .code_is(1);
 }
 
 // GNU `seq` manual only makes guarantees about `-w` working if the
@@ -1138,8 +1140,9 @@ fn test_equalize_widths_corner_cases() {
 
     // We can't really pad with infinite number of zeros, so `-w` is ignored.
     // (there is another test with infinity as an increment above)
+    // Exits with code 1 due to EPIPE when stdout closes.
     new_ucmd!()
         .args(&["-w", "1", "1.2", "inf"])
         .run_stdout_starts_with(b"1.0\n2.2\n3.4\n")
-        .success();
+        .code_is(1);
 }
