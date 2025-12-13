@@ -317,6 +317,14 @@ impl Observer {
 
         let event_path = event.paths.first().unwrap();
         let mut paths: Vec<PathBuf> = vec![];
+
+        // If the path is not being tracked, ignore this event.
+        // This can happen when --follow=descriptor is used without --retry,
+        // and a file that initially didn't exist is created in a watched directory.
+        if !self.files.contains_key(event_path) {
+            return Ok(paths);
+        }
+
         let display_name = self.files.get(event_path).display_name.clone();
 
         match event.kind {
