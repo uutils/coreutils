@@ -11,8 +11,6 @@ use std::ffi::OsString;
 use std::io::{self, Write};
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
-#[cfg(unix)]
-use uucore::signals::enable_pipe_errors;
 use uucore::translate;
 
 // it's possible that using a smaller or larger buffer might provide better performance on some
@@ -29,7 +27,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match exec(&buffer) {
         Ok(()) => Ok(()),
-        Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        Err(err) if err.kind() == io::ErrorKind::BrokenPipe => {
+            // When SIGPIPE is trapped (SIG_IGN), write operations return EPIPE.
+            // GNU coreutils prints an error message in this case.
+            eprintln!("{}", translate!("yes-error-stdout-broken-pipe"));
+            Ok(())
+        }
         Err(err) => Err(USimpleError::new(
             1,
             translate!("yes-error-standard-output", "error" => err),
@@ -113,8 +116,16 @@ fn prepare_buffer(buf: &mut Vec<u8>) {
 pub fn exec(bytes: &[u8]) -> io::Result<()> {
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
-    #[cfg(unix)]
-    enable_pipe_errors()?;
+
+    // SIGPIPE handling:
+    // Rust ignores SIGPIPE by default (rust-lang/rust#62569). When write() fails
+    // because the pipe is closed, it returns EPIPE error instead of being killed by
+    // the signal. We catch this error in uumain() and print a diagnostic message,
+    // matching GNU coreutils behavior.
+    //
+    // Key point: We do NOT restore SIGPIPE to SIG_DFL. This preserves POSIX signal
+    // inheritance semantics - if the parent set SIGPIPE to SIG_IGN (e.g., `trap '' PIPE`),
+    // we respect that setting and rely on EPIPE error handling.
 
     loop {
         stdout.write_all(bytes)?;
