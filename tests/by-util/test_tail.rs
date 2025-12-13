@@ -597,10 +597,17 @@ fn test_follow_name_multiple() {
             .arg(FOOBAR_2_TXT)
             .run_no_wait();
 
+        // On macOS, file system caching can cause delays before output written
+        // to a redirected stdout temp file becomes visible to other file handles.
+        #[cfg(target_os = "macos")]
+        let initial_delay = 1300;
+        #[cfg(not(target_os = "macos"))]
+        let initial_delay = 500;
+
         child
-            .make_assertion_with_delay(500)
+            .make_assertion_with_delay(initial_delay)
             .is_alive()
-            .with_current_output()
+            .with_all_output()
             .stdout_only_fixture("foobar_follow_multiple.expected");
 
         let first_append = "trois\n";
