@@ -5,6 +5,8 @@
 
 // spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST
 
+mod locale;
+
 use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime;
 use jiff::tz::{TimeZone, TimeZoneDatabase};
@@ -537,7 +539,7 @@ fn make_format_string(settings: &Settings) -> &str {
         },
         Format::Resolution => "%s.%N",
         Format::Custom(ref fmt) => fmt,
-        Format::Default => "%a %b %e %X %Z %Y",
+        Format::Default => locale::get_locale_default_format(),
     }
 }
 

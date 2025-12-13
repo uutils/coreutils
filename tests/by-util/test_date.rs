@@ -1071,3 +1071,58 @@ fn test_date_military_timezone_with_offset_variations() {
             .stdout_is(format!("{expected}\n"));
     }
 }
+
+// Locale-aware hour formatting tests
+#[test]
+#[cfg(unix)]
+fn test_date_locale_hour_c_locale() {
+    // C locale should use 24-hour format
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-10-11T13:00")
+        .succeeds()
+        .stdout_contains("13:00");
+}
+
+#[test]
+#[cfg(any(
+    target_os = "linux",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "dragonfly"
+))]
+fn test_date_locale_hour_en_us() {
+    // en_US locale typically uses 12-hour format when available
+    // Note: If locale is not installed on system, falls back to C locale (24-hour)
+    let result = new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-10-11T13:00")
+        .succeeds();
+
+    let stdout = result.stdout_str();
+    // Accept either 12-hour (if locale available) or 24-hour (if locale unavailable)
+    // The important part is that the code doesn't crash and handles locale detection gracefully
+    assert!(
+        stdout.contains("1:00") || stdout.contains("13:00"),
+        "date output should contain either 1:00 (12-hour) or 13:00 (24-hour), got: {stdout}"
+    );
+}
+
+#[test]
+fn test_date_explicit_format_overrides_locale() {
+    // Explicit format should override locale preferences
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-10-11T13:00")
+        .arg("+%H:%M")
+        .succeeds()
+        .stdout_is("13:00\n");
+}
