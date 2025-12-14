@@ -1096,7 +1096,7 @@ fn allows_traditional_usage() -> bool {
 #[derive(Debug, Clone)]
 struct LegacyKeyPart {
     field: usize,
-    char: usize,
+    char_pos: usize,
     opts: String,
 }
 
@@ -1108,36 +1108,28 @@ fn parse_usize_or_max(num: &str) -> Option<usize> {
     }
 }
 
-fn parse_legacy_part(spec: &str, default_char: usize) -> Option<LegacyKeyPart> {
-    let mut idx = 0;
-    let bytes = spec.as_bytes();
-    while idx < bytes.len() && bytes[idx].is_ascii_digit() {
-        idx += 1;
-    }
+fn parse_legacy_part(spec: &str) -> Option<LegacyKeyPart> {
+    let idx = spec.chars().take_while(|c| c.is_ascii_digit()).count();
     if idx == 0 {
         return None;
     }
 
     let field = parse_usize_or_max(&spec[..idx])?;
-    let mut char = default_char;
+    let mut char_pos = 0;
     let mut rest = &spec[idx..];
 
     if let Some(stripped) = rest.strip_prefix('.') {
-        let mut char_idx = 0;
-        let stripped_bytes = stripped.as_bytes();
-        while char_idx < stripped_bytes.len() && stripped_bytes[char_idx].is_ascii_digit() {
-            char_idx += 1;
-        }
+        let char_idx = stripped.chars().take_while(|c| c.is_ascii_digit()).count();
         if char_idx == 0 {
             return None;
         }
-        char = parse_usize_or_max(&stripped[..char_idx])?;
+        char_pos = parse_usize_or_max(&stripped[..char_idx])?;
         rest = &stripped[char_idx..];
     }
 
     Some(LegacyKeyPart {
         field,
-        char,
+        char_pos,
         opts: rest.to_string(),
     })
 }
@@ -1145,12 +1137,12 @@ fn parse_legacy_part(spec: &str, default_char: usize) -> Option<LegacyKeyPart> {
 /// Convert legacy +POS1 [-POS2] into a `-k` key specification using saturating arithmetic.
 fn legacy_key_to_k(from: &LegacyKeyPart, to: Option<&LegacyKeyPart>) -> String {
     let start_field = from.field.saturating_add(1);
-    let start_char = from.char.saturating_add(1);
+    let start_char = from.char_pos.saturating_add(1);
 
     let mut keydef = format!(
         "{}{}{}",
         start_field,
-        if from.char == 0 {
+        if from.char_pos == 0 {
             String::new()
         } else {
             format!(".{start_char}")
@@ -1159,7 +1151,7 @@ fn legacy_key_to_k(from: &LegacyKeyPart, to: Option<&LegacyKeyPart>) -> String {
     );
 
     if let Some(to) = to {
-        let end_field = if to.char == 0 {
+        let end_field = if to.char_pos == 0 {
             // When the end character index is zero, GNU keeps the field number as-is.
             // Clamp to 1 to avoid generating an invalid field 0.
             to.field.max(1)
@@ -1168,9 +1160,9 @@ fn legacy_key_to_k(from: &LegacyKeyPart, to: Option<&LegacyKeyPart>) -> String {
         };
 
         let mut end_part = end_field.to_string();
-        if to.char != 0 {
+        if to.char_pos != 0 {
             end_part.push('.');
-            end_part.push_str(&to.char.to_string());
+            end_part.push_str(&to.char_pos.to_string());
         }
         end_part.push_str(&to.opts);
 
@@ -1204,7 +1196,7 @@ where
 
         let as_str = arg.to_string_lossy();
         if let Some(from_spec) = as_str.strip_prefix('+') {
-            if let Some(from) = parse_legacy_part(from_spec, 0) {
+            if let Some(from) = parse_legacy_part(from_spec) {
                 let mut to_part = None;
 
                 let next_candidate = iter.peek().map(|next| next.to_string_lossy().to_string());
@@ -1217,7 +1209,7 @@ where
                             .is_some_and(|c| c.is_ascii_digit())
                         {
                             let next_arg = iter.next().unwrap();
-                            if let Some(parsed) = parse_legacy_part(stripped, 0) {
+                            if let Some(parsed) = parse_legacy_part(stripped) {
                                 to_part = Some(parsed);
                             } else {
                                 processed.push(arg);
