@@ -1201,11 +1201,7 @@ where
 
                 if let Some(next_str) = next_candidate {
                     if let Some(stripped) = next_str.strip_prefix('-') {
-                        if stripped
-                            .as_bytes()
-                            .first()
-                            .is_some_and(|c| c.is_ascii_digit())
-                        {
+                        if stripped.starts_with(|c: char| c.is_ascii_digit()) {
                             let next_arg = iter.next().unwrap();
                             if let Some(parsed) = parse_legacy_part(stripped) {
                                 to_part = Some(parsed);
