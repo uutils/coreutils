@@ -135,10 +135,11 @@ impl<'parser> Parser<'parser> {
     }
     /// Parse a size string into a number of bytes.
     ///
-    /// A size string comprises an integer and an optional unit. The unit
-    /// may be K, M, G, T, P, E, Z, Y, R or Q (powers of 1024), or KB, MB,
-    /// etc. (powers of 1000), or b which is 512.
-    /// Binary prefixes can be used, too: KiB=K, MiB=M, and so on.
+    /// A size string comprises an integer and an optional unit. The integer
+    /// may be in decimal, octal (0 prefix), hexadecimal (0x prefix), or
+    /// binary (0b prefix) notation. The unit may be K, M, G, T, P, E, Z, Y,
+    /// R or Q (powers of 1024), or KB, MB, etc. (powers of 1000), or b which
+    /// is 512. Binary prefixes can be used, too: KiB=K, MiB=M, and so on.
     ///
     /// # Errors
     ///
@@ -339,6 +340,8 @@ impl<'parser> Parser<'parser> {
             return NumberSystem::Hexadecimal;
         }
 
+        // Binary prefix: "0b" followed by at least one binary digit (0 or 1)
+        // Note: "0b" alone is treated as decimal 0 with suffix "b"
         if let Some(prefix) = size.strip_prefix("0b") {
             if !prefix.is_empty() {
                 return NumberSystem::Binary;
@@ -380,7 +383,9 @@ impl<'parser> Parser<'parser> {
 /// assert_eq!(Ok(123), parse_size_u128("123"));
 /// assert_eq!(Ok(9 * 1000), parse_size_u128("9kB")); // kB is 1000
 /// assert_eq!(Ok(2 * 1024), parse_size_u128("2K")); // K is 1024
-/// assert_eq!(Ok(44251 * 1024), parse_size_u128("0xACDBK"));
+/// assert_eq!(Ok(44251 * 1024), parse_size_u128("0xACDBK")); // hexadecimal
+/// assert_eq!(Ok(10), parse_size_u128("0b1010")); // binary
+/// assert_eq!(Ok(10 * 1024), parse_size_u128("0b1010K")); // binary with suffix
 /// ```
 pub fn parse_size_u128(size: &str) -> Result<u128, ParseSizeError> {
     Parser::default().parse(size)
@@ -581,6 +586,7 @@ mod tests {
         assert!(parse_size_u64("1Y").is_err());
         assert!(parse_size_u64("1R").is_err());
         assert!(parse_size_u64("1Q").is_err());
+        assert!(parse_size_u64("0b1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111").is_err());
 
         assert!(variant_eq(
             &parse_size_u64("1Z").unwrap_err(),
