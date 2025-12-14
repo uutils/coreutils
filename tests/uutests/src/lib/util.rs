@@ -120,9 +120,14 @@ pub struct CmdResult {
     stdout: Vec<u8>,
     /// captured standard error after running the Command
     stderr: Vec<u8>,
+    /// arguments used to run the command (for GNU comparison)
+    args: Vec<OsString>,
+    /// environment variables used to run the command (for GNU comparison)
+    env_vars: Vec<(OsString, OsString)>,
 }
 
 impl CmdResult {
+    #[allow(clippy::too_many_arguments)]
     pub fn new<S, T, U, V>(
         bin_path: S,
         util_name: Option<T>,
@@ -130,6 +135,8 @@ impl CmdResult {
         exit_status: Option<ExitStatus>,
         stdout: U,
         stderr: V,
+        args: Vec<OsString>,
+        env_vars: Vec<(OsString, OsString)>,
     ) -> Self
     where
         S: Into<PathBuf>,
@@ -144,6 +151,8 @@ impl CmdResult {
             exit_status,
             stdout: stdout.into(),
             stderr: stderr.into(),
+            args,
+            env_vars,
         }
     }
 
@@ -160,6 +169,8 @@ impl CmdResult {
             self.exit_status,
             function(&self.stdout),
             self.stderr.as_slice(),
+            self.args.clone(),
+            self.env_vars.clone(),
         )
     }
 
@@ -176,6 +187,8 @@ impl CmdResult {
             self.exit_status,
             function(self.stdout_str()),
             self.stderr.as_slice(),
+            self.args.clone(),
+            self.env_vars.clone(),
         )
     }
 
@@ -192,6 +205,8 @@ impl CmdResult {
             self.exit_status,
             self.stdout.as_slice(),
             function(&self.stderr),
+            self.args.clone(),
+            self.env_vars.clone(),
         )
     }
 
@@ -208,6 +223,8 @@ impl CmdResult {
             self.exit_status,
             self.stdout.as_slice(),
             function(self.stderr_str()),
+            self.args.clone(),
+            self.env_vars.clone(),
         )
     }
 
@@ -905,6 +922,103 @@ impl CmdResult {
             "Stdout matches regex:\n{}",
             self.stdout_str()
         );
+        self
+    }
+
+    /// Compare this result against GNU coreutils. Auto-skips if GNU unavailable.
+    #[track_caller]
+    #[cfg(unix)]
+    pub fn matches_gnu(&self) -> &Self {
+        let Some(util_name) = &self.util_name else {
+            eprintln!("Skipping GNU comparison: util_name not set");
+            return self;
+        };
+
+        let gnu_version = match check_coreutil_version(util_name, VERSION_MIN) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Skipping GNU comparison: {e}");
+                return self;
+            }
+        };
+
+        let gnu_name = host_name_for(util_name);
+        // Skip first arg (util_name) since UCommand prepends it for multicall binary
+        let args: Vec<&str> = self
+            .args
+            .iter()
+            .skip(1)
+            .filter_map(|s| s.to_str())
+            .collect();
+
+        let Ok(gnu_output) = std::process::Command::new(gnu_name.as_ref())
+            .args(&args)
+            .env("PATH", PATH)
+            .envs(DEFAULT_ENV)
+            .envs(
+                self.env_vars
+                    .iter()
+                    .filter_map(|(k, v)| Some((k.to_str()?, v.to_str()?))),
+            )
+            .output()
+        else {
+            eprintln!("Skipping GNU comparison: failed to run GNU {util_name}");
+            return self;
+        };
+
+        let (gnu_stdout, gnu_stderr) = if cfg!(target_os = "linux") {
+            (gnu_output.stdout, gnu_output.stderr)
+        } else {
+            let from = format!("{gnu_name}:");
+            let to = format!("{util_name}:");
+            (
+                String::from_utf8_lossy(&gnu_output.stdout)
+                    .replace(&from, &to)
+                    .into_bytes(),
+                String::from_utf8_lossy(&gnu_output.stderr)
+                    .replace(&from, &to)
+                    .into_bytes(),
+            )
+        };
+
+        let stdout_match = self.stdout == gnu_stdout;
+        let stderr_match = self.stderr == gnu_stderr;
+        let code_match = self.exit_status.and_then(|s| s.code()) == gnu_output.status.code();
+
+        if !stdout_match || !stderr_match || !code_match {
+            let mut msg = format!("Output differs from GNU {util_name} ({gnu_version}):\n");
+            if !stdout_match {
+                msg.push_str(&format!(
+                    "stdout:\n  uutils: {:?}\n  GNU:    {:?}\n",
+                    String::from_utf8_lossy(&self.stdout),
+                    String::from_utf8_lossy(&gnu_stdout)
+                ));
+            }
+            if !stderr_match {
+                msg.push_str(&format!(
+                    "stderr:\n  uutils: {:?}\n  GNU:    {:?}\n",
+                    String::from_utf8_lossy(&self.stderr),
+                    String::from_utf8_lossy(&gnu_stderr)
+                ));
+            }
+            if !code_match {
+                msg.push_str(&format!(
+                    "exit code:\n  uutils: {:?}\n  GNU:    {:?}\n",
+                    self.exit_status.and_then(|s| s.code()),
+                    gnu_output.status.code()
+                ));
+            }
+            panic!("{msg}");
+        }
+
+        self
+    }
+
+    /// No-op on non-unix platforms.
+    ///
+    /// GNU coreutils comparison only makes sense on unix systems.
+    #[cfg(not(unix))]
+    pub fn matches_gnu(&self) -> &Self {
         self
     }
 }
@@ -2198,6 +2312,8 @@ impl<'a> UChildAssertion<'a> {
             exit_status,
             stdout,
             stderr,
+            self.uchild.args.clone(),
+            self.uchild.env_vars.clone(),
         )
     }
 
@@ -2279,6 +2395,8 @@ pub struct UChild {
     stderr_to_stdout: bool,
     join_handle: Option<JoinHandle<io::Result<()>>>,
     timeout: Option<Duration>,
+    args: Vec<OsString>,
+    env_vars: Vec<(OsString, OsString)>,
     tmpd: Option<Rc<TempDir>>, // drop last
 }
 
@@ -2301,6 +2419,8 @@ impl UChild {
             stderr_to_stdout: ucommand.stderr_to_stdout,
             join_handle: None,
             timeout: ucommand.timeout,
+            args: ucommand.args.iter().cloned().collect(),
+            env_vars: ucommand.env_vars.clone(),
             tmpd: ucommand.tmpd.clone(),
         }
     }
@@ -2475,10 +2595,12 @@ impl UChild {
     ///
     /// Returns the error from the call to `wait_with_output` if any
     pub fn wait(self) -> io::Result<CmdResult> {
-        let (bin_path, util_name, tmpd) = (
+        let (bin_path, util_name, tmpd, args, env_vars) = (
             self.bin_path.clone(),
             self.util_name.clone(),
             self.tmpd.clone(),
+            self.args.clone(),
+            self.env_vars.clone(),
         );
 
         let output = self.wait_with_output()?;
@@ -2490,6 +2612,8 @@ impl UChild {
             exit_status: Some(output.status),
             stdout: output.stdout,
             stderr: output.stderr,
+            args,
+            env_vars,
         })
     }
 
@@ -3082,6 +3206,10 @@ pub fn gnu_cmd_result(
         result.exit_status,
         stdout.as_bytes(),
         stderr.as_bytes(),
+        args.iter().map(OsString::from).collect(),
+        envs.iter()
+            .map(|(k, v)| (OsString::from(k), OsString::from(v)))
+            .collect(),
     ))
 }
 

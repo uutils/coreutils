@@ -11,12 +11,21 @@ use uutests::util::UCommand;
 
 #[test]
 fn test_default() {
-    new_ucmd!().arg("hi").succeeds().stdout_only("hi\n");
+    new_ucmd!()
+        .arg("hi")
+        .succeeds()
+        .stdout_only("hi\n")
+        .matches_gnu();
 }
 
 #[test]
 fn test_no_trailing_newline() {
-    new_ucmd!().arg("-n").arg("hi").succeeds().stdout_only("hi");
+    new_ucmd!()
+        .arg("-n")
+        .arg("hi")
+        .succeeds()
+        .stdout_only("hi")
+        .matches_gnu();
 }
 
 #[test]
