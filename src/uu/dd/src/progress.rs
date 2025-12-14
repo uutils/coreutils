@@ -20,6 +20,8 @@ use signal_hook::iterator::Handle;
 use uucore::{
     error::UResult,
     format::num_format::{FloatVariant, Formatter},
+    locale::setup_localization,
+    translate,
 };
 
 use crate::numbers::{SuffixType, to_magnitude_and_suffix};
@@ -102,8 +104,10 @@ impl ProgUpdate {
         self.write_stat.report(w)?;
         match self.read_stat.records_truncated {
             0 => {}
-            1 => writeln!(w, "1 truncated record")?,
-            n => writeln!(w, "{n} truncated records")?,
+            count => {
+                let message = translate!("dd-progress-truncated-record", "count" => count);
+                writeln!(w, "{message}")?;
+            }
         }
         Ok(())
     }
@@ -143,7 +147,7 @@ impl ProgUpdate {
         // Compute the throughput (bytes per second) as a string.
         let duration = self.duration.as_secs_f64();
         let safe_millis = std::cmp::max(1, self.duration.as_millis());
-        let rate = 1000 * (btotal / safe_millis);
+        let rate = (1000u128 * btotal) / safe_millis;
         let transfer_rate = to_magnitude_and_suffix(rate, SuffixType::Si);
 
         // If we are rewriting the progress line, do write a carriage
@@ -164,24 +168,22 @@ impl ProgUpdate {
         // If the number of bytes written is sufficiently large, then
         // print a more concise representation of the number, like
         // "1.2 kB" and "1.0 KiB".
-        match btotal {
-            1 => write!(
-                w,
-                "{carriage_return}{btotal} byte copied, {duration_str} s, {transfer_rate}/s{newline}",
-            )?,
-            0..=999 => write!(
-                w,
-                "{carriage_return}{btotal} bytes copied, {duration_str} s, {transfer_rate}/s{newline}",
-            )?,
-            1000..=1023 => write!(
-                w,
-                "{carriage_return}{btotal} bytes ({btotal_metric}) copied, {duration_str} s, {transfer_rate}/s{newline}",
-            )?,
-            _ => write!(
-                w,
-                "{carriage_return}{btotal} bytes ({btotal_metric}, {btotal_bin}) copied, {duration_str} s, {transfer_rate}/s{newline}",
-            )?,
+        let message = match btotal {
+            1 => {
+                translate!("dd-progress-byte-copied", "bytes" => btotal, "duration" => duration_str, "rate" => transfer_rate)
+            }
+            0..=999 => {
+                translate!("dd-progress-bytes-copied", "bytes" => btotal, "duration" => duration_str, "rate" => transfer_rate)
+            }
+            1000..=1023 => {
+                translate!("dd-progress-bytes-copied-si", "bytes" => btotal, "si" => btotal_metric, "duration" => duration_str, "rate" => transfer_rate)
+            }
+            _ => {
+                translate!("dd-progress-bytes-copied-si-iec", "bytes" => btotal, "si" => btotal_metric, "iec" => btotal_bin, "duration" => duration_str, "rate" => transfer_rate)
+            }
         };
+
+        write!(w, "{carriage_return}{message}{newline}")?;
         Ok(())
     }
 
@@ -311,11 +313,8 @@ impl ReadStat {
     ///
     /// If there is a problem writing to `w`.
     fn report(&self, w: &mut impl Write) -> std::io::Result<()> {
-        writeln!(
-            w,
-            "{}+{} records in",
-            self.reads_complete, self.reads_partial
-        )?;
+        let message = translate!("dd-progress-records-in", "complete" => self.reads_complete, "partial" => self.reads_partial);
+        writeln!(w, "{message}")?;
         Ok(())
     }
 }
@@ -368,11 +367,8 @@ impl WriteStat {
     ///
     /// If there is a problem writing to `w`.
     fn report(&self, w: &mut impl Write) -> std::io::Result<()> {
-        writeln!(
-            w,
-            "{}+{} records out",
-            self.writes_complete, self.writes_partial
-        )
+        let message = translate!("dd-progress-records-out", "complete" => self.writes_complete, "partial" => self.writes_partial);
+        writeln!(w, "{message}")
     }
 }
 
@@ -428,6 +424,9 @@ pub(crate) fn gen_prog_updater(
     print_level: Option<StatusLevel>,
 ) -> impl Fn() {
     move || {
+        // As we are in a thread, we need to set up localization independently.
+        let _ = setup_localization("dd");
+
         let mut progress_printed = false;
         while let Ok(update) = rx.recv() {
             // Print the final read/write statistics.
@@ -502,6 +501,9 @@ pub(crate) fn gen_prog_updater(
 ) -> impl Fn() {
     // --------------------------------------------------------------
     move || {
+        // As we are in a thread, we need to set up localization independently.
+        let _ = setup_localization("dd");
+
         // Holds the state of whether we have printed the current progress.
         // This is needed so that we know whether or not to print a newline
         // character before outputting non-progress data.
@@ -532,11 +534,18 @@ pub(crate) fn gen_prog_updater(
 
 #[cfg(test)]
 mod tests {
-
+    use std::env;
     use std::io::Cursor;
     use std::time::Duration;
+    use uucore::locale::setup_localization;
 
     use super::{ProgUpdate, ReadStat, WriteStat};
+    fn init() {
+        unsafe {
+            env::set_var("LANG", "C");
+        }
+        let _ = setup_localization("dd");
+    }
 
     fn prog_update_write(n: u128) -> ProgUpdate {
         ProgUpdate {
@@ -561,22 +570,31 @@ mod tests {
 
     #[test]
     fn test_read_stat_report() {
+        init();
         let read_stat = ReadStat::new(1, 2, 3, 4);
         let mut cursor = Cursor::new(vec![]);
         read_stat.report(&mut cursor).unwrap();
-        assert_eq!(cursor.get_ref(), b"1+2 records in\n");
+        assert_eq!(
+            std::str::from_utf8(cursor.get_ref()).unwrap(),
+            "1+2 records in\n"
+        );
     }
 
     #[test]
     fn test_write_stat_report() {
+        init();
         let write_stat = WriteStat::new(1, 2, 3);
         let mut cursor = Cursor::new(vec![]);
         write_stat.report(&mut cursor).unwrap();
-        assert_eq!(cursor.get_ref(), b"1+2 records out\n");
+        assert_eq!(
+            std::str::from_utf8(cursor.get_ref()).unwrap(),
+            "1+2 records out\n"
+        );
     }
 
     #[test]
     fn test_prog_update_write_io_lines() {
+        init();
         let read_stat = ReadStat::new(1, 2, 3, 4);
         let write_stat = WriteStat::new(4, 5, 6);
         let duration = Duration::new(789, 0);
@@ -591,13 +609,14 @@ mod tests {
         let mut cursor = Cursor::new(vec![]);
         prog_update.write_io_lines(&mut cursor).unwrap();
         assert_eq!(
-            cursor.get_ref(),
-            b"1+2 records in\n4+5 records out\n3 truncated records\n"
+            std::str::from_utf8(cursor.get_ref()).unwrap(),
+            "1+2 records in\n4+5 records out\n3 truncated records\n"
         );
     }
 
     #[test]
     fn test_prog_update_write_prog_line() {
+        init();
         let prog_update = ProgUpdate {
             read_stat: ReadStat::default(),
             write_stat: WriteStat::default(),
@@ -615,45 +634,55 @@ mod tests {
         //     0 bytes copied, 7.9151e-05 s, 0.0 kB/s
         //
         // The throughput still does not match GNU dd.
-        assert_eq!(cursor.get_ref(), b"0 bytes copied, 1 s, 0.0 B/s\n");
+        assert_eq!(
+            std::str::from_utf8(cursor.get_ref()).unwrap(),
+            "0 bytes copied, 1 s, 0.0 B/s\n"
+        );
 
         let prog_update = prog_update_write(1);
         let mut cursor = Cursor::new(vec![]);
         prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
-        assert_eq!(cursor.get_ref(), b"1 byte copied, 1 s, 0.0 B/s\n");
+        assert_eq!(
+            std::str::from_utf8(cursor.get_ref()).unwrap(),
+            "1 byte copied, 1 s, 1.0 B/s\n"
+        );
 
         let prog_update = prog_update_write(999);
         let mut cursor = Cursor::new(vec![]);
         prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
-        assert_eq!(cursor.get_ref(), b"999 bytes copied, 1 s, 0.0 B/s\n");
+        assert_eq!(
+            std::str::from_utf8(cursor.get_ref()).unwrap(),
+            "999 bytes copied, 1 s, 999 B/s\n"
+        );
 
         let prog_update = prog_update_write(1000);
         let mut cursor = Cursor::new(vec![]);
         prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
         assert_eq!(
-            cursor.get_ref(),
-            b"1000 bytes (1.0 kB) copied, 1 s, 1.0 kB/s\n"
+            std::str::from_utf8(cursor.get_ref()).unwrap(),
+            "1000 bytes (1.0 kB) copied, 1 s, 1.0 kB/s\n"
         );
 
         let prog_update = prog_update_write(1023);
         let mut cursor = Cursor::new(vec![]);
         prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
         assert_eq!(
-            cursor.get_ref(),
-            b"1023 bytes (1.0 kB) copied, 1 s, 1.0 kB/s\n"
+            std::str::from_utf8(cursor.get_ref()).unwrap(),
+            "1023 bytes (1.0 kB) copied, 1 s, 1.0 kB/s\n"
         );
 
         let prog_update = prog_update_write(1024);
         let mut cursor = Cursor::new(vec![]);
         prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
         assert_eq!(
-            cursor.get_ref(),
-            b"1024 bytes (1.0 kB, 1.0 KiB) copied, 1 s, 1.0 kB/s\n"
+            std::str::from_utf8(cursor.get_ref()).unwrap(),
+            "1024 bytes (1.0 kB, 1.0 KiB) copied, 1 s, 1.0 kB/s\n"
         );
     }
 
     #[test]
     fn write_transfer_stats() {
+        init();
         let prog_update = ProgUpdate {
             read_stat: ReadStat::default(),
             write_stat: WriteStat::default(),
@@ -664,16 +693,18 @@ mod tests {
         prog_update
             .write_transfer_stats(&mut cursor, false)
             .unwrap();
-        let mut iter = cursor.get_ref().split(|v| *v == b'\n');
-        assert_eq!(iter.next().unwrap(), b"0+0 records in");
-        assert_eq!(iter.next().unwrap(), b"0+0 records out");
-        assert_eq!(iter.next().unwrap(), b"0 bytes copied, 1 s, 0.0 B/s");
-        assert_eq!(iter.next().unwrap(), b"");
+        let output_str = std::str::from_utf8(cursor.get_ref()).unwrap();
+        let mut iter = output_str.split('\n');
+        assert_eq!(iter.next().unwrap(), "0+0 records in");
+        assert_eq!(iter.next().unwrap(), "0+0 records out");
+        assert_eq!(iter.next().unwrap(), "0 bytes copied, 1 s, 0.0 B/s");
+        assert_eq!(iter.next().unwrap(), "");
         assert!(iter.next().is_none());
     }
 
     #[test]
     fn write_final_transfer_stats() {
+        init();
         // Tests the formatting of the final statistics written after a progress line.
         let prog_update = ProgUpdate {
             read_stat: ReadStat::default(),
@@ -685,21 +716,26 @@ mod tests {
         let rewrite = true;
         prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
         prog_update.write_transfer_stats(&mut cursor, true).unwrap();
-        let mut iter = cursor.get_ref().split(|v| *v == b'\n');
-        assert_eq!(iter.next().unwrap(), b"\r0 bytes copied, 1 s, 0.0 B/s");
-        assert_eq!(iter.next().unwrap(), b"0+0 records in");
-        assert_eq!(iter.next().unwrap(), b"0+0 records out");
-        assert_eq!(iter.next().unwrap(), b"0 bytes copied, 1 s, 0.0 B/s");
-        assert_eq!(iter.next().unwrap(), b"");
+        let output_str = std::str::from_utf8(cursor.get_ref()).unwrap();
+        let mut iter = output_str.split('\n');
+        assert_eq!(iter.next().unwrap(), "\r0 bytes copied, 1 s, 0.0 B/s");
+        assert_eq!(iter.next().unwrap(), "0+0 records in");
+        assert_eq!(iter.next().unwrap(), "0+0 records out");
+        assert_eq!(iter.next().unwrap(), "0 bytes copied, 1 s, 0.0 B/s");
+        assert_eq!(iter.next().unwrap(), "");
         assert!(iter.next().is_none());
     }
 
     #[test]
     fn test_duration_precision() {
+        init();
         let prog_update = prog_update_duration(Duration::from_nanos(123));
         let mut cursor = Cursor::new(vec![]);
         let rewrite = false;
         prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
-        assert_eq!(cursor.get_ref(), b"0 bytes copied, 1.23e-07 s, 0.0 B/s\n");
+        assert_eq!(
+            std::str::from_utf8(cursor.get_ref()).unwrap(),
+            "0 bytes copied, 0.000000123 s, 0.0 B/s\n"
+        );
     }
 }

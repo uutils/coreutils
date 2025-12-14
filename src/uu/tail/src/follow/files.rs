@@ -18,9 +18,9 @@ use uucore::error::UResult;
 
 /// Data structure to keep a handle on files to follow.
 /// `last` always holds the path/key of the last file that was printed from.
-/// The keys of the HashMap can point to an existing file path (normal case),
-/// or stdin ("-"), or to a non existing path (--retry).
-/// For existing files, all keys in the HashMap are absolute Paths.
+/// The keys of the [`HashMap`] can point to an existing file path (normal case),
+/// or stdin ("-"), or to a non-existing path (--retry).
+/// For existing files, all keys in the [`HashMap`] are absolute Paths.
 pub struct FileHandling {
     map: HashMap<PathBuf, PathData>,
     last: Option<PathBuf>,
@@ -36,7 +36,7 @@ impl FileHandling {
         }
     }
 
-    /// Wrapper for HashMap::insert using Path::canonicalize
+    /// Wrapper for [`HashMap::insert`] using [`Path::canonicalize`]
     pub fn insert(&mut self, k: &Path, v: PathData, update_last: bool) {
         let k = Self::canonicalize_path(k);
         if update_last {
@@ -45,17 +45,17 @@ impl FileHandling {
         let _ = self.map.insert(k, v);
     }
 
-    /// Wrapper for HashMap::remove using Path::canonicalize
+    /// Wrapper for [`HashMap::remove`] using [`Path::canonicalize`]
     pub fn remove(&mut self, k: &Path) -> PathData {
         self.map.remove(&Self::canonicalize_path(k)).unwrap()
     }
 
-    /// Wrapper for HashMap::get using Path::canonicalize
+    /// Wrapper for [`HashMap::get`] using [`Path::canonicalize`]
     pub fn get(&self, k: &Path) -> &PathData {
         self.map.get(&Self::canonicalize_path(k)).unwrap()
     }
 
-    /// Wrapper for HashMap::get_mut using Path::canonicalize
+    /// Wrapper for [`HashMap::get_mut`] using [`Path::canonicalize`]
     pub fn get_mut(&mut self, k: &Path) -> &mut PathData {
         self.map.get_mut(&Self::canonicalize_path(k)).unwrap()
     }
@@ -74,7 +74,7 @@ impl FileHandling {
         self.get_mut(path).metadata.as_ref()
     }
 
-    pub fn keys(&self) -> Keys<PathBuf, PathData> {
+    pub fn keys(&self) -> Keys<'_, PathBuf, PathData> {
         self.map.keys()
     }
 
@@ -115,8 +115,8 @@ impl FileHandling {
     pub fn update_reader(&mut self, path: &Path) -> UResult<()> {
         /*
         BUG: If it's not necessary to reopen a file, GNU's tail calls seek to offset 0.
-        However we can't call seek here because `BufRead` does not implement `Seek`.
-        As a workaround we always reopen the file even though this might not always
+        However, we can't call seek here because `BufRead` does not implement `Seek`.
+        As a workaround, we always reopen the file even though this might not always
         be necessary.
         */
         self.get_mut(path)
@@ -172,8 +172,8 @@ impl FileHandling {
     }
 }
 
-/// Data structure to keep a handle on the BufReader, Metadata
-/// and the display_name (header_name) of files that are being followed.
+/// Data structure to keep a handle on the [`BufReader`], [`Metadata`]
+/// and the `display_name` (`header_name`) of files that are being followed.
 pub struct PathData {
     pub reader: Option<Box<dyn BufRead>>,
     pub metadata: Option<Metadata>,

@@ -8,9 +8,10 @@
 
 use clap::builder::ValueParser;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::{display::Quotable, format_usage, help_about, help_usage, show_error, show_warning};
+use uucore::translate;
+use uucore::{display::Quotable, format_usage, show_error, show_warning};
 
-use clap::{Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use selinux::{OpaqueSecurityContext, SecurityContext};
 
 use std::borrow::Cow;
@@ -23,9 +24,6 @@ mod errors;
 mod fts;
 
 use errors::*;
-
-const ABOUT: &str = help_about!("chcon.md");
-const USAGE: &str = help_usage!("chcon.md");
 
 pub mod options {
     pub static HELP: &str = "help";
@@ -59,9 +57,9 @@ pub mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let config = uu_app();
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let options = match parse_command_line(config, args) {
+    let options = match parse_command_line(&matches) {
         Ok(r) => r,
         Err(r) => {
             if let Error::CommandLine(r) = r {
@@ -79,10 +77,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
                 Ok(None) => {
                     let err = io::Error::from_raw_os_error(libc::ENODATA);
-                    Err(Error::from_io1("Getting security context", reference, err))
+                    Err(Error::from_io1(
+                        translate!("chcon-op-getting-security-context"),
+                        reference,
+                        err,
+                    ))
                 }
 
-                Err(r) => Err(Error::from_selinux("Getting security context", r)),
+                Err(r) => Err(Error::from_selinux(
+                    translate!("chcon-op-getting-security-context"),
+                    r,
+                )),
             };
 
             match result {
@@ -104,7 +109,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Err(_r) => {
                     return Err(USimpleError::new(
                         libc::EXIT_FAILURE,
-                        format!("Invalid security context {}.", context.quote()),
+                        translate!("chcon-error-invalid-context", "context" => context.quote()),
                     ));
                 }
             };
@@ -112,7 +117,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if SecurityContext::from_c_str(&c_context, false).check() == Some(false) {
                 return Err(USimpleError::new(
                     libc::EXIT_FAILURE,
-                    format!("Invalid security context {}.", context.quote()),
+                    translate!("chcon-error-invalid-context", "context" => context.quote()),
                 ));
             }
 
@@ -149,47 +154,45 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .disable_help_flag(true)
+        .about(translate!("chcon-about"))
+        .override_usage(format_usage(&translate!("chcon-usage")))
+        .infer_long_args(true);
+    uucore::clap_localization::configure_localized_command(cmd)
         .args_override_self(true)
-        .arg(
-            Arg::new(options::HELP)
-                .long(options::HELP)
-                .help("Print help information.")
-                .action(ArgAction::Help),
-        )
+        .disable_help_flag(true)
         .arg(
             Arg::new(options::dereference::DEREFERENCE)
                 .long(options::dereference::DEREFERENCE)
                 .overrides_with(options::dereference::NO_DEREFERENCE)
-                .help(
-                    "Affect the referent of each symbolic link (this is the default), \
-                     rather than the symbolic link itself.",
-                )
+                .help(translate!("chcon-help-dereference"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::dereference::NO_DEREFERENCE)
                 .short('h')
                 .long(options::dereference::NO_DEREFERENCE)
-                .help("Affect symbolic links instead of any referenced file.")
+                .help(translate!("chcon-help-no-dereference"))
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("help")
+                .long("help")
+                .help(translate!("help"))
+                .action(ArgAction::Help),
         )
         .arg(
             Arg::new(options::preserve_root::PRESERVE_ROOT)
                 .long(options::preserve_root::PRESERVE_ROOT)
                 .overrides_with(options::preserve_root::NO_PRESERVE_ROOT)
-                .help("Fail to operate recursively on '/'.")
+                .help(translate!("chcon-help-preserve-root"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::preserve_root::NO_PRESERVE_ROOT)
                 .long(options::preserve_root::NO_PRESERVE_ROOT)
-                .help("Do not treat '/' specially (the default).")
+                .help(translate!("chcon-help-no-preserve-root"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -198,10 +201,7 @@ pub fn uu_app() -> Command {
                 .value_name("RFILE")
                 .value_hint(clap::ValueHint::FilePath)
                 .conflicts_with_all([options::USER, options::ROLE, options::TYPE, options::RANGE])
-                .help(
-                    "Use security context of RFILE, rather than specifying \
-                     a CONTEXT value.",
-                )
+                .help(translate!("chcon-help-reference"))
                 .value_parser(ValueParser::os_string()),
         )
         .arg(
@@ -210,7 +210,7 @@ pub fn uu_app() -> Command {
                 .long(options::USER)
                 .value_name("USER")
                 .value_hint(clap::ValueHint::Username)
-                .help("Set user USER in the target security context.")
+                .help(translate!("chcon-help-user"))
                 .value_parser(ValueParser::os_string()),
         )
         .arg(
@@ -218,7 +218,7 @@ pub fn uu_app() -> Command {
                 .short('r')
                 .long(options::ROLE)
                 .value_name("ROLE")
-                .help("Set role ROLE in the target security context.")
+                .help(translate!("chcon-help-role"))
                 .value_parser(ValueParser::os_string()),
         )
         .arg(
@@ -226,7 +226,7 @@ pub fn uu_app() -> Command {
                 .short('t')
                 .long(options::TYPE)
                 .value_name("TYPE")
-                .help("Set type TYPE in the target security context.")
+                .help(translate!("chcon-help-type"))
                 .value_parser(ValueParser::os_string()),
         )
         .arg(
@@ -234,14 +234,14 @@ pub fn uu_app() -> Command {
                 .short('l')
                 .long(options::RANGE)
                 .value_name("RANGE")
-                .help("Set range RANGE in the target security context.")
+                .help(translate!("chcon-help-range"))
                 .value_parser(ValueParser::os_string()),
         )
         .arg(
             Arg::new(options::RECURSIVE)
                 .short('R')
                 .long(options::RECURSIVE)
-                .help("Operate on files and directories recursively.")
+                .help(translate!("chcon-help-recursive"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -252,10 +252,7 @@ pub fn uu_app() -> Command {
                     options::sym_links::FOLLOW_DIR_SYM_LINKS,
                     options::sym_links::NO_FOLLOW_SYM_LINKS,
                 ])
-                .help(
-                    "If a command line argument is a symbolic link to a directory, \
-                     traverse it. Only valid when -R is specified.",
-                )
+                .help(translate!("chcon-help-follow-arg-dir-symlink"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -266,10 +263,7 @@ pub fn uu_app() -> Command {
                     options::sym_links::FOLLOW_ARG_DIR_SYM_LINK,
                     options::sym_links::NO_FOLLOW_SYM_LINKS,
                 ])
-                .help(
-                    "Traverse every symbolic link to a directory encountered. \
-                     Only valid when -R is specified.",
-                )
+                .help(translate!("chcon-help-follow-dir-symlinks"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -280,17 +274,14 @@ pub fn uu_app() -> Command {
                     options::sym_links::FOLLOW_ARG_DIR_SYM_LINK,
                     options::sym_links::FOLLOW_DIR_SYM_LINKS,
                 ])
-                .help(
-                    "Do not traverse any symbolic links (default). \
-                     Only valid when -R is specified.",
-                )
+                .help(translate!("chcon-help-no-follow-symlinks"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::VERBOSE)
                 .short('v')
                 .long(options::VERBOSE)
-                .help("Output a diagnostic for every file processed.")
+                .help(translate!("chcon-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -312,38 +303,30 @@ struct Options {
     files: Vec<PathBuf>,
 }
 
-fn parse_command_line(config: Command, args: impl uucore::Args) -> Result<Options> {
-    let matches = config.try_get_matches_from(args)?;
-
+fn parse_command_line(matches: &ArgMatches) -> Result<Options> {
     let verbose = matches.get_flag(options::VERBOSE);
 
     let (recursive_mode, affect_symlink_referent) = if matches.get_flag(options::RECURSIVE) {
         if matches.get_flag(options::sym_links::FOLLOW_DIR_SYM_LINKS) {
             if matches.get_flag(options::dereference::NO_DEREFERENCE) {
-                return Err(Error::ArgumentsMismatch(format!(
-                    "'--{}' with '--{}' require '-P'",
-                    options::RECURSIVE,
-                    options::dereference::NO_DEREFERENCE
+                return Err(Error::ArgumentsMismatch(translate!(
+                    "chcon-error-recursive-no-dereference-require-p"
                 )));
             }
 
             (RecursiveMode::RecursiveAndFollowAllDirSymLinks, true)
         } else if matches.get_flag(options::sym_links::FOLLOW_ARG_DIR_SYM_LINK) {
             if matches.get_flag(options::dereference::NO_DEREFERENCE) {
-                return Err(Error::ArgumentsMismatch(format!(
-                    "'--{}' with '--{}' require '-P'",
-                    options::RECURSIVE,
-                    options::dereference::NO_DEREFERENCE
+                return Err(Error::ArgumentsMismatch(translate!(
+                    "chcon-error-recursive-no-dereference-require-p"
                 )));
             }
 
             (RecursiveMode::RecursiveAndFollowArgDirSymLinks, true)
         } else {
             if matches.get_flag(options::dereference::DEREFERENCE) {
-                return Err(Error::ArgumentsMismatch(format!(
-                    "'--{}' with '--{}' require either '-H' or '-L'",
-                    options::RECURSIVE,
-                    options::dereference::DEREFERENCE
+                return Err(Error::ArgumentsMismatch(translate!(
+                    "chcon-error-recursive-dereference-require-h-or-l"
                 )));
             }
 
@@ -517,12 +500,19 @@ fn process_file(
     let mut entry = fts.last_entry_ref().unwrap();
 
     let file_full_name = entry.path().map(PathBuf::from).ok_or_else(|| {
-        Error::from_io("File name validation", io::ErrorKind::InvalidInput.into())
+        Error::from_io(
+            translate!("chcon-op-file-name-validation"),
+            io::ErrorKind::InvalidInput.into(),
+        )
     })?;
 
     let fts_access_path = entry.access_path().ok_or_else(|| {
         let err = io::ErrorKind::InvalidInput.into();
-        Error::from_io1("File name validation", &file_full_name, err)
+        Error::from_io1(
+            translate!("chcon-op-file-name-validation"),
+            &file_full_name,
+            err,
+        )
     })?;
 
     let err = |s, k: io::ErrorKind| Error::from_io1(s, &file_full_name, k.into());
@@ -536,7 +526,10 @@ fn process_file(
     let file_dev_ino: DeviceAndINode = if let Some(st) = entry.stat() {
         st.try_into()?
     } else {
-        return Err(err("Getting meta data", io::ErrorKind::InvalidInput));
+        return Err(err(
+            translate!("chcon-op-getting-meta-data"),
+            io::ErrorKind::InvalidInput,
+        ));
     };
 
     let mut result = Ok(());
@@ -555,7 +548,10 @@ fn process_file(
                     // Ensure that we do not process "/" on the second visit.
                     let _ignored = fts.read_next_entry();
 
-                    return Err(err("Modifying root path", io::ErrorKind::PermissionDenied));
+                    return Err(err(
+                        translate!("chcon-op-modifying-root-path"),
+                        io::ErrorKind::PermissionDenied,
+                    ));
                 }
 
                 return Ok(());
@@ -580,17 +576,20 @@ fn process_file(
                 return Ok(());
             }
 
-            result = fts_err("Accessing");
+            result = fts_err(translate!("chcon-op-accessing"));
         }
 
-        fts_sys::FTS_ERR => result = fts_err("Accessing"),
+        fts_sys::FTS_ERR => result = fts_err(translate!("chcon-op-accessing")),
 
-        fts_sys::FTS_DNR => result = fts_err("Reading directory"),
+        fts_sys::FTS_DNR => result = fts_err(translate!("chcon-op-reading-directory")),
 
         fts_sys::FTS_DC => {
             if cycle_warning_required(options.recursive_mode.fts_open_options(), &entry) {
                 emit_cycle_warning(&file_full_name);
-                return Err(err("Reading cyclic directory", io::ErrorKind::InvalidData));
+                return Err(err(
+                    translate!("chcon-op-reading-cyclic-directory"),
+                    io::ErrorKind::InvalidData,
+                ));
             }
         }
 
@@ -602,15 +601,17 @@ fn process_file(
         && root_dev_ino_check(root_dev_ino, file_dev_ino)
     {
         root_dev_ino_warn(&file_full_name);
-        result = Err(err("Modifying root path", io::ErrorKind::PermissionDenied));
+        result = Err(err(
+            translate!("chcon-op-modifying-root-path"),
+            io::ErrorKind::PermissionDenied,
+        ));
     }
 
     if result.is_ok() {
         if options.verbose {
             println!(
-                "{}: Changing security context of: {}",
-                uucore::util_name(),
-                file_full_name.quote()
+                "{}",
+                translate!("chcon-verbose-changing-context", "util_name" => uucore::util_name(), "file" => file_full_name.quote())
             );
         }
 
@@ -638,7 +639,7 @@ fn change_file_context(
             let err0 = || -> Result<()> {
                 // If the file doesn't have a context, and we're not setting all of the context
                 // components, there isn't really an obvious default. Thus, we just give up.
-                let op = "Applying partial security context to unlabeled file";
+                let op = translate!("chcon-op-applying-partial-context");
                 let err = io::ErrorKind::InvalidInput.into();
                 Err(Error::from_io1(op, path, err))
             };
@@ -648,20 +649,30 @@ fn change_file_context(
                     Ok(Some(context)) => context,
 
                     Ok(None) => return err0(),
-                    Err(r) => return Err(Error::from_selinux("Getting security context", r)),
+                    Err(r) => {
+                        return Err(Error::from_selinux(
+                            translate!("chcon-op-getting-security-context"),
+                            r,
+                        ));
+                    }
                 };
 
             let c_file_context = match file_context.to_c_string() {
                 Ok(Some(context)) => context,
 
                 Ok(None) => return err0(),
-                Err(r) => return Err(Error::from_selinux("Getting security context", r)),
+                Err(r) => {
+                    return Err(Error::from_selinux(
+                        translate!("chcon-op-getting-security-context"),
+                        r,
+                    ));
+                }
             };
 
             let se_context =
                 OpaqueSecurityContext::from_c_str(c_file_context.as_ref()).map_err(|_r| {
                     let err = io::ErrorKind::InvalidInput.into();
-                    Error::from_io1("Creating security context", path, err)
+                    Error::from_io1(translate!("chcon-op-creating-security-context"), path, err)
                 })?;
 
             type SetValueProc = fn(&OpaqueSecurityContext, &CStr) -> selinux::errors::Result<()>;
@@ -677,24 +688,27 @@ fn change_file_context(
                 if let Some(new_value) = new_value {
                     let c_new_value = os_str_to_c_string(new_value).map_err(|_r| {
                         let err = io::ErrorKind::InvalidInput.into();
-                        Error::from_io1("Creating security context", path, err)
+                        Error::from_io1(translate!("chcon-op-creating-security-context"), path, err)
                     })?;
 
-                    set_value_proc(&se_context, &c_new_value)
-                        .map_err(|r| Error::from_selinux("Setting security context user", r))?;
+                    set_value_proc(&se_context, &c_new_value).map_err(|r| {
+                        Error::from_selinux(translate!("chcon-op-setting-security-context-user"), r)
+                    })?;
                 }
             }
 
-            let context_string = se_context
-                .to_c_string()
-                .map_err(|r| Error::from_selinux("Getting security context", r))?;
+            let context_string = se_context.to_c_string().map_err(|r| {
+                Error::from_selinux(translate!("chcon-op-getting-security-context"), r)
+            })?;
 
             if c_file_context.as_ref().to_bytes() == context_string.as_ref().to_bytes() {
                 Ok(()) // Nothing to change.
             } else {
                 SecurityContext::from_c_str(&context_string, false)
                     .set_for_path(path, options.affect_symlink_referent, false)
-                    .map_err(|r| Error::from_selinux("Setting security context", r))
+                    .map_err(|r| {
+                        Error::from_selinux(translate!("chcon-op-setting-security-context"), r)
+                    })
             }
         }
 
@@ -702,10 +716,16 @@ fn change_file_context(
             if let Some(c_context) = context.to_c_string()? {
                 SecurityContext::from_c_str(c_context.as_ref(), false)
                     .set_for_path(path, options.affect_symlink_referent, false)
-                    .map_err(|r| Error::from_selinux("Setting security context", r))
+                    .map_err(|r| {
+                        Error::from_selinux(translate!("chcon-op-setting-security-context"), r)
+                    })
             } else {
                 let err = io::ErrorKind::InvalidInput.into();
-                Err(Error::from_io1("Setting security context", path, err))
+                Err(Error::from_io1(
+                    translate!("chcon-op-setting-security-context"),
+                    path,
+                    err,
+                ))
             }
         }
     }
@@ -734,27 +754,24 @@ fn root_dev_ino_check(root_dev_ino: Option<DeviceAndINode>, dir_dev_ino: DeviceA
 fn root_dev_ino_warn(dir_name: &Path) {
     if dir_name.as_os_str() == "/" {
         show_warning!(
-            "It is dangerous to operate recursively on '/'. \
-             Use --{} to override this failsafe.",
-            options::preserve_root::NO_PRESERVE_ROOT,
+            "{}",
+            translate!("chcon-warning-dangerous-recursive-root", "option" => options::preserve_root::NO_PRESERVE_ROOT)
         );
     } else {
         show_warning!(
-            "It is dangerous to operate recursively on {} (same as '/'). \
-             Use --{} to override this failsafe.",
-            dir_name.quote(),
-            options::preserve_root::NO_PRESERVE_ROOT,
+            "{}",
+            translate!("chcon-warning-dangerous-recursive-dir", "dir" => dir_name.to_string_lossy(), "option" => options::preserve_root::NO_PRESERVE_ROOT)
         );
     }
 }
 
-// When fts_read returns FTS_DC to indicate a directory cycle, it may or may not indicate
-// a real problem.
-// When a program like chgrp performs a recursive traversal that requires traversing symbolic links,
-// it is *not* a problem.
-// However, when invoked with "-P -R", it deserves a warning.
-// The fts_options parameter records the options that control this aspect of fts behavior,
-// so test that.
+/// When `fts_read` returns [`fts_sys::FTS_DC`] to indicate a directory cycle, it may or may not indicate
+/// a real problem.
+/// When a program like chgrp performs a recursive traversal that requires traversing symbolic links,
+/// it is *not* a problem.
+/// However, when invoked with "-P -R", it deserves a warning.
+/// The `fts_options` parameter records the options that control this aspect of fts behavior,
+/// so test that.
 fn cycle_warning_required(fts_options: c_int, entry: &fts::EntryRef) -> bool {
     // When dereferencing no symlinks, or when dereferencing only those listed on the command line
     // and we're not processing a command-line argument, then a cycle is a serious problem.
@@ -764,11 +781,8 @@ fn cycle_warning_required(fts_options: c_int, entry: &fts::EntryRef) -> bool {
 
 fn emit_cycle_warning(file_name: &Path) {
     show_warning!(
-        "Circular directory structure.\n\
-This almost certainly means that you have a corrupted file system.\n\
-NOTIFY YOUR SYSTEM MANAGER.\n\
-The following directory is part of the cycle {}.",
-        file_name.quote()
+        "{}",
+        translate!("chcon-warning-circular-directory", "file" => file_name.to_string_lossy())
     );
 }
 
@@ -779,7 +793,7 @@ enum SELinuxSecurityContext<'t> {
 }
 
 impl SELinuxSecurityContext<'_> {
-    fn to_c_string(&self) -> Result<Option<Cow<CStr>>> {
+    fn to_c_string(&self) -> Result<Option<Cow<'_, CStr>>> {
         match self {
             Self::File(context) => context
                 .to_c_string()

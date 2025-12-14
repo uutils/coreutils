@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel
+// spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel Secho
 #![allow(clippy::missing_errors_doc)]
 
 #[cfg(unix)]
@@ -522,7 +522,7 @@ fn test_split_string_into_args_s_escaped_c_not_allowed() {
     let out = scene.ucmd().args(&[r#"-S"\c""#]).fails().stderr_move_str();
     assert_eq!(
         out,
-        "env: '\\c' must not appear in double-quoted -S string\n"
+        "env: '\\c' must not appear in double-quoted -S string at position 2\n"
     );
 }
 
@@ -608,91 +608,91 @@ fn test_env_parsing_errors() {
         .arg("-S\\|echo hallo") // no quotes, invalid escape sequence |
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\|' in -S\n");
+        .stderr_is("env: invalid sequence '\\|' in -S at position 1\n");
 
     ts.ucmd()
         .arg("-S\\a") // no quotes, invalid escape sequence a
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\a' in -S\n");
+        .stderr_is("env: invalid sequence '\\a' in -S at position 1\n");
 
     ts.ucmd()
         .arg("-S\"\\a\"") // double quotes, invalid escape sequence a
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\a' in -S\n");
+        .stderr_is("env: invalid sequence '\\a' in -S at position 2\n");
 
     ts.ucmd()
         .arg(r#"-S"\a""#) // same as before, just using r#""#
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\a' in -S\n");
+        .stderr_is("env: invalid sequence '\\a' in -S at position 2\n");
 
     ts.ucmd()
         .arg("-S'\\a'") // single quotes, invalid escape sequence a
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\a' in -S\n");
+        .stderr_is("env: invalid sequence '\\a' in -S at position 2\n");
 
     ts.ucmd()
         .arg(r"-S\|\&\;") // no quotes, invalid escape sequence |
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\|' in -S\n");
+        .stderr_is("env: invalid sequence '\\|' in -S at position 1\n");
 
     ts.ucmd()
         .arg(r"-S\<\&\;") // no quotes, invalid escape sequence <
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\<' in -S\n");
+        .stderr_is("env: invalid sequence '\\<' in -S at position 1\n");
 
     ts.ucmd()
         .arg(r"-S\>\&\;") // no quotes, invalid escape sequence >
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\>' in -S\n");
+        .stderr_is("env: invalid sequence '\\>' in -S at position 1\n");
 
     ts.ucmd()
         .arg(r"-S\`\&\;") // no quotes, invalid escape sequence `
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S\n");
+        .stderr_is("env: invalid sequence '\\`' in -S at position 1\n");
 
     ts.ucmd()
         .arg(r#"-S"\`\&\;""#) // double quotes, invalid escape sequence `
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S\n");
+        .stderr_is("env: invalid sequence '\\`' in -S at position 2\n");
 
     ts.ucmd()
         .arg(r"-S'\`\&\;'") // single quotes, invalid escape sequence `
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S\n");
+        .stderr_is("env: invalid sequence '\\`' in -S at position 2\n");
 
     ts.ucmd()
         .arg(r"-S\`") // ` escaped without quotes
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S\n");
+        .stderr_is("env: invalid sequence '\\`' in -S at position 1\n");
 
     ts.ucmd()
         .arg(r#"-S"\`""#) // ` escaped in double quotes
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S\n");
+        .stderr_is("env: invalid sequence '\\`' in -S at position 2\n");
 
     ts.ucmd()
         .arg(r"-S'\`'") // ` escaped in single quotes
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S\n");
+        .stderr_is("env: invalid sequence '\\`' in -S at position 2\n");
 
     ts.ucmd()
         .args(&[r"-S\🦉"]) // ` escaped in single quotes
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\\u{FFFD}' in -S\n"); // gnu doesn't show the owl. Instead a invalid unicode ?
+        .stderr_is("env: invalid sequence '\\\u{FFFD}' in -S at position 1\n"); // gnu doesn't show the owl. Instead a invalid unicode ?
 }
 
 #[test]
@@ -1009,7 +1009,7 @@ mod tests_split_iterator {
     ///
     /// It tries to avoid introducing any unnecessary quotes or escape characters,
     /// but specifics regarding quoting style are left unspecified.
-    pub fn quote(s: &str) -> std::borrow::Cow<str> {
+    pub fn quote(s: &str) -> std::borrow::Cow<'_, str> {
         // We are going somewhat out of the way to provide
         // minimal amount of quoting in typical cases.
         match escape_style(s) {
@@ -1755,6 +1755,17 @@ fn test_simulation_of_terminal_pty_pipes_into_data_and_sends_eot_automatically()
     std::assert_eq!(String::from_utf8_lossy(out.stderr()), "");
 }
 
+#[test]
+#[cfg(not(windows))]
+fn test_emoji_env_vars() {
+    new_ucmd!()
+        .arg("🎯_VAR=Hello 🌍")
+        .arg("printenv")
+        .arg("🎯_VAR")
+        .succeeds()
+        .stdout_contains("Hello 🌍");
+}
+
 #[cfg(unix)]
 #[test]
 fn test_simulation_of_terminal_pty_write_in_data_and_sends_eot_automatically() {
@@ -1772,4 +1783,82 @@ fn test_simulation_of_terminal_pty_write_in_data_and_sends_eot_automatically() {
         "Hello stdin forwarding via write_in!\r\n"
     );
     std::assert_eq!(String::from_utf8_lossy(out.stderr()), "");
+}
+
+#[test]
+fn test_env_french() {
+    new_ucmd!()
+        .arg("--verbo")
+        .env("LANG", "fr_FR")
+        .fails()
+        .stderr_contains("erreur : argument inattendu");
+}
+
+#[test]
+fn test_shebang_error() {
+    new_ucmd!()
+        .arg("\'-v \'")
+        .fails()
+        .stderr_contains("use -[v]S to pass options in shebang lines");
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_braced_variable_with_default_value() {
+    new_ucmd!()
+        .arg("-Secho ${UNSET_VAR_UNLIKELY_12345:fallback}")
+        .succeeds()
+        .stdout_is("fallback\n");
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_braced_variable_with_default_when_set() {
+    new_ucmd!()
+        .env("TEST_VAR_12345", "actual")
+        .arg("-Secho ${TEST_VAR_12345:fallback}")
+        .succeeds()
+        .stdout_is("actual\n");
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_simple_braced_variable() {
+    new_ucmd!()
+        .env("TEST_VAR_12345", "value")
+        .arg("-Secho ${TEST_VAR_12345}")
+        .succeeds()
+        .stdout_is("value\n");
+}
+
+#[test]
+fn test_braced_variable_error_missing_closing_brace() {
+    new_ucmd!()
+        .arg("-Secho ${FOO")
+        .fails_with_code(125)
+        .stderr_contains("Missing closing brace");
+}
+
+#[test]
+fn test_braced_variable_error_missing_closing_brace_after_default() {
+    new_ucmd!()
+        .arg("-Secho ${FOO:-value")
+        .fails_with_code(125)
+        .stderr_contains("Missing closing brace after default value");
+}
+
+#[test]
+fn test_braced_variable_error_starts_with_digit() {
+    new_ucmd!()
+        .arg("-Secho ${1FOO}")
+        .fails_with_code(125)
+        .stderr_contains("Unexpected character: '1'");
+}
+
+#[test]
+fn test_braced_variable_error_unexpected_character() {
+    new_ucmd!()
+        .arg("-Secho ${FOO?}")
+        .fails_with_code(125)
+        .stderr_contains("Unexpected character: '?'");
 }

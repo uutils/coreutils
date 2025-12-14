@@ -3,13 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore αbcdef ; (people) kkos
-// spell-checker:ignore aabcccd aabcd aabd abbbd abbcabc abbcac abbcbbbd abbcbd
-// spell-checker:ignore abbccd abcac acabc andand bigcmp bignum emptysub
-// spell-checker:ignore orempty oror
+// spell-checker:ignore aabcccd aabcd aabd abbb abbbd abbcabc abbcac abbcbbbd abbcbd
+// spell-checker:ignore abbccd abcabc abcac acabc andand bigcmp bignum emptysub
+// spell-checker:ignore orempty oror bcdef fedcb
 
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[test]
 fn test_no_arguments() {
@@ -60,6 +58,16 @@ fn test_simple_arithmetic() {
         .args(&["4", "/", "2"])
         .succeeds()
         .stdout_only("2\n");
+
+    new_ucmd!()
+        .args(&["4", "=", "2"])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["4", "=", "4"])
+        .succeeds()
+        .stdout_only("1\n");
 }
 
 #[test]
@@ -210,43 +218,6 @@ fn test_and() {
 }
 
 #[test]
-fn test_index() {
-    new_ucmd!()
-        .args(&["index", "αbcdef", "x"])
-        .fails_with_code(1)
-        .stdout_only("0\n");
-    new_ucmd!()
-        .args(&["index", "αbcdef", "α"])
-        .succeeds()
-        .stdout_only("1\n");
-    new_ucmd!()
-        .args(&["index", "αbc_δef", "δ"])
-        .succeeds()
-        .stdout_only("5\n");
-    new_ucmd!()
-        .args(&["index", "αbc_δef", "δf"])
-        .succeeds()
-        .stdout_only("5\n");
-    new_ucmd!()
-        .args(&["index", "αbcdef", "fb"])
-        .succeeds()
-        .stdout_only("2\n");
-    new_ucmd!()
-        .args(&["index", "αbcdef", "f"])
-        .succeeds()
-        .stdout_only("6\n");
-    new_ucmd!()
-        .args(&["index", "αbcdef_f", "f"])
-        .succeeds()
-        .stdout_only("6\n");
-
-    new_ucmd!()
-        .args(&["αbcdef", "index", "α"])
-        .fails_with_code(2)
-        .stderr_only("expr: syntax error: unexpected argument 'index'\n");
-}
-
-#[test]
 fn test_length_fail() {
     new_ucmd!().args(&["length", "αbcdef", "1"]).fails();
 }
@@ -265,36 +236,225 @@ fn test_length() {
 }
 
 #[test]
-fn test_length_mb() {
+fn test_regex_empty() {
+    new_ucmd!().args(&["", ":", ""]).fails().stdout_only("0\n");
     new_ucmd!()
-        .args(&["length", "αbcdef"])
-        .succeeds()
-        .stdout_only("6\n");
+        .args(&["abc", ":", ""])
+        .fails()
+        .stdout_only("0\n");
 }
 
 #[test]
-fn test_regex() {
-    // FixME: [2022-12-19; rivy] test disabled as it currently fails due to 'oniguruma' bug (see GH:kkos/oniguruma/issues/279)
-    // new_ucmd!()
-    //     .args(&["a^b", ":", "a^b"])
-    //     .succeeds()
-    //     .stdout_only("3\n");
+fn test_regex_trailing_backslash() {
+    new_ucmd!()
+        .args(&["\\", ":", "\\\\"])
+        .succeeds()
+        .stdout_only("1\n");
+    new_ucmd!()
+        .args(&["\\", ":", "\\"])
+        .fails()
+        .stderr_only("expr: Trailing backslash\n");
+    new_ucmd!()
+        .args(&["abc\\", ":", "abc\\\\"])
+        .succeeds()
+        .stdout_only("4\n");
+    new_ucmd!()
+        .args(&["abc\\", ":", "abc\\"])
+        .fails()
+        .stderr_only("expr: Trailing backslash\n");
+}
+
+#[test]
+fn test_regex_caret() {
+    new_ucmd!()
+        .args(&["a^b", ":", "a^b"])
+        .succeeds()
+        .stdout_only("3\n");
     new_ucmd!()
         .args(&["a^b", ":", "a\\^b"])
         .succeeds()
         .stdout_only("3\n");
     new_ucmd!()
+        .args(&["abc", ":", "^abc"])
+        .succeeds()
+        .stdout_only("3\n");
+    new_ucmd!()
+        .args(&["^abc", ":", "^^abc"])
+        .succeeds()
+        .stdout_only("4\n");
+    new_ucmd!()
+        .args(&["b", ":", "a\\|^b"])
+        .succeeds()
+        .stdout_only("1\n");
+    new_ucmd!()
+        .args(&["ab", ":", "\\(^a\\)b"])
+        .succeeds()
+        .stdout_only("a\n");
+    new_ucmd!()
+        .args(&["^abc", ":", "^abc"])
+        .fails()
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["^^^^^^^^^", ":", "^^^"])
+        .succeeds()
+        .stdout_only("2\n");
+    new_ucmd!()
+        .args(&["ab[^c]", ":", "ab[^c]"])
+        .succeeds()
+        .stdout_only("3\n"); // Matches "ab["
+    new_ucmd!()
+        .args(&["ab[^c]", ":", "ab\\[^c]"])
+        .succeeds()
+        .stdout_only("6\n");
+    new_ucmd!()
+        .args(&["[^a]", ":", "\\[^a]"])
+        .succeeds()
+        .stdout_only("4\n");
+    new_ucmd!()
+        .args(&["\\a", ":", "\\\\[^^]"])
+        .succeeds()
+        .stdout_only("2\n");
+    // Patterns are anchored to the beginning of the pattern "^bc"
+    new_ucmd!()
+        .args(&["abc", ":", "bc"])
+        .fails()
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["^a", ":", "^^[^^]"])
+        .succeeds()
+        .stdout_only("2\n");
+    new_ucmd!()
+        .args(&["abc", ":", "ab[^c]"])
+        .fails()
+        .stdout_only("0\n");
+}
+
+#[test]
+fn test_regex_dollar() {
+    new_ucmd!()
         .args(&["a$b", ":", "a\\$b"])
         .succeeds()
         .stdout_only("3\n");
+    new_ucmd!()
+        .args(&["a", ":", "a$\\|b"])
+        .succeeds()
+        .stdout_only("1\n");
+    new_ucmd!()
+        .args(&["ab", ":", "a\\(b$\\)"])
+        .succeeds()
+        .stdout_only("b\n");
+    new_ucmd!()
+        .args(&["a$c", ":", "a$\\c"])
+        .succeeds()
+        .stdout_only("3\n");
+    new_ucmd!()
+        .args(&["$a", ":", "$a"])
+        .succeeds()
+        .stdout_only("2\n");
+    new_ucmd!()
+        .args(&["a", ":", "a$\\|b"])
+        .succeeds()
+        .stdout_only("1\n");
     new_ucmd!()
         .args(&["-5", ":", "-\\{0,1\\}[0-9]*$"])
         .succeeds()
         .stdout_only("2\n");
     new_ucmd!()
-        .args(&["abc", ":", "bc"])
+        .args(&["$", ":", "$"])
         .fails()
         .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["a$", ":", "a$\\|b"])
+        .fails()
+        .stdout_only("0\n");
+}
+
+#[test]
+fn test_regex_range_quantifier() {
+    new_ucmd!()
+        .args(&["a", ":", "a\\{1\\}"])
+        .succeeds()
+        .stdout_only("1\n");
+    new_ucmd!()
+        .args(&["aaaaaaaaaa", ":", "a\\{1,\\}"])
+        .succeeds()
+        .stdout_only("10\n");
+    new_ucmd!()
+        .args(&["aaa", ":", "a\\{,3\\}"])
+        .succeeds()
+        .stdout_only("3\n");
+    new_ucmd!()
+        .args(&["aa", ":", "a\\{1,3\\}"])
+        .succeeds()
+        .stdout_only("2\n");
+    new_ucmd!()
+        .args(&["aaaa", ":", "a\\{,\\}"])
+        .succeeds()
+        .stdout_only("4\n");
+    new_ucmd!()
+        .args(&["a", ":", "ab\\{,3\\}"])
+        .succeeds()
+        .stdout_only("1\n");
+    new_ucmd!()
+        .args(&["abbb", ":", "ab\\{,3\\}"])
+        .succeeds()
+        .stdout_only("4\n");
+    new_ucmd!()
+        .args(&["abcabc", ":", "\\(abc\\)\\{,\\}"])
+        .succeeds()
+        .stdout_only("abc\n");
+    new_ucmd!()
+        .args(&["a", ":", "a\\{,6\\}"])
+        .succeeds()
+        .stdout_only("1\n");
+    new_ucmd!()
+        .args(&["{abc}", ":", "\\{abc\\}"])
+        .succeeds()
+        .stdout_only("5\n");
+    new_ucmd!()
+        .args(&["a{bc}", ":", "a\\(\\{bc\\}\\)"])
+        .succeeds()
+        .stdout_only("{bc}\n");
+    new_ucmd!()
+        .args(&["{b}", ":", "a\\|\\{b\\}"])
+        .succeeds()
+        .stdout_only("3\n");
+    new_ucmd!()
+        .args(&["{", ":", "a\\|\\{"])
+        .succeeds()
+        .stdout_only("1\n");
+    new_ucmd!()
+        .args(&["{}}}", ":", "\\{\\}\\}\\}"])
+        .succeeds()
+        .stdout_only("4\n");
+    new_ucmd!()
+        .args(&["a{}}}", ":", "a\\{\\}\\}\\}"])
+        .fails()
+        .stderr_only("expr: Invalid content of \\{\\}\n");
+    new_ucmd!()
+        .args(&["ab", ":", "ab\\{\\}"])
+        .fails()
+        .stderr_only("expr: Invalid content of \\{\\}\n");
+    new_ucmd!()
+        .args(&["_", ":", "a\\{12345678901234567890\\}"])
+        .fails()
+        .stderr_only("expr: Regular expression too big\n");
+    new_ucmd!()
+        .args(&["_", ":", "a\\{12345678901234567890,\\}"])
+        .fails()
+        .stderr_only("expr: Regular expression too big\n");
+    new_ucmd!()
+        .args(&["_", ":", "a\\{,12345678901234567890\\}"])
+        .fails()
+        .stderr_only("expr: Regular expression too big\n");
+    new_ucmd!()
+        .args(&["_", ":", "a\\{1,12345678901234567890\\}"])
+        .fails()
+        .stderr_only("expr: Regular expression too big\n");
+    new_ucmd!()
+        .args(&["_", ":", "a\\{1,1234567890abcdef\\}"])
+        .fails()
+        .stderr_only("expr: Invalid content of \\{\\}\n");
 }
 
 #[test]
@@ -308,6 +468,49 @@ fn test_substr() {
         .args(&["abc", "substr", "1", "1"])
         .fails_with_code(2)
         .stderr_only("expr: syntax error: unexpected argument 'substr'\n");
+}
+
+#[test]
+fn test_builtin_functions_precedence() {
+    new_ucmd!()
+        .args(&["substr", "ab cd", "3", "1", "!=", " "])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["substr", "ab cd", "3", "1", "=", " "])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["length", "abcd", "!=", "4"])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["length", "abcd", "=", "4"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["index", "abcd", "c", "!=", "3"])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["index", "abcd", "c", "=", "3"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["match", "abcd", "ab\\(.*\\)", "!=", "cd"])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["match", "abcd", "ab\\(.*\\)", "=", "cd"])
+        .succeeds()
+        .stdout_only("1\n");
 }
 
 #[test]
@@ -379,10 +582,16 @@ fn test_eager_evaluation() {
 #[test]
 fn test_long_input() {
     // Giving expr an arbitrary long expression should succeed rather than end with a segfault due to a stack overflow.
-    #[cfg(not(windows))]
+    #[cfg(all(not(windows), not(target_os = "openbsd")))]
     const MAX_NUMBER: usize = 40000;
-    #[cfg(not(windows))]
+    #[cfg(all(not(windows), not(target_os = "openbsd")))]
     const RESULT: &str = "800020000\n";
+
+    // On OpenBSD, crash with default MAX_NUMBER
+    #[cfg(target_os = "openbsd")]
+    const MAX_NUMBER: usize = 10000;
+    #[cfg(target_os = "openbsd")]
+    const RESULT: &str = "50005000\n";
 
     // On windows there is 8192 characters input limit
     #[cfg(windows)]
@@ -403,8 +612,6 @@ fn test_long_input() {
 /// Regroup the testcases of the GNU test expr.pl
 mod gnu_expr {
     use uutests::new_ucmd;
-    use uutests::util::TestScenario;
-    use uutests::util_name;
 
     #[test]
     fn test_a() {
@@ -618,7 +825,6 @@ mod gnu_expr {
             .stdout_only("1\n");
     }
 
-    #[ignore]
     #[test]
     fn test_anchor() {
         new_ucmd!()
@@ -711,7 +917,6 @@ mod gnu_expr {
             .stdout_only("\n");
     }
 
-    #[ignore = "rust-onig bug, see https://github.com/rust-onig/rust-onig/issues/188"]
     #[test]
     fn test_bre10() {
         new_ucmd!()
@@ -720,7 +925,6 @@ mod gnu_expr {
             .stdout_only("3\n");
     }
 
-    #[ignore]
     #[test]
     fn test_bre11() {
         new_ucmd!()
@@ -769,7 +973,6 @@ mod gnu_expr {
             .stdout_only("\n");
     }
 
-    #[ignore]
     #[test]
     fn test_bre17() {
         new_ucmd!()
@@ -778,7 +981,6 @@ mod gnu_expr {
             .stdout_only("{1}a\n");
     }
 
-    #[ignore]
     #[test]
     fn test_bre18() {
         new_ucmd!()
@@ -787,7 +989,6 @@ mod gnu_expr {
             .stdout_only("1\n");
     }
 
-    #[ignore]
     #[test]
     fn test_bre19() {
         new_ucmd!()
@@ -999,7 +1200,6 @@ mod gnu_expr {
             .stderr_contains("Invalid content of \\{\\}");
     }
 
-    #[ignore]
     #[test]
     fn test_bre45() {
         new_ucmd!()
@@ -1008,7 +1208,6 @@ mod gnu_expr {
             .stdout_only("1\n");
     }
 
-    #[ignore]
     #[test]
     fn test_bre46() {
         new_ucmd!()
@@ -1041,7 +1240,7 @@ mod gnu_expr {
             .args(&["_", ":", "a\\{32768\\}"])
             .fails_with_code(2)
             .no_stdout()
-            .stderr_contains("Invalid content of \\{\\}");
+            .stderr_contains("Regular expression too big\n");
     }
 
     #[test]
@@ -1275,4 +1474,496 @@ mod gnu_expr {
             .no_stdout()
             .stderr_contains("syntax error: expecting ')' instead of 'a'");
     }
+}
+
+/// Test that `expr` correctly detects and handles locales
+mod locale_aware {
+    use uutests::new_ucmd;
+
+    #[test]
+    fn test_expr_collating() {
+        for (loc, code, output) in [
+            ("C", 0, "1\n"),
+            ("fr_FR.UTF-8", 1, "0\n"),
+            ("fr_FR.utf-8", 1, "0\n"),
+            ("en_US", 1, "0\n"),
+        ] {
+            new_ucmd!()
+                .args(&["50n", ">", "-51"])
+                .env("LC_ALL", loc)
+                .run()
+                .code_is(code)
+                .stdout_only(output);
+        }
+    }
+}
+
+/// This module reimplements the expr-multibyte.pl test
+#[cfg(target_os = "linux")]
+mod gnu_expr_multibyte {
+    use uutests::new_ucmd;
+
+    use uucore::os_str_from_bytes;
+
+    trait AsByteSlice<'a> {
+        fn into_bytes(self) -> &'a [u8];
+    }
+
+    impl<'a> AsByteSlice<'a> for &'a str {
+        fn into_bytes(self) -> &'a [u8] {
+            self.as_bytes()
+        }
+    }
+
+    impl<'a> AsByteSlice<'a> for &'a [u8] {
+        fn into_bytes(self) -> &'a [u8] {
+            self
+        }
+    }
+
+    impl<'a, const N: usize> AsByteSlice<'a> for &'a [u8; N] {
+        fn into_bytes(self) -> &'a [u8] {
+            self
+        }
+    }
+
+    const EXPRESSION: &[u8] =
+        "\u{1F14}\u{03BA}\u{03C6}\u{03C1}\u{03B1}\u{03C3}\u{03B9}\u{03C2}".as_bytes();
+
+    #[derive(Debug, Default, Clone, Copy)]
+    struct TestCase {
+        pub locale: &'static str,
+        pub out: Option<&'static [u8]>,
+        pub code: i32,
+    }
+
+    impl TestCase {
+        const FR: Self = Self::new("fr_FR.UTF-8");
+        const C: Self = Self::new("C");
+
+        const fn new(locale: &'static str) -> Self {
+            Self {
+                locale,
+                out: None,
+                code: 0,
+            }
+        }
+
+        fn out(mut self, out: impl AsByteSlice<'static>) -> Self {
+            self.out = Some(out.into_bytes());
+            self
+        }
+
+        fn code(mut self, code: i32) -> Self {
+            self.code = code;
+            self
+        }
+    }
+
+    fn check_test_case(args: &[&[u8]], tc: &TestCase) {
+        let args = args
+            .iter()
+            .map(|arg: &&[u8]| os_str_from_bytes(arg).unwrap())
+            .collect::<Vec<_>>();
+
+        let res = new_ucmd!().env("LC_ALL", tc.locale).args(&args).run();
+
+        res.code_is(tc.code);
+
+        if let Some(out) = tc.out {
+            let mut out = out.to_owned();
+            out.push(b'\n');
+            res.stdout_is_bytes(&out);
+        } else {
+            res.no_stdout();
+        }
+    }
+
+    // LENGTH EXPRESSIONS
+
+    // sanity check
+    #[test]
+    fn test_l1() {
+        let args: &[&[u8]] = &[b"length", b"abcdef"];
+
+        let cases = &[TestCase::FR.out("6"), TestCase::C.out("6")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    // A single multibyte character in the beginning of the string \xCE\xB1 is
+    // UTF-8 for "U+03B1 GREEK SMALL LETTER ALPHA"
+    #[test]
+    fn test_l2() {
+        let args: &[&[u8]] = &[b"length", b"\xCE\xB1bcdef"];
+
+        let cases = &[TestCase::FR.out("6"), TestCase::C.out("7")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    // A single multibyte character in the middle of the string \xCE\xB4 is
+    // UTF-8 for "U+03B4 GREEK SMALL LETTER DELTA"
+    #[test]
+    fn test_l3() {
+        let args: &[&[u8]] = &[b"length", b"abc\xCE\xB4ef"];
+
+        let cases = &[TestCase::FR.out("6"), TestCase::C.out("7")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    // A single multibyte character in the end of the string
+    #[test]
+    fn test_l4() {
+        let args: &[&[u8]] = &[b"length", b"fedcb\xCE\xB1"];
+
+        let cases = &[TestCase::FR.out("6"), TestCase::C.out("7")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    // A invalid multibyte sequence
+    #[test]
+    fn test_l5() {
+        let args: &[&[u8]] = &[b"length", b"\xB1aaa"];
+
+        let cases = &[TestCase::FR.out("4"), TestCase::C.out("4")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    // An incomplete multibyte sequence at the end of the string
+    #[test]
+    fn test_l6() {
+        let args: &[&[u8]] = &[b"length", b"aaa\xCE"];
+
+        let cases = &[TestCase::FR.out("4"), TestCase::C.out("4")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    // An incomplete multibyte sequence at the end of the string
+    #[test]
+    fn test_l7() {
+        let args: &[&[u8]] = &[b"length", EXPRESSION];
+
+        let cases = &[TestCase::FR.out("8"), TestCase::C.out("17")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    // INDEX EXPRESSIONS
+
+    // sanity check
+    #[test]
+    fn test_i1() {
+        let args: &[&[u8]] = &[b"index", b"abcdef", b"fb"];
+
+        let cases = &[TestCase::FR.out("2"), TestCase::C.out("2")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    // Search for a single-octet
+    #[test]
+    fn test_i2() {
+        let args: &[&[u8]] = &[b"index", b"\xCE\xB1bc\xCE\xB4ef", b"b"];
+
+        let cases = &[TestCase::FR.out("2"), TestCase::C.out("3")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    #[test]
+    fn test_i3() {
+        let args: &[&[u8]] = &[b"index", b"\xCE\xB1bc\xCE\xB4ef", b"f"];
+
+        let cases = &[TestCase::FR.out("6"), TestCase::C.out("8")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    // Search for multibyte character.
+    // In the C locale, the search string is treated as two octets.
+    // the first of them (\xCE) matches the first octet of the input string.
+    #[test]
+    fn test_i4() {
+        let args: &[&[u8]] = &[b"index", b"\xCE\xB1bc\xCE\xB4ef", b"\xCE\xB4"];
+
+        let cases = &[TestCase::FR.out("4"), TestCase::C.out("1")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    // Invalid multibyte sequence in the input string, treated as a single
+    // octet.
+    #[test]
+    fn test_i5() {
+        let args: &[&[u8]] = &[b"index", b"\xCEbc\xCE\xB4ef", b"\xCE\xB4"];
+
+        let cases = &[TestCase::FR.out("4"), TestCase::C.out("1")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    // Invalid multibyte sequence in the search string, treated as a single
+    // octet. In multibyte locale, there should be no match, expr returns and
+    // prints zero, and terminates with exit-code 1 (as per POSIX).
+    #[test]
+    fn test_i6() {
+        let args: &[&[u8]] = &[b"index", b"\xCE\xB1bc\xCE\xB4ef", b"\xB4"];
+
+        let cases = &[TestCase::FR.out("0").code(1), TestCase::C.out("6")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    // Edge-case: invalid multibyte sequence BOTH in the input string and in
+    // the search string: expr should find a match.
+    #[test]
+    fn test_i7() {
+        let args: &[&[u8]] = &[b"index", b"\xCE\xB1bc\xB4ef", b"\xB4"];
+
+        let cases = &[TestCase::FR.out("4")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    // SUBSTR EXPRESSIONS
+
+    // sanity check
+    #[test]
+    fn test_s1() {
+        let args: &[&[u8]] = &[b"substr", b"abcdef", b"2", b"3"];
+
+        let cases = &[TestCase::FR.out("bcd"), TestCase::C.out("bcd")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    #[test]
+    fn test_s2() {
+        let args: &[&[u8]] = &[b"substr", b"\xCE\xB1bc\xCE\xB4ef", b"1", b"1"];
+
+        let cases = &[TestCase::FR.out(b"\xCE\xB1"), TestCase::C.out(b"\xCE")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    #[test]
+    fn test_s3() {
+        let args: &[&[u8]] = &[b"substr", b"\xCE\xB1bc\xCE\xB4ef", b"3", b"2"];
+
+        let cases = &[TestCase::FR.out(b"c\xCE\xB4"), TestCase::C.out("bc")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    #[test]
+    fn test_s4() {
+        let args: &[&[u8]] = &[b"substr", b"\xCE\xB1bc\xCE\xB4ef", b"4", b"1"];
+
+        let cases = &[TestCase::FR.out(b"\xCE\xB4"), TestCase::C.out("c")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    #[test]
+    fn test_s5() {
+        let args: &[&[u8]] = &[b"substr", b"\xCE\xB1bc\xCE\xB4ef", b"4", b"2"];
+
+        let cases = &[TestCase::FR.out(b"\xCE\xB4e"), TestCase::C.out(b"c\xCE")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    #[test]
+    fn test_s6() {
+        let args: &[&[u8]] = &[b"substr", b"\xCE\xB1bc\xCE\xB4ef", b"6", b"1"];
+
+        let cases = &[TestCase::FR.out(b"f"), TestCase::C.out(b"\xB4")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    #[test]
+    fn test_s7() {
+        let args: &[&[u8]] = &[b"substr", b"\xCE\xB1bc\xCE\xB4ef", b"7", b"1"];
+
+        let cases = &[TestCase::FR.out("").code(1), TestCase::C.out(b"e")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    #[test]
+    fn test_s8() {
+        let args: &[&[u8]] = &[b"substr", b"\xCE\xB1bc\xB4ef", b"3", b"3"];
+
+        let cases = &[TestCase::FR.out(b"c\xB4e"), TestCase::C.out(b"bc\xB4")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    // MATCH EXPRESSIONS
+
+    // sanity check
+    #[test]
+    fn test_m1() {
+        let args: &[&[u8]] = &[b"match", b"abcdef", b"ab"];
+
+        let cases = &[TestCase::FR.out("2"), TestCase::C.out("2")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+    #[test]
+    fn test_m2() {
+        let args: &[&[u8]] = &[b"match", b"abcdef", b"\\(ab\\)"];
+
+        let cases = &[TestCase::FR.out("ab"), TestCase::C.out("ab")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    // The regex engine should match the '.' to the first multibyte character.
+    #[test]
+    fn test_m3() {
+        let args: &[&[u8]] = &[b"match", b"\xCE\xB1bc\xCE\xB4ef", b".bc"];
+
+        let cases = &[TestCase::FR.out("3"), TestCase::C.out("0").code(1)];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    // The opposite of the previous test: two dots should only match the two
+    // octets in single-byte locale.
+    #[test]
+    fn test_m4() {
+        let args: &[&[u8]] = &[b"match", b"\xCE\xB1bc\xCE\xB4ef", b"..bc"];
+
+        let cases = &[TestCase::FR.out("0").code(1), TestCase::C.out("4")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    // Match with grouping - a single dot should return the two octets
+    #[test]
+    fn test_m5() {
+        let args: &[&[u8]] = &[b"match", b"\xCE\xB1bc\xCE\xB4ef", b"\\(.b\\)c"];
+
+        let cases = &[TestCase::FR.out(b"\xCE\xB1b"), TestCase::C.out("").code(1)];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    // Invalid multibyte sequences - regex should not match in multibyte locale
+    // (POSIX requirement)
+    #[test]
+    fn test_m6() {
+        let args: &[&[u8]] = &[b"match", b"\xCEbc\xCE\xB4ef", b"\\(.\\)"];
+
+        let cases = &[TestCase::FR.out("").code(1), TestCase::C.out(b"\xCE")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+
+    // Character classes: in the multibyte case, the regex engine understands
+    // there is a single multibyte character in the brackets.
+    // In the single byte case, the regex engine sees two octets in the
+    // character class ('\xCE' and '\xB1') - and it matches the first one.
+    #[test]
+    fn test_m7() {
+        let args: &[&[u8]] = &[b"match", b"\xCE\xB1bc\xCE\xB4ef", b"\\(.\\)"];
+
+        let cases = &[TestCase::FR.out(b"\xCE\xB1"), TestCase::C.out(b"\xCE")];
+
+        for tc in cases {
+            check_test_case(args, tc);
+        }
+    }
+}
+
+#[test]
+fn test_emoji_operations() {
+    new_ucmd!()
+        .args(&["🚀", "=", "🚀"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["🚀", "!=", "🚀"])
+        .fails()
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["🚀", "=", "🧨"])
+        .fails()
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["length", "🦀🚀🎯"])
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .succeeds()
+        .stdout_only("3\n");
+
+    new_ucmd!()
+        .args(&["🌍", "!=", "🌎"])
+        .succeeds()
+        .stdout_only("1\n");
 }

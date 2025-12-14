@@ -2,9 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore plass samp
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStringExt;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
@@ -302,4 +304,96 @@ fn prefix_equal_skip_prefix_equal_two() {
             .succeeds()
             .stdout_is_fixture("prefixed-one-word-per-line_p=_P=2.txt");
     }
+}
+
+#[test]
+fn test_fmt_unicode_whitespace_handling() {
+    // Character classification fix: Test that Unicode whitespace characters like non-breaking space
+    // are NOT treated as whitespace by fmt, maintaining GNU fmt compatibility.
+    // GNU fmt only recognizes ASCII whitespace (space, tab, newline, etc.) and excludes
+    // Unicode whitespace characters to ensure consistent formatting behavior.
+    // This prevents regression of the character classification fix
+    let non_breaking_space = "\u{00A0}"; // U+00A0 NO-BREAK SPACE
+    let figure_space = "\u{2007}"; // U+2007 FIGURE SPACE
+    let narrow_no_break_space = "\u{202F}"; // U+202F NARROW NO-BREAK SPACE
+
+    // When fmt splits on width=1, these characters should NOT cause line breaks
+    // because they should not be considered whitespace
+    for (name, char) in [
+        ("non-breaking space", non_breaking_space),
+        ("figure space", figure_space),
+        ("narrow no-break space", narrow_no_break_space),
+    ] {
+        let input = format!("={char}=");
+        let result = new_ucmd!()
+            .args(&["-s", "-w1"])
+            .pipe_in(input.as_bytes())
+            .succeeds();
+
+        // Should be 1 line since the Unicode char is not treated as whitespace
+        assert_eq!(
+            result.stdout_str().lines().count(),
+            1,
+            "Failed for {name}: Unicode character should not be treated as whitespace"
+        );
+    }
+}
+
+#[test]
+fn test_fmt_knuth_plass_line_breaking() {
+    // Line breaking algorithm improvements: Test the enhanced Knuth-Plass optimal line breaking
+    // algorithm that better handles sentence boundaries, word positioning constraints,
+    // and produces more natural line breaks for complex text formatting.
+    // This prevents regression of the line breaking algorithm improvements
+    let input = "@command{fmt} prefers breaking lines at the end of a sentence, and tries to\n\
+                avoid line breaks after the first word of a sentence or before the last word\n\
+                of a sentence.  A @dfn{sentence break} is defined as either the end of a\n\
+                paragraph or a word ending in any of @samp{.?!}, followed by two spaces or end\n\
+                of line, ignoring any intervening parentheses or quotes.  Like @TeX{},\n\
+                @command{fmt} reads entire ''paragraphs'' before choosing line breaks; the\n\
+                algorithm is a variant of that given by\n\
+                Donald E. Knuth and Michael F. Plass\n\
+                in ''Breaking Paragraphs Into Lines'',\n\
+                @cite{Software---Practice & Experience}\n\
+                @b{11}, 11 (November 1981), 1119--1184.";
+
+    let expected = "@command{fmt} prefers breaking lines at the end of a sentence,\n\
+                   and tries to avoid line breaks after the first word of a sentence\n\
+                   or before the last word of a sentence.  A @dfn{sentence break}\n\
+                   is defined as either the end of a paragraph or a word ending\n\
+                   in any of @samp{.?!}, followed by two spaces or end of line,\n\
+                   ignoring any intervening parentheses or quotes.  Like @TeX{},\n\
+                   @command{fmt} reads entire ''paragraphs'' before choosing line\n\
+                   breaks; the algorithm is a variant of that given by Donald\n\
+                   E. Knuth and Michael F. Plass in ''Breaking Paragraphs Into\n\
+                   Lines'', @cite{Software---Practice & Experience} @b{11}, 11\n\
+                   (November 1981), 1119--1184.\n";
+
+    new_ucmd!()
+        .args(&["-g", "60", "-w", "72"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_fmt_non_utf8_paths() {
+    use uutests::at_and_ucmd;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
+
+    std::fs::write(at.plus(&filename), b"hello world this is a test").unwrap();
+
+    ucmd.arg(&filename).succeeds();
+}
+
+#[test]
+fn fmt_reflow_unicode() {
+    new_ucmd!()
+        .args(&["-w", "4"])
+        .pipe_in("漢字漢字 💐 日本語の文字\n")
+        .succeeds()
+        .stdout_is("漢字漢字\n💐\n日本語の文字\n");
 }

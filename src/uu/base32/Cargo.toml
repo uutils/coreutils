@@ -20,6 +20,8 @@ path = "src/base32.rs"
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["encoding"] }
+fluent = { workspace = true }
+base64-simd = "0.8"
 
 [[bin]]
 name = "base32"

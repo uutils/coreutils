@@ -7,53 +7,52 @@
 
 use clap::{Arg, ArgAction, Command};
 use uu_base32::base_common::{self, BASE_CMD_PARSE_ERROR, Config};
-use uucore::error::UClapError;
+use uucore::translate;
 use uucore::{
     encoding::Format,
     error::{UResult, UUsageError},
 };
-use uucore::{help_about, help_usage};
 
-const ABOUT: &str = help_about!("basenc.md");
-const USAGE: &str = help_usage!("basenc.md");
-
-const ENCODINGS: &[(&str, Format, &str)] = &[
-    ("base64", Format::Base64, "same as 'base64' program"),
-    ("base64url", Format::Base64Url, "file- and url-safe base64"),
-    ("base32", Format::Base32, "same as 'base32' program"),
-    (
-        "base32hex",
-        Format::Base32Hex,
-        "extended hex alphabet base32",
-    ),
-    ("base16", Format::Base16, "hex encoding"),
-    (
-        "base2lsbf",
-        Format::Base2Lsbf,
-        "bit string with least significant bit (lsb) first",
-    ),
-    (
-        "base2msbf",
-        Format::Base2Msbf,
-        "bit string with most significant bit (msb) first",
-    ),
-    (
-        "z85",
-        Format::Z85,
-        "ascii85-like encoding;\n\
-        when encoding, input length must be a multiple of 4;\n\
-        when decoding, input length must be a multiple of 5",
-    ),
-];
+fn get_encodings() -> Vec<(&'static str, Format, String)> {
+    vec![
+        ("base64", Format::Base64, translate!("basenc-help-base64")),
+        (
+            "base64url",
+            Format::Base64Url,
+            translate!("basenc-help-base64url"),
+        ),
+        ("base32", Format::Base32, translate!("basenc-help-base32")),
+        (
+            "base32hex",
+            Format::Base32Hex,
+            translate!("basenc-help-base32hex"),
+        ),
+        ("base16", Format::Base16, translate!("basenc-help-base16")),
+        (
+            "base2lsbf",
+            Format::Base2Lsbf,
+            translate!("basenc-help-base2lsbf"),
+        ),
+        (
+            "base2msbf",
+            Format::Base2Msbf,
+            translate!("basenc-help-base2msbf"),
+        ),
+        ("z85", Format::Z85, translate!("basenc-help-z85")),
+        ("base58", Format::Base58, translate!("basenc-help-base58")),
+    ]
+}
 
 pub fn uu_app() -> Command {
-    let mut command = base_common::base_app(ABOUT, USAGE);
-    for encoding in ENCODINGS {
+    let encodings = get_encodings();
+    let mut command = base_common::base_app(translate!("basenc-about"), translate!("basenc-usage"));
+
+    for encoding in &encodings {
         let raw_arg = Arg::new(encoding.0)
             .long(encoding.0)
-            .help(encoding.2)
+            .help(&encoding.2)
             .action(ArgAction::SetTrue);
-        let overriding_arg = ENCODINGS
+        let overriding_arg = encodings
             .iter()
             .fold(raw_arg, |arg, enc| arg.overrides_with(enc.0));
         command = command.arg(overriding_arg);
@@ -62,13 +61,18 @@ pub fn uu_app() -> Command {
 }
 
 fn parse_cmd_args(args: impl uucore::Args) -> UResult<(Config, Format)> {
-    let matches = uu_app()
-        .try_get_matches_from(args.collect_lossy())
-        .with_exit_code(1)?;
-    let format = ENCODINGS
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+
+    let encodings = get_encodings();
+    let format = encodings
         .iter()
         .find(|encoding| matches.get_flag(encoding.0))
-        .ok_or_else(|| UUsageError::new(BASE_CMD_PARSE_ERROR, "missing encoding type"))?
+        .ok_or_else(|| {
+            UUsageError::new(
+                BASE_CMD_PARSE_ERROR,
+                translate!("basenc-error-missing-encoding-type"),
+            )
+        })?
         .1;
     let config = Config::from(&matches)?;
     Ok((config, format))

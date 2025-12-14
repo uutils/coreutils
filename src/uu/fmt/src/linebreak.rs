@@ -92,8 +92,8 @@ pub fn break_lines(
     }
 }
 
-// break_simple implements a "greedy" breaking algorithm: print words until
-// maxlength would be exceeded, then print a linebreak and indent and continue.
+/// `break_simple` implements a "greedy" breaking algorithm: print words until
+/// maxlength would be exceeded, then print a linebreak and indent and continue.
 fn break_simple<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
     mut iter: T,
     args: &mut BreakArgs<'a>,
@@ -130,10 +130,10 @@ fn accum_words_simple<'a>(
     }
 }
 
-// break_knuth_plass implements an "optimal" breaking algorithm in the style of
-//    Knuth, D.E., and Plass, M.F. "Breaking Paragraphs into Lines." in Software,
-//    Practice and Experience. Vol. 11, No. 11, November 1981.
-//    http://onlinelibrary.wiley.com/doi/10.1002/spe.4380111102/pdf
+/// `break_knuth_plass` implements an "optimal" breaking algorithm in the style of
+/// Knuth, D.E., and Plass, M.F. "Breaking Paragraphs into Lines." in Software,
+/// Practice and Experience. Vol. 11, No. 11, November 1981.
+/// <http://onlinelibrary.wiley.com/doi/10.1002/spe.4380111102/pdf>
 fn break_knuth_plass<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
     mut iter: T,
     args: &mut BreakArgs<'a>,
@@ -175,9 +175,8 @@ fn break_knuth_plass<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
                         fresh = true;
                     }
                     break;
-                } else {
-                    write_with_spaces(word, slen, args.ostream)?;
                 }
+                write_with_spaces(word, slen, args.ostream)?;
             }
             Ok((prev_punct, fresh))
         },
@@ -237,13 +236,15 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
     let mut next_active_breaks = vec![];
 
     let stretch = args.opts.width - args.opts.goal;
-    let minlength = args.opts.goal.max(stretch + 1) - stretch;
+    let minlength = if args.opts.goal <= 10 {
+        1
+    } else {
+        args.opts.goal.max(stretch + 1) - stretch
+    };
     let mut new_linebreaks = vec![];
     let mut is_sentence_start = false;
     let mut least_demerits = 0;
-    loop {
-        let Some(w) = iter.next() else { break };
-
+    while let Some(w) = iter.next() {
         // if this is the last word, we don't add additional demerits for this break
         let (is_last_word, is_sentence_end) = match iter.peek() {
             None => (true, true),
@@ -385,11 +386,11 @@ fn build_best_path<'a>(paths: &[LineBreak<'a>], active: &[usize]) -> Vec<(&'a Wo
 const BAD_INFTY: i64 = 10_000_000;
 const BAD_INFTY_SQ: i64 = BAD_INFTY * BAD_INFTY;
 // badness = BAD_MULT * abs(r) ^ 3
-const BAD_MULT: f32 = 100.0;
+const BAD_MULT: f32 = 200.0;
 // DR_MULT is multiplier for delta-R between lines
 const DR_MULT: f32 = 600.0;
 // DL_MULT is penalty multiplier for short words at end of line
-const DL_MULT: f32 = 300.0;
+const DL_MULT: f32 = 10.0;
 
 fn compute_demerits(delta_len: isize, stretch: usize, wlen: usize, prev_rat: f32) -> (i64, f32) {
     // how much stretch are we using?
@@ -460,7 +461,7 @@ fn restart_active_breaks<'a>(
     }
 }
 
-// Number of spaces to add before a word, based on mode, newline, sentence start.
+/// Number of spaces to add before a word, based on mode, newline, sentence start.
 fn compute_slen(uniform: bool, newline: bool, start: bool, punct: bool) -> usize {
     if uniform || newline {
         if start || (newline && punct) { 2 } else { 1 }
@@ -469,8 +470,8 @@ fn compute_slen(uniform: bool, newline: bool, start: bool, punct: bool) -> usize
     }
 }
 
-// If we're on a fresh line, slen=0 and we slice off leading whitespace.
-// Otherwise, compute slen and leave whitespace alone.
+/// If we're on a fresh line, `slen=0` and we slice off leading whitespace.
+/// Otherwise, compute `slen` and leave whitespace alone.
 fn slice_if_fresh(
     fresh: bool,
     word: &str,
@@ -487,13 +488,13 @@ fn slice_if_fresh(
     }
 }
 
-// Write a newline and add the indent.
+/// Write a newline and add the indent.
 fn write_newline(indent: &str, ostream: &mut BufWriter<Stdout>) -> std::io::Result<()> {
     ostream.write_all(b"\n")?;
     ostream.write_all(indent.as_bytes())
 }
 
-// Write the word, along with slen spaces.
+/// Write the word, along with slen spaces.
 fn write_with_spaces(
     word: &str,
     slen: usize,

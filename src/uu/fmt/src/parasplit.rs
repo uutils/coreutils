@@ -26,6 +26,14 @@ fn char_width(c: char) -> usize {
     }
 }
 
+/// GNU fmt has a more restrictive definition of whitespace than Unicode.
+/// It only considers ASCII whitespace characters (space, tab, newline, etc.)
+/// and excludes many Unicode whitespace characters like non-breaking spaces.
+fn is_fmt_whitespace(c: char) -> bool {
+    // Only ASCII whitespace characters are considered whitespace in GNU fmt
+    matches!(c, ' ' | '\t' | '\n' | '\r' | '\x0B' | '\x0C')
+}
+
 // lines with PSKIP, lacking PREFIX, or which are entirely blank are
 // NoFormatLines; otherwise, they are FormatLines
 #[derive(Debug)]
@@ -35,7 +43,7 @@ pub enum Line {
 }
 
 impl Line {
-    // when we know that it's a FormatLine, as in the ParagraphStream iterator
+    /// when we know that it's a [`Line::FormatLine`], as in the [`ParagraphStream`] iterator
     fn get_formatline(self) -> FileLine {
         match self {
             Self::FormatLine(fl) => fl,
@@ -43,7 +51,7 @@ impl Line {
         }
     }
 
-    // when we know that it's a NoFormatLine, as in the ParagraphStream iterator
+    /// when we know that it's a [`Line::NoFormatLine`], as in the [`ParagraphStream`] iterator
     fn get_noformatline(self) -> (String, bool) {
         match self {
             Self::NoFormatLine(s, b) => (s, b),
@@ -109,7 +117,7 @@ impl FileLines<'_> {
             for (i, char) in line.char_indices() {
                 if line[i..].starts_with(pfx) {
                     return (true, i);
-                } else if !char.is_whitespace() {
+                } else if !is_fmt_whitespace(char) {
                     break;
                 }
             }
@@ -128,7 +136,7 @@ impl FileLines<'_> {
                 prefix_len = indent_len;
             }
 
-            if (os >= prefix_end) && !c.is_whitespace() {
+            if (os >= prefix_end) && !is_fmt_whitespace(c) {
                 // found first non-whitespace after prefix, this is indent_end
                 indent_end = os;
                 break;
@@ -154,7 +162,7 @@ impl Iterator for FileLines<'_> {
         // emit a blank line
         // Err(true) indicates that this was a linebreak,
         // which is important to know when detecting mail headers
-        if n.chars().all(char::is_whitespace) {
+        if n.chars().all(is_fmt_whitespace) {
             return Some(Line::NoFormatLine(String::new(), true));
         }
 
@@ -174,7 +182,7 @@ impl Iterator for FileLines<'_> {
         if pmatch
             && n[poffset + self.opts.prefix.as_ref().map_or(0, |s| s.len())..]
                 .chars()
-                .all(char::is_whitespace)
+                .all(is_fmt_whitespace)
         {
             return Some(Line::NoFormatLine(n, false));
         }
@@ -199,10 +207,10 @@ impl Iterator for FileLines<'_> {
     }
 }
 
-/// A paragraph : a collection of FileLines that are to be formatted
+/// A paragraph : a collection of [`FileLines`] that are to be formatted
 /// plus info about the paragraph's indentation
 ///
-/// We only retain the String from the FileLine; the other info
+/// We only retain the String from the [`FileLine`]; the other info
 /// is only there to help us in deciding how to merge lines into Paragraphs
 #[derive(Debug)]
 pub struct Paragraph {
@@ -498,7 +506,7 @@ impl WordSplit<'_> {
         let mut aftertab = 0;
         let mut word_start = None;
         for (os, c) in string.char_indices() {
-            if !c.is_whitespace() {
+            if !is_fmt_whitespace(c) {
                 word_start = Some(os);
                 break;
             } else if c == '\t' {
@@ -519,7 +527,7 @@ impl WordSplit<'_> {
 impl WordSplit<'_> {
     fn new<'b>(opts: &'b FmtOptions, string: &'b str) -> WordSplit<'b> {
         // wordsplits *must* start at a non-whitespace character
-        let trim_string = string.trim_start();
+        let trim_string = string.trim_start_matches(is_fmt_whitespace);
         WordSplit {
             opts,
             string: trim_string,
@@ -571,7 +579,7 @@ impl<'a> Iterator for WordSplit<'a> {
         // points to whitespace character OR end of string
         let mut word_nchars = 0;
         self.position = match self.string[word_start..].find(|x: char| {
-            if x.is_whitespace() {
+            if is_fmt_whitespace(x) {
                 true
             } else {
                 word_nchars += char_width(x);

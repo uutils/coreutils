@@ -24,12 +24,15 @@ use parseargs::Parser;
 use progress::ProgUpdateType;
 use progress::{ProgUpdate, ReadStat, StatusLevel, WriteStat, gen_prog_updater};
 use uucore::io::OwnedFileDescriptorOrHandle;
+use uucore::translate;
 
 use std::cmp;
 use std::env;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Stdout, Write};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::os::fd::AsFd;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
@@ -58,11 +61,8 @@ use uucore::error::{FromIo, UResult};
 use uucore::error::{USimpleError, set_exit_code};
 #[cfg(target_os = "linux")]
 use uucore::show_if_err;
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
+use uucore::{format_usage, show_error};
 
-const ABOUT: &str = help_about!("dd.md");
-const AFTER_HELP: &str = help_section!("after help", "dd.md");
-const USAGE: &str = help_usage!("dd.md");
 const BUF_INIT_BYTE: u8 = 0xDD;
 
 /// Final settings after parsing
@@ -235,7 +235,10 @@ impl Source {
             #[cfg(not(unix))]
             Self::Stdin(stdin) => match io::copy(&mut stdin.take(n), &mut io::sink()) {
                 Ok(m) if m < n => {
-                    show_error!("'standard input': cannot skip to specified offset");
+                    show_error!(
+                        "{}",
+                        translate!("dd-error-cannot-skip-offset", "file" => "standard input")
+                    );
                     Ok(m)
                 }
                 Ok(m) => Ok(m),
@@ -247,14 +250,20 @@ impl Source {
                     if len < n {
                         // GNU compatibility:
                         // this case prints the stats but sets the exit code to 1
-                        show_error!("'standard input': cannot skip: Invalid argument");
+                        show_error!(
+                            "{}",
+                            translate!("dd-error-cannot-skip-invalid", "file" => "standard input")
+                        );
                         set_exit_code(1);
                         return Ok(len);
                     }
                 }
                 match io::copy(&mut f.take(n), &mut io::sink()) {
                     Ok(m) if m < n => {
-                        show_error!("'standard input': cannot skip to specified offset");
+                        show_error!(
+                            "{}",
+                            translate!("dd-error-cannot-skip-offset", "file" => "standard input")
+                        );
                         Ok(m)
                     }
                     Ok(m) => Ok(m),
@@ -279,7 +288,7 @@ impl Source {
         match self {
             Self::File(f) => {
                 let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
-                posix_fadvise(f.as_raw_fd(), offset, len, advice)
+                posix_fadvise(f.as_fd(), offset, len, advice)
             }
             _ => Err(Errno::ESPIPE), // "Illegal seek"
         }
@@ -343,10 +352,10 @@ impl<'a> Input<'a> {
             if settings.iflags.directory && !f.metadata()?.is_dir() {
                 return Err(USimpleError::new(
                     1,
-                    "setting flags for 'standard input': Not a directory",
+                    translate!("dd-error-not-directory", "file" => "standard input"),
                 ));
             }
-        };
+        }
         if settings.skip > 0 {
             src.skip(settings.skip)?;
         }
@@ -364,8 +373,9 @@ impl<'a> Input<'a> {
                 opts.custom_flags(libc_flags);
             }
 
-            opts.open(filename)
-                .map_err_context(|| format!("failed to open {}", filename.quote()))?
+            opts.open(filename).map_err_context(
+                || translate!("dd-error-failed-to-open", "path" => filename.quote()),
+            )?
         };
 
         let mut src = Source::File(src);
@@ -437,7 +447,7 @@ impl Read for Input<'_> {
                     }
                 }
                 Ok(len) => return Ok(len),
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => (),
                 Err(_) if self.settings.iconv.noerror => return Ok(base_idx),
                 Err(e) => return Err(e),
             }
@@ -457,10 +467,11 @@ impl Input<'_> {
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
         #[cfg(target_os = "linux")]
         {
-            show_if_err!(self
-                .src
-                .discard_cache(offset, len)
-                .map_err_context(|| "failed to discard cache for: 'standard input'".to_string()));
+            show_if_err!(
+                self.src
+                    .discard_cache(offset, len)
+                    .map_err_context(|| translate!("dd-error-failed-discard-cache-input"))
+            );
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -609,7 +620,10 @@ impl Dest {
                     if len < n {
                         // GNU compatibility:
                         // this case prints the stats but sets the exit code to 1
-                        show_error!("'standard output': cannot seek: Invalid argument");
+                        show_error!(
+                            "{}",
+                            translate!("dd-error-cannot-seek-invalid", "output" => "standard output")
+                        );
                         set_exit_code(1);
                         return Ok(len);
                     }
@@ -649,7 +663,7 @@ impl Dest {
         match self {
             Self::File(f, _) => {
                 let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
-                posix_fadvise(f.as_raw_fd(), offset, len, advice)
+                posix_fadvise(f.as_fd(), offset, len, advice)
             }
             _ => Err(Errno::ESPIPE), // "Illegal seek"
         }
@@ -672,6 +686,54 @@ fn is_sparse(buf: &[u8]) -> bool {
     buf.iter().all(|&e| e == 0u8)
 }
 
+/// Handle O_DIRECT write errors by temporarily removing the flag and retrying.
+/// This follows GNU dd behavior for partial block writes with O_DIRECT.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn handle_o_direct_write(f: &mut File, buf: &[u8], original_error: io::Error) -> io::Result<usize> {
+    use nix::fcntl::{FcntlArg, OFlag, fcntl};
+
+    // Get current flags using nix
+    let oflags = match fcntl(&mut *f, FcntlArg::F_GETFL) {
+        Ok(flags) => OFlag::from_bits_retain(flags),
+        Err(_) => return Err(original_error),
+    };
+
+    // If O_DIRECT is set, try removing it temporarily
+    if oflags.contains(OFlag::O_DIRECT) {
+        let flags_without_direct = oflags - OFlag::O_DIRECT;
+
+        // Remove O_DIRECT flag using nix
+        if fcntl(&mut *f, FcntlArg::F_SETFL(flags_without_direct)).is_err() {
+            return Err(original_error);
+        }
+
+        // Retry the write without O_DIRECT
+        let write_result = f.write(buf);
+
+        // Restore O_DIRECT flag using nix (GNU doesn't restore it, but we'll be safer)
+        // Log any restoration errors without failing the operation
+        if let Err(os_err) = fcntl(&mut *f, FcntlArg::F_SETFL(oflags)) {
+            // Just log the error, don't fail the whole operation
+            show_error!("Failed to restore O_DIRECT flag: {}", os_err);
+        }
+
+        write_result
+    } else {
+        // O_DIRECT wasn't set, return original error
+        Err(original_error)
+    }
+}
+
+/// Stub for non-Linux platforms - just return the original error.
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn handle_o_direct_write(
+    _f: &mut File,
+    _buf: &[u8],
+    original_error: io::Error,
+) -> io::Result<usize> {
+    Err(original_error)
+}
+
 impl Write for Dest {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match self {
@@ -683,7 +745,21 @@ impl Write for Dest {
                 f.seek(SeekFrom::Current(seek_amt))?;
                 Ok(buf.len())
             }
-            Self::File(f, _) => f.write(buf),
+            Self::File(f, _) => {
+                // Try the write first
+                match f.write(buf) {
+                    Ok(len) => Ok(len),
+                    Err(e)
+                        if e.kind() == io::ErrorKind::InvalidInput
+                            && e.raw_os_error() == Some(libc::EINVAL) =>
+                    {
+                        // This might be an O_DIRECT alignment issue.
+                        // Try removing O_DIRECT temporarily and retry.
+                        handle_o_direct_write(f, buf, e)
+                    }
+                    Err(e) => Err(e),
+                }
+            }
             Self::Stdout(stdout) => stdout.write(buf),
             #[cfg(unix)]
             Self::Fifo(f) => f.write(buf),
@@ -723,7 +799,7 @@ impl<'a> Output<'a> {
     fn new_stdout(settings: &'a Settings) -> UResult<Self> {
         let mut dst = Dest::Stdout(io::stdout());
         dst.seek(settings.seek)
-            .map_err_context(|| "write error".to_string())?;
+            .map_err_context(|| translate!("dd-error-write-error"))?;
         Ok(Self { dst, settings })
     }
 
@@ -744,8 +820,9 @@ impl<'a> Output<'a> {
             opts.open(path)
         }
 
-        let dst = open_dst(filename, &settings.oconv, &settings.oflags)
-            .map_err_context(|| format!("failed to open {}", filename.quote()))?;
+        let dst = open_dst(filename, &settings.oconv, &settings.oflags).map_err_context(
+            || translate!("dd-error-failed-to-open", "path" => filename.quote()),
+        )?;
 
         // Seek to the index in the output file, truncating if requested.
         //
@@ -770,7 +847,7 @@ impl<'a> Output<'a> {
         };
         let mut dst = Dest::File(dst, density);
         dst.seek(settings.seek)
-            .map_err_context(|| "failed to seek in output file".to_string())?;
+            .map_err_context(|| translate!("dd-error-failed-to-seek"))?;
         Ok(Self { dst, settings })
     }
 
@@ -784,7 +861,7 @@ impl<'a> Output<'a> {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
             nix::fcntl::fcntl(
-                fx.as_raw().as_raw_fd(),
+                fx.as_raw().as_fd(),
                 F_SETFL(OFlag::from_bits_retain(libc_flags)),
             )?;
         }
@@ -832,9 +909,11 @@ impl<'a> Output<'a> {
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
         #[cfg(target_os = "linux")]
         {
-            show_if_err!(self.dst.discard_cache(offset, len).map_err_context(|| {
-                "failed to discard cache for: 'standard output'".to_string()
-            }));
+            show_if_err!(
+                self.dst
+                    .discard_cache(offset, len)
+                    .map_err_context(|| { translate!("dd-error-failed-discard-cache-output") })
+            );
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -861,7 +940,7 @@ impl<'a> Output<'a> {
                         return Ok(base_idx);
                     }
                 }
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => (),
                 Err(e) => return Err(e),
             }
         }
@@ -1063,7 +1142,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             output_thread,
             truncate,
         );
-    };
+    }
 
     // Create a common buffer with a capacity of the block size.
     // This is the max size needed.
@@ -1083,7 +1162,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     #[cfg(target_os = "linux")]
     if let Err(e) = &signal_handler {
         if Some(StatusLevel::None) != i.settings.status {
-            eprintln!("Internal dd Warning: Unable to register signal handler \n\t{e}");
+            eprintln!("{}\n\t{e}", translate!("dd-warning-signal-handler"));
         }
     }
 
@@ -1296,8 +1375,8 @@ fn calc_bsize(ibs: usize, obs: usize) -> usize {
     (ibs / gcd) * obs
 }
 
-// Calculate the buffer size appropriate for this loop iteration, respecting
-// a count=N if present.
+/// Calculate the buffer size appropriate for this loop iteration, respecting
+/// a `count=N` if present.
 fn calc_loop_bsize(
     count: Option<Num>,
     rstat: &ReadStat,
@@ -1320,8 +1399,8 @@ fn calc_loop_bsize(
     }
 }
 
-// Decide if the current progress is below a count=N limit or return
-// true if no such limit is set.
+/// Decide if the current progress is below a `count=N` limit or return
+/// `true` if no such limit is set.
 fn below_count_limit(count: Option<Num>, rstat: &ReadStat) -> bool {
     match count {
         Some(Num::Blocks(n)) => rstat.reads_complete + rstat.reads_partial < n,
@@ -1398,7 +1477,7 @@ fn is_fifo(filename: &str) -> bool {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let settings: Settings = Parser::new().parse(
         matches
@@ -1419,15 +1498,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None if is_stdout_redirected_to_seekable_file() => Output::new_file_from_stdout(&settings)?,
         None => Output::new_stdout(&settings)?,
     };
-    dd_copy(i, o).map_err_context(|| "IO error".to_string())
+    dd_copy(i, o).map_err_context(|| translate!("dd-error-io-error"))
 }
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("dd-about"))
+        .override_usage(format_usage(&translate!("dd-usage")))
+        .after_help(translate!("dd-after-help"))
         .infer_long_args(true)
         .arg(Arg::new(options::OPERANDS).num_args(1..))
 }

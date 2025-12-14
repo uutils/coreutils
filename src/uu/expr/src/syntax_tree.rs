@@ -3,15 +3,23 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ints paren prec multibytes
+// spell-checker:ignore (ToDO) ints paren prec multibytes aaaabc
 
 use std::{cell::Cell, collections::BTreeMap};
 
-use num_bigint::{BigInt, ParseBigIntError};
-use num_traits::{ToPrimitive, Zero};
+use num_bigint::BigInt;
+use num_traits::ToPrimitive;
 use onig::{Regex, RegexOptions, Syntax};
 
-use crate::{ExprError, ExprResult};
+use crate::{
+    ExprError, ExprResult,
+    locale_aware::{
+        locale_aware_index, locale_aware_length, locale_aware_substr, locale_comparison,
+    },
+};
+
+pub(crate) type MaybeNonUtf8String = Vec<u8>;
+pub(crate) type MaybeNonUtf8Str = [u8];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinOp {
@@ -63,29 +71,27 @@ impl BinOp {
 
 impl RelationOp {
     fn eval(&self, a: ExprResult<NumOrStr>, b: ExprResult<NumOrStr>) -> ExprResult<NumOrStr> {
+        // Make sure that the given comparison validates the relational operator.
+        let check_cmp = |cmp| {
+            use RelationOp::{Eq, Geq, Gt, Leq, Lt, Neq};
+            use std::cmp::Ordering::{Equal, Greater, Less};
+            matches!(
+                (self, cmp),
+                (Lt | Leq | Neq, Less) | (Leq | Eq | Geq, Equal) | (Gt | Geq | Neq, Greater)
+            )
+        };
+
         let a = a?;
         let b = b?;
-        let b = if let (Ok(a), Ok(b)) = (&a.to_bigint(), &b.to_bigint()) {
-            match self {
-                Self::Lt => a < b,
-                Self::Leq => a <= b,
-                Self::Eq => a == b,
-                Self::Neq => a != b,
-                Self::Gt => a > b,
-                Self::Geq => a >= b,
-            }
+        let b = if let (Some(a), Some(b)) = (&a.to_bigint(), &b.to_bigint()) {
+            check_cmp(a.cmp(b))
         } else {
             // These comparisons should be using locale settings
+
             let a = a.eval_as_string();
             let b = b.eval_as_string();
-            match self {
-                Self::Lt => a < b,
-                Self::Leq => a <= b,
-                Self::Eq => a == b,
-                Self::Neq => a != b,
-                Self::Gt => a > b,
-                Self::Geq => a >= b,
-            }
+
+            check_cmp(locale_comparison(&a, &b))
         };
         if b { Ok(1.into()) } else { Ok(0.into()) }
     }
@@ -110,7 +116,7 @@ impl NumericOp {
             Self::Mod => {
                 if a.checked_div(&b).is_none() {
                     return Err(ExprError::DivisionByZero);
-                };
+                }
                 a % b
             }
         }))
@@ -147,41 +153,89 @@ impl StringOp {
                 Ok(left)
             }
             Self::Match => {
-                let left = left?.eval_as_string();
-                let right = right?.eval_as_string();
-                check_posix_regex_errors(&right)?;
-                let prefix = if right.starts_with('*') { r"^\" } else { "^" };
-                let re_string = format!("{prefix}{right}");
-                let re = Regex::with_options(
-                    &re_string,
-                    RegexOptions::REGEX_OPTION_NONE,
-                    Syntax::grep(),
-                )
-                .map_err(|_| ExprError::InvalidRegexExpression)?;
-                Ok(if re.captures_len() > 0 {
-                    re.captures(&left)
-                        .and_then(|captures| captures.at(1))
-                        .unwrap_or("")
-                        .to_string()
-                } else {
-                    re.find(&left)
-                        .map_or("0".to_string(), |(start, end)| (end - start).to_string())
-                }
-                .into())
+                let left_bytes = left?.eval_as_string();
+                let right_bytes = right?.eval_as_string();
+                evaluate_match_expression(left_bytes, right_bytes)
             }
             Self::Index => {
                 let left = left?.eval_as_string();
                 let right = right?.eval_as_string();
-                for (current_idx, ch_h) in left.chars().enumerate() {
-                    for ch_n in right.to_string().chars() {
-                        if ch_n == ch_h {
-                            return Ok((current_idx + 1).into());
-                        }
-                    }
-                }
-                Ok(0.into())
+
+                Ok(locale_aware_index(&left, &right).into())
             }
         }
+    }
+}
+
+/// Check if regex pattern character iterator is at the end of a regex expression or subexpression
+fn is_end_of_expression<I>(pattern_chars: &I) -> bool
+where
+    I: Iterator<Item = char> + Clone,
+{
+    let mut pattern_chars_clone = pattern_chars.clone();
+    match pattern_chars_clone.next() {
+        Some('\\') => matches!(pattern_chars_clone.next(), Some(')' | '|')),
+        None => true, // No characters left
+        _ => false,
+    }
+}
+
+/// Check if regex pattern character iterator is at the start of a valid range quantifier.
+/// The iterator's start position is expected to be after the opening brace.
+/// Range quantifier ends to closing brace.
+///
+/// # Examples of valid range quantifiers
+///
+/// - `r"\{3\}"`
+/// - `r"\{3,\}"`
+/// - `r"\{,6\}"`
+/// - `r"\{3,6\}"`
+/// - `r"\{,\}"`
+fn verify_range_quantifier<I>(pattern_chars: &I) -> Result<(), ExprError>
+where
+    I: Iterator<Item = char> + Clone,
+{
+    let mut pattern_chars_clone = pattern_chars.clone().peekable();
+    if pattern_chars_clone.peek().is_none() {
+        return Err(ExprError::UnmatchedOpeningBrace);
+    }
+
+    // Parse the string between braces
+    let mut quantifier = String::new();
+    let mut prev = '\0';
+    let mut curr_is_escaped = false;
+    while let Some(curr) = pattern_chars_clone.next() {
+        curr_is_escaped = prev == '\\' && !curr_is_escaped;
+        if curr_is_escaped && curr == '}' {
+            break;
+        }
+        if pattern_chars_clone.peek().is_none() {
+            return Err(ExprError::UnmatchedOpeningBrace);
+        }
+        if prev != '\0' {
+            quantifier.push(prev);
+        }
+        prev = curr;
+    }
+
+    // Check if parsed quantifier is valid
+    let re = Regex::new(r"^([0-9]*,[0-9]*|[0-9]+)$").expect("valid regular expression");
+    if let Some(captures) = re.captures(&quantifier) {
+        let matched = captures.at(0).unwrap_or_default();
+        match matched.split_once(',') {
+            Some(("", "")) => Ok(()),
+            Some((x, "") | ("", x)) if x.parse::<i16>().is_ok() => Ok(()),
+            Some((_, "") | ("", _)) => Err(ExprError::TooBigRangeQuantifierIndex),
+            Some((f, l)) => match (f.parse::<i16>(), l.parse::<i16>()) {
+                (Ok(f), Ok(l)) if f > l => Err(ExprError::InvalidBracketContent),
+                (Ok(_), Ok(_)) => Ok(()),
+                _ => Err(ExprError::TooBigRangeQuantifierIndex),
+            },
+            None if matched.parse::<i16>().is_ok() => Ok(()),
+            None => Err(ExprError::TooBigRangeQuantifierIndex),
+        }
+    } else {
+        Err(ExprError::InvalidBracketContent)
     }
 }
 
@@ -194,118 +248,335 @@ impl StringOp {
 ///
 /// This method is not comprehensively checking all cases in which
 /// a regular expression could be invalid; any cases not caught will
-/// result in a [ExprError::InvalidRegexExpression] when passing the
+/// result in a [`ExprError::InvalidRegexExpression`] when passing the
 /// regular expression through the Oniguruma bindings. This method is
 /// intended to just identify a few situations for which GNU coreutils
 /// has specific error messages.
 fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
     let mut escaped_parens: u64 = 0;
-    let mut escaped_braces: u64 = 0;
-    let mut escaped = false;
+    let mut prev = '\0';
+    let mut curr_is_escaped = false;
 
-    let mut repeating_pattern_text = String::new();
-    let mut invalid_content_error = false;
-
-    for c in pattern.chars() {
-        match (escaped, c) {
+    for curr in pattern.chars() {
+        curr_is_escaped = prev == '\\' && !curr_is_escaped;
+        match (curr_is_escaped, curr) {
+            (true, '(') => escaped_parens += 1,
             (true, ')') => {
                 escaped_parens = escaped_parens
                     .checked_sub(1)
                     .ok_or(ExprError::UnmatchedClosingParenthesis)?;
             }
-            (true, '(') => {
-                escaped_parens += 1;
-            }
-            (true, '}') => {
-                escaped_braces = escaped_braces
-                    .checked_sub(1)
-                    .ok_or(ExprError::UnmatchedClosingBrace)?;
-                let mut repetition =
-                    repeating_pattern_text[..repeating_pattern_text.len() - 1].splitn(2, ',');
-                match (
-                    repetition
-                        .next()
-                        .expect("splitn always returns at least one string"),
-                    repetition.next(),
-                ) {
-                    ("", None) => {
-                        // Empty repeating pattern
-                        invalid_content_error = true;
-                    }
-                    (x, None | Some("")) => {
-                        if x.parse::<i16>().is_err() {
-                            invalid_content_error = true;
-                        }
-                    }
-                    ("", Some(x)) => {
-                        if x.parse::<i16>().is_err() {
-                            invalid_content_error = true;
-                        }
-                    }
-                    (f, Some(l)) => {
-                        if let (Ok(f), Ok(l)) = (f.parse::<i16>(), l.parse::<i16>()) {
-                            invalid_content_error = invalid_content_error || f > l;
-                        } else {
-                            invalid_content_error = true;
-                        }
-                    }
-                }
-                repeating_pattern_text.clear();
-            }
-            (true, '{') => {
-                escaped_braces += 1;
-            }
-            _ => {
-                if escaped_braces > 0 && repeating_pattern_text.len() <= 13 {
-                    repeating_pattern_text.push(c);
-                }
-                if escaped_braces > 0 && !(c.is_ascii_digit() || c == '\\' || c == ',') {
-                    invalid_content_error = true;
-                }
-            }
+            _ => {}
         }
-        escaped = !escaped && c == '\\';
+        prev = curr;
     }
-    match (
-        escaped_parens.is_zero(),
-        escaped_braces.is_zero(),
-        invalid_content_error,
-    ) {
-        (true, true, false) => Ok(()),
-        (_, false, _) => Err(ExprError::UnmatchedOpeningBrace),
-        (false, _, _) => Err(ExprError::UnmatchedOpeningParenthesis),
-        (true, true, true) => Err(ExprError::InvalidBracketContent),
+
+    match escaped_parens {
+        0 => Ok(()),
+        _ => Err(ExprError::UnmatchedOpeningParenthesis),
     }
 }
 
+/// Build a regex from a pattern string with locale-aware encoding
+fn build_regex(pattern_bytes: Vec<u8>) -> ExprResult<(Regex, String)> {
+    use onig::EncodedBytes;
+    use uucore::i18n::{UEncoding, get_locale_encoding};
+
+    let encoding = get_locale_encoding();
+
+    // For pattern processing, we need to handle it based on locale
+    let pattern_str = String::from_utf8(pattern_bytes.clone())
+        .unwrap_or_else(|_| String::from_utf8_lossy(&pattern_bytes).into());
+    check_posix_regex_errors(&pattern_str)?;
+
+    // Transpile the input pattern from BRE syntax to `onig` crate's `Syntax::grep`
+    let mut re_string = String::with_capacity(pattern_str.len() + 1);
+    let mut pattern_chars = pattern_str.chars().peekable();
+    let mut prev = '\0';
+    let mut prev_is_escaped = false;
+    let mut is_start_of_expression = true;
+
+    // All patterns are anchored so they begin with a caret (^)
+    if pattern_chars.peek() != Some(&'^') {
+        re_string.push('^');
+    }
+
+    while let Some(curr) = pattern_chars.next() {
+        let curr_is_escaped = prev == '\\' && !prev_is_escaped;
+        let is_first_character = prev == '\0';
+
+        match curr {
+            // Character class negation "[^a]"
+            // Explicitly escaped caret "\^"
+            '^' if !is_start_of_expression && !matches!(prev, '[' | '\\') => {
+                re_string.push_str(r"\^");
+            }
+            '$' if !curr_is_escaped && !is_end_of_expression(&pattern_chars) => {
+                re_string.push_str(r"\$");
+            }
+            '\\' if !curr_is_escaped && pattern_chars.peek().is_none() => {
+                return Err(ExprError::TrailingBackslash);
+            }
+            '{' if curr_is_escaped => {
+                // Handle '{' literally at the start of an expression
+                if is_start_of_expression {
+                    if re_string.ends_with('\\') {
+                        let _ = re_string.pop();
+                    }
+                    re_string.push(curr);
+                } else {
+                    // Check if the following section is a valid range quantifier
+                    verify_range_quantifier(&pattern_chars)?;
+
+                    re_string.push(curr);
+                    // Set the lower bound of range quantifier to 0 if it is missing
+                    if pattern_chars.peek() == Some(&',') {
+                        re_string.push('0');
+                    }
+                }
+            }
+            _ => re_string.push(curr),
+        }
+
+        // Capturing group "\(abc\)"
+        // Alternative pattern "a\|b"
+        is_start_of_expression = curr == '\\' && is_first_character
+            || curr_is_escaped && matches!(curr, '(' | '|')
+            || curr == '\\' && prev_is_escaped && matches!(prev, '(' | '|');
+
+        prev_is_escaped = curr_is_escaped;
+        prev = curr;
+    }
+
+    // Create regex with proper encoding
+    let re = match encoding {
+        UEncoding::Utf8 => {
+            // For UTF-8 locale, use UTF-8 encoding
+            Regex::with_options_and_encoding(
+                &re_string,
+                RegexOptions::REGEX_OPTION_SINGLELINE,
+                Syntax::grep(),
+            )
+        }
+        UEncoding::Ascii => {
+            // For non-UTF-8 locale, use ASCII encoding
+            Regex::with_options_and_encoding(
+                EncodedBytes::ascii(re_string.as_bytes()),
+                RegexOptions::REGEX_OPTION_SINGLELINE,
+                Syntax::grep(),
+            )
+        }
+    }
+    .map_err(|error| match error.code() {
+        // "invalid repeat range {lower,upper}"
+        -123 => ExprError::InvalidBracketContent,
+        // "too big number for repeat range"
+        -201 => ExprError::TooBigRangeQuantifierIndex,
+        _ => ExprError::InvalidRegexExpression,
+    })?;
+
+    Ok((re, re_string))
+}
+
+/// Find matches in the input using the compiled regex
+fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> ExprResult<String> {
+    use onig::EncodedBytes;
+    use uucore::i18n::{UEncoding, get_locale_encoding};
+
+    let encoding = get_locale_encoding();
+
+    // Match against the input using the appropriate encoding
+    let mut region = onig::Region::new();
+    let result = match encoding {
+        UEncoding::Utf8 => {
+            // In UTF-8 locale, check if input is valid UTF-8
+            if let Ok(left_str) = std::str::from_utf8(&left_bytes) {
+                // Valid UTF-8, match as UTF-8
+                let pos = regex.search_with_encoding(
+                    left_str,
+                    0,
+                    left_str.len(),
+                    onig::SearchOptions::SEARCH_OPTION_NONE,
+                    Some(&mut region),
+                );
+
+                if pos.is_some() {
+                    if regex.captures_len() > 0 {
+                        // Get first capture group
+                        region
+                            .pos(1)
+                            .map(|(start, end)| left_str[start..end].to_string())
+                            .unwrap_or_default()
+                    } else {
+                        // Count characters in the match
+                        let (start, end) = region.pos(0).unwrap();
+                        left_str[start..end].chars().count().to_string()
+                    }
+                } else {
+                    // No match
+                    if regex.captures_len() > 0 {
+                        String::new()
+                    } else {
+                        "0".to_string()
+                    }
+                }
+            } else {
+                // Invalid UTF-8 in UTF-8 locale
+                // Try to match as bytes using ASCII encoding
+                let left_encoded = EncodedBytes::ascii(&left_bytes);
+                // Need to create ASCII version of regex too
+                let re_ascii = Regex::with_options_and_encoding(
+                    EncodedBytes::ascii(re_string.as_bytes()),
+                    RegexOptions::REGEX_OPTION_SINGLELINE,
+                    Syntax::grep(),
+                )
+                .ok();
+
+                if let Some(re_ascii) = re_ascii {
+                    let pos = re_ascii.search_with_encoding(
+                        left_encoded,
+                        0,
+                        left_bytes.len(),
+                        onig::SearchOptions::SEARCH_OPTION_NONE,
+                        Some(&mut region),
+                    );
+
+                    if pos.is_some() {
+                        if re_ascii.captures_len() > 0 {
+                            // Get first capture group
+                            region
+                                .pos(1)
+                                .map(|(start, end)| {
+                                    // Return empty string for invalid UTF-8 capture in UTF-8 locale
+                                    if std::str::from_utf8(&left_bytes[start..end]).is_err() {
+                                        String::new()
+                                    } else {
+                                        String::from_utf8_lossy(&left_bytes[start..end])
+                                            .into_owned()
+                                    }
+                                })
+                                .unwrap_or_default()
+                        } else {
+                            // No capture groups - return 0 for invalid UTF-8 in UTF-8 locale
+                            "0".to_string()
+                        }
+                    } else {
+                        // No match
+                        if re_ascii.captures_len() > 0 {
+                            String::new()
+                        } else {
+                            "0".to_string()
+                        }
+                    }
+                } else {
+                    // Couldn't create ASCII regex - no match
+                    if regex.captures_len() > 0 {
+                        String::new()
+                    } else {
+                        "0".to_string()
+                    }
+                }
+            }
+        }
+        UEncoding::Ascii => {
+            // In ASCII/C locale, work with bytes directly
+            let left_encoded = EncodedBytes::ascii(&left_bytes);
+            let pos = regex.search_with_encoding(
+                left_encoded,
+                0,
+                left_bytes.len(),
+                onig::SearchOptions::SEARCH_OPTION_NONE,
+                Some(&mut region),
+            );
+
+            if pos.is_some() {
+                if regex.captures_len() > 0 {
+                    // Get first capture group - return raw bytes for C locale
+                    if let Some((start, end)) = region.pos(1) {
+                        let capture_bytes = &left_bytes[start..end];
+                        // Return raw bytes as String for consistency with other cases
+                        return Ok(String::from_utf8_lossy(capture_bytes).into_owned());
+                    }
+                    String::new()
+                } else {
+                    // Return byte count of match
+                    let (start, end) = region.pos(0).unwrap();
+                    (end - start).to_string()
+                }
+            } else {
+                // No match
+                if regex.captures_len() > 0 {
+                    String::new()
+                } else {
+                    "0".to_string()
+                }
+            }
+        }
+    };
+
+    Ok(result)
+}
+
+/// Evaluate a match expression with locale-aware regex matching
+fn evaluate_match_expression(left_bytes: Vec<u8>, right_bytes: Vec<u8>) -> ExprResult<NumOrStr> {
+    let (regex, re_string) = build_regex(right_bytes)?;
+
+    // Special case for ASCII locale with capture groups that need to return raw bytes
+    use uucore::i18n::{UEncoding, get_locale_encoding};
+    let encoding = get_locale_encoding();
+
+    if matches!(encoding, UEncoding::Ascii) && regex.captures_len() > 0 {
+        // Try to find the actual capture bytes for ASCII locale
+        let mut region = onig::Region::new();
+        let left_encoded = onig::EncodedBytes::ascii(&left_bytes);
+        let pos = regex.search_with_encoding(
+            left_encoded,
+            0,
+            left_bytes.len(),
+            onig::SearchOptions::SEARCH_OPTION_NONE,
+            Some(&mut region),
+        );
+
+        if pos.is_some() {
+            if let Some((start, end)) = region.pos(1) {
+                let capture_bytes = &left_bytes[start..end];
+                return Ok(MaybeNonUtf8String::from(capture_bytes.to_vec()).into());
+            }
+        }
+    }
+
+    let result = find_match(regex, re_string, left_bytes)?;
+    Ok(result.into())
+}
+
 /// Precedence for infix binary operators
-const PRECEDENCE: &[&[(&str, BinOp)]] = &[
-    &[("|", BinOp::String(StringOp::Or))],
-    &[("&", BinOp::String(StringOp::And))],
+const PRECEDENCE: &[&[(&MaybeNonUtf8Str, BinOp)]] = &[
+    &[(b"|", BinOp::String(StringOp::Or))],
+    &[(b"&", BinOp::String(StringOp::And))],
     &[
-        ("<", BinOp::Relation(RelationOp::Lt)),
-        ("<=", BinOp::Relation(RelationOp::Leq)),
-        ("=", BinOp::Relation(RelationOp::Eq)),
-        ("!=", BinOp::Relation(RelationOp::Neq)),
-        (">=", BinOp::Relation(RelationOp::Geq)),
-        (">", BinOp::Relation(RelationOp::Gt)),
+        (b"<", BinOp::Relation(RelationOp::Lt)),
+        (b"<=", BinOp::Relation(RelationOp::Leq)),
+        (b"=", BinOp::Relation(RelationOp::Eq)),
+        (b"!=", BinOp::Relation(RelationOp::Neq)),
+        (b">=", BinOp::Relation(RelationOp::Geq)),
+        (b">", BinOp::Relation(RelationOp::Gt)),
     ],
     &[
-        ("+", BinOp::Numeric(NumericOp::Add)),
-        ("-", BinOp::Numeric(NumericOp::Sub)),
+        (b"+", BinOp::Numeric(NumericOp::Add)),
+        (b"-", BinOp::Numeric(NumericOp::Sub)),
     ],
     &[
-        ("*", BinOp::Numeric(NumericOp::Mul)),
-        ("/", BinOp::Numeric(NumericOp::Div)),
-        ("%", BinOp::Numeric(NumericOp::Mod)),
+        (b"*", BinOp::Numeric(NumericOp::Mul)),
+        (b"/", BinOp::Numeric(NumericOp::Div)),
+        (b"%", BinOp::Numeric(NumericOp::Mod)),
     ],
-    &[(":", BinOp::String(StringOp::Match))],
+    &[(b":", BinOp::String(StringOp::Match))],
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NumOrStr {
     Num(BigInt),
-    Str(String),
+    Str(MaybeNonUtf8String),
 }
 
 impl From<usize> for NumOrStr {
@@ -322,30 +593,37 @@ impl From<BigInt> for NumOrStr {
 
 impl From<String> for NumOrStr {
     fn from(str: String) -> Self {
+        Self::Str(str.into())
+    }
+}
+
+impl From<MaybeNonUtf8String> for NumOrStr {
+    fn from(str: MaybeNonUtf8String) -> Self {
         Self::Str(str)
     }
 }
 
 impl NumOrStr {
-    pub fn to_bigint(&self) -> Result<BigInt, ParseBigIntError> {
+    pub fn to_bigint(&self) -> Option<BigInt> {
         match self {
-            Self::Num(num) => Ok(num.clone()),
-            Self::Str(str) => str.parse::<BigInt>(),
+            Self::Num(num) => Some(num.clone()),
+            Self::Str(str) => std::str::from_utf8(str).ok()?.parse::<BigInt>().ok(),
         }
     }
 
     pub fn eval_as_bigint(self) -> ExprResult<BigInt> {
         match self {
             Self::Num(num) => Ok(num),
-            Self::Str(str) => str
+            Self::Str(str) => String::from_utf8(str)
+                .map_err(|_| ExprError::NonIntegerArgument)?
                 .parse::<BigInt>()
                 .map_err(|_| ExprError::NonIntegerArgument),
         }
     }
 
-    pub fn eval_as_string(self) -> String {
+    pub fn eval_as_string(self) -> MaybeNonUtf8String {
         match self {
-            Self::Num(num) => num.to_string(),
+            Self::Num(num) => num.to_string().into(),
             Self::Str(str) => str,
         }
     }
@@ -365,7 +643,7 @@ pub enum AstNodeInner {
         value: NumOrStr,
     },
     Leaf {
-        value: String,
+        value: MaybeNonUtf8String,
     },
     BinOp {
         op_type: BinOp,
@@ -383,7 +661,7 @@ pub enum AstNodeInner {
 }
 
 impl AstNode {
-    pub fn parse(input: &[impl AsRef<str>]) -> ExprResult<Self> {
+    pub fn parse(input: &[impl AsRef<MaybeNonUtf8Str>]) -> ExprResult<Self> {
         Parser::new(input).parse()
     }
 
@@ -410,7 +688,7 @@ impl AstNode {
                     result_stack.insert(node.id, Ok(value.clone()));
                 }
                 AstNodeInner::Leaf { value, .. } => {
-                    result_stack.insert(node.id, Ok(value.to_string().into()));
+                    result_stack.insert(node.id, Ok(value.to_owned().into()));
                 }
                 AstNodeInner::BinOp {
                     op_type,
@@ -447,7 +725,7 @@ impl AstNode {
                         continue;
                     };
 
-                    let string: String = string?.eval_as_string();
+                    let string: MaybeNonUtf8String = string?.eval_as_string();
 
                     // The GNU docs say:
                     //
@@ -468,7 +746,7 @@ impl AstNode {
                         .unwrap_or(0);
 
                     if let (Some(pos), Some(_)) = (pos.checked_sub(1), length.checked_sub(1)) {
-                        let result = string.chars().skip(pos).take(length).collect::<String>();
+                        let result = locale_aware_substr(string, pos, length);
                         result_stack.insert(node.id, Ok(result.into()));
                     } else {
                         result_stack.insert(node.id, Ok(String::new().into()));
@@ -483,7 +761,7 @@ impl AstNode {
                         continue;
                     };
 
-                    let length = string?.eval_as_string().chars().count();
+                    let length = locale_aware_length(&string?.eval_as_string());
                     result_stack.insert(node.id, Ok(length.into()));
                 }
             }
@@ -498,9 +776,9 @@ thread_local! {
     static NODE_ID: Cell<u32> = const { Cell::new(1) };
 }
 
-// We create unique identifiers for each node in the AST.
-// This is used to transform the recursive algorithm into an iterative one.
-// It is used to store the result of each node's evaluation in a BtreeMap.
+/// We create unique identifiers for each node in the AST.
+/// This is used to transform the recursive algorithm into an iterative one.
+/// It is used to store the result of each node's evaluation in a `BtreeMap`.
 fn get_next_id() -> u32 {
     NODE_ID.with(|id| {
         let current = id.get();
@@ -509,17 +787,17 @@ fn get_next_id() -> u32 {
     })
 }
 
-struct Parser<'a, S: AsRef<str>> {
+struct Parser<'a, S: AsRef<MaybeNonUtf8Str>> {
     input: &'a [S],
     index: usize,
 }
 
-impl<'a, S: AsRef<str>> Parser<'a, S> {
+impl<'a, S: AsRef<MaybeNonUtf8Str>> Parser<'a, S> {
     fn new(input: &'a [S]) -> Self {
         Self { input, index: 0 }
     }
 
-    fn next(&mut self) -> ExprResult<&'a str> {
+    fn next(&mut self) -> ExprResult<&'a MaybeNonUtf8Str> {
         let next = self.input.get(self.index);
         if let Some(next) = next {
             self.index += 1;
@@ -528,12 +806,12 @@ impl<'a, S: AsRef<str>> Parser<'a, S> {
             // The indexing won't panic, because we know that the input size
             // is greater than zero.
             Err(ExprError::MissingArgument(
-                self.input[self.index - 1].as_ref().into(),
+                String::from_utf8_lossy(self.input[self.index - 1].as_ref()).into_owned(),
             ))
         }
     }
 
-    fn accept<T>(&mut self, f: impl Fn(&str) -> Option<T>) -> Option<T> {
+    fn accept<T>(&mut self, f: impl Fn(&MaybeNonUtf8Str) -> Option<T>) -> Option<T> {
         let next = self.input.get(self.index)?;
         let tok = f(next.as_ref());
         if let Some(tok) = tok {
@@ -550,7 +828,9 @@ impl<'a, S: AsRef<str>> Parser<'a, S> {
         }
         let res = self.parse_expression()?;
         if let Some(arg) = self.input.get(self.index) {
-            return Err(ExprError::UnexpectedArgument(arg.as_ref().into()));
+            return Err(ExprError::UnexpectedArgument(
+                String::from_utf8_lossy(arg.as_ref()).into_owned(),
+            ));
         }
         Ok(res)
     }
@@ -593,60 +873,60 @@ impl<'a, S: AsRef<str>> Parser<'a, S> {
     fn parse_simple_expression(&mut self) -> ExprResult<AstNode> {
         let first = self.next()?;
         let inner = match first {
-            "match" => {
-                let left = self.parse_expression()?;
-                let right = self.parse_expression()?;
+            b"match" => {
+                let left = self.parse_simple_expression()?;
+                let right = self.parse_simple_expression()?;
                 AstNodeInner::BinOp {
                     op_type: BinOp::String(StringOp::Match),
                     left: Box::new(left),
                     right: Box::new(right),
                 }
             }
-            "substr" => {
-                let string = self.parse_expression()?;
-                let pos = self.parse_expression()?;
-                let length = self.parse_expression()?;
+            b"substr" => {
+                let string = self.parse_simple_expression()?;
+                let pos = self.parse_simple_expression()?;
+                let length = self.parse_simple_expression()?;
                 AstNodeInner::Substr {
                     string: Box::new(string),
                     pos: Box::new(pos),
                     length: Box::new(length),
                 }
             }
-            "index" => {
-                let left = self.parse_expression()?;
-                let right = self.parse_expression()?;
+            b"index" => {
+                let left = self.parse_simple_expression()?;
+                let right = self.parse_simple_expression()?;
                 AstNodeInner::BinOp {
                     op_type: BinOp::String(StringOp::Index),
                     left: Box::new(left),
                     right: Box::new(right),
                 }
             }
-            "length" => {
-                let string = self.parse_expression()?;
+            b"length" => {
+                let string = self.parse_simple_expression()?;
                 AstNodeInner::Length {
                     string: Box::new(string),
                 }
             }
-            "+" => AstNodeInner::Leaf {
+            b"+" => AstNodeInner::Leaf {
                 value: self.next()?.into(),
             },
-            "(" => {
+            b"(" => {
                 // Evaluate the node just after parsing to we detect arithmetic
                 // errors before checking for the closing parenthesis.
                 let s = self.parse_expression()?.evaluated()?;
 
                 match self.next() {
-                    Ok(")") => {}
+                    Ok(b")") => {}
                     // Since we have parsed at least a '(', there will be a token
                     // at `self.index - 1`. So this indexing won't panic.
                     Ok(_) => {
                         return Err(ExprError::ExpectedClosingBraceInsteadOf(
-                            self.input[self.index - 1].as_ref().into(),
+                            String::from_utf8_lossy(self.input[self.index - 1].as_ref()).into(),
                         ));
                     }
                     Err(ExprError::MissingArgument(_)) => {
                         return Err(ExprError::ExpectedClosingBraceAfter(
-                            self.input[self.index - 1].as_ref().into(),
+                            String::from_utf8_lossy(self.input[self.index - 1].as_ref()).into(),
                         ));
                     }
                     Err(e) => return Err(e),
@@ -670,11 +950,11 @@ pub fn is_truthy(s: &NumOrStr) -> bool {
         NumOrStr::Num(num) => num != &BigInt::from(0),
         NumOrStr::Str(str) => {
             // Edge case: `-` followed by nothing is truthy
-            if str == "-" {
+            if str == b"-" {
                 return true;
             }
 
-            let mut bytes = str.bytes();
+            let mut bytes = str.iter().copied();
 
             // Empty string is falsy
             let Some(first) = bytes.next() else {
@@ -690,7 +970,7 @@ pub fn is_truthy(s: &NumOrStr) -> bool {
 #[cfg(test)]
 mod test {
     use crate::ExprError;
-    use crate::ExprError::InvalidBracketContent;
+    use crate::syntax_tree::verify_range_quantifier;
 
     use super::{
         AstNode, AstNodeInner, BinOp, NumericOp, RelationOp, StringOp, check_posix_regex_errors,
@@ -840,7 +1120,7 @@ mod test {
             .unwrap()
             .eval()
             .unwrap();
-        assert_eq!(result.eval_as_string(), "");
+        assert_eq!(result.eval_as_string(), b"");
     }
 
     #[test]
@@ -849,13 +1129,13 @@ mod test {
             .unwrap()
             .eval()
             .unwrap();
-        assert_eq!(result.eval_as_string(), "0");
+        assert_eq!(result.eval_as_string(), b"0");
 
         let result = AstNode::parse(&["*cats", ":", r"*cats"])
             .unwrap()
             .eval()
             .unwrap();
-        assert_eq!(result.eval_as_string(), "5");
+        assert_eq!(result.eval_as_string(), b"5");
     }
 
     #[test]
@@ -864,7 +1144,7 @@ mod test {
             .unwrap()
             .eval()
             .unwrap();
-        assert_eq!(result.eval_as_string(), "0");
+        assert_eq!(result.eval_as_string(), b"0");
     }
 
     #[test]
@@ -883,11 +1163,6 @@ mod test {
             check_posix_regex_errors(r"\(abc"),
             Err(ExprError::UnmatchedOpeningParenthesis)
         );
-
-        assert_eq!(
-            check_posix_regex_errors(r"\{1,2"),
-            Err(ExprError::UnmatchedOpeningBrace)
-        );
     }
 
     #[test]
@@ -896,47 +1171,234 @@ mod test {
             check_posix_regex_errors(r"abc\)"),
             Err(ExprError::UnmatchedClosingParenthesis)
         );
+    }
 
+    #[test]
+    fn test_is_valid_range_quantifier() {
+        assert!(verify_range_quantifier(&"3\\}".chars()).is_ok());
+        assert!(verify_range_quantifier(&"3,\\}".chars()).is_ok());
+        assert!(verify_range_quantifier(&",6\\}".chars()).is_ok());
+        assert!(verify_range_quantifier(&"3,6\\}".chars()).is_ok());
+        assert!(verify_range_quantifier(&",\\}".chars()).is_ok());
+        assert!(verify_range_quantifier(&"32767\\}anything".chars()).is_ok());
         assert_eq!(
-            check_posix_regex_errors(r"abc\}"),
-            Err(ExprError::UnmatchedClosingBrace)
+            verify_range_quantifier(&"\\{3,6\\}".chars()),
+            Err(ExprError::InvalidBracketContent)
+        );
+        assert_eq!(
+            verify_range_quantifier(&"\\}".chars()),
+            Err(ExprError::InvalidBracketContent)
+        );
+        assert_eq!(
+            verify_range_quantifier(&"".chars()),
+            Err(ExprError::UnmatchedOpeningBrace)
+        );
+        assert_eq!(
+            verify_range_quantifier(&"3".chars()),
+            Err(ExprError::UnmatchedOpeningBrace)
+        );
+        assert_eq!(
+            verify_range_quantifier(&"3,".chars()),
+            Err(ExprError::UnmatchedOpeningBrace)
+        );
+        assert_eq!(
+            verify_range_quantifier(&",6".chars()),
+            Err(ExprError::UnmatchedOpeningBrace)
+        );
+        assert_eq!(
+            verify_range_quantifier(&"3,6".chars()),
+            Err(ExprError::UnmatchedOpeningBrace)
+        );
+        assert_eq!(
+            verify_range_quantifier(&",".chars()),
+            Err(ExprError::UnmatchedOpeningBrace)
+        );
+        assert_eq!(
+            verify_range_quantifier(&"32768\\}".chars()),
+            Err(ExprError::TooBigRangeQuantifierIndex)
         );
     }
 
     #[test]
-    fn check_regex_empty_repeating_pattern() {
-        assert_eq!(
-            check_posix_regex_errors("ab\\{\\}"),
-            Err(InvalidBracketContent)
-        );
+    fn test_evaluate_match_expression_basic() {
+        use super::evaluate_match_expression;
+
+        // Basic literal match
+        let result = evaluate_match_expression(b"hello".to_vec(), b"hello".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"5");
+
+        // No match
+        let result = evaluate_match_expression(b"hello".to_vec(), b"world".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"0");
+
+        // Partial match from beginning
+        let result = evaluate_match_expression(b"hello world".to_vec(), b"hello".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"5");
     }
 
     #[test]
-    fn check_regex_intervals_two_numbers() {
-        assert_eq!(
-            // out of order
-            check_posix_regex_errors("ab\\{1,0\\}"),
-            Err(InvalidBracketContent)
-        );
-        assert_eq!(
-            check_posix_regex_errors("ab\\{1,a\\}"),
-            Err(InvalidBracketContent)
-        );
-        assert_eq!(
-            check_posix_regex_errors("ab\\{a,3\\}"),
-            Err(InvalidBracketContent)
-        );
-        assert_eq!(
-            check_posix_regex_errors("ab\\{a,b\\}"),
-            Err(InvalidBracketContent)
-        );
-        assert_eq!(
-            check_posix_regex_errors("ab\\{a,\\}"),
-            Err(InvalidBracketContent)
-        );
-        assert_eq!(
-            check_posix_regex_errors("ab\\{,b\\}"),
-            Err(InvalidBracketContent)
-        );
+    fn test_evaluate_match_expression_regex_patterns() {
+        use super::evaluate_match_expression;
+
+        // Dot matches any character
+        let result = evaluate_match_expression(b"abc".to_vec(), b"a.c".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"3");
+
+        // Star quantifier
+        let result = evaluate_match_expression(b"aaaabc".to_vec(), b"a*bc".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"6");
+
+        // Plus quantifier (escaped in BRE)
+        let result = evaluate_match_expression(b"aaaabc".to_vec(), b"a\\+bc".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"6");
+
+        // Question mark quantifier (escaped in BRE)
+        let result = evaluate_match_expression(b"abc".to_vec(), b"ab\\?c".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"3");
+    }
+
+    #[test]
+    fn test_evaluate_match_expression_capture_groups() {
+        use super::evaluate_match_expression;
+
+        // Simple capture group
+        let result =
+            evaluate_match_expression(b"hello123".to_vec(), b"hello\\([0-9]*\\)".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"123");
+
+        // Empty capture group
+        let result =
+            evaluate_match_expression(b"hello".to_vec(), b"hello\\([0-9]*\\)".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"");
+
+        // No capture group, just match length
+        let result =
+            evaluate_match_expression(b"hello123".to_vec(), b"hello[0-9]*".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"8");
+    }
+
+    #[test]
+    fn test_evaluate_match_expression_character_classes() {
+        use super::evaluate_match_expression;
+
+        // Simple character class
+        let result = evaluate_match_expression(b"abc123".to_vec(), b"[a-z]*".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"3");
+
+        // Negated character class
+        let result = evaluate_match_expression(b"123abc".to_vec(), b"[^a-z]*".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"3");
+
+        // Digit character class
+        let result = evaluate_match_expression(b"123abc".to_vec(), b"[0-9]*".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"3");
+    }
+
+    #[test]
+    fn test_evaluate_match_expression_anchoring() {
+        use super::evaluate_match_expression;
+
+        // Patterns are automatically anchored at start
+        let result = evaluate_match_expression(b"world hello".to_vec(), b"hello".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"0");
+
+        // Explicit start anchor (redundant but should work)
+        let result =
+            evaluate_match_expression(b"hello world".to_vec(), b"^hello".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"5");
+
+        // End anchor
+        let result =
+            evaluate_match_expression(b"hello world".to_vec(), b"world$".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"0"); // Should fail because not at start
+
+        let result = evaluate_match_expression(b"world".to_vec(), b"world$".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"5");
+    }
+
+    #[test]
+    fn test_evaluate_match_expression_special_characters() {
+        use super::evaluate_match_expression;
+
+        // Escaped special characters
+        let result = evaluate_match_expression(b"a.b".to_vec(), b"a\\.b".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"3");
+
+        // Escaped asterisk
+        let result = evaluate_match_expression(b"a*b".to_vec(), b"a\\*b".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"3");
+
+        // Caret not at beginning should be escaped
+        let result = evaluate_match_expression(b"a^b".to_vec(), b"a^b".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"3");
+
+        // Dollar not at end should be escaped
+        let result = evaluate_match_expression(b"a$b".to_vec(), b"a$b".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"3");
+    }
+
+    #[test]
+    fn test_evaluate_match_expression_range_quantifiers() {
+        use super::evaluate_match_expression;
+
+        // Fixed count quantifier
+        let result = evaluate_match_expression(b"aaa".to_vec(), b"a\\{3\\}".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"3");
+
+        // Range quantifier
+        let result = evaluate_match_expression(b"aa".to_vec(), b"a\\{1,3\\}".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"2");
+
+        // Minimum quantifier
+        let result = evaluate_match_expression(b"aaaa".to_vec(), b"a\\{2,\\}".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"4");
+
+        // Maximum quantifier
+        let result = evaluate_match_expression(b"aa".to_vec(), b"a\\{,3\\}".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"2");
+    }
+
+    #[test]
+    fn test_evaluate_match_expression_empty_and_edge_cases() {
+        use super::evaluate_match_expression;
+
+        // Empty input string
+        let result = evaluate_match_expression(b"".to_vec(), b".*".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"0");
+
+        // Empty pattern (should match empty string)
+        let result = evaluate_match_expression(b"".to_vec(), b"".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"0");
+
+        // Pattern matching empty string
+        let result = evaluate_match_expression(b"hello".to_vec(), b".*".to_vec()).unwrap();
+        assert_eq!(result.eval_as_string(), b"5");
+    }
+
+    #[test]
+    fn test_evaluate_match_expression_error_cases() {
+        use super::evaluate_match_expression;
+
+        // Unmatched opening parenthesis
+        let result = evaluate_match_expression(b"hello".to_vec(), b"\\(hello".to_vec());
+        assert!(matches!(
+            result,
+            Err(ExprError::UnmatchedOpeningParenthesis)
+        ));
+
+        // Unmatched closing parenthesis
+        let result = evaluate_match_expression(b"hello".to_vec(), b"hello\\)".to_vec());
+        assert!(matches!(
+            result,
+            Err(ExprError::UnmatchedClosingParenthesis)
+        ));
+
+        // Trailing backslash
+        let result = evaluate_match_expression(b"hello".to_vec(), b"hello\\".to_vec());
+        assert!(matches!(result, Err(ExprError::TrailingBackslash)));
+
+        // Invalid bracket content
+        let result = evaluate_match_expression(b"hello".to_vec(), b"a\\{invalid\\}".to_vec());
+        assert!(matches!(result, Err(ExprError::InvalidBracketContent)));
     }
 }

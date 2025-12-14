@@ -16,10 +16,8 @@ use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
-use uucore::{format_usage, help_about, help_usage, show_error};
-
-const ABOUT: &str = help_about!("expand.md");
-const USAGE: &str = help_usage!("expand.md");
+use uucore::translate;
+use uucore::{format_usage, show_error};
 
 pub mod options {
     pub static TABS: &str = "tabs";
@@ -62,17 +60,17 @@ fn is_digit_or_comma(c: char) -> bool {
 /// Errors that can occur when parsing a `--tabs` argument.
 #[derive(Debug, Error)]
 enum ParseError {
-    #[error("tab size contains invalid character(s): {}", .0.quote())]
+    #[error("{}", translate!("expand-error-invalid-character", "char" => .0.quote()))]
     InvalidCharacter(String),
-    #[error("{} specifier not at start of number: {}", .0.quote(), .1.quote())]
+    #[error("{}", translate!("expand-error-specifier-not-at-start", "specifier" => .0.quote(), "number" => .1.quote()))]
     SpecifierNotAtStartOfNumber(String, String),
-    #[error("{} specifier only allowed with the last value", .0.quote())]
+    #[error("{}", translate!("expand-error-specifier-only-allowed-with-last", "specifier" => .0.quote()))]
     SpecifierOnlyAllowedWithLastValue(String),
-    #[error("tab size cannot be 0")]
+    #[error("{}", translate!("expand-error-tab-size-cannot-be-zero"))]
     TabSizeCannotBeZero,
-    #[error("tab stop is too large {}", .0.quote())]
+    #[error("{}", translate!("expand-error-tab-size-too-large", "size" => .0.quote()))]
     TabSizeTooLarge(String),
-    #[error("tab sizes must be ascending")]
+    #[error("{}", translate!("expand-error-tab-sizes-must-be-ascending"))]
     TabSizesMustBeAscending,
 }
 
@@ -172,7 +170,7 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
 }
 
 struct Options {
-    files: Vec<String>,
+    files: Vec<OsString>,
     tabstops: Vec<usize>,
     tspaces: String,
     iflag: bool,
@@ -206,9 +204,9 @@ impl Options {
             .unwrap(); // length of tabstops is guaranteed >= 1
         let tspaces = " ".repeat(nspaces);
 
-        let files: Vec<String> = match matches.get_many::<String>(options::FILES) {
-            Some(s) => s.map(|v| v.to_string()).collect(),
-            None => vec!["-".to_owned()],
+        let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILES) {
+            Some(s) => s.cloned().collect(),
+            None => vec![OsString::from("-")],
         };
 
         Ok(Self {
@@ -245,58 +243,60 @@ fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(expand_shortcuts(args.collect()))?;
+    let matches =
+        uucore::clap_localization::handle_clap_result(uu_app(), expand_shortcuts(args.collect()))?;
 
     expand(&Options::new(&matches)?)
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(uucore::crate_version!())
-        .about(ABOUT)
-        .after_help(LONG_HELP)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .args_override_self(true)
-        .arg(
-            Arg::new(options::INITIAL)
-                .long(options::INITIAL)
-                .short('i')
-                .help("do not convert tabs after non blanks")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::TABS)
-                .long(options::TABS)
-                .short('t')
-                .value_name("N, LIST")
-                .action(ArgAction::Append)
-                .help(
-                    "have tabs N characters apart, not 8 or use comma separated list \
-                    of explicit tab positions",
-                ),
-        )
-        .arg(
-            Arg::new(options::NO_UTF8)
-                .long(options::NO_UTF8)
-                .short('U')
-                .help("interpret input file as 8-bit ASCII rather than UTF-8")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FILES)
-                .action(ArgAction::Append)
-                .hide(true)
-                .value_hint(clap::ValueHint::FilePath),
-        )
+    uucore::clap_localization::configure_localized_command(
+        Command::new(uucore::util_name())
+            .version(uucore::crate_version!())
+            .about(translate!("expand-about"))
+            .after_help(LONG_HELP)
+            .override_usage(format_usage(&translate!("expand-usage"))),
+    )
+    .infer_long_args(true)
+    .args_override_self(true)
+    .arg(
+        Arg::new(options::INITIAL)
+            .long(options::INITIAL)
+            .short('i')
+            .help(translate!("expand-help-initial"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::TABS)
+            .long(options::TABS)
+            .short('t')
+            .value_name("N, LIST")
+            .action(ArgAction::Append)
+            .help(translate!("expand-help-tabs")),
+    )
+    .arg(
+        Arg::new(options::NO_UTF8)
+            .long(options::NO_UTF8)
+            .short('U')
+            .help(translate!("expand-help-no-utf8"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::FILES)
+            .action(ArgAction::Append)
+            .hide(true)
+            .value_hint(clap::ValueHint::FilePath)
+            .value_parser(clap::value_parser!(OsString)),
+    )
 }
 
-fn open(path: &str) -> UResult<BufReader<Box<dyn Read + 'static>>> {
+fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     let file_buf;
     if path == "-" {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
     } else {
-        file_buf = File::open(path).map_err_context(|| path.to_string())?;
+        let path_ref = Path::new(path);
+        file_buf = File::open(path_ref).map_err_context(|| path.to_string_lossy().to_string())?;
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
 }
@@ -358,6 +358,15 @@ fn expand_line(
 ) -> std::io::Result<()> {
     use self::CharType::{Backspace, Other, Tab};
 
+    // Fast path: if there are no tabs, backspaces, and (in UTF-8 mode or no carriage returns),
+    // we can write the buffer directly without character-by-character processing
+    if !buf.contains(&b'\t') && !buf.contains(&b'\x08') && (options.uflag || !buf.contains(&b'\r'))
+    {
+        output.write_all(buf)?;
+        buf.truncate(0);
+        return Ok(());
+    }
+
     let mut col = 0;
     let mut byte = 0;
     let mut init = true;
@@ -384,10 +393,10 @@ fn expand_line(
             }
         } else {
             (
-                match buf[byte] {
+                match buf.get(byte) {
                     // always take exactly 1 byte in strict ASCII mode
-                    0x09 => Tab,
-                    0x08 => Backspace,
+                    Some(0x09) => Tab,
+                    Some(0x08) => Backspace,
                     _ => Other,
                 },
                 1,
@@ -408,7 +417,7 @@ fn expand_line(
                         output.write_all(&options.tspaces.as_bytes()[..nts])?;
                     } else {
                         output.write_all(" ".repeat(nts).as_bytes())?;
-                    };
+                    }
                 } else {
                     output.write_all(&buf[byte..byte + nbytes])?;
                 }
@@ -435,7 +444,6 @@ fn expand_line(
         byte += nbytes; // advance the pointer
     }
 
-    output.flush()?;
     buf.truncate(0); // clear the buffer
 
     Ok(())
@@ -448,7 +456,10 @@ fn expand(options: &Options) -> UResult<()> {
 
     for file in &options.files {
         if Path::new(file).is_dir() {
-            show_error!("{file}: Is a directory");
+            show_error!(
+                "{}",
+                translate!("expand-error-is-directory", "file" => file.to_string_lossy())
+            );
             set_exit_code(1);
             continue;
         }
@@ -459,16 +470,19 @@ fn expand(options: &Options) -> UResult<()> {
                     Err(_) => buf.is_empty(),
                 } {
                     expand_line(&mut buf, &mut output, ts, options)
-                        .map_err_context(|| "failed to write output".to_string())?;
+                        .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
                 }
             }
             Err(e) => {
                 show_error!("{e}");
                 set_exit_code(1);
-                continue;
             }
         }
     }
+    // Flush once at the end
+    output
+        .flush()
+        .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
     Ok(())
 }
 

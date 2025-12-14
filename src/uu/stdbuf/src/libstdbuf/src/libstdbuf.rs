@@ -2,34 +2,104 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) IOFBF IOLBF IONBF cstdio setvbuf
+// spell-checker:ignore (ToDO) IOFBF IOLBF IONBF setvbuf stderrp stdinp stdoutp
 
-use cpp::cpp;
+use ctor::ctor;
 use libc::{_IOFBF, _IOLBF, _IONBF, FILE, c_char, c_int, fileno, size_t};
 use std::env;
 use std::ptr;
 
-cpp! {{
-    #include <cstdio>
+// This runs automatically when the library is loaded via LD_PRELOAD
+#[ctor]
+fn init() {
+    unsafe { __stdbuf() };
+}
 
-    extern "C" {
-        void __stdbuf(void);
-
-        void __attribute((constructor))
-        __stdbuf_init(void) {
-            __stdbuf();
+/// # Safety
+/// This function is unsafe because it calls a C API
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __stdbuf_get_stdin() -> *mut FILE {
+    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+    {
+        unsafe extern "C" {
+            fn __stdinp() -> *mut FILE;
         }
-
-        FILE *__stdbuf_get_stdin() { return stdin; }
-        FILE *__stdbuf_get_stdout() { return stdout; }
-        FILE *__stdbuf_get_stderr() { return stderr; }
+        unsafe { __stdinp() }
     }
-}}
 
-unsafe extern "C" {
-    fn __stdbuf_get_stdin() -> *mut FILE;
-    fn __stdbuf_get_stdout() -> *mut FILE;
-    fn __stdbuf_get_stderr() -> *mut FILE;
+    #[cfg(target_os = "openbsd")]
+    {
+        unsafe extern "C" {
+            static mut __stdin: *mut FILE;
+        }
+        unsafe { __stdin }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd")))]
+    {
+        unsafe extern "C" {
+            static mut stdin: *mut FILE;
+        }
+        unsafe { stdin }
+    }
+}
+
+/// # Safety
+/// This function is unsafe because it calls a C API
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __stdbuf_get_stdout() -> *mut FILE {
+    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+    {
+        unsafe extern "C" {
+            fn __stdoutp() -> *mut FILE;
+        }
+        unsafe { __stdoutp() }
+    }
+
+    #[cfg(target_os = "openbsd")]
+    {
+        unsafe extern "C" {
+            static mut __stdout: *mut FILE;
+        }
+        unsafe { __stdout }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd")))]
+    {
+        unsafe extern "C" {
+            static mut stdout: *mut FILE;
+        }
+        unsafe { stdout }
+    }
+}
+
+/// # Safety
+/// This function is unsafe because it calls a C API
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __stdbuf_get_stderr() -> *mut FILE {
+    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+    {
+        unsafe extern "C" {
+            fn __stderrp() -> *mut FILE;
+        }
+        unsafe { __stderrp() }
+    }
+
+    #[cfg(target_os = "openbsd")]
+    {
+        unsafe extern "C" {
+            static mut __stderr: *mut FILE;
+        }
+        unsafe { __stderr }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd")))]
+    {
+        unsafe extern "C" {
+            static mut stderr: *mut FILE;
+        }
+        unsafe { stderr }
+    }
 }
 
 fn set_buffer(stream: *mut FILE, value: &str) {
@@ -61,7 +131,9 @@ fn set_buffer(stream: *mut FILE, value: &str) {
 }
 
 /// # Safety
-/// ToDO ... (safety note)
+/// This function is intended to be called automatically when the library is loaded via LD_PRELOAD.
+/// It assumes that the standard streams are valid and that calling setvbuf on them is safe.
+/// The caller must ensure this function is only called in a compatible runtime environment.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __stdbuf() {
     if let Ok(val) = env::var("_STDBUF_E") {

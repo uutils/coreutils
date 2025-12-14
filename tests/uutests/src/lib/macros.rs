@@ -52,7 +52,7 @@ macro_rules! util_name {
 #[macro_export]
 macro_rules! new_ucmd {
     () => {
-        TestScenario::new(util_name!()).ucmd()
+        ::uutests::util::TestScenario::new(::uutests::util_name!()).ucmd()
     };
 }
 
@@ -71,8 +71,24 @@ macro_rules! new_ucmd {
 #[macro_export]
 macro_rules! at_and_ucmd {
     () => {{
-        let ts = TestScenario::new(util_name!());
+        let ts = ::uutests::util::TestScenario::new(::uutests::util_name!());
         (ts.fixtures.clone(), ts.ucmd())
+    }};
+}
+
+/// Convenience macro for acquiring a [`TestScenario`] with its test path.
+///
+/// Returns a tuple containing the following:
+/// - a [`TestScenario`] for invoking commands
+/// - an [`AtPath`] that points to a unique temporary test directory
+///
+/// [`AtPath`]: crate::util::AtPath
+/// [`TestScenario`]: crate::util::TestScenario
+#[macro_export]
+macro_rules! at_and_ts {
+    () => {{
+        let ts = ::uutests::util::TestScenario::new(::uutests::util_name!());
+        (ts.fixtures.clone(), ts)
     }};
 }
 

@@ -9,7 +9,8 @@ use clap::{Arg, ArgAction, Command};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::fs::{make_path_relative_to, paths_refer_to_same_file};
-use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show_error};
+use uucore::translate;
+use uucore::{format_usage, prompt_yes, show_error};
 
 use std::borrow::Cow;
 use std::collections::HashSet;
@@ -28,11 +29,11 @@ use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 pub struct Settings {
     overwrite: OverwriteMode,
     backup: BackupMode,
-    suffix: String,
+    suffix: OsString,
     symbolic: bool,
     relative: bool,
     logical: bool,
-    target_dir: Option<String>,
+    target_dir: Option<PathBuf>,
     no_target_dir: bool,
     no_dereference: bool,
     verbose: bool,
@@ -47,21 +48,23 @@ pub enum OverwriteMode {
 
 #[derive(Error, Debug)]
 enum LnError {
-    #[error("target {} is not a directory", _0.quote())]
-    TargetIsDirectory(PathBuf),
+    #[error("{}", translate!("ln-error-target-is-not-directory", "target" => _0.quote()))]
+    TargetIsNotADirectory(PathBuf),
 
     #[error("")]
     SomeLinksFailed,
 
-    #[error("{} and {} are the same file", _0.quote(), _1.quote())]
+    #[error("{}", translate!("ln-error-same-file", "file1" => _0.quote(), "file2" => _1.quote()))]
     SameFile(PathBuf, PathBuf),
 
-    #[error("missing destination file operand after {}", _0.quote())]
+    #[error("{}", translate!("ln-error-missing-destination", "operand" => _0.quote()))]
     MissingDestination(PathBuf),
 
-    #[error("extra operand {}\nTry '{} --help' for more information.",
-    format!("{_0:?}").trim_matches('"'), _1)]
+    #[error("{}", translate!("ln-error-extra-operand", "operand" => _0.to_string_lossy(), "program" => _1.clone()))]
     ExtraOperand(OsString, String),
+
+    #[error("{}", translate!("ln-failed-to-create-hard-link-dir", "source" => _0.to_string_lossy()))]
+    FailedToCreateHardLinkDir(PathBuf),
 }
 
 impl UError for LnError {
@@ -69,10 +72,6 @@ impl UError for LnError {
         1
     }
 }
-
-const ABOUT: &str = help_about!("ln.md");
-const USAGE: &str = help_usage!("ln.md");
-const AFTER_HELP: &str = help_section!("after help", "ln.md");
 
 mod options {
     pub const FORCE: &str = "force";
@@ -92,17 +91,12 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let after_help = format!(
-        "{AFTER_HELP}\n\n{}",
-        backup_control::BACKUP_CONTROL_LONG_HELP
-    );
-
-    let matches = uu_app().after_help(after_help).try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     /* the list of files */
 
     let paths: Vec<PathBuf> = matches
-        .get_many::<String>(ARG_FILES)
+        .get_many::<OsString>(ARG_FILES)
         .unwrap()
         .map(PathBuf::from)
         .collect();
@@ -126,13 +120,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let settings = Settings {
         overwrite: overwrite_mode,
         backup: backup_mode,
-        suffix: backup_suffix,
+        suffix: OsString::from(backup_suffix),
         symbolic,
         logical,
         relative: matches.get_flag(options::RELATIVE),
         target_dir: matches
-            .get_one::<String>(options::TARGET_DIRECTORY)
-            .map(String::from),
+            .get_one::<OsString>(options::TARGET_DIRECTORY)
+            .map(PathBuf::from),
         no_target_dir: matches.get_flag(options::NO_TARGET_DIRECTORY),
         no_dereference: matches.get_flag(options::NO_DEREFERENCE),
         verbose: matches.get_flag(options::VERBOSE),
@@ -142,11 +136,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
+    let after_help = format!(
+        "{}\n\n{}",
+        translate!("ln-after-help"),
+        backup_control::BACKUP_CONTROL_LONG_HELP
+    );
+
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("ln-about"))
+        .override_usage(format_usage(&translate!("ln-usage")))
         .infer_long_args(true)
+        .after_help(after_help)
         .arg(backup_control::arguments::backup())
         .arg(backup_control::arguments::backup_no_args())
         /*.arg(
@@ -159,31 +161,28 @@ pub fn uu_app() -> Command {
             Arg::new(options::FORCE)
                 .short('f')
                 .long(options::FORCE)
-                .help("remove existing destination files")
+                .help(translate!("ln-help-force"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::INTERACTIVE)
                 .short('i')
                 .long(options::INTERACTIVE)
-                .help("prompt whether to remove existing destination files")
+                .help(translate!("ln-help-interactive"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_DEREFERENCE)
                 .short('n')
                 .long(options::NO_DEREFERENCE)
-                .help(
-                    "treat LINK_NAME as a normal file if it is a \
-                     symbolic link to a directory",
-                )
+                .help(translate!("ln-help-no-dereference"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::LOGICAL)
                 .short('L')
                 .long(options::LOGICAL)
-                .help("follow TARGETs that are symbolic links")
+                .help(translate!("ln-help-logical"))
                 .overrides_with(options::PHYSICAL)
                 .action(ArgAction::SetTrue),
         )
@@ -192,14 +191,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::PHYSICAL)
                 .short('P')
                 .long(options::PHYSICAL)
-                .help("make hard links directly to symbolic links")
+                .help(translate!("ln-help-physical"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SYMBOLIC)
                 .short('s')
                 .long(options::SYMBOLIC)
-                .help("make symbolic links instead of hard links")
+                .help(translate!("ln-help-symbolic"))
                 // override added for https://github.com/uutils/coreutils/issues/2359
                 .overrides_with(options::SYMBOLIC)
                 .action(ArgAction::SetTrue),
@@ -209,23 +208,24 @@ pub fn uu_app() -> Command {
             Arg::new(options::TARGET_DIRECTORY)
                 .short('t')
                 .long(options::TARGET_DIRECTORY)
-                .help("specify the DIRECTORY in which to create the links")
+                .help(translate!("ln-help-target-directory"))
                 .value_name("DIRECTORY")
                 .value_hint(clap::ValueHint::DirPath)
+                .value_parser(clap::value_parser!(OsString))
                 .conflicts_with(options::NO_TARGET_DIRECTORY),
         )
         .arg(
             Arg::new(options::NO_TARGET_DIRECTORY)
                 .short('T')
                 .long(options::NO_TARGET_DIRECTORY)
-                .help("treat LINK_NAME as a normal file always")
+                .help(translate!("ln-help-no-target-directory"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::RELATIVE)
                 .short('r')
                 .long(options::RELATIVE)
-                .help("create symbolic links relative to link location")
+                .help(translate!("ln-help-relative"))
                 .requires(options::SYMBOLIC)
                 .action(ArgAction::SetTrue),
         )
@@ -233,13 +233,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::VERBOSE)
                 .short('v')
                 .long(options::VERBOSE)
-                .help("print name of each linked file")
+                .help(translate!("ln-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath)
+                .value_parser(clap::value_parser!(OsString))
                 .required(true)
                 .num_args(1..),
         )
@@ -247,9 +248,9 @@ pub fn uu_app() -> Command {
 
 fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
     // Handle cases where we create links in a directory first.
-    if let Some(ref name) = settings.target_dir {
+    if let Some(ref target_path) = settings.target_dir {
         // 4th form: a directory is specified by -t.
-        return link_files_in_dir(files, &PathBuf::from(name), settings);
+        return link_files_in_dir(files, target_path, settings);
     }
     if !settings.no_target_dir {
         if files.len() == 1 {
@@ -283,7 +284,7 @@ fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
 #[allow(clippy::cognitive_complexity)]
 fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) -> UResult<()> {
     if !target_dir.is_dir() {
-        return Err(LnError::TargetIsDirectory(target_dir.to_owned()).into());
+        return Err(LnError::TargetIsNotADirectory(target_dir.to_owned()).into());
     }
     // remember the linked destinations for further usage
     let mut linked_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
@@ -298,16 +299,23 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
             // We need to clean the target
             if target_dir.is_file() {
                 if let Err(e) = fs::remove_file(target_dir) {
-                    show_error!("Could not update {}: {e}", target_dir.quote());
-                };
+                    show_error!(
+                        "{}",
+                        translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
+                    );
+                }
             }
+            #[cfg(windows)]
             if target_dir.is_dir() {
                 // Not sure why but on Windows, the symlink can be
                 // considered as a dir
                 // See test_ln::test_symlink_no_deref_dir
                 if let Err(e) = fs::remove_dir(target_dir) {
-                    show_error!("Could not update {}: {e}", target_dir.quote());
-                };
+                    show_error!(
+                        "{}",
+                        translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
+                    );
+                }
             }
             target_dir.to_path_buf()
         } else {
@@ -323,7 +331,10 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                     }
                 }
                 None => {
-                    show_error!("cannot stat {}: No such file or directory", srcpath.quote());
+                    show_error!(
+                        "{}",
+                        translate!("ln-error-cannot-stat", "path" => srcpath.quote())
+                    );
                     all_successful = false;
                     continue;
                 }
@@ -333,9 +344,8 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
         if linked_destinations.contains(&targetpath) {
             // If the target file was already created in this ln call, do not overwrite
             show_error!(
-                "will not overwrite just-created '{}' with '{}'",
-                targetpath.display(),
-                srcpath.display()
+                "{}",
+                translate!("ln-error-will-not-overwrite", "target" => targetpath.display(), "source" => srcpath.display())
             );
             all_successful = false;
         } else if let Err(e) = link(srcpath, &targetpath, settings) {
@@ -388,69 +398,82 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
             }
         }
         if let Some(ref p) = backup_path {
-            fs::rename(dst, p).map_err_context(|| format!("cannot backup {}", dst.quote()))?;
+            fs::rename(dst, p)
+                .map_err_context(|| translate!("ln-cannot-backup", "file" => dst.quote()))?;
         }
         match settings.overwrite {
             OverwriteMode::NoClobber => {}
             OverwriteMode::Interactive => {
-                if !prompt_yes!("replace {}?", dst.quote()) {
+                if !prompt_yes!("{}", translate!("ln-prompt-replace", "file" => dst.quote())) {
                     return Err(LnError::SomeLinksFailed.into());
                 }
 
-                if fs::remove_file(dst).is_ok() {};
+                if fs::remove_file(dst).is_ok() {}
                 // In case of error, don't do anything
             }
             OverwriteMode::Force => {
                 if !dst.is_symlink() && paths_refer_to_same_file(src, dst, true) {
-                    return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
+                    // Even in force overwrite mode, verify we are not targeting the same entry and return a SameFile error if so
+                    let same_entry = match (
+                        canonicalize(src, MissingHandling::Missing, ResolveMode::Physical),
+                        canonicalize(dst, MissingHandling::Missing, ResolveMode::Physical),
+                    ) {
+                        (Ok(src), Ok(dst)) => src == dst,
+                        _ => true,
+                    };
+                    if same_entry {
+                        return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
+                    }
                 }
-                if fs::remove_file(dst).is_ok() {};
+                if fs::remove_file(dst).is_ok() {}
                 // In case of error, don't do anything
             }
-        };
+        }
     }
 
     if settings.symbolic {
         symlink(&source, dst)?;
     } else {
+        // Cannot create hard link to a directory directly
+        // We can however create hard link to a symlink that points to a directory, so long as -L is not passed
+        if src.is_dir() && (!src.is_symlink() || settings.logical) {
+            return Err(LnError::FailedToCreateHardLinkDir(source.to_path_buf()).into());
+        }
+
         let p = if settings.logical && source.is_symlink() {
             // if we want to have an hard link,
             // source is a symlink and -L is passed
             // we want to resolve the symlink to create the hardlink
             fs::canonicalize(&source)
-                .map_err_context(|| format!("failed to access {}", source.quote()))?
+                .map_err_context(|| translate!("ln-failed-to-access", "file" => source.quote()))?
         } else {
             source.to_path_buf()
         };
         fs::hard_link(p, dst).map_err_context(|| {
-            format!(
-                "failed to create hard link {} => {}",
-                source.quote(),
-                dst.quote()
-            )
+            translate!("ln-failed-to-create-hard-link", "source" => source.quote(), "dest" => dst.quote())
         })?;
     }
 
     if settings.verbose {
         print!("{} -> {}", dst.quote(), source.quote());
         match backup_path {
-            Some(path) => println!(" (backup: {})", path.quote()),
+            Some(path) => println!(" ({})", translate!("ln-backup", "backup" => path.quote())),
             None => println!(),
         }
     }
     Ok(())
 }
 
-fn simple_backup_path(path: &Path, suffix: &str) -> PathBuf {
-    let mut p = path.as_os_str().to_str().unwrap().to_owned();
-    p.push_str(suffix);
-    PathBuf::from(p)
+fn simple_backup_path(path: &Path, suffix: &OsString) -> PathBuf {
+    let mut file_name = path.file_name().unwrap_or_default().to_os_string();
+    file_name.push(suffix);
+    path.with_file_name(file_name)
 }
 
 fn numbered_backup_path(path: &Path) -> PathBuf {
     let mut i: u64 = 1;
     loop {
-        let new_path = simple_backup_path(path, &format!(".~{i}~"));
+        let new_path = simple_backup_path(path, &OsString::from(format!(".~{i}~")));
         if !new_path.exists() {
             return new_path;
         }
@@ -458,8 +481,8 @@ fn numbered_backup_path(path: &Path) -> PathBuf {
     }
 }
 
-fn existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
-    let test_path = simple_backup_path(path, ".~1~");
+fn existing_backup_path(path: &Path, suffix: &OsString) -> PathBuf {
+    let test_path = simple_backup_path(path, &OsString::from(".~1~"));
     if test_path.exists() {
         return numbered_backup_path(path);
     }

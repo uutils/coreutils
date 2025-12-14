@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+// spell-checker:ignore (words) dirfd subdirs openat FDCWD
 
 use std::fs::{OpenOptions, Permissions, metadata, set_permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
@@ -232,14 +233,21 @@ fn test_chmod_ugoa() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-// TODO fix android, it has 0777
-// We should force for the umask on startup
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
+#[allow(clippy::cast_lossless)]
 fn test_chmod_umask_expected() {
+    // Get the actual system umask using libc
+    let system_umask = unsafe {
+        let mask = libc::umask(0);
+        libc::umask(mask);
+        mask
+    };
+
+    // Now verify that get_umask() returns the same value
     let current_umask = uucore::mode::get_umask();
     assert_eq!(
-        current_umask, 0o022,
-        "Unexpected umask value: expected 022 (octal), but got {current_umask:03o}. Please adjust the test environment.",
+        current_umask, system_umask as u32,
+        "get_umask() returned {current_umask:03o}, but system umask is {system_umask:03o}",
     );
 }
 
@@ -384,6 +392,10 @@ fn test_chmod_recursive() {
     make_file(&at.plus_as_string("a/b/b"), 0o100444);
     make_file(&at.plus_as_string("a/b/c/c"), 0o100444);
     make_file(&at.plus_as_string("z/y"), 0o100444);
+    #[cfg(not(target_os = "linux"))]
+    let err_msg = "chmod: Permission denied\n";
+    #[cfg(target_os = "linux")]
+    let err_msg = "chmod: 'z': Permission denied\n";
 
     // only the permissions of folder `a` and `z` are changed
     // folder can't be read after read permission is removed
@@ -394,7 +406,7 @@ fn test_chmod_recursive() {
         .arg("z")
         .umask(0)
         .fails()
-        .stderr_is("chmod: Permission denied\n");
+        .stderr_is(err_msg);
 
     assert_eq!(at.metadata("z/y").permissions().mode(), 0o100444);
     assert_eq!(at.metadata("a/a").permissions().mode(), 0o100444);
@@ -944,10 +956,8 @@ fn test_chmod_dangling_symlink_recursive_combos() {
         at.symlink_file(dangling_target, symlink);
 
         let mut ucmd = scene.ucmd();
-        for f in &flags {
-            ucmd.arg(f);
-        }
-        ucmd.arg("u+x")
+        ucmd.args(&flags)
+            .arg("u+x")
             .umask(0o022)
             .arg(symlink)
             .fails()
@@ -1002,10 +1012,8 @@ fn test_chmod_traverse_symlink_combo() {
         set_permissions(at.plus(target), Permissions::from_mode(0o664)).unwrap();
 
         let mut ucmd = scene.ucmd();
-        for f in &flags {
-            ucmd.arg(f);
-        }
-        ucmd.arg("u+x")
+        ucmd.args(&flags)
+            .arg("u+x")
             .umask(0o022)
             .arg(directory)
             .succeeds()
@@ -1026,4 +1034,326 @@ fn test_chmod_traverse_symlink_combo() {
             "For flags {flags:?}, expected symlink perms = {expected_symlink_perms:o}, got = {actual_symlink:o}",
         );
     }
+}
+
+#[test]
+fn test_chmod_recursive_symlink_to_directory_command_line() {
+    // Test behavior when the symlink itself is a command-line argument
+    let scenarios = [
+        (vec!["-R"], true), // Default behavior (-H): follow symlinks that are command line args
+        (vec!["-R", "-H"], true), // Explicit -H: follow symlinks that are command line args
+        (vec!["-R", "-L"], true), // -L: follow all symlinks
+        (vec!["-R", "-P"], false), // -P: never follow symlinks
+    ];
+
+    for (flags, should_follow_symlink_dir) in scenarios {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        let target_dir = "target_dir";
+        let symlink_to_dir = "link_dir";
+        let file_in_target = "file_in_target";
+
+        at.mkdir(target_dir);
+        at.touch(format!("{target_dir}/{file_in_target}"));
+        at.symlink_dir(target_dir, symlink_to_dir);
+
+        set_permissions(
+            at.plus(format!("{target_dir}/{file_in_target}")),
+            Permissions::from_mode(0o644),
+        )
+        .unwrap();
+
+        let mut ucmd = scene.ucmd();
+        ucmd.args(&flags)
+            .arg("go-rwx")
+            .arg(symlink_to_dir) // The symlink itself is the command-line argument
+            .succeeds()
+            .no_stderr();
+
+        let actual_file_perms = at
+            .metadata(&format!("{target_dir}/{file_in_target}"))
+            .permissions()
+            .mode();
+
+        if should_follow_symlink_dir {
+            // When following symlinks, the file inside the target directory should have its permissions changed
+            assert_eq!(
+                actual_file_perms, 0o100_600,
+                "For flags {flags:?}, expected file perms when following symlinks = 600, got = {actual_file_perms:o}",
+            );
+        } else {
+            // When not following symlinks, the file inside the target directory should be unchanged
+            assert_eq!(
+                actual_file_perms, 0o100_644,
+                "For flags {flags:?}, expected file perms when not following symlinks = 644, got = {actual_file_perms:o}",
+            );
+        }
+    }
+}
+
+#[test]
+fn test_chmod_recursive_symlink_during_traversal() {
+    // Test behavior when symlinks are encountered during directory traversal
+    let scenarios = [
+        (vec!["-R"], false), // Default behavior (-H): don't follow symlinks encountered during traversal
+        (vec!["-R", "-H"], false), // Explicit -H: don't follow symlinks encountered during traversal
+        (vec!["-R", "-L"], true),  // -L: follow all symlinks including those found during traversal
+        (vec!["-R", "-P"], false), // -P: never follow symlinks
+    ];
+
+    for (flags, should_follow_symlink_dir) in scenarios {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        let directory = "dir";
+        let target_dir = "target_dir";
+        let symlink_to_dir = "link_dir";
+        let file_in_target = "file_in_target";
+
+        at.mkdir(directory);
+        at.mkdir(target_dir);
+        at.touch(format!("{target_dir}/{file_in_target}"));
+        at.symlink_dir(target_dir, &format!("{directory}/{symlink_to_dir}"));
+
+        set_permissions(
+            at.plus(format!("{target_dir}/{file_in_target}")),
+            Permissions::from_mode(0o644),
+        )
+        .unwrap();
+
+        let mut ucmd = scene.ucmd();
+        ucmd.args(&flags)
+            .arg("go-rwx")
+            .arg(directory) // The directory is the command-line argument
+            .succeeds()
+            .no_stderr();
+
+        let actual_file_perms = at
+            .metadata(&format!("{target_dir}/{file_in_target}"))
+            .permissions()
+            .mode();
+
+        if should_follow_symlink_dir {
+            // When following symlinks, the file inside the target directory should have its permissions changed
+            assert_eq!(
+                actual_file_perms, 0o100_600,
+                "For flags {flags:?}, expected file perms when following symlinks = 600, got = {actual_file_perms:o}",
+            );
+        } else {
+            // When not following symlinks, the file inside the target directory should be unchanged
+            assert_eq!(
+                actual_file_perms, 0o100_644,
+                "For flags {flags:?}, expected file perms when not following symlinks = 644, got = {actual_file_perms:o}",
+            );
+        }
+    }
+}
+
+#[test]
+fn test_chmod_recursive_symlink_combinations() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let directory = "dir";
+    let target_dir = "target_dir";
+    let target_file = "target_file";
+    let symlink_to_dir = "link_dir";
+    let symlink_to_file = "link_file";
+    let file_in_target = "file";
+
+    at.mkdir(directory);
+    at.mkdir(target_dir);
+    at.touch(target_file);
+    at.touch(format!("{target_dir}/{file_in_target}"));
+    at.symlink_dir(target_dir, &format!("{directory}/{symlink_to_dir}"));
+    at.symlink_file(target_file, &format!("{directory}/{symlink_to_file}"));
+
+    set_permissions(at.plus(target_file), Permissions::from_mode(0o644)).unwrap();
+    set_permissions(
+        at.plus(format!("{target_dir}/{file_in_target}")),
+        Permissions::from_mode(0o644),
+    )
+    .unwrap();
+
+    // Test with -R -L (follow all symlinks)
+    scene
+        .ucmd()
+        .arg("-R")
+        .arg("-L")
+        .arg("go-rwx")
+        .arg(directory)
+        .succeeds()
+        .no_stderr();
+
+    // Both target file and file in target directory should have permissions changed
+    assert_eq!(at.metadata(target_file).permissions().mode(), 0o100_600);
+    assert_eq!(
+        at.metadata(&format!("{target_dir}/{file_in_target}"))
+            .permissions()
+            .mode(),
+        0o100_600
+    );
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_chmod_non_utf8_paths() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a file with non-UTF-8 name
+    // Using bytes that form an invalid UTF-8 sequence
+    let non_utf8_bytes = b"test_\xFF\xFE.txt";
+    let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
+
+    // Create the file using OpenOptions with the non-UTF-8 name
+    OpenOptions::new()
+        .mode(0o644)
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(at.plus(non_utf8_name))
+        .unwrap();
+
+    // Verify initial permissions
+    let initial_perms = metadata(at.plus(non_utf8_name))
+        .unwrap()
+        .permissions()
+        .mode();
+    assert_eq!(initial_perms & 0o777, 0o644);
+
+    // Test chmod with the non-UTF-8 filename
+    scene
+        .ucmd()
+        .arg("755")
+        .arg(non_utf8_name)
+        .succeeds()
+        .no_stderr();
+
+    // Verify permissions were changed
+    let new_perms = metadata(at.plus(non_utf8_name))
+        .unwrap()
+        .permissions()
+        .mode();
+    assert_eq!(new_perms & 0o777, 0o755);
+
+    // Test with multiple non-UTF-8 files
+    let non_utf8_bytes2 = b"file_\xC0\x80.dat";
+    let non_utf8_name2 = OsStr::from_bytes(non_utf8_bytes2);
+
+    OpenOptions::new()
+        .mode(0o666)
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(at.plus(non_utf8_name2))
+        .unwrap();
+
+    // Change permissions on both files at once
+    scene
+        .ucmd()
+        .arg("644")
+        .arg(non_utf8_name)
+        .arg(non_utf8_name2)
+        .succeeds()
+        .no_stderr();
+
+    // Verify both files have the new permissions
+    assert_eq!(
+        metadata(at.plus(non_utf8_name))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o644
+    );
+    assert_eq!(
+        metadata(at.plus(non_utf8_name2))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o644
+    );
+}
+
+#[cfg(all(target_os = "linux", feature = "chmod"))]
+#[test]
+#[ignore = "covered by util/check-safe-traversal.sh"]
+fn test_chmod_recursive_uses_dirfd_for_subdirs() {
+    use std::process::Command;
+    use uutests::get_tests_binary;
+
+    // strace is required; fail fast if it is missing or not runnable
+    let output = Command::new("strace")
+        .arg("-V")
+        .output()
+        .expect("strace not found; install strace to run this test");
+    assert!(
+        output.status.success(),
+        "strace -V failed; ensure strace is installed and usable"
+    );
+
+    let (at, _ucmd) = at_and_ucmd!();
+    at.mkdir("x");
+    at.mkdir("x/y");
+    at.mkdir("x/y/z");
+
+    let log_path = at.plus_as_string("strace.log");
+
+    let status = Command::new("strace")
+        .arg("-e")
+        .arg("openat")
+        .arg("-o")
+        .arg(&log_path)
+        .arg(get_tests_binary!())
+        .args(["chmod", "-R", "+x", "x"])
+        .current_dir(&at.subdir)
+        .status()
+        .expect("failed to run strace");
+    assert!(status.success(), "strace run failed");
+
+    let log = at.read("strace.log");
+
+    // Regression guard: ensure recursion uses dirfd-relative openat instead of AT_FDCWD with a multi-component path
+    assert!(
+        !log.contains("openat(AT_FDCWD, \"x/y"),
+        "chmod recursed using AT_FDCWD with a multi-component path; expected dirfd-relative openat"
+    );
+}
+
+#[test]
+fn test_chmod_colored_output() {
+    // Test colored help message
+    new_ucmd!()
+        .arg("--help")
+        .env("CLICOLOR_FORCE", "1")
+        .env("LANG", "en_US.UTF-8")
+        .succeeds()
+        .stdout_contains("\x1b[1m\x1b[4mUsage:\x1b[0m") // Bold+underline "Usage:"
+        .stdout_contains("\x1b[1m\x1b[4mArguments:\x1b[0m"); // Bold+underline "Arguments:"
+
+    // Test colored error message for invalid option
+    new_ucmd!()
+        .arg("--invalid-option")
+        .env("CLICOLOR_FORCE", "1")
+        .env("LANG", "en_US.UTF-8")
+        .fails()
+        .code_is(1)
+        .stderr_contains("\x1b[31merror\x1b[0m") // Red "error"
+        .stderr_contains("\x1b[33m--invalid-option\x1b[0m"); // Yellow invalid option
+
+    // Test French localized colored error message
+    new_ucmd!()
+        .arg("--invalid-option")
+        .env("CLICOLOR_FORCE", "1")
+        .env("LANG", "fr_FR.UTF-8")
+        .fails()
+        .code_is(1)
+        .stderr_contains("\x1b[31merreur\x1b[0m") // Red "erreur" in French
+        .stderr_contains("\x1b[33m--invalid-option\x1b[0m"); // Yellow invalid option
 }

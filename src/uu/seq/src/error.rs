@@ -8,6 +8,7 @@ use crate::numberparse::ParseNumberError;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
+use uucore::translate;
 
 #[derive(Debug, Error)]
 pub enum SeqError {
@@ -15,29 +16,32 @@ pub enum SeqError {
     ///
     /// The parameters are the [`String`] argument as read from the
     /// command line and the underlying parsing error itself.
-    #[error("invalid {} argument: {}", parse_error_type(.1), .0.quote())]
+    #[error("{}", translate!("seq-error-parse", "type" => parse_error_type(.1), "arg" => .0.quote()))]
     ParseError(String, ParseNumberError),
 
     /// The increment argument was zero, which is not allowed.
     ///
     /// The parameter is the increment argument as a [`String`] as read
     /// from the command line.
-    #[error("invalid Zero increment value: {}", .0.quote())]
+    #[error("{}", translate!("seq-error-zero-increment", "arg" => .0.quote()))]
     ZeroIncrement(String),
 
     /// No arguments were passed to this function, 1 or more is required
-    #[error("missing operand")]
+    #[error("{}", translate!("seq-error-no-arguments"))]
     NoArguments,
 
     /// Both a format and equal width where passed to seq
-    #[error("format string may not be specified when printing equal width strings")]
+    #[error(
+        "{}",
+        translate!("seq-error-format-and-equal-width")
+    )]
     FormatAndEqualWidth,
 }
 
-fn parse_error_type(e: &ParseNumberError) -> &'static str {
+fn parse_error_type(e: &ParseNumberError) -> String {
     match e {
-        ParseNumberError::Float => "floating point",
-        ParseNumberError::Nan => "'not-a-number'",
+        ParseNumberError::Float => translate!("seq-parse-error-type-float"),
+        ParseNumberError::Nan => translate!("seq-parse-error-type-nan"),
     }
 }
 

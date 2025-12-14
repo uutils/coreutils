@@ -20,6 +20,7 @@ path = "src/whoami.rs"
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["entries", "process"] }
+fluent = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true, features = [

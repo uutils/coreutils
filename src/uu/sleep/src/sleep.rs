@@ -3,21 +3,16 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use clap::{Arg, ArgAction, Command};
 use std::thread;
 use std::time::Duration;
-
+use uucore::translate;
 use uucore::{
     error::{UResult, USimpleError, UUsageError},
-    format_usage, help_about, help_section, help_usage,
+    format_usage,
     parser::parse_time,
     show_error,
 };
-
-use clap::{Arg, ArgAction, Command};
-
-static ABOUT: &str = help_about!("sleep.md");
-const USAGE: &str = help_usage!("sleep.md");
-static AFTER_HELP: &str = help_section!("after help", "sleep.md");
 
 mod options {
     pub const NUMBER: &str = "NUMBER";
@@ -25,17 +20,14 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let numbers = matches
         .get_many::<String>(options::NUMBER)
         .ok_or_else(|| {
             USimpleError::new(
                 1,
-                format!(
-                    "missing operand\nTry '{} --help' for more information.",
-                    uucore::execution_phrase()
-                ),
+                translate!("sleep-error-missing-operand", "program" => uucore::execution_phrase()),
             )
         })?
         .map(|s| s.as_str())
@@ -47,13 +39,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("sleep-about"))
+        .after_help(translate!("sleep-after-help"))
+        .override_usage(format_usage(&translate!("sleep-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::NUMBER)
-                .help("pause for NUMBER seconds")
+                .help(translate!("sleep-help-number"))
                 .value_name(options::NUMBER)
                 .action(ArgAction::Append),
         )
@@ -76,7 +69,7 @@ fn sleep(args: &[&str]) -> UResult<()> {
 
     if arg_error {
         return Err(UUsageError::new(1, ""));
-    };
+    }
     thread::sleep(sleep_dur);
     Ok(())
 }

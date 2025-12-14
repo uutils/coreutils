@@ -37,3 +37,8 @@ pub fn is_wsl_2() -> bool {
     }
     false
 }
+
+/// Test if the program is running under WSL
+pub fn is_wsl() -> bool {
+    is_wsl_1() || is_wsl_2()
+}

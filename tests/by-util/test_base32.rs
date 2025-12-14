@@ -5,8 +5,6 @@
 //
 
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[test]
 fn test_encode() {
@@ -115,12 +113,11 @@ fn test_wrap() {
 #[test]
 fn test_wrap_no_arg() {
     for wrap_param in ["-w", "--wrap"] {
-        let ts = TestScenario::new(util_name!());
-        let expected_stderr = "a value is required for '--wrap <COLS>' but none was supplied";
-        ts.ucmd()
+        new_ucmd!()
             .arg(wrap_param)
             .fails()
-            .stderr_contains(expected_stderr)
+            .stderr_contains("error: a value is required for '--wrap <COLS>' but none was supplied")
+            .stderr_contains("For more information, try '--help'.")
             .no_stdout();
     }
 }
@@ -152,4 +149,13 @@ fn test_base32_file_not_found() {
         .arg("a.txt")
         .fails()
         .stderr_only("base32: a.txt: No such file or directory\n");
+}
+
+#[test]
+fn test_encode_large_input_is_buffered() {
+    let input = "A".repeat(6000);
+    new_ucmd!()
+        .pipe_in(input)
+        .succeeds()
+        .stdout_contains("BIFAUCQK"); // spell-checker:disable-line
 }

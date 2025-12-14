@@ -21,6 +21,7 @@ path = "src/groups.rs"
 clap = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["entries", "process"] }
+fluent = { workspace = true }
 
 [[bin]]
 name = "groups"

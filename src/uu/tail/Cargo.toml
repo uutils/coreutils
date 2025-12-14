@@ -23,8 +23,9 @@ clap = { workspace = true }
 libc = { workspace = true }
 memchr = { workspace = true }
 notify = { workspace = true }
-uucore = { workspace = true, features = ["parser"] }
+uucore = { workspace = true, features = ["fs", "parser-size"] }
 same-file = { workspace = true }
+fluent = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [

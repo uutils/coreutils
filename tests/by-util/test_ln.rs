@@ -549,7 +549,11 @@ fn test_symlink_no_deref_dir() {
     scene.ucmd().args(&["-sn", dir1, link]).fails();
 
     // Try with the no-deref
-    scene.ucmd().args(&["-sfn", dir1, link]).succeeds();
+    scene
+        .ucmd()
+        .args(&["-sfn", dir1, link])
+        .succeeds()
+        .no_stderr();
     assert!(at.dir_exists(dir1));
     assert!(at.dir_exists(dir2));
     assert!(at.is_symlink(link));
@@ -790,6 +794,52 @@ fn test_symlink_remove_existing_same_src_and_dest() {
 }
 
 #[test]
+fn test_force_same_file_detected_after_canonicalization() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("file", "hello");
+
+    ucmd.args(&["-f", "file", "./file"])
+        .fails_with_code(1)
+        .stderr_contains("are the same file");
+
+    assert!(at.file_exists("file"));
+    assert_eq!(at.read("file"), "hello");
+}
+
+#[test]
+#[cfg(not(target_os = "android"))]
+fn test_force_ln_existing_hard_link_entry() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("file", "hardlink\n");
+    at.mkdir("dir");
+
+    scene.ucmd().args(&["file", "dir"]).succeeds().no_stderr();
+    assert!(at.file_exists("dir/file"));
+
+    scene
+        .ucmd()
+        .args(&["-f", "file", "dir"])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists("file"));
+    assert!(at.file_exists("dir/file"));
+    assert_eq!(at.read("file"), "hardlink\n");
+    assert_eq!(at.read("dir/file"), "hardlink\n");
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let source_inode = at.metadata("file").ino();
+        let target_inode = at.metadata("dir/file").ino();
+        assert_eq!(source_inode, target_inode);
+    }
+}
+
+#[test]
 #[cfg(not(target_os = "android"))]
 fn test_ln_seen_file() {
     let ts = TestScenario::new(util_name!());
@@ -838,4 +888,63 @@ fn test_ln_seen_file() {
             "Inode numbers of b/f and c/f should not be equal"
         );
     }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_ln_non_utf8_paths() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a test file with non-UTF-8 bytes in the name
+    let non_utf8_bytes = b"test_\xFF\xFE.txt";
+    let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
+    let non_utf8_link_bytes = b"link_\xFF\xFE.txt";
+    let non_utf8_link_name = OsStr::from_bytes(non_utf8_link_bytes);
+
+    // Create the actual file
+    at.touch(non_utf8_name);
+
+    // Test creating a hard link with non-UTF-8 file names
+    scene
+        .ucmd()
+        .arg(non_utf8_name)
+        .arg(non_utf8_link_name)
+        .succeeds();
+
+    // Both files should exist
+    assert!(at.file_exists(non_utf8_name));
+    assert!(at.file_exists(non_utf8_link_name));
+
+    // Test creating a symbolic link with non-UTF-8 file names
+    let symlink_bytes = b"symlink_\xFF\xFE.txt";
+    let symlink_name = OsStr::from_bytes(symlink_bytes);
+
+    scene
+        .ucmd()
+        .args(&["-s"])
+        .arg(non_utf8_name)
+        .arg(symlink_name)
+        .succeeds();
+
+    // Check if symlink was created successfully
+    let symlink_path = at.plus(symlink_name);
+    assert!(symlink_path.is_symlink());
+}
+
+#[test]
+fn test_ln_hard_link_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir");
+
+    scene
+        .ucmd()
+        .args(&["dir", "dir_link"])
+        .fails()
+        .stderr_contains("hard link not allowed for directory");
 }

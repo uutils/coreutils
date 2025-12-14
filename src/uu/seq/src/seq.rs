@@ -3,8 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat biguint
-use std::ffi::OsString;
-use std::io::{BufWriter, ErrorKind, Write, stdout};
+use std::ffi::{OsStr, OsString};
+use std::io::{BufWriter, Write, stdout};
 
 use clap::{Arg, ArgAction, Command};
 use num_bigint::BigUint;
@@ -15,7 +15,7 @@ use uucore::error::{FromIo, UResult};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::format::num_format::FloatVariant;
 use uucore::format::{Format, num_format};
-use uucore::{fast_inc::fast_inc, format_usage, help_about, help_usage};
+use uucore::{fast_inc::fast_inc, format_usage};
 
 mod error;
 
@@ -28,8 +28,7 @@ mod numberparse;
 use crate::error::SeqError;
 use crate::number::PreciseNumber;
 
-const ABOUT: &str = help_about!("seq.md");
-const USAGE: &str = help_usage!("seq.md");
+use uucore::translate;
 
 const OPT_SEPARATOR: &str = "separator";
 const OPT_TERMINATOR: &str = "terminator";
@@ -40,8 +39,8 @@ const ARG_NUMBERS: &str = "numbers";
 
 #[derive(Clone)]
 struct SeqOptions<'a> {
-    separator: String,
-    terminator: String,
+    separator: OsString,
+    terminator: OsString,
     equal_width: bool,
     format: Option<&'a str>,
 }
@@ -51,8 +50,8 @@ struct SeqOptions<'a> {
 /// The elements are (first, increment, last).
 type RangeFloat = (ExtendedBigDecimal, ExtendedBigDecimal, ExtendedBigDecimal);
 
-// Turn short args with attached value, for example "-s,", into two args "-s" and "," to make
-// them work with clap.
+/// Turn short args with attached value, for example "-s,", into two args "-s" and "," to make
+/// them work with clap.
 fn split_short_args_with_value(args: impl uucore::Args) -> impl uucore::Args {
     let mut v: Vec<OsString> = Vec::new();
 
@@ -93,7 +92,8 @@ fn select_precision(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(split_short_args_with_value(args))?;
+    let matches =
+        uucore::clap_localization::handle_clap_result(uu_app(), split_short_args_with_value(args))?;
 
     let numbers_option = matches.get_many::<String>(ARG_NUMBERS);
 
@@ -105,14 +105,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let options = SeqOptions {
         separator: matches
-            .get_one::<String>(OPT_SEPARATOR)
-            .map_or("\n", |s| s.as_str())
-            .to_string(),
+            .get_one::<OsString>(OPT_SEPARATOR)
+            .cloned()
+            .unwrap_or_else(|| OsString::from("\n")),
         terminator: matches
-            .get_one::<String>(OPT_TERMINATOR)
-            .map(|s| s.as_str())
-            .unwrap_or("\n")
-            .to_string(),
+            .get_one::<OsString>(OPT_TERMINATOR)
+            .cloned()
+            .unwrap_or_else(|| OsString::from("\n")),
         equal_width: matches.get_flag(OPT_EQUAL_WIDTH),
         format: matches.get_one::<String>(OPT_FORMAT).map(|s| s.as_str()),
     };
@@ -124,7 +123,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let first = if numbers.len() > 1 {
         match numbers[0].parse() {
             Ok(num) => num,
-            Err(e) => return Err(SeqError::ParseError(numbers[0].to_string(), e).into()),
+            Err(e) => return Err(SeqError::ParseError(numbers[0].to_owned(), e).into()),
         }
     } else {
         PreciseNumber::one()
@@ -132,13 +131,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let increment = if numbers.len() > 2 {
         match numbers[1].parse() {
             Ok(num) => num,
-            Err(e) => return Err(SeqError::ParseError(numbers[1].to_string(), e).into()),
+            Err(e) => return Err(SeqError::ParseError(numbers[1].to_owned(), e).into()),
         }
     } else {
         PreciseNumber::one()
     };
     if increment.is_zero() {
-        return Err(SeqError::ZeroIncrement(numbers[1].to_string()).into());
+        return Err(SeqError::ZeroIncrement(numbers[1].to_owned()).into());
     }
     let last: PreciseNumber = {
         // We are guaranteed that `numbers.len()` is greater than zero
@@ -147,7 +146,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let n: usize = numbers.len();
         match numbers[n - 1].parse() {
             Ok(num) => num,
-            Err(e) => return Err(SeqError::ParseError(numbers[n - 1].to_string(), e).into()),
+            Err(e) => return Err(SeqError::ParseError(numbers[n - 1].to_owned(), e).into()),
         }
     };
 
@@ -212,7 +211,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match result {
         Ok(()) => Ok(()),
-        Err(err) if err.kind() == ErrorKind::BrokenPipe => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
+            // GNU seq prints the Broken pipe message but still exits with status 0
+            let err = err.map_err_context(|| "write error".into());
+            uucore::show_error!("{err}");
+            Ok(())
+        }
         Err(err) => Err(err.map_err_context(|| "write error".into())),
     }
 }
@@ -222,32 +226,35 @@ pub fn uu_app() -> Command {
         .trailing_var_arg(true)
         .infer_long_args(true)
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("seq-about"))
+        .override_usage(format_usage(&translate!("seq-usage")))
         .arg(
             Arg::new(OPT_SEPARATOR)
                 .short('s')
                 .long("separator")
-                .help("Separator character (defaults to \\n)"),
+                .help(translate!("seq-help-separator"))
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(OPT_TERMINATOR)
                 .short('t')
                 .long("terminator")
-                .help("Terminator character (defaults to \\n)"),
+                .help(translate!("seq-help-terminator"))
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(OPT_EQUAL_WIDTH)
                 .short('w')
                 .long("equal-width")
-                .help("Equalize widths of all numbers by padding with zeros")
+                .help(translate!("seq-help-equal-width"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_FORMAT)
                 .short('f')
                 .long(OPT_FORMAT)
-                .help("use printf style floating-point FORMAT"),
+                .help(translate!("seq-help-format")),
         )
         .arg(
             // we use allow_hyphen_values instead of allow_negative_numbers because clap removed
@@ -266,8 +273,8 @@ fn fast_print_seq(
     first: &BigUint,
     increment: u64,
     last: &BigUint,
-    separator: &str,
-    terminator: &str,
+    separator: &OsStr,
+    terminator: &OsStr,
     padding: usize,
 ) -> std::io::Result<()> {
     // Nothing to do, just return.
@@ -304,7 +311,7 @@ fn fast_print_seq(
 
     // Initialize buf with first and separator.
     buf[start..num_end].copy_from_slice(first_str.as_bytes());
-    buf[num_end..].copy_from_slice(separator.as_bytes());
+    buf[num_end..].copy_from_slice(separator.as_encoded_bytes());
 
     // Normally, if padding is > 0, it should be equal to last_length,
     // so start would be == 0, but there are corner cases.
@@ -320,7 +327,7 @@ fn fast_print_seq(
     }
     // Write the last number without separator, but with terminator.
     stdout.write_all(&buf[start..num_end])?;
-    write!(stdout, "{terminator}")?;
+    stdout.write_all(terminator.as_encoded_bytes())?;
     stdout.flush()?;
     Ok(())
 }
@@ -336,8 +343,8 @@ fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> boo
 /// Arbitrary precision decimal number code path ("slow" path)
 fn print_seq(
     range: RangeFloat,
-    separator: &str,
-    terminator: &str,
+    separator: &OsStr,
+    terminator: &OsStr,
     format: &Format<num_format::Float, &ExtendedBigDecimal>,
     fast_allowed: bool,
     padding: usize, // Used by fast path only
@@ -374,7 +381,7 @@ fn print_seq(
     let mut is_first_iteration = true;
     while !done_printing(&value, &increment, &last) {
         if !is_first_iteration {
-            stdout.write_all(separator.as_bytes())?;
+            stdout.write_all(separator.as_encoded_bytes())?;
         }
         format.fmt(&mut stdout, &value)?;
         // TODO Implement augmenting addition.
@@ -382,7 +389,7 @@ fn print_seq(
         is_first_iteration = false;
     }
     if !is_first_iteration {
-        stdout.write_all(terminator.as_bytes())?;
+        stdout.write_all(terminator.as_encoded_bytes())?;
     }
     stdout.flush()?;
     Ok(())

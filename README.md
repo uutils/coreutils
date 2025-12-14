@@ -1,6 +1,6 @@
 <!-- markdownlint-disable MD033 MD041 MD002 -->
 <!-- markdownlint-disable commands-show-output no-duplicate-heading -->
-<!-- spell-checker:ignore markdownlint ; (options) DESTDIR UTILNAME manpages reimplementation oranda -->
+<!-- spell-checker:ignore markdownlint ; (options) DESTDIR UTILNAME manpages reimplementation oranda libclang -->
 <div class="oranda-hide">
 <div align="center">
 
@@ -13,8 +13,9 @@
 [![License](http://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/uutils/coreutils/blob/main/LICENSE)
 [![dependency status](https://deps.rs/repo/github/uutils/coreutils/status.svg)](https://deps.rs/repo/github/uutils/coreutils)
 
-[![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
+[![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/main/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
 ![MSRV](https://img.shields.io/badge/MSRV-1.85.0-brightgreen)
+[![Weblate](https://hosted.weblate.org/widget/rust-coreutils/svg-badge.svg)](https://hosted.weblate.org/projects/rust-coreutils/)
 
 </div>
 
@@ -41,8 +42,15 @@ cargo install coreutils
 
 ## Goals
 
-uutils aims to be a drop-in replacement for the GNU utils. Differences with GNU
+uutils coreutils aims to be a drop-in replacement for the GNU utils. Differences with GNU
 are treated as bugs.
+
+Our key objectives include:
+- Matching GNU's output (stdout and error code) exactly
+- Better error messages
+- Providing comprehensive internationalization support (UTF-8)
+- Improved performances
+- [Extensions](docs/src/extensions.md) when relevant (example: --progress)
 
 uutils aims to work on as many platforms as possible, to be able to use the same
 utils on Linux, macOS, Windows and other platforms. This ensures, for example,
@@ -59,6 +67,7 @@ uutils has both user and developer documentation available:
 Both can also be generated locally, the instructions for that can be found in
 the [coreutils docs](https://github.com/uutils/uutils.github.io) repository.
 
+Use [weblate/rust-coreutils](https://hosted.weblate.org/projects/rust-coreutils/) to translate the Rust coreutils into your language.
 
 <!-- ANCHOR: build (this mark is needed for mdbook) -->
 
@@ -78,7 +87,7 @@ There are currently two methods to build the uutils binaries: either Cargo or
 GNU Make.
 
 > Building the full package, including all documentation, requires both Cargo
-> and Gnu Make on a Unix platform.
+> and GNU Make on a Unix platform.
 
 For either method, we first need to fetch the repository:
 
@@ -96,6 +105,8 @@ other Rust program:
 cargo build --release
 ```
 
+Replace `--release` with `--profile=release-fast` or `--profile=release-small` to use all optimizations or save binary size.
+
 This command builds the most portable common core set of uutils into a multicall
 (BusyBox-type) binary, named 'coreutils', on most Rust-supported platforms.
 
@@ -111,6 +122,12 @@ cargo build --release --features windows
 cargo build --release --features unix
 ```
 
+To build SELinux-specific features, including `chcon` and `runcon`, ensure that `libselinux` 
+and `libclang` are installed on your system. Then, run the following command:
+```
+cargo build --release --features unix,feat_selinux
+```
+
 If you don't want to build every utility available on your platform into the
 final binary, you can also specify which ones you want to build manually. For
 example:
@@ -119,11 +136,13 @@ example:
 cargo build --features "base32 cat echo rm" --no-default-features
 ```
 
-If you don't want to build the multicall binary and would prefer to build the
-utilities as individual binaries, that is also possible. Each utility is
-contained in its own package within the main repository, named "uu_UTILNAME". To
-build individual utilities, use cargo to build just the specific packages (using
-the `--package` [aka `-p`] option). For example:
+If you want to build the utilities as individual binaries, that is also possible:
+
+```shell
+cargo build --release --bins --workspace --exclude coreutils --exclude uu_runcon --exclude uu_chcon
+```
+Each utility is contained in its own package within the main repository, named "uu_UTILNAME". To
+build selected individual utilities, use the `--package` [aka `-p`] option. For example:
 
 ```shell
 cargo build -p uu_base32 -p uu_cat -p uu_echo -p uu_rm
@@ -133,16 +152,16 @@ cargo build -p uu_base32 -p uu_cat -p uu_echo -p uu_rm
 
 Building using `make` is a simple process as well.
 
-To simply build all available utilities:
+To simply build all available utilities (with debug profile):
 
 ```shell
 make
 ```
 
-In release mode:
+In release-fast mode:
 
 ```shell
-make PROFILE=release
+make PROFILE=release-fast
 ```
 
 To build all but a few of the available utilities:
@@ -182,6 +201,12 @@ To install all available utilities:
 make install
 ```
 
+To install all utilities with all possible optimizations:
+
+```shell
+make PROFILE=release-fast install
+```
+
 To install using `sudo` switch `-E` must be used:
 
 ```shell
@@ -203,8 +228,10 @@ make UTILS='UTILITY_1 UTILITY_2' install
 To install every program with a prefix (e.g. uu-echo uu-cat):
 
 ```shell
-make PROG_PREFIX=PREFIX_GOES_HERE install
+make PROG_PREFIX=uu- install
 ```
+
+`PROG_PREFIX` requires separator `-`, `_`, or `=`.
 
 To install the multicall binary:
 
@@ -231,20 +258,29 @@ make COMPLETIONS=n MANPAGES=n install
 
 ### Manually install shell completions
 
-The `coreutils` binary can generate completions for the `bash`, `elvish`,
-`fish`, `powershell` and `zsh` shells. It prints the result to stdout.
+The `uudoc` binary generates completions for the `bash`, `elvish`,
+`fish`, `powershell` and `zsh` shells to stdout.
 
-The syntax is:
-
+Install `uudoc` by
 ```shell
-cargo run completion <utility> <shell>
+cargo install --bin uudoc --features uudoc --path .
+```
+
+Then use the installed binary:
+```shell
+uudoc completion <utility> <shell>
 ```
 
 So, to install completions for `ls` on `bash` to
 `/usr/local/share/bash-completion/completions/ls`, run:
 
 ```shell
-cargo run completion ls bash > /usr/local/share/bash-completion/completions/ls
+uudoc completion ls bash > /usr/local/share/bash-completion/completions/ls.bash
+```
+
+Completion for prefixed `cp` with `uu-` on `zsh` is generated by
+```shell
+env PROG_PREFIX=uu- uudoc completion cp zsh
 ```
 
 ### Manually install manpages
@@ -252,13 +288,13 @@ cargo run completion ls bash > /usr/local/share/bash-completion/completions/ls
 To generate manpages, the syntax is:
 
 ```bash
-cargo run manpage <utility>
+uudoc manpage <utility>
 ```
 
 So, to install the manpage for `ls` to `/usr/local/share/man/man1/ls.1` run:
 
 ```bash
-cargo run manpage ls > /usr/local/share/man/man1/ls.1
+uudoc manpage ls > /usr/local/share/man/man1/ls.1
 ```
 
 ## Un-installation
@@ -286,7 +322,7 @@ make uninstall
 To uninstall every program with a set prefix:
 
 ```shell
-make PROG_PREFIX=PREFIX_GOES_HERE uninstall
+make PROG_PREFIX=uu- uninstall
 ```
 
 To uninstall the multicall binary:
@@ -313,7 +349,7 @@ breakdown of the GNU test results of the main branch can be found
 See <https://github.com/orgs/uutils/projects/1> for the main meta bugs
 (many are missing).
 
-![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.png?raw=true)
+![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.svg?raw=true)
 
 </div> <!-- close oranda-hide div -->
 

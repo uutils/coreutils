@@ -1,0 +1,7 @@
+.xx "Rust is/" "" "Hello World" ""
+.xx "" "Hello World" "Rust is a/" ""
+.xx "is/" "Hello" "World Rust" ""
+.xx "" "/Rust is" "a fun/" ""
+.xx "" "/Rust is a" "fun language" ""
+.xx "" "/World Rust" "is a fun/" ""
+.xx "" "/is a fun" "language" ""

@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use crate::units::Unit;
 use uucore::ranges::Range;
+use uucore::translate;
 
 pub const DELIMITER: &str = "delimiter";
 pub const FIELD: &str = "field";
@@ -145,9 +146,9 @@ impl FromStr for FormatOptions {
 
         if iter.peek().is_none() {
             return if options.prefix == s {
-                Err(format!("format '{s}' has no % directive"))
+                Err(translate!("numfmt-error-format-no-percent", "format" => s))
             } else {
-                Err(format!("format '{s}' ends in %"))
+                Err(translate!("numfmt-error-format-ends-in-percent", "format" => s))
             };
         }
 
@@ -167,9 +168,7 @@ impl FromStr for FormatOptions {
             match iter.peek() {
                 Some(c) if c.is_ascii_digit() => padding.push('-'),
                 _ => {
-                    return Err(format!(
-                        "invalid format '{s}', directive must be %[0]['][-][N][.][N]f"
-                    ));
+                    return Err(translate!("numfmt-error-invalid-format-directive", "format" => s));
                 }
             }
         }
@@ -187,7 +186,9 @@ impl FromStr for FormatOptions {
             if let Ok(p) = padding.parse() {
                 options.padding = Some(p);
             } else {
-                return Err(format!("invalid format '{s}' (width overflow)"));
+                return Err(
+                    translate!("numfmt-error-invalid-format-width-overflow", "format" => s),
+                );
             }
         }
 
@@ -195,7 +196,7 @@ impl FromStr for FormatOptions {
             iter.next();
 
             if matches!(iter.peek(), Some(' ' | '+' | '-')) {
-                return Err(format!("invalid precision in format '{s}'"));
+                return Err(translate!("numfmt-error-invalid-precision", "format" => s));
             }
 
             while let Some(c) = iter.peek() {
@@ -212,16 +213,14 @@ impl FromStr for FormatOptions {
             } else if let Ok(p) = precision.parse() {
                 options.precision = Some(p);
             } else {
-                return Err(format!("invalid precision in format '{s}'"));
+                return Err(translate!("numfmt-error-invalid-precision", "format" => s));
             }
         }
 
         if let Some('f') = iter.peek() {
             iter.next();
         } else {
-            return Err(format!(
-                "invalid format '{s}', directive must be %[0]['][-][N][.][N]f"
-            ));
+            return Err(translate!("numfmt-error-invalid-format-directive", "format" => s));
         }
 
         // '%' chars in the suffix, if any, must appear in blocks of even length, otherwise
@@ -235,7 +234,7 @@ impl FromStr for FormatOptions {
                 }
                 iter.next();
             } else {
-                return Err(format!("format '{s}' has too many % directives"));
+                return Err(translate!("numfmt-error-format-too-many-percent", "format" => s));
             }
         }
 
@@ -252,7 +251,7 @@ impl FromStr for InvalidModes {
             "fail" => Ok(Self::Fail),
             "warn" => Ok(Self::Warn),
             "ignore" => Ok(Self::Ignore),
-            unknown => Err(format!("Unknown invalid mode: {unknown}")),
+            unknown => Err(translate!("numfmt-error-unknown-invalid-mode", "mode" => unknown)),
         }
     }
 }

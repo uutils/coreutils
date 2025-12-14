@@ -23,6 +23,7 @@ rand = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "mktemp"

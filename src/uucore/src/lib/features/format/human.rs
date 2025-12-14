@@ -9,7 +9,7 @@
 //!
 //! Format sizes like gnulibs human_readable() would
 
-use number_prefix::NumberPrefix;
+use unit_prefix::NumberPrefix;
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum SizeFormat {
@@ -18,12 +18,12 @@ pub enum SizeFormat {
     Decimal, // Powers of 1000, --si
 }
 
-// There are a few peculiarities to how GNU formats the sizes:
-// 1. One decimal place is given if and only if the size is smaller than 10
-// 2. It rounds sizes up.
-// 3. The human-readable format uses powers for 1024, but does not display the "i"
-//    that is commonly used to denote Kibi, Mebi, etc.
-// 4. Kibi and Kilo are denoted differently ("k" and "K", respectively)
+/// There are a few peculiarities to how GNU formats the sizes:
+/// 1. One decimal place is given if and only if the size is smaller than 10
+/// 2. It rounds sizes up.
+/// 3. The human-readable format uses powers for 1024, but does not display the "i"
+///    that is commonly used to denote Kibi, Mebi, etc.
+/// 4. Kibi and Kilo are denoted differently ("k" and "K", respectively)
 fn format_prefixed(prefixed: &NumberPrefix<f64>) -> String {
     match prefixed {
         NumberPrefix::Standalone(bytes) => bytes.to_string(),

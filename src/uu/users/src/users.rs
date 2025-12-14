@@ -11,24 +11,13 @@ use std::path::Path;
 use clap::builder::ValueParser;
 use clap::{Arg, Command};
 use uucore::error::UResult;
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
+use uucore::translate;
 
 #[cfg(target_os = "openbsd")]
 use utmp_classic::{UtmpEntry, parse_from_path};
 #[cfg(not(target_os = "openbsd"))]
 use uucore::utmpx::{self, Utmpx};
-
-#[cfg(target_env = "musl")]
-const ABOUT: &str = concat!(
-    help_about!("users.md"),
-    "\n\nWarning: When built with musl libc, the `users` utility may show '0 users' \n",
-    "due to musl's stub implementation of utmpx functions."
-);
-
-#[cfg(not(target_env = "musl"))]
-const ABOUT: &str = help_about!("users.md");
-
-const USAGE: &str = help_usage!("users.md");
 
 #[cfg(target_os = "openbsd")]
 const OPENBSD_UTMP_FILE: &str = "/var/run/utmp";
@@ -40,17 +29,13 @@ fn get_long_usage() -> String {
     let default_path: &str = utmpx::DEFAULT_FILE;
     #[cfg(target_os = "openbsd")]
     let default_path: &str = OPENBSD_UTMP_FILE;
-    format!(
-        "Output who is currently logged in according to FILE.
-If FILE is not specified, use {default_path}.  /var/log/wtmp as FILE is common."
-    )
+
+    translate!("users-long-usage", "default_path" => default_path)
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(get_long_usage())
-        .try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let maybe_file: Option<&Path> = matches.get_one::<OsString>(ARG_FILE).map(AsRef::as_ref);
 
@@ -81,7 +66,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let filename = maybe_file.unwrap_or(utmpx::DEFAULT_FILE.as_ref());
 
         users = Utmpx::iter_all_records_from(filename)
-            .filter(Utmpx::is_user_process)
+            .filter(|ut| ut.is_user_process())
             .map(|ut| ut.user())
             .collect::<Vec<_>>();
     };
@@ -95,11 +80,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
+    #[cfg(not(target_env = "musl"))]
+    let about = translate!("users-about");
+    #[cfg(target_env = "musl")]
+    let about = translate!("users-about") + &translate!("users-about-musl-warning");
+
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(about)
+        .override_usage(format_usage(&translate!("users-usage")))
         .infer_long_args(true)
+        .after_help(get_long_usage())
         .arg(
             Arg::new(ARG_FILE)
                 .num_args(1)

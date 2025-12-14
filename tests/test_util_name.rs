@@ -2,6 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore readelf
+
 use uutests::util::TestScenario;
 
 #[cfg(unix)]
@@ -36,16 +39,18 @@ fn execution_phrase_double() {
     let output = Command::new(&scenario.bin_path)
         .arg("ls")
         .arg("--some-invalid-arg")
+        .env("LANG", "en_US.UTF-8")
         .output()
         .unwrap();
     assert!(
         String::from_utf8(output.stderr)
             .unwrap()
-            .contains(&format!("Usage: {} ls", scenario.bin_path.display()))
+            .contains(&"Usage: ls".to_string())
     );
 }
 
 #[test]
+#[ignore = "Test assumes error upon non-UTF8"]
 #[cfg(feature = "sort")]
 fn util_name_double() {
     use std::{
@@ -71,6 +76,7 @@ fn util_name_double() {
 }
 
 #[test]
+#[ignore = "Test assumes error upon non-UTF8"]
 #[cfg(feature = "sort")]
 #[cfg(unix)]
 fn util_name_single() {
@@ -189,65 +195,62 @@ fn util_invalid_name_invalid_command() {
         .unwrap();
     let output = child.wait_with_output().unwrap();
     assert_eq!(output.status.code(), Some(1));
-    assert_eq!(output.stderr, b"");
+    assert_eq!(output.stdout, b"");
     assert_eq!(
-        output.stdout,
+        output.stderr,
         b"definitely_invalid: function/utility not found\n"
     );
 }
 
 #[test]
-#[cfg(feature = "true")]
-fn util_completion() {
+fn util_version() {
     use std::process::{Command, Stdio};
 
-    let scenario = TestScenario::new("completion");
+    let scenario = TestScenario::new("--version");
     if !scenario.bin_path.exists() {
         println!("Skipping test: Binary not found at {:?}", scenario.bin_path);
         return;
     }
-
-    let child = Command::new(&scenario.bin_path)
-        .arg("completion")
-        .arg("true")
-        .arg("powershell")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert_eq!(output.status.code(), Some(0));
-    assert_eq!(output.stderr, b"");
-    let output_str = String::from_utf8(output.stdout).unwrap();
-    assert!(
-        output_str.contains("using namespace System.Management.Automation"),
-        "{output_str:?}"
-    );
+    for arg in ["-V", "--version"] {
+        let child = Command::new(&scenario.bin_path)
+            .arg(arg)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert_eq!(output.status.code(), Some(0));
+        assert_eq!(output.stderr, b"");
+        let output_str = String::from_utf8(output.stdout).unwrap();
+        let ver = std::env::var("CARGO_PKG_VERSION").unwrap();
+        assert_eq!(format!("coreutils {ver} (multi-call binary)\n"), output_str);
+    }
 }
 
 #[test]
-#[cfg(feature = "true")]
-fn util_manpage() {
-    use std::process::{Command, Stdio};
+#[cfg(target_env = "musl")]
+fn test_musl_no_dynamic_deps() {
+    use std::process::Command;
 
-    let scenario = TestScenario::new("completion");
+    let scenario = TestScenario::new("test_musl_no_dynamic_deps");
     if !scenario.bin_path.exists() {
         println!("Skipping test: Binary not found at {:?}", scenario.bin_path);
         return;
     }
 
-    let child = Command::new(&scenario.bin_path)
-        .arg("manpage")
-        .arg("true")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert_eq!(output.status.code(), Some(0));
-    assert_eq!(output.stderr, b"");
-    let output_str = String::from_utf8(output.stdout).unwrap();
-    assert!(output_str.contains("\n.TH true 1 "), "{output_str:?}");
+    let output = Command::new("readelf")
+        .arg("-d")
+        .arg(&scenario.bin_path)
+        .output()
+        .expect("Failed to run readelf");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Static binaries should have no NEEDED entries (dynamic library dependencies)
+    assert!(
+        !stdout.contains("NEEDED"),
+        "Found dynamic dependencies in musl binary:\n{}",
+        stdout
+    );
 }

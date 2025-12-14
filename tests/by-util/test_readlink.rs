@@ -2,11 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore regfile
-use uutests::new_ucmd;
-use uutests::path_concat;
+//
+// spell-checker:ignore regfile parentdir
+
 use uutests::util::{TestScenario, get_root_path};
-use uutests::{at_and_ucmd, util_name};
+use uutests::{at_and_ucmd, new_ucmd, path_concat, util_name};
 
 static GIBBERISH: &str = "supercalifragilisticexpialidocious";
 
@@ -16,19 +16,26 @@ static NOT_A_DIRECTORY: &str = "Not a directory";
 static NOT_A_DIRECTORY: &str = "The directory name is invalid.";
 
 #[test]
+fn test_no_args() {
+    new_ucmd!()
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("readlink: missing operand");
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
 fn test_resolve() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("foo");
     at.symlink_file("foo", "bar");
 
-    scene.ucmd().arg("bar").succeeds().stdout_contains("foo\n");
+    ucmd.arg("bar").succeeds().stdout_contains("foo\n");
 }
 
 #[test]
@@ -58,6 +65,21 @@ fn test_canonicalize_missing() {
     let expect = path_concat!(at.root_dir_resolved(), GIBBERISH) + "\n";
     println!("actual: {actual:?}");
     println!("expect: {expect:?}");
+    assert_eq!(actual, expect);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_canonicalize_symlink_before_parentdir() {
+    // GNU readlink follows the symlink first and only then evaluates `..`.
+    // Logical resolution would collapse `link/..` up front and return the current directory instead.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("real");
+    at.mkdir("real/sub");
+    at.relative_symlink_dir("real/sub", "link");
+
+    let actual = ucmd.args(&["-f", "link/.."]).succeeds().stdout_move_str();
+    let expect = format!("{}/real\n", at.root_dir_resolved());
     assert_eq!(actual, expect);
 }
 
@@ -101,6 +123,21 @@ fn test_symlink_to_itself_verbose() {
     ucmd.args(&["-ev", "a"])
         .fails_with_code(1)
         .stderr_contains("Too many levels of symbolic links");
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_posixly_correct_regular_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("regfile");
+    scene
+        .ucmd()
+        .env("POSIXLY_CORRECT", "1")
+        .arg("regfile")
+        .fails_with_code(1)
+        .stderr_contains("Invalid argument")
+        .no_stdout();
 }
 
 #[test]
@@ -373,4 +410,26 @@ fn test_delimiters() {
         .succeeds()
         .stderr_contains("ignoring --no-newline with multiple arguments")
         .stdout_is("/a\n/a\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_readlink_non_utf8_paths() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file_name = "target_file";
+    at.touch(file_name);
+    let non_utf8_bytes = b"symlink_\xFF\xFE";
+    let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
+
+    std::os::unix::fs::symlink(at.plus_as_string(file_name), at.plus(non_utf8_name)).unwrap();
+
+    // Test that readlink handles non-UTF-8 symlink names without crashing
+    let result = scene.ucmd().arg(non_utf8_name).succeeds();
+
+    let output = result.stdout_str_lossy();
+    assert!(output.contains(file_name));
 }

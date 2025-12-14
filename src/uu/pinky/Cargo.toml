@@ -1,3 +1,5 @@
+# spell-checker:ignore logind
+
 [package]
 name = "uu_pinky"
 description = "pinky ~ (uutils) display user information"
@@ -14,12 +16,16 @@ readme.workspace = true
 [lints]
 workspace = true
 
+[features]
+feat_systemd_logind = ["uucore/feat_systemd_logind"]
+
 [lib]
 path = "src/pinky.rs"
 
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["utmpx", "entries"] }
+fluent = { workspace = true }
 
 [[bin]]
 name = "pinky"

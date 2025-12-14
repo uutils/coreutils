@@ -1,16 +1,14 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime serde bincode gethostid kqueue libselinux mangen memmap procfs uuhelp startswith constness expl
+# spell-checker:ignore (libs) bigdecimal datetime serde bincode gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs
 
 [package]
 name = "coreutils"
 description = "coreutils ~ GNU coreutils (updated); implemented as universal (cross-platform) utils, written in Rust"
 default-run = "coreutils"
 repository = "https://github.com/uutils/coreutils"
-readme = "README.md"
 rust-version = "1.85.0"
-build = "build.rs"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -29,14 +27,23 @@ macos = ["feat_os_macos"]
 unix = ["feat_os_unix"]
 windows = ["feat_os_windows"]
 ## project-specific feature shortcodes
-nightly = []
-test_unimplemented = []
 expensive_tests = []
 # "test_risky_names" == enable tests that create problematic file names (would make a network share inaccessible to Windows, breaks SVN on Mac OS, etc.)
 test_risky_names = []
 # * only build `uudoc` when `--feature uudoc` is activated
-uudoc = ["zip", "dep:uuhelp_parser"]
+uudoc = ["dep:clap_complete", "dep:clap_mangen", "dep:fluent-syntax", "dep:zip"]
 ## features
+## Optional feature for stdbuf
+# "feat_external_libstdbuf" == use an external libstdbuf.so for stdbuf instead of embedding it
+feat_external_libstdbuf = ["stdbuf/feat_external_libstdbuf"]
+# "feat_systemd_logind" == enable feat_systemd_logind support for utmpx replacement
+feat_systemd_logind = [
+  "pinky/feat_systemd_logind",
+  "uptime/feat_systemd_logind",
+  "users/feat_systemd_logind",
+  "uucore/feat_systemd_logind",
+  "who/feat_systemd_logind",
+]
 # "feat_acl" == enable support for ACLs (access control lists; by using`--features feat_acl`)
 # NOTE:
 # * On linux, the posix-acl/acl-sys crate requires `libacl` headers and shared library to be accessible in the C toolchain at compile time.
@@ -48,14 +55,15 @@ feat_acl = ["cp/feat_acl"]
 # * Running a uutils compiled with `feat_selinux` requires an SELinux enabled Kernel at run time.
 feat_selinux = [
   "cp/selinux",
+  "feat_require_selinux",
   "id/selinux",
+  "install/selinux",
   "ls/selinux",
   "mkdir/selinux",
   "mkfifo/selinux",
   "mknod/selinux",
-  "stat/selinux",
   "selinux",
-  "feat_require_selinux",
+  "stat/selinux",
 ]
 ##
 ## feature sets
@@ -73,11 +81,11 @@ feat_common_core = [
   "csplit",
   "cut",
   "date",
+  "dd",
   "df",
   "dir",
   "dircolors",
   "dirname",
-  "dd",
   "du",
   "echo",
   "env",
@@ -121,11 +129,11 @@ feat_common_core = [
   "tail",
   "tee",
   "test",
+  "touch",
   "tr",
   "true",
   "truncate",
   "tsort",
-  "touch",
   "unexpand",
   "uniq",
   "unlink",
@@ -141,7 +149,6 @@ feat_Tier1 = [
   "hostname",
   "nproc",
   "sync",
-  "touch",
   "uname",
   "whoami",
 ]
@@ -153,14 +160,21 @@ feat_os_macos = [
   "feat_require_unix_hostid",
 ]
 # "feat_os_unix" == set of utilities which can be built/run on modern/usual *nix platforms.
-# Also used for targets binding to the "musl" library (ref: <https://musl.libc.org/about.html>)
 feat_os_unix = [
   "feat_Tier1",
   #
-  "feat_require_crate_cpp",
   "feat_require_unix",
-  "feat_require_unix_utmpx",
   "feat_require_unix_hostid",
+  "feat_require_unix_utmpx",
+]
+# "feat_os_unix_musl" == set of utilities which can be built/run on targets binding to the "musl" library (ref: <https://musl.libc.org/about.html>)
+# It excludes stdbuf due to cdylib limitations (https://github.com/rust-lang/rust/issues/82193)
+feat_os_unix_musl = [
+  "feat_Tier1",
+  #
+  "feat_require_unix_musl",
+  "feat_require_unix_hostid",
+  "feat_require_unix_utmpx",
 ]
 # "feat_os_windows" == set of utilities which can be built/run on modern/usual windows platforms
 feat_os_windows = [
@@ -184,10 +198,12 @@ feat_os_unix_android = [
 #
 # ** NOTE: these `feat_require_...` sets should be minimized as much as possible to encourage cross-platform availability of utilities
 #
-# "feat_require_crate_cpp" == set of utilities requiring the `cpp` crate (which fail to compile on several platforms; as of 2020-04-23)
-feat_require_crate_cpp = ["stdbuf"]
-# "feat_require_unix" == set of utilities requiring support which is only available on unix platforms (as of 2020-04-23)
-feat_require_unix = [
+# "feat_require_unix" == set of utilities requiring support which is only available on unix platforms
+feat_require_unix = ["feat_require_unix_core", "stdbuf"]
+# "feat_require_unix_musl" == set of utilities requiring unix support, excluding stdbuf (cdylib not supported on musl)
+feat_require_unix_musl = ["feat_require_unix_core"]
+# "feat_require_unix_core" == core unix utilities (shared between regular unix and musl)
+feat_require_unix_core = [
   "chgrp",
   "chmod",
   "chown",
@@ -218,8 +234,6 @@ feat_require_selinux = ["chcon", "runcon"]
 # "feat_os_unix_fuchsia" == set of utilities which can be built/run on the "Fuchsia" OS (refs: <https://fuchsia.dev>; <https://en.wikipedia.org/wiki/Google_Fuchsia>)
 feat_os_unix_fuchsia = [
   "feat_common_core",
-  #
-  "feat_require_crate_cpp",
   #
   "chgrp",
   "chmod",
@@ -252,12 +266,23 @@ feat_os_windows_legacy = [
   "arch",
   "nproc",
   "sync",
-  "touch",
   "whoami",
 ]
 ##
 # * bypass/override ~ translate 'test' feature name to avoid dependency collision with rust core 'test' crate (o/w surfaces as compiler errors during testing)
 test = ["uu_test"]
+
+[workspace]
+resolver = "3"
+members = [
+  ".",
+  "src/uu/*",
+  "src/uu/stdbuf/src/libstdbuf",
+  "src/uucore",
+  "src/uucore_procs",
+  "tests/uutests",
+  # "fuzz",  # TODO
+]
 
 [workspace.package]
 authors = ["uutils developers"]
@@ -267,7 +292,7 @@ homepage = "https://github.com/uutils/coreutils"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 license = "MIT"
 readme = "README.package.md"
-version = "0.0.30"
+version = "0.5.0"
 
 [workspace.dependencies]
 ansi-width = "0.1.0"
@@ -276,20 +301,20 @@ binary-heap-plus = "0.5.0"
 bstr = "1.9.1"
 bytecount = "0.6.8"
 byteorder = "1.5.0"
-chrono = { version = "0.4.38", default-features = false, features = [
+chrono = { version = "0.4.41", default-features = false, features = [
   "std",
   "alloc",
   "clock",
 ] }
-chrono-tz = "0.10.0"
-clap = { version = "4.5", features = ["wrap_help", "cargo"] }
+clap = { version = "4.5", features = ["wrap_help", "cargo", "color"] }
 clap_complete = "4.4"
 clap_mangen = "0.2"
 compare = "0.1.0"
-coz = { version = "0.1.3" }
 crossterm = "0.29.0"
-ctrlc = { version = "3.4.4", features = ["termination"] }
-dns-lookup = { version = "2.0.4" }
+ctor = "0.6.0"
+ctrlc = { version = "3.4.7", features = ["termination"] }
+divan = { package = "codspeed-divan-compat", version = "4.0.5" }
+dns-lookup = { version = "3.0.0" }
 exacl = "0.12.0"
 file_diff = "1.0.0"
 filetime = "0.2.23"
@@ -300,57 +325,61 @@ gcd = "2.3"
 glob = "0.3.1"
 half = "2.4.1"
 hostname = "0.4"
-iana-time-zone = "0.1.57"
-indicatif = "0.17.8"
+icu_collator = "2.0.0"
+icu_decimal = "2.0.0"
+icu_locale = "2.0.0"
+icu_provider = "2.0.0"
+indicatif = "0.18.0"
 itertools = "0.14.0"
+jiff = { version = "0.2.10", default-features = false, features = [
+  "std",
+  "alloc",
+  "tz-system",
+] }
 libc = "0.2.172"
-linux-raw-sys = "0.9"
-lscolors = { version = "0.20.0", default-features = false, features = [
+linux-raw-sys = "0.12"
+lscolors = { version = "0.21.0", default-features = false, features = [
   "gnu_legacy",
 ] }
 memchr = "2.7.2"
 memmap2 = "0.9.4"
-nix = { version = "0.29", default-features = false }
+nix = { version = "0.30", default-features = false }
 nom = "8.0.0"
-notify = { version = "=8.0.0", features = ["macos_kqueue"] }
+notify = { version = "=8.2.0", features = ["macos_kqueue"] }
 num-bigint = "0.4.4"
 num-prime = "0.4.4"
 num-traits = "0.2.19"
-number_prefix = "0.4"
-onig = { version = "~6.4", default-features = false }
-parse_datetime = "0.9.0"
-phf = "0.11.2"
-phf_codegen = "0.11.2"
+onig = { version = "~6.5.1", default-features = false }
+parse_datetime = "0.13.0"
+phf = "0.13.1"
+phf_codegen = "0.13.1"
 platform-info = "2.0.3"
-quick-error = "2.0.1"
+procfs = "0.18"
 rand = { version = "0.9.0", features = ["small_rng"] }
 rand_core = "0.9.0"
 rayon = "1.10"
 regex = "1.10.4"
-rstest = "0.25.0"
+rstest = "0.26.0"
 rust-ini = "0.21.0"
 same-file = "1.0.6"
 self_cell = "1.0.4"
-# Remove the "=" once we moved to Rust edition 2024
-selinux = "= 0.5.1"
-selinux-sys = "= 0.6.14"
+# FIXME we use the exact version because the new 0.5.3 requires an MSRV of 1.88
+selinux = "=0.5.2"
 signal-hook = "0.3.17"
-smallvec = { version = "1.13.2", features = ["union"] }
 tempfile = "3.15.0"
 terminal_size = "0.4.0"
 textwrap = { version = "0.16.1", features = ["terminal_size"] }
 thiserror = "2.0.3"
 time = { version = "0.3.36" }
-unicode-segmentation = "1.11.0"
 unicode-width = "0.2.0"
-utf-8 = "0.7.6"
+unit-prefix = "0.5"
 utmp-classic = "0.1.6"
 uutils_term_grid = "0.7"
 walkdir = "2.5"
 winapi-util = "0.1.8"
-windows-sys = { version = "0.59.0", default-features = false }
+windows-sys = { version = "0.61.0", default-features = false }
 xattr = "1.3.1"
-zip = { version = "2.2.2", default-features = false, features = ["deflate"] }
+zip = { version = "6.0.0", default-features = false, features = ["deflate"] }
 
 hex = "0.4.3"
 md-5 = "0.10.6"
@@ -360,131 +389,137 @@ sha3 = "0.10.8"
 blake2b_simd = "1.0.2"
 blake3 = "1.5.1"
 sm3 = "0.4.2"
-crc32fast = "1.4.2"
+crc-fast = "1.5.0"
 digest = "0.10.7"
 
-uucore = { version = "0.0.30", package = "uucore", path = "src/uucore" }
-uucore_procs = { version = "0.0.30", package = "uucore_procs", path = "src/uucore_procs" }
-uu_ls = { version = "0.0.30", path = "src/uu/ls" }
-uu_base32 = { version = "0.0.30", path = "src/uu/base32" }
-uutests = { version = "0.0.30", package = "uutests", path = "tests/uutests/" }
+# Fluent dependencies
+fluent = "0.17.0"
+fluent-bundle = "0.16.0"
+unic-langid = "0.9.6"
+fluent-syntax = "0.12.0"
+
+uucore = { version = "0.5.0", package = "uucore", path = "src/uucore" }
+uucore_procs = { version = "0.5.0", package = "uucore_procs", path = "src/uucore_procs" }
+uu_ls = { version = "0.5.0", path = "src/uu/ls" }
+uu_base32 = { version = "0.5.0", path = "src/uu/base32" }
+uutests = { version = "0.5.0", package = "uutests", path = "tests/uutests" }
 
 [dependencies]
-clap = { workspace = true }
-uucore = { workspace = true }
-clap_complete = { workspace = true }
-clap_mangen = { workspace = true }
-phf = { workspace = true }
+clap.workspace = true
+clap_complete = { workspace = true, optional = true }
+clap_mangen = { workspace = true, optional = true }
+fluent-syntax = { workspace = true, optional = true }
+phf.workspace = true
 selinux = { workspace = true, optional = true }
-textwrap = { workspace = true }
+textwrap.workspace = true
+uucore.workspace = true
 zip = { workspace = true, optional = true }
 
-uuhelp_parser = { optional = true, version = ">=0.0.19", path = "src/uuhelp_parser" }
 
 # * uutils
-uu_test = { optional = true, version = "0.0.30", package = "uu_test", path = "src/uu/test" }
+uu_test = { optional = true, version = "0.5.0", package = "uu_test", path = "src/uu/test" }
 #
-arch = { optional = true, version = "0.0.30", package = "uu_arch", path = "src/uu/arch" }
-base32 = { optional = true, version = "0.0.30", package = "uu_base32", path = "src/uu/base32" }
-base64 = { optional = true, version = "0.0.30", package = "uu_base64", path = "src/uu/base64" }
-basename = { optional = true, version = "0.0.30", package = "uu_basename", path = "src/uu/basename" }
-basenc = { optional = true, version = "0.0.30", package = "uu_basenc", path = "src/uu/basenc" }
-cat = { optional = true, version = "0.0.30", package = "uu_cat", path = "src/uu/cat" }
-chcon = { optional = true, version = "0.0.30", package = "uu_chcon", path = "src/uu/chcon" }
-chgrp = { optional = true, version = "0.0.30", package = "uu_chgrp", path = "src/uu/chgrp" }
-chmod = { optional = true, version = "0.0.30", package = "uu_chmod", path = "src/uu/chmod" }
-chown = { optional = true, version = "0.0.30", package = "uu_chown", path = "src/uu/chown" }
-chroot = { optional = true, version = "0.0.30", package = "uu_chroot", path = "src/uu/chroot" }
-cksum = { optional = true, version = "0.0.30", package = "uu_cksum", path = "src/uu/cksum" }
-comm = { optional = true, version = "0.0.30", package = "uu_comm", path = "src/uu/comm" }
-cp = { optional = true, version = "0.0.30", package = "uu_cp", path = "src/uu/cp" }
-csplit = { optional = true, version = "0.0.30", package = "uu_csplit", path = "src/uu/csplit" }
-cut = { optional = true, version = "0.0.30", package = "uu_cut", path = "src/uu/cut" }
-date = { optional = true, version = "0.0.30", package = "uu_date", path = "src/uu/date" }
-dd = { optional = true, version = "0.0.30", package = "uu_dd", path = "src/uu/dd" }
-df = { optional = true, version = "0.0.30", package = "uu_df", path = "src/uu/df" }
-dir = { optional = true, version = "0.0.30", package = "uu_dir", path = "src/uu/dir" }
-dircolors = { optional = true, version = "0.0.30", package = "uu_dircolors", path = "src/uu/dircolors" }
-dirname = { optional = true, version = "0.0.30", package = "uu_dirname", path = "src/uu/dirname" }
-du = { optional = true, version = "0.0.30", package = "uu_du", path = "src/uu/du" }
-echo = { optional = true, version = "0.0.30", package = "uu_echo", path = "src/uu/echo" }
-env = { optional = true, version = "0.0.30", package = "uu_env", path = "src/uu/env" }
-expand = { optional = true, version = "0.0.30", package = "uu_expand", path = "src/uu/expand" }
-expr = { optional = true, version = "0.0.30", package = "uu_expr", path = "src/uu/expr" }
-factor = { optional = true, version = "0.0.30", package = "uu_factor", path = "src/uu/factor" }
-false = { optional = true, version = "0.0.30", package = "uu_false", path = "src/uu/false" }
-fmt = { optional = true, version = "0.0.30", package = "uu_fmt", path = "src/uu/fmt" }
-fold = { optional = true, version = "0.0.30", package = "uu_fold", path = "src/uu/fold" }
-groups = { optional = true, version = "0.0.30", package = "uu_groups", path = "src/uu/groups" }
-hashsum = { optional = true, version = "0.0.30", package = "uu_hashsum", path = "src/uu/hashsum" }
-head = { optional = true, version = "0.0.30", package = "uu_head", path = "src/uu/head" }
-hostid = { optional = true, version = "0.0.30", package = "uu_hostid", path = "src/uu/hostid" }
-hostname = { optional = true, version = "0.0.30", package = "uu_hostname", path = "src/uu/hostname" }
-id = { optional = true, version = "0.0.30", package = "uu_id", path = "src/uu/id" }
-install = { optional = true, version = "0.0.30", package = "uu_install", path = "src/uu/install" }
-join = { optional = true, version = "0.0.30", package = "uu_join", path = "src/uu/join" }
-kill = { optional = true, version = "0.0.30", package = "uu_kill", path = "src/uu/kill" }
-link = { optional = true, version = "0.0.30", package = "uu_link", path = "src/uu/link" }
-ln = { optional = true, version = "0.0.30", package = "uu_ln", path = "src/uu/ln" }
-ls = { optional = true, version = "0.0.30", package = "uu_ls", path = "src/uu/ls" }
-logname = { optional = true, version = "0.0.30", package = "uu_logname", path = "src/uu/logname" }
-mkdir = { optional = true, version = "0.0.30", package = "uu_mkdir", path = "src/uu/mkdir" }
-mkfifo = { optional = true, version = "0.0.30", package = "uu_mkfifo", path = "src/uu/mkfifo" }
-mknod = { optional = true, version = "0.0.30", package = "uu_mknod", path = "src/uu/mknod" }
-mktemp = { optional = true, version = "0.0.30", package = "uu_mktemp", path = "src/uu/mktemp" }
-more = { optional = true, version = "0.0.30", package = "uu_more", path = "src/uu/more" }
-mv = { optional = true, version = "0.0.30", package = "uu_mv", path = "src/uu/mv" }
-nice = { optional = true, version = "0.0.30", package = "uu_nice", path = "src/uu/nice" }
-nl = { optional = true, version = "0.0.30", package = "uu_nl", path = "src/uu/nl" }
-nohup = { optional = true, version = "0.0.30", package = "uu_nohup", path = "src/uu/nohup" }
-nproc = { optional = true, version = "0.0.30", package = "uu_nproc", path = "src/uu/nproc" }
-numfmt = { optional = true, version = "0.0.30", package = "uu_numfmt", path = "src/uu/numfmt" }
-od = { optional = true, version = "0.0.30", package = "uu_od", path = "src/uu/od" }
-paste = { optional = true, version = "0.0.30", package = "uu_paste", path = "src/uu/paste" }
-pathchk = { optional = true, version = "0.0.30", package = "uu_pathchk", path = "src/uu/pathchk" }
-pinky = { optional = true, version = "0.0.30", package = "uu_pinky", path = "src/uu/pinky" }
-pr = { optional = true, version = "0.0.30", package = "uu_pr", path = "src/uu/pr" }
-printenv = { optional = true, version = "0.0.30", package = "uu_printenv", path = "src/uu/printenv" }
-printf = { optional = true, version = "0.0.30", package = "uu_printf", path = "src/uu/printf" }
-ptx = { optional = true, version = "0.0.30", package = "uu_ptx", path = "src/uu/ptx" }
-pwd = { optional = true, version = "0.0.30", package = "uu_pwd", path = "src/uu/pwd" }
-readlink = { optional = true, version = "0.0.30", package = "uu_readlink", path = "src/uu/readlink" }
-realpath = { optional = true, version = "0.0.30", package = "uu_realpath", path = "src/uu/realpath" }
-rm = { optional = true, version = "0.0.30", package = "uu_rm", path = "src/uu/rm" }
-rmdir = { optional = true, version = "0.0.30", package = "uu_rmdir", path = "src/uu/rmdir" }
-runcon = { optional = true, version = "0.0.30", package = "uu_runcon", path = "src/uu/runcon" }
-seq = { optional = true, version = "0.0.30", package = "uu_seq", path = "src/uu/seq" }
-shred = { optional = true, version = "0.0.30", package = "uu_shred", path = "src/uu/shred" }
-shuf = { optional = true, version = "0.0.30", package = "uu_shuf", path = "src/uu/shuf" }
-sleep = { optional = true, version = "0.0.30", package = "uu_sleep", path = "src/uu/sleep" }
-sort = { optional = true, version = "0.0.30", package = "uu_sort", path = "src/uu/sort" }
-split = { optional = true, version = "0.0.30", package = "uu_split", path = "src/uu/split" }
-stat = { optional = true, version = "0.0.30", package = "uu_stat", path = "src/uu/stat" }
-stdbuf = { optional = true, version = "0.0.30", package = "uu_stdbuf", path = "src/uu/stdbuf" }
-stty = { optional = true, version = "0.0.30", package = "uu_stty", path = "src/uu/stty" }
-sum = { optional = true, version = "0.0.30", package = "uu_sum", path = "src/uu/sum" }
-sync = { optional = true, version = "0.0.30", package = "uu_sync", path = "src/uu/sync" }
-tac = { optional = true, version = "0.0.30", package = "uu_tac", path = "src/uu/tac" }
-tail = { optional = true, version = "0.0.30", package = "uu_tail", path = "src/uu/tail" }
-tee = { optional = true, version = "0.0.30", package = "uu_tee", path = "src/uu/tee" }
-timeout = { optional = true, version = "0.0.30", package = "uu_timeout", path = "src/uu/timeout" }
-touch = { optional = true, version = "0.0.30", package = "uu_touch", path = "src/uu/touch" }
-tr = { optional = true, version = "0.0.30", package = "uu_tr", path = "src/uu/tr" }
-true = { optional = true, version = "0.0.30", package = "uu_true", path = "src/uu/true" }
-truncate = { optional = true, version = "0.0.30", package = "uu_truncate", path = "src/uu/truncate" }
-tsort = { optional = true, version = "0.0.30", package = "uu_tsort", path = "src/uu/tsort" }
-tty = { optional = true, version = "0.0.30", package = "uu_tty", path = "src/uu/tty" }
-uname = { optional = true, version = "0.0.30", package = "uu_uname", path = "src/uu/uname" }
-unexpand = { optional = true, version = "0.0.30", package = "uu_unexpand", path = "src/uu/unexpand" }
-uniq = { optional = true, version = "0.0.30", package = "uu_uniq", path = "src/uu/uniq" }
-unlink = { optional = true, version = "0.0.30", package = "uu_unlink", path = "src/uu/unlink" }
-uptime = { optional = true, version = "0.0.30", package = "uu_uptime", path = "src/uu/uptime" }
-users = { optional = true, version = "0.0.30", package = "uu_users", path = "src/uu/users" }
-vdir = { optional = true, version = "0.0.30", package = "uu_vdir", path = "src/uu/vdir" }
-wc = { optional = true, version = "0.0.30", package = "uu_wc", path = "src/uu/wc" }
-who = { optional = true, version = "0.0.30", package = "uu_who", path = "src/uu/who" }
-whoami = { optional = true, version = "0.0.30", package = "uu_whoami", path = "src/uu/whoami" }
-yes = { optional = true, version = "0.0.30", package = "uu_yes", path = "src/uu/yes" }
+arch = { optional = true, version = "0.5.0", package = "uu_arch", path = "src/uu/arch" }
+base32 = { optional = true, version = "0.5.0", package = "uu_base32", path = "src/uu/base32" }
+base64 = { optional = true, version = "0.5.0", package = "uu_base64", path = "src/uu/base64" }
+basename = { optional = true, version = "0.5.0", package = "uu_basename", path = "src/uu/basename" }
+basenc = { optional = true, version = "0.5.0", package = "uu_basenc", path = "src/uu/basenc" }
+cat = { optional = true, version = "0.5.0", package = "uu_cat", path = "src/uu/cat" }
+chcon = { optional = true, version = "0.5.0", package = "uu_chcon", path = "src/uu/chcon" }
+chgrp = { optional = true, version = "0.5.0", package = "uu_chgrp", path = "src/uu/chgrp" }
+chmod = { optional = true, version = "0.5.0", package = "uu_chmod", path = "src/uu/chmod" }
+chown = { optional = true, version = "0.5.0", package = "uu_chown", path = "src/uu/chown" }
+chroot = { optional = true, version = "0.5.0", package = "uu_chroot", path = "src/uu/chroot" }
+cksum = { optional = true, version = "0.5.0", package = "uu_cksum", path = "src/uu/cksum" }
+comm = { optional = true, version = "0.5.0", package = "uu_comm", path = "src/uu/comm" }
+cp = { optional = true, version = "0.5.0", package = "uu_cp", path = "src/uu/cp" }
+csplit = { optional = true, version = "0.5.0", package = "uu_csplit", path = "src/uu/csplit" }
+cut = { optional = true, version = "0.5.0", package = "uu_cut", path = "src/uu/cut" }
+date = { optional = true, version = "0.5.0", package = "uu_date", path = "src/uu/date" }
+dd = { optional = true, version = "0.5.0", package = "uu_dd", path = "src/uu/dd" }
+df = { optional = true, version = "0.5.0", package = "uu_df", path = "src/uu/df" }
+dir = { optional = true, version = "0.5.0", package = "uu_dir", path = "src/uu/dir" }
+dircolors = { optional = true, version = "0.5.0", package = "uu_dircolors", path = "src/uu/dircolors" }
+dirname = { optional = true, version = "0.5.0", package = "uu_dirname", path = "src/uu/dirname" }
+du = { optional = true, version = "0.5.0", package = "uu_du", path = "src/uu/du" }
+echo = { optional = true, version = "0.5.0", package = "uu_echo", path = "src/uu/echo" }
+env = { optional = true, version = "0.5.0", package = "uu_env", path = "src/uu/env" }
+expand = { optional = true, version = "0.5.0", package = "uu_expand", path = "src/uu/expand" }
+expr = { optional = true, version = "0.5.0", package = "uu_expr", path = "src/uu/expr" }
+factor = { optional = true, version = "0.5.0", package = "uu_factor", path = "src/uu/factor" }
+false = { optional = true, version = "0.5.0", package = "uu_false", path = "src/uu/false" }
+fmt = { optional = true, version = "0.5.0", package = "uu_fmt", path = "src/uu/fmt" }
+fold = { optional = true, version = "0.5.0", package = "uu_fold", path = "src/uu/fold" }
+groups = { optional = true, version = "0.5.0", package = "uu_groups", path = "src/uu/groups" }
+hashsum = { optional = true, version = "0.5.0", package = "uu_hashsum", path = "src/uu/hashsum" }
+head = { optional = true, version = "0.5.0", package = "uu_head", path = "src/uu/head" }
+hostid = { optional = true, version = "0.5.0", package = "uu_hostid", path = "src/uu/hostid" }
+hostname = { optional = true, version = "0.5.0", package = "uu_hostname", path = "src/uu/hostname" }
+id = { optional = true, version = "0.5.0", package = "uu_id", path = "src/uu/id" }
+install = { optional = true, version = "0.5.0", package = "uu_install", path = "src/uu/install" }
+join = { optional = true, version = "0.5.0", package = "uu_join", path = "src/uu/join" }
+kill = { optional = true, version = "0.5.0", package = "uu_kill", path = "src/uu/kill" }
+link = { optional = true, version = "0.5.0", package = "uu_link", path = "src/uu/link" }
+ln = { optional = true, version = "0.5.0", package = "uu_ln", path = "src/uu/ln" }
+ls = { optional = true, version = "0.5.0", package = "uu_ls", path = "src/uu/ls" }
+logname = { optional = true, version = "0.5.0", package = "uu_logname", path = "src/uu/logname" }
+mkdir = { optional = true, version = "0.5.0", package = "uu_mkdir", path = "src/uu/mkdir" }
+mkfifo = { optional = true, version = "0.5.0", package = "uu_mkfifo", path = "src/uu/mkfifo" }
+mknod = { optional = true, version = "0.5.0", package = "uu_mknod", path = "src/uu/mknod" }
+mktemp = { optional = true, version = "0.5.0", package = "uu_mktemp", path = "src/uu/mktemp" }
+more = { optional = true, version = "0.5.0", package = "uu_more", path = "src/uu/more" }
+mv = { optional = true, version = "0.5.0", package = "uu_mv", path = "src/uu/mv" }
+nice = { optional = true, version = "0.5.0", package = "uu_nice", path = "src/uu/nice" }
+nl = { optional = true, version = "0.5.0", package = "uu_nl", path = "src/uu/nl" }
+nohup = { optional = true, version = "0.5.0", package = "uu_nohup", path = "src/uu/nohup" }
+nproc = { optional = true, version = "0.5.0", package = "uu_nproc", path = "src/uu/nproc" }
+numfmt = { optional = true, version = "0.5.0", package = "uu_numfmt", path = "src/uu/numfmt" }
+od = { optional = true, version = "0.5.0", package = "uu_od", path = "src/uu/od" }
+paste = { optional = true, version = "0.5.0", package = "uu_paste", path = "src/uu/paste" }
+pathchk = { optional = true, version = "0.5.0", package = "uu_pathchk", path = "src/uu/pathchk" }
+pinky = { optional = true, version = "0.5.0", package = "uu_pinky", path = "src/uu/pinky" }
+pr = { optional = true, version = "0.5.0", package = "uu_pr", path = "src/uu/pr" }
+printenv = { optional = true, version = "0.5.0", package = "uu_printenv", path = "src/uu/printenv" }
+printf = { optional = true, version = "0.5.0", package = "uu_printf", path = "src/uu/printf" }
+ptx = { optional = true, version = "0.5.0", package = "uu_ptx", path = "src/uu/ptx" }
+pwd = { optional = true, version = "0.5.0", package = "uu_pwd", path = "src/uu/pwd" }
+readlink = { optional = true, version = "0.5.0", package = "uu_readlink", path = "src/uu/readlink" }
+realpath = { optional = true, version = "0.5.0", package = "uu_realpath", path = "src/uu/realpath" }
+rm = { optional = true, version = "0.5.0", package = "uu_rm", path = "src/uu/rm" }
+rmdir = { optional = true, version = "0.5.0", package = "uu_rmdir", path = "src/uu/rmdir" }
+runcon = { optional = true, version = "0.5.0", package = "uu_runcon", path = "src/uu/runcon" }
+seq = { optional = true, version = "0.5.0", package = "uu_seq", path = "src/uu/seq" }
+shred = { optional = true, version = "0.5.0", package = "uu_shred", path = "src/uu/shred" }
+shuf = { optional = true, version = "0.5.0", package = "uu_shuf", path = "src/uu/shuf" }
+sleep = { optional = true, version = "0.5.0", package = "uu_sleep", path = "src/uu/sleep" }
+sort = { optional = true, version = "0.5.0", package = "uu_sort", path = "src/uu/sort" }
+split = { optional = true, version = "0.5.0", package = "uu_split", path = "src/uu/split" }
+stat = { optional = true, version = "0.5.0", package = "uu_stat", path = "src/uu/stat" }
+stdbuf = { optional = true, version = "0.5.0", package = "uu_stdbuf", path = "src/uu/stdbuf" }
+stty = { optional = true, version = "0.5.0", package = "uu_stty", path = "src/uu/stty" }
+sum = { optional = true, version = "0.5.0", package = "uu_sum", path = "src/uu/sum" }
+sync = { optional = true, version = "0.5.0", package = "uu_sync", path = "src/uu/sync" }
+tac = { optional = true, version = "0.5.0", package = "uu_tac", path = "src/uu/tac" }
+tail = { optional = true, version = "0.5.0", package = "uu_tail", path = "src/uu/tail" }
+tee = { optional = true, version = "0.5.0", package = "uu_tee", path = "src/uu/tee" }
+timeout = { optional = true, version = "0.5.0", package = "uu_timeout", path = "src/uu/timeout" }
+touch = { optional = true, version = "0.5.0", package = "uu_touch", path = "src/uu/touch" }
+tr = { optional = true, version = "0.5.0", package = "uu_tr", path = "src/uu/tr" }
+true = { optional = true, version = "0.5.0", package = "uu_true", path = "src/uu/true" }
+truncate = { optional = true, version = "0.5.0", package = "uu_truncate", path = "src/uu/truncate" }
+tsort = { optional = true, version = "0.5.0", package = "uu_tsort", path = "src/uu/tsort" }
+tty = { optional = true, version = "0.5.0", package = "uu_tty", path = "src/uu/tty" }
+uname = { optional = true, version = "0.5.0", package = "uu_uname", path = "src/uu/uname" }
+unexpand = { optional = true, version = "0.5.0", package = "uu_unexpand", path = "src/uu/unexpand" }
+uniq = { optional = true, version = "0.5.0", package = "uu_uniq", path = "src/uu/uniq" }
+unlink = { optional = true, version = "0.5.0", package = "uu_unlink", path = "src/uu/unlink" }
+uptime = { optional = true, version = "0.5.0", package = "uu_uptime", path = "src/uu/uptime" }
+users = { optional = true, version = "0.5.0", package = "uu_users", path = "src/uu/users" }
+vdir = { optional = true, version = "0.5.0", package = "uu_vdir", path = "src/uu/vdir" }
+wc = { optional = true, version = "0.5.0", package = "uu_wc", path = "src/uu/wc" }
+who = { optional = true, version = "0.5.0", package = "uu_who", path = "src/uu/who" }
+whoami = { optional = true, version = "0.5.0", package = "uu_whoami", path = "src/uu/whoami" }
+yes = { optional = true, version = "0.5.0", package = "uu_yes", path = "src/uu/yes" }
 
 # this breaks clippy linting with: "tests/by-util/test_factor_benches.rs: No such file or directory (os error 2)"
 # factor_benches = { optional = true, version = "0.0.0", package = "uu_factor_benches", path = "tests/benches/factor" }
@@ -495,19 +530,20 @@ yes = { optional = true, version = "0.0.30", package = "uu_yes", path = "src/uu/
 #pin_cc = { version="1.0.61, < 1.0.62", package="cc" } ## cc v1.0.62 has compiler errors for MinRustV v1.32.0, requires 1.34 (for `std::str::split_ascii_whitespace()`)
 
 [dev-dependencies]
-chrono = { workspace = true }
-filetime = { workspace = true }
-glob = { workspace = true }
-libc = { workspace = true }
-num-prime = { workspace = true }
+chrono.workspace = true
+ctor.workspace = true
+filetime.workspace = true
+glob.workspace = true
+libc.workspace = true
+num-prime.workspace = true
 pretty_assertions = "1.4.0"
-rand = { workspace = true }
-regex = { workspace = true }
+rand.workspace = true
+regex.workspace = true
 sha1 = { workspace = true, features = ["std"] }
-tempfile = { workspace = true }
+tempfile.workspace = true
 time = { workspace = true, features = ["local-offset"] }
 unindent = "0.2.3"
-uutests = { workspace = true }
+uutests.workspace = true
 uucore = { workspace = true, features = [
   "mode",
   "entries",
@@ -515,21 +551,23 @@ uucore = { workspace = true, features = [
   "signals",
   "utmpx",
 ] }
-walkdir = { workspace = true }
+walkdir.workspace = true
 hex-literal = "1.0.0"
-rstest = { workspace = true }
-ctor = "0.4.1"
-
-[target.'cfg(any(target_os = "linux", target_os = "android"))'.dev-dependencies]
-procfs = { version = "0.17", default-features = false }
+rstest.workspace = true
 
 [target.'cfg(unix)'.dev-dependencies]
-nix = { workspace = true, features = ["process", "signal", "user", "term"] }
+nix = { workspace = true, features = [
+  "process",
+  "signal",
+  "socket",
+  "user",
+  "term",
+] }
 rlimit = "0.10.1"
-xattr = { workspace = true }
+xattr.workspace = true
 
-# Specifically used in test_uptime::test_uptime_with_file_containing_valid_boot_time_utmpx_record
-# to deserialize a utmpx struct into a binary file
+# Used in test_uptime::test_uptime_with_file_containing_valid_boot_time_utmpx_record
+# to deserialize an utmpx struct into a binary file
 [target.'cfg(all(target_family= "unix",not(target_os = "macos")))'.dev-dependencies]
 serde = { version = "1.0.202", features = ["derive"] }
 bincode = { version = "2.0.1", features = ["serde"] }
@@ -537,7 +575,7 @@ serde-big-array = "0.5.1"
 
 
 [build-dependencies]
-phf_codegen = { workspace = true }
+phf_codegen.workspace = true
 
 [[bin]]
 name = "coreutils"
@@ -548,50 +586,38 @@ name = "uudoc"
 path = "src/bin/uudoc.rs"
 required-features = ["uudoc"]
 
-# The default release profile. It contains all optimizations, without
-# sacrificing debug info. With this profile (like in the standard
-# release profile), the debug info and the stack traces will still be available.
+# The default release profile with some optimizations.
 [profile.release]
 lto = true
+panic = "abort"
 
-# A release-like profile that is tuned to be fast, even when being fast
-# compromises on binary size. This includes aborting on panic.
 [profile.release-fast]
 inherits = "release"
-panic = "abort"
+codegen-units = 1
 
 # A release-like profile that is as small as possible.
 [profile.release-small]
-inherits = "release"
+inherits = "release-fast"
 opt-level = "z"
-panic = "abort"
 strip = true
 
-[lints.clippy]
-multiple_crate_versions = "allow"
-cargo_common_metadata = "allow"
-uninlined_format_args = "allow"
-missing_panics_doc = "allow"
-# TODO remove when https://github.com/rust-lang/rust-clippy/issues/13774 is fixed
-large_stack_arrays = "allow"
+# A release-like profile with debug info for profiling.
+# See https://github.com/mstange/samply .
+[profile.profiling]
+inherits = "release"
+panic = "unwind"
+debug = true
 
-use_self = "warn"
-needless_pass_by_value = "warn"
-semicolon_if_nothing_returned = "warn"
-single_char_pattern = "warn"
-explicit_iter_loop = "warn"
-if_not_else = "warn"
-manual_let_else = "warn"
-
-all = { level = "deny", priority = -1 }
-cargo = { level = "warn", priority = -1 }
-pedantic = { level = "deny", priority = -1 }
+[lints]
+workspace = true
 
 # This is the linting configuration for all crates.
-# Eventually the clippy settings from the `[lints]` section should be moved here.
 # In order to use these, all crates have `[lints] workspace = true` section.
 [workspace.lints.rust]
-unused_qualifications = "warn"
+# Allow "fuzzing" as a "cfg" condition name
+# https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+#unused_qualifications = "warn" // TODO: fix warnings in uucore, then re-enable this lint
 
 [workspace.lints.clippy]
 # The counts were generated with this command:
@@ -605,63 +631,53 @@ unused_qualifications = "warn"
 all = { level = "warn", priority = -1 }
 cargo = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
+use_self = "warn"                            # nursery lint
 cargo_common_metadata = "allow"              # 3240
-multiple_crate_versions = "allow"            # 2314
-missing_errors_doc = "allow"                 # 1504
+multiple_crate_versions = "allow"            # 2882
+missing_errors_doc = "allow"                 # 1572
 missing_panics_doc = "allow"                 # 946
 must_use_candidate = "allow"                 # 322
-doc_markdown = "allow"                       # 267
-match_same_arms = "allow"                    # 212
-unnecessary_semicolon = "allow"              # 156
-redundant_closure_for_method_calls = "allow" # 133
-cast_possible_truncation = "allow"           # 118
-too_many_lines = "allow"                     # 81
-cast_possible_wrap = "allow"                 # 76
-trivially_copy_pass_by_ref = "allow"         # 74
+match_same_arms = "allow"                    # 204
+redundant_closure_for_method_calls = "allow" # 125
+cast_possible_truncation = "allow"           # 122
+too_many_lines = "allow"                     # 101
+trivially_copy_pass_by_ref = "allow"         # 84
+single_match_else = "allow"                  # 82
+cast_possible_wrap = "allow"                 # 78
 cast_sign_loss = "allow"                     # 70
 struct_excessive_bools = "allow"             # 68
-single_match_else = "allow"                  # 66
-redundant_else = "allow"                     # 58
-map_unwrap_or = "allow"                      # 54
 cast_precision_loss = "allow"                # 52
-unnested_or_patterns = "allow"               # 40
-inefficient_to_string = "allow"              # 38
-unnecessary_wraps = "allow"                  # 37
-cast_lossless = "allow"                      # 33
-ignored_unit_patterns = "allow"              # 29
-needless_continue = "allow"                  # 28
-items_after_statements = "allow"             # 22
+cast_lossless = "allow"                      # 35
+unnecessary_wraps = "allow"                  # 33
+ignored_unit_patterns = "allow"              # 21
 similar_names = "allow"                      # 20
+large_stack_arrays = "allow"                 # 20
 wildcard_imports = "allow"                   # 18
-used_underscore_binding = "allow"            # 16
-large_stack_arrays = "allow"                 # 14
+used_underscore_binding = "allow"            # 18
+needless_pass_by_value = "allow"             # 16
 float_cmp = "allow"                          # 12
-# semicolon_if_nothing_returned = "allow"  # 9
-used_underscore_items = "allow"    # 8
-return_self_not_must_use = "allow" # 8
-needless_pass_by_value = "allow"   # 8
-# manual_let_else = "allow"  # 8
-# needless_raw_string_hashes = "allow"  # 7
-match_on_vec_items = "allow" # 6
-inline_always = "allow"      # 6
-# format_push_string = "allow"  # 6
-fn_params_excessive_bools = "allow" # 6
-# single_char_pattern = "allow"  # 4
-# ptr_cast_constness = "allow"  # 4
-# match_wildcard_for_single_variants = "allow"  # 4
-# manual_is_variant_and = "allow"  # 4
-# explicit_deref_methods = "allow"  # 4
-# enum_glob_use = "allow"  # 3
-# unnecessary_literal_bound = "allow"  # 2
-# stable_sort_primitive = "allow"  # 2
-should_panic_without_expect = "allow" # 2
-# ptr_as_ptr = "allow"  # 2
-# needless_for_each = "allow"  # 2
-if_not_else = "allow"             # 2
-expl_impl_clone_on_copy = "allow" # 2
-# cloned_instead_of_copied = "allow"  # 2
-# borrow_as_ptr = "allow"  # 2
-bool_to_int_with_if = "allow" # 2
-# ref_as_ptr = "allow"  # 2
-# unreadable_literal = "allow"  # 1
-uninlined_format_args = "allow" # ?
+items_after_statements = "allow"             # 11
+return_self_not_must_use = "allow"           # 8
+needless_continue = "allow"                  # 6
+inline_always = "allow"                      # 6
+fn_params_excessive_bools = "allow"          # 6
+used_underscore_items = "allow"              # 2
+should_panic_without_expect = "allow"        # 2
+
+doc_markdown = "allow"
+unused_self = "allow"
+map_unwrap_or = "allow"
+enum_glob_use = "allow"
+ptr_cast_constness = "allow"
+borrow_as_ptr = "allow"
+ptr_as_ptr = "allow"
+needless_raw_string_hashes = "allow"
+unreadable_literal = "allow"
+unnested_or_patterns = "allow"
+implicit_hasher = "allow"
+struct_field_names = "allow"
+doc_link_with_quotes = "allow"
+format_push_string = "allow"
+flat_map_option = "allow"
+from_iter_instead_of_collect = "allow"
+large_types_passed_by_value = "allow"

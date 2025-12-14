@@ -16,8 +16,8 @@ use crate::{
 /// This class makes parsing and word collection more convenient.
 ///
 /// It manages an "output" buffer that is automatically filled.
-/// It provides "skip_one" and "take_one" that focus on
-/// working with ASCII separators. Thus they will skip or take
+/// It provides `skip_one` and `take_one` that focus on
+/// working with ASCII separators. Thus, they will skip or take
 /// all consecutive non-ascii char sequences at once.
 pub struct StringExpander<'a> {
     parser: StringParser<'a>,

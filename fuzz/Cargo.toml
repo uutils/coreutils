@@ -1,38 +1,46 @@
 [package]
 name = "uucore-fuzz"
 version = "0.0.0"
+description = "uutils ~ 'core' uutils fuzzers"
+repository = "https://github.com/uutils/coreutils/tree/main/fuzz/"
+edition.workspace = true
+license.workspace = true
 publish = false
-edition = "2024"
-
-[package.metadata]
-cargo-fuzz = true
-
-[dependencies]
-console = "0.15.0"
-libfuzzer-sys = "0.4.7"
-libc = "0.2.153"
-tempfile = "3.15.0"
-rand = { version = "0.9.0", features = ["small_rng"] }
-similar = "2.5.0"
-
-uucore = { path = "../src/uucore/", features = ["parser"] }
-uu_date = { path = "../src/uu/date/" }
-uu_test = { path = "../src/uu/test/" }
-uu_expr = { path = "../src/uu/expr/" }
-uu_printf = { path = "../src/uu/printf/" }
-uu_echo = { path = "../src/uu/echo/" }
-uu_seq = { path = "../src/uu/seq/" }
-uu_sort = { path = "../src/uu/sort/" }
-uu_wc = { path = "../src/uu/wc/" }
-uu_cut = { path = "../src/uu/cut/" }
-uu_split = { path = "../src/uu/split/" }
-uu_tr = { path = "../src/uu/tr/" }
-uu_env = { path = "../src/uu/env/" }
-uu_cksum = { path = "../src/uu/cksum/" }
 
 # Prevent this from interfering with workspaces
 [workspace]
 members = ["."]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Enable debug symbols in release builds for readable backtraces
+# when fuzzing discovers crashes. This addresses issue #5343.
+[profile.release]
+debug = true
+
+[dependencies]
+libfuzzer-sys = "0.4.7"
+rand = { version = "0.9.0", features = ["small_rng"] }
+uufuzz = { path = "uufuzz" }
+uucore = { path = "../src/uucore", features = ["parser"] }
+uu_date = { path = "../src/uu/date" }
+uu_test = { path = "../src/uu/test" }
+uu_expr = { path = "../src/uu/expr" }
+uu_printf = { path = "../src/uu/printf" }
+uu_echo = { path = "../src/uu/echo" }
+uu_seq = { path = "../src/uu/seq" }
+uu_sort = { path = "../src/uu/sort" }
+uu_wc = { path = "../src/uu/wc" }
+uu_cut = { path = "../src/uu/cut" }
+uu_split = { path = "../src/uu/split" }
+uu_tr = { path = "../src/uu/tr" }
+uu_env = { path = "../src/uu/env" }
+uu_cksum = { path = "../src/uu/cksum" }
 
 [[bin]]
 name = "fuzz_date"
@@ -133,5 +141,11 @@ doc = false
 [[bin]]
 name = "fuzz_cksum"
 path = "fuzz_targets/fuzz_cksum.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_non_utf8_paths"
+path = "fuzz_targets/fuzz_non_utf8_paths.rs"
 test = false
 doc = false

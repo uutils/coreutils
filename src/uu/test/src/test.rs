@@ -17,35 +17,28 @@ use std::fs;
 use std::os::unix::fs::MetadataExt;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
 #[cfg(not(windows))]
 use uucore::process::{getegid, geteuid};
-use uucore::{format_usage, help_about, help_section};
 
-const ABOUT: &str = help_about!("test.md");
+use uucore::translate;
 
 // The help_usage method replaces util name (the first word) with {}.
 // And, The format_usage method replaces {} with execution_phrase ( e.g. test or [ ).
 // However, This test command has two util names.
 // So, we use test or [ instead of {} so that the usage string is correct.
-const USAGE: &str = "\
-test EXPRESSION
-[
-[ EXPRESSION ]
-[ ]
-[ OPTION
-]";
 
 // We use after_help so that this comes after the usage string (it would come before if we used about)
-const AFTER_HELP: &str = help_section!("after help", "test.md");
 
 pub fn uu_app() -> Command {
     // Disable printing of -h and -v as valid alternatives for --help and --version,
     // since we don't recognize -h and -v as help/version flags.
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("test-about"))
+        .override_usage(format_usage(&translate!("test-usage")))
+        .after_help(translate!("test-after-help"))
 }
 
 #[uucore::main]
@@ -57,13 +50,19 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     if binary_name.ends_with('[') {
         // If invoked as [ we should recognize --help and --version (but not -h or -v)
         if args.len() == 1 && (args[0] == "--help" || args[0] == "--version") {
-            uu_app().get_matches_from(std::iter::once(program).chain(args.into_iter()));
+            uucore::clap_localization::handle_clap_result(
+                uu_app(),
+                std::iter::once(program).chain(args.into_iter()),
+            )?;
             return Ok(());
         }
         // If invoked via name '[', matching ']' must be in the last arg
         let last = args.pop();
         if last.as_deref() != Some(OsStr::new("]")) {
-            return Err(USimpleError::new(2, "missing ']'"));
+            return Err(USimpleError::new(
+                2,
+                translate!("test-error-missing-closing-bracket"),
+            ));
         }
     }
 
@@ -206,24 +205,26 @@ fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
 
 /// Operations to compare files metadata
 /// `a` is the left hand side
-/// `b` is the left hand side
+/// `b` is the right hand side
 /// `op` the operation (ex: -ef, -nt, etc)
 fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
-    // Don't manage the error. GNU doesn't show error when doing
-    // test foo -nt bar
-    let (Ok(f_a), Ok(f_b)) = (fs::metadata(a), fs::metadata(b)) else {
-        return Ok(false);
+    let f_a = fs::metadata(a);
+    let f_b = fs::metadata(b);
+
+    let result = match (op.to_str(), f_a, f_b) {
+        #[cfg(unix)]
+        (Some("-ef"), Ok(f_a), Ok(f_b)) => f_a.ino() == f_b.ino() && f_a.dev() == f_b.dev(),
+        #[cfg(not(unix))]
+        (Some("-ef"), Ok(_), Ok(_)) => unimplemented!(),
+        (Some("-nt"), Ok(f_a), Ok(f_b)) => f_a.modified().unwrap() > f_b.modified().unwrap(),
+        (Some("-nt"), Ok(_), _) => true,
+        (Some("-ot"), Ok(f_a), Ok(f_b)) => f_a.modified().unwrap() < f_b.modified().unwrap(),
+        (Some("-ot"), _, Ok(_)) => true,
+        (Some("-ef" | "-nt" | "-ot"), _, _) => false,
+        (_, _, _) => return Err(ParseError::UnknownOperator(op.quote().to_string())),
     };
 
-    Ok(match op.to_str() {
-        #[cfg(unix)]
-        Some("-ef") => f_a.ino() == f_b.ino() && f_a.dev() == f_b.dev(),
-        #[cfg(not(unix))]
-        Some("-ef") => unimplemented!(),
-        Some("-nt") => f_a.modified().unwrap() > f_b.modified().unwrap(),
-        Some("-ot") => f_a.modified().unwrap() < f_b.modified().unwrap(),
-        _ => return Err(ParseError::UnknownOperator(op.quote().to_string())),
-    })
+    Ok(result)
 }
 
 fn isatty(fd: &OsStr) -> ParseResult<bool> {
@@ -348,8 +349,81 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::integers;
-    use std::ffi::OsStr;
+    use super::*;
+    use std::{ffi::OsStr, time::UNIX_EPOCH};
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_files_with_unknown_op() {
+        let a = NamedTempFile::new().unwrap();
+        let b = NamedTempFile::new().unwrap();
+        let a = OsStr::new(a.path());
+        let b = OsStr::new(b.path());
+        let op = OsStr::new("unknown_op");
+
+        assert!(files(a, b, op).is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_files_with_ef_op() {
+        let a = NamedTempFile::new().unwrap();
+        let b = NamedTempFile::new().unwrap();
+        let a = OsStr::new(a.path());
+        let b = OsStr::new(b.path());
+        let op = OsStr::new("-ef");
+
+        assert!(files(a, a, op).unwrap());
+        assert!(!files(a, b, op).unwrap());
+        assert!(!files(b, a, op).unwrap());
+
+        let existing_file = a;
+        let non_existing_file = OsStr::new("non_existing_file");
+
+        assert!(!files(existing_file, non_existing_file, op).unwrap());
+        assert!(!files(non_existing_file, existing_file, op).unwrap());
+        assert!(!files(non_existing_file, non_existing_file, op).unwrap());
+    }
+
+    #[test]
+    fn test_files_with_nt_op() {
+        let older_file = NamedTempFile::new().unwrap();
+        older_file.as_file().set_modified(UNIX_EPOCH).unwrap();
+        let older_file = OsStr::new(older_file.path());
+        let newer_file = NamedTempFile::new().unwrap();
+        let newer_file = OsStr::new(newer_file.path());
+        let op = OsStr::new("-nt");
+
+        assert!(files(newer_file, older_file, op).unwrap());
+        assert!(!files(older_file, newer_file, op).unwrap());
+
+        let existing_file = newer_file;
+        let non_existing_file = OsStr::new("non_existing_file");
+
+        assert!(files(existing_file, non_existing_file, op).unwrap());
+        assert!(!files(non_existing_file, existing_file, op).unwrap());
+        assert!(!files(non_existing_file, non_existing_file, op).unwrap());
+    }
+
+    #[test]
+    fn test_files_with_ot_op() {
+        let older_file = NamedTempFile::new().unwrap();
+        older_file.as_file().set_modified(UNIX_EPOCH).unwrap();
+        let older_file = OsStr::new(older_file.path());
+        let newer_file = NamedTempFile::new().unwrap();
+        let newer_file = OsStr::new(newer_file.path());
+        let op = OsStr::new("-ot");
+
+        assert!(!files(newer_file, older_file, op).unwrap());
+        assert!(files(older_file, newer_file, op).unwrap());
+
+        let existing_file = newer_file;
+        let non_existing_file = OsStr::new("non_existing_file");
+
+        assert!(!files(existing_file, non_existing_file, op).unwrap());
+        assert!(files(non_existing_file, existing_file, op).unwrap());
+        assert!(!files(non_existing_file, non_existing_file, op).unwrap());
+    }
 
     #[test]
     fn test_integer_op() {

@@ -5,17 +5,17 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::cell::{OnceCell, RefCell};
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Stdin, Write, stdin, stdout};
 use std::iter::Cycle;
+use std::path::Path;
 use std::rc::Rc;
 use std::slice::Iter;
 use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
 use uucore::line_ending::LineEnding;
-use uucore::{format_usage, help_about, help_usage};
-
-const ABOUT: &str = help_about!("paste.md");
-const USAGE: &str = help_usage!("paste.md");
+use uucore::translate;
 
 mod options {
     pub const DELIMITER: &str = "delimiters";
@@ -26,12 +26,12 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let serial = matches.get_flag(options::SERIAL);
     let delimiters = matches.get_one::<String>(options::DELIMITER).unwrap();
     let files = matches
-        .get_many::<String>(options::FILE)
+        .get_many::<OsString>(options::FILE)
         .unwrap()
         .cloned()
         .collect();
@@ -43,21 +43,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("paste-about"))
+        .override_usage(format_usage(&translate!("paste-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::SERIAL)
                 .long(options::SERIAL)
                 .short('s')
-                .help("paste one file at a time instead of in parallel")
+                .help(translate!("paste-help-serial"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DELIMITER)
                 .long(options::DELIMITER)
                 .short('d')
-                .help("reuse characters from LIST instead of TABs")
+                .help(translate!("paste-help-delimiter"))
                 .value_name("LIST")
                 .default_value("\t")
                 .hide_default_value(true),
@@ -67,20 +68,21 @@ pub fn uu_app() -> Command {
                 .value_name("FILE")
                 .action(ArgAction::Append)
                 .default_value("-")
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::ZERO_TERMINATED)
                 .long(options::ZERO_TERMINATED)
                 .short('z')
-                .help("line delimiter is NUL, not newline")
+                .help(translate!("paste-help-zero-terminated"))
                 .action(ArgAction::SetTrue),
         )
 }
 
 #[allow(clippy::cognitive_complexity)]
 fn paste(
-    filenames: Vec<String>,
+    filenames: Vec<OsString>,
     serial: bool,
     delimiters: &str,
     line_ending: LineEnding,
@@ -92,17 +94,16 @@ fn paste(
     let mut input_source_vec = Vec::with_capacity(filenames.len());
 
     for filename in filenames {
-        let input_source = match filename.as_str() {
-            "-" => InputSource::StandardInput(
+        let input_source = if filename == "-" {
+            InputSource::StandardInput(
                 stdin_once_cell
                     .get_or_init(|| Rc::new(RefCell::new(stdin())))
                     .clone(),
-            ),
-            st => {
-                let file = File::open(st)?;
-
-                InputSource::File(BufReader::new(file))
-            }
+            )
+        } else {
+            let path = Path::new(&filename);
+            let file = File::open(path)?;
+            InputSource::File(BufReader::new(file))
         };
 
         input_source_vec.push(input_source);
@@ -238,7 +239,7 @@ fn parse_delimiters(delimiters: &str) -> UResult<Box<[Box<[u8]>]>> {
                 None => {
                     return Err(USimpleError::new(
                         1,
-                        format!("delimiter list ends with an unescaped backslash: {delimiters}"),
+                        translate!("paste-error-delimiter-unescaped-backslash", "delimiters" => delimiters),
                     ));
                 }
             },
@@ -270,7 +271,7 @@ enum DelimiterState<'a> {
 }
 
 impl<'a> DelimiterState<'a> {
-    fn new(unescaped_and_encoded_delimiters: &'a [Box<[u8]>]) -> DelimiterState<'a> {
+    fn new(unescaped_and_encoded_delimiters: &'a [Box<[u8]>]) -> Self {
         match unescaped_and_encoded_delimiters {
             [] => DelimiterState::NoDelimiters,
             [only_delimiter] => {
@@ -363,10 +364,12 @@ enum InputSource {
 impl InputSource {
     fn read_until(&mut self, byte: u8, buf: &mut Vec<u8>) -> UResult<usize> {
         let us = match self {
-            InputSource::File(bu) => bu.read_until(byte, buf)?,
-            InputSource::StandardInput(rc) => rc
+            Self::File(bu) => bu.read_until(byte, buf)?,
+            Self::StandardInput(rc) => rc
                 .try_borrow()
-                .map_err(|bo| USimpleError::new(1, format!("{bo}")))?
+                .map_err(|bo| {
+                    USimpleError::new(1, translate!("paste-error-stdin-borrow", "error" => bo))
+                })?
                 .lock()
                 .read_until(byte, buf)?,
         };

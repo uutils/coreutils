@@ -1,5 +1,12 @@
+# Note: keep in mind that this file is completely ignored in several use-cases
+# like e.g. out-of-tree builds ( https://github.com/rust-lang/cargo/issues/2930 ).
+# For this reason this file should be avoided as much as possible when there are alternatives.
+
 [target.x86_64-unknown-redox]
 linker = "x86_64-unknown-redox-gcc"
+[target.aarch64-unknown-linux-gnu]
+linker = "aarch64-linux-gnu-gcc"
 
 [env]
-PROJECT_NAME_FOR_VERSION_STRING = "uutils coreutils"
+# See feat_external_libstdbuf in src/uu/stdbuf/Cargo.toml
+LIBSTDBUF_DIR = "/usr/local/libexec/coreutils"

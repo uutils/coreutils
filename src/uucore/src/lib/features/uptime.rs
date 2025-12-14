@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore gettime BOOTTIME clockid boottime formated nusers loadavg getloadavg
+// spell-checker:ignore gettime BOOTTIME clockid boottime nusers loadavg getloadavg
 
 //! Provides functions to get system uptime, number of users and load average.
 
@@ -13,19 +13,20 @@
 // See https://github.com/uutils/coreutils/pull/7289 for discussion.
 
 use crate::error::{UError, UResult};
+use crate::translate;
 use chrono::Local;
 use libc::time_t;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum UptimeError {
-    #[error("could not retrieve system uptime")]
+    #[error("{}", translate!("uptime-lib-error-system-uptime"))]
     SystemUptime,
-    #[error("could not retrieve system load average")]
+    #[error("{}", translate!("uptime-lib-error-system-loadavg"))]
     SystemLoadavg,
-    #[error("Windows does not have an equivalent to the load average on Unix-like systems")]
+    #[error("{}", translate!("uptime-lib-error-windows-loadavg"))]
     WindowsLoadavg,
-    #[error("boot time larger than current time")]
+    #[error("{}", translate!("uptime-lib-error-boot-time"))]
     BootTime,
 }
 
@@ -74,7 +75,7 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
 
         Ok(uptime)
     } else {
-        Err(UptimeError::SystemUptime)
+        Err(UptimeError::SystemUptime)?
     }
 }
 
@@ -165,7 +166,7 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
 ///
 /// Returns a UResult with the uptime in a human-readable format(e.g. "1 day, 3:45") if successful, otherwise an UptimeError.
 #[inline]
-pub fn get_formated_uptime(boot_time: Option<time_t>) -> UResult<String> {
+pub fn get_formatted_uptime(boot_time: Option<time_t>) -> UResult<String> {
     let up_secs = get_uptime(boot_time)?;
 
     if up_secs < 0 {
@@ -174,11 +175,12 @@ pub fn get_formated_uptime(boot_time: Option<time_t>) -> UResult<String> {
     let up_days = up_secs / 86400;
     let up_hours = (up_secs - (up_days * 86400)) / 3600;
     let up_mins = (up_secs - (up_days * 86400) - (up_hours * 3600)) / 60;
-    match up_days.cmp(&1) {
-        std::cmp::Ordering::Equal => Ok(format!("{up_days:1} day, {up_hours:2}:{up_mins:02}")),
-        std::cmp::Ordering::Greater => Ok(format!("{up_days:1} days {up_hours:2}:{up_mins:02}")),
-        _ => Ok(format!("{up_hours:2}:{up_mins:02}")),
-    }
+
+    Ok(translate!(
+        "uptime-format",
+        "days" => up_days,
+        "time" => format!("{up_hours:02}:{up_mins:02}")
+    ))
 }
 
 /// Get the number of users currently logged in
@@ -211,27 +213,22 @@ pub fn get_nusers() -> usize {
 pub fn get_nusers(file: &str) -> usize {
     use utmp_classic::{UtmpEntry, parse_from_path};
 
-    let mut nusers = 0;
-
-    let entries = match parse_from_path(file) {
-        Some(e) => e,
-        None => return 0,
+    let Ok(entries) = parse_from_path(file) else {
+        return 0;
     };
 
-    for entry in entries {
-        if let UtmpEntry::UTMP {
-            line: _,
-            user,
-            host: _,
-            time: _,
-        } = entry
-        {
-            if !user.is_empty() {
-                nusers += 1;
-            }
-        }
+    if entries.is_empty() {
+        return 0;
     }
-    nusers
+
+    // Count entries that have a non-empty user field
+    entries
+        .iter()
+        .filter_map(|entry| match entry {
+            UtmpEntry::UTMP { user, .. } if !user.is_empty() => Some(()),
+            _ => None,
+        })
+        .count()
 }
 
 /// Get the number of users currently logged in
@@ -302,14 +299,13 @@ pub fn get_nusers() -> usize {
 ///
 /// # Returns
 ///
-/// e.g. "0 user", "1 user", "2 users"
+/// e.g. "0 users", "1 user", "2 users"
 #[inline]
-pub fn format_nusers(nusers: usize) -> String {
-    match nusers {
-        0 => "0 user".to_string(),
-        1 => "1 user".to_string(),
-        _ => format!("{nusers} users"),
-    }
+pub fn format_nusers(n: usize) -> String {
+    translate!(
+        "uptime-user-count",
+        "count" => n
+    )
 }
 
 /// Get the number of users currently logged in in a human-readable format
@@ -368,8 +364,27 @@ pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
 #[inline]
 pub fn get_formatted_loadavg() -> UResult<String> {
     let loadavg = get_loadavg()?;
-    Ok(format!(
-        "load average: {:.2}, {:.2}, {:.2}",
-        loadavg.0, loadavg.1, loadavg.2
+    Ok(translate!(
+        "uptime-lib-format-loadavg",
+        "avg1" => format!("{:.2}", loadavg.0),
+        "avg5" => format!("{:.2}", loadavg.1),
+        "avg15" => format!("{:.2}", loadavg.2),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::locale;
+
+    #[test]
+    fn test_format_nusers() {
+        unsafe {
+            std::env::set_var("LANG", "en_US.UTF-8");
+        }
+        let _ = locale::setup_localization("uptime");
+        assert_eq!("0 users", format_nusers(0));
+        assert_eq!("1 user", format_nusers(1));
+        assert_eq!("2 users", format_nusers(2));
+    }
 }

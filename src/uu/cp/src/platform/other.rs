@@ -5,10 +5,11 @@
 // spell-checker:ignore reflink
 use std::fs;
 use std::path::Path;
+use uucore::translate;
 
-use quick_error::ResultExt;
-
-use crate::{CopyDebug, CopyResult, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode};
+use crate::{
+    CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode,
+};
 
 /// Copies `source` to `dest` for systems without copy-on-write
 pub(crate) fn copy_on_write(
@@ -19,19 +20,21 @@ pub(crate) fn copy_on_write(
     context: &str,
 ) -> CopyResult<CopyDebug> {
     if reflink_mode != ReflinkMode::Never {
-        return Err("--reflink is only supported on linux and macOS"
+        return Err(translate!("cp-error-reflink-not-supported")
             .to_string()
             .into());
     }
     if sparse_mode != SparseMode::Auto {
-        return Err("--sparse is only supported on linux".to_string().into());
+        return Err(translate!("cp-error-sparse-not-supported")
+            .to_string()
+            .into());
     }
     let copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unsupported,
         reflink: OffloadReflinkDebug::Unsupported,
         sparse_detection: SparseDebug::Unsupported,
     };
-    fs::copy(source, dest).context(context)?;
+    fs::copy(source, dest).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 
     Ok(copy_debug)
 }

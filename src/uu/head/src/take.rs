@@ -16,7 +16,7 @@ struct TakeAllBuffer {
 
 impl TakeAllBuffer {
     fn new() -> Self {
-        TakeAllBuffer {
+        Self {
             buffer: vec![],
             start_index: 0,
         }
@@ -31,7 +31,7 @@ impl TakeAllBuffer {
                     self.buffer.truncate(n);
                     return Ok(n);
                 }
-                Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+                Err(e) if e.kind() == ErrorKind::Interrupted => (),
                 Err(e) => return Err(e),
             }
         }
@@ -82,10 +82,10 @@ impl TakeAllBuffer {
 /// copied.
 ///
 /// Algorithm for this function is as follows...
-/// 1 - Chunks of the input file are read into a queue of TakeAllBuffer instances.
+/// 1 - Chunks of the input file are read into a queue of [`TakeAllBuffer`] instances.
 ///     Chunks are read until at least we have enough data to write out the entire contents of the
-///     first TakeAllBuffer in the queue whilst still retaining at least `n` bytes in the queue.
-///     If we hit EoF at any point, stop reading.
+///     first [`TakeAllBuffer`] in the queue whilst still retaining at least `n` bytes in the queue.
+///     If we hit `EoF` at any point, stop reading.
 /// 2 - Assess whether we managed to queue up greater-than `n` bytes. If not, we must be done, in
 ///     which case break and return.
 /// 3 - Write either the full first buffer of data, or just enough bytes to get back down to having
@@ -151,7 +151,7 @@ struct BytesAndLines {
 
 impl TakeAllLinesBuffer {
     fn new() -> Self {
-        TakeAllLinesBuffer {
+        Self {
             inner: TakeAllBuffer::new(),
             terminated_lines: 0,
             partial_line: false,
@@ -233,19 +233,19 @@ impl TakeAllLinesBuffer {
 /// copied.
 ///
 /// Algorithm for this function is as follows...
-/// 1 - Chunks of the input file are read into a queue of TakeAllLinesBuffer instances.
+/// 1 - Chunks of the input file are read into a queue of [`TakeAllLinesBuffer`] instances.
 ///     Chunks are read until at least we have enough lines that we can write out the entire
-///     contents of the first TakeAllLinesBuffer in the queue whilst still retaining at least
+///     contents of the first [`TakeAllLinesBuffer`] in the queue whilst still retaining at least
 ///     `n` lines in the queue.
-///     If we hit EoF at any point, stop reading.
+///     If we hit `EoF` at any point, stop reading.
 /// 2 - Asses whether we managed to queue up greater-than `n` lines. If not, we must be done, in
 ///     which case break and return.
 /// 3 - Write either the full first buffer of data, or just enough lines to get back down to
 ///     having the required `n` lines of data queued.
 /// 4 - Go back to (1).
 ///
-/// Note that lines will regularly straddle multiple TakeAllLinesBuffer instances. The partial_line
-/// flag on TakeAllLinesBuffer tracks this, and we use that to ensure that we write out enough
+/// Note that lines will regularly straddle multiple [`TakeAllLinesBuffer`] instances. The `partial_line`
+/// flag on [`TakeAllLinesBuffer`] tracks this, and we use that to ensure that we write out enough
 /// lines in the case that the input file doesn't end with a `separator` character.
 pub fn copy_all_but_n_lines<R: Read, W: Write>(
     mut reader: R,

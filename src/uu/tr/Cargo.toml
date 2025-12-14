@@ -21,6 +21,8 @@ path = "src/tr.rs"
 nom = { workspace = true }
 clap = { workspace = true }
 uucore = { workspace = true, features = ["fs"] }
+fluent = { workspace = true }
+bytecount = { workspace = true, features = ["runtime-dispatch-simd"] }
 
 [[bin]]
 name = "tr"

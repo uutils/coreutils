@@ -1,0 +1,58 @@
+Index: gnu/tests/uniq/uniq.pl
+===================================================================
+--- gnu.orig/tests/uniq/uniq.pl
++++ gnu/tests/uniq/uniq.pl
+@@ -178,12 +178,9 @@ my @Tests =
+   {IN=>"a\na\nb\nc\nc\n"}, {OUT=>"\na\na\n\nc\nc\n"}],
+  ['118', '--all-repeated=prepend', {IN=>"a\nb\n"}, {OUT=>""}],
+  ['119', '--all-repeated=badoption', {IN=>"a\n"}, {OUT=>""}, {EXIT=>1},
+-  {ERR=>"$prog: invalid argument 'badoption' for '--all-repeated'\n"
+-        . "Valid arguments are:\n"
+-        . "  - 'none'\n"
+-        . "  - 'prepend'\n"
+-        . "  - 'separate'\n"
+-        . $try}],
++  {ERR=>"error: invalid value 'badoption' for '--all-repeated[=<delimit-method>]'\n\n"
++        . "  [possible values: none, prepend, separate]\n\n"
++        . "For more information, try '--help'.\n"}],
+  # Check that -d and -u suppress all output, as POSIX requires.
+  ['120', qw(-d -u), {IN=>"a\na\n\b"}, {OUT=>""}],
+  ['121', "-d -u -w$limits->{UINTMAX_OFLOW}", {IN=>"a\na\n\b"}, {OUT=>""}],
+@@ -214,26 +211,22 @@ my @Tests =
+  ['140', '--group=both',     {IN=>""}, {OUT=>""}],
+  # Grouping with other options - must fail
+  ['141', '--group -c',       {IN=>""}, {OUT=>""}, {EXIT=>1},
+-  {ERR=>"$prog: --group is mutually exclusive with -c/-d/-D/-u\n" .
+-        "Try 'uniq --help' for more information.\n"}],
++  {ERR=>"error: the argument '--group[=<group-method>]' cannot be used with '--count'\n\n" .
++        "For more information, try '--help'.\n"}],
+  ['142', '--group -d',       {IN=>""}, {OUT=>""}, {EXIT=>1},
+-  {ERR=>"$prog: --group is mutually exclusive with -c/-d/-D/-u\n" .
+-        "Try 'uniq --help' for more information.\n"}],
++  {ERR=>"error: the argument '--group[=<group-method>]' cannot be used with '--repeated'\n\n" .
++        "For more information, try '--help'.\n"}],
+  ['143', '--group -u',       {IN=>""}, {OUT=>""}, {EXIT=>1},
+-  {ERR=>"$prog: --group is mutually exclusive with -c/-d/-D/-u\n" .
+-        "Try 'uniq --help' for more information.\n"}],
++  {ERR=>"error: the argument '--group[=<group-method>]' cannot be used with '--unique'\n\n" .
++        "For more information, try '--help'.\n"}],
+  ['144', '--group -D',       {IN=>""}, {OUT=>""}, {EXIT=>1},
+-  {ERR=>"$prog: --group is mutually exclusive with -c/-d/-D/-u\n" .
+-        "Try 'uniq --help' for more information.\n"}],
++  {ERR=>"error: the argument '--group[=<group-method>]' cannot be used with '--all-repeated[=<delimit-method>]'\n\n" .
++        "For more information, try '--help'.\n"}],
+  # Grouping with badoption
+  ['145', '--group=badoption',{IN=>""}, {OUT=>""}, {EXIT=>1},
+-  {ERR=>"$prog: invalid argument 'badoption' for '--group'\n" .
+-        "Valid arguments are:\n" .
+-        "  - 'prepend'\n" .
+-        "  - 'append'\n" .
+-        "  - 'separate'\n" .
+-        "  - 'both'\n" .
+-        "Try '$prog --help' for more information.\n"}],
++  {ERR=>"error: invalid value 'badoption' for '--group[=<group-method>]'\n\n" .
++        "  [possible values: separate, prepend, append, both]\n\n" .
++        "For more information, try '--help'.\n"}],
+ );
+
+ # Locale related tests

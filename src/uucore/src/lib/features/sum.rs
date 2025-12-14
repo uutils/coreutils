@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore memmem algo
+// spell-checker:ignore memmem algo PCLMULQDQ refin xorout Hdlc
 
 //! Implementations of digest functions, like md5 and sha1.
 //!
@@ -12,11 +12,51 @@
 //! [`DigestWriter`] struct provides a wrapper around [`Digest`] that
 //! implements the [`Write`] trait, for use in situations where calling
 //! [`write`] would be useful.
-use std::io::Write;
 
-use hex::encode;
+use std::io::{self, Write};
+
+use data_encoding::BASE64;
+
 #[cfg(windows)]
 use memchr::memmem;
+
+use crate::error::{UResult, USimpleError};
+
+/// Represents the output of a checksum computation.
+#[derive(Debug)]
+pub enum DigestOutput {
+    /// Varying-size output
+    Vec(Vec<u8>),
+    /// Legacy output for Crc and Crc32B modes
+    Crc(u32),
+    /// Legacy output for Sysv and BSD modes
+    U16(u16),
+}
+
+impl DigestOutput {
+    pub fn write_raw(&self, mut w: impl std::io::Write) -> io::Result<()> {
+        match self {
+            Self::Vec(buf) => w.write_all(buf),
+            // For legacy outputs, print them in big endian
+            Self::Crc(n) => w.write_all(&n.to_be_bytes()),
+            Self::U16(n) => w.write_all(&n.to_be_bytes()),
+        }
+    }
+
+    pub fn to_hex(&self) -> UResult<String> {
+        match self {
+            Self::Vec(buf) => Ok(hex::encode(buf)),
+            _ => Err(USimpleError::new(1, "Legacy output cannot be encoded")),
+        }
+    }
+
+    pub fn to_base64(&self) -> UResult<String> {
+        match self {
+            Self::Vec(buf) => Ok(BASE64.encode(buf)),
+            _ => Err(USimpleError::new(1, "Legacy output cannot be encoded")),
+        }
+    }
+}
 
 pub trait Digest {
     fn new() -> Self
@@ -29,10 +69,11 @@ pub trait Digest {
     fn output_bytes(&self) -> usize {
         self.output_bits().div_ceil(8)
     }
-    fn result_str(&mut self) -> String {
+
+    fn result(&mut self) -> DigestOutput {
         let mut buf: Vec<u8> = vec![0; self.output_bytes()];
         self.hash_finalize(&mut buf);
-        encode(buf)
+        DigestOutput::Vec(buf)
     }
 }
 
@@ -122,84 +163,62 @@ impl Digest for Sm3 {
     }
 }
 
-// NOTE: CRC_TABLE_LEN *must* be <= 256 as we cast 0..CRC_TABLE_LEN to u8
-const CRC_TABLE_LEN: usize = 256;
-
 pub struct Crc {
-    state: u32,
+    digest: crc_fast::Digest,
     size: usize,
-    crc_table: [u32; CRC_TABLE_LEN],
 }
+
 impl Crc {
-    fn generate_crc_table() -> [u32; CRC_TABLE_LEN] {
-        let mut table = [0; CRC_TABLE_LEN];
-
-        for (i, elt) in table.iter_mut().enumerate().take(CRC_TABLE_LEN) {
-            *elt = Self::crc_entry(i as u8);
-        }
-
-        table
-    }
-    fn crc_entry(input: u8) -> u32 {
-        let mut crc = (input as u32) << 24;
-
-        let mut i = 0;
-        while i < 8 {
-            let if_condition = crc & 0x8000_0000;
-            let if_body = (crc << 1) ^ 0x04c1_1db7;
-            let else_body = crc << 1;
-
-            // NOTE: i feel like this is easier to understand than emulating an if statement in bitwise
-            //       ops
-            let condition_table = [else_body, if_body];
-
-            crc = condition_table[(if_condition != 0) as usize];
-            i += 1;
-        }
-
-        crc
-    }
-
-    fn update(&mut self, input: u8) {
-        self.state = (self.state << 8)
-            ^ self.crc_table[((self.state >> 24) as usize ^ input as usize) & 0xFF];
+    /// POSIX cksum SIMD configuration for crc-fast
+    /// This uses SIMD instructions (PCLMULQDQ) for fast CRC computation
+    fn get_posix_cksum_params() -> crc_fast::CrcParams {
+        crc_fast::CrcParams::new(
+            "CRC-32/CKSUM", // Name
+            32,             // Width
+            0x04c11db7,     // Polynomial
+            0x00000000,     // Initial CRC value: 0 (not 0xffffffff)
+            false,          // No input reflection (refin)
+            0xffffffff,     // XOR output with 0xffffffff (xorout)
+            0,              // Check value (not used)
+        )
     }
 }
 
 impl Digest for Crc {
     fn new() -> Self {
         Self {
-            state: 0,
+            digest: crc_fast::Digest::new_with_params(Self::get_posix_cksum_params()),
             size: 0,
-            crc_table: Self::generate_crc_table(),
         }
     }
 
     fn hash_update(&mut self, input: &[u8]) {
-        for &elt in input {
-            self.update(elt);
-        }
+        self.digest.update(input);
         self.size += input.len();
     }
 
     fn hash_finalize(&mut self, out: &mut [u8]) {
+        // Add the size at the end of the buffer.
         let mut sz = self.size;
-        while sz != 0 {
-            self.update(sz as u8);
+        while sz > 0 {
+            self.digest.update(&[sz as u8]);
             sz >>= 8;
         }
-        self.state = !self.state;
-        out.copy_from_slice(&self.state.to_ne_bytes());
+
+        out.copy_from_slice(&self.digest.finalize().to_ne_bytes());
     }
 
-    fn result_str(&mut self) -> String {
-        let mut _out: Vec<u8> = vec![0; 4];
-        self.hash_finalize(&mut _out);
-        format!("{}", self.state)
+    fn result(&mut self) -> DigestOutput {
+        let mut out: [u8; 8] = [0; 8];
+        self.hash_finalize(&mut out);
+
+        let x = u64::from_ne_bytes(out);
+        DigestOutput::Crc((x & (u32::MAX as u64)) as u32)
     }
 
     fn reset(&mut self) {
-        *self = Self::new();
+        self.digest.reset();
+        self.size = 0;
     }
 
     fn output_bits(&self) -> usize {
@@ -207,34 +226,41 @@ impl Digest for Crc {
     }
 }
 
-pub struct CRC32B(crc32fast::Hasher);
+pub struct CRC32B {
+    digest: crc_fast::Digest,
+}
+
 impl Digest for CRC32B {
     fn new() -> Self {
-        Self(crc32fast::Hasher::new())
+        Self {
+            digest: crc_fast::Digest::new(crc_fast::CrcAlgorithm::Crc32IsoHdlc),
+        }
     }
 
     fn hash_update(&mut self, input: &[u8]) {
-        self.0.update(input);
+        self.digest.update(input);
     }
 
     fn hash_finalize(&mut self, out: &mut [u8]) {
-        let result = self.0.clone().finalize();
-        let slice = result.to_be_bytes();
-        out.copy_from_slice(&slice);
+        let result = self.digest.finalize();
+        // crc_fast returns a 64-bit value, but CRC32B should be 32-bit
+        // Take the lower 32 bits and convert to big-endian bytes
+        let crc32_value = (result & 0xffffffff) as u32;
+        out.copy_from_slice(&crc32_value.to_be_bytes());
     }
 
     fn reset(&mut self) {
-        self.0.reset();
+        self.digest.reset();
     }
 
     fn output_bits(&self) -> usize {
         32
     }
 
-    fn result_str(&mut self) -> String {
+    fn result(&mut self) -> DigestOutput {
         let mut out = [0; 4];
         self.hash_finalize(&mut out);
-        format!("{}", u32::from_be_bytes(out))
+        DigestOutput::Crc(u32::from_be_bytes(out))
     }
 }
 
@@ -257,10 +283,10 @@ impl Digest for Bsd {
         out.copy_from_slice(&self.state.to_ne_bytes());
     }
 
-    fn result_str(&mut self) -> String {
-        let mut _out: Vec<u8> = vec![0; 2];
+    fn result(&mut self) -> DigestOutput {
+        let mut _out = [0; 2];
         self.hash_finalize(&mut _out);
-        format!("{}", self.state)
+        DigestOutput::U16(self.state)
     }
 
     fn reset(&mut self) {
@@ -292,10 +318,10 @@ impl Digest for SysV {
         out.copy_from_slice(&(self.state as u16).to_ne_bytes());
     }
 
-    fn result_str(&mut self) -> String {
-        let mut _out: Vec<u8> = vec![0; 2];
+    fn result(&mut self) -> DigestOutput {
+        let mut _out = [0; 2];
         self.hash_finalize(&mut _out);
-        format!("{}", self.state)
+        DigestOutput::U16((self.state & (u16::MAX as u32)) as u16)
     }
 
     fn reset(&mut self) {
@@ -309,7 +335,7 @@ impl Digest for SysV {
 
 // Implements the Digest trait for sha2 / sha3 algorithms with fixed output
 macro_rules! impl_digest_common {
-    ($algo_type: ty, $size: expr) => {
+    ($algo_type: ty, $size: literal) => {
         impl Digest for $algo_type {
             fn new() -> Self {
                 Self(Default::default())
@@ -336,7 +362,7 @@ macro_rules! impl_digest_common {
 
 // Implements the Digest trait for sha2 / sha3 algorithms with variable output
 macro_rules! impl_digest_shake {
-    ($algo_type: ty) => {
+    ($algo_type: ty, $output_bits: literal) => {
         impl Digest for $algo_type {
             fn new() -> Self {
                 Self(Default::default())
@@ -355,7 +381,13 @@ macro_rules! impl_digest_shake {
             }
 
             fn output_bits(&self) -> usize {
-                0
+                $output_bits
+            }
+
+            fn result(&mut self) -> DigestOutput {
+                let mut bytes = vec![0; self.output_bits().div_ceil(8)];
+                self.hash_finalize(&mut bytes);
+                DigestOutput::Vec(bytes)
             }
         }
     };
@@ -385,8 +417,8 @@ impl_digest_common!(Sha3_512, 512);
 
 pub struct Shake128(sha3::Shake128);
 pub struct Shake256(sha3::Shake256);
-impl_digest_shake!(Shake128);
-impl_digest_shake!(Shake256);
+impl_digest_shake!(Shake128, 256);
+impl_digest_shake!(Shake256, 512);
 
 /// A struct that writes to a digest.
 ///
@@ -518,15 +550,144 @@ mod tests {
         writer_crlf.write_all(b"\r").unwrap();
         writer_crlf.write_all(b"\n").unwrap();
         writer_crlf.finalize();
-        let result_crlf = digest.result_str();
+        let result_crlf = digest.result();
 
         // We expect "\r\n" to be replaced with "\n" in text mode on Windows.
         let mut digest = Box::new(Md5::new()) as Box<dyn Digest>;
         let mut writer_lf = DigestWriter::new(&mut digest, false);
         writer_lf.write_all(b"\n").unwrap();
         writer_lf.finalize();
-        let result_lf = digest.result_str();
+        let result_lf = digest.result();
 
         assert_eq!(result_crlf, result_lf);
+    }
+
+    use super::{Crc, Digest};
+
+    #[test]
+    fn test_crc_basic_functionality() {
+        // Test that our CRC implementation works with basic functionality
+        let mut crc1 = Crc::new();
+        let mut crc2 = Crc::new();
+
+        // Same input should give same output
+        crc1.hash_update(b"test");
+        crc2.hash_update(b"test");
+
+        let mut out1 = [0u8; 8];
+        let mut out2 = [0u8; 8];
+        crc1.hash_finalize(&mut out1);
+        crc2.hash_finalize(&mut out2);
+
+        assert_eq!(out1, out2);
+    }
+
+    #[test]
+    fn test_crc_digest_basic() {
+        let mut crc = Crc::new();
+
+        // Test empty input
+        let mut output = [0u8; 8];
+        crc.hash_finalize(&mut output);
+        let empty_result = u64::from_ne_bytes(output);
+
+        // Reset and test with "test" string
+        let mut crc = Crc::new();
+        crc.hash_update(b"test");
+        crc.hash_finalize(&mut output);
+        let test_result = u64::from_ne_bytes(output);
+
+        // The result should be different for different inputs
+        assert_ne!(empty_result, test_result);
+
+        // Test known value: "test" should give 3076352578
+        assert_eq!(test_result, 3076352578);
+    }
+
+    #[test]
+    fn test_crc_digest_incremental() {
+        let mut crc1 = Crc::new();
+        let mut crc2 = Crc::new();
+
+        // Test that processing in chunks gives same result as all at once
+        let data = b"Hello, World! This is a test string for CRC computation.";
+
+        // Process all at once
+        crc1.hash_update(data);
+        let mut output1 = [0u8; 8];
+        crc1.hash_finalize(&mut output1);
+
+        // Process in chunks
+        crc2.hash_update(&data[0..10]);
+        crc2.hash_update(&data[10..30]);
+        crc2.hash_update(&data[30..]);
+        let mut output2 = [0u8; 8];
+        crc2.hash_finalize(&mut output2);
+
+        assert_eq!(output1, output2);
+    }
+
+    #[test]
+    fn test_crc_slice8_vs_single_byte() {
+        // Test that our optimized slice-by-8 gives same results as byte-by-byte
+        let test_data = b"This is a longer test string to verify slice-by-8 optimization works correctly with various data sizes including remainders.";
+
+        let mut crc_optimized = Crc::new();
+        crc_optimized.hash_update(test_data);
+        let mut output_opt = [0u8; 8];
+        crc_optimized.hash_finalize(&mut output_opt);
+
+        // Create a reference implementation using hash_update
+        let mut crc_reference = Crc::new();
+        for &byte in test_data {
+            crc_reference.hash_update(&[byte]);
+        }
+        let mut output_ref = [0u8; 8];
+        crc_reference.hash_finalize(&mut output_ref);
+
+        assert_eq!(output_opt, output_ref);
+    }
+
+    #[test]
+    fn test_crc_known_values() {
+        // Test against our CRC implementation values
+        // Note: These are the correct values for our POSIX cksum implementation
+        let test_cases = [
+            ("", 4294967295_u64),
+            ("a", 1220704766_u64),
+            ("abc", 1219131554_u64),
+        ];
+
+        for (input, expected) in test_cases {
+            let mut crc = Crc::new();
+            crc.hash_update(input.as_bytes());
+            let mut output = [0u8; 8];
+            crc.hash_finalize(&mut output);
+            let result = u64::from_ne_bytes(output);
+
+            assert_eq!(result, expected, "CRC mismatch for input: '{input}'");
+        }
+    }
+
+    #[test]
+    fn test_crc_hash_update_edge_cases() {
+        let mut crc = Crc::new();
+
+        // Test with data that's not a multiple of 8 bytes
+        let data7 = b"1234567"; // 7 bytes
+        crc.hash_update(data7);
+
+        let data9 = b"123456789"; // 9 bytes
+        let mut crc2 = Crc::new();
+        crc2.hash_update(data9);
+
+        // Should not panic and should produce valid results
+        let mut out1 = [0u8; 8];
+        let mut out2 = [0u8; 8];
+        crc.hash_finalize(&mut out1);
+        crc2.hash_finalize(&mut out2);
+
+        // Results should be different for different inputs
+        assert_ne!(out1, out2);
     }
 }

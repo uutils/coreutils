@@ -25,6 +25,9 @@ This section will explain how to install and configure these tools.
 We also have an extensive CI that uses these tools and will check your code before it can be merged.
 The next section [Testing](#testing) will explain how to run those checks locally to avoid waiting for the CI.
 
+As an alternative to host installation of the tools, you can open the project with the provided development container configuration.
+For more information about development containers, see the [Visual Studio Code Dev Containers documentation](https://code.visualstudio.com/docs/devcontainers/containers).
+
 ### Rust toolchain
 
 [Install Rust](https://www.rust-lang.org/tools/install)
@@ -227,7 +230,9 @@ To run uutils against the GNU test suite locally, run the following commands:
 ```shell
 bash util/build-gnu.sh
 # Build uutils with release optimizations
-bash util/build-gnu.sh --release-build
+env PROFILE=release bash util/build-gnu.sh
+# Build uutils with SELinux
+env SELINUX_ENABLED=1 bash util/build-gnu.sh
 bash util/run-gnu-test.sh
 # To run a single test:
 bash util/run-gnu-test.sh tests/touch/not-owner.sh # for example
@@ -286,7 +291,6 @@ brew install \
   coreutils \
   autoconf \
   gettext \
-  wget \
   texinfo \
   xz \
   automake \
@@ -331,12 +335,12 @@ If you have used [Git for Windows](https://gitforwindows.org) to install `git` o
 
 Alternatively you can install [Cygwin](https://www.cygwin.com) and/or use [WSL2](https://learn.microsoft.com/en-us/windows/wsl/compare-versions#whats-new-in-wsl-2) to get access to all GNU core utilities on Windows.
 
-# Preparing a new release
+## Preparing a new release
 
 1. Modify `util/update-version.sh` (FROM & TO) and run it
 1. Submit a new PR with these changes and wait for it to be merged
 1. Tag the new release `git tag -a X.Y.Z` and `git push --tags`
-1. Once the CI is green, a new release will be automatically created in draft mode. 
+1. Once the CI is green, a new release will be automatically created in draft mode.
    Reuse this release and make sure that assets have been added.
 1. Write the release notes (it takes time) following previous examples
 1. Run `util/publish.sh --do-it` to publish the new release to crates.io

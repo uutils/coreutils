@@ -5,10 +5,7 @@
 use super::{CatResult, FdReadable, InputHandle};
 
 use nix::unistd;
-use std::os::{
-    fd::AsFd,
-    unix::io::{AsRawFd, RawFd},
-};
+use std::os::{fd::AsFd, unix::io::AsRawFd};
 
 use uucore::pipes::{pipe, splice, splice_exact};
 
@@ -41,7 +38,7 @@ pub(super) fn write_fast_using_splice<R: FdReadable, S: AsRawFd + AsFd>(
                     // we can recover by copying the data that we have from the
                     // intermediate pipe to stdout using normal read/write. Then
                     // we tell the caller to fall back.
-                    copy_exact(pipe_rd.as_raw_fd(), write_fd, n)?;
+                    copy_exact(&pipe_rd, write_fd, n)?;
                     return Ok(true);
                 }
             }
@@ -55,7 +52,7 @@ pub(super) fn write_fast_using_splice<R: FdReadable, S: AsRawFd + AsFd>(
 /// Move exactly `num_bytes` bytes from `read_fd` to `write_fd`.
 ///
 /// Panics if not enough bytes can be read.
-fn copy_exact(read_fd: RawFd, write_fd: &impl AsFd, num_bytes: usize) -> nix::Result<()> {
+fn copy_exact(read_fd: &impl AsFd, write_fd: &impl AsFd, num_bytes: usize) -> nix::Result<()> {
     let mut left = num_bytes;
     let mut buf = [0; BUF_SIZE];
     while left > 0 {

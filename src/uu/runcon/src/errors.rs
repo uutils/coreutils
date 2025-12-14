@@ -11,6 +11,7 @@ use std::str::Utf8Error;
 
 use uucore::display::Quotable;
 use uucore::error::UError;
+use uucore::translate;
 
 pub(crate) type Result<T> = std::result::Result<T, Error>;
 
@@ -25,10 +26,10 @@ pub(crate) mod error_exit_status {
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum Error {
-    #[error("No command is specified")]
+    #[error("{}", translate!("runcon-error-no-command"))]
     MissingCommand,
 
-    #[error("runcon may be used only on a SELinux kernel")]
+    #[error("{}", translate!("runcon-error-selinux-not-enabled"))]
     SELinuxNotEnabled,
 
     #[error(transparent)]
@@ -37,19 +38,19 @@ pub(crate) enum Error {
     #[error(transparent)]
     CommandLine(#[from] clap::Error),
 
-    #[error("{operation} failed")]
+    #[error("{}", translate!("runcon-error-operation-failed", "operation" => .operation))]
     SELinux {
         operation: &'static str,
         source: selinux::errors::Error,
     },
 
-    #[error("{operation} failed")]
+    #[error("{}", translate!("runcon-error-operation-failed", "operation" => .operation))]
     Io {
         operation: &'static str,
         source: io::Error,
     },
 
-    #[error("{operation} failed on {}", .operand1.quote())]
+    #[error("{}", translate!("runcon-error-operation-failed-on", "operation" => .operation, "operand" => .operand1.quote()))]
     Io1 {
         operation: &'static str,
         operand1: OsString,

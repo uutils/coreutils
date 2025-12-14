@@ -1,4 +1,4 @@
-# spell-checker:ignore bintools gnum gperf ldflags libclang nixpkgs numtide pkgs texinfo
+# spell-checker:ignore bintools gnum gperf ldflags libclang nixpkgs numtide pkgs texinfo gettext
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs";
@@ -30,6 +30,7 @@
           rustup
 
           pre-commit
+          nodePackages.cspell
 
           # debugging
           gdb

@@ -3,8 +3,7 @@
 [package]
 name = "uutests"
 description = "uutils ~ 'core' uutils test library (cross-platform)"
-repository = "https://github.com/uutils/coreutils/tree/main/src/tests/common"
-# readme = "README.md"
+repository = "https://github.com/uutils/coreutils/tree/main/tests/uutests"
 authors.workspace = true
 categories.workspace = true
 edition.workspace = true
@@ -20,13 +19,12 @@ all-features = true
 path = "src/lib/lib.rs"
 
 [dependencies]
-glob = { workspace = true }
+ctor = { workspace = true }
 libc = { workspace = true }
 pretty_assertions = "1.4.0"
 rand = { workspace = true }
 regex = { workspace = true }
 tempfile = { workspace = true }
-time = { workspace = true, features = ["local-offset"] }
 uucore = { workspace = true, features = [
   "mode",
   "entries",
@@ -34,7 +32,6 @@ uucore = { workspace = true, features = [
   "signals",
   "utmpx",
 ] }
-ctor = "0.4.1"
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 

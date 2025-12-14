@@ -5,13 +5,15 @@
 
 // spell-checker:ignore (paths) GPGHome findxs
 
-use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
+use clap::builder::{TypedValueParser, ValueParserFactory};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use uucore::display::{Quotable, println_verbatim};
 use uucore::error::{FromIo, UError, UResult, UUsageError};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
+use uucore::translate;
 
 use std::env;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::io::ErrorKind;
 use std::iter;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
@@ -24,9 +26,6 @@ use std::os::unix::prelude::PermissionsExt;
 use rand::Rng;
 use tempfile::Builder;
 use thiserror::Error;
-
-const ABOUT: &str = help_about!("mktemp.md");
-const USAGE: &str = help_usage!("mktemp.md");
 
 static DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
 
@@ -45,35 +44,30 @@ const TMPDIR_ENV_VAR: &str = "TMPDIR";
 #[cfg(windows)]
 const TMPDIR_ENV_VAR: &str = "TMP";
 
-#[derive(Debug, Error)]
+#[derive(Error, Debug)]
 enum MkTempError {
-    #[error("could not persist file {path}", path = .0.quote())]
+    #[error("{}", translate!("mktemp-error-persist-file", "path" => .0.quote()))]
     PersistError(PathBuf),
 
-    #[error("with --suffix, template {template} must end in X", template = .0.quote())]
+    #[error("{}", translate!("mktemp-error-must-end-in-x", "template" => .0.quote()))]
     MustEndInX(String),
 
-    #[error("too few X's in template {template}", template = .0.quote())]
+    #[error("{}", translate!("mktemp-error-too-few-xs", "template" => .0.quote()))]
     TooFewXs(String),
 
-    /// The template prefix contains a path separator (e.g. `"a/bXXX"`).
-    #[error("invalid template, {template}, contains directory separator", template = .0.quote())]
+    #[error("{}", translate!("mktemp-error-prefix-contains-separator", "template" => .0.quote()))]
     PrefixContainsDirSeparator(String),
 
-    /// The template suffix contains a path separator (e.g. `"XXXa/b"`).
-    #[error("invalid suffix {suffix}, contains directory separator", suffix = .0.quote())]
+    #[error("{}", translate!("mktemp-error-suffix-contains-separator", "suffix" => .0.quote()))]
     SuffixContainsDirSeparator(String),
 
-    #[error("invalid template, {template}; with --tmpdir, it may not be absolute", template = .0.quote())]
+    #[error("{}", translate!("mktemp-error-invalid-template", "template" => .0.quote()))]
     InvalidTemplate(String),
 
-    #[error("too many templates")]
+    #[error("{}", translate!("mktemp-error-too-many-templates"))]
     TooManyTemplates,
 
-    /// When a specified temporary directory could not be found.
-    #[error("failed to create {template_type} via template {template}: No such file or directory",
-            template_type = .0,
-            template = .1.quote())]
+    #[error("{}", translate!("mktemp-error-not-found", "template_type" => .0.clone(), "template" => .1.quote()))]
     NotFound(String, String),
 }
 
@@ -111,21 +105,30 @@ pub struct Options {
     pub treat_as_template: bool,
 
     /// The template to use for the name of the temporary file.
-    pub template: String,
+    pub template: OsString,
 }
 
 impl Options {
     fn from(matches: &ArgMatches) -> Self {
         let tmpdir = matches
-            .get_one::<PathBuf>(OPT_TMPDIR)
-            .or_else(|| matches.get_one::<PathBuf>(OPT_P))
-            .cloned();
-        let (tmpdir, template) = match matches.get_one::<String>(ARG_TEMPLATE) {
+            .get_one::<Option<PathBuf>>(OPT_TMPDIR)
+            .or_else(|| matches.get_one::<Option<PathBuf>>(OPT_P))
+            .map(|dir| match dir {
+                // If the argument of -p/--tmpdir is non-empty, use it as the
+                // tmpdir.
+                Some(d) => d.clone(),
+                // Otherwise use $TMPDIR if set, else use the system's default
+                // temporary directory.
+                None => env::var(TMPDIR_ENV_VAR)
+                    .ok()
+                    .map_or_else(env::temp_dir, PathBuf::from),
+            });
+        let (tmpdir, template) = match matches.get_one::<OsString>(ARG_TEMPLATE) {
             // If no template argument is given, `--tmpdir` is implied.
             None => {
                 let tmpdir = Some(tmpdir.unwrap_or_else(env::temp_dir));
                 let template = DEFAULT_TEMPLATE;
-                (tmpdir, template.to_string())
+                (tmpdir, OsString::from(template))
             }
             Some(template) => {
                 let tmpdir = if env::var(TMPDIR_ENV_VAR).is_ok() && matches.get_flag(OPT_T) {
@@ -139,7 +142,7 @@ impl Options {
                 } else {
                     None
                 };
-                (tmpdir, template.to_string())
+                (tmpdir, template.clone())
             }
         };
         Self {
@@ -197,28 +200,32 @@ fn find_last_contiguous_block_of_xs(s: &str) -> Option<(usize, usize)> {
 
 impl Params {
     fn from(options: Options) -> Result<Self, MkTempError> {
+        // Convert OsString template to string for processing
+        let Some(template_str) = options.template.to_str() else {
+            // For non-UTF-8 templates, return an error
+            return Err(MkTempError::InvalidTemplate(
+                options.template.to_string_lossy().into_owned(),
+            ));
+        };
+
         // The template argument must end in 'X' if a suffix option is given.
-        if options.suffix.is_some() && !options.template.ends_with('X') {
-            return Err(MkTempError::MustEndInX(options.template));
+        if options.suffix.is_some() && !template_str.ends_with('X') {
+            return Err(MkTempError::MustEndInX(template_str.to_string()));
         }
 
         // Get the start and end indices of the randomized part of the template.
         //
         // For example, if the template is "abcXXXXyz", then `i` is 3 and `j` is 7.
-        let (i, j) = match find_last_contiguous_block_of_xs(&options.template) {
-            None => {
-                let s = match options.suffix {
-                    // If a suffix is specified, the error message includes the template without the suffix.
-                    Some(_) => options
-                        .template
-                        .chars()
-                        .take(options.template.len())
-                        .collect::<String>(),
-                    None => options.template,
-                };
-                return Err(MkTempError::TooFewXs(s));
-            }
-            Some(indices) => indices,
+        let Some((i, j)) = find_last_contiguous_block_of_xs(template_str) else {
+            let s = match options.suffix {
+                // If a suffix is specified, the error message includes the template without the suffix.
+                Some(_) => template_str
+                    .chars()
+                    .take(template_str.len())
+                    .collect::<String>(),
+                None => template_str.to_string(),
+            };
+            return Err(MkTempError::TooFewXs(s));
         };
 
         // Combine the directory given as an option and the prefix of the template.
@@ -227,35 +234,36 @@ impl Params {
         // then `prefix` is "a/b/c/d".
         let tmpdir = options.tmpdir;
         let prefix_from_option = tmpdir.clone().unwrap_or_default();
-        let prefix_from_template = &options.template[..i];
-        let prefix = Path::new(&prefix_from_option)
-            .join(prefix_from_template)
-            .display()
-            .to_string();
+        let prefix_from_template = &template_str[..i];
+        let prefix_path = Path::new(&prefix_from_option).join(prefix_from_template);
         if options.treat_as_template && prefix_from_template.contains(MAIN_SEPARATOR) {
-            return Err(MkTempError::PrefixContainsDirSeparator(options.template));
+            return Err(MkTempError::PrefixContainsDirSeparator(
+                template_str.to_string(),
+            ));
         }
         if tmpdir.is_some() && Path::new(prefix_from_template).is_absolute() {
-            return Err(MkTempError::InvalidTemplate(options.template));
+            return Err(MkTempError::InvalidTemplate(template_str.to_string()));
         }
 
         // Split the parent directory from the file part of the prefix.
         //
-        // For example, if `prefix` is "a/b/c/d", then `directory` is
-        // "a/b/c" is `prefix` gets reassigned to "d".
-        let (directory, prefix) = if prefix.ends_with(MAIN_SEPARATOR) {
-            (prefix, String::new())
-        } else {
-            let path = Path::new(&prefix);
-            let directory = match path.parent() {
-                None => String::new(),
-                Some(d) => d.display().to_string(),
-            };
-            let prefix = match path.file_name() {
-                None => String::new(),
-                Some(f) => f.to_str().unwrap().to_string(),
-            };
-            (directory, prefix)
+        // For example, if `prefix_path` is "a/b/c/d", then `directory` is
+        // "a/b/c" and `prefix` gets reassigned to "d".
+        let (directory, prefix) = {
+            let prefix_str = prefix_path.to_string_lossy();
+            if prefix_str.ends_with(MAIN_SEPARATOR) {
+                (prefix_path, String::new())
+            } else {
+                let directory = match prefix_path.parent() {
+                    None => PathBuf::new(),
+                    Some(d) => d.to_path_buf(),
+                };
+                let prefix = match prefix_path.file_name() {
+                    None => String::new(),
+                    Some(f) => f.to_str().unwrap().to_string(),
+                };
+                (directory, prefix)
+            }
         };
 
         // Combine the suffix from the template with the suffix given as an option.
@@ -263,7 +271,7 @@ impl Params {
         // For example, if the suffix command-line argument is ".txt" and
         // the template is "XXXabc", then `suffix` is "abc.txt".
         let suffix_from_option = options.suffix.unwrap_or_default();
-        let suffix_from_template = &options.template[j..];
+        let suffix_from_template = &template_str[j..];
         let suffix = format!("{suffix_from_template}{suffix_from_option}");
         if suffix.contains(MAIN_SEPARATOR) {
             return Err(MkTempError::SuffixContainsDirSeparator(suffix));
@@ -276,11 +284,54 @@ impl Params {
         let num_rand_chars = j - i;
 
         Ok(Self {
-            directory: directory.into(),
+            directory,
             prefix,
             num_rand_chars,
             suffix,
         })
+    }
+}
+
+/// Custom parser that converts empty string to `None`, and non-empty string to
+/// `Some(PathBuf)`.
+///
+/// This parser is used for the `-p` and `--tmpdir` options where an empty string
+/// argument should be treated as "not provided", causing mktemp to fall back to
+/// using the `$TMPDIR` environment variable or the system's default temporary
+/// directory.
+///
+/// # Examples
+///
+/// - Empty string `""` -> `None`
+/// - Non-empty string `"/tmp"` -> `Some(PathBuf::from("/tmp"))`
+///
+/// This handles the special case where users can pass an empty directory name
+/// to explicitly request fallback behavior.
+#[derive(Clone, Debug)]
+struct OptionalPathBufParser;
+
+impl TypedValueParser for OptionalPathBufParser {
+    type Value = Option<PathBuf>;
+
+    fn parse_ref(
+        &self,
+        _cmd: &Command,
+        _arg: Option<&Arg>,
+        value: &OsStr,
+    ) -> Result<Self::Value, clap::Error> {
+        if value.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(PathBuf::from(value)))
+        }
+    }
+}
+
+impl ValueParserFactory for OptionalPathBufParser {
+    type Parser = Self;
+
+    fn value_parser() -> Self::Parser {
+        Self
     }
 }
 
@@ -290,13 +341,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = match uu_app().try_get_matches_from(&args) {
         Ok(m) => m,
         Err(e) => {
+            use uucore::clap_localization::handle_clap_error_with_exit_code;
+            if e.kind() == clap::error::ErrorKind::UnknownArgument {
+                handle_clap_error_with_exit_code(e, 1);
+            }
             if e.kind() == clap::error::ErrorKind::TooManyValues
                 && e.context().any(|(kind, val)| {
                     kind == clap::error::ContextKind::InvalidArg
                         && val == &clap::error::ContextValue::String("[template]".into())
                 })
             {
-                return Err(UUsageError::new(1, "too many templates"));
+                return Err(UUsageError::new(
+                    1,
+                    translate!("mktemp-error-too-many-templates"),
+                ));
             }
             return Err(e.into());
         }
@@ -310,7 +368,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // If POSIXLY_CORRECT was set, template MUST be the last argument.
         if matches.contains_id(ARG_TEMPLATE) {
             // Template argument was provided, check if was the last one.
-            if args.last().unwrap() != OsStr::new(&options.template) {
+            if args.last().unwrap() != &options.template {
                 return Err(Box::new(MkTempError::TooManyTemplates));
             }
         }
@@ -341,63 +399,56 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         res
     };
-    println_verbatim(res?).map_err_context(|| "failed to print directory name".to_owned())
+    println_verbatim(res?).map_err_context(|| translate!("mktemp-error-failed-print"))
 }
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("mktemp-about"))
+        .override_usage(format_usage(&translate!("mktemp-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_DIRECTORY)
                 .short('d')
                 .long(OPT_DIRECTORY)
-                .help("Make a directory instead of a file")
+                .help(translate!("mktemp-help-directory"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_DRY_RUN)
                 .short('u')
                 .long(OPT_DRY_RUN)
-                .help("do not create anything; merely print a name (unsafe)")
+                .help(translate!("mktemp-help-dry-run"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_QUIET)
                 .short('q')
                 .long("quiet")
-                .help("Fail silently if an error occurs.")
+                .help(translate!("mktemp-help-quiet"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_SUFFIX)
                 .long(OPT_SUFFIX)
-                .help(
-                    "append SUFFIX to TEMPLATE; SUFFIX must not contain a path separator. \
-                     This option is implied if TEMPLATE does not end with X.",
-                )
+                .help(translate!("mktemp-help-suffix"))
                 .value_name("SUFFIX"),
         )
         .arg(
             Arg::new(OPT_P)
                 .short('p')
-                .help("short form of --tmpdir")
+                .help(translate!("mktemp-help-p"))
                 .value_name("DIR")
                 .num_args(1)
-                .value_parser(ValueParser::path_buf())
+                .value_parser(OptionalPathBufParser)
                 .value_hint(clap::ValueHint::DirPath),
         )
         .arg(
             Arg::new(OPT_TMPDIR)
                 .long(OPT_TMPDIR)
-                .help(
-                    "interpret TEMPLATE relative to DIR; if DIR is not specified, use \
-                     $TMPDIR ($TMP on windows) if set, else /tmp. With this option, \
-                     TEMPLATE must not be an absolute name; unlike with -t, TEMPLATE \
-                     may contain slashes, but mktemp creates only the final component",
-                )
+                .help(translate!("mktemp-help-tmpdir"))
                 .value_name("DIR")
                 // Allows use of default argument just by setting --tmpdir. Else,
                 // use provided input to generate tmpdir
@@ -405,19 +456,20 @@ pub fn uu_app() -> Command {
                 // Require an equals to avoid ambiguity if no tmpdir is supplied
                 .require_equals(true)
                 .overrides_with(OPT_P)
-                .value_parser(ValueParser::path_buf())
+                .value_parser(OptionalPathBufParser)
                 .value_hint(clap::ValueHint::DirPath),
         )
         .arg(
             Arg::new(OPT_T)
                 .short('t')
-                .help(
-                    "Generate a template (using the supplied prefix and TMPDIR \
-                (TMP on windows) if set) to create a filename template [deprecated]",
-                )
+                .help(translate!("mktemp-help-t"))
                 .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(ARG_TEMPLATE).num_args(..=1))
+        .arg(
+            Arg::new(ARG_TEMPLATE)
+                .num_args(..=1)
+                .value_parser(clap::value_parser!(OsString)),
+        )
 }
 
 fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
@@ -468,15 +520,15 @@ fn make_temp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult
 
     match builder.tempdir_in(dir) {
         Ok(d) => {
-            // `into_path` consumes the TempDir without removing it
-            let path = d.into_path();
+            // `keep` consumes the TempDir without removing it
+            let path = d.keep();
             Ok(path)
         }
         Err(e) if e.kind() == ErrorKind::NotFound => {
             let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
             let path = Path::new(dir).join(filename);
             let s = path.display().to_string();
-            Err(MkTempError::NotFound("directory".to_string(), s).into())
+            Err(MkTempError::NotFound(translate!("mktemp-template-type-directory"), s).into())
         }
         Err(e) => Err(e.into()),
     }
@@ -506,7 +558,7 @@ fn make_temp_file(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResul
             let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
             let path = Path::new(dir).join(filename);
             let s = path.display().to_string();
-            Err(MkTempError::NotFound("file".to_string(), s).into())
+            Err(MkTempError::NotFound(translate!("mktemp-template-type-file"), s).into())
         }
         Err(e) => Err(e.into()),
     }

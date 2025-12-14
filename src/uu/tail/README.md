@@ -36,7 +36,7 @@ flag name: `--use-polling`.
 * Improve resource management by adding more system calls to `inotify_rm_watch`
   when appropriate.
 
-# GNU test-suite results (9.1.8-e08752)
+## GNU test-suite results (9.1.8-e08752)
 
 The functionality for the test "gnu/tests/tail-2/follow-stdin.sh" is implemented.
 It fails because it is provoking closing a file descriptor with `tail -f <&-`

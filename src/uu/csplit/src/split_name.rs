@@ -16,7 +16,7 @@ pub struct SplitName {
 }
 
 impl SplitName {
-    /// Creates a new SplitName with the given user-defined options:
+    /// Creates a new [`SplitName`] with the given user-defined options:
     /// - `prefix_opt` specifies a prefix for all splits.
     /// - `format_opt` specifies a custom format for the suffix part of the filename, using the
     ///   `sprintf` format notation.
@@ -81,7 +81,7 @@ mod tests {
         match split_name {
             Err(CsplitError::InvalidNumber(_)) => (),
             _ => panic!("should fail with InvalidNumber"),
-        };
+        }
     }
 
     #[test]
@@ -90,7 +90,7 @@ mod tests {
         match split_name {
             Err(CsplitError::SuffixFormatIncorrect) => (),
             _ => panic!("should fail with SuffixFormatIncorrect"),
-        };
+        }
     }
 
     #[test]
@@ -99,7 +99,7 @@ mod tests {
         match split_name {
             Err(CsplitError::SuffixFormatIncorrect) => (),
             _ => panic!("should fail with SuffixFormatIncorrect"),
-        };
+        }
     }
 
     #[test]
@@ -244,6 +244,6 @@ mod tests {
         match split_name {
             Err(CsplitError::SuffixFormatTooManyPercents) => (),
             _ => panic!("should fail with SuffixFormatTooManyPercents"),
-        };
+        }
     }
 }

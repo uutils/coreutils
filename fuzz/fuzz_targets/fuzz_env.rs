@@ -10,11 +10,10 @@ use uu_env::uumain;
 
 use std::ffi::OsString;
 
-mod fuzz_common;
-use crate::fuzz_common::{
+use rand::Rng;
+use uufuzz::{
     CommandResult, compare_result, generate_and_run_uumain, generate_random_string, run_gnu_cmd,
 };
-use rand::Rng;
 
 static CMD_PATH: &str = "env";
 

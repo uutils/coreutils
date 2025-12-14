@@ -11,16 +11,10 @@ categories.workspace = true
 edition.workspace = true
 
 [lib]
-name = "libstdbuf"
+name = "stdbuf"
 path = "src/libstdbuf.rs"
-crate-type = [
-  "cdylib",
-  "rlib",
-] # XXX: note: the rlib is just to prevent Cargo from spitting out a warning
+crate-type = ["cdylib"]
 
 [dependencies]
-cpp = "0.5.10"
+ctor = { workspace = true }
 libc = { workspace = true }
-
-[build-dependencies]
-cpp_build = "0.5.10"

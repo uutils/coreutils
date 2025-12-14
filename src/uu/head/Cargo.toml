@@ -22,11 +22,12 @@ clap = { workspace = true }
 memchr = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
-  "parser",
+  "parser-size",
   "ringbuffer",
   "lines",
   "fs",
 ] }
+fluent = { workspace = true }
 
 [[bin]]
 name = "head"

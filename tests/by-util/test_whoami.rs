@@ -7,9 +7,8 @@ use uutests::new_ucmd;
 #[cfg(unix)]
 use uutests::unwrap_or_return;
 #[cfg(unix)]
-use uutests::util::expected_result;
-use uutests::util::{TestScenario, is_ci, whoami};
-use uutests::util_name;
+use uutests::util::{TestScenario, expected_result};
+use uutests::util::{is_ci, whoami};
 
 #[test]
 fn test_invalid_arg() {
@@ -19,11 +18,13 @@ fn test_invalid_arg() {
 #[test]
 #[cfg(unix)]
 fn test_normal() {
+    use uutests::util_name;
+
     let ts = TestScenario::new(util_name!());
     let exp_result = unwrap_or_return!(expected_result(&ts, &[]));
-    let result = ts.ucmd().succeeds();
 
-    result
+    ts.ucmd()
+        .succeeds()
         .stdout_is(exp_result.stdout_str())
         .stderr_is(exp_result.stderr_str());
 }
@@ -33,6 +34,7 @@ fn test_normal() {
 fn test_normal_compare_id() {
     let ts = TestScenario::new("id");
     let id_un = unwrap_or_return!(expected_result(&ts, &["-un"]));
+
     if id_un.succeeded() {
         new_ucmd!().succeeds().stdout_is(id_un.stdout_str());
     } else if is_ci() && id_un.stderr_str().contains("cannot find name for user ID") {
@@ -45,6 +47,7 @@ fn test_normal_compare_id() {
 #[test]
 fn test_normal_compare_env() {
     let whoami = whoami();
+
     if whoami == "nobody" {
         println!("test skipped:");
     } else if !is_ci() {

@@ -25,7 +25,9 @@ use std::hash::Hash;
 use std::io::Stdin;
 use std::io::{Error, ErrorKind, Result as IOResult};
 #[cfg(unix)]
-use std::os::unix::{fs::MetadataExt, io::AsRawFd};
+use std::os::fd::AsFd;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use std::path::{Component, MAIN_SEPARATOR, Path, PathBuf};
 #[cfg(target_os = "windows")]
 use winapi_util::AsHandleRef;
@@ -50,8 +52,8 @@ pub struct FileInformation(
 impl FileInformation {
     /// Get information from a currently open file
     #[cfg(unix)]
-    pub fn from_file(file: &impl AsRawFd) -> IOResult<Self> {
-        let stat = nix::sys::stat::fstat(file.as_raw_fd())?;
+    pub fn from_file(file: &impl AsFd) -> IOResult<Self> {
+        let stat = nix::sys::stat::fstat(file)?;
         Ok(Self(stat))
     }
 
@@ -121,6 +123,7 @@ impl FileInformation {
             not(target_os = "openbsd"),
             not(target_os = "illumos"),
             not(target_os = "solaris"),
+            not(target_os = "cygwin"),
             not(target_arch = "aarch64"),
             not(target_arch = "riscv64"),
             not(target_arch = "loongarch64"),
@@ -138,6 +141,7 @@ impl FileInformation {
                 target_os = "openbsd",
                 target_os = "illumos",
                 target_os = "solaris",
+                target_os = "cygwin",
                 target_arch = "aarch64",
                 target_arch = "riscv64",
                 target_arch = "loongarch64",
@@ -532,14 +536,16 @@ pub fn display_permissions_unix(mode: mode_t, display_file_type: bool) -> String
     result
 }
 
-/// For some programs like install or mkdir, dir/. can be provided
+/// For some programs like install or mkdir, dir/. or dir/./ can be provided
 /// Special case to match GNU's behavior:
-/// install -d foo/. should work and just create foo/
+/// install -d foo/. (and foo/./) should work and just create foo/
 /// std::fs::create_dir("foo/."); fails in pure Rust
 pub fn dir_strip_dot_for_creation(path: &Path) -> PathBuf {
-    if path.to_string_lossy().ends_with("/.") {
+    let path_str = path.to_string_lossy();
+
+    if path_str.ends_with("/.") || path_str.ends_with("/./") {
         // Do a simple dance to strip the "/."
-        Path::new(&path).components().collect::<PathBuf>()
+        Path::new(&path).components().collect()
     } else {
         path.to_path_buf()
     }
@@ -692,7 +698,7 @@ pub fn path_ends_with_terminator(path: &Path) -> bool {
     path.as_os_str()
         .as_bytes()
         .last()
-        .is_some_and(|&byte| byte == b'/' || byte == b'\\')
+        .is_some_and(|&byte| byte == b'/')
 }
 
 #[cfg(windows)]
@@ -717,8 +723,10 @@ pub fn is_stdin_directory(stdin: &Stdin) -> bool {
     #[cfg(unix)]
     {
         use nix::sys::stat::fstat;
-        let mode = fstat(stdin.as_raw_fd()).unwrap().st_mode as mode_t;
-        has!(mode, S_IFDIR)
+        let mode = fstat(stdin.as_fd()).unwrap().st_mode as mode_t;
+        // We use the S_IFMT mask ala S_ISDIR() to avoid mistaking
+        // sockets for directories.
+        mode & S_IFMT == S_IFDIR
     }
 
     #[cfg(windows)]
@@ -1047,6 +1055,7 @@ mod tests {
         assert!(path_ends_with_terminator(Path::new("/some/path/")));
 
         // Path ends with a backslash
+        #[cfg(windows)]
         assert!(path_ends_with_terminator(Path::new("C:\\some\\path\\")));
 
         // Path does not end with a terminator
@@ -1058,6 +1067,7 @@ mod tests {
 
         // Root path
         assert!(path_ends_with_terminator(Path::new("/")));
+        #[cfg(windows)]
         assert!(path_ends_with_terminator(Path::new("C:\\")));
     }
 

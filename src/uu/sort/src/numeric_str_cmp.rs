@@ -5,12 +5,12 @@
 
 //! Fast comparison for strings representing a base 10 number without precision loss.
 //!
-//! To be able to short-circuit when comparing, [NumInfo] must be passed along with each number
-//! to [numeric_str_cmp]. [NumInfo] is generally obtained by calling [NumInfo::parse] and should be cached.
-//! It is allowed to arbitrarily modify the exponent afterwards, which is equivalent to shifting the decimal point.
+//! To be able to short-circuit when comparing, [`NumInfo`] must be passed along with each number
+//! to [`numeric_str_cmp`]. [`NumInfo`] is generally obtained by calling [`NumInfo::parse`] and should be cached.
+//! It is allowed to arbitrarily modify the exponent afterward, which is equivalent to shifting the decimal point.
 //!
-//! More specifically, exponent can be understood so that the original number is in (1..10)*10^exponent.
-//! From that follows the constraints of this algorithm: It is able to compare numbers in ±(1*10^[i64::MIN]..10*10^[i64::MAX]).
+//! More specifically, exponent can be understood so that the original number is in `(1..10)*10^exponent`.
+//! From that follows the constraints of this algorithm: It is able to compare numbers in ±(1*10^[`i64::MIN`]..10*10^[`i64::MAX`]).
 
 use std::{cmp::Ordering, ops::Range};
 
@@ -28,8 +28,8 @@ pub struct NumInfo {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct NumInfoParseSettings {
     pub accept_si_units: bool,
-    pub thousands_separator: Option<char>,
-    pub decimal_pt: Option<char>,
+    pub thousands_separator: Option<u8>,
+    pub decimal_pt: Option<u8>,
 }
 
 impl Default for NumInfoParseSettings {
@@ -37,21 +37,21 @@ impl Default for NumInfoParseSettings {
         Self {
             accept_si_units: false,
             thousands_separator: None,
-            decimal_pt: Some('.'),
+            decimal_pt: Some(b'.'),
         }
     }
 }
 
 impl NumInfo {
-    /// Parse NumInfo for this number.
-    /// Also returns the range of num that should be passed to numeric_str_cmp later.
+    /// Parse [`NumInfo`] for this number.
+    /// Also returns the range of num that should be passed to [`numeric_str_cmp`] later.
     ///
     /// Leading zeros will be excluded from the returned range. If the number consists of only zeros,
     /// an empty range (idx..idx) is returned so that idx is the char after the last zero.
     /// If the input is not a number (which has to be treated as zero), the returned empty range
     /// will be 0..0.
     #[allow(clippy::cognitive_complexity)]
-    pub fn parse(num: &str, parse_settings: &NumInfoParseSettings) -> (Self, Range<usize>) {
+    pub fn parse(num: &[u8], parse_settings: &NumInfoParseSettings) -> (Self, Range<usize>) {
         let mut exponent = -1;
         let mut had_decimal_pt = false;
         let mut had_digit = false;
@@ -60,12 +60,12 @@ impl NumInfo {
 
         let mut first_char = true;
 
-        for (idx, char) in num.char_indices() {
-            if first_char && char.is_whitespace() {
+        for (idx, &char) in num.iter().enumerate() {
+            if first_char && char.is_ascii_whitespace() {
                 continue;
             }
 
-            if first_char && char == '-' {
+            if first_char && char == b'-' {
                 sign = Sign::Negative;
                 first_char = false;
                 continue;
@@ -84,7 +84,16 @@ impl NumInfo {
                     let has_si_unit = parse_settings.accept_si_units
                         && matches!(
                             char,
-                            'K' | 'k' | 'M' | 'G' | 'T' | 'P' | 'E' | 'Z' | 'Y' | 'R' | 'Q'
+                            b'K' | b'k'
+                                | b'M'
+                                | b'G'
+                                | b'T'
+                                | b'P'
+                                | b'E'
+                                | b'Z'
+                                | b'Y'
+                                | b'R'
+                                | b'Q'
                         );
                     (
                         Self { exponent, sign },
@@ -112,7 +121,7 @@ impl NumInfo {
                 continue;
             }
             had_digit = true;
-            if start.is_none() && char == '0' {
+            if start.is_none() && char == b'0' {
                 if had_decimal_pt {
                     // We're parsing a number whose first nonzero digit is after the decimal point.
                     exponent -= 1;
@@ -124,7 +133,7 @@ impl NumInfo {
             if !had_decimal_pt {
                 exponent += 1;
             }
-            if start.is_none() && char != '0' {
+            if start.is_none() && char != b'0' {
                 start = Some(idx);
             }
         }
@@ -150,7 +159,7 @@ impl NumInfo {
     }
 
     fn is_invalid_char(
-        c: char,
+        c: u8,
         had_decimal_pt: &mut bool,
         parse_settings: &NumInfoParseSettings,
     ) -> bool {
@@ -168,19 +177,19 @@ impl NumInfo {
     }
 }
 
-fn get_unit(unit: Option<char>) -> u8 {
+fn get_unit(unit: Option<u8>) -> u8 {
     if let Some(unit) = unit {
         match unit {
-            'K' | 'k' => 1,
-            'M' => 2,
-            'G' => 3,
-            'T' => 4,
-            'P' => 5,
-            'E' => 6,
-            'Z' => 7,
-            'Y' => 8,
-            'R' => 9,
-            'Q' => 10,
+            b'K' | b'k' => 1,
+            b'M' => 2,
+            b'G' => 3,
+            b'T' => 4,
+            b'P' => 5,
+            b'E' => 6,
+            b'Z' => 7,
+            b'Y' => 8,
+            b'R' => 9,
+            b'Q' => 10,
             _ => 0,
         }
     } else {
@@ -191,16 +200,16 @@ fn get_unit(unit: Option<char>) -> u8 {
 /// Compare two numbers according to the rules of human numeric comparison.
 /// The SI-Unit takes precedence over the actual value (i.e. 2000M < 1G).
 pub fn human_numeric_str_cmp(
-    (a, a_info): (&str, &NumInfo),
-    (b, b_info): (&str, &NumInfo),
+    (a, a_info): (&[u8], &NumInfo),
+    (b, b_info): (&[u8], &NumInfo),
 ) -> Ordering {
     // 1. Sign
     if a_info.sign != b_info.sign {
         return a_info.sign.cmp(&b_info.sign);
     }
     // 2. Unit
-    let a_unit = get_unit(a.chars().next_back());
-    let b_unit = get_unit(b.chars().next_back());
+    let a_unit = get_unit(a.iter().next_back().copied());
+    let b_unit = get_unit(b.iter().next_back().copied());
     let ordering = a_unit.cmp(&b_unit);
     if ordering == Ordering::Equal {
         // 3. Number
@@ -213,9 +222,9 @@ pub fn human_numeric_str_cmp(
 }
 
 /// Compare two numbers as strings without parsing them as a number first. This should be more performant and can handle numbers more precisely.
-/// NumInfo is needed to provide a fast path for most numbers.
+/// [`NumInfo`] is needed to provide a fast path for most numbers.
 #[inline(always)]
-pub fn numeric_str_cmp((a, a_info): (&str, &NumInfo), (b, b_info): (&str, &NumInfo)) -> Ordering {
+pub fn numeric_str_cmp((a, a_info): (&[u8], &NumInfo), (b, b_info): (&[u8], &NumInfo)) -> Ordering {
     // check for a difference in the sign
     if a_info.sign != b_info.sign {
         return a_info.sign.cmp(&b_info.sign);
@@ -226,22 +235,22 @@ pub fn numeric_str_cmp((a, a_info): (&str, &NumInfo), (b, b_info): (&str, &NumIn
         a_info.exponent.cmp(&b_info.exponent)
     } else {
         // walk the characters from the front until we find a difference
-        let mut a_chars = a.chars().filter(char::is_ascii_digit);
-        let mut b_chars = b.chars().filter(char::is_ascii_digit);
+        let mut a_chars = a.iter().copied().filter(u8::is_ascii_digit);
+        let mut b_chars = b.iter().copied().filter(u8::is_ascii_digit);
         loop {
             let a_next = a_chars.next();
             let b_next = b_chars.next();
             match (a_next, b_next) {
                 (None, None) => break Ordering::Equal,
                 (Some(c), None) => {
-                    break if c == '0' && a_chars.all(|c| c == '0') {
+                    break if c == b'0' && a_chars.all(|c| c == b'0') {
                         Ordering::Equal
                     } else {
                         Ordering::Greater
                     };
                 }
                 (None, Some(c)) => {
-                    break if c == '0' && b_chars.all(|c| c == '0') {
+                    break if c == b'0' && b_chars.all(|c| c == b'0') {
                         Ordering::Equal
                     } else {
                         Ordering::Less
@@ -270,7 +279,7 @@ mod tests {
 
     #[test]
     fn parses_exp() {
-        let n = "1";
+        let n = b"1";
         assert_eq!(
             NumInfo::parse(n, &NumInfoParseSettings::default()),
             (
@@ -281,7 +290,7 @@ mod tests {
                 0..1
             )
         );
-        let n = "100";
+        let n = b"100";
         assert_eq!(
             NumInfo::parse(n, &NumInfoParseSettings::default()),
             (
@@ -292,12 +301,12 @@ mod tests {
                 0..3
             )
         );
-        let n = "1,000";
+        let n = b"1,000";
         assert_eq!(
             NumInfo::parse(
                 n,
                 &NumInfoParseSettings {
-                    thousands_separator: Some(','),
+                    thousands_separator: Some(b','),
                     ..Default::default()
                 }
             ),
@@ -309,7 +318,7 @@ mod tests {
                 0..5
             )
         );
-        let n = "1,000";
+        let n = b"1,000";
         assert_eq!(
             NumInfo::parse(n, &NumInfoParseSettings::default()),
             (
@@ -320,7 +329,7 @@ mod tests {
                 0..1
             )
         );
-        let n = "1000.00";
+        let n = b"1000.00";
         assert_eq!(
             NumInfo::parse(n, &NumInfoParseSettings::default()),
             (
@@ -334,7 +343,7 @@ mod tests {
     }
     #[test]
     fn parses_negative_exp() {
-        let n = "0.00005";
+        let n = b"0.00005";
         assert_eq!(
             NumInfo::parse(n, &NumInfoParseSettings::default()),
             (
@@ -345,7 +354,7 @@ mod tests {
                 6..7
             )
         );
-        let n = "00000.00005";
+        let n = b"00000.00005";
         assert_eq!(
             NumInfo::parse(n, &NumInfoParseSettings::default()),
             (
@@ -360,7 +369,7 @@ mod tests {
 
     #[test]
     fn parses_sign() {
-        let n = "5";
+        let n = b"5";
         assert_eq!(
             NumInfo::parse(n, &NumInfoParseSettings::default()),
             (
@@ -371,7 +380,7 @@ mod tests {
                 0..1
             )
         );
-        let n = "-5";
+        let n = b"-5";
         assert_eq!(
             NumInfo::parse(n, &NumInfoParseSettings::default()),
             (
@@ -382,7 +391,7 @@ mod tests {
                 1..2
             )
         );
-        let n = "    -5";
+        let n = b"    -5";
         assert_eq!(
             NumInfo::parse(n, &NumInfoParseSettings::default()),
             (
@@ -395,7 +404,7 @@ mod tests {
         );
     }
 
-    fn test_helper(a: &str, b: &str, expected: Ordering) {
+    fn test_helper(a: &[u8], b: &[u8], expected: Ordering) {
         let (a_info, a_range) = NumInfo::parse(a, &NumInfoParseSettings::default());
         let (b_info, b_range) = NumInfo::parse(b, &NumInfoParseSettings::default());
         let ordering = numeric_str_cmp(
@@ -408,71 +417,71 @@ mod tests {
     }
     #[test]
     fn test_single_digit() {
-        test_helper("1", "2", Ordering::Less);
-        test_helper("0", "0", Ordering::Equal);
+        test_helper(b"1", b"2", Ordering::Less);
+        test_helper(b"0", b"0", Ordering::Equal);
     }
     #[test]
     fn test_minus() {
-        test_helper("-1", "-2", Ordering::Greater);
-        test_helper("-0", "-0", Ordering::Equal);
+        test_helper(b"-1", b"-2", Ordering::Greater);
+        test_helper(b"-0", b"-0", Ordering::Equal);
     }
     #[test]
     fn test_different_len() {
-        test_helper("-20", "-100", Ordering::Greater);
-        test_helper("10.0", "2.000000", Ordering::Greater);
+        test_helper(b"-20", b"-100", Ordering::Greater);
+        test_helper(b"10.0", b"2.000000", Ordering::Greater);
     }
     #[test]
     fn test_decimal_digits() {
-        test_helper("20.1", "20.2", Ordering::Less);
-        test_helper("20.1", "20.15", Ordering::Less);
-        test_helper("-20.1", "+20.15", Ordering::Less);
-        test_helper("-20.1", "-20", Ordering::Less);
+        test_helper(b"20.1", b"20.2", Ordering::Less);
+        test_helper(b"20.1", b"20.15", Ordering::Less);
+        test_helper(b"-20.1", b"+20.15", Ordering::Less);
+        test_helper(b"-20.1", b"-20", Ordering::Less);
     }
     #[test]
     fn test_trailing_zeroes() {
-        test_helper("20.00000", "20.1", Ordering::Less);
-        test_helper("20.00000", "20.0", Ordering::Equal);
+        test_helper(b"20.00000", b"20.1", Ordering::Less);
+        test_helper(b"20.00000", b"20.0", Ordering::Equal);
     }
     #[test]
     fn test_invalid_digits() {
-        test_helper("foo", "bar", Ordering::Equal);
-        test_helper("20.1", "a", Ordering::Greater);
-        test_helper("-20.1", "a", Ordering::Less);
-        test_helper("a", "0.15", Ordering::Less);
+        test_helper(b"foo", b"bar", Ordering::Equal);
+        test_helper(b"20.1", b"a", Ordering::Greater);
+        test_helper(b"-20.1", b"a", Ordering::Less);
+        test_helper(b"a", b"0.15", Ordering::Less);
     }
     #[test]
     fn test_multiple_decimal_pts() {
-        test_helper("10.0.0", "50.0.0", Ordering::Less);
-        test_helper("0.1.", "0.2.0", Ordering::Less);
-        test_helper("1.1.", "0", Ordering::Greater);
-        test_helper("1.1.", "-0", Ordering::Greater);
+        test_helper(b"10.0.0", b"50.0.0", Ordering::Less);
+        test_helper(b"0.1.", b"0.2.0", Ordering::Less);
+        test_helper(b"1.1.", b"0", Ordering::Greater);
+        test_helper(b"1.1.", b"-0", Ordering::Greater);
     }
     #[test]
     fn test_leading_decimal_pts() {
-        test_helper(".0", ".0", Ordering::Equal);
-        test_helper(".1", ".0", Ordering::Greater);
-        test_helper(".02", "0", Ordering::Greater);
+        test_helper(b".0", b".0", Ordering::Equal);
+        test_helper(b".1", b".0", Ordering::Greater);
+        test_helper(b".02", b"0", Ordering::Greater);
     }
     #[test]
     fn test_leading_zeroes() {
-        test_helper("000000.0", ".0", Ordering::Equal);
-        test_helper("0.1", "0000000000000.0", Ordering::Greater);
-        test_helper("-01", "-2", Ordering::Greater);
+        test_helper(b"000000.0", b".0", Ordering::Equal);
+        test_helper(b"0.1", b"0000000000000.0", Ordering::Greater);
+        test_helper(b"-01", b"-2", Ordering::Greater);
     }
 
     #[test]
     fn minus_zero() {
         // This matches GNU sort behavior.
-        test_helper("-0", "0", Ordering::Equal);
-        test_helper("-0x", "0", Ordering::Equal);
+        test_helper(b"-0", b"0", Ordering::Equal);
+        test_helper(b"-0x", b"0", Ordering::Equal);
     }
     #[test]
     fn double_minus() {
-        test_helper("--1", "0", Ordering::Equal);
+        test_helper(b"--1", b"0", Ordering::Equal);
     }
     #[test]
     fn single_minus() {
-        let info = NumInfo::parse("-", &NumInfoParseSettings::default());
+        let info = NumInfo::parse(b"-", &NumInfoParseSettings::default());
         assert_eq!(
             info,
             (
@@ -487,7 +496,7 @@ mod tests {
     #[test]
     fn invalid_with_unit() {
         let info = NumInfo::parse(
-            "-K",
+            b"-K",
             &NumInfoParseSettings {
                 accept_si_units: true,
                 ..Default::default()

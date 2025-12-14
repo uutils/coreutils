@@ -5,8 +5,6 @@
 
 // spell-checker:ignore fffffffffffffffc
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[test]
 fn basic_literal() {
@@ -86,10 +84,10 @@ fn escaped_unicode_incomplete() {
 #[test]
 fn escaped_unicode_invalid() {
     for arg in ["\\ud9d0", "\\U0000D8F9"] {
-        new_ucmd!().arg(arg).fails_with_code(1).stderr_only(format!(
-            "printf: invalid universal character name {}\n",
-            arg
-        ));
+        new_ucmd!()
+            .arg(arg)
+            .fails_with_code(1)
+            .stderr_only(format!("printf: invalid universal character name {arg}\n"));
     }
 }
 
@@ -807,7 +805,7 @@ fn test_overflow() {
 fn partial_char() {
     new_ucmd!()
         .args(&["%d", "'abc"])
-        .fails_with_code(1)
+        .succeeds()
         .stdout_is("97")
         .stderr_is(
             "printf: warning: bc: character(s) following character constant have been ignored\n",
@@ -906,6 +904,10 @@ fn pad_unsigned_three() {
         ("%#.3x", "0x003"),
         ("%#.3X", "0X003"),
         ("%#.3o", "003"),
+        ("%#05x", "0x003"),
+        ("%#05X", "0X003"),
+        ("%3x", "  3"),
+        ("%3X", "  3"),
     ] {
         new_ucmd!()
             .args(&[format, "3"])
@@ -1281,7 +1283,7 @@ fn float_arg_with_whitespace() {
         .fails()
         .stderr_contains("expected a numeric value");
 
-    // A input string with a whitespace special character that has
+    // An input string with a whitespace special character that has
     // not already been expanded should fail.
     new_ucmd!()
         .args(&["%f", "\\t0.1"])
@@ -1291,25 +1293,192 @@ fn float_arg_with_whitespace() {
 
 #[test]
 fn mb_input() {
-    for format in ["\"á", "\'á", "'\u{e1}"] {
+    let cases = vec![
+        ("%04x\n", "\"á", "00e1\n"),
+        ("%04x\n", "'á", "00e1\n"),
+        ("%04x\n", "'\u{e1}", "00e1\n"),
+        ("%i\n", "\"á", "225\n"),
+        ("%i\n", "'á", "225\n"),
+        ("%i\n", "'\u{e1}", "225\n"),
+        ("%f\n", "'á", "225.000000\n"),
+    ];
+    for (format, arg, stdout) in cases {
         new_ucmd!()
-            .args(&["%04x\n", format])
+            .args(&[format, arg])
             .succeeds()
-            .stdout_only("00e1\n");
+            .stdout_only(stdout);
     }
 
     let cases = vec![
-        ("\"á=", "="),
-        ("\'á-", "-"),
-        ("\'á=-==", "=-=="),
-        ("'\u{e1}++", "++"),
+        ("%04x\n", "\"á=", "00e1\n", "="),
+        ("%04x\n", "'á-", "00e1\n", "-"),
+        ("%04x\n", "'á=-==", "00e1\n", "=-=="),
+        ("%04x\n", "'á'", "00e1\n", "'"),
+        ("%04x\n", "'\u{e1}++", "00e1\n", "++"),
+        ("%04x\n", "''á'", "0027\n", "á'"),
+        ("%i\n", "\"á=", "225\n", "="),
     ];
-
-    for (format, expected) in cases {
+    for (format, arg, stdout, stderr) in cases {
         new_ucmd!()
-            .args(&["%04x\n", format])
+            .args(&[format, arg])
+            .succeeds()
+            .stdout_is(stdout)
+            .stderr_is(format!("printf: warning: {stderr}: character(s) following character constant have been ignored\n"));
+    }
+
+    for arg in ["\"", "'"] {
+        new_ucmd!()
+            .args(&["%04x\n", arg])
+            .fails()
+            .stderr_contains("expected a numeric value");
+    }
+}
+
+#[test]
+#[cfg(target_family = "unix")]
+fn mb_invalid_unicode() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let cases = vec![
+        ("%04x\n", b"\"\xe1", "00e1\n"),
+        ("%04x\n", b"'\xe1", "00e1\n"),
+        ("%i\n", b"\"\xe1", "225\n"),
+        ("%i\n", b"'\xe1", "225\n"),
+        ("%f\n", b"'\xe1", "225.000000\n"),
+    ];
+    for (format, arg, stdout) in cases {
+        new_ucmd!()
+            .arg(format)
+            .arg(OsStr::from_bytes(arg))
+            .succeeds()
+            .stdout_only(stdout);
+    }
+
+    let cases = vec![
+        (b"\"\xe1=".as_slice(), "="),
+        (b"'\xe1-".as_slice(), "-"),
+        (b"'\xe1=-==".as_slice(), "=-=="),
+        (b"'\xe1'".as_slice(), "'"),
+        // unclear if original or replacement character is better in stderr
+        //(b"''\xe1'".as_slice(), "'�'"),
+    ];
+    for (arg, expected) in cases {
+        new_ucmd!()
+            .arg("%04x\n")
+            .arg(OsStr::from_bytes(arg))
             .succeeds()
             .stdout_is("00e1\n")
             .stderr_is(format!("printf: warning: {expected}: character(s) following character constant have been ignored\n"));
+    }
+}
+
+#[test]
+fn positional_format_specifiers() {
+    new_ucmd!()
+        .args(&["%1$d%d-", "5", "10", "6", "20"])
+        .succeeds()
+        .stdout_only("55-1010-66-2020-");
+
+    new_ucmd!()
+        .args(&["%2$d%d-", "5", "10", "6", "20"])
+        .succeeds()
+        .stdout_only("105-206-");
+
+    new_ucmd!()
+        .args(&["%3$d%d-", "5", "10", "6", "20"])
+        .succeeds()
+        .stdout_only("65-020-");
+
+    new_ucmd!()
+        .args(&["%4$d%d-", "5", "10", "6", "20"])
+        .succeeds()
+        .stdout_only("205-");
+
+    new_ucmd!()
+        .args(&["%5$d%d-", "5", "10", "6", "20"])
+        .succeeds()
+        .stdout_only("05-");
+
+    new_ucmd!()
+        .args(&["%0$d%d-", "5", "10", "6", "20"])
+        .fails_with_code(1)
+        .stderr_only("printf: %0$: invalid conversion specification\n");
+
+    new_ucmd!()
+        .args(&[
+            "Octal: %6$o, Int: %1$d, Float: %4$f, String: %2$s, Hex: %7$x, Scientific: %5$e, Char: %9$c, Unsigned: %3$u, Integer: %8$i",
+            "42",          // 1$d - Int
+            "hello",       // 2$s - String
+            "100",         // 3$u - Unsigned
+            "3.14159",     // 4$f - Float
+            "0.00001",     // 5$e - Scientific
+            "77",          // 6$o - Octal
+            "255",         // 7$x - Hex
+            "123",         // 8$i - Integer
+            "A",           // 9$c - Char
+        ])
+        .succeeds()
+        .stdout_only("Octal: 115, Int: 42, Float: 3.141590, String: hello, Hex: ff, Scientific: 1.000000e-05, Char: A, Unsigned: 100, Integer: 123");
+}
+
+#[test]
+#[cfg(target_family = "unix")]
+fn non_utf_8_input() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    // ISO-8859-1 encoded text
+    // spell-checker:disable
+    const INPUT_AND_OUTPUT: &[u8] =
+        b"Swer an rehte g\xFCete wendet s\xEEn gem\xFCete, dem volget s\xE6lde und \xEAre.";
+    // spell-checker:enable
+
+    let os_str = OsStr::from_bytes(INPUT_AND_OUTPUT);
+
+    new_ucmd!()
+        .arg("%s")
+        .arg(os_str)
+        .succeeds()
+        .stdout_only_bytes(INPUT_AND_OUTPUT);
+
+    new_ucmd!()
+        .arg(os_str)
+        .succeeds()
+        .stdout_only_bytes(INPUT_AND_OUTPUT);
+
+    new_ucmd!()
+        .arg("%d")
+        .arg(os_str)
+        .fails()
+        .stderr_contains("expected a numeric value");
+}
+
+#[test]
+fn test_emoji_formatting() {
+    new_ucmd!()
+        .args(&["Status: %s 🎯 Count: %d\n", "Success 🚀", "42"])
+        .succeeds()
+        .stdout_only("Status: Success 🚀 🎯 Count: 42\n");
+}
+
+#[test]
+fn test_large_width_format() {
+    // Test that extremely large width specifications fail gracefully with an error
+    // rather than panicking. This tests the fix for the printf-surprise.sh GNU test.
+    // When printf tries to format with a width of 20 million, it should return
+    // an error message and exit code 1, not panic with exit code 101.
+    let test_cases = [
+        ("%20000000f", "0"),    // float formatting
+        ("%10000000s", "test"), // string formatting
+        ("%15000000d", "42"),   // integer formatting
+    ];
+
+    for (format, arg) in test_cases {
+        new_ucmd!()
+            .args(&[format, arg])
+            .fails_with_code(1)
+            .stderr_contains("write error")
+            .stdout_is("");
     }
 }

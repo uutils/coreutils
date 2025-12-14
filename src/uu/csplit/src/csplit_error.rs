@@ -2,38 +2,39 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use std::io;
 use thiserror::Error;
-
 use uucore::display::Quotable;
 use uucore::error::UError;
+use uucore::translate;
 
 /// Errors thrown by the csplit command
 #[derive(Debug, Error)]
 pub enum CsplitError {
     #[error("IO error: {}", _0)]
     IoError(#[from] io::Error),
-    #[error("{}: line number out of range", ._0.quote())]
+    #[error("{}", translate!("csplit-error-line-out-of-range", "pattern" => _0.quote()))]
     LineOutOfRange(String),
-    #[error("{}: line number out of range on repetition {}", ._0.quote(), _1)]
+    #[error("{}", translate!("csplit-error-line-out-of-range-on-repetition", "pattern" => _0.quote(), "repetition" => _1))]
     LineOutOfRangeOnRepetition(String, usize),
-    #[error("{}: match not found", ._0.quote())]
+    #[error("{}", translate!("csplit-error-match-not-found", "pattern" => _0.quote()))]
     MatchNotFound(String),
-    #[error("{}: match not found on repetition {}", ._0.quote(), _1)]
+    #[error("{}", translate!("csplit-error-match-not-found-on-repetition", "pattern" => _0.quote(), "repetition" => _1))]
     MatchNotFoundOnRepetition(String, usize),
-    #[error("0: line number must be greater than zero")]
+    #[error("{}", translate!("csplit-error-line-number-is-zero"))]
     LineNumberIsZero,
-    #[error("line number '{}' is smaller than preceding line number, {}", _0, _1)]
+    #[error("{}", translate!("csplit-error-line-number-smaller-than-previous", "current" => _0, "previous" => _1))]
     LineNumberSmallerThanPrevious(usize, usize),
-    #[error("{}: invalid pattern", ._0.quote())]
+    #[error("{}", translate!("csplit-error-invalid-pattern", "pattern" => _0.quote()))]
     InvalidPattern(String),
-    #[error("invalid number: {}", ._0.quote())]
+    #[error("{}", translate!("csplit-error-invalid-number", "number" => _0.quote()))]
     InvalidNumber(String),
-    #[error("incorrect conversion specification in suffix")]
+    #[error("{}", translate!("csplit-error-suffix-format-incorrect"))]
     SuffixFormatIncorrect,
-    #[error("too many % conversion specifications in suffix")]
+    #[error("{}", translate!("csplit-error-suffix-format-too-many-percents"))]
     SuffixFormatTooManyPercents,
-    #[error("{} is not a regular file", ._0.quote())]
+    #[error("{}", translate!("csplit-error-not-regular-file", "file" => _0.quote()))]
     NotRegularFile(String),
     #[error("{}", _0)]
     UError(Box<dyn UError>),

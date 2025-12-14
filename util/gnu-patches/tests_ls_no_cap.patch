@@ -8,13 +8,13 @@ index 99f0563bc..f7b9e7885 100755
  LS_COLORS=ca=1; export LS_COLORS
 -strace -e capget ls --color=always > /dev/null 2> out || fail=1
 -$EGREP 'capget\(' out || skip_ "your ls doesn't call capget"
-+strace -e llistxattr ls --color=always > /dev/null 2> out || fail=1
-+$EGREP 'llistxattr\(' out || skip_ "your ls doesn't call llistxattr"
++strace -e listxattr ls --color=always > /dev/null 2> out || fail=1
++$EGREP 'listxattr\(' out || skip_ "your ls doesn't call listxattr"
  
  LS_COLORS=ca=:; export LS_COLORS
 -strace -e capget ls --color=always > /dev/null 2> out || fail=1
 -$EGREP 'capget\(' out && fail=1
-+strace -e llistxattr ls --color=always > /dev/null 2> out || fail=1
-+$EGREP 'llistxattr\(' out && fail=1
++strace -e listxattr ls --color=always > /dev/null 2> out || fail=1
++$EGREP 'listxattr\(' out && fail=1
  
  Exit $fail

@@ -533,3 +533,50 @@ fn test_full() {
         .fails()
         .stderr_contains("No space left on device");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_join_non_utf8_paths() {
+    use std::fs::File;
+    use std::io::Write;
+
+    let ts = TestScenario::new(util_name!());
+    let test_dir = ts.fixtures.subdir.as_path();
+
+    // Create files directly with non-UTF-8 names
+    let file1_bytes = b"test_\xFF\xFE_1.txt";
+    let file2_bytes = b"test_\xFF\xFE_2.txt";
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        let file1_name = std::ffi::OsStr::from_bytes(file1_bytes);
+        let file2_name = std::ffi::OsStr::from_bytes(file2_bytes);
+
+        let mut file1 = File::create(test_dir.join(file1_name)).unwrap();
+        file1.write_all(b"a 1\n").unwrap();
+
+        let mut file2 = File::create(test_dir.join(file2_name)).unwrap();
+        file2.write_all(b"a 2\n").unwrap();
+
+        ts.ucmd()
+            .arg(file1_name)
+            .arg(file2_name)
+            .succeeds()
+            .stdout_only("a 1 2\n");
+    }
+}
+
+#[test]
+fn join_emoji_delim_inner_key() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("file1", "a🗿b\n");
+    at.write("file2", "u🗿b\n");
+
+    ts.ucmd()
+        .args(&["-t🗿", "-1", "2", "-2", "2", "file1", "file2"])
+        .succeeds()
+        .stdout_only("b🗿a🗿u\n");
+}

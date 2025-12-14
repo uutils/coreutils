@@ -1,3 +1,5 @@
+# spell-checker:ignore bigdecimal
+
 [package]
 name = "uu_sort"
 description = "sort ~ (uutils) sort input lines"
@@ -18,6 +20,7 @@ workspace = true
 path = "src/sort.rs"
 
 [dependencies]
+bigdecimal = { workspace = true }
 binary-heap-plus = { workspace = true }
 clap = { workspace = true }
 compare = { workspace = true }
@@ -31,11 +34,29 @@ self_cell = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 unicode-width = { workspace = true }
-uucore = { workspace = true, features = ["fs", "parser", "version-cmp"] }
-
-[target.'cfg(target_os = "linux")'.dependencies]
+uucore = { workspace = true, features = ["fs", "parser-size", "version-cmp"] }
+fluent = { workspace = true }
 nix = { workspace = true }
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = [
+  "benchmark",
+  "fs",
+  "parser-size",
+  "version-cmp",
+  "i18n-collator",
+] }
 
 [[bin]]
 name = "sort"
 path = "src/main.rs"
+
+[[bench]]
+name = "sort_bench"
+harness = false
+
+[[bench]]
+name = "sort_locale_bench"
+harness = false

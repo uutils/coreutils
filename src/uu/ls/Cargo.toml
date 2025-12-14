@@ -1,3 +1,5 @@
+# spell-checker:ignore tzdb zoneinfo
+
 [package]
 name = "uu_ls"
 description = "ls ~ (uutils) display directory contents"
@@ -19,31 +21,42 @@ path = "src/ls.rs"
 
 [dependencies]
 ansi-width = { workspace = true }
-chrono = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 glob = { workspace = true }
 hostname = { workspace = true }
+fnv = { workspace = true }
 lscolors = { workspace = true }
-number_prefix = { workspace = true }
 selinux = { workspace = true, optional = true }
 terminal_size = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "colors",
-  "custom-tz-fmt",
   "entries",
   "format",
   "fs",
+  "fsext",
   "fsxattr",
-  "parser",
+  "parser-size",
+  "parser-glob",
   "quoting-style",
+  "time",
   "version-cmp",
 ] }
 uutils_term_grid = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "ls"
 path = "src/main.rs"
 
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "ls_bench"
+harness = false
+
 [features]
-feat_selinux = ["selinux"]
+feat_selinux = ["selinux", "uucore/selinux"]

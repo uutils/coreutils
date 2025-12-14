@@ -6,8 +6,7 @@ use regex::Regex;
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 use std::fs::OpenOptions;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
+
 #[test]
 fn test_no_args() {
     new_ucmd!().fails().no_output();

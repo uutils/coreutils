@@ -37,8 +37,12 @@ pub mod human;
 pub mod num_format;
 mod spec;
 
+pub use self::escape::{EscapedChar, OctalParsing};
 use crate::extendedbigdecimal::ExtendedBigDecimal;
-pub use argument::*;
+pub use argument::{FormatArgument, FormatArguments};
+
+use self::{escape::parse_escape_code, num_format::Formatter};
+use crate::{NonUtf8OsStrError, error::UError};
 pub use spec::Spec;
 use std::{
     error::Error,
@@ -49,13 +53,6 @@ use std::{
 };
 
 use os_display::Quotable;
-
-use crate::error::UError;
-
-pub use self::{
-    escape::{EscapedChar, OctalParsing, parse_escape_code},
-    num_format::Formatter,
-};
 
 #[derive(Debug)]
 pub enum FormatError {
@@ -74,6 +71,7 @@ pub enum FormatError {
     /// The hexadecimal characters represent a code point that cannot represent a
     /// Unicode character (e.g., a surrogate code point)
     InvalidCharacter(char, Vec<u8>),
+    InvalidEncoding(NonUtf8OsStrError),
 }
 
 impl Error for FormatError {}
@@ -82,6 +80,12 @@ impl UError for FormatError {}
 impl From<std::io::Error> for FormatError {
     fn from(value: std::io::Error) -> Self {
         Self::IoError(value)
+    }
+}
+
+impl From<NonUtf8OsStrError> for FormatError {
+    fn from(value: NonUtf8OsStrError) -> Self {
+        Self::InvalidEncoding(value)
     }
 }
 
@@ -109,17 +113,36 @@ impl Display for FormatError {
             Self::InvalidPrecision(precision) => write!(f, "invalid precision: '{precision}'"),
             // TODO: Error message below needs some work
             Self::WrongSpecType => write!(f, "wrong % directive type was given"),
-            Self::IoError(_) => write!(f, "io error"),
+            Self::IoError(_) => write!(f, "write error"),
             Self::NoMoreArguments => write!(f, "no more arguments"),
             Self::InvalidArgument(_) => write!(f, "invalid argument"),
             Self::MissingHex => write!(f, "missing hexadecimal number in escape"),
             Self::InvalidCharacter(escape_char, digits) => write!(
                 f,
-                "invalid universal character name \\{}{}",
-                escape_char,
+                "invalid universal character name \\{escape_char}{}",
                 String::from_utf8_lossy(digits)
             ),
+            Self::InvalidEncoding(no) => no.fmt(f),
         }
+    }
+}
+
+/// Maximum width for formatting to prevent memory allocation panics.
+/// Rust's formatter will panic when trying to allocate memory for very large widths.
+/// This limit is somewhat arbitrary but should be well above any practical use case
+/// while still preventing formatter panics.
+const MAX_FORMAT_WIDTH: usize = 1_000_000;
+
+/// Check if a width is too large for formatting.
+/// Returns an error if the width exceeds MAX_FORMAT_WIDTH.
+fn check_width(width: usize) -> std::io::Result<()> {
+    if width > MAX_FORMAT_WIDTH {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::OutOfMemory,
+            "formatting width too large",
+        ))
+    } else {
+        Ok(())
     }
 }
 
@@ -161,15 +184,15 @@ impl FormatChar for EscapedChar {
 }
 
 impl<C: FormatChar> FormatItem<C> {
-    pub fn write<'a>(
+    pub fn write(
         &self,
         writer: impl Write,
-        args: &mut impl Iterator<Item = &'a FormatArgument>,
+        args: &mut FormatArguments,
     ) -> Result<ControlFlow<()>, FormatError> {
         match self {
             Self::Spec(spec) => spec.write(writer, args)?,
             Self::Char(c) => return c.write(writer).map_err(FormatError::IoError),
-        };
+        }
         Ok(ControlFlow::Continue(()))
     }
 }
@@ -280,9 +303,12 @@ fn printf_writer<'a>(
     format_string: impl AsRef<[u8]>,
     args: impl IntoIterator<Item = &'a FormatArgument>,
 ) -> Result<(), FormatError> {
-    let mut args = args.into_iter();
+    let args = args.into_iter().cloned().collect::<Vec<_>>();
+    let mut args = FormatArguments::new(&args);
     for item in parse_spec_only(format_string.as_ref()) {
-        item?.write(&mut writer, &mut args)?;
+        if item?.write(&mut writer, &mut args)?.is_break() {
+            break;
+        }
     }
     Ok(())
 }

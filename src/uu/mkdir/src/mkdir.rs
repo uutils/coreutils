@@ -13,16 +13,14 @@ use std::path::{Path, PathBuf};
 #[cfg(not(windows))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
+use uucore::translate;
+
 #[cfg(not(windows))]
 use uucore::mode;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
-use uucore::{format_usage, help_about, help_section, help_usage, show_if_err};
+use uucore::{format_usage, show_if_err};
 
 static DEFAULT_PERM: u32 = 0o777;
-
-const ABOUT: &str = help_about!("mkdir.md");
-const USAGE: &str = help_usage!("mkdir.md");
-const AFTER_HELP: &str = help_section!("after help", "mkdir.md");
 
 mod options {
     pub const MODE: &str = "mode";
@@ -44,66 +42,35 @@ pub struct Config<'a> {
     /// Print message for each created directory.
     pub verbose: bool,
 
-    /// Set SELinux security context.
+    /// Set `SELinux` security context.
     pub set_selinux_context: bool,
 
-    /// Specific SELinux context.
+    /// Specific `SELinux` context.
     pub context: Option<&'a String>,
 }
 
 #[cfg(windows)]
-fn get_mode(_matches: &ArgMatches, _mode_had_minus_prefix: bool) -> Result<u32, String> {
+fn get_mode(_matches: &ArgMatches) -> Result<u32, String> {
     Ok(DEFAULT_PERM)
 }
 
 #[cfg(not(windows))]
-fn get_mode(matches: &ArgMatches, mode_had_minus_prefix: bool) -> Result<u32, String> {
+fn get_mode(matches: &ArgMatches) -> Result<u32, String> {
     // Not tested on Windows
-    let mut new_mode = DEFAULT_PERM;
-
     if let Some(m) = matches.get_one::<String>(options::MODE) {
-        for mode in m.split(',') {
-            if mode.chars().any(|c| c.is_ascii_digit()) {
-                new_mode = mode::parse_numeric(new_mode, m, true)?;
-            } else {
-                let cmode = if mode_had_minus_prefix {
-                    // clap parsing is finished, now put prefix back
-                    format!("-{mode}")
-                } else {
-                    mode.to_string()
-                };
-                new_mode = mode::parse_symbolic(new_mode, &cmode, mode::get_umask(), true)?;
-            }
-        }
-        Ok(new_mode)
+        mode::parse_chmod(DEFAULT_PERM, m, true, mode::get_umask())
     } else {
         // If no mode argument is specified return the mode derived from umask
-        Ok(!mode::get_umask() & 0o0777)
+        Ok(!mode::get_umask() & DEFAULT_PERM)
     }
-}
-
-#[cfg(windows)]
-fn strip_minus_from_mode(_args: &mut [String]) -> bool {
-    false
-}
-
-#[cfg(not(windows))]
-fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
-    mode::strip_minus_from_mode(args)
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut args = args.collect_lossy();
-
-    // Before we can parse 'args' with clap (and previously getopts),
-    // a possible MODE prefix '-' needs to be removed (e.g. "chmod -x FILE").
-    let mode_had_minus_prefix = strip_minus_from_mode(&mut args);
-
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
-    let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let dirs = matches
         .get_many::<OsString>(options::DIRS)
@@ -115,7 +82,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let set_selinux_context = matches.get_flag(options::SELINUX);
     let context = matches.get_one::<String>(options::CONTEXT);
 
-    match get_mode(&matches, mode_had_minus_prefix) {
+    match get_mode(&matches) {
         Ok(mode) => {
             let config = Config {
                 recursive,
@@ -133,20 +100,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .about(translate!("mkdir-about"))
+        .override_usage(format_usage(&translate!("mkdir-usage")))
         .infer_long_args(true)
+        .after_help(translate!("mkdir-after-help"))
         .arg(
             Arg::new(options::MODE)
                 .short('m')
                 .long(options::MODE)
-                .help("set file mode (not implemented on windows)"),
+                .help(translate!("mkdir-help-mode"))
+                .allow_hyphen_values(true)
+                .num_args(1),
         )
         .arg(
             Arg::new(options::PARENTS)
                 .short('p')
                 .long(options::PARENTS)
-                .help("make parent directories as needed")
+                .help(translate!("mkdir-help-parents"))
                 .overrides_with(options::PARENTS)
                 .action(ArgAction::SetTrue),
         )
@@ -154,18 +125,21 @@ pub fn uu_app() -> Command {
             Arg::new(options::VERBOSE)
                 .short('v')
                 .long(options::VERBOSE)
-                .help("print a message for each printed directory")
+                .help(translate!("mkdir-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SELINUX)
                 .short('Z')
-                .help("set SELinux security context of each created directory to the default type")
+                .help(translate!("mkdir-help-selinux"))
                 .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(options::CONTEXT).long(options::CONTEXT).value_name("CTX").help(
-            "like -Z, or if CTX is specified then set the SELinux or SMACK security context to CTX",
-        ))
+        .arg(
+            Arg::new(options::CONTEXT)
+                .long(options::CONTEXT)
+                .value_name("CTX")
+                .help(translate!("mkdir-help-context")),
+        )
         .arg(
             Arg::new(options::DIRS)
                 .action(ArgAction::Append)
@@ -206,10 +180,9 @@ pub fn mkdir(path: &Path, config: &Config) -> UResult<()> {
     if path.as_os_str().is_empty() {
         return Err(USimpleError::new(
             1,
-            "cannot create directory '': No such file or directory".to_owned(),
+            translate!("mkdir-error-empty-directory-name"),
         ));
     }
-
     // Special case to match GNU's behavior:
     // mkdir -p foo/. should work and just create foo/
     // std::fs::create_dir("foo/."); fails in pure Rust
@@ -223,8 +196,9 @@ fn chmod(path: &Path, mode: u32) -> UResult<()> {
     use std::fs::{Permissions, set_permissions};
     use std::os::unix::fs::PermissionsExt;
     let mode = Permissions::from_mode(mode);
-    set_permissions(path, mode)
-        .map_err_context(|| format!("cannot set permissions {}", path.quote()))
+    set_permissions(path, mode).map_err_context(
+        || translate!("mkdir-error-cannot-set-permissions", "path" => path.quote()),
+    )
 }
 
 #[cfg(windows)]
@@ -233,37 +207,61 @@ fn chmod(_path: &Path, _mode: u32) -> UResult<()> {
     Ok(())
 }
 
-// Return true if the directory at `path` has been created by this call.
-// `is_parent` argument is not used on windows
-#[allow(unused_variables)]
+// Create a directory at the given path.
+// Uses iterative approach instead of recursion to avoid stack overflow with deep nesting.
 fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
     let path_exists = path.exists();
     if path_exists && !config.recursive {
         return Err(USimpleError::new(
             1,
-            format!("{}: File exists", path.display()),
+            translate!("mkdir-error-file-exists", "path" => path.to_string_lossy()),
         ));
     }
     if path == Path::new("") {
         return Ok(());
     }
 
+    // Iterative implementation: collect all directories to create, then create them
+    // This avoids stack overflow with deeply nested directories
     if config.recursive {
-        match path.parent() {
-            Some(p) => create_dir(p, true, config)?,
-            None => {
-                USimpleError::new(1, "failed to create whole tree");
+        // Pre-allocate approximate capacity to avoid reallocations
+        let mut dirs_to_create = Vec::with_capacity(16);
+        let mut current = path;
+
+        // First pass: collect all parent directories
+        while let Some(parent) = current.parent() {
+            if parent == Path::new("") {
+                break;
+            }
+            dirs_to_create.push(parent);
+            current = parent;
+        }
+
+        // Second pass: create directories from root to leaf
+        // Only create those that don't exist
+        for dir in dirs_to_create.iter().rev() {
+            if !dir.exists() {
+                create_single_dir(dir, true, config)?;
             }
         }
     }
+
+    // Create the target directory
+    create_single_dir(path, is_parent, config)
+}
+
+// Helper function to create a single directory with appropriate permissions
+// `is_parent` argument is not used on windows
+#[allow(unused_variables)]
+fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
+    let path_exists = path.exists();
 
     match std::fs::create_dir(path) {
         Ok(()) => {
             if config.verbose {
                 println!(
-                    "{}: created directory {}",
-                    uucore::util_name(),
-                    path.quote()
+                    "{}",
+                    translate!("mkdir-verbose-created-directory", "util_name" => uucore::util_name(), "path" => path.quote())
                 );
             }
 
@@ -298,17 +296,31 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
                 if let Err(e) = uucore::selinux::set_selinux_security_context(path, config.context)
                 {
                     let _ = std::fs::remove_dir(path);
-                    return Err(USimpleError::new(
-                        1,
-                        format!("failed to set SELinux security context: {}", e),
-                    ));
+                    return Err(USimpleError::new(1, e.to_string()));
                 }
             }
 
             Ok(())
         }
 
-        Err(_) if path.is_dir() => Ok(()),
+        Err(_) if path.is_dir() => {
+            // Directory already exists - check if this is a logical directory creation
+            // (i.e., not just a parent reference like "test_dir/..")
+            let ends_with_parent_dir = matches!(
+                path.components().next_back(),
+                Some(std::path::Component::ParentDir)
+            );
+
+            // Print verbose message for logical directories, even if they exist
+            // This matches GNU behavior for paths like "test_dir/../test_dir_a"
+            if config.verbose && is_parent && config.recursive && !ends_with_parent_dir {
+                println!(
+                    "{}",
+                    translate!("mkdir-verbose-created-directory", "util_name" => uucore::util_name(), "path" => path.quote())
+                );
+            }
+            Ok(())
+        }
         Err(e) => Err(e.into()),
     }
 }

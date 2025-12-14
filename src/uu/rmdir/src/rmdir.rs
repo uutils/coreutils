@@ -13,11 +13,10 @@ use std::io;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{UResult, set_exit_code, strip_errno};
+use uucore::translate;
 
-use uucore::{format_usage, help_about, help_usage, show_error, util_name};
+use uucore::{format_usage, show_error, util_name};
 
-static ABOUT: &str = help_about!("rmdir.md");
-const USAGE: &str = help_usage!("rmdir.md");
 static OPT_IGNORE_FAIL_NON_EMPTY: &str = "ignore-fail-on-non-empty";
 static OPT_PARENTS: &str = "parents";
 static OPT_VERBOSE: &str = "verbose";
@@ -26,7 +25,7 @@ static ARG_DIRS: &str = "dirs";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let opts = Opts {
         ignore: matches.get_flag(OPT_IGNORE_FAIL_NON_EMPTY),
@@ -73,15 +72,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     let no_slash: &Path = OsStr::from_bytes(&bytes[..bytes.len() - 1]).as_ref();
                     if no_slash.is_symlink() && points_to_directory(no_slash).unwrap_or(true) {
                         show_error!(
-                            "failed to remove {}: Symbolic link not followed",
-                            path.quote()
+                            "{}",
+                            translate!("rmdir-error-symbolic-link-not-followed", "path" => path.quote())
                         );
                         continue;
                     }
                 }
             }
 
-            show_error!("failed to remove {}: {}", path.quote(), strip_errno(&error));
+            show_error!(
+                "{}",
+                translate!("rmdir-error-failed-to-remove", "path" => path.quote(), "err" => strip_errno(&error))
+            );
         }
     }
 
@@ -109,7 +111,10 @@ fn remove(mut path: &Path, opts: Opts) -> Result<(), Error<'_>> {
 
 fn remove_single(path: &Path, opts: Opts) -> Result<(), Error<'_>> {
     if opts.verbose {
-        println!("{}: removing directory, {}", util_name(), path.quote());
+        println!(
+            "{}",
+            translate!("rmdir-verbose-removing-directory", "util_name" => util_name(), "path" => path.quote())
+        );
     }
     remove_dir(path).map_err(|error| Error { error, path })
 }
@@ -165,30 +170,28 @@ struct Opts {
 pub fn uu_app() -> Command {
     Command::new(util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .help_template(uucore::localized_help_template(util_name()))
+        .about(translate!("rmdir-about"))
+        .override_usage(format_usage(&translate!("rmdir-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_IGNORE_FAIL_NON_EMPTY)
                 .long(OPT_IGNORE_FAIL_NON_EMPTY)
-                .help("ignore each failure that is solely because a directory is non-empty")
+                .help(translate!("rmdir-help-ignore-fail-non-empty"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_PARENTS)
                 .short('p')
                 .long(OPT_PARENTS)
-                .help(
-                    "remove DIRECTORY and its ancestors; e.g.,
-                  'rmdir -p a/b/c' is similar to rmdir a/b/c a/b a",
-                )
+                .help(translate!("rmdir-help-parents"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
                 .short('v')
                 .long(OPT_VERBOSE)
-                .help("output a diagnostic for every directory processed")
+                .help(translate!("rmdir-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

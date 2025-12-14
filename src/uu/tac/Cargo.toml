@@ -26,6 +26,7 @@ regex = { workspace = true }
 clap = { workspace = true }
 uucore = { workspace = true }
 thiserror = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "tac"

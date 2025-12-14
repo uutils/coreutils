@@ -5,6 +5,8 @@
 
 // spell-checker:ignore nconfined
 
+#[cfg(feature = "feat_selinux")]
+use uucore::selinux::get_getfattr_output;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
@@ -30,6 +32,13 @@ fn test_create_one_fifo_with_invalid_mode() {
         .arg("abcd")
         .arg("-m")
         .arg("invalid")
+        .fails()
+        .stderr_contains("invalid mode");
+
+    new_ucmd!()
+        .arg("abcd")
+        .arg("-m")
+        .arg("0999")
         .fails()
         .stderr_contains("invalid mode");
 }
@@ -80,6 +89,18 @@ fn test_create_fifo_with_mode_and_umask() {
 
     test_fifo_creation("734", 0o077, "prwx-wxr--"); // spell-checker:disable-line
     test_fifo_creation("706", 0o777, "prwx---rw-"); // spell-checker:disable-line
+    test_fifo_creation("a=rwx", 0o022, "prwxrwxrwx"); // spell-checker:disable-line
+    test_fifo_creation("a=rx", 0o022, "pr-xr-xr-x"); // spell-checker:disable-line
+    test_fifo_creation("a=r", 0o022, "pr--r--r--"); // spell-checker:disable-line
+    test_fifo_creation("=rwx", 0o022, "prwxr-xr-x"); // spell-checker:disable-line
+    test_fifo_creation("u+w", 0o022, "prw-rw-rw-"); // spell-checker:disable-line
+    test_fifo_creation("u-w", 0o022, "pr--rw-rw-"); // spell-checker:disable-line
+    test_fifo_creation("u+x", 0o022, "prwxrw-rw-"); // spell-checker:disable-line
+    test_fifo_creation("u-r,g-w,o+x", 0o022, "p-w-r--rwx"); // spell-checker:disable-line
+    test_fifo_creation("a=rwx,o-w", 0o022, "prwxrwxr-x"); // spell-checker:disable-line
+    test_fifo_creation("=rwx,o-w", 0o022, "prwxr-xr-x"); // spell-checker:disable-line
+    test_fifo_creation("ug+rw,o+r", 0o022, "prw-rw-rw-"); // spell-checker:disable-line
+    test_fifo_creation("u=rwx,g=rx,o=", 0o022, "prwxr-x---"); // spell-checker:disable-line
 }
 
 #[test]
@@ -106,9 +127,34 @@ fn test_create_fifo_with_umask() {
 }
 
 #[test]
+fn test_create_fifo_permission_denied() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let no_exec_dir = "owner_no_exec_dir";
+    let named_pipe = "owner_no_exec_dir/mkfifo_err";
+
+    at.mkdir(no_exec_dir);
+    at.set_mode(no_exec_dir, 0o644);
+
+    let err_msg = format!(
+        "mkfifo: cannot create fifo '{named_pipe}': File exists
+mkfifo: cannot set permissions on '{named_pipe}': Permission denied (os error 13)
+"
+    );
+
+    scene
+        .ucmd()
+        .arg(named_pipe)
+        .arg("-m")
+        .arg("666")
+        .fails()
+        .stderr_is(err_msg.as_str());
+}
+
+#[test]
 #[cfg(feature = "feat_selinux")]
 fn test_mkfifo_selinux() {
-    use std::process::Command;
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     let dest = "test_file";
@@ -121,23 +167,10 @@ fn test_mkfifo_selinux() {
         ts.ucmd().arg(arg).arg(dest).succeeds();
         assert!(at.is_fifo("test_file"));
 
-        let getfattr_output = Command::new("getfattr")
-            .arg(at.plus_as_string(dest))
-            .arg("-n")
-            .arg("security.selinux")
-            .output()
-            .expect("Failed to run `getfattr` on the destination file");
-        println!("{:?}", getfattr_output);
+        let context_value = get_getfattr_output(&at.plus_as_string(dest));
         assert!(
-            getfattr_output.status.success(),
-            "getfattr did not run successfully: {}",
-            String::from_utf8_lossy(&getfattr_output.stderr)
-        );
-
-        let stdout = String::from_utf8_lossy(&getfattr_output.stdout);
-        assert!(
-            stdout.contains("unconfined_u"),
-            "Expected 'foo' not found in getfattr output:\n{stdout}"
+            context_value.contains("unconfined_u"),
+            "Expected 'unconfined_u' not found in getfattr output:\n{context_value}"
         );
         at.remove(&at.plus_as_string(dest));
     }
@@ -160,7 +193,7 @@ fn test_mkfifo_selinux_invalid() {
             .arg(arg)
             .arg(dest)
             .fails()
-            .stderr_contains("Failed to");
+            .stderr_contains("failed to");
         if at.file_exists(dest) {
             at.remove(dest);
         }

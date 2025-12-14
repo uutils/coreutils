@@ -6,11 +6,16 @@
 // spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized
 
 mod error;
+#[cfg(unix)]
+mod hardlink;
 
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, ArgMatches, Command, error::ErrorKind};
+use clap::error::ErrorKind;
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::env;
 use std::ffi::OsString;
@@ -24,6 +29,11 @@ use std::os::unix::fs::FileTypeExt;
 use std::os::windows;
 use std::path::{Path, PathBuf, absolute};
 
+#[cfg(unix)]
+use crate::hardlink::{
+    HardlinkGroupScanner, HardlinkOptions, HardlinkTracker, create_hardlink_context,
+    with_optional_hardlink_context,
+};
 use uucore::backup_control::{self, source_is_target_backup};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code};
@@ -35,17 +45,17 @@ use uucore::fs::{
 };
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
 use uucore::fsxattr;
+#[cfg(feature = "selinux")]
+use uucore::selinux::set_selinux_security_context;
+use uucore::translate;
 use uucore::update_control;
 
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
 // requires these enums
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
-use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
+use uucore::{format_usage, prompt_yes, show};
 
-use fs_extra::dir::{
-    CopyOptions as DirCopyOptions, TransitProcess, TransitProcessResult, get_size as dir_get_size,
-    move_dir, move_dir_with_progress,
-};
+use fs_extra::dir::get_size as dir_get_size;
 
 use crate::error::MvError;
 
@@ -92,6 +102,9 @@ pub struct Options {
 
     /// `--debug`
     pub debug: bool,
+
+    /// `-Z, --context`
+    pub context: Option<String>,
 }
 
 impl Default for Options {
@@ -107,6 +120,7 @@ impl Default for Options {
             strip_slashes: false,
             progress_bar: false,
             debug: false,
+            context: None,
         }
     }
 }
@@ -123,10 +137,6 @@ pub enum OverwriteMode {
     Force,
 }
 
-const ABOUT: &str = help_about!("mv.md");
-const USAGE: &str = help_usage!("mv.md");
-const AFTER_HELP: &str = help_section!("after help", "mv.md");
-
 static OPT_FORCE: &str = "force";
 static OPT_INTERACTIVE: &str = "interactive";
 static OPT_NO_CLOBBER: &str = "no-clobber";
@@ -137,11 +147,12 @@ static OPT_VERBOSE: &str = "verbose";
 static OPT_PROGRESS: &str = "progress";
 static ARG_FILES: &str = "files";
 static OPT_DEBUG: &str = "debug";
+static OPT_CONTEXT: &str = "context";
+static OPT_SELINUX: &str = "selinux";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut app = uu_app();
-    let matches = app.try_get_matches_from_mut(args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let files: Vec<OsString> = matches
         .get_many::<OsString>(ARG_FILES)
@@ -150,13 +161,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect();
 
     if files.len() == 1 && !matches.contains_id(OPT_TARGET_DIRECTORY) {
-        app.error(
+        let err = uu_app().error(
             ErrorKind::TooFewValues,
-            format!(
-                "The argument '<{ARG_FILES}>...' requires at least 2 values, but only 1 was provided"
-            ),
-        )
-        .exit();
+            translate!("mv-error-insufficient-arguments", "arg_files" => ARG_FILES),
+        );
+        uucore::clap_localization::handle_clap_error_with_exit_code(err, 1);
     }
 
     let overwrite_mode = determine_overwrite_mode(&matches);
@@ -170,7 +179,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     {
         return Err(UUsageError::new(
             1,
-            "cannot combine --backup with -n/--no-clobber or --update=none-fail",
+            translate!("mv-error-backup-with-no-clobber"),
         ));
     }
 
@@ -186,6 +195,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
+    // Handle -Z and --context options
+    // If -Z is used, use the default context (empty string)
+    // If --context=value is used, use that specific value
+    let context = if matches.get_flag(OPT_SELINUX) {
+        Some(String::new())
+    } else {
+        matches.get_one::<String>(OPT_CONTEXT).cloned()
+    };
+
     let opts = Options {
         overwrite: overwrite_mode,
         backup: backup_mode,
@@ -197,6 +215,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         strip_slashes: matches.get_flag(OPT_STRIP_TRAILING_SLASHES),
         progress_bar: matches.get_flag(OPT_PROGRESS),
         debug: matches.get_flag(OPT_DEBUG),
+        context,
     };
 
     mv(&files[..], &opts)
@@ -205,10 +224,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(translate!("mv-about"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .override_usage(format_usage(&translate!("mv-usage")))
         .after_help(format!(
-            "{AFTER_HELP}\n\n{}",
+            "{}\n\n{}",
+            translate!("mv-after-help"),
             backup_control::BACKUP_CONTROL_LONG_HELP
         ))
         .infer_long_args(true)
@@ -216,7 +237,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_FORCE)
                 .short('f')
                 .long(OPT_FORCE)
-                .help("do not prompt before overwriting")
+                .help(translate!("mv-help-force"))
                 .overrides_with_all([OPT_INTERACTIVE, OPT_NO_CLOBBER])
                 .action(ArgAction::SetTrue),
         )
@@ -224,7 +245,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_INTERACTIVE)
                 .short('i')
                 .long(OPT_INTERACTIVE)
-                .help("prompt before override")
+                .help(translate!("mv-help-interactive"))
                 .overrides_with_all([OPT_FORCE, OPT_NO_CLOBBER])
                 .action(ArgAction::SetTrue),
         )
@@ -232,14 +253,14 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_NO_CLOBBER)
                 .short('n')
                 .long(OPT_NO_CLOBBER)
-                .help("do not overwrite an existing file")
+                .help(translate!("mv-help-no-clobber"))
                 .overrides_with_all([OPT_FORCE, OPT_INTERACTIVE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_STRIP_TRAILING_SLASHES)
                 .long(OPT_STRIP_TRAILING_SLASHES)
-                .help("remove any trailing slashes from each SOURCE argument")
+                .help(translate!("mv-help-strip-trailing-slashes"))
                 .action(ArgAction::SetTrue),
         )
         .arg(backup_control::arguments::backup())
@@ -251,7 +272,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_TARGET_DIRECTORY)
                 .short('t')
                 .long(OPT_TARGET_DIRECTORY)
-                .help("move all SOURCE arguments into DIRECTORY")
+                .help(translate!("mv-help-target-directory"))
                 .value_name("DIRECTORY")
                 .value_hint(clap::ValueHint::DirPath)
                 .conflicts_with(OPT_NO_TARGET_DIRECTORY)
@@ -261,25 +282,38 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_NO_TARGET_DIRECTORY)
                 .short('T')
                 .long(OPT_NO_TARGET_DIRECTORY)
-                .help("treat DEST as a normal file")
+                .help(translate!("mv-help-no-target-directory"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
                 .short('v')
                 .long(OPT_VERBOSE)
-                .help("explain what is being done")
+                .help(translate!("mv-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_PROGRESS)
                 .short('g')
                 .long(OPT_PROGRESS)
-                .help(
-                    "Display a progress bar. \n\
-                Note: this feature is not supported by GNU coreutils.",
-                )
+                .help(translate!("mv-help-progress"))
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(OPT_SELINUX)
+                .short('Z')
+                .help(translate!("mv-help-selinux"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(OPT_CONTEXT)
+                .long(OPT_CONTEXT)
+                .value_name("CTX")
+                .value_parser(clap::value_parser!(String))
+                .help(translate!("mv-help-context"))
+                .num_args(0..=1)
+                .require_equals(true)
+                .default_missing_value(""),
         )
         .arg(
             Arg::new(ARG_FILES)
@@ -292,7 +326,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_DEBUG)
                 .long(OPT_DEBUG)
-                .help("explain how a file is copied. Implies -v")
+                .help(translate!("mv-help-debug"))
                 .action(ArgAction::SetTrue),
         )
 }
@@ -328,11 +362,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
     if opts.backup == BackupMode::Simple && source_is_target_backup(source, target, &opts.suffix) {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
-            format!(
-                "backing up {} might destroy source;  {} not moved",
-                target.quote(),
-                source.quote()
-            ),
+            translate!("mv-error-backup-might-destroy-source", "target" => target.quote(), "source" => source.quote()),
         )
         .into());
     }
@@ -344,8 +374,12 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         });
     }
 
-    let target_is_dir = target.is_dir();
-    let source_is_dir = source.is_dir();
+    let source_is_dir = source.is_dir() && !source.is_symlink();
+    let target_is_dir = if target.is_symlink() {
+        fs::canonicalize(target).is_ok_and(|p| p.is_dir())
+    } else {
+        target.is_dir()
+    };
 
     if path_ends_with_terminator(target)
         && (!target_is_dir && !source_is_dir)
@@ -360,8 +394,23 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
     if target_is_dir {
         if opts.no_target_dir {
             if source.is_dir() {
-                rename(source, target, opts, None).map_err_context(|| {
-                    format!("cannot move {} to {}", source.quote(), target.quote())
+                #[cfg(unix)]
+                let (mut hardlink_tracker, hardlink_scanner) = create_hardlink_context();
+                #[cfg(unix)]
+                let hardlink_params = (Some(&mut hardlink_tracker), Some(&hardlink_scanner));
+                #[cfg(not(unix))]
+                let hardlink_params = (None, None);
+
+                rename(
+                    source,
+                    target,
+                    opts,
+                    None,
+                    hardlink_params.0,
+                    hardlink_params.1,
+                )
+                .map_err_context(|| {
+                    translate!("mv-error-cannot-move", "source" => source.quote(), "target" => target.quote())
                 })
             } else {
                 Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
@@ -369,23 +418,41 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         } else {
             move_files_into_dir(&[source.to_path_buf()], target, opts)
         }
-    } else if target.exists() && source.is_dir() {
+    } else if target.exists() && source_is_dir {
         match opts.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => {
-                if !prompt_yes!("overwrite {}? ", target.quote()) {
+                if !prompt_yes!(
+                    "{}",
+                    translate!("mv-prompt-overwrite", "target" => target.quote())
+                ) {
                     return Err(io::Error::other("").into());
                 }
             }
             OverwriteMode::Force => {}
-        };
+        }
         Err(MvError::NonDirectoryToDirectory(
             source.quote().to_string(),
             target.quote().to_string(),
         )
         .into())
     } else {
-        rename(source, target, opts, None).map_err(|e| USimpleError::new(1, format!("{e}")))
+        #[cfg(unix)]
+        let (mut hardlink_tracker, hardlink_scanner) = create_hardlink_context();
+        #[cfg(unix)]
+        let hardlink_params = (Some(&mut hardlink_tracker), Some(&hardlink_scanner));
+        #[cfg(not(unix))]
+        let hardlink_params = (None, None);
+
+        rename(
+            source,
+            target,
+            opts,
+            None,
+            hardlink_params.0,
+            hardlink_params.1,
+        )
+        .map_err(|e| USimpleError::new(1, format!("{e}")))
     }
 }
 
@@ -475,7 +542,7 @@ fn handle_multiple_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
     if opts.no_target_dir {
         return Err(UUsageError::new(
             1,
-            format!("mv: extra operand {}", paths[2].quote()),
+            translate!("mv-error-extra-operand", "operand" => paths.last().unwrap().quote()),
         ));
     }
     let target_dir = paths.last().unwrap();
@@ -504,20 +571,53 @@ pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
 fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) -> UResult<()> {
     // remember the moved destinations for further usage
     let mut moved_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
+    // Create hardlink tracking context
+    #[cfg(unix)]
+    let (mut hardlink_tracker, hardlink_scanner) = {
+        let (tracker, mut scanner) = create_hardlink_context();
+
+        // Use hardlink options
+        let hardlink_options = HardlinkOptions {
+            verbose: options.verbose || options.debug,
+        };
+
+        // Pre-scan files if needed
+        if let Err(e) = scanner.scan_files(files, &hardlink_options) {
+            if hardlink_options.verbose {
+                eprintln!("mv: warning: failed to scan files for hardlinks: {e}");
+                eprintln!("mv: continuing without hardlink preservation");
+            } else {
+                // Show warning in non-verbose mode for serious errors
+                eprintln!(
+                    "mv: warning: hardlink scanning failed, continuing without hardlink preservation"
+                );
+            }
+            // Continue without hardlink tracking on scan failure
+            // This provides graceful degradation rather than failing completely
+        }
+
+        (tracker, scanner)
+    };
 
     if !target_dir.is_dir() {
         return Err(MvError::NotADirectory(target_dir.quote().to_string()).into());
     }
 
-    let multi_progress = options.progress_bar.then(MultiProgress::new);
+    let display_manager = options.progress_bar.then(MultiProgress::new);
 
-    let count_progress = if let Some(ref multi_progress) = multi_progress {
+    let count_progress = if let Some(ref display_manager) = display_manager {
         if files.len() > 1 {
-            Some(multi_progress.add(
-                ProgressBar::new(files.len().try_into().unwrap()).with_style(
-                    ProgressStyle::with_template("moving {msg} {wide_bar} {pos}/{len}").unwrap(),
+            Some(
+                display_manager.add(
+                    ProgressBar::new(files.len().try_into().unwrap()).with_style(
+                        ProgressStyle::with_template(&format!(
+                            "{} {{msg}} {{wide_bar}} {{pos}}/{{len}}",
+                            translate!("mv-progress-moving")
+                        ))
+                        .unwrap(),
+                    ),
                 ),
-            ))
+            )
         } else {
             None
         }
@@ -526,13 +626,14 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
     };
 
     for sourcepath in files {
-        if !sourcepath.exists() {
+        if sourcepath.symlink_metadata().is_err() {
             show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
             continue;
         }
 
         if let Some(ref pb) = count_progress {
-            pb.set_message(sourcepath.to_string_lossy().to_string());
+            let msg = format!("{} (scanning hardlinks)", sourcepath.to_string_lossy());
+            pb.set_message(msg);
         }
 
         let targetpath = match sourcepath.file_name() {
@@ -547,11 +648,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
             // If the target file was already created in this mv call, do not overwrite
             show!(USimpleError::new(
                 1,
-                format!(
-                    "will not overwrite just-created '{}' with '{}'",
-                    targetpath.display(),
-                    sourcepath.display()
-                ),
+                translate!("mv-error-will-not-overwrite-just-created", "target" => targetpath.display(), "source" => sourcepath.display()),
             ));
             continue;
         }
@@ -563,20 +660,28 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
             continue;
         }
 
-        match rename(sourcepath, &targetpath, options, multi_progress.as_ref()) {
+        #[cfg(unix)]
+        let hardlink_params = (Some(&mut hardlink_tracker), Some(&hardlink_scanner));
+        #[cfg(not(unix))]
+        let hardlink_params = (None, None);
+
+        match rename(
+            sourcepath,
+            &targetpath,
+            options,
+            display_manager.as_ref(),
+            hardlink_params.0,
+            hardlink_params.1,
+        ) {
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
                 let e = e.map_err_context(|| {
-                    format!(
-                        "cannot move {} to {}",
-                        sourcepath.quote(),
-                        targetpath.quote()
-                    )
+                    translate!("mv-error-cannot-move", "source" => sourcepath.quote(), "target" => targetpath.quote())
                 });
-                match multi_progress {
+                match display_manager {
                     Some(ref pb) => pb.suspend(|| show!(e)),
                     None => show!(e),
-                };
+                }
             }
             Ok(()) => (),
         }
@@ -592,14 +697,18 @@ fn rename(
     from: &Path,
     to: &Path,
     opts: &Options,
-    multi_progress: Option<&MultiProgress>,
+    display_manager: Option<&MultiProgress>,
+    #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
+    #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
+    #[cfg(not(unix))] _hardlink_tracker: Option<()>,
+    #[cfg(not(unix))] _hardlink_scanner: Option<()>,
 ) -> io::Result<()> {
     let mut backup_path = None;
 
     if to.exists() {
         if opts.update == UpdateMode::None {
             if opts.debug {
-                println!("skipped {}", to.quote());
+                println!("{}", translate!("mv-debug-skipped", "target" => to.quote()));
             }
             return Ok(());
         }
@@ -611,62 +720,83 @@ fn rename(
         }
 
         if opts.update == UpdateMode::NoneFail {
-            let err_msg = format!("not replacing {}", to.quote());
+            let err_msg = translate!("mv-error-not-replacing", "target" => to.quote());
             return Err(io::Error::other(err_msg));
         }
 
         match opts.overwrite {
             OverwriteMode::NoClobber => {
                 if opts.debug {
-                    println!("skipped {}", to.quote());
+                    println!("{}", translate!("mv-debug-skipped", "target" => to.quote()));
                 }
                 return Ok(());
             }
             OverwriteMode::Interactive => {
-                if !prompt_yes!("overwrite {}?", to.quote()) {
+                if !prompt_yes!(
+                    "{}",
+                    translate!("mv-prompt-overwrite", "target" => to.quote())
+                ) {
                     return Err(io::Error::other(""));
                 }
             }
             OverwriteMode::Force => {}
-        };
+        }
 
         backup_path = backup_control::get_backup_path(opts.backup, to, &opts.suffix);
         if let Some(ref backup_path) = backup_path {
-            rename_with_fallback(to, backup_path, multi_progress)?;
+            // For backup renames, we don't need to track hardlinks as we're just moving the existing file
+            rename_with_fallback(to, backup_path, display_manager, false, None, None)?;
         }
     }
 
     // "to" may no longer exist if it was backed up
-    if to.exists() && to.is_dir() {
+    if to.exists() && to.is_dir() && !to.is_symlink() {
         // normalize behavior between *nix and windows
         if from.is_dir() {
             if is_empty_dir(to) {
                 fs::remove_dir(to)?;
             } else {
-                return Err(io::Error::other("Directory not empty"));
+                return Err(io::Error::other(translate!("mv-error-directory-not-empty")));
             }
         }
     }
 
-    rename_with_fallback(from, to, multi_progress)?;
+    #[cfg(unix)]
+    {
+        rename_with_fallback(
+            from,
+            to,
+            display_manager,
+            opts.verbose,
+            hardlink_tracker,
+            hardlink_scanner,
+        )?;
+    }
+    #[cfg(not(unix))]
+    {
+        rename_with_fallback(from, to, display_manager, opts.verbose, None, None)?;
+    }
+
+    #[cfg(feature = "selinux")]
+    if let Some(ref context) = opts.context {
+        set_selinux_security_context(to, Some(context))
+            .map_err(|e| io::Error::other(e.to_string()))?;
+    }
 
     if opts.verbose {
         let message = match backup_path {
-            Some(path) => format!(
-                "renamed {} -> {} (backup: {})",
-                from.quote(),
-                to.quote(),
-                path.quote()
-            ),
-            None => format!("renamed {} -> {}", from.quote(), to.quote()),
+            Some(path) => {
+                translate!("mv-verbose-renamed-with-backup", "from" => from.quote(), "to" => to.quote(), "backup" => path.quote())
+            }
+            None => translate!("mv-verbose-renamed", "from" => from.quote(), "to" => to.quote()),
         };
 
-        match multi_progress {
+        match display_manager {
             Some(pb) => pb.suspend(|| {
                 println!("{message}");
             }),
             None => println!("{message}"),
-        };
+        }
     }
     Ok(())
 }
@@ -686,7 +816,12 @@ fn is_fifo(_filetype: fs::FileType) -> bool {
 fn rename_with_fallback(
     from: &Path,
     to: &Path,
-    multi_progress: Option<&MultiProgress>,
+    display_manager: Option<&MultiProgress>,
+    verbose: bool,
+    #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
+    #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
+    #[cfg(not(unix))] _hardlink_tracker: Option<()>,
+    #[cfg(not(unix))] _hardlink_scanner: Option<()>,
 ) -> io::Result<()> {
     fs::rename(from, to).or_else(|err| {
         #[cfg(windows)]
@@ -698,8 +833,8 @@ fn rename_with_fallback(
         // 1. Files are on different devices (EXDEV error)
         // 2. On Windows, if the target file exists and source file is opened by another process
         //    (MoveFileExW fails with "Access Denied" even if the source file has FILE_SHARE_DELETE permission)
-        let should_fallback = matches!(err.raw_os_error(), Some(EXDEV))
-            || (from.is_file() && can_delete_file(from).unwrap_or(false));
+        let should_fallback =
+            matches!(err.raw_os_error(), Some(EXDEV)) || (from.is_file() && can_delete_file(from));
         if !should_fallback {
             return Err(err);
         }
@@ -709,11 +844,42 @@ fn rename_with_fallback(
         if file_type.is_symlink() {
             rename_symlink_fallback(from, to)
         } else if file_type.is_dir() {
-            rename_dir_fallback(from, to, multi_progress)
+            #[cfg(unix)]
+            {
+                with_optional_hardlink_context(
+                    hardlink_tracker,
+                    hardlink_scanner,
+                    |tracker, scanner| {
+                        rename_dir_fallback(
+                            from,
+                            to,
+                            display_manager,
+                            verbose,
+                            Some(tracker),
+                            Some(scanner),
+                        )
+                    },
+                )
+            }
+            #[cfg(not(unix))]
+            {
+                rename_dir_fallback(from, to, display_manager, verbose)
+            }
         } else if is_fifo(file_type) {
             rename_fifo_fallback(from, to)
         } else {
-            rename_file_fallback(from, to)
+            #[cfg(unix)]
+            {
+                with_optional_hardlink_context(
+                    hardlink_tracker,
+                    hardlink_scanner,
+                    |tracker, scanner| rename_file_fallback(from, to, Some(tracker), Some(scanner)),
+                )
+            }
+            #[cfg(not(unix))]
+            {
+                rename_file_fallback(from, to)
+            }
         }
     })
 }
@@ -753,7 +919,7 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     } else {
         Err(io::Error::new(
             io::ErrorKind::NotFound,
-            "can't determine symlink type, since it is dangling",
+            translate!("mv-error-dangling-symlink"),
         ))
     }
 }
@@ -763,14 +929,17 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     let path_symlink_points_to = fs::read_link(from)?;
     Err(io::Error::new(
         io::ErrorKind::Other,
-        "your operating system does not support symlinks",
+        translate!("mv-error-no-symlink-support"),
     ))
 }
 
 fn rename_dir_fallback(
     from: &Path,
     to: &Path,
-    multi_progress: Option<&MultiProgress>,
+    display_manager: Option<&MultiProgress>,
+    verbose: bool,
+    #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
+    #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
 ) -> io::Result<()> {
     // We remove the destination directory if it exists to match the
     // behavior of `fs::rename`. As far as I can tell, `fs_extra`'s
@@ -778,13 +947,6 @@ fn rename_dir_fallback(
     if to.exists() {
         fs::remove_dir_all(to)?;
     }
-    let options = DirCopyOptions {
-        // From the `fs_extra` documentation:
-        // "Recursively copy a directory with a new name or place it
-        // inside the destination. (same behaviors like cp -r in Unix)"
-        copy_inside: true,
-        ..DirCopyOptions::new()
-    };
 
     // Calculate total size of directory
     // Silently degrades:
@@ -793,78 +955,255 @@ fn rename_dir_fallback(
     //    (Move will probably fail due to permission error later?)
     let total_size = dir_get_size(from).ok();
 
-    let progress_bar = match (multi_progress, total_size) {
-        (Some(multi_progress), Some(total_size)) => {
+    let progress_bar = match (display_manager, total_size) {
+        (Some(display_manager), Some(total_size)) => {
             let template = "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}";
             let style = ProgressStyle::with_template(template).unwrap();
             let bar = ProgressBar::new(total_size).with_style(style);
-            Some(multi_progress.add(bar))
+            Some(display_manager.add(bar))
         }
         (_, _) => None,
     };
 
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    let xattrs =
-        fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| std::collections::HashMap::new());
+    let xattrs = fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| HashMap::new());
 
-    let result = if let Some(ref pb) = progress_bar {
-        move_dir_with_progress(from, to, &options, |process_info: TransitProcess| {
-            pb.set_position(process_info.copied_bytes);
-            pb.set_message(process_info.file_name);
-            TransitProcessResult::ContinueOrAbort
-        })
-    } else {
-        move_dir(from, to, &options)
-    };
+    // Use directory copying (with or without hardlink support)
+    let result = copy_dir_contents(
+        from,
+        to,
+        #[cfg(unix)]
+        hardlink_tracker,
+        #[cfg(unix)]
+        hardlink_scanner,
+        verbose,
+        progress_bar.as_ref(),
+        display_manager,
+    );
 
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
     fsxattr::apply_xattrs(to, xattrs)?;
 
-    match result {
-        Err(err) => match err.kind {
-            fs_extra::error::ErrorKind::PermissionDenied => Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "Permission denied",
-            )),
-            _ => Err(io::Error::new(io::ErrorKind::Other, format!("{err:?}"))),
-        },
-        _ => Ok(()),
-    }
+    result?;
+
+    // Remove the source directory after successful copy
+    fs::remove_dir_all(from)?;
+
+    Ok(())
 }
 
-fn rename_file_fallback(from: &Path, to: &Path) -> io::Result<()> {
+/// Copy directory recursively, optionally preserving hardlinks
+fn copy_dir_contents(
+    from: &Path,
+    to: &Path,
+    #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
+    #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
+    verbose: bool,
+    progress_bar: Option<&ProgressBar>,
+    display_manager: Option<&MultiProgress>,
+) -> io::Result<()> {
+    // Create the destination directory
+    fs::create_dir_all(to)?;
+
+    // Recursively copy contents
+    #[cfg(unix)]
+    {
+        if let (Some(tracker), Some(scanner)) = (hardlink_tracker, hardlink_scanner) {
+            copy_dir_contents_recursive(
+                from,
+                to,
+                tracker,
+                scanner,
+                verbose,
+                progress_bar,
+                display_manager,
+            )?;
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        copy_dir_contents_recursive(from, to, None, None, verbose, progress_bar, display_manager)?;
+    }
+
+    Ok(())
+}
+
+fn copy_dir_contents_recursive(
+    from_dir: &Path,
+    to_dir: &Path,
+    #[cfg(unix)] hardlink_tracker: &mut HardlinkTracker,
+    #[cfg(unix)] hardlink_scanner: &HardlinkGroupScanner,
+    #[cfg(not(unix))] _hardlink_tracker: Option<()>,
+    #[cfg(not(unix))] _hardlink_scanner: Option<()>,
+    verbose: bool,
+    progress_bar: Option<&ProgressBar>,
+    display_manager: Option<&MultiProgress>,
+) -> io::Result<()> {
+    let entries = fs::read_dir(from_dir)?;
+
+    for entry in entries {
+        let entry = entry?;
+        let from_path = entry.path();
+        let file_name = from_path.file_name().unwrap();
+        let to_path = to_dir.join(file_name);
+
+        if let Some(pb) = progress_bar {
+            pb.set_message(from_path.to_string_lossy().to_string());
+        }
+
+        if from_path.is_dir() {
+            // Recursively copy subdirectory
+            fs::create_dir_all(&to_path)?;
+
+            // Print verbose message for directory
+            if verbose {
+                let message = translate!("mv-verbose-renamed", "from" => from_path.quote(), "to" => to_path.quote());
+                match display_manager {
+                    Some(pb) => pb.suspend(|| {
+                        println!("{message}");
+                    }),
+                    None => println!("{message}"),
+                }
+            }
+
+            copy_dir_contents_recursive(
+                &from_path,
+                &to_path,
+                #[cfg(unix)]
+                hardlink_tracker,
+                #[cfg(unix)]
+                hardlink_scanner,
+                #[cfg(not(unix))]
+                _hardlink_tracker,
+                #[cfg(not(unix))]
+                _hardlink_scanner,
+                verbose,
+                progress_bar,
+                display_manager,
+            )?;
+        } else {
+            // Copy file with or without hardlink support based on platform
+            #[cfg(unix)]
+            {
+                copy_file_with_hardlinks_helper(
+                    &from_path,
+                    &to_path,
+                    hardlink_tracker,
+                    hardlink_scanner,
+                )?;
+            }
+            #[cfg(not(unix))]
+            {
+                fs::copy(&from_path, &to_path)?;
+            }
+
+            // Print verbose message for file
+            if verbose {
+                let message = translate!("mv-verbose-renamed", "from" => from_path.quote(), "to" => to_path.quote());
+                match display_manager {
+                    Some(pb) => pb.suspend(|| {
+                        println!("{message}");
+                    }),
+                    None => println!("{message}"),
+                }
+            }
+        }
+
+        if let Some(pb) = progress_bar {
+            if let Ok(metadata) = from_path.metadata() {
+                pb.inc(metadata.len());
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn copy_file_with_hardlinks_helper(
+    from: &Path,
+    to: &Path,
+    hardlink_tracker: &mut HardlinkTracker,
+    hardlink_scanner: &HardlinkGroupScanner,
+) -> io::Result<()> {
+    // Check if this file should be a hardlink to an already-copied file
+    use crate::hardlink::HardlinkOptions;
+    let hardlink_options = HardlinkOptions::default();
+    // Create a hardlink instead of copying
+    if let Some(existing_target) =
+        hardlink_tracker.check_hardlink(from, to, hardlink_scanner, &hardlink_options)?
+    {
+        fs::hard_link(&existing_target, to)?;
+        return Ok(());
+    }
+
+    // Regular file copy
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+    {
+        fs::copy(from, to).and_then(|_| fsxattr::copy_xattrs(&from, &to))?;
+    }
+    #[cfg(any(target_os = "macos", target_os = "redox"))]
+    {
+        fs::copy(from, to)?;
+    }
+
+    Ok(())
+}
+
+fn rename_file_fallback(
+    from: &Path,
+    to: &Path,
+    #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
+    #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
+) -> io::Result<()> {
+    // Remove existing target file if it exists
     if to.is_symlink() {
         fs::remove_file(to).map_err(|err| {
-            let to = to.to_string_lossy();
-            let from = from.to_string_lossy();
-            io::Error::new(
-                err.kind(),
-                format!(
-                    "inter-device move failed: '{from}' to '{to}'\
-                            ; unable to remove target: {err}"
-                ),
-            )
+            let inter_device_msg = translate!("mv-error-inter-device-move-failed", "from" => from.display(), "to" => to.display(), "err" => err);
+            io::Error::new(err.kind(), inter_device_msg)
         })?;
+    } else if to.exists() {
+        // For non-symlinks, just remove the file without special error handling
+        fs::remove_file(to)?;
     }
+
+    // Check if this file is part of a hardlink group and if so, create a hardlink instead of copying
+    #[cfg(unix)]
+    {
+        if let (Some(tracker), Some(scanner)) = (hardlink_tracker, hardlink_scanner) {
+            use crate::hardlink::HardlinkOptions;
+            let hardlink_options = HardlinkOptions::default();
+            if let Some(existing_target) =
+                tracker.check_hardlink(from, to, scanner, &hardlink_options)?
+            {
+                // Create a hardlink to the first moved file instead of copying
+                fs::hard_link(&existing_target, to)?;
+                fs::remove_file(from)?;
+                return Ok(());
+            }
+        }
+    }
+
+    // Regular file copy
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
     fs::copy(from, to)
         .and_then(|_| fsxattr::copy_xattrs(&from, &to))
-        .and_then(|_| fs::remove_file(from))?;
+        .and_then(|_| fs::remove_file(from))
+        .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
     #[cfg(any(target_os = "macos", target_os = "redox", not(unix)))]
-    fs::copy(from, to).and_then(|_| fs::remove_file(from))?;
+    fs::copy(from, to)
+        .and_then(|_| fs::remove_file(from))
+        .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
     Ok(())
 }
 
 fn is_empty_dir(path: &Path) -> bool {
-    match fs::read_dir(path) {
-        Ok(contents) => contents.peekable().peek().is_none(),
-        Err(_e) => false,
-    }
+    fs::read_dir(path).is_ok_and(|mut contents| contents.next().is_none())
 }
 
 /// Checks if a file can be deleted by attempting to open it with delete permissions.
 #[cfg(windows)]
-fn can_delete_file(path: &Path) -> Result<bool, io::Error> {
+fn can_delete_file(path: &Path) -> bool {
     use std::{
         os::windows::ffi::OsStrExt as _,
         ptr::{null, null_mut},
@@ -897,19 +1236,19 @@ fn can_delete_file(path: &Path) -> Result<bool, io::Error> {
     };
 
     if handle == INVALID_HANDLE_VALUE {
-        return Err(io::Error::last_os_error());
+        return false;
     }
 
     unsafe { CloseHandle(handle) };
 
-    Ok(true)
+    true
 }
 
 #[cfg(not(windows))]
-fn can_delete_file(_: &Path) -> Result<bool, io::Error> {
+fn can_delete_file(_: &Path) -> bool {
     // On non-Windows platforms, always return false to indicate that we don't need
     // to try the copy+delete fallback. This is because on Unix-like systems,
     // rename() failing with errors other than EXDEV means the operation cannot
     // succeed even with a copy+delete approach (e.g. permission errors).
-    Ok(false)
+    false
 }

@@ -21,8 +21,7 @@ path = "src/more.rs"
 clap = { workspace = true }
 uucore = { workspace = true }
 crossterm = { workspace = true }
-unicode-width = { workspace = true }
-unicode-segmentation = { workspace = true }
+fluent = { workspace = true }
 
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
 nix = { workspace = true }
@@ -33,3 +32,6 @@ crossterm = { workspace = true, features = ["use-dev-tty"] }
 [[bin]]
 name = "more"
 path = "src/main.rs"
+
+[dev-dependencies]
+tempfile = { workspace = true }

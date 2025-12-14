@@ -1,3 +1,4 @@
+# spell-checker:ignore dpkg
 [package]
 name = "uu_stdbuf"
 description = "stdbuf ~ (uutils) run COMMAND with modified standard stream buffering"
@@ -19,11 +20,31 @@ path = "src/stdbuf.rs"
 
 [dependencies]
 clap = { workspace = true }
+libstdbuf = { package = "uu_stdbuf_libstdbuf", version = "0.5.0", path = "src/libstdbuf" }
 tempfile = { workspace = true }
-uucore = { workspace = true, features = ["parser"] }
+uucore = { workspace = true, features = ["parser-size"] }
+thiserror = { workspace = true }
+fluent = { workspace = true }
 
-[build-dependencies]
-libstdbuf = { version = "0.0.30", package = "uu_stdbuf_libstdbuf", path = "src/libstdbuf" }
+# "feat_external_libstdbuf": use an external libstdbuf.so for stdbuf instead of embedding it into
+# the stdbuf binary.
+# There are 2 use-cases:
+# 1. Installation of uutils-coreutils using cargo install (e.g. from crates.io
+#    which supports only "cargo install" as installation method).  In this case,
+#    installing libstdbuf.so is impossible, because "cargo install" installs
+#    only binary programs (no cdylib), thus libstdbuf.so must be embedded into
+#    stdbuf and written to /tmp at runtime.  This is a hack, and may not work
+#    on some platforms, e.g. because the SELinux permissions may not allow
+#    stdbuf to write to /tmp, /tmp may be read-only, libstdbuf.so may not work
+#    at all without SELinux labels, etc.
+#
+# 2. Installation of uutils-coreutils using an external tool, e.g. dpkg/apt on
+#    debian. In this case, libstdbuf.so should be installed separately to its
+#    correct location and the environment variable LIBSTDBUF_DIR configures the
+#    installation directory during the build. E.g. LIBSTDBUF_DIR="/usr/lib"
+
+[features]
+feat_external_libstdbuf = []
 
 [[bin]]
 name = "stdbuf"

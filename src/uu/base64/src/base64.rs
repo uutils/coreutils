@@ -5,22 +5,16 @@
 
 use clap::Command;
 use uu_base32::base_common;
-use uucore::{encoding::Format, error::UResult, help_about, help_usage};
-
-const ABOUT: &str = help_about!("base64.md");
-const USAGE: &str = help_usage!("base64.md");
+use uucore::translate;
+use uucore::{encoding::Format, error::UResult};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let format = Format::Base64;
-
-    let config = base_common::parse_base_cmd_args(args, ABOUT, USAGE)?;
-
+    let config = base_common::parse_base_cmd_args(args, uu_app())?;
     let mut input = base_common::get_input(&config)?;
-
-    base_common::handle_input(&mut input, format, config)
+    base_common::handle_input(&mut input, Format::Base64, config)
 }
 
 pub fn uu_app() -> Command {
-    base_common::base_app(ABOUT, USAGE)
+    base_common::base_app(translate!("base64-about"), translate!("base64-usage"))
 }

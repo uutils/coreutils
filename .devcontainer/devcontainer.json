@@ -1,0 +1,50 @@
+{
+    "name": "uutils-devcontainer",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "features": {
+        "ghcr.io/devcontainers/features/rust:1":
+        {
+            "version": "latest",
+            "profile": "default",
+            "components": "llvm-tools-preview"
+        }
+    },
+    "onCreateCommand": {
+        "install pre-commit hooks": "pre-commit install",
+        "update permissions for gnu coreutils volume": "sudo chown vscode:vscode ${containerWorkspaceFolder}/../gnu"
+    },
+	"mounts": [
+		{
+			"source": "devcontainer-gnu-coreutils-${devcontainerId}",
+	 		"target": "${containerWorkspaceFolder}/../gnu",
+	 		"type": "volume"
+	 	}
+	],
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "streetsidesoftware.code-spell-checker",
+                "foxundermoon.shell-format",
+                "ms-vscode.cpptools"
+            ],
+            "settings": {
+                "rust-analyzer.check.command": "clippy",
+                "rust-analyzer.debug.engine": "ms-vscode.cpptools",
+                "rust-analyzer.debug.engineSettings": {
+                    "cppdbg": {
+                        "miDebuggerPath": "rust-gdb",
+                        "setupCommands": [
+                            {
+                                "description": "Enable pretty-printing for gdb",
+                                "text": "-enable-pretty-printing",
+                                "ignoreFailures": false
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+}

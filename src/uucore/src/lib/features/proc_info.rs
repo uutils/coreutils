@@ -30,6 +30,7 @@
 #![allow(dead_code)]
 
 use crate::features::tty::Teletype;
+
 use std::hash::Hash;
 use std::{
     collections::HashMap,
@@ -38,6 +39,7 @@ use std::{
     path::PathBuf,
     rc::Rc,
 };
+
 use walkdir::{DirEntry, WalkDir};
 
 /// State or process
@@ -164,7 +166,7 @@ impl ProcessInformation {
         let pid = {
             value
                 .iter()
-                .last()
+                .next_back()
                 .ok_or(io::ErrorKind::Other)?
                 .to_str()
                 .ok_or(io::ErrorKind::InvalidData)?

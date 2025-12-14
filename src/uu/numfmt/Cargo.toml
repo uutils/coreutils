@@ -21,7 +21,17 @@ path = "src/numfmt.rs"
 clap = { workspace = true }
 uucore = { workspace = true, features = ["parser", "ranges"] }
 thiserror = { workspace = true }
+fluent = { workspace = true }
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
 
 [[bin]]
 name = "numfmt"
 path = "src/main.rs"
+
+[[bench]]
+name = "numfmt_bench"
+harness = false

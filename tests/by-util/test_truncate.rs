@@ -386,6 +386,17 @@ fn test_underflow_relative_size() {
     assert!(at.read_bytes(FILE1).is_empty());
 }
 
+#[test]
+fn test_negative_size_with_space() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-s", "-1", FILE1])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(at.file_exists(FILE1));
+    assert!(at.read_bytes(FILE1).is_empty());
+}
+
 #[cfg(not(windows))]
 #[test]
 fn test_fifo_error_size_only() {
@@ -419,4 +430,17 @@ fn test_fifo_error_reference_and_size() {
         .fails()
         .no_stdout()
         .stderr_contains("cannot open 'fifo' for writing: No such device or address");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_truncate_non_utf8_paths() {
+    use std::os::unix::ffi::OsStrExt;
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let file_name = std::ffi::OsStr::from_bytes(b"test_\xFF\xFE.txt");
+    at.write(&file_name.to_string_lossy(), "test content");
+
+    // Test that truncate can handle non-UTF-8 filenames
+    ts.ucmd().arg("-s").arg("10").arg(file_name).succeeds();
 }

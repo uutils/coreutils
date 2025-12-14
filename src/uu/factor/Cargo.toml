@@ -19,17 +19,24 @@ num-traits = { workspace = true } # used in src/numerics.rs, which is included b
 
 [dependencies]
 clap = { workspace = true }
-coz = { workspace = true, optional = true }
 num-traits = { workspace = true }
-rand = { workspace = true }
-smallvec = { workspace = true }
 uucore = { workspace = true }
 num-bigint = { workspace = true }
 num-prime = { workspace = true }
+fluent = { workspace = true }
 
 [[bin]]
 name = "factor"
 path = "src/main.rs"
 
+[dev-dependencies]
+divan = { workspace = true }
+rand = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
 [lib]
 path = "src/factor.rs"
+
+[[bench]]
+name = "factor_bench"
+harness = false
