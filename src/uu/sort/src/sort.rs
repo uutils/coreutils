@@ -1159,15 +1159,13 @@ fn legacy_key_to_k(from: &LegacyKeyPart, to: Option<&LegacyKeyPart>) -> String {
             to.field.saturating_add(1)
         };
 
-        let mut end_part = end_field.to_string();
-        if to.char_pos != 0 {
-            end_part.push('.');
-            end_part.push_str(&to.char_pos.to_string());
-        }
-        end_part.push_str(&to.opts);
-
         keydef.push(',');
-        keydef.push_str(&end_part);
+        keydef.push_str(&end_field.to_string());
+        if to.char_pos != 0 {
+            keydef.push('.');
+            keydef.push_str(&to.char_pos.to_string());
+        }
+        keydef.push_str(&to.opts);
     }
 
     keydef
