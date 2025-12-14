@@ -129,11 +129,11 @@ class TestIdentifyTestChanges(unittest.TestCase):
         }
         reference = {
             "tests/ls/test1": "PASS",
-            "tests/ls/test2": "SKIP",
+            "tests/ls/test2": "PASS",
             "tests/cp/test3": "PASS",
             "tests/cp/test4": "FAIL",
         }
-        regressions, _, _, _ = identify_test_changes(current, reference)
+        regressions, _, _, _, _ = identify_test_changes(current, reference)
         self.assertEqual(sorted(regressions), ["tests/ls/test1", "tests/ls/test2"])
 
     def test_fixes(self):
@@ -150,7 +150,7 @@ class TestIdentifyTestChanges(unittest.TestCase):
             "tests/cp/test3": "PASS",
             "tests/cp/test4": "FAIL",
         }
-        _, fixes, _, _ = identify_test_changes(current, reference)
+        _, fixes, _, _, _ = identify_test_changes(current, reference)
         self.assertEqual(sorted(fixes), ["tests/ls/test1", "tests/ls/test2"])
 
     def test_newly_skipped(self):
@@ -165,7 +165,7 @@ class TestIdentifyTestChanges(unittest.TestCase):
             "tests/ls/test2": "FAIL",
             "tests/cp/test3": "PASS",
         }
-        _, _, newly_skipped, _ = identify_test_changes(current, reference)
+        _, _, newly_skipped, _, _ = identify_test_changes(current, reference)
         self.assertEqual(newly_skipped, ["tests/ls/test1"])
 
     def test_newly_passing(self):
@@ -180,7 +180,7 @@ class TestIdentifyTestChanges(unittest.TestCase):
             "tests/ls/test2": "FAIL",
             "tests/cp/test3": "SKIP",
         }
-        _, _, _, newly_passing = identify_test_changes(current, reference)
+        _, _, _, newly_passing, _ = identify_test_changes(current, reference)
         self.assertEqual(newly_passing, ["tests/ls/test1"])
 
     def test_all_categories(self):
@@ -191,6 +191,7 @@ class TestIdentifyTestChanges(unittest.TestCase):
             "tests/cp/test3": "SKIP",  # Newly skipped
             "tests/cp/test4": "PASS",  # Newly passing
             "tests/rm/test5": "PASS",  # No change
+            "tests/rm/test6": "FAIL",  # Newly failing
         }
         reference = {
             "tests/ls/test1": "PASS",  # Regression
@@ -198,14 +199,16 @@ class TestIdentifyTestChanges(unittest.TestCase):
             "tests/cp/test3": "PASS",  # Newly skipped
             "tests/cp/test4": "SKIP",  # Newly passing
             "tests/rm/test5": "PASS",  # No change
+            "tests/rm/test6": "SKIP",  # Newly failing
         }
-        regressions, fixes, newly_skipped, newly_passing = identify_test_changes(
-            current, reference
+        regressions, fixes, newly_skipped, newly_passing, newly_failing = (
+            identify_test_changes(current, reference)
         )
         self.assertEqual(regressions, ["tests/ls/test1"])
         self.assertEqual(fixes, ["tests/ls/test2"])
         self.assertEqual(newly_skipped, ["tests/cp/test3"])
         self.assertEqual(newly_passing, ["tests/cp/test4"])
+        self.assertEqual(newly_failing, ["tests/rm/test6"])
 
     def test_new_and_removed_tests(self):
         """Test handling of tests that are only in one of the datasets."""
@@ -219,13 +222,43 @@ class TestIdentifyTestChanges(unittest.TestCase):
             "tests/ls/test2": "PASS",
             "tests/rm/old_test": "FAIL",
         }
-        regressions, fixes, newly_skipped, newly_passing = identify_test_changes(
-            current, reference
+        regressions, fixes, newly_skipped, newly_passing, newly_failing = (
+            identify_test_changes(current, reference)
         )
         self.assertEqual(regressions, ["tests/ls/test2"])
         self.assertEqual(fixes, [])
         self.assertEqual(newly_skipped, [])
         self.assertEqual(newly_passing, [])
+        self.assertEqual(newly_failing, [])
+
+    def test_newly_failing(self):
+        """Test identifying newly failing tests (SKIP -> FAIL)."""
+        current = {
+            "tests/ls/test1": "FAIL",
+            "tests/ls/test2": "ERROR",
+            "tests/cp/test3": "PASS",
+        }
+        reference = {
+            "tests/ls/test1": "SKIP",
+            "tests/ls/test2": "SKIP",
+            "tests/cp/test3": "SKIP",
+        }
+        _, _, _, _, newly_failing = identify_test_changes(current, reference)
+        self.assertEqual(sorted(newly_failing), ["tests/ls/test1", "tests/ls/test2"])
+
+    def test_skip_to_fail_not_regression(self):
+        """Test that SKIP -> FAIL is not counted as a regression."""
+        current = {
+            "tests/ls/test1": "FAIL",
+            "tests/ls/test2": "FAIL",
+        }
+        reference = {
+            "tests/ls/test1": "SKIP",
+            "tests/ls/test2": "PASS",
+        }
+        regressions, _, _, _, newly_failing = identify_test_changes(current, reference)
+        self.assertEqual(regressions, ["tests/ls/test2"])
+        self.assertEqual(newly_failing, ["tests/ls/test1"])
 
 
 class TestMainFunction(unittest.TestCase):
@@ -285,7 +318,7 @@ class TestMainFunction(unittest.TestCase):
         current_flat = flatten_test_results(self.current_data)
         reference_flat = flatten_test_results(self.reference_data)
 
-        regressions, _, _, _ = identify_test_changes(current_flat, reference_flat)
+        regressions, _, _, _, _ = identify_test_changes(current_flat, reference_flat)
 
         self.assertIn("tests/ls/test2", regressions)
 
@@ -320,7 +353,7 @@ class TestMainFunction(unittest.TestCase):
         current_flat = flatten_test_results(self.current_data)
         reference_flat = flatten_test_results(self.reference_data)
 
-        _, fixes, _, _ = identify_test_changes(current_flat, reference_flat)
+        _, fixes, _, _, _ = identify_test_changes(current_flat, reference_flat)
 
         # tests/cp/test1 and tests/cp/test2 should be fixed but tests/cp/test1 is in ignore list
         self.assertIn("tests/cp/test1", fixes)

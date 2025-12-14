@@ -20,8 +20,33 @@ use uucore::checksum::{
     sanitize_sha2_sha3_length_str,
 };
 use uucore::error::UResult;
+use uucore::hardware::{HasHardwareFeatures as _, SimdPolicy};
 use uucore::line_ending::LineEnding;
 use uucore::{format_usage, translate};
+
+/// Print CPU hardware capability detection information to stderr
+/// This matches GNU cksum's --debug behavior
+fn print_cpu_debug_info() {
+    let features = SimdPolicy::detect();
+
+    fn print_feature(name: &str, available: bool) {
+        if available {
+            eprintln!("cksum: using {name} hardware support");
+        } else {
+            eprintln!("cksum: {name} support not detected");
+        }
+    }
+
+    // x86/x86_64
+    print_feature("avx512", features.has_avx512());
+    print_feature("avx2", features.has_avx2());
+    print_feature("pclmul", features.has_pclmul());
+
+    // ARM aarch64
+    if cfg!(target_arch = "aarch64") {
+        print_feature("vmull", features.has_vmull());
+    }
+}
 
 mod options {
     pub const ALGORITHM: &str = "algorithm";
@@ -40,6 +65,7 @@ mod options {
     pub const IGNORE_MISSING: &str = "ignore-missing";
     pub const QUIET: &str = "quiet";
     pub const ZERO: &str = "zero";
+    pub const DEBUG: &str = "debug";
 }
 
 /// cksum has a bunch of legacy behavior. We handle this in this function to
@@ -181,6 +207,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         matches.get_flag(options::BASE64),
     );
 
+    // Print hardware debug info if requested
+    if matches.get_flag(options::DEBUG) {
+        print_cpu_debug_info();
+    }
+
     let opts = ChecksumComputeOptions {
         algo_kind: algo,
         output_format,
@@ -315,6 +346,12 @@ pub fn uu_app() -> Command {
                 .long(options::ZERO)
                 .short('z')
                 .help(translate!("cksum-help-zero"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::DEBUG)
+                .long(options::DEBUG)
+                .help(translate!("cksum-help-debug"))
                 .action(ArgAction::SetTrue),
         )
         .after_help(translate!("cksum-after-help"))

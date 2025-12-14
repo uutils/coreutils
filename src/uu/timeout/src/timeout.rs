@@ -275,7 +275,7 @@ fn wait_or_kill_process(
             process.wait()?;
             Ok(ExitStatus::SignalSent(signal).into())
         }
-        Err(_) => Ok(ExitStatus::WaitingFailed.into()),
+        Err(_) => Ok(ExitStatus::CommandTimedOut.into()),
     }
 }
 
@@ -305,7 +305,6 @@ fn preserve_signal_info(signal: libc::c_int) -> libc::c_int {
     signal
 }
 
-/// TODO: Improve exit codes, and make them consistent with the GNU Coreutils exit codes.
 fn timeout(
     cmd: &[String],
     duration: Duration,
@@ -328,12 +327,10 @@ fn timeout(
         .stderr(Stdio::inherit())
         .spawn()
         .map_err(|err| {
-            let status_code = if err.kind() == ErrorKind::NotFound {
-                // FIXME: not sure which to use
-                127
-            } else {
-                // FIXME: this may not be 100% correct...
-                126
+            let status_code = match err.kind() {
+                ErrorKind::NotFound => ExitStatus::CommandNotFound.into(),
+                ErrorKind::PermissionDenied => ExitStatus::CannotInvoke.into(),
+                _ => ExitStatus::CannotInvoke.into(),
             };
             USimpleError::new(
                 status_code,
