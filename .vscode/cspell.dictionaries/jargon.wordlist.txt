@@ -85,6 +85,7 @@ lstat
 mebi
 mebibytes
 mergeable
+metacharacters
 microbenchmark
 microbenchmarks
 microbenchmarking

@@ -15,8 +15,9 @@ use super::{
 };
 use crate::{
     format::FormatArguments,
+    i18n::UEncoding,
     os_str_as_bytes,
-    quoting_style::{QuotingStyle, locale_aware_escape_name},
+    quoting_style::{QuotingStyle, escape_name},
 };
 use std::{io::Write, num::NonZero, ops::ControlFlow};
 
@@ -403,10 +404,14 @@ impl Spec {
                 writer.write_all(&parsed).map_err(FormatError::IoError)
             }
             Self::QuotedString { position } => {
-                let s = locale_aware_escape_name(
-                    args.next_string(position),
-                    QuotingStyle::SHELL_ESCAPE,
-                );
+                // printf %q uses committed dollar mode (entire string in $'...' when control chars present)
+                let printf_style = QuotingStyle::Shell {
+                    escape: true,
+                    always_quote: false,
+                    show_control: false,
+                    commit_dollar_mode: true, // printf %q style
+                };
+                let s = escape_name(args.next_string(position), printf_style, UEncoding::Utf8);
                 let bytes = os_str_as_bytes(&s)?;
                 writer.write_all(bytes).map_err(FormatError::IoError)
             }
