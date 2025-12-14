@@ -12,6 +12,9 @@ env-help-debug = print verbose information for each processing step
 env-help-split-string = process and split S into separate arguments; used to pass multiple arguments on shebang lines
 env-help-argv0 = Override the zeroth argument passed to the command being executed. Without this option a default value of `command` is used.
 env-help-ignore-signal = set handling of SIG signal(s) to do nothing
+env-help-default-signal = set handling of SIG signal(s) to the default
+env-help-block-signal = block delivery of SIG signal(s) to COMMAND
+env-help-list-signal-handling = list non default signal handling to stderr
 
 # Error messages
 env-error-missing-closing-quote = no terminating quote in -S string at position { $position } for quote '{ $quote }'

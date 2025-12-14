@@ -937,6 +937,106 @@ fn test_env_arg_ignore_signal_empty() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_env_arg_default_signal_accepted() {
+    // Verify --default-signal is accepted and processes correctly
+    new_ucmd!()
+        .args(&["--default-signal=int", "echo", "hello"])
+        .succeeds()
+        .stdout_contains("hello");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_arg_default_signal_multiple() {
+    // Verify multiple signals can be specified
+    new_ucmd!()
+        .args(&["--default-signal=int,usr1", "echo", "hello"])
+        .succeeds()
+        .stdout_contains("hello");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_arg_default_signal_invalid() {
+    new_ucmd!()
+        .args(&["--default-signal=banana"])
+        .fails()
+        .stderr_contains("invalid signal");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_arg_default_signal_empty_resets_all() {
+    // Empty --default-signal= should be accepted (resets all signals)
+    new_ucmd!()
+        .args(&["--default-signal=", "echo", "hello"])
+        .succeeds()
+        .stdout_contains("hello");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_arg_block_signal_accepted() {
+    // Verify --block-signal is accepted
+    new_ucmd!()
+        .args(&["--block-signal=int", "echo", "hello"])
+        .succeeds()
+        .stdout_contains("hello");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_arg_block_signal_invalid() {
+    new_ucmd!()
+        .args(&["--block-signal=banana"])
+        .fails()
+        .stderr_contains("invalid signal");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_arg_block_signal_empty() {
+    // Empty --block-signal= should be accepted (blocks all signals)
+    new_ucmd!()
+        .args(&["--block-signal=", "echo", "hello"])
+        .succeeds()
+        .stdout_contains("hello");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_arg_list_signal_handling() {
+    // --list-signal-handling should output to stderr
+    new_ucmd!()
+        .args(&[
+            "--ignore-signal=int",
+            "--list-signal-handling",
+            "echo",
+            "hello",
+        ])
+        .succeeds()
+        .stdout_contains("hello")
+        .stderr_contains("INT");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_arg_list_signal_handling_shows_ignore() {
+    // When signal is ignored, should show IGNORE
+    new_ucmd!()
+        .args(&[
+            "--ignore-signal=usr1",
+            "--list-signal-handling",
+            "echo",
+            "hello",
+        ])
+        .succeeds()
+        .stdout_contains("hello")
+        .stderr_contains("IGNORE");
+}
+
+#[test]
 fn disallow_equals_sign_on_short_unset_option() {
     let ts = TestScenario::new(util_name!());
 

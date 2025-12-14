@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf pgrp
+// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf pgrp sigset sigprocmask sigaction Sigmask
 // spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGDANGER SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGMIGRATE SIGMSG SIGPIPE SIGPRE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTALRM SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVIRT SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VIRT VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX TALRM AIOCANCEL XRES RTMIN RTMAX LTOSTOP
 
 //! This module provides a way to handle signals in a platform-independent way.
@@ -13,9 +13,15 @@
 #[cfg(unix)]
 use nix::errno::Errno;
 #[cfg(unix)]
+use nix::libc;
+#[cfg(unix)]
 use nix::sys::signal::{
-    SigHandler::SigDfl, SigHandler::SigIgn, Signal::SIGINT, Signal::SIGPIPE, signal,
+    SigHandler::SigDfl, SigHandler::SigIgn, SigSet, SigmaskHow, Signal, Signal::SIGINT,
+    Signal::SIGPIPE, signal, sigprocmask,
 };
+
+#[cfg(unix)]
+pub use nix::libc::{SIGKILL, SIGSTOP};
 
 /// The default signal value.
 pub static DEFAULT_SIGNAL: usize = 15;
@@ -424,6 +430,65 @@ pub fn ignore_interrupts() -> Result<(), Errno> {
     // We pass the error as is, the return value would just be Ok(SigIgn), so we can safely ignore it.
     // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
     unsafe { signal(SIGINT, SigIgn) }.map(|_| ())
+}
+
+/// Ignore a signal by its number.
+#[cfg(unix)]
+pub fn ignore_signal(sig: usize) -> Result<(), Errno> {
+    let sig = Signal::try_from(sig as i32).map_err(|_| Errno::EINVAL)?;
+    // SAFETY: Setting to SigIgn is safe - no custom handler.
+    unsafe { signal(sig, SigIgn) }.map(|_| ())
+}
+
+/// Reset a signal to its default handler.
+#[cfg(unix)]
+pub fn reset_signal(sig: usize) -> Result<(), Errno> {
+    let sig = Signal::try_from(sig as i32).map_err(|_| Errno::EINVAL)?;
+    // SAFETY: Setting to SigDfl is safe - no custom handler.
+    unsafe { signal(sig, SigDfl) }.map(|_| ())
+}
+
+/// Block delivery of a set of signals.
+#[cfg(unix)]
+pub fn block_signals(signals: &[usize]) -> Result<(), Errno> {
+    if signals.is_empty() {
+        return Ok(());
+    }
+    let mut sigset = SigSet::empty();
+    for &sig in signals {
+        let sig = Signal::try_from(sig as i32).map_err(|_| Errno::EINVAL)?;
+        sigset.add(sig);
+    }
+    sigprocmask(SigmaskHow::SIG_BLOCK, Some(&sigset), None)
+}
+
+/// Status of a signal handler.
+#[cfg(unix)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignalStatus {
+    /// Default signal handler.
+    Default,
+    /// Signal is ignored.
+    Ignore,
+    /// Custom signal handler installed.
+    Custom,
+}
+
+/// Query the current handler status for a signal.
+#[cfg(unix)]
+pub fn get_signal_status(sig: usize) -> Result<SignalStatus, Errno> {
+    let mut current = std::mem::MaybeUninit::<libc::sigaction>::uninit();
+    // SAFETY: We pass null for new action, so this only queries the current handler.
+    if unsafe { libc::sigaction(sig as i32, std::ptr::null(), current.as_mut_ptr()) } != 0 {
+        return Err(Errno::last());
+    }
+    // SAFETY: sigaction succeeded, so current is initialized.
+    let handler = unsafe { current.assume_init() }.sa_sigaction;
+    Ok(match handler {
+        h if h == libc::SIG_IGN => SignalStatus::Ignore,
+        h if h == libc::SIG_DFL => SignalStatus::Default,
+        _ => SignalStatus::Custom,
+    })
 }
 
 #[test]

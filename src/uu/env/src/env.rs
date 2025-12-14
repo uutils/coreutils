@@ -17,10 +17,6 @@ use ini::Ini;
 use native_int_str::{
     Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation_owned,
 };
-#[cfg(unix)]
-use nix::libc;
-#[cfg(unix)]
-use nix::sys::signal::{SigHandler::SigIgn, Signal, signal};
 use std::borrow::Cow;
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -29,12 +25,15 @@ use std::io::{self, Write};
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
+#[cfg(unix)]
+use uucore::signals::{
+    SIGKILL, SIGSTOP, SignalStatus, block_signals, get_signal_status, ignore_signal, reset_signal,
+    signal_by_name_or_value, signal_name_by_value,
+};
 
 use uucore::display::Quotable;
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
-#[cfg(unix)]
-use uucore::signals::signal_by_name_or_value;
 use uucore::translate;
 use uucore::{format_usage, show_warning};
 
@@ -84,6 +83,9 @@ mod options {
     pub const SPLIT_STRING: &str = "split-string";
     pub const ARGV0: &str = "argv0";
     pub const IGNORE_SIGNAL: &str = "ignore-signal";
+    pub const DEFAULT_SIGNAL: &str = "default-signal";
+    pub const BLOCK_SIGNAL: &str = "block-signal";
+    pub const LIST_SIGNAL_HANDLING: &str = "list-signal-handling";
 }
 
 struct Options<'a> {
@@ -97,6 +99,12 @@ struct Options<'a> {
     argv0: Option<&'a OsStr>,
     #[cfg(unix)]
     ignore_signal: Vec<usize>,
+    #[cfg(unix)]
+    default_signal: Vec<usize>,
+    #[cfg(unix)]
+    block_signal: Vec<usize>,
+    #[cfg(unix)]
+    list_signal_handling: bool,
 }
 
 /// print `name=value` env pairs on screen
@@ -155,11 +163,11 @@ fn parse_signal_value(signal_name: &str) -> UResult<usize> {
 }
 
 #[cfg(unix)]
-fn parse_signal_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> {
+fn parse_signal_opt(signal_vec: &mut Vec<usize>, opt: &OsStr) -> UResult<()> {
     if opt.is_empty() {
         return Ok(());
     }
-    let signals: Vec<&'a OsStr> = opt
+    let signals: Vec<&OsStr> = opt
         .as_bytes()
         .split(|&b| b == b',')
         .map(OsStr::from_bytes)
@@ -179,12 +187,33 @@ fn parse_signal_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> {
             ));
         };
         let sig_val = parse_signal_value(sig_str)?;
-        if !opts.ignore_signal.contains(&sig_val) {
-            opts.ignore_signal.push(sig_val);
+        if !signal_vec.contains(&sig_val) {
+            signal_vec.push(sig_val);
         }
     }
 
     Ok(())
+}
+
+/// Parse signal option that can be empty (meaning all signals)
+#[cfg(unix)]
+fn parse_signal_opt_or_all(signal_vec: &mut Vec<usize>, opt: &OsStr) -> UResult<()> {
+    if opt.is_empty() {
+        // Empty means all signals - add all valid signal numbers (1-31 typically)
+        // Skip SIGKILL and SIGSTOP which cannot be caught or ignored
+        let sigkill = SIGKILL as usize;
+        let sigstop = SIGSTOP as usize;
+        for sig_val in 1..32 {
+            if sig_val == sigkill || sig_val == sigstop {
+                continue; // SIGKILL and SIGSTOP cannot be modified
+            }
+            if !signal_vec.contains(&sig_val) {
+                signal_vec.push(sig_val);
+            }
+        }
+        return Ok(());
+    }
+    parse_signal_opt(signal_vec, opt)
 }
 
 fn load_config_file(opts: &mut Options) -> UResult<()> {
@@ -307,8 +336,39 @@ pub fn uu_app() -> Command {
                 .long(options::IGNORE_SIGNAL)
                 .value_name("SIG")
                 .action(ArgAction::Append)
+                .num_args(0..=1)
+                .default_missing_value("")
+                .require_equals(true)
                 .value_parser(ValueParser::os_string())
                 .help(translate!("env-help-ignore-signal")),
+        )
+        .arg(
+            Arg::new(options::DEFAULT_SIGNAL)
+                .long(options::DEFAULT_SIGNAL)
+                .value_name("SIG")
+                .action(ArgAction::Append)
+                .num_args(0..=1)
+                .default_missing_value("")
+                .require_equals(true)
+                .value_parser(ValueParser::os_string())
+                .help(translate!("env-help-default-signal")),
+        )
+        .arg(
+            Arg::new(options::BLOCK_SIGNAL)
+                .long(options::BLOCK_SIGNAL)
+                .value_name("SIG")
+                .action(ArgAction::Append)
+                .num_args(0..=1)
+                .default_missing_value("")
+                .require_equals(true)
+                .value_parser(ValueParser::os_string())
+                .help(translate!("env-help-block-signal")),
+        )
+        .arg(
+            Arg::new(options::LIST_SIGNAL_HANDLING)
+                .long(options::LIST_SIGNAL_HANDLING)
+                .action(ArgAction::SetTrue)
+                .help(translate!("env-help-list-signal-handling")),
         )
 }
 
@@ -543,8 +603,22 @@ impl EnvAppData {
 
         apply_specified_env_vars(&opts);
 
+        // Apply signal handling in the correct order:
+        // 1. Reset signals to default
+        // 2. Set signals to ignore
+        // 3. Block signals
+        // 4. List signal handling (if requested)
+        #[cfg(unix)]
+        apply_default_signal(&opts)?;
+
         #[cfg(unix)]
         apply_ignore_signal(&opts)?;
+
+        #[cfg(unix)]
+        apply_block_signal(&opts)?;
+
+        #[cfg(unix)]
+        list_signal_handling(&opts)?;
 
         if opts.program.is_empty() {
             // no program provided, so just dump all env vars to stdout
@@ -705,12 +779,32 @@ fn make_options(matches: &clap::ArgMatches) -> UResult<Options<'_>> {
         argv0,
         #[cfg(unix)]
         ignore_signal: vec![],
+        #[cfg(unix)]
+        default_signal: vec![],
+        #[cfg(unix)]
+        block_signal: vec![],
+        #[cfg(unix)]
+        list_signal_handling: matches.get_flag(options::LIST_SIGNAL_HANDLING),
     };
 
     #[cfg(unix)]
-    if let Some(iter) = matches.get_many::<OsString>("ignore-signal") {
+    if let Some(iter) = matches.get_many::<OsString>(options::IGNORE_SIGNAL) {
         for opt in iter {
-            parse_signal_opt(&mut opts, opt)?;
+            parse_signal_opt_or_all(&mut opts.ignore_signal, opt)?;
+        }
+    }
+
+    #[cfg(unix)]
+    if let Some(iter) = matches.get_many::<OsString>(options::DEFAULT_SIGNAL) {
+        for opt in iter {
+            parse_signal_opt_or_all(&mut opts.default_signal, opt)?;
+        }
+    }
+
+    #[cfg(unix)]
+    if let Some(iter) = matches.get_many::<OsString>(options::BLOCK_SIGNAL) {
+        for opt in iter {
+            parse_signal_opt_or_all(&mut opts.block_signal, opt)?;
         }
     }
 
@@ -821,25 +915,58 @@ fn apply_specified_env_vars(opts: &Options<'_>) {
 #[cfg(unix)]
 fn apply_ignore_signal(opts: &Options<'_>) -> UResult<()> {
     for &sig_value in &opts.ignore_signal {
-        let sig: Signal = (sig_value as i32)
-            .try_into()
-            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
-
-        ignore_signal(sig)?;
+        ignore_signal(sig_value).map_err(|err| {
+            USimpleError::new(
+                125,
+                translate!("env-error-failed-set-signal-action", "signal" => sig_value, "error" => err.desc()),
+            )
+        })?;
     }
     Ok(())
 }
 
 #[cfg(unix)]
-fn ignore_signal(sig: Signal) -> UResult<()> {
-    // SAFETY: This is safe because we write the handler for each signal only once, and therefore "the current handler is the default", as the documentation requires it.
-    let result = unsafe { signal(sig, SigIgn) };
-    if let Err(err) = result {
-        return Err(USimpleError::new(
-            125,
-            translate!("env-error-failed-set-signal-action", "signal" => (sig as i32), "error" => err.desc()),
-        ));
+fn apply_default_signal(opts: &Options<'_>) -> UResult<()> {
+    for &sig_value in &opts.default_signal {
+        reset_signal(sig_value).map_err(|err| {
+            USimpleError::new(
+                125,
+                translate!("env-error-failed-set-signal-action", "signal" => sig_value, "error" => err.desc()),
+            )
+        })?;
     }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn apply_block_signal(opts: &Options<'_>) -> UResult<()> {
+    block_signals(&opts.block_signal)
+        .map_err(|err| USimpleError::new(125, format!("failed to block signals: {}", err.desc())))
+}
+
+#[cfg(unix)]
+fn list_signal_handling(opts: &Options<'_>) -> UResult<()> {
+    if !opts.list_signal_handling {
+        return Ok(());
+    }
+
+    let stderr = io::stderr();
+    let mut stderr = stderr.lock();
+
+    // Check each signal that was modified
+    for &sig_value in &opts.ignore_signal {
+        if let Some(name) = signal_name_by_value(sig_value) {
+            if let Ok(status) = get_signal_status(sig_value) {
+                let handler_str = match status {
+                    SignalStatus::Ignore => "IGNORE",
+                    SignalStatus::Default => "DEFAULT",
+                    SignalStatus::Custom => "HANDLER",
+                };
+                writeln!(stderr, "{name:<10} (): {handler_str}").ok();
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -848,9 +975,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Rust ignores SIGPIPE (see https://github.com/rust-lang/rust/issues/62569).
     // We restore its default action here.
     #[cfg(unix)]
-    unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
-    }
+    uucore::signals::enable_pipe_errors().ok();
     EnvAppData::default().run_env(args)
 }
 
