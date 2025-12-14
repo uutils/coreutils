@@ -5,7 +5,8 @@
 #![allow(clippy::similar_names)]
 
 use std::path::PathBuf;
-use uutests::{at_and_ts, at_and_ucmd, new_ucmd};
+use uutests::util::TestScenario;
+use uutests::{at_and_ts, at_and_ucmd, new_ucmd, util_name};
 
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
@@ -193,8 +194,7 @@ fn test_symlink_custom_backup_suffix() {
 
 #[test]
 fn test_symlink_suffix_without_backup_option() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
 
     at.write("a", "a\n");
     at.write("b", "b2\n");
@@ -203,9 +203,7 @@ fn test_symlink_suffix_without_backup_option() {
     assert!(at.file_exists("b"));
     let suffix = ".sfx";
     let suffix_arg = &format!("--suffix={suffix}");
-    scene
-        .ucmd()
-        .args(&["-s", "-f", suffix_arg, "a", "b"])
+    ucmd.args(&["-s", "-f", suffix_arg, "a", "b"])
         .succeeds()
         .no_stderr();
     assert!(at.file_exists("a"));
@@ -923,22 +921,24 @@ fn test_ln_extra_operand() {
     at.touch("c");
     ucmd.args(&["-T", "a", "b", "c"])
         .fails_with_code(1)
-        .stderr_contains("extra operand c")
+        .stderr_contains("extra operand 'c'")
         .stderr_contains("--help");
 }
 
 #[cfg(target_os = "linux")]
 #[test]
-fn test_ln_cannot_stat_non_utf8() {
+fn test_ln_non_utf8_symlink() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
     let (at, ts) = at_and_ts!();
     at.mkdir("target_dir");
-    at.touch(OsStr::from_bytes(b"file_\xFF"));
+    let non_utf8_file = OsStr::from_bytes(b"file_\xFF");
+    at.touch(non_utf8_file);
+    // GNU ln handles non-UTF8 paths without error
     ts.ucmd()
         .arg("-s")
-        .arg(OsStr::from_bytes(b"file_\xFF"))
+        .arg(non_utf8_file)
         .arg("target_dir")
-        .fails_with_code(1)
-        .stderr_contains("cannot stat");
+        .succeeds()
+        .no_stderr();
 }
