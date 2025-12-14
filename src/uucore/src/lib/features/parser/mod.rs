@@ -8,8 +8,6 @@
 pub mod num_parser;
 #[cfg(any(feature = "parser", feature = "parser-glob"))]
 pub mod parse_glob;
-#[cfg(any(feature = "parser", feature = "parser-num"))]
-pub mod parse_int;
 #[cfg(any(feature = "parser", feature = "parser-size"))]
 pub mod parse_signed_num;
 #[cfg(any(feature = "parser", feature = "parser-size"))]
