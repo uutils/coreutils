@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::process;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult, set_exit_code};
+use uucore::error::{ExitCode, UError, UResult, set_exit_code};
 use uucore::format_usage;
 use uucore::translate;
 
@@ -46,17 +46,12 @@ enum NohupError {
 
     #[error("{}", translate!("nohup-error-open-failed-both", "first_path" => NOHUP_OUT.quote(), "first_err" => _1, "second_path" => _2.quote(), "second_err" => _3))]
     OpenFailed2(i32, #[source] Error, String, Error),
-
-    #[error("")]
-    StderrWriteFailed(i32),
 }
 
 impl UError for NohupError {
     fn code(&self) -> i32 {
         match self {
-            Self::OpenFailed(code, _)
-            | Self::OpenFailed2(code, _, _, _)
-            | Self::StderrWriteFailed(code) => *code,
+            Self::OpenFailed(code, _) | Self::OpenFailed2(code, _, _, _) => *code,
             _ => 2,
         }
     }
@@ -71,10 +66,11 @@ fn failure_code() -> i32 {
 
 /// We are unable to use the regular show_error because we need to detect if stderr
 /// is unavailable because GNU nohup exits with 125 if it can't write to stderr.
+/// When stderr is unavailable, we use ExitCode to exit silently with the appropriate code.
 fn write_stderr(msg: &str) -> UResult<()> {
     let mut stderr = std::io::stderr();
     if writeln!(stderr, "nohup: {msg}").is_err() || stderr.flush().is_err() {
-        return Err(NohupError::StderrWriteFailed(failure_code()).into());
+        return Err(ExitCode(failure_code()).into());
     }
     Ok(())
 }
