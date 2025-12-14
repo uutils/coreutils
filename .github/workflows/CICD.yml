@@ -149,7 +149,7 @@ jobs:
       shell: bash
       run: |
         RUSTDOCFLAGS="-Dwarnings" cargo doc  ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-deps --workspace --document-private-items
-    - uses: DavidAnson/markdownlint-cli2-action@v21
+    - uses: DavidAnson/markdownlint-cli2-action@v22
       with:
         fix: "true"
         globs: |
@@ -546,12 +546,12 @@ jobs:
         previous_multisize=$(cat dl/size-result.json | jq -r '.[] | .multisize')
         check 'multicall binary' "$multisize" "$previous_multisize" 'size-result.json'
     - name: Upload the individual size result
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: individual-size-result
         path: individual-size-result.json
     - name: Upload the size result
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: size-result
         path: size-result.json
@@ -585,7 +585,7 @@ jobs:
           - { os: ubuntu-latest  , target: x86_64-unknown-redox        , features: feat_os_unix_redox     , use-cross: redoxer , skip-tests: true }
           - { os: ubuntu-latest  , target: wasm32-unknown-unknown      , default-features: false, features: uucore/format, skip-tests: true, skip-package: true, skip-publish: true }
           - { os: macos-latest   , target: aarch64-apple-darwin        , features: feat_os_macos, workspace-tests: true } # M1 CPU
-          # PR #7964: Mac should still build even if the feature is not enabled. Do not publish this. 
+          # PR #7964: Mac should still build even if the feature is not enabled. Do not publish this.
           - { os: macos-latest   , target: aarch64-apple-darwin        , workspace-tests: true, skip-publish: true } # M1 CPU
           - { os: macos-latest   , target: x86_64-apple-darwin         , features: feat_os_macos, workspace-tests: true }
           - { os: windows-latest , target: i686-pc-windows-msvc        , features: feat_os_windows }
@@ -712,7 +712,6 @@ jobs:
       shell: bash
       run: |
         ## Create build/work space
-        mkdir -p '${{ steps.vars.outputs.STAGING }}'
         mkdir -p '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}'
     - name: Install/setup prerequisites
       shell: bash
@@ -821,7 +820,7 @@ jobs:
       env:
         RUST_BACKTRACE: "1"
     - name: Archive executable artifacts
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: ${{ env.PROJECT_NAME }}-${{ matrix.job.target }}${{ steps.vars.outputs.ARTIFACTS_SUFFIX }}
         path: target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}
@@ -921,17 +920,17 @@ jobs:
           HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
           echo "HASH=${HASH}" >> $GITHUB_OUTPUT
     - name: Reserve SHA1/ID of 'test-summary'
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: "${{ steps.summary.outputs.HASH }}"
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Reserve test results summary
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: busybox-test-summary
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Upload json results
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: busybox-result.json
         path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
@@ -1014,17 +1013,17 @@ jobs:
         HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
           echo "HASH=${HASH}" >> $GITHUB_OUTPUT
     - name: Reserve SHA1/ID of 'test-summary'
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: "${{ steps.summary.outputs.HASH }}"
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Reserve test results summary
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: toybox-test-summary
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Upload json results
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: toybox-result.json
         path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
@@ -1100,7 +1099,9 @@ jobs:
 
         case '${{ matrix.job.os }}' in
           ubuntu-latest)
-            sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
+            # selinux and systemd headers needed to build tests
+            sudo apt-get -y update
+            sudo apt-get -y install libselinux1-dev libsystemd-dev
             # pinky is a tool to show logged-in users from utmp, and gecos fields from /etc/passwd.
             # In GitHub Action *nix VMs, no accounts log in, even the "runner" account that runs the commands, and "system boot" entry is missing.
             # The account also has empty gecos fields.
@@ -1118,11 +1119,6 @@ jobs:
             echo 200:x:2000:2000::/home/200:/bin/bash | sudo tee -a /etc/passwd
             echo 200:x:2000: | sudo tee -a /etc/group
             ;;
-        esac
-
-        case '${{ matrix.job.os }}' in
-          # Update binutils if MinGW due to https://github.com/rust-lang/rust/issues/112368
-          windows-latest) C:/msys64/usr/bin/pacman.exe -Sy --needed mingw-w64-x86_64-gcc --noconfirm ; echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH ;;
         esac
 
         ## Install the llvm-tools component to get access to `llvm-profdata`
@@ -1219,7 +1215,7 @@ jobs:
       uses: lima-vm/lima-actions/setup@v1
       id: lima-actions-setup
     - name: Cache ~/.cache/lima
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.cache/lima
         key: lima-${{ steps.lima-actions-setup.outputs.version }}
