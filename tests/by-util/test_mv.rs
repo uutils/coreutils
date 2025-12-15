@@ -2537,6 +2537,56 @@ fn test_special_file_different_filesystem() {
     std::fs::remove_dir_all("/dev/shm/tmp").unwrap();
 }
 
+/// Test moving a directory containing a FIFO file across different filesystems (issue #9656)
+/// Without proper FIFO handling, this test will hang indefinitely when
+/// copy_dir_contents_recursive tries to fs::copy() the FIFO
+#[cfg(unix)]
+#[test]
+fn test_mv_dir_containing_fifo_cross_filesystem() {
+    use std::time::Duration;
+
+    // Skip if /dev/shm not available
+    if !Path::new("/dev/shm").exists() {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkfifo("a/f");
+
+    // This will hang without the fix, so use timeout
+    // Move to /dev/shm which is typically a different filesystem (tmpfs)
+    ucmd.args(&["a", "/dev/shm/test_mv_fifo_dir"])
+        .timeout(Duration::from_secs(2))
+        .succeeds();
+
+    assert!(!at.dir_exists("a"));
+    assert!(Path::new("/dev/shm/test_mv_fifo_dir").exists());
+    assert!(Path::new("/dev/shm/test_mv_fifo_dir/f").exists());
+    std::fs::remove_dir_all("/dev/shm/test_mv_fifo_dir").ok();
+}
+
+/// Test moving a directory containing a FIFO file (same filesystem - issue #9656)
+/// This tests FIFO handling doesn't fail even on same filesystem
+#[cfg(unix)]
+#[test]
+fn test_mv_dir_containing_fifo_same_filesystem() {
+    use std::time::Duration;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkfifo("a/f");
+
+    // This will hang without the fix, so use timeout
+    ucmd.args(&["a", "b"])
+        .timeout(Duration::from_secs(2))
+        .succeeds();
+
+    assert!(!at.dir_exists("a"));
+    assert!(at.dir_exists("b"));
+    assert!(at.is_fifo("b/f"));
+}
+
 /// Test cross-device move with permission denied error
 /// This test mimics the scenario from the GNU part-fail test where
 /// a cross-device move fails due to permission errors when removing the target file

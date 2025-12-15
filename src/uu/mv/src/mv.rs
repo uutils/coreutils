@@ -1082,15 +1082,24 @@ fn copy_dir_contents_recursive(
                 display_manager,
             )?;
         } else {
-            // Copy file with or without hardlink support based on platform
+            // Check if this is a FIFO to avoid blocking on fs::copy (issue #9656)
             #[cfg(unix)]
             {
-                copy_file_with_hardlinks_helper(
-                    &from_path,
-                    &to_path,
-                    hardlink_tracker,
-                    hardlink_scanner,
-                )?;
+                let metadata = from_path.symlink_metadata()?;
+                let file_type = metadata.file_type();
+
+                if is_fifo(file_type) {
+                    // Handle FIFO specially to avoid blocking on fs::copy
+                    rename_fifo_fallback(&from_path, &to_path)?;
+                } else {
+                    // Copy file with hardlink support
+                    copy_file_with_hardlinks_helper(
+                        &from_path,
+                        &to_path,
+                        hardlink_tracker,
+                        hardlink_scanner,
+                    )?;
+                }
             }
             #[cfg(not(unix))]
             {
