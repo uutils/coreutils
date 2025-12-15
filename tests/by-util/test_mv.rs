@@ -2075,6 +2075,61 @@ mod inter_partition_copying {
         );
     }
 
+    // Test that ownership is preserved when moving files across partitions as root.
+    //
+    // This specifically guards the EXDEV (copy+delete) fallback path, which must not
+    // change uid/gid compared to a same-filesystem rename.
+    #[test]
+    #[cfg(target_os = "linux")]
+    pub(crate) fn test_mv_preserves_ownership_across_partitions_when_root() {
+        use std::ffi::CString;
+        use std::fs::metadata;
+        use std::os::unix::ffi::OsStrExt as _;
+        use std::os::unix::fs::MetadataExt as _;
+        use tempfile::TempDir;
+        use uutests::util::TestScenario;
+
+        // Requires root to set an arbitrary uid/gid.
+        if unsafe { libc::geteuid() } != 0 {
+            return;
+        }
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.write("file", "test content");
+
+        let src_path = at.plus("file");
+        let src_path_c = CString::new(src_path.as_os_str().as_bytes()).unwrap();
+
+        // Pick a non-root uid/gid. If chown isn't possible in this environment, skip.
+        let target_uid: libc::uid_t = 1;
+        let target_gid: libc::gid_t = 1;
+        let chown_result = unsafe { libc::chown(src_path_c.as_ptr(), target_uid, target_gid) };
+        if chown_result != 0 {
+            return;
+        }
+
+        let src_meta = metadata(&src_path).expect("Failed to get metadata for source file");
+        assert_eq!(src_meta.uid(), target_uid);
+        assert_eq!(src_meta.gid(), target_gid);
+
+        // Force cross-filesystem move using /dev/shm (tmpfs)
+        let other_fs_tempdir = TempDir::new_in("/dev/shm/")
+            .expect("Unable to create temp directory in /dev/shm - test requires tmpfs");
+
+        scene
+            .ucmd()
+            .arg("file")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds();
+
+        let moved_file = other_fs_tempdir.path().join("file");
+        let moved_meta = metadata(&moved_file).expect("Failed to get metadata for moved file");
+        assert_eq!(moved_meta.uid(), target_uid);
+        assert_eq!(moved_meta.gid(), target_gid);
+    }
+
     // Test that hardlinks are preserved even with multiple sets of hardlinked files
     #[test]
     #[cfg(unix)]
