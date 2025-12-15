@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf pgrp
+// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf pgrp GETFD
 // spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGDANGER SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGMIGRATE SIGMSG SIGPIPE SIGPRE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTALRM SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVIRT SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VIRT VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX TALRM AIOCANCEL XRES RTMIN RTMAX LTOSTOP
 
 //! This module provides a way to handle signals in a platform-independent way.
@@ -424,6 +424,89 @@ pub fn ignore_interrupts() -> Result<(), Errno> {
     // We pass the error as is, the return value would just be Ok(SigIgn), so we can safely ignore it.
     // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
     unsafe { signal(SIGINT, SigIgn) }.map(|_| ())
+}
+
+// Detect closed stdin/stdout before Rust reopens them as /dev/null (see issue #2873)
+#[cfg(unix)]
+use std::sync::atomic::{AtomicBool, Ordering};
+
+#[cfg(unix)]
+static STDIN_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+#[cfg(unix)]
+static STDOUT_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+#[cfg(unix)]
+static STDERR_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(unix)]
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn capture_stdio_state() {
+    use nix::libc;
+    unsafe {
+        STDIN_WAS_CLOSED.store(
+            libc::fcntl(libc::STDIN_FILENO, libc::F_GETFD) == -1,
+            Ordering::Relaxed,
+        );
+        STDOUT_WAS_CLOSED.store(
+            libc::fcntl(libc::STDOUT_FILENO, libc::F_GETFD) == -1,
+            Ordering::Relaxed,
+        );
+        STDERR_WAS_CLOSED.store(
+            libc::fcntl(libc::STDERR_FILENO, libc::F_GETFD) == -1,
+            Ordering::Relaxed,
+        );
+    }
+}
+
+#[macro_export]
+#[cfg(unix)]
+macro_rules! init_stdio_state_capture {
+    () => {
+        #[cfg(not(target_os = "macos"))]
+        #[used]
+        #[unsafe(link_section = ".init_array")]
+        static CAPTURE_STDIO_STATE: unsafe extern "C" fn() = $crate::signals::capture_stdio_state;
+
+        #[cfg(target_os = "macos")]
+        #[used]
+        #[unsafe(link_section = "__DATA,__mod_init_func")]
+        static CAPTURE_STDIO_STATE: unsafe extern "C" fn() = $crate::signals::capture_stdio_state;
+    };
+}
+
+#[macro_export]
+#[cfg(not(unix))]
+macro_rules! init_stdio_state_capture {
+    () => {};
+}
+
+#[cfg(unix)]
+pub fn stdin_was_closed() -> bool {
+    STDIN_WAS_CLOSED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(unix))]
+pub const fn stdin_was_closed() -> bool {
+    false
+}
+
+#[cfg(unix)]
+pub fn stdout_was_closed() -> bool {
+    STDOUT_WAS_CLOSED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(unix))]
+pub const fn stdout_was_closed() -> bool {
+    false
+}
+
+#[cfg(unix)]
+pub fn stderr_was_closed() -> bool {
+    STDERR_WAS_CLOSED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(unix))]
+pub const fn stderr_was_closed() -> bool {
+    false
 }
 
 #[test]
