@@ -71,11 +71,11 @@ mod login {
                 let session_cstr = unsafe { CStr::from_ptr(session_ptr) };
                 sessions.push(session_cstr.to_string_lossy().into_owned());
 
-                unsafe { libc::free(session_ptr as *mut libc::c_void) };
+                unsafe { libc::free(session_ptr.cast()) };
                 i += 1;
             }
 
-            unsafe { libc::free(sessions_ptr as *mut libc::c_void) };
+            unsafe { libc::free(sessions_ptr.cast()) };
         }
 
         Ok(sessions)
@@ -135,7 +135,7 @@ mod login {
         let tty_cstr = unsafe { CStr::from_ptr(tty_ptr) };
         let tty_string = tty_cstr.to_string_lossy().into_owned();
 
-        unsafe { libc::free(tty_ptr as *mut libc::c_void) };
+        unsafe { libc::free(tty_ptr.cast()) };
 
         Ok(Some(tty_string))
     }
@@ -164,7 +164,7 @@ mod login {
         let host_cstr = unsafe { CStr::from_ptr(host_ptr) };
         let host_string = host_cstr.to_string_lossy().into_owned();
 
-        unsafe { libc::free(host_ptr as *mut libc::c_void) };
+        unsafe { libc::free(host_ptr.cast()) };
 
         Ok(Some(host_string))
     }
@@ -193,7 +193,7 @@ mod login {
         let display_cstr = unsafe { CStr::from_ptr(display_ptr) };
         let display_string = display_cstr.to_string_lossy().into_owned();
 
-        unsafe { libc::free(display_ptr as *mut libc::c_void) };
+        unsafe { libc::free(display_ptr.cast()) };
 
         Ok(Some(display_string))
     }
@@ -221,7 +221,7 @@ mod login {
         let type_cstr = unsafe { CStr::from_ptr(type_ptr) };
         let type_string = type_cstr.to_string_lossy().into_owned();
 
-        unsafe { libc::free(type_ptr as *mut libc::c_void) };
+        unsafe { libc::free(type_ptr.cast()) };
 
         Ok(Some(type_string))
     }
@@ -249,7 +249,7 @@ mod login {
         let seat_cstr = unsafe { CStr::from_ptr(seat_ptr) };
         let seat_string = seat_cstr.to_string_lossy().into_owned();
 
-        unsafe { libc::free(seat_ptr as *mut libc::c_void) };
+        unsafe { libc::free(seat_ptr.cast()) };
 
         Ok(Some(seat_string))
     }
@@ -376,7 +376,7 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
             let ret = libc::getpwuid_r(
                 uid,
                 passwd.as_mut_ptr(),
-                buf.as_mut_ptr() as *mut libc::c_char,
+                buf.as_mut_ptr().cast(),
                 buf.len(),
                 &raw mut result,
             );
