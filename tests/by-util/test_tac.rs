@@ -359,3 +359,21 @@ fn test_fifo_argument() {
 
     writer.join().unwrap();
 }
+
+#[test]
+#[cfg(unix)]
+fn test_stdin_dev_null_rdwr_is_supported() {
+    use std::fs::OpenOptions;
+
+    let dev_null = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/null")
+        .unwrap();
+
+    new_ucmd!()
+        .set_stdin(dev_null)
+        .succeeds()
+        .no_stderr()
+        .stdout_is("");
+}
