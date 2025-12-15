@@ -186,10 +186,11 @@ fn sub_q_control_chars_basic() {
 #[test]
 fn sub_q_control_chars_with_apostrophe() {
     // Bug #9638: control char + apostrophe + control char
+    // GNU outputs: $'\001'\'$'\001'
     new_ucmd!()
         .args(&["%q\n", "\x01'\x01"])
         .succeeds()
-        .stdout_only("$'\\001\\'\\001'\n");
+        .stdout_only("$'\\001'\\'$'\\001'\n");
 }
 
 #[test]
@@ -257,7 +258,7 @@ fn sub_q_newline() {
     new_ucmd!()
         .args(&["%q\n", "a\nb"])
         .succeeds()
-        .stdout_only("$'a\\nb'\n");
+        .stdout_only("a$'\\n'b\n");
 }
 
 #[test]
@@ -265,7 +266,7 @@ fn sub_q_tab() {
     new_ucmd!()
         .args(&["%q\n", "a\tb"])
         .succeeds()
-        .stdout_only("$'a\\tb'\n");
+        .stdout_only("a$'\\t'b\n");
 }
 
 #[test]
@@ -273,7 +274,7 @@ fn sub_q_mixed_control_and_text() {
     new_ucmd!()
         .args(&["%q\n", "hello\x01world"])
         .succeeds()
-        .stdout_only("$'hello\\001world'\n");
+        .stdout_only("hello$'\\001'world\n");
 }
 
 #[test]
@@ -281,7 +282,7 @@ fn sub_q_apostrophe_in_dollar_quote() {
     new_ucmd!()
         .args(&["%q\n", "it's\na\nthing"])
         .succeeds()
-        .stdout_only("$'it\\'s\\na\\nthing'\n");
+        .stdout_only("it\\'s$'\\n'a$'\\n'thing\n");
 }
 
 #[test]
@@ -329,7 +330,7 @@ fn sub_q_mixed_escapes() {
     new_ucmd!()
         .args(&["%q\n", "a b\nc"])
         .succeeds()
-        .stdout_only("$'a b\\nc'\n");
+        .stdout_only("a\\ b$'\\n'c\n");
 }
 
 #[test]
