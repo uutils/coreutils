@@ -5,17 +5,16 @@
 
 // spell-checker:ignore (paths) atim sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist fpath testdir testfile
 // spell-checker:ignore selfref ELOOP smallfile
+
 #[cfg(not(windows))]
 use regex::Regex;
 
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
 #[cfg(not(target_os = "windows"))]
 use uutests::unwrap_or_return;
 use uutests::util::TestScenario;
 #[cfg(not(target_os = "windows"))]
 use uutests::util::expected_result;
-use uutests::util_name;
+use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 #[cfg(not(target_os = "openbsd"))]
 const SUB_DIR: &str = "subdir/deeper";
@@ -1397,6 +1396,17 @@ fn test_du_files0_from_stdin_with_invalid_zero_length_file_names() {
         .fails_with_code(1)
         .stderr_contains("-:1: invalid zero-length file name")
         .stderr_contains("-:2: invalid zero-length file name");
+}
+
+#[test]
+fn test_du_files0_from_stdin_with_stdin_as_input() {
+    new_ucmd!()
+        .arg("--files0-from=-")
+        .pipe_in("-")
+        .fails_with_code(1)
+        .stderr_is(
+            "du: when reading file names from standard input, no file name of '-' allowed\n",
+        );
 }
 
 #[test]

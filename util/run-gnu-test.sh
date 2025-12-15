@@ -54,7 +54,18 @@ if test $# -ge 1; then
     done
 fi
 
-if [[ "$1" == "run-root" && "$has_selinux_tests" == true ]]; then
+if [[ "$1" == "run-tty" ]]; then
+    # Handle TTY tests - dynamically find tests requiring TTY and run each individually
+    shift
+    TTY_TESTS=$(grep -r "require_controlling_input_terminal" tests --include="*.sh" --include="*.pl" -l 2>/dev/null)
+    echo "Running TTY tests individually:"
+    # If a test fails, it can break the implementation of the other tty tests. By running them separately this stops the different tests from being able to break each other
+    for test in $TTY_TESTS; do
+        echo "  Running: $test"
+        script -qec "timeout -sKILL 5m '${MAKE}' check TESTS='$test' SUBDIRS=. RUN_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit='' srcdir='${path_GNU}'" /dev/null || :
+    done
+    exit 0
+elif [[ "$1" == "run-root" && "$has_selinux_tests" == true ]]; then
     # Handle SELinux root tests separately
     shift
     if test -n "$CI"; then
@@ -63,7 +74,7 @@ if [[ "$1" == "run-root" && "$has_selinux_tests" == true ]]; then
         sudo "${MAKE}" -j "$("${NPROC}")" check TESTS="$*" SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" TEST_SUITE_LOG="tests/test-suite-root.log" || :
     fi
     exit 0
-elif test "$1" != "run-root"; then
+elif test "$1" != "run-root" && test "$1" != "run-tty"; then
     if test $# -ge 1; then
         # if set, run only the tests passed
         SPECIFIC_TESTS=""
@@ -91,7 +102,7 @@ fi
 # * `srcdir=..` specifies the GNU source directory for tests (fixing failing/confused 'tests/factor/tNN.sh' tests and causing no harm to other tests)
 #shellcheck disable=SC2086
 
-if test "$1" != "run-root"; then
+if test "$1" != "run-root" && test "$1" != "run-tty"; then
     # run the regular tests
     if test $# -ge 1; then
         timeout -sKILL 4h "${MAKE}" -j "$("${NPROC}")" check TESTS="$SPECIFIC_TESTS" SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" || : # Kill after 4 hours in case something gets stuck in make

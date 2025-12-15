@@ -173,6 +173,11 @@ fi
 if echo "$AVAILABLE_UTILS" | grep -q "chmod"; then
     cp -r test_dir test_chmod
     check_utility "chmod" "openat,fchmodat,newfstatat,chmod" "openat fchmodat" "-R 755 test_chmod" "recursive_chmod"
+
+    # Additional regression guard: ensure recursion uses dirfd-relative openat, not AT_FDCWD with a multi-component path
+    if grep -q 'openat(AT_FDCWD, "test_chmod/' strace_chmod_recursive_chmod.log; then
+        fail_immediately "chmod recursed using AT_FDCWD with a multi-component path; expected dirfd-relative openat"
+    fi
 fi
 
 # Test chown - should use openat, fchownat, newfstatat

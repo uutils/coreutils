@@ -202,6 +202,8 @@ PCLMUL
 pclmul
 PCLMULQDQ
 pclmulqdq
+PMULL
+pmull
 TUNABLES
 tunables
 VMULL
