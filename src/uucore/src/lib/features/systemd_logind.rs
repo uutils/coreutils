@@ -53,7 +53,7 @@ mod login {
     pub fn get_sessions() -> Result<Vec<String>, Box<dyn std::error::Error>> {
         let mut sessions_ptr: *mut *mut libc::c_char = ptr::null_mut();
 
-        let result = unsafe { ffi::sd_get_sessions(&mut sessions_ptr) };
+        let result = unsafe { ffi::sd_get_sessions(&raw mut sessions_ptr) };
 
         if result < 0 {
             return Err(format!("sd_get_sessions failed: {result}").into());
@@ -86,7 +86,7 @@ mod login {
         let session_cstring = CString::new(session_id)?;
         let mut uid: std::os::raw::c_uint = 0;
 
-        let result = unsafe { ffi::sd_session_get_uid(session_cstring.as_ptr(), &mut uid) };
+        let result = unsafe { ffi::sd_session_get_uid(session_cstring.as_ptr(), &raw mut uid) };
 
         if result < 0 {
             return Err(
@@ -102,7 +102,8 @@ mod login {
         let session_cstring = CString::new(session_id)?;
         let mut usec: u64 = 0;
 
-        let result = unsafe { ffi::sd_session_get_start_time(session_cstring.as_ptr(), &mut usec) };
+        let result =
+            unsafe { ffi::sd_session_get_start_time(session_cstring.as_ptr(), &raw mut usec) };
 
         if result < 0 {
             return Err(format!(
@@ -119,7 +120,7 @@ mod login {
         let session_cstring = CString::new(session_id)?;
         let mut tty_ptr: *mut libc::c_char = ptr::null_mut();
 
-        let result = unsafe { ffi::sd_session_get_tty(session_cstring.as_ptr(), &mut tty_ptr) };
+        let result = unsafe { ffi::sd_session_get_tty(session_cstring.as_ptr(), &raw mut tty_ptr) };
 
         if result < 0 {
             return Err(
@@ -147,7 +148,7 @@ mod login {
         let mut host_ptr: *mut libc::c_char = ptr::null_mut();
 
         let result =
-            unsafe { ffi::sd_session_get_remote_host(session_cstring.as_ptr(), &mut host_ptr) };
+            unsafe { ffi::sd_session_get_remote_host(session_cstring.as_ptr(), &raw mut host_ptr) };
 
         if result < 0 {
             return Err(format!(
@@ -176,7 +177,7 @@ mod login {
         let mut display_ptr: *mut libc::c_char = ptr::null_mut();
 
         let result =
-            unsafe { ffi::sd_session_get_display(session_cstring.as_ptr(), &mut display_ptr) };
+            unsafe { ffi::sd_session_get_display(session_cstring.as_ptr(), &raw mut display_ptr) };
 
         if result < 0 {
             return Err(format!(
@@ -204,7 +205,8 @@ mod login {
         let session_cstring = CString::new(session_id)?;
         let mut type_ptr: *mut libc::c_char = ptr::null_mut();
 
-        let result = unsafe { ffi::sd_session_get_type(session_cstring.as_ptr(), &mut type_ptr) };
+        let result =
+            unsafe { ffi::sd_session_get_type(session_cstring.as_ptr(), &raw mut type_ptr) };
 
         if result < 0 {
             return Err(
@@ -231,7 +233,8 @@ mod login {
         let session_cstring = CString::new(session_id)?;
         let mut seat_ptr: *mut libc::c_char = ptr::null_mut();
 
-        let result = unsafe { ffi::sd_session_get_seat(session_cstring.as_ptr(), &mut seat_ptr) };
+        let result =
+            unsafe { ffi::sd_session_get_seat(session_cstring.as_ptr(), &raw mut seat_ptr) };
 
         if result < 0 {
             return Err(
@@ -375,7 +378,7 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
                 passwd.as_mut_ptr(),
                 buf.as_mut_ptr() as *mut libc::c_char,
                 buf.len(),
-                &mut result,
+                &raw mut result,
             );
 
             if ret == 0 && !result.is_null() {
