@@ -43,6 +43,9 @@ pub struct ReverseChunks<'a> {
 
     /// The index of the next block to read.
     block_idx: usize,
+
+    /// The buffer to read each block into.
+    buf: Vec<u8>,
 }
 
 impl<'a> ReverseChunks<'a> {
@@ -60,6 +63,7 @@ impl<'a> ReverseChunks<'a> {
             size,
             max_blocks_to_read,
             block_idx,
+            buf: vec![0; BLOCK_SIZE as usize],
         }
     }
 }
@@ -84,7 +88,12 @@ impl Iterator for ReverseChunks<'_> {
 
         // Seek backwards by the next chunk, read the full chunk into
         // `buf`, and then seek back to the start of the chunk again.
-        let mut buf = vec![0; BLOCK_SIZE as usize];
+        let buf = &mut self.buf;
+        // Zero out the buffer to avoid returning old data in case
+        // of partial reads.
+        if self.block_idx > 0 {
+            buf.fill(0);
+        }
         let pos = self
             .file
             .seek(SeekFrom::Current(-(block_size as i64)))
