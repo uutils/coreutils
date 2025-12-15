@@ -25,6 +25,9 @@ pub(super) struct NonEscapedShellQuoter<'a> {
     /// with `?`.
     show_control: bool,
 
+    /// Whether to always quote the output
+    always_quote: bool,
+
     // INTERNAL STATE
     /// Whether the name should be quoted.
     must_quote: bool,
@@ -40,11 +43,13 @@ impl<'a> NonEscapedShellQuoter<'a> {
         dirname: bool,
         size_hint: usize,
     ) -> Self {
-        let (quotes, must_quote) = initial_quoting(reference, dirname, always_quote);
+        let (quotes, must_quote) =
+            initial_quoting_with_show_control(reference, dirname, always_quote, show_control);
         Self {
             reference,
             quotes,
             show_control,
+            always_quote,
             must_quote,
             buffer: Vec::with_capacity(size_hint),
         }
@@ -82,7 +87,12 @@ impl Quoter for NonEscapedShellQuoter<'_> {
     }
 
     fn finalize(self: Box<Self>) -> Vec<u8> {
-        finalize_shell_quoter(self.buffer, self.reference, self.must_quote, self.quotes)
+        finalize_shell_quoter(
+            self.buffer,
+            self.reference,
+            self.must_quote || self.always_quote,
+            self.quotes,
+        )
     }
 }
 
@@ -126,7 +136,7 @@ impl<'a> EscapedShellQuoter<'a> {
         let (quotes, must_quote) = initial_quoting(reference, dirname, always_quote);
 
         // commit_dollar_mode controls quoting strategy:
-        // true (printf %q): use selective dollar-quoting (same as ls)
+        // true (printf %q): use selective dollar-quoting
         // false (ls): use selective dollar-quoting
         // Both modes use selective quoting: enter $'...' only for control chars
         let commit_dollar = commit_dollar_mode;
@@ -149,12 +159,11 @@ impl<'a> EscapedShellQuoter<'a> {
                 // Close any existing quote section first
                 self.buffer.push(b'\'');
                 self.in_quote_section = false;
-            } else if self.buffer.is_empty() {
-                // Both ls and printf %q modes: add empty quotes when buffer is empty
-                // This indicates the string starts with something needing quotes
-                self.buffer.extend(b"''");
-            } else if !self.commit_dollar {
-                // ls mode with existing content: wrap it in quotes
+            } else if !self.commit_dollar
+                && !self.buffer.is_empty()
+                && !self.buffer.windows(2).any(|w| w == b"$'")
+            {
+                // ls mode (not printf %q): Buffer has content but no dollar quotes - wrap it
                 let quote = if self.quotes == Quotes::Single {
                     b'\''
                 } else {
@@ -165,7 +174,12 @@ impl<'a> EscapedShellQuoter<'a> {
                 quoted.extend_from_slice(&self.buffer);
                 quoted.push(quote);
                 self.buffer = quoted;
+            } else if !self.commit_dollar && self.buffer.is_empty() {
+                // ls mode: When entering dollar mode with empty buffer (entire string needs escaping),
+                // prefix with empty quote '' to match GNU behavior
+                self.buffer.extend(b"''");
             }
+            // If buffer is empty or already contains $'...' just append next $'
             self.buffer.extend(b"$'");
             self.in_dollar = true;
         }
@@ -189,20 +203,21 @@ impl Quoter for EscapedShellQuoter<'_> {
             EscapeState::Backslash('\'') | EscapeState::Char('\'') => {
                 if self.in_dollar {
                     // Inside $'...' section - need to exit, then handle apostrophe
-                    self.exit_dollar();
+                    self.exit_dollar(); // This adds closing '
                     self.must_quote = true;
-                    // Backslash-escape the apostrophe
+                    // After exit_dollar's closing ', add: backslash-quote
+                    // Result: $'\001' + \' = $'\001'\'
                     self.buffer.extend(b"\\'");
+                    // Now optionally open a new quote section for following chars
+                    // Don't set in_quote_section - let next char decide
                 } else if self.commit_dollar {
                     // printf %q mode, not in dollar section
-                    // Check if this is a standalone single quote
+                    self.must_quote = true;
+                    // Special case: standalone single quote uses double quotes
                     if self.buffer.is_empty() && self.reference.len() == 1 {
-                        // Standalone single quote uses double quotes: "'"
-                        self.must_quote = true;
                         self.buffer.extend(b"\"'\"");
                     } else {
-                        // Embedded quote - backslash escape
-                        self.must_quote = true;
+                        // Embedded quote - backslash-escape it
                         self.buffer.extend(b"\\'");
                     }
                 } else {
@@ -228,6 +243,16 @@ impl Quoter for EscapedShellQuoter<'_> {
                     self.buffer.extend(b"\\\\");
                 }
             }
+            EscapeState::Backslash(x) => {
+                // Control character escapes (\n, \t, \r, etc.) or single quote
+                // These MUST use $'...' syntax to preserve the escape sequence
+                if !self.in_dollar {
+                    self.enter_dollar();
+                }
+                self.must_quote = true;
+                self.buffer.push(b'\\');
+                self.buffer.extend(x.to_string().as_bytes());
+            }
             EscapeState::Char(x) => {
                 if self.in_dollar {
                     if self.commit_dollar {
@@ -237,12 +262,7 @@ impl Quoter for EscapedShellQuoter<'_> {
                     } else {
                         // In selective dollar mode (ls), exit dollar and start new quoted section
                         self.exit_dollar();
-                        let quote = if self.quotes == Quotes::Single {
-                            b'\''
-                        } else {
-                            b'"'
-                        };
-                        self.buffer.push(quote);
+                        self.buffer.push(b'\'');
                         self.in_quote_section = true;
                         self.buffer.extend(x.to_string().as_bytes());
                     }
@@ -268,7 +288,8 @@ impl Quoter for EscapedShellQuoter<'_> {
                 } else {
                     // Not in dollar mode
                     if self.commit_dollar {
-                        // printf %q: just add the character, will be quoted in finalize
+                        // printf %q: backslash-escape the special character
+                        self.buffer.push(b'\\');
                         self.buffer.extend(x.to_string().as_bytes());
                     } else {
                         // ls: will be wrapped in outer quotes, no escaping needed
@@ -326,21 +347,30 @@ impl Quoter for EscapedShellQuoter<'_> {
             return self.buffer;
         }
 
-        // If buffer contains dollar-quoted sections, we're done
-        if self.buffer.windows(2).any(|w| w == b"$'") {
+        // Check if we need outer quotes
+        let contains_quote_chars = bytes_start_with(self.reference, SPECIAL_SHELL_CHARS_START);
+        let should_quote = self.must_quote || self.always_quote || contains_quote_chars;
+
+        // If buffer contains dollar-quoted sections and doesn't need outer quotes, we're done
+        if self.buffer.windows(2).any(|w| w == b"$'") && !should_quote {
             return self.buffer;
         }
 
-        // For strings without dollar quotes, add outer quotes if needed
-        let contains_quote_chars = bytes_start_with(self.reference, SPECIAL_SHELL_CHARS_START);
-        let should_quote = self.must_quote || self.always_quote || contains_quote_chars;
-        
         // For printf %q (commit_dollar=true), if the buffer already contains quotes (e.g., "'"
         // for a standalone single quote), don't add outer quotes
-        if self.commit_dollar && (self.buffer.starts_with(b"\"'\"") || self.buffer.starts_with(b"'") || self.buffer.starts_with(b"\"")) {
+        if self.commit_dollar
+            && (self.buffer.starts_with(b"\"'\"")
+                || self.buffer.starts_with(b"'")
+                || self.buffer.starts_with(b"\""))
+        {
             return self.buffer;
         }
-        
+
+        // For printf %q (commit_dollar=true), don't add outer quotes
+        if self.commit_dollar {
+            return self.buffer;
+        }
+
         if should_quote {
             let mut quoted = Vec::with_capacity(self.buffer.len() + 2);
             let quote = if self.quotes == Quotes::Single {
@@ -360,9 +390,24 @@ impl Quoter for EscapedShellQuoter<'_> {
 
 /// Deduce the initial quoting status from the provided information
 fn initial_quoting(input: &[u8], dirname: bool, always_quote: bool) -> (Quotes, bool) {
-    if input
-        .iter()
-        .any(|c| shell_escaped_char_set(dirname).contains(c))
+    initial_quoting_with_show_control(input, dirname, always_quote, true)
+}
+
+/// Deduce the initial quoting status, with awareness of whether control chars will be shown
+fn initial_quoting_with_show_control(
+    input: &[u8],
+    dirname: bool,
+    always_quote: bool,
+    show_control: bool,
+) -> (Quotes, bool) {
+    // Check for control characters FIRST - they require $'...' which only works with single quotes
+    // But only consider them if we're showing them; if hiding, they become '?' which isn't special
+    let has_control_chars = show_control && input.iter().any(|&c| c < 32 || c == 127);
+
+    if has_control_chars
+        || input
+            .iter()
+            .any(|c| shell_escaped_char_set(dirname).contains(c))
     {
         (Quotes::Single, true)
     } else if input.contains(&b'\'') {
