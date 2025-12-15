@@ -1252,19 +1252,17 @@ fn rename_file_fallback(
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
     fs::copy(from, to)
         .and_then(|_| fsxattr::copy_xattrs(&from, &to))
-        .and_then(|_| {
+        .map(|_| {
             #[cfg(unix)]
             try_preserve_ownership_and_permissions(&from_meta, to);
-            Ok(())
         })
         .and_then(|_| fs::remove_file(from))
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
     #[cfg(any(target_os = "macos", target_os = "redox", not(unix)))]
     fs::copy(from, to)
-        .and_then(|_| {
+        .map(|_| {
             #[cfg(unix)]
             try_preserve_ownership_and_permissions(&from_meta, to);
-            Ok(())
         })
         .and_then(|_| fs::remove_file(from))
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
