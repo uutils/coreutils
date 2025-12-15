@@ -11,7 +11,6 @@ use uucore::selinux::get_getfattr_output;
 use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, new_ucmd, path_concat, util_name};
 
-#[cfg(not(windows))]
 use std::fs::set_permissions;
 
 use std::io::Write;
@@ -972,7 +971,6 @@ fn test_cp_arg_no_clobber_twice() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_cp_arg_force() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -4103,6 +4101,110 @@ fn test_cp_dest_no_permissions() {
         .stderr_contains("denied");
 }
 
+/// Test readonly destination behavior with reflink options
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn test_cp_readonly_dest_with_reflink() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("source.txt", "source content");
+    at.write("readonly_dest_auto.txt", "original content");
+    at.write("readonly_dest_always.txt", "original content");
+    at.set_readonly("readonly_dest_auto.txt");
+    at.set_readonly("readonly_dest_always.txt");
+
+    // Test reflink=auto
+    ts.ucmd()
+        .args(&["--reflink=auto", "source.txt", "readonly_dest_auto.txt"])
+        .fails()
+        .stderr_contains("readonly_dest_auto.txt");
+
+    // Test reflink=always
+    ts.ucmd()
+        .args(&["--reflink=always", "source.txt", "readonly_dest_always.txt"])
+        .fails()
+        .stderr_contains("readonly_dest_always.txt");
+
+    assert_eq!(at.read("readonly_dest_auto.txt"), "original content");
+    assert_eq!(at.read("readonly_dest_always.txt"), "original content");
+}
+
+/// Test readonly destination behavior in recursive directory copy
+#[test]
+fn test_cp_readonly_dest_recursive() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("source_dir");
+    at.mkdir("dest_dir");
+    at.write("source_dir/file.txt", "source content");
+    at.write("dest_dir/file.txt", "original content");
+    at.set_readonly("dest_dir/file.txt");
+
+    ts.ucmd().args(&["-r", "source_dir", "dest_dir"]).succeeds();
+
+    assert_eq!(at.read("dest_dir/file.txt"), "original content");
+}
+
+/// Test copying to readonly file when another file exists
+#[test]
+fn test_cp_readonly_dest_with_existing_file() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("source.txt", "source content");
+    at.write("readonly_dest.txt", "original content");
+    at.write("other_file.txt", "other content");
+    at.set_readonly("readonly_dest.txt");
+
+    ts.ucmd()
+        .args(&["source.txt", "readonly_dest.txt"])
+        .fails()
+        .stderr_contains("readonly_dest.txt")
+        .stderr_contains("denied");
+
+    assert_eq!(at.read("readonly_dest.txt"), "original content");
+    assert_eq!(at.read("other_file.txt"), "other content");
+}
+
+/// Test readonly source file (should work fine)
+#[test]
+fn test_cp_readonly_source() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("readonly_source.txt", "source content");
+    at.write("dest.txt", "dest content");
+    at.set_readonly("readonly_source.txt");
+
+    ts.ucmd()
+        .args(&["readonly_source.txt", "dest.txt"])
+        .succeeds();
+
+    assert_eq!(at.read("dest.txt"), "source content");
+}
+
+/// Test readonly source and destination (should fail)
+#[test]
+fn test_cp_readonly_source_and_dest() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("readonly_source.txt", "source content");
+    at.write("readonly_dest.txt", "original content");
+    at.set_readonly("readonly_source.txt");
+    at.set_readonly("readonly_dest.txt");
+
+    ts.ucmd()
+        .args(&["readonly_source.txt", "readonly_dest.txt"])
+        .fails()
+        .stderr_contains("readonly_dest.txt")
+        .stderr_contains("denied");
+
+    assert_eq!(at.read("readonly_dest.txt"), "original content");
+}
+
 #[test]
 #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
 fn test_cp_attributes_only() {
@@ -7116,6 +7218,25 @@ fn test_cp_no_dereference_symlink_with_parents() {
         .args(&["--parents", "--no-dereference", "symlink-to-directory", "x"])
         .succeeds();
     assert_eq!(at.resolve_link("x/symlink-to-directory"), "directory");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_recursive_no_dereference_symlink_to_directory() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("source_dir");
+    at.touch("source_dir/file.txt");
+    at.symlink_file("source_dir", "symlink_to_dir");
+
+    // Copy with -r --no-dereference (or -rP): should copy the symlink, not the directory contents
+    ts.ucmd()
+        .args(&["-r", "--no-dereference", "symlink_to_dir", "dest"])
+        .succeeds();
+
+    assert!(at.is_symlink("dest"));
+    assert_eq!(at.resolve_link("dest"), "source_dir");
 }
 
 #[test]

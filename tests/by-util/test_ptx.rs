@@ -256,3 +256,11 @@ fn test_utf8() {
         .succeeds()
         .stdout_only("\\xx {}{it’s}{disabled}{}{}\n\\xx {}{}{it’s}{ disabled}{}\n");
 }
+
+#[test]
+fn test_gnu_mode_dumb_format() {
+    // Test GNU mode (dumb format) - the default mode without -G flag
+    new_ucmd!().pipe_in("a b").succeeds().stdout_only(
+        "                                       a b\n                                   a   b\n",
+    );
+}
