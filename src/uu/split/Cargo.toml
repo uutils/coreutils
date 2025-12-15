@@ -20,7 +20,7 @@ path = "src/split.rs"
 [dependencies]
 clap = { workspace = true }
 memchr = { workspace = true }
-uucore = { workspace = true, features = ["fs", "parser-size"] }
+uucore = { workspace = true, features = ["fs", "parser-size", "signals"] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 

@@ -131,7 +131,8 @@ pub use crate::features::selinux;
 use nix::errno::Errno;
 #[cfg(unix)]
 use nix::sys::signal::{
-    SaFlags, SigAction, SigHandler::SigDfl, SigSet, Signal::SIGBUS, Signal::SIGSEGV, sigaction,
+    SaFlags, SigAction, SigHandler::SigDfl, SigSet, Signal::SIGBUS, Signal::SIGPIPE,
+    Signal::SIGSEGV, sigaction,
 };
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
@@ -143,10 +144,12 @@ use std::str;
 use std::str::Utf8Chunk;
 use std::sync::{LazyLock, atomic::Ordering};
 
-/// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
-/// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
+/// Restore standard Unix signal behavior.
 #[cfg(unix)]
 pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
+    // Disable custom signal handlers installed by Rust for stack-overflow handling.
+    // With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
+    // See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
     unsafe {
         sigaction(
             SIGSEGV,
@@ -156,6 +159,15 @@ pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
     unsafe {
         sigaction(
             SIGBUS,
+            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
+        )
+    }?;
+    // Reset SIGPIPE to default behavior since Rust ignores it by default.
+    // This ensures Unix utilities behave normally when pipes are broken.
+    // See https://github.com/rust-lang/rust/issues/62569 for discussion.
+    unsafe {
+        sigaction(
+            SIGPIPE,
             &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
         )
     }?;

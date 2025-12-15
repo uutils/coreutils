@@ -25,8 +25,6 @@ use std::os::unix::net::UnixStream;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
-#[cfg(not(target_os = "windows"))]
-use uucore::libc;
 use uucore::translate;
 use uucore::{fast_inc::fast_inc_one, format_usage};
 
@@ -222,15 +220,6 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // When we receive a SIGPIPE signal, we want to terminate the process so
-    // that we don't print any error messages to stderr. Rust ignores SIGPIPE
-    // (see https://github.com/rust-lang/rust/issues/62569), so we restore it's
-    // default action here.
-    #[cfg(not(target_os = "windows"))]
-    unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
-    }
-
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let number_mode = if matches.get_flag(options::NUMBER_NONBLANK) {

@@ -29,6 +29,9 @@ use uucore::parser::parse_size::parse_size_u64;
 use uucore::format_usage;
 use uucore::uio_error;
 
+#[cfg(unix)]
+use uucore::signals::ignore_pipe;
+
 static OPT_BYTES: &str = "bytes";
 static OPT_LINE_BYTES: &str = "line-bytes";
 static OPT_LINES: &str = "lines";
@@ -1530,6 +1533,15 @@ where
 
 #[allow(clippy::cognitive_complexity)]
 fn split(settings: &Settings) -> UResult<()> {
+    #[cfg(unix)]
+    {
+        // When using --filter, ignore SIGPIPE so that closure of one pipe
+        // does not terminate the process, as there may still be other streams
+        // expecting input from us. This matches GNU split behavior.
+        if settings.filter.is_some() {
+            ignore_pipe().map_err(|_| USimpleError::new(1, "failed to set signal handler"))?;
+        }
+    }
     let r_box = if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
     } else {
