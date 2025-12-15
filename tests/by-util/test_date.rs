@@ -37,7 +37,7 @@ fn test_invalid_long_option() {
     new_ucmd!()
         .arg("--fB")
         .fails_with_code(1)
-        .stderr_contains("invalid date '--fB'");
+        .stderr_contains("unexpected argument '--fB'");
 }
 
 #[test]
@@ -45,7 +45,7 @@ fn test_invalid_short_option() {
     new_ucmd!()
         .arg("-w")
         .fails_with_code(1)
-        .stderr_contains("invalid date '-w'");
+        .stderr_contains("unexpected argument '-w'");
 }
 
 #[test]
