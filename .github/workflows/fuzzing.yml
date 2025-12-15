@@ -21,7 +21,7 @@ jobs:
     name: Build and test uufuzz examples
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
@@ -55,7 +55,7 @@ jobs:
     name: Build the fuzzers
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@nightly
@@ -99,7 +99,7 @@ jobs:
           - { name: fuzz_non_utf8_paths, should_pass: true }
 
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@nightly
@@ -110,7 +110,7 @@ jobs:
         shared-key: "cargo-fuzz-cache-key"
         cache-directories: "fuzz/target"
     - name: Restore Cached Corpus
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v5
       with:
         key: corpus-cache-${{ matrix.test-target.name }}
         path: |
@@ -192,13 +192,13 @@ jobs:
 
         echo "" >> $GITHUB_STEP_SUMMARY
     - name: Save Corpus Cache
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       with:
         key: corpus-cache-${{ matrix.test-target.name }}
         path: |
           fuzz/corpus/${{ matrix.test-target.name }}
     - name: Upload Stats
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: fuzz-stats-${{ matrix.test-target.name }}
         path: |
@@ -211,11 +211,11 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
       - name: Download all stats
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           path: fuzz/stats-artifacts
           pattern: fuzz-stats-*
@@ -309,7 +309,7 @@ jobs:
         run: |
           cat fuzzing_summary.md
       - name: Upload Summary
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: fuzzing-summary
           path: fuzzing_summary.md

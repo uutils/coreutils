@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use rstest::rstest;
+
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
@@ -107,17 +109,12 @@ macro_rules! test_digest {
             at.write("a", "file1\n");
             at.write("c", "file3\n");
 
-            #[cfg(unix)]
-            let file_not_found_str = "No such file or directory";
-            #[cfg(not(unix))]
-            let file_not_found_str = "The system cannot find the file specified";
-
             ts.ucmd()
                 .args(&[DIGEST_ARG, BITS_ARG, "a", "b", "c"])
                 .fails()
                 .stdout_contains("a\n")
                 .stdout_contains("c\n")
-                .stderr_contains(format!("b: {file_not_found_str}"));
+                .stderr_contains("b: No such file or directory");
         }
     }
     )*)
@@ -255,11 +252,16 @@ fn test_invalid_b2sum_length_option_not_multiple_of_8() {
         .ccmd("b2sum")
         .arg("--length=9")
         .arg(at.subdir.join("testf"))
-        .fails_with_code(1);
+        .fails_with_code(1)
+        .stderr_contains("b2sum: invalid length: '9'")
+        .stderr_contains("b2sum: length is not a multiple of 8");
 }
 
-#[test]
-fn test_invalid_b2sum_length_option_too_large() {
+#[rstest]
+#[case("513")]
+#[case("1024")]
+#[case("18446744073709552000")]
+fn test_invalid_b2sum_length_option_too_large(#[case] len: &str) {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
@@ -267,9 +269,13 @@ fn test_invalid_b2sum_length_option_too_large() {
 
     scene
         .ccmd("b2sum")
-        .arg("--length=513")
+        .arg("--length")
+        .arg(len)
         .arg(at.subdir.join("testf"))
-        .fails_with_code(1);
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains(format!("b2sum: invalid length: '{len}'"))
+        .stderr_contains("b2sum: maximum digest length for 'BLAKE2b' is 512 bits");
 }
 
 #[test]
@@ -1097,11 +1103,11 @@ fn test_sha256_stdin_binary() {
     );
 }
 
+// This test is currently disabled on windows
 #[test]
+#[cfg_attr(windows, ignore = "Discussion is in #9168")]
 fn test_check_sha256_binary() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd()
+    new_ucmd!()
         .args(&[
             "--sha256",
             "--bits=256",
