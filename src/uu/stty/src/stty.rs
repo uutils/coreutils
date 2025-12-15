@@ -466,12 +466,18 @@ fn parse_saved_state(arg: &str) -> Option<(CFlags, CCFlags)> {
     let mut c_flags = CFlags::default();
     for c_flag in &mut c_flags {
         let part = parts.next()?;
+        if part.starts_with('+') {
+            return None;
+        }
         *c_flag = u32::from_str_radix(part, 16).ok()?;
     }
 
     let mut cc_flags = CCFlags::default();
     for cc_flag in &mut cc_flags {
         let part = parts.next()?;
+        if part.starts_with('+') {
+            return None;
+        }
         *cc_flag = u8::from_str_radix(part, 16).ok()?;
     }
     // GNU requires exactly the right number of parts for this platform
