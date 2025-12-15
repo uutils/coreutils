@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, ErrorKind, Read, Seek, Write};
+use std::io::{self, BufReader, ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::encoding::{
@@ -28,6 +28,8 @@ pub const BASE_CMD_PARSE_ERROR: i32 = 1;
 ///
 /// This default is only used if no "-w"/"--wrap" argument is passed
 pub const WRAP_DEFAULT: usize = 76;
+// Fixed to 8 KiB (equivalent to std::io::DEFAULT_BUF_SIZE on most targets)
+pub const DEFAULT_BUFFER_SIZE: usize = 8 * 1024;
 
 pub struct Config {
     pub decode: bool,
@@ -95,21 +97,16 @@ impl Config {
     }
 }
 
-pub fn parse_base_cmd_args(
-    args: impl uucore::Args,
-    about: &'static str,
-    usage: &str,
-) -> UResult<Config> {
-    let command = base_app(about, usage);
+pub fn parse_base_cmd_args(args: impl uucore::Args, command: Command) -> UResult<Config> {
     let matches = uucore::clap_localization::handle_clap_result(command, args)?;
     Config::from(&matches)
 }
 
-pub fn base_app(about: &'static str, usage: &str) -> Command {
+pub fn base_app(about: String, usage: String) -> Command {
     let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .about(about)
-        .override_usage(format_usage(usage))
+        .override_usage(format_usage(&usage))
         .infer_long_args(true);
     uucore::clap_localization::configure_localized_command(cmd)
         // Format arguments.
@@ -149,64 +146,63 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
         )
 }
 
-/// A trait alias for types that implement both `Read` and `Seek`.
-pub trait ReadSeek: Read + Seek {}
-
-/// Automatically implement the `ReadSeek` trait for any type that implements both `Read` and `Seek`.
-impl<T: Read + Seek> ReadSeek for T {}
-
-pub fn get_input(config: &Config) -> UResult<Box<dyn ReadSeek>> {
+pub fn get_input(config: &Config) -> UResult<Box<dyn Read>> {
     match &config.to_read {
         Some(path_buf) => {
-            // Do not buffer input, because buffering is handled by `fast_decode` and `fast_encode`
             let file =
                 File::open(path_buf).map_err_context(|| path_buf.maybe_quote().to_string())?;
-            Ok(Box::new(file))
+            Ok(Box::new(BufReader::new(file)))
         }
         None => {
-            let mut buffer = Vec::new();
-            io::stdin().read_to_end(&mut buffer)?;
-            Ok(Box::new(io::Cursor::new(buffer)))
+            // Stdin is already buffered by the OS; wrap once more to reduce syscalls per read.
+            Ok(Box::new(BufReader::new(io::stdin())))
         }
     }
 }
-
-/// Determines if the input buffer contains any padding ('=') ignoring trailing whitespace.
-fn read_and_has_padding<R: Read>(input: &mut R) -> UResult<(bool, Vec<u8>)> {
-    let mut buf = Vec::new();
-    input
-        .read_to_end(&mut buf)
-        .map_err(|err| USimpleError::new(1, format_read_error(err.kind())))?;
-
-    // Treat the stream as padded if any '=' exists (GNU coreutils continues decoding
-    // even when padding bytes are followed by more data).
-    let has_padding = buf.contains(&b'=');
-
-    Ok((has_padding, buf))
-}
-
-pub fn handle_input<R: Read + Seek>(input: &mut R, format: Format, config: Config) -> UResult<()> {
-    let (has_padding, read) = read_and_has_padding(input)?;
-
+pub fn handle_input<R: Read>(input: &mut R, format: Format, config: Config) -> UResult<()> {
+    // Always allow padding for Base64 to avoid a full pre-scan of the input.
     let supports_fast_decode_and_encode =
-        get_supports_fast_decode_and_encode(format, config.decode, has_padding);
+        get_supports_fast_decode_and_encode(format, config.decode, true);
 
     let supports_fast_decode_and_encode_ref = supports_fast_decode_and_encode.as_ref();
     let mut stdout_lock = io::stdout().lock();
-    let result = if config.decode {
-        fast_decode::fast_decode(
-            read,
+    let result = match (format, config.decode) {
+        // Base58 must process the entire input as one big integer; keep the
+        // historical behavior of buffering everything for this format only.
+        (Format::Base58, _) => {
+            let mut buffered = Vec::new();
+            input
+                .read_to_end(&mut buffered)
+                .map_err(|err| USimpleError::new(1, format_read_error(err.kind())))?;
+            if config.decode {
+                fast_decode::fast_decode_buffer(
+                    buffered,
+                    &mut stdout_lock,
+                    supports_fast_decode_and_encode_ref,
+                    config.ignore_garbage,
+                )
+            } else {
+                fast_encode::fast_encode_buffer(
+                    buffered,
+                    &mut stdout_lock,
+                    supports_fast_decode_and_encode_ref,
+                    config.wrap_cols,
+                )
+            }
+        }
+        // Streaming path for all other encodings keeps memory bounded.
+        (_, true) => fast_decode::fast_decode_stream(
+            input,
             &mut stdout_lock,
             supports_fast_decode_and_encode_ref,
             config.ignore_garbage,
-        )
-    } else {
-        fast_encode::fast_encode(
-            read,
+        ),
+        (_, false) => fast_encode::fast_encode_stream(
+            input,
             &mut stdout_lock,
             supports_fast_decode_and_encode_ref,
             config.wrap_cols,
-        )
+        ),
     };
 
     // Ensure any pending stdout buffer is flushed even if decoding failed; GNU basenc
@@ -296,14 +292,17 @@ pub fn get_supports_fast_decode_and_encode(
 }
 
 pub mod fast_encode {
-    use crate::base_common::WRAP_DEFAULT;
+    use crate::base_common::{DEFAULT_BUFFER_SIZE, WRAP_DEFAULT};
     use std::{
         cmp::min,
         collections::VecDeque,
-        io::{self, Write},
+        io::{self, Read, Write},
         num::NonZeroUsize,
     };
-    use uucore::{encoding::SupportsFastDecodeAndEncode, error::UResult};
+    use uucore::{
+        encoding::SupportsFastDecodeAndEncode,
+        error::{UResult, USimpleError},
+    };
 
     struct LineWrapping {
         line_length: NonZeroUsize,
@@ -405,7 +404,7 @@ pub mod fast_encode {
     }
     // End of helper functions
 
-    pub fn fast_encode(
+    pub fn fast_encode_buffer(
         input: Vec<u8>,
         output: &mut dyn Write,
         supports_fast_decode_and_encode: &dyn SupportsFastDecodeAndEncode,
@@ -506,10 +505,102 @@ pub mod fast_encode {
         }
         Ok(())
     }
+
+    /// Encodes all data read from `input` into Base32 using a fast, chunked
+    /// implementation and writes the result to `output`.
+    ///
+    /// The `supports_fast_decode_and_encode` parameter supplies an optimized
+    /// encoder and determines the chunk size used for bulk processing. When
+    /// `wrap` is:
+    /// - `Some(0)`: no line wrapping is performed,
+    /// - `Some(n)`: lines are wrapped every `n` characters,
+    /// - `None`: the default wrap width is applied.
+    ///
+    /// Remaining bytes are encoded and flushed at the end. I/O or encoding
+    /// failures are propagated via `UResult`.
+    pub fn fast_encode_stream(
+        input: &mut dyn Read,
+        output: &mut dyn Write,
+        supports_fast_decode_and_encode: &dyn SupportsFastDecodeAndEncode,
+        wrap: Option<usize>,
+    ) -> UResult<()> {
+        const ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE: usize = 1_024;
+
+        let encode_in_chunks_of_size =
+            supports_fast_decode_and_encode.unpadded_multiple() * ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
+
+        assert!(encode_in_chunks_of_size > 0);
+
+        let mut line_wrapping = match wrap {
+            Some(0) => None,
+            Some(an) => Some(LineWrapping {
+                line_length: NonZeroUsize::new(an).unwrap(),
+                print_buffer: Vec::<u8>::new(),
+            }),
+            None => Some(LineWrapping {
+                line_length: NonZeroUsize::new(WRAP_DEFAULT).unwrap(),
+                print_buffer: Vec::<u8>::new(),
+            }),
+        };
+
+        // Buffers
+        let mut leftover_buffer = VecDeque::<u8>::new();
+        let mut encoded_buffer = VecDeque::<u8>::new();
+
+        let mut read_buffer = vec![0u8; encode_in_chunks_of_size.max(DEFAULT_BUFFER_SIZE)];
+
+        loop {
+            let read = input
+                .read(&mut read_buffer)
+                .map_err(|err| USimpleError::new(1, super::format_read_error(err.kind())))?;
+            if read == 0 {
+                break;
+            }
+
+            leftover_buffer.extend(&read_buffer[..read]);
+
+            while leftover_buffer.len() >= encode_in_chunks_of_size {
+                {
+                    let contiguous = leftover_buffer.make_contiguous();
+                    encode_in_chunks_to_buffer(
+                        supports_fast_decode_and_encode,
+                        &contiguous[..encode_in_chunks_of_size],
+                        &mut encoded_buffer,
+                    )?;
+                }
+
+                // Drop the data we just encoded
+                leftover_buffer.drain(..encode_in_chunks_of_size);
+
+                write_to_output(
+                    &mut line_wrapping,
+                    &mut encoded_buffer,
+                    output,
+                    false,
+                    wrap == Some(0),
+                )?;
+            }
+        }
+
+        // Encode any remaining bytes and flush
+        supports_fast_decode_and_encode
+            .encode_to_vec_deque(leftover_buffer.make_contiguous(), &mut encoded_buffer)?;
+
+        write_to_output(
+            &mut line_wrapping,
+            &mut encoded_buffer,
+            output,
+            true,
+            wrap == Some(0),
+        )?;
+
+        Ok(())
+    }
 }
 
 pub mod fast_decode {
-    use std::io::{self, Write};
+    use crate::base_common::DEFAULT_BUFFER_SIZE;
+    use std::io::{self, Read, Write};
     use uucore::{
         encoding::SupportsFastDecodeAndEncode,
         error::{UResult, USimpleError},
@@ -579,7 +670,7 @@ pub mod fast_decode {
     }
     // End of helper functions
 
-    pub fn fast_decode(
+    pub fn fast_decode_buffer(
         input: Vec<u8>,
         output: &mut dyn Write,
         supports_fast_decode_and_encode: &dyn SupportsFastDecodeAndEncode,
@@ -671,6 +762,123 @@ pub mod fast_decode {
 
         Ok(())
     }
+
+    pub fn fast_decode_stream(
+        input: &mut dyn Read,
+        output: &mut dyn Write,
+        supports_fast_decode_and_encode: &dyn SupportsFastDecodeAndEncode,
+        ignore_garbage: bool,
+    ) -> UResult<()> {
+        const DECODE_IN_CHUNKS_OF_SIZE_MULTIPLE: usize = 1_024;
+
+        let alphabet = supports_fast_decode_and_encode.alphabet();
+        let alphabet_table = alphabet_lookup(alphabet);
+        let valid_multiple = supports_fast_decode_and_encode.valid_decoding_multiple();
+        let decode_in_chunks_of_size = valid_multiple * DECODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
+
+        assert!(decode_in_chunks_of_size > 0);
+        assert!(valid_multiple > 0);
+
+        let supports_partial_decode = supports_fast_decode_and_encode.supports_partial_decode();
+
+        let mut buffer = Vec::with_capacity(decode_in_chunks_of_size);
+        let mut decoded_buffer = Vec::<u8>::new();
+        let mut read_buffer = [0u8; DEFAULT_BUFFER_SIZE];
+
+        loop {
+            let read = input
+                .read(&mut read_buffer)
+                .map_err(|err| USimpleError::new(1, super::format_read_error(err.kind())))?;
+            if read == 0 {
+                break;
+            }
+
+            for &byte in &read_buffer[..read] {
+                if byte == b'\n' || byte == b'\r' {
+                    continue;
+                }
+
+                if alphabet_table[usize::from(byte)] {
+                    buffer.push(byte);
+                } else if ignore_garbage {
+                    continue;
+                } else {
+                    if supports_partial_decode {
+                        flush_ready_chunks(
+                            &mut buffer,
+                            decode_in_chunks_of_size,
+                            valid_multiple,
+                            supports_fast_decode_and_encode,
+                            &mut decoded_buffer,
+                            output,
+                        )?;
+                    } else {
+                        while buffer.len() >= decode_in_chunks_of_size {
+                            decode_in_chunks_to_buffer(
+                                supports_fast_decode_and_encode,
+                                &buffer[..decode_in_chunks_of_size],
+                                &mut decoded_buffer,
+                            )?;
+                            write_to_output(&mut decoded_buffer, output)?;
+                            buffer.drain(..decode_in_chunks_of_size);
+                        }
+                    }
+                    return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                }
+
+                if supports_partial_decode {
+                    flush_ready_chunks(
+                        &mut buffer,
+                        decode_in_chunks_of_size,
+                        valid_multiple,
+                        supports_fast_decode_and_encode,
+                        &mut decoded_buffer,
+                        output,
+                    )?;
+                } else if buffer.len() == decode_in_chunks_of_size {
+                    decode_in_chunks_to_buffer(
+                        supports_fast_decode_and_encode,
+                        &buffer,
+                        &mut decoded_buffer,
+                    )?;
+                    write_to_output(&mut decoded_buffer, output)?;
+                    buffer.clear();
+                }
+            }
+        }
+
+        if supports_partial_decode {
+            flush_ready_chunks(
+                &mut buffer,
+                decode_in_chunks_of_size,
+                valid_multiple,
+                supports_fast_decode_and_encode,
+                &mut decoded_buffer,
+                output,
+            )?;
+        }
+
+        if !buffer.is_empty() {
+            let mut owned_chunk: Option<Vec<u8>> = None;
+            let mut had_invalid_tail = false;
+
+            if let Some(pad_result) = supports_fast_decode_and_encode.pad_remainder(&buffer) {
+                had_invalid_tail = pad_result.had_invalid_tail;
+                owned_chunk = Some(pad_result.chunk);
+            }
+
+            let final_chunk = owned_chunk.as_deref().unwrap_or(&buffer);
+
+            supports_fast_decode_and_encode.decode_into_vec(final_chunk, &mut decoded_buffer)?;
+            write_to_output(&mut decoded_buffer, output)?;
+
+            if had_invalid_tail {
+                return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+            }
+        }
+
+        Ok(())
+    }
 }
 
 fn format_read_error(kind: ErrorKind) -> String {
@@ -690,6 +898,21 @@ fn format_read_error(kind: ErrorKind) -> String {
     }
 
     translate!("base-common-read-error", "error" => kind_string_capitalized)
+}
+
+/// Determines if the input buffer contains any padding ('=') ignoring trailing whitespace.
+#[cfg(test)]
+fn read_and_has_padding<R: Read>(input: &mut R) -> UResult<(bool, Vec<u8>)> {
+    let mut buf = Vec::new();
+    input
+        .read_to_end(&mut buf)
+        .map_err(|err| USimpleError::new(1, format_read_error(err.kind())))?;
+
+    // Treat the stream as padded if any '=' exists (GNU coreutils continues decoding
+    // even when padding bytes are followed by more data).
+    let has_padding = buf.contains(&b'=');
+
+    Ok((has_padding, buf))
 }
 
 #[cfg(test)]

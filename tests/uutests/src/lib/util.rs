@@ -2923,15 +2923,8 @@ pub fn host_name_for(util_name: &str) -> Cow<'_, str> {
     util_name.into()
 }
 
-// GNU coreutils version 8.32 is the reference version since it is the latest version and the
-// GNU test suite in "coreutils/.github/workflows/GnuTests.yml" runs against it.
-// However, here 8.30 was chosen because right now there's no ubuntu image for the github actions
-// CICD available with a higher version than 8.30.
-// GNU coreutils versions from the CICD images for comparison:
-// ubuntu-2004: 8.30 (latest)
-// ubuntu-1804: 8.28
-// macos-latest: 8.32
-const VERSION_MIN: &str = "8.30"; // minimum Version for the reference `coreutil` in `$PATH`
+// Choose same coreutils version with ubuntu-latest runner: https://github.com/actions/runner-images/tree/main/images/ubuntu
+const VERSION_MIN: &str = "9.4"; // minimum Version for the reference `coreutil` in `$PATH`
 
 const UUTILS_WARNING: &str = "uutils-tests-warning";
 const UUTILS_INFO: &str = "uutils-tests-info";

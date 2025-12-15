@@ -155,6 +155,22 @@ fn test_mknod_mode_permissions() {
 }
 
 #[test]
+fn test_mknod_mode_comma_separated() {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .arg("-m")
+        .arg("u=rwx,g=rx,o=")
+        .arg("test_file")
+        .arg("p")
+        .succeeds();
+    assert!(ts.fixtures.is_fifo("test_file"));
+    assert_eq!(
+        ts.fixtures.metadata("test_file").permissions().mode() & 0o777,
+        0o750
+    );
+}
+
+#[test]
 #[cfg(feature = "feat_selinux")]
 fn test_mknod_selinux() {
     let ts = TestScenario::new(util_name!());

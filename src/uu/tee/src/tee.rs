@@ -443,11 +443,12 @@ pub fn ensure_stdout_not_broken() -> Result<bool> {
     // POLLRDBAND is the flag used by GNU tee.
     let mut pfds = [PollFd::new(out.as_fd(), PollFlags::POLLRDBAND)];
 
-    // Then, ensure that the pipe is not broken
-    let res = nix::poll::poll(&mut pfds, PollTimeout::NONE)?;
+    // Then, ensure that the pipe is not broken.
+    // Use ZERO timeout to return immediately - we just want to check the current state.
+    let res = nix::poll::poll(&mut pfds, PollTimeout::ZERO)?;
 
     if res > 0 {
-        // poll succeeded;
+        // poll returned with events ready - check if POLLERR is set (pipe broken)
         let error = pfds.iter().any(|pfd| {
             if let Some(revents) = pfd.revents() {
                 revents.contains(PollFlags::POLLERR)
@@ -458,8 +459,8 @@ pub fn ensure_stdout_not_broken() -> Result<bool> {
         return Ok(!error);
     }
 
-    // if res == 0, it means that timeout was reached, which is impossible
-    // because we set infinite timeout.
-    // And if res < 0, the nix wrapper should have sent back an error.
-    unreachable!();
+    // res == 0 means no events ready (timeout reached immediately with ZERO timeout).
+    // This means the pipe is healthy (not broken).
+    // res < 0 would be an error, but nix returns Err in that case.
+    Ok(true)
 }

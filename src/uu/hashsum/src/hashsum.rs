@@ -11,7 +11,7 @@ use std::num::ParseIntError;
 use std::path::Path;
 
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 
 use uucore::checksum::compute::{
     ChecksumComputeOptions, figure_out_output_format, perform_checksum_computation,
@@ -19,7 +19,7 @@ use uucore::checksum::compute::{
 use uucore::checksum::validate::{
     ChecksumValidateOptions, ChecksumVerbose, perform_checksum_validation,
 };
-use uucore::checksum::{AlgoKind, ChecksumError, SizedAlgoKind, calculate_blake2b_length};
+use uucore::checksum::{AlgoKind, ChecksumError, SizedAlgoKind, calculate_blake2b_length_str};
 use uucore::error::UResult;
 use uucore::line_ending::LineEnding;
 use uucore::{format_usage, translate};
@@ -139,14 +139,14 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     //        least somewhat better from a user's perspective.
     let matches = uucore::clap_localization::handle_clap_result(command, args)?;
 
-    let input_length: Option<&usize> = if binary_name == "b2sum" {
-        matches.get_one::<usize>(options::LENGTH)
+    let input_length: Option<&String> = if binary_name == "b2sum" {
+        matches.get_one::<String>(options::LENGTH)
     } else {
         None
     };
 
     let length = match input_length {
-        Some(length) => calculate_blake2b_length(*length)?,
+        Some(length) => calculate_blake2b_length_str(length)?,
         None => None,
     };
 
@@ -378,7 +378,6 @@ fn uu_app_opt_length(command: Command) -> Command {
     command.arg(
         Arg::new(options::LENGTH)
             .long(options::LENGTH)
-            .value_parser(value_parser!(usize))
             .short('l')
             .help(translate!("hashsum-help-length"))
             .overrides_with(options::LENGTH)
