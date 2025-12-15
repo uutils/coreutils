@@ -3940,6 +3940,7 @@ dependencies = [
  "fluent",
  "libc",
  "memchr",
+ "nix",
  "notify",
  "rstest",
  "same-file",
