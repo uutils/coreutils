@@ -468,7 +468,7 @@ fn pretty(possible_pw: Option<Passwd>) {
             "{}",
             p.belongs_to()
                 .iter()
-                .map(|&gr| entries::gid2grp(gr).unwrap())
+                .map(|&gr| entries::gid2grp(gr).unwrap_or_else(|_| gr.to_string()))
                 .collect::<Vec<_>>()
                 .join(" ")
         );
@@ -508,7 +508,7 @@ fn pretty(possible_pw: Option<Passwd>) {
             entries::get_groups_gnu(None)
                 .unwrap()
                 .iter()
-                .map(|&gr| entries::gid2grp(gr).unwrap())
+                .map(|&gr| entries::gid2grp(gr).unwrap_or_else(|_| gr.to_string()))
                 .collect::<Vec<_>>()
                 .join(" ")
         );
