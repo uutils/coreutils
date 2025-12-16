@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command};
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::path::Path;
@@ -119,14 +119,71 @@ impl<T: AsRef<str>> From<T> for NumberFormat {
 }
 
 impl NumberFormat {
-    /// Turns a line number into a `String` with at least `min_width` chars,
+    /// Writes a line number into `buf` with at least `min_width` chars,
     /// formatted according to the `NumberFormat`s variant.
-    fn format(&self, number: i64, min_width: usize) -> String {
+    /// The buffer is cleared before writing.
+    #[inline(always)]
+    fn write_to(&self, buf: &mut Vec<u8>, number: i64, min_width: usize) {
+        buf.clear();
+
+        // Convert number to bytes using stack buffer (i64 max is 20 digits + sign)
+        let mut num_buf = [0u8; 21];
+        let is_negative = number < 0;
+
+        // Handle i64::MIN specially to avoid overflow on abs()
+        let mut n = if number == i64::MIN {
+            0u64
+        } else if is_negative {
+            (-number) as u64
+        } else {
+            number as u64
+        };
+
+        // Convert to digits (in reverse order)
+        let mut pos = num_buf.len();
+        if number == i64::MIN {
+            const MIN_DIGITS: &[u8] = b"9223372036854775808";
+            pos = num_buf.len() - MIN_DIGITS.len();
+            num_buf[pos..].copy_from_slice(MIN_DIGITS);
+        } else {
+            loop {
+                pos -= 1;
+                num_buf[pos] = b'0' + (n % 10) as u8;
+                n /= 10;
+                if n == 0 {
+                    break;
+                }
+            }
+        }
+
+        let digits = &num_buf[pos..];
+        let digit_len = digits.len() + usize::from(is_negative);
+        let padding = min_width.saturating_sub(digit_len);
+
         match self {
-            Self::Left => format!("{number:<min_width$}"),
-            Self::Right => format!("{number:>min_width$}"),
-            Self::RightZero if number < 0 => format!("-{0:0>1$}", number.abs(), min_width - 1),
-            Self::RightZero => format!("{number:0>min_width$}"),
+            Self::Left => {
+                if is_negative {
+                    buf.push(b'-');
+                }
+                buf.extend_from_slice(digits);
+                buf.resize(buf.len() + padding, b' ');
+            }
+            Self::Right => {
+                buf.resize(padding, b' ');
+                if is_negative {
+                    buf.push(b'-');
+                }
+                buf.extend_from_slice(digits);
+            }
+            Self::RightZero => {
+                if is_negative {
+                    buf.push(b'-');
+                    buf.resize(buf.len() + padding, b'0');
+                } else {
+                    buf.resize(padding, b'0');
+                }
+                buf.extend_from_slice(digits);
+            }
         }
     }
 }
@@ -139,28 +196,26 @@ enum SectionDelimiter {
 
 impl SectionDelimiter {
     /// A valid section delimiter contains the pattern one to three times,
-    /// and nothing else.
-    fn parse(bytes: &[u8], pattern: &OsStr) -> Option<Self> {
-        let pattern = pattern.as_encoded_bytes();
-
-        if bytes.is_empty() || pattern.is_empty() || bytes.len() % pattern.len() != 0 {
+    /// and nothing else. Takes pre-computed pattern bytes to avoid conversion per line.
+    #[inline(always)]
+    fn parse(bytes: &[u8], pattern: &[u8]) -> Option<Self> {
+        // Fast path: most lines won't match the delimiter length
+        let pat_len = pattern.len();
+        if pat_len == 0 || bytes.is_empty() || bytes.len() % pat_len != 0 {
             return None;
         }
 
-        let count = bytes.len() / pattern.len();
-        if !(1..=3).contains(&count) {
+        let count = bytes.len() / pat_len;
+        if count > 3 {
             return None;
         }
 
-        if bytes
-            .chunks_exact(pattern.len())
-            .all(|chunk| chunk == pattern)
-        {
+        if bytes.chunks_exact(pat_len).all(|chunk| chunk == pattern) {
             match count {
                 1 => Some(Self::Footer),
                 2 => Some(Self::Body),
                 3 => Some(Self::Header),
-                _ => unreachable!(),
+                _ => None,
             }
         } else {
             None
@@ -346,17 +401,29 @@ pub fn uu_app() -> Command {
 }
 
 /// Helper to write: prefix bytes + line bytes + newline
+/// Writes directly to BufWriter - fewer memcpys than intermediate buffer
+#[inline(always)]
 fn write_line(writer: &mut impl Write, prefix: &[u8], line: &[u8]) -> std::io::Result<()> {
     writer.write_all(prefix)?;
     writer.write_all(line)?;
-    writeln!(writer)
+    writer.write_all(b"\n")
 }
 
 /// `nl` implements the main functionality for an individual buffer.
 fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings) -> UResult<()> {
-    let mut writer = BufWriter::new(stdout());
+    // Use larger buffer to reduce flush frequency
+    let mut writer = BufWriter::with_capacity(64 * 1024, stdout());
     let mut current_numbering_style = &settings.body_numbering;
     let mut line = Vec::new();
+    // Reusable buffer for number formatting - avoids allocation per line
+    let mut prefix_buf = Vec::with_capacity(settings.number_width + 16);
+    // Pre-compute the blank prefix for non-numbered lines
+    let blank_prefix = " ".repeat(settings.number_width + 1);
+    let blank_prefix_bytes = blank_prefix.as_bytes();
+    // Pre-compute separator bytes to avoid conversion on every line
+    let separator_bytes = settings.number_separator.as_encoded_bytes();
+    // Pre-compute section delimiter bytes to avoid conversion on every line
+    let delimiter_bytes = settings.section_delimiter.as_encoded_bytes();
 
     loop {
         line.clear();
@@ -378,8 +445,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
             stats.consecutive_empty_lines = 0;
         }
 
-        let new_numbering_style = match SectionDelimiter::parse(&line, &settings.section_delimiter)
-        {
+        let new_numbering_style = match SectionDelimiter::parse(&line, delimiter_bytes) {
             Some(SectionDelimiter::Header) => Some(&settings.header_numbering),
             Some(SectionDelimiter::Body) => Some(&settings.body_numbering),
             Some(SectionDelimiter::Footer) => Some(&settings.footer_numbering),
@@ -416,17 +482,17 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                         translate!("nl-error-line-number-overflow"),
                     ));
                 };
-                let mut prefix = settings
-                    .number_format
-                    .format(line_number, settings.number_width)
-                    .into_bytes();
-                prefix.extend_from_slice(settings.number_separator.as_encoded_bytes());
-                write_line(&mut writer, &prefix, &line)
+                settings.number_format.write_to(
+                    &mut prefix_buf,
+                    line_number,
+                    settings.number_width,
+                );
+                prefix_buf.extend_from_slice(separator_bytes);
+                write_line(&mut writer, &prefix_buf, &line)
                     .map_err_context(|| translate!("nl-error-could-not-write"))?;
                 stats.line_number = line_number.checked_add(settings.line_increment);
             } else {
-                let prefix = " ".repeat(settings.number_width + 1);
-                write_line(&mut writer, prefix.as_bytes(), &line)
+                write_line(&mut writer, blank_prefix_bytes, &line)
                     .map_err_context(|| translate!("nl-error-could-not-write"))?;
             }
         }
@@ -441,22 +507,28 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
 mod test {
     use super::*;
 
+    fn format_to_string(nf: &NumberFormat, number: i64, min_width: usize) -> String {
+        let mut buf = Vec::new();
+        nf.write_to(&mut buf, number, min_width);
+        String::from_utf8(buf).unwrap()
+    }
+
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_format() {
-        assert_eq!(NumberFormat::Left.format(12, 1), "12");
-        assert_eq!(NumberFormat::Left.format(-12, 1), "-12");
-        assert_eq!(NumberFormat::Left.format(12, 4), "12  ");
-        assert_eq!(NumberFormat::Left.format(-12, 4), "-12 ");
+        assert_eq!(format_to_string(&NumberFormat::Left, 12, 1), "12");
+        assert_eq!(format_to_string(&NumberFormat::Left, -12, 1), "-12");
+        assert_eq!(format_to_string(&NumberFormat::Left, 12, 4), "12  ");
+        assert_eq!(format_to_string(&NumberFormat::Left, -12, 4), "-12 ");
 
-        assert_eq!(NumberFormat::Right.format(12, 1), "12");
-        assert_eq!(NumberFormat::Right.format(-12, 1), "-12");
-        assert_eq!(NumberFormat::Right.format(12, 4), "  12");
-        assert_eq!(NumberFormat::Right.format(-12, 4), " -12");
+        assert_eq!(format_to_string(&NumberFormat::Right, 12, 1), "12");
+        assert_eq!(format_to_string(&NumberFormat::Right, -12, 1), "-12");
+        assert_eq!(format_to_string(&NumberFormat::Right, 12, 4), "  12");
+        assert_eq!(format_to_string(&NumberFormat::Right, -12, 4), " -12");
 
-        assert_eq!(NumberFormat::RightZero.format(12, 1), "12");
-        assert_eq!(NumberFormat::RightZero.format(-12, 1), "-12");
-        assert_eq!(NumberFormat::RightZero.format(12, 4), "0012");
-        assert_eq!(NumberFormat::RightZero.format(-12, 4), "-012");
+        assert_eq!(format_to_string(&NumberFormat::RightZero, 12, 1), "12");
+        assert_eq!(format_to_string(&NumberFormat::RightZero, -12, 1), "-12");
+        assert_eq!(format_to_string(&NumberFormat::RightZero, 12, 4), "0012");
+        assert_eq!(format_to_string(&NumberFormat::RightZero, -12, 4), "-012");
     }
 }
