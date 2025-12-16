@@ -164,16 +164,27 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         binary_flag_default
     };
     let check = matches.get_flag("check");
-    let status = matches.get_flag("status");
-    let quiet = matches.get_flag("quiet");
-    let strict = matches.get_flag("strict");
-    let warn = matches.get_flag("warn");
-    let ignore_missing = matches.get_flag("ignore-missing");
 
-    if ignore_missing && !check {
-        // --ignore-missing needs -c
-        return Err(ChecksumError::IgnoreNotCheck.into());
-    }
+    let check_flag = |flag| match (check, matches.get_flag(flag)) {
+        (_, false) => Ok(false),
+        (true, true) => Ok(true),
+        (false, true) => Err(ChecksumError::CheckOnlyFlag(flag.into())),
+    };
+
+    // Each of the following flags are only expected in --check mode.
+    // If we encounter them otherwise, end with an error.
+    let ignore_missing = check_flag("ignore-missing")?;
+    let warn = check_flag("warn")?;
+    let quiet = check_flag("quiet")?;
+    let strict = check_flag("strict")?;
+    let status = check_flag("status")?;
+
+    let files = matches.get_many::<OsString>(options::FILE).map_or_else(
+        // No files given, read from stdin.
+        || Box::new(iter::once(OsStr::new("-"))) as Box<dyn Iterator<Item = &OsStr>>,
+        // At least one file given, read from them.
+        |files| Box::new(files.map(OsStr::new)) as Box<dyn Iterator<Item = &OsStr>>,
+    );
 
     if check {
         // on Windows, allow --binary/--text to be used with --check
@@ -188,13 +199,6 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
             }
         }
 
-        // Execute the checksum validation based on the presence of files or the use of stdin
-        // Determine the source of input: a list of files or stdin.
-        let input = matches.get_many::<OsString>(options::FILE).map_or_else(
-            || iter::once(OsStr::new("-")).collect::<Vec<_>>(),
-            |files| files.map(OsStr::new).collect::<Vec<_>>(),
-        );
-
         let verbose = ChecksumVerbose::new(status, quiet, warn);
 
         let opts = ChecksumValidateOptions {
@@ -204,16 +208,11 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         };
 
         // Execute the checksum validation
-        return perform_checksum_validation(input.iter().copied(), Some(algo_kind), length, opts);
-    } else if quiet {
-        return Err(ChecksumError::QuietNotCheck.into());
-    } else if strict {
-        return Err(ChecksumError::StrictNotCheck.into());
+        return perform_checksum_validation(files, Some(algo_kind), length, opts);
     }
 
-    let line_ending = LineEnding::from_zero_flag(matches.get_flag("zero"));
-
     let algo = SizedAlgoKind::from_unsized(algo_kind, length)?;
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag("zero"));
 
     let opts = ChecksumComputeOptions {
         algo_kind: algo,
@@ -226,13 +225,6 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         ),
         line_ending,
     };
-
-    let files = matches.get_many::<OsString>(options::FILE).map_or_else(
-        // No files given, read from stdin.
-        || Box::new(iter::once(OsStr::new("-"))) as Box<dyn Iterator<Item = &OsStr>>,
-        // At least one file given, read from them.
-        |files| Box::new(files.map(OsStr::new)) as Box<dyn Iterator<Item = &OsStr>>,
-    );
 
     // Show the hashsum of the input
     perform_checksum_computation(opts, files)
