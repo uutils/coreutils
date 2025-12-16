@@ -398,16 +398,17 @@ fn initial_quoting_with_show_control(
     input: &[u8],
     dirname: bool,
     always_quote: bool,
-    show_control: bool,
+    _show_control: bool,
 ) -> (Quotes, bool) {
-    // Check for control characters FIRST - they require $'...' which only works with single quotes
-    // But only consider them if we're showing them; if hiding, they become '?' which isn't special
-    let has_control_chars = show_control && input.iter().any(|&c| c < 32 || c == 127);
+    // For NonEscapedShellQuoter, control chars don't trigger quoting.
+    // When show_control=false, they become '?' which isn't special.
+    // When show_control=true, they're shown as-is but still don't trigger quoting
+    // (unlike EscapedShellQuoter which uses dollar-quoting for them).
+    // Only characters in shell_escaped_char_set trigger quoting.
 
-    if has_control_chars
-        || input
-            .iter()
-            .any(|c| shell_escaped_char_set(dirname).contains(c))
+    if input
+        .iter()
+        .any(|c| shell_escaped_char_set(dirname).contains(c))
     {
         (Quotes::Single, true)
     } else if input.contains(&b'\'') {
