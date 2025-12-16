@@ -667,7 +667,6 @@ should_panic_without_expect = "allow"        # 2
 doc_markdown = "allow"
 unused_self = "allow"
 enum_glob_use = "allow"
-ptr_cast_constness = "allow"
 needless_raw_string_hashes = "allow"
 unreadable_literal = "allow"
 unnested_or_patterns = "allow"
