@@ -590,6 +590,7 @@ required-features = ["uudoc"]
 [profile.release]
 lto = true
 panic = "abort"
+rustflags = ["-Cforce-unwind-tables=no"] # https://blog.rust-lang.org/2025/12/11/Rust-1.92.0/#emit-unwind-tables-even-when-cpanic-abort-is-enabled-on-linux
 
 [profile.release-fast]
 inherits = "release"
@@ -606,6 +607,7 @@ strip = true
 [profile.profiling]
 inherits = "release"
 panic = "unwind"
+rustflags = ["-Cforce-unwind-tables=yes"]
 debug = true
 
 [lints]
