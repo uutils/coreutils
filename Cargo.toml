@@ -666,7 +666,6 @@ should_panic_without_expect = "allow"        # 2
 
 doc_markdown = "allow"
 unused_self = "allow"
-map_unwrap_or = "allow"
 enum_glob_use = "allow"
 ptr_cast_constness = "allow"
 borrow_as_ptr = "allow"
