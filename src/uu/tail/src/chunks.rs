@@ -295,19 +295,21 @@ impl BytesChunkBuffer {
     /// chunks.fill(&mut reader).unwrap();
     /// ```
     pub fn fill(&mut self, reader: &mut impl BufRead) -> UResult<()> {
-        let mut chunk = Box::new(BytesChunk::new());
+        let mut chunk_opt = Some(Box::new(BytesChunk::new()));
 
         // fill chunks with all bytes from reader and reuse already instantiated chunks if possible
-        while chunk.fill(reader)?.is_some() {
+        while chunk_opt.as_mut().unwrap().fill(reader)?.is_some() {
+            let chunk = chunk_opt.take().unwrap();
             self.bytes += chunk.bytes as u64;
-            self.chunks.push_back(chunk.clone());
+            self.chunks.push_back(chunk);
 
             let first = &self.chunks[0];
             if self.bytes - first.bytes as u64 > self.num_print {
-                chunk = self.chunks.pop_front().unwrap();
-                self.bytes -= chunk.bytes as u64;
+                let old_front = self.chunks.pop_front().unwrap();
+                self.bytes -= old_front.bytes as u64;
+                chunk_opt = Some(old_front);
             } else {
-                *chunk = BytesChunk::new();
+                chunk_opt = Some(Box::new(BytesChunk::new()));
             }
         }
 
