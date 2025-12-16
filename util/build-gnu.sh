@@ -223,6 +223,12 @@ sed -i -e "s|---dis ||g" tests/tail/overlay-headers.sh
 # Do not FAIL, just do a regular ERROR
 "${SED}" -i -e "s|framework_failure_ 'no inotify_add_watch';|fail=1;|" tests/tail/inotify-rotate-resources.sh
 
+# The notify crate makes inotify_add_watch calls in a background thread, so strace needs -f to follow threads.
+# Also remove the HAVE_INOTIFY header check since that's for C builds.
+"${SED}" -i -e "s|grep '^#define HAVE_INOTIFY 1' \"\$CONFIG_HEADER\" >/dev/null && is_local_dir_ \. |is_local_dir_ . |" \
+    -e "s|strace -e inotify_add_watch|strace -f -e inotify_add_watch|" \
+    tests/tail/inotify-dir-recreate.sh
+
 test -f "${UU_BUILD_DIR}/getlimits" || cp src/getlimits "${UU_BUILD_DIR}"
 
 # pr produces very long log and this command isn't super interesting

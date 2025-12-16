@@ -17,6 +17,7 @@ RUN apt-get update \
        libcap-dev \
        libexpect-perl \
        libselinux1-dev \
+       libsystemd-dev \
        python3-pyinotify \
        quilt \
        texinfo \
