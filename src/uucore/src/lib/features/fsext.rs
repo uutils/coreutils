@@ -881,8 +881,13 @@ impl FsMeta for StatFs {
     fn fsid(&self) -> u64 {
         // Use type inference to determine the type of f_fsid
         // (libc::__fsid_t on Android, libc::fsid_t on other platforms)
-        let f_fsid: &[u32; 2] = unsafe { &*(&raw const self.f_fsid as *const [u32; 2]) };
-        ((u64::from(f_fsid[0])) << 32) | u64::from(f_fsid[1])
+        let f_fsid = self.f_fsid;
+
+        assert_eq!(size_of_val(&f_fsid), size_of::<[u32; 2]>());
+
+        let words: [u32; 2] = unsafe { mem::transmute_copy(&f_fsid) };
+
+        ((u64::from(words[0])) << 32) | u64::from(words[1])
     }
     #[cfg(not(any(
         target_vendor = "apple",
