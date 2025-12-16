@@ -4,26 +4,23 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) sbytes slen dlen memmem memmap Mmap mmap SIGBUS
+#[cfg(unix)]
+uucore::init_stdio_state_capture!();
+
 mod error;
 
 use clap::{Arg, ArgAction, Command};
 use memchr::memmem;
 use memmap2::Mmap;
-#[cfg(unix)]
-use nix::{
-    errno::Errno,
-    fcntl::{FcntlArg, fcntl},
-};
 use std::ffi::OsString;
 use std::io::{BufWriter, Read, Write, stdin, stdout};
-#[cfg(unix)]
-use std::os::fd::{AsRawFd, BorrowedFd};
 use std::{
     fs::{File, read},
     path::Path,
 };
-use uucore::error::UError;
-use uucore::error::UResult;
+#[cfg(unix)]
+use uucore::error::set_exit_code;
+use uucore::error::{UError, UResult};
 use uucore::{format_usage, show};
 
 use crate::error::TacError;
@@ -244,19 +241,24 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
         let buf;
 
         let data: &[u8] = if filename == "-" {
-            if let Err(e) = ensure_stdin_open() {
-                let e: Box<dyn UError> = TacError::ReadError(OsString::from("stdin"), e).into();
+            #[cfg(unix)]
+            if uucore::signals::stdin_was_closed() {
+                let e: Box<dyn UError> = TacError::ReadError(
+                    OsString::from("-"),
+                    std::io::Error::from_raw_os_error(libc::EBADF),
+                )
+                .into();
                 show!(e);
+                set_exit_code(1);
                 continue;
             }
-
             if let Some(mmap1) = try_mmap_stdin() {
                 mmap = mmap1;
                 &mmap
             } else {
                 let mut buf1 = Vec::new();
                 if let Err(e) = stdin().read_to_end(&mut buf1) {
-                    let e: Box<dyn UError> = TacError::ReadError(OsString::from("stdin"), e).into();
+                    let e: Box<dyn UError> = TacError::ReadError(OsString::from("-"), e).into();
                     show!(e);
                     continue;
                 }
@@ -335,28 +337,4 @@ fn try_mmap_path(path: &Path) -> Option<Mmap> {
     let mmap = unsafe { Mmap::map(&file).ok()? };
 
     Some(mmap)
-}
-
-#[cfg(unix)]
-fn stdin_closed() -> std::io::Result<bool> {
-    let stdin_fd = unsafe { BorrowedFd::borrow_raw(stdin().as_raw_fd()) };
-    match fcntl(stdin_fd, FcntlArg::F_GETFL) {
-        Ok(_) => Ok(false),
-        Err(_) => Ok(true),
-    }
-}
-
-fn ensure_stdin_open() -> std::io::Result<()> {
-    #[cfg(unix)]
-    {
-        if stdin_closed()? {
-            return Err(nix_error_to_io(Errno::EBADF));
-        }
-    }
-    Ok(())
-}
-
-#[cfg(unix)]
-fn nix_error_to_io(errno: Errno) -> std::io::Error {
-    std::io::Error::from_raw_os_error(errno as i32)
 }

@@ -426,6 +426,90 @@ pub fn ignore_interrupts() -> Result<(), Errno> {
     unsafe { signal(SIGINT, SigIgn) }.map(|_| ())
 }
 
+// Detect closed stdin/stdout/stderr before Rust reopens them as /dev/null (see issue #2873)
+#[cfg(unix)]
+use std::sync::atomic::{AtomicBool, Ordering};
+
+#[cfg(unix)]
+static STDIN_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+#[cfg(unix)]
+static STDOUT_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+#[cfg(unix)]
+static STDERR_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(unix)]
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn capture_stdio_state() {
+    use nix::libc;
+
+    unsafe {
+        STDIN_WAS_CLOSED.store(
+            libc::fcntl(libc::STDIN_FILENO, libc::F_GETFD) == -1,
+            Ordering::Relaxed,
+        );
+        STDOUT_WAS_CLOSED.store(
+            libc::fcntl(libc::STDOUT_FILENO, libc::F_GETFD) == -1,
+            Ordering::Relaxed,
+        );
+        STDERR_WAS_CLOSED.store(
+            libc::fcntl(libc::STDERR_FILENO, libc::F_GETFD) == -1,
+            Ordering::Relaxed,
+        );
+    }
+}
+
+#[macro_export]
+#[cfg(unix)]
+macro_rules! init_stdio_state_capture {
+    () => {
+        #[cfg(not(target_os = "macos"))]
+        #[used]
+        #[unsafe(link_section = ".init_array")]
+        static CAPTURE_STDIO_STATE: unsafe extern "C" fn() = $crate::signals::capture_stdio_state;
+
+        #[cfg(target_os = "macos")]
+        #[used]
+        #[unsafe(link_section = "__DATA,__mod_init_func")]
+        static CAPTURE_STDIO_STATE: unsafe extern "C" fn() = $crate::signals::capture_stdio_state;
+    };
+}
+
+#[macro_export]
+#[cfg(not(unix))]
+macro_rules! init_stdio_state_capture {
+    () => {};
+}
+
+#[cfg(unix)]
+pub fn stdin_was_closed() -> bool {
+    STDIN_WAS_CLOSED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(unix))]
+pub const fn stdin_was_closed() -> bool {
+    false
+}
+
+#[cfg(unix)]
+pub fn stdout_was_closed() -> bool {
+    STDOUT_WAS_CLOSED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(unix))]
+pub const fn stdout_was_closed() -> bool {
+    false
+}
+
+#[cfg(unix)]
+pub fn stderr_was_closed() -> bool {
+    STDERR_WAS_CLOSED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(unix))]
+pub const fn stderr_was_closed() -> bool {
+    false
+}
+
 #[test]
 fn signal_by_value() {
     assert_eq!(signal_by_name_or_value("0"), Some(0));

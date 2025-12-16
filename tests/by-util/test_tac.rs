@@ -377,3 +377,23 @@ fn test_stdin_dev_null_rdwr_is_supported() {
         .no_stderr()
         .stdout_is("");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_stdin_closed_with_dash_args_fails() {
+    use std::os::unix::process::CommandExt;
+
+    let ts = TestScenario::new(util_name!());
+    let mut cmd = std::process::Command::new(&ts.bin_path);
+    cmd.arg("tac").args(["-", "-"]);
+
+    unsafe {
+        cmd.pre_exec(|| {
+            libc::close(libc::STDIN_FILENO);
+            Ok(())
+        });
+    }
+
+    let output = cmd.output().unwrap();
+    assert_eq!(output.status.code(), Some(1));
+}
