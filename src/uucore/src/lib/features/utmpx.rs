@@ -56,7 +56,7 @@ pub use libc::getutxent;
 #[cfg_attr(target_env = "musl", allow(deprecated))]
 pub use libc::setutxent;
 use libc::utmpx;
-#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "netbsd"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "netbsd", target_os = "cygwin"))]
 #[cfg_attr(target_env = "musl", allow(deprecated))]
 pub use libc::utmpxname;
 
@@ -177,6 +177,26 @@ mod ut {
     pub use libc::RUN_LVL;
     pub use libc::SIGNATURE;
     pub use libc::USER_PROCESS;
+}
+
+#[cfg(target_os = "cygwin")]
+mod ut {
+    pub static DEFAULT_FILE: &str = "";
+
+    pub use libc::UT_LINESIZE as UT_LINESIZE;
+    pub use libc::UT_NAMESIZE as UT_NAMESIZE;
+    pub use libc::UT_HOSTSIZE as UT_HOSTSIZE;
+    pub use libc::UT_IDLEN as UT_IDLEN;
+
+    pub use libc::RUN_LVL;
+    pub use libc::BOOT_TIME;
+    pub use libc::NEW_TIME;
+    pub use libc::OLD_TIME;
+    pub use libc::INIT_PROCESS;
+    pub use libc::LOGIN_PROCESS;
+    pub use libc::USER_PROCESS;
+    pub use libc::DEAD_PROCESS;
+
 }
 
 /// A login record
