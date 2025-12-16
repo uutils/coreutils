@@ -590,11 +590,10 @@ required-features = ["uudoc"]
 [profile.release]
 lto = true
 panic = "abort"
-codegen-units = 4 # should be replaced by 1 without regression
+codegen-units = 1
 
 [profile.release-fast]
 inherits = "release"
-codegen-units = 1
 
 # A release-like profile that is as small as possible.
 [profile.release-small]
