@@ -185,14 +185,14 @@ fn find_stdout() -> UResult<(File, String)> {
     let exit_code = failure_code();
 
     match open_nohup_file(Path::new(NOHUP_OUT)) {
-        Ok(t) => Ok((t, NOHUP_OUT.to_string())),
+        Ok(t) => Ok((t, NOHUP_OUT.to_owned())),
         Err(e1) => {
             let Ok(home) = env::var("HOME") else {
                 return Err(NohupError::OpenFailed(exit_code, e1).into());
             };
             let mut homeout = PathBuf::from(home);
             homeout.push(NOHUP_OUT);
-            let homeout_str = homeout.to_str().unwrap().to_string();
+            let homeout_str = homeout.to_string_lossy().into_owned();
             match open_nohup_file(&homeout) {
                 Ok(t) => Ok((t, homeout_str)),
                 Err(e2) => Err(NohupError::OpenFailed2(exit_code, e1, homeout_str, e2).into()),
