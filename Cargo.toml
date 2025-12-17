@@ -570,7 +570,7 @@ xattr.workspace = true
 # to deserialize an utmpx struct into a binary file
 [target.'cfg(all(target_family= "unix",not(target_os = "macos")))'.dev-dependencies]
 serde = { version = "1.0.202", features = ["derive"] }
-bincode = { version = "2.0.1", features = ["serde"] }
+bincode = { version = "3.0.0", features = ["serde"] }
 serde-big-array = "0.5.1"
 
 
