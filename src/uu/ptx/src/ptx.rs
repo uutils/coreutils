@@ -19,7 +19,7 @@ use clap::{Arg, ArgAction, Command};
 use regex::Regex;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, UUsageError};
+use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::translate;
 
@@ -43,6 +43,7 @@ struct Config {
     context_regex: String,
     line_width: usize,
     gap_size: usize,
+    sentence_regex: Option<String>,
 }
 
 impl Default for Config {
@@ -59,6 +60,7 @@ impl Default for Config {
             context_regex: "\\w+".to_owned(),
             line_width: 72,
             gap_size: 3,
+            sentence_regex: None,
         }
     }
 }
@@ -197,9 +199,6 @@ struct WordRef {
 
 #[derive(Debug, Error)]
 enum PtxError {
-    #[error("{}", translate!("ptx-error-not-implemented", "feature" => (*.0)))]
-    NotImplemented(&'static str),
-
     #[error("{0}")]
     ParseError(ParseIntError),
 }
@@ -214,8 +213,18 @@ fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
         config.format = OutFormat::Roff;
         "[^ \t\n]+".clone_into(&mut config.context_regex);
     }
-    if matches.contains_id(options::SENTENCE_REGEXP) {
-        return Err(PtxError::NotImplemented("-S").into());
+    if let Some(regex) = matches.get_one::<String>(options::SENTENCE_REGEXP) {
+        config.sentence_regex = Some(regex.clone());
+
+        // Verify regex is valid and doesn't match empty string
+        if let Ok(re) = Regex::new(regex) {
+            if re.is_match("") {
+                return Err(USimpleError::new(
+                    1,
+                    "A regular expression cannot match a length zero string",
+                ));
+            }
+        }
     }
     config.auto_ref = matches.get_flag(options::AUTO_REFERENCE);
     config.input_ref = matches.get_flag(options::REFERENCES);
@@ -271,17 +280,38 @@ struct FileContent {
 
 type FileMap = HashMap<OsString, FileContent>;
 
-fn read_input(input_files: &[OsString]) -> std::io::Result<FileMap> {
+fn read_input(input_files: &[OsString], config: &Config) -> std::io::Result<FileMap> {
     let mut file_map: FileMap = HashMap::new();
     let mut offset: usize = 0;
+
+    let sentence_splitter =
+        if let Some(re_str) = &config.sentence_regex {
+            Some(Regex::new(re_str).map_err(|_| {
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid regex")
+            })?)
+        } else {
+            None
+        };
+
     for filename in input_files {
-        let reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
+        let mut reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
             Box::new(stdin())
         } else {
             let file = File::open(Path::new(filename))?;
             Box::new(file)
         });
-        let lines: Vec<String> = reader.lines().collect::<std::io::Result<Vec<String>>>()?;
+
+        let lines = if let Some(re) = &sentence_splitter {
+            let mut buffer = String::new();
+            reader.read_to_string(&mut buffer)?;
+
+            re.split(&buffer)
+                .map(|s| s.replace("\n", " ")) // ptx behavior: newlines become spaces inside sentences
+                .filter(|s| !s.is_empty()) // remove empty sentences
+                .collect()
+        } else {
+            reader.lines().collect::<std::io::Result<Vec<String>>>()?
+        };
 
         // Indexing UTF-8 string requires walking from the beginning, which can hurts performance badly when the line is long.
         // Since we will be jumping around the line a lot, we dump the content into a Vec<char>, which can be indexed in constant time.
@@ -877,7 +907,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let word_filter = WordFilter::new(&matches, &config)?;
-    let file_map = read_input(&input_files).map_err_context(String::new)?;
+    let file_map = read_input(&input_files, &config).map_err_context(String::new)?;
     let word_set = create_word_set(&config, &word_filter, &file_map);
     write_traditional_output(&mut config, &file_map, &word_set, &output_file)
 }
