@@ -56,7 +56,12 @@ pub use libc::getutxent;
 #[cfg_attr(target_env = "musl", allow(deprecated))]
 pub use libc::setutxent;
 use libc::utmpx;
-#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "netbsd", target_os = "cygwin"))]
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "linux",
+    target_os = "netbsd",
+    target_os = "cygwin"
+))]
 #[cfg_attr(target_env = "musl", allow(deprecated))]
 pub use libc::utmpxname;
 
@@ -83,20 +88,20 @@ macro_rules! chars2string {
 mod ut {
     pub static DEFAULT_FILE: &str = "/var/run/utmp";
 
-    #[cfg(not(target_env = "musl"))]
-    pub use libc::__UT_HOSTSIZE as UT_HOSTSIZE;
     #[cfg(target_env = "musl")]
     pub use libc::UT_HOSTSIZE;
-
     #[cfg(not(target_env = "musl"))]
-    pub use libc::__UT_LINESIZE as UT_LINESIZE;
+    pub use libc::__UT_HOSTSIZE as UT_HOSTSIZE;
+
     #[cfg(target_env = "musl")]
     pub use libc::UT_LINESIZE;
-
     #[cfg(not(target_env = "musl"))]
-    pub use libc::__UT_NAMESIZE as UT_NAMESIZE;
+    pub use libc::__UT_LINESIZE as UT_LINESIZE;
+
     #[cfg(target_env = "musl")]
     pub use libc::UT_NAMESIZE;
+    #[cfg(not(target_env = "musl"))]
+    pub use libc::__UT_NAMESIZE as UT_NAMESIZE;
 
     pub const UT_IDSIZE: usize = 4;
 
@@ -183,20 +188,19 @@ mod ut {
 mod ut {
     pub static DEFAULT_FILE: &str = "";
 
-    pub use libc::UT_LINESIZE as UT_LINESIZE;
-    pub use libc::UT_NAMESIZE as UT_NAMESIZE;
-    pub use libc::UT_HOSTSIZE as UT_HOSTSIZE;
-    pub use libc::UT_IDLEN as UT_IDLEN;
+    pub use libc::UT_HOSTSIZE;
+    pub use libc::UT_IDLEN;
+    pub use libc::UT_LINESIZE;
+    pub use libc::UT_NAMESIZE;
 
-    pub use libc::RUN_LVL;
     pub use libc::BOOT_TIME;
-    pub use libc::NEW_TIME;
-    pub use libc::OLD_TIME;
+    pub use libc::DEAD_PROCESS;
     pub use libc::INIT_PROCESS;
     pub use libc::LOGIN_PROCESS;
+    pub use libc::NEW_TIME;
+    pub use libc::OLD_TIME;
+    pub use libc::RUN_LVL;
     pub use libc::USER_PROCESS;
-    pub use libc::DEAD_PROCESS;
-
 }
 
 /// A login record
@@ -271,7 +275,7 @@ impl Utmpx {
         let (hostname, display) = host.split_once(':').unwrap_or((&host, ""));
 
         if !hostname.is_empty() {
-            use dns_lookup::{AddrInfoHints, getaddrinfo};
+            use dns_lookup::{getaddrinfo, AddrInfoHints};
 
             const AI_CANONNAME: i32 = 0x2;
             let hints = AddrInfoHints {

@@ -5,7 +5,7 @@
 // spell-checker:ignore (ToDO) IOFBF IOLBF IONBF setvbuf stderrp stdinp stdoutp
 
 use ctor::ctor;
-use libc::{_IOFBF, _IOLBF, _IONBF, FILE, c_char, c_int, fileno, size_t};
+use libc::{c_char, c_int, fileno, size_t, FILE, _IOFBF, _IOLBF, _IONBF};
 use std::env;
 use std::ptr;
 
@@ -58,7 +58,12 @@ pub unsafe extern "C" fn __stdbuf_get_stdin() -> *mut FILE {
         unsafe { (*__getreent())._stdin }
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd", target_os = "cygwin")))]
+    #[cfg(not(any(
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "cygwin"
+    )))]
     {
         unsafe extern "C" {
             static mut stdin: *mut FILE;
@@ -110,7 +115,12 @@ pub unsafe extern "C" fn __stdbuf_get_stdout() -> *mut FILE {
         unsafe { (*__getreent())._stdout }
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd", target_os = "cygwin")))]
+    #[cfg(not(any(
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "cygwin"
+    )))]
     {
         unsafe extern "C" {
             static mut stdout: *mut FILE;
@@ -162,7 +172,12 @@ pub unsafe extern "C" fn __stdbuf_get_stderr() -> *mut FILE {
         unsafe { (*__getreent())._stdin }
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd", target_os = "cygwin")))]
+    #[cfg(not(any(
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "cygwin"
+    )))]
     {
         unsafe extern "C" {
             static mut stderr: *mut FILE;

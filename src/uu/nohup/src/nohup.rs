@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) SIGHUP cproc vprocmgr homeout
 
 use clap::{Arg, ArgAction, Command};
-use libc::{SIG_IGN, SIGHUP, dup2, signal};
+use libc::{dup2, signal, SIGHUP, SIG_IGN};
 use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{Error, ErrorKind, IsTerminal};
@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::process;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult, set_exit_code};
+use uucore::error::{set_exit_code, UError, UResult};
 use uucore::translate;
 use uucore::{format_usage, show_error};
 

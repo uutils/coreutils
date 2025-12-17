@@ -38,7 +38,7 @@ use std::ffi::CStr;
 use uucore::display::Quotable;
 use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::error::UResult;
-use uucore::error::{USimpleError, set_exit_code};
+use uucore::error::{set_exit_code, USimpleError};
 pub use uucore::libc;
 use uucore::libc::{getlogin, uid_t};
 use uucore::line_ending::LineEnding;
@@ -535,7 +535,12 @@ fn pline(possible_uid: Option<uid_t>) {
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd", target_os = "cygwin"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "cygwin"
+))]
 fn pline(possible_uid: Option<uid_t>) {
     let uid = possible_uid.unwrap_or_else(getuid);
     let pw = Passwd::locate(uid).unwrap();
@@ -552,10 +557,20 @@ fn pline(possible_uid: Option<uid_t>) {
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd", target_os = "cygwin"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "cygwin"
+))]
 fn auditid() {}
 
-#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "openbsd", target_os = "cygwin")))]
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "cygwin"
+)))]
 fn auditid() {
     use std::mem::MaybeUninit;
 
