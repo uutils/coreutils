@@ -2,24 +2,14 @@
 # `run-gnu-test.bash [TEST]`
 # run GNU test (or all tests if TEST is missing/null)
 
-# spell-checker:ignore (env/vars) GNULIB SRCDIR SUBDIRS OSTYPE ; (utils) shellcheck gnproc greadlink
+# spell-checker:ignore (env/vars) GNULIB SRCDIR SUBDIRS OSTYPE MAKEFLAGS; (utils) shellcheck greadlink
 
 # ref: [How the GNU coreutils are tested](https://www.pixelbeat.org/docs/coreutils-testing.html) @@ <https://archive.is/p2ITW>
 # * note: to run a single test => `make check TESTS=PATH/TO/TEST/SCRIPT SUBDIRS=. VERBOSE=yes`
 
-# Use GNU version for make, nproc, readlink on *BSD
-case "$OSTYPE" in
-    *bsd*)
-        MAKE="gmake"
-        NPROC="gnproc"
-        READLINK="greadlink"
-        ;;
-    *)
-        MAKE="make"
-        NPROC="nproc"
-        READLINK="readlink"
-        ;;
-esac
+# Use GNU make, readlink on *BSD
+MAKE=$(command -v gmake||command -v make)
+READLINK=$(command -v greadlink||command -v readlink) # Use our readlink to remove a dependency
 
 ME_dir="$(dirname -- "$("${READLINK}" -fm -- "$0")")"
 REPO_main_dir="$(dirname -- "${ME_dir}")"
@@ -37,6 +27,9 @@ path_GNU="$("${READLINK}" -fm -- "${path_GNU:-${path_UUTILS}/../gnu}")"
 echo "path_UUTILS='${path_UUTILS}'"
 echo "path_GNU='${path_GNU}'"
 
+# Use GNU nproc for *BSD
+MAKEFLAGS="${MAKEFLAGS} -j $(${path_GNU}/src/nproc)"
+export MAKEFLAGS
 ###
 
 cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
@@ -71,7 +64,7 @@ elif [[ "$1" == "run-root" && "$has_selinux_tests" == true ]]; then
     if test -n "$CI"; then
         echo "Running SELinux tests as root"
         # Don't use check-root here as the upstream root tests is hardcoded
-        sudo "${MAKE}" -j "$("${NPROC}")" check TESTS="$*" SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" TEST_SUITE_LOG="tests/test-suite-root.log" || :
+        sudo "${MAKE}" check TESTS="$*" SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" TEST_SUITE_LOG="tests/test-suite-root.log" || :
     fi
     exit 0
 elif test "$1" != "run-root" && test "$1" != "run-tty"; then
@@ -105,9 +98,9 @@ fi
 if test "$1" != "run-root" && test "$1" != "run-tty"; then
     # run the regular tests
     if test $# -ge 1; then
-        timeout -sKILL 4h "${MAKE}" -j "$("${NPROC}")" check TESTS="$SPECIFIC_TESTS" SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" || : # Kill after 4 hours in case something gets stuck in make
+        timeout -sKILL 4h "${MAKE}" check TESTS="$SPECIFIC_TESTS" SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" || : # Kill after 4 hours in case something gets stuck in make
     else
-        timeout -sKILL 4h "${MAKE}" -j "$("${NPROC}")" check SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" || : # Kill after 4 hours in case something gets stuck in make
+        timeout -sKILL 4h "${MAKE}" check SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" || : # Kill after 4 hours in case something gets stuck in make
     fi
 else
     # in case we would like to run tests requiring root
@@ -115,10 +108,10 @@ else
         if test -n "$CI"; then
             if test $# -ge 2; then
                 echo "Running check-root to run only root tests"
-                sudo "${MAKE}" -j "$("${NPROC}")" check-root TESTS="$2" SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" TEST_SUITE_LOG="tests/test-suite-root.log" || :
+                sudo "${MAKE}" check-root TESTS="$2" SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" TEST_SUITE_LOG="tests/test-suite-root.log" || :
             else
                 echo "Running check-root to run only root tests"
-                sudo "${MAKE}" -j "$("${NPROC}")" check-root SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" TEST_SUITE_LOG="tests/test-suite-root.log" || :
+                sudo "${MAKE}" check-root SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" TEST_SUITE_LOG="tests/test-suite-root.log" || :
             fi
         fi
     fi
