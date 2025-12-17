@@ -130,15 +130,15 @@ impl Default for Options {
 /// specifies behavior of the overwrite flag
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub enum OverwriteMode {
+    /// No flag specified - prompt for unwriteable files when stdin is TTY
+    #[default]
+    Default,
     /// '-n' '--no-clobber'   do not overwrite
     NoClobber,
     /// '-i' '--interactive'  prompt before overwrite
     Interactive,
     ///'-f' '--force'         overwrite without prompt
     Force,
-    /// No flag specified - prompt for unwriteable files when stdin is TTY
-    #[default]
-    Default,
 }
 
 static OPT_FORCE: &str = "force";
@@ -427,11 +427,12 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
     } else if target.exists() && source_is_dir {
         match opts.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
-            OverwriteMode::Interactive => prompt_overwrite(target)?,
+            OverwriteMode::Interactive => prompt_overwrite(target, None)?,
             OverwriteMode::Force => {}
             OverwriteMode::Default => {
-                if std::io::stdin().is_terminal() && !is_writable(target) {
-                    prompt_overwrite(target)?;
+                let (writable, mode) = is_writable(target);
+                if !writable && std::io::stdin().is_terminal() {
+                    prompt_overwrite(target, mode)?;
                 }
             }
         }
@@ -735,12 +736,13 @@ fn rename(
                 }
                 return Ok(());
             }
-            OverwriteMode::Interactive => prompt_overwrite(to)?,
+            OverwriteMode::Interactive => prompt_overwrite(to, None)?,
             OverwriteMode::Force => {}
             OverwriteMode::Default => {
                 // GNU mv prompts when stdin is a TTY and target is not writable
-                if std::io::stdin().is_terminal() && !is_writable(to) {
-                    prompt_overwrite(to)?;
+                let (writable, mode) = is_writable(to);
+                if !writable && std::io::stdin().is_terminal() {
+                    prompt_overwrite(to, mode)?;
                 }
             }
         }
@@ -1204,31 +1206,34 @@ fn is_empty_dir(path: &Path) -> bool {
     fs::read_dir(path).is_ok_and(|mut contents| contents.next().is_none())
 }
 
+/// Check if file is writable, returning the mode for potential reuse.
 #[cfg(unix)]
-fn is_writable(path: &Path) -> bool {
+fn is_writable(path: &Path) -> (bool, Option<u32>) {
     if let Ok(metadata) = path.metadata() {
         let mode = metadata.permissions().mode();
         // Check if user write bit is set
-        (mode & 0o200) != 0
+        ((mode & 0o200) != 0, Some(mode))
     } else {
-        true // If we can't get metadata, assume writable
+        (false, None) // If we can't get metadata, prompt user to be safe
     }
 }
 
+/// Check if file is writable.
 #[cfg(not(unix))]
-fn is_writable(path: &Path) -> bool {
+fn is_writable(path: &Path) -> (bool, Option<u32>) {
     if let Ok(metadata) = path.metadata() {
-        !metadata.permissions().readonly()
+        (!metadata.permissions().readonly(), None)
     } else {
-        true
+        (false, None) // If we can't get metadata, prompt user to be safe
     }
 }
 
 #[cfg(unix)]
-fn get_interactive_prompt(to: &Path) -> String {
+fn get_interactive_prompt(to: &Path, cached_mode: Option<u32>) -> String {
     use libc::mode_t;
-    if let Ok(metadata) = to.metadata() {
-        let mode = metadata.permissions().mode();
+    // Use cached mode if available, otherwise fetch it
+    let mode = cached_mode.or_else(|| to.metadata().ok().map(|m| m.permissions().mode()));
+    if let Some(mode) = mode {
         let file_mode = mode & 0o777;
         // Check if file is not writable by user
         if (mode & 0o200) == 0 {
@@ -1241,13 +1246,13 @@ fn get_interactive_prompt(to: &Path) -> String {
 }
 
 #[cfg(not(unix))]
-fn get_interactive_prompt(to: &Path) -> String {
+fn get_interactive_prompt(to: &Path, _cached_mode: Option<u32>) -> String {
     translate!("mv-prompt-overwrite", "target" => to.quote())
 }
 
 /// Prompts the user for confirmation and returns an error if declined.
-fn prompt_overwrite(to: &Path) -> io::Result<()> {
-    if !prompt_yes!("{}", get_interactive_prompt(to)) {
+fn prompt_overwrite(to: &Path, cached_mode: Option<u32>) -> io::Result<()> {
+    if !prompt_yes!("{}", get_interactive_prompt(to, cached_mode)) {
         return Err(io::Error::other(""));
     }
     Ok(())
