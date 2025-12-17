@@ -3,9 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore winsize Openpty openpty xpixel ypixel ptyprocess
+use std::os::unix::fs::PermissionsExt;
 use std::thread::sleep;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
+use uutests::util::TerminalSimulation;
 use uutests::util::TestScenario;
 use uutests::util_name;
 
@@ -237,4 +239,29 @@ fn test_nohup_stderr_to_stdout() {
     let content = std::fs::read_to_string(at.plus_as_string("nohup.out")).unwrap();
     assert!(content.contains("stdout message"));
     assert!(content.contains("stderr message"));
+}
+
+#[test]
+fn test_nohup_file_permissions_ignore_umask_always_o600() {
+    for umask_val in [0o077, 0o000] {
+        let ts = TestScenario::new(util_name!());
+        ts.ucmd()
+            .terminal_sim_stdio(TerminalSimulation {
+                stdin: true,
+                stdout: true,
+                stderr: true,
+                size: None,
+            })
+            .umask(umask_val)
+            .args(&["echo", "test"])
+            .succeeds();
+
+        sleep(std::time::Duration::from_millis(10));
+        let mode = std::fs::metadata(ts.fixtures.plus_as_string("nohup.out"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o600, "with umask {umask_val:o}, got mode {mode:o}");
+    }
 }

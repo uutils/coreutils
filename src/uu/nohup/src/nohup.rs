@@ -7,9 +7,11 @@
 
 use clap::{Arg, ArgAction, Command};
 use libc::{SIG_IGN, SIGHUP, dup2, signal};
+use nix::sys::stat::{Mode, umask};
 use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{Error, ErrorKind, IsTerminal};
+use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::prelude::*;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -123,17 +125,31 @@ fn replace_fds() -> UResult<()> {
     Ok(())
 }
 
+/// Open nohup.out file with mode 0o600, temporarily clearing umask.
+/// The umask is cleared to ensure the file is created with exactly 0o600 permissions.
+fn open_nohup_file(path: &Path) -> std::io::Result<File> {
+    // Clear umask (set it to 0) and save the old value
+    let old_umask = umask(Mode::from_bits_truncate(0));
+
+    let result = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .mode(0o600)
+        .open(path);
+
+    // Restore previous umask
+    umask(old_umask);
+
+    result
+}
+
 fn find_stdout() -> UResult<File> {
     let internal_failure_code = match env::var("POSIXLY_CORRECT") {
         Ok(_) => POSIX_NOHUP_FAILURE,
         Err(_) => EXIT_CANCELED,
     };
 
-    match OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(Path::new(NOHUP_OUT))
-    {
+    match open_nohup_file(Path::new(NOHUP_OUT)) {
         Ok(t) => {
             show_error!(
                 "{}",
@@ -148,7 +164,7 @@ fn find_stdout() -> UResult<File> {
             let mut homeout = PathBuf::from(home);
             homeout.push(NOHUP_OUT);
             let homeout_str = homeout.to_str().unwrap();
-            match OpenOptions::new().create(true).append(true).open(&homeout) {
+            match open_nohup_file(&homeout) {
                 Ok(t) => {
                     show_error!(
                         "{}",
