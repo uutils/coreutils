@@ -535,7 +535,7 @@ fn pline(possible_uid: Option<uid_t>) {
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd", target_os = "cygwin"))]
 fn pline(possible_uid: Option<uid_t>) {
     let uid = possible_uid.unwrap_or_else(getuid);
     let pw = Passwd::locate(uid).unwrap();
@@ -552,10 +552,10 @@ fn pline(possible_uid: Option<uid_t>) {
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd", target_os = "cygwin"))]
 fn auditid() {}
 
-#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "openbsd")))]
+#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "openbsd", target_os = "cygwin")))]
 fn auditid() {
     use std::mem::MaybeUninit;
 
