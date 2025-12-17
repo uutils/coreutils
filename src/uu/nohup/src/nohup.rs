@@ -55,10 +55,20 @@ impl UError for NohupError {
     }
 }
 
+fn failure_code() -> i32 {
+    match env::var("POSIXLY_CORRECT") {
+        Ok(_) => POSIX_NOHUP_FAILURE,
+        Err(_) => EXIT_CANCELED,
+    }
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches =
-        uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
+    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(
+        uu_app(),
+        args,
+        failure_code(),
+    )?;
 
     replace_fds()?;
 
@@ -124,10 +134,7 @@ fn replace_fds() -> UResult<()> {
 }
 
 fn find_stdout() -> UResult<File> {
-    let internal_failure_code = match env::var("POSIXLY_CORRECT") {
-        Ok(_) => POSIX_NOHUP_FAILURE,
-        Err(_) => EXIT_CANCELED,
-    };
+    let internal_failure_code = failure_code();
 
     match OpenOptions::new()
         .create(true)
