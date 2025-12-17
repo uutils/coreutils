@@ -142,6 +142,7 @@ dd-error-status-not-recognized = status=LEVEL not recognized -> { $level }
 dd-error-unimplemented = feature not implemented on this system -> { $feature }
 dd-error-bs-out-of-range = { $param }=N cannot fit into memory
 dd-error-invalid-number = invalid number: ‘{ $input }’
+dd-error-invalid-number-too-large = invalid number: { $input }: Value too large for defined data type
 
 # Progress messages
 dd-progress-records-in = { $complete }+{ $partial } records in
