@@ -13,9 +13,9 @@ use std::io::Error;
 use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process;
-use uucore::entries::{grp2gid, usr2uid, Locate, Passwd};
-use uucore::error::{set_exit_code, UResult, UUsageError};
-use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
+use uucore::entries::{Locate, Passwd, grp2gid, usr2uid};
+use uucore::error::{UResult, UUsageError, set_exit_code};
+use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
 use uucore::{format_usage, show};
 
