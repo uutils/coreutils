@@ -15,6 +15,7 @@ use std::cell::RefCell;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::{
     cell::OnceCell,
+    collections::HashSet,
     cmp::Reverse,
     ffi::{OsStr, OsString},
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
@@ -50,6 +51,8 @@ mod config;
 mod dired;
 mod display;
 
+pub mod output;
+pub use output::{CollectorOutput, EntryInfo, LsOutput};
 pub use config::{Config, options};
 pub use display::Format;
 
@@ -787,7 +790,7 @@ pub fn uu_app() -> Command {
 
 /// Represents the possible values of [`PathData::display_name`]. The reason this is a
 /// separate enum is to avoid a self-referential struct, as it is moved in hot loops.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum PathDataDisplayName<'a> {
     SelfReferential,
     Custom(Cow<'a, OsStr>),
@@ -797,7 +800,11 @@ enum PathDataDisplayName<'a> {
 /// Any data that will be reused several times makes sense to be added to this structure.
 /// Caching data here helps eliminate redundant syscalls to fetch same information.
 #[derive(Debug)]
-struct PathData<'a> {
+/// Internal representation of file/directory entry data.
+///
+/// This struct is used internally for file enumeration. It can be converted
+/// to [`EntryInfo`] for programmatic access via the [`LsOutput`] trait.
+pub struct PathData<'a> {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
@@ -814,6 +821,19 @@ struct PathData<'a> {
 }
 
 impl<'a> PathData<'a> {
+    /// Convert this PathData to an EntryInfo for programmatic access
+    pub fn to_entry_info(&self, config: &Config) -> EntryInfo {
+        EntryInfo {
+            path: self.p_buf.clone().into_owned(),
+            display_name: self.display_name.clone(),
+            file_type: self.file_type().copied(),
+            metadata: self.metadata().cloned(),
+            security_context: self.security_context(config).to_string(),
+            command_line: self.command_line,
+            must_dereference: self.must_dereference,
+        }
+    }
+
     fn new(
         p_buf: Cow<'a, Path>,
         dir_entry: Option<DirEntry>,
@@ -1002,38 +1022,144 @@ struct ListState<'a> {
     display_buf: Vec<u8>,
 }
 
-#[allow(clippy::cognitive_complexity)]
-pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
+/// Text output implementation that formats entries for terminal display.
+///
+/// This is the default output sink used by [`list`] for standard ls behavior.
+/// It handles all text formatting including colors, columns, long format, etc.
+struct TextOutput<'a> {
+    state: ListState<'a>,
+    dired: DiredOutput,
+}
+
+impl<'a> TextOutput<'a> {
+    fn new(config: &'a Config) -> Self {
+        Self {
+            state: ListState {
+                out: BufWriter::new(stdout()),
+                style_manager: config.color.as_ref().map(StyleManager::new),
+                #[cfg(unix)]
+                uid_cache: HashMap::default(),
+                #[cfg(unix)]
+                gid_cache: HashMap::default(),
+                recent_time_range: (SystemTime::now() - Duration::new(31_556_952 / 2, 0))
+                    ..=SystemTime::now(),
+            },
+            dired: DiredOutput::default(),
+        }
+    }
+}
+
+impl<'a> LsOutput for TextOutput<'a> {
+    fn write_entries(&mut self, entries: &[PathData], config: &Config) -> UResult<()> {
+        display_items(entries, config, &mut self.state, &mut self.dired)
+    }
+
+    fn write_dir_header(
+        &mut self,
+        path_data: &PathData,
+        config: &Config,
+        is_first: bool,
+    ) -> UResult<()> {
+        if is_first {
+            if config.dired {
+                dired::indent(&mut self.state.out)?;
+            }
+            show_dir_name(path_data, &mut self.state.out, config)?;
+            writeln!(self.state.out)?;
+            if config.dired {
+                let dir_len = path_data.display_name().len();
+                dired::calculate_subdired(&mut self.dired, dir_len);
+                dired::add_dir_name(&mut self.dired, dir_len);
+            }
+        } else {
+            writeln!(self.state.out)?;
+            if config.dired {
+                self.dired.padding = 2;
+                dired::indent(&mut self.state.out)?;
+                let dir_name_size = path_data.path().to_string_lossy().len();
+                dired::calculate_subdired(&mut self.dired, dir_name_size);
+                dired::add_dir_name(&mut self.dired, dir_name_size);
+            }
+            show_dir_name(path_data, &mut self.state.out, config)?;
+            writeln!(self.state.out)?;
+        }
+        Ok(())
+    }
+
+    fn write_total(&mut self, total_size: u64, config: &Config) -> UResult<()> {
+        if config.dired {
+            dired::indent(&mut self.state.out)?;
+        }
+        let total_str = format!(
+            "{}{}",
+            translate!("ls-total", "size" => display_size(total_size, config)),
+            config.line_ending
+        );
+        write!(self.state.out, "{}", total_str)?;
+        if config.dired {
+            dired::add_total(&mut self.dired, total_str.len());
+        }
+        Ok(())
+    }
+
+    fn flush(&mut self) -> UResult<()> {
+        self.state.out.flush()?;
+        Ok(())
+    }
+
+    fn finalize(&mut self, config: &Config) -> UResult<()> {
+        if config.dired && !config.hyperlink {
+            dired::print_dired_output(config, &self.dired, &mut self.state.out)?;
+        }
+        Ok(())
+    }
+
+    fn initialize(&mut self, _config: &Config) -> UResult<()> {
+        if let Some(style_manager) = self.state.style_manager.as_mut() {
+            if style_manager.get_normal_style().is_some() {
+                let to_write = style_manager.reset(true);
+                write!(self.state.out, "{to_write}")?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Lists files and directories, sending structured output to a custom sink.
+///
+/// This function provides programmatic access to ls functionality without
+/// requiring text parsing. It enumerates files and directories according
+/// to the provided configuration and sends each entry to the output sink.
+///
+/// # Arguments
+///
+/// * `locs` - Paths to list
+/// * `config` - Configuration controlling listing behavior
+/// * `output` - A sink implementing [`LsOutput`] to receive entries
+///
+/// # Example
+///
+/// ```ignore
+/// use uu_ls::{Config, list_with_output, CollectorOutput};
+/// use std::path::Path;
+///
+/// let config = Config::from(&matches)?;
+/// let mut output = CollectorOutput::new();
+/// list_with_output(vec![Path::new(".")], &config, &mut output)?;
+///
+/// for entry in output.entries() {
+///     println!("{}: {:?}", entry.display_name.to_string_lossy(), entry.file_type);
+/// }
+/// ```
+pub fn list_with_output<O: LsOutput>(
+    locs: Vec<&Path>,
+    config: &Config,
+    output: &mut O,
+) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
-    let mut dired = DiredOutput::default();
     let initial_locs_len = locs.len();
     let now = SystemTime::now();
-
-    let mut state = ListState {
-        out: BufWriter::new(stdout()),
-        style_manager: config.color.as_ref().map(StyleManager::new),
-        #[cfg(unix)]
-        uid_cache: FxHashMap::default(),
-        #[cfg(unix)]
-        gid_cache: FxHashMap::default(),
-        #[cfg(not(unix))]
-        uid_cache: (),
-        #[cfg(not(unix))]
-        gid_cache: (),
-        // Time range for which to use the "recent" format. Anything from 0.5 year in the past to now
-        // (files with modification time in the future use "old" format).
-        // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-        recent_time_range: (now - Duration::new(31_556_952 / 2, 0))..=now,
-        stack: Vec::new(),
-        listed_ancestors: FxHashSet::default(),
-        initial_locs_len,
-        display_buf: Vec::with_capacity(if config.format == Format::Long {
-            128
-        } else {
-            0
-        }),
-    };
 
     for loc in locs {
         let path_data = PathData::new(loc.into(), None, None, config, true);
@@ -1065,16 +1191,10 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     sort_entries(&mut files, config);
     sort_entries(&mut dirs, config);
 
-    if let Some(style_manager) = state.style_manager.as_mut() {
-        // ls will try to write a reset before anything is written if normal
-        // color is given
-        if style_manager.get_normal_style().is_some() {
-            let to_write = style_manager.reset(true);
-            write!(state.out, "{to_write}")?;
-        }
-    }
+    output.initialize(config)?;
 
-    display_items(&files, config, &mut state, &mut dired)?;
+    // Write file entries
+    output.write_entries(&files, config)?;
 
     for (pos, path_data) in dirs.iter().enumerate() {
         let needs_blank_line = pos != 0 || !files.is_empty();
@@ -1083,7 +1203,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         let read_dir = match fs::read_dir(path_data.path()) {
             Err(err) => {
                 // flush stdout buffer before the error to preserve formatting and order
-                state.out.flush()?;
+                output.flush()?;
                 show!(LsError::IOErrorContext(
                     path_data.path().to_path_buf(),
                     err,
@@ -1094,54 +1214,132 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
             Ok(rd) => rd,
         };
 
-        state.listed_ancestors.insert(FileInformation::from_path(
+        // Write dir heading for multiple arguments or recursive mode
+        if initial_locs_len > 1 || config.recursive {
+            let is_first = pos == 0 && files.is_empty();
+            output.write_dir_header(path_data, config, is_first)?;
+        }
+
+        let mut listed_ancestors = HashSet::default();
+        listed_ancestors.insert(FileInformation::from_path(
             path_data.path(),
             path_data.must_dereference,
         )?);
+        enter_directory(path_data, read_dir, config, &mut listed_ancestors, output)?;
+    }
 
-        // List each of the arguments to ls first.
-        depth_first_list(
-            (path_data.path().to_path_buf(), needs_blank_line),
-            read_dir,
-            config,
-            &mut state,
-            &mut dired,
-            true,
-        )?;
+    output.finalize(config)?;
+    Ok(())
+}
 
-        // Only runs if it must list recursively.
-        while let Some(dir_data) = state.stack.pop() {
-            let read_dir = match fs::read_dir(&dir_data.0) {
+fn enter_directory<O: LsOutput>(
+    path_data: &PathData,
+    mut read_dir: ReadDir,
+    config: &Config,
+    listed_ancestors: &mut HashSet<FileInformation>,
+    output: &mut O,
+) -> UResult<()> {
+    // Create vec of entries with initial dot files
+    let mut entries: Vec<PathData> = if config.files == Files::All {
+        vec![
+            PathData::new(
+                path_data.path().to_path_buf(),
+                None,
+                Some(".".into()),
+                config,
+                false,
+            ),
+            PathData::new(
+                path_data.path().join(".."),
+                None,
+                Some("..".into()),
+                config,
+                false,
+            ),
+        ]
+    } else {
+        vec![]
+    };
+
+    // Convert those entries to the PathData struct
+    for raw_entry in read_dir.by_ref() {
+        let dir_entry = match raw_entry {
+            Ok(path) => path,
+            Err(err) => {
+                output.flush()?;
+                show!(LsError::IOError(err));
+                continue;
+            }
+        };
+
+        if should_display(&dir_entry, config) {
+            let entry_path_data =
+                PathData::new(dir_entry.path(), Some(dir_entry), None, config, false);
+            entries.push(entry_path_data);
+        }
+    }
+
+    sort_entries(&mut entries, config);
+
+    // Print total after any error display
+    if config.format == Format::Long || config.alloc_size {
+        let mut total_size = 0u64;
+        for item in &entries {
+            total_size += item
+                .metadata()
+                .as_ref()
+                .map_or(0, |md| get_block_size(md, config));
+        }
+        output.write_total(total_size, config)?;
+    }
+
+    output.write_entries(&entries, config)?;
+
+    if config.recursive {
+        for e in entries
+            .iter()
+            .skip(if config.files == Files::All { 2 } else { 0 })
+            .filter(|p| p.file_type().is_some_and(|ft| ft.is_dir()))
+        {
+            match fs::read_dir(e.path()) {
                 Err(err) => {
-                    // flush stdout buffer before the error to preserve formatting and order
-                    state.out.flush()?;
+                    output.flush()?;
                     show!(LsError::IOErrorContext(
-                        path_data.path().to_path_buf(),
+                        e.path().to_path_buf(),
                         err,
-                        path_data.command_line
+                        e.command_line
                     ));
-                    continue;
                 }
-                Ok(rd) => rd,
-            };
-
-            depth_first_list(dir_data, read_dir, config, &mut state, &mut dired, false)?;
-
-            // Heuristic to ensure stack does not keep its capacity forever if there is
-            // combinatorial explosion; we decrease it logarithmically here.
-            let (cap, len) = (state.stack.capacity(), state.stack.len());
-            if cap > (len + 4) * 2 {
-                state.stack.shrink_to(len + (cap - len) / 2);
+                Ok(rd) => {
+                    if listed_ancestors
+                        .insert(FileInformation::from_path(e.path(), e.must_dereference)?)
+                    {
+                        // when listing several directories in recursive mode, we show
+                        // "dirname:" at the beginning of the file list
+                        output.write_dir_header(e, config, false)?;
+                        enter_directory(e, rd, config, listed_ancestors, output)?;
+                        listed_ancestors
+                            .remove(&FileInformation::from_path(e.path(), e.must_dereference)?);
+                    } else {
+                        output.flush()?;
+                        show!(LsError::AlreadyListedError(e.path().to_path_buf()));
+                    }
+                }
             }
         }
+    }
 
-        // No need to clear state.buf since [`enter_directory`] drains it.
-        state.listed_ancestors.clear();
-    }
-    if config.dired && !config.hyperlink {
-        dired::print_dired_output(config, &dired, &mut state.out)?;
-    }
     Ok(())
+}
+
+/// Lists files and directories with text output to stdout.
+///
+/// This is the standard ls entry point that formats output as text.
+/// It uses [`list_with_output`] internally with a text formatter.
+#[allow(clippy::cognitive_complexity)]
+pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
+    let mut output = TextOutput::new(config);
+    list_with_output(locs, config, &mut output)
 }
 
 fn sort_entries(entries: &mut [PathData], config: &Config) {
@@ -1208,154 +1406,55 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
     }
 }
 
-fn depth_first_list(
-    (dir_path, needs_blank_line): DirData,
-    mut read_dir: ReadDir,
-    config: &Config,
-    state: &mut ListState,
-    dired: &mut DiredOutput,
-    is_top_level: bool,
-) -> UResult<()> {
-    let path_data = PathData::new(dir_path.as_path().into(), None, None, config, false);
+fn is_hidden(file_path: &DirEntry) -> bool {
+    #[cfg(windows)]
+    {
+        let metadata = file_path.metadata().unwrap();
+        let attr = metadata.file_attributes();
+        (attr & 0x2) > 0
+    }
+    #[cfg(not(windows))]
+    {
+        file_path
+            .file_name()
+            .to_str()
+            .is_some_and(|res| res.starts_with('.'))
+    }
+}
 
-    // Print dir heading - name... 'total' comes after error display
-    if state.initial_locs_len > 1 || config.recursive {
-        if is_top_level {
-            if needs_blank_line {
-                writeln!(state.out)?;
-                if config.dired {
-                    dired.padding += 1;
-                }
-            }
-            if config.dired {
-                dired::indent(&mut state.out)?;
-            }
-            show_dir_name(&path_data, &mut state.out, config)?;
-            writeln!(state.out)?;
-            if config.dired {
-                let dir_len = path_data.path().as_os_str().len();
-                // add the //SUBDIRED// coordinates
-                dired::calculate_subdired(dired, dir_len);
-                // Add the padding for the dir name
-                dired::add_dir_name(dired, dir_len);
-            }
-        } else {
-            writeln!(state.out)?;
-            if config.dired {
-                dired.padding += 1;
-                dired::indent(&mut state.out)?;
-                let dir_name_size = path_data.path().as_os_str().len();
-                dired::calculate_subdired(dired, dir_name_size);
-                dired::add_dir_name(dired, dir_name_size);
-            }
-            show_dir_name(&path_data, &mut state.out, config)?;
-            writeln!(state.out)?;
-        }
+fn should_display(entry: &DirEntry, config: &Config) -> bool {
+    // check if hidden
+    if config.files == Files::Normal && is_hidden(entry) {
+        return false;
     }
 
-    // Append entries with initial dot files and record their existence
-    let (ref mut buf, trim) = if config.files == Files::All {
-        const DOT_DIRECTORIES: usize = 2;
-        let v = vec![
-            PathData::new(
-                path_data.path().into(),
-                None,
-                Some(OsStr::new(".").into()),
-                config,
-                false,
-            ),
-            PathData::new(
-                // On WASI the sandbox may block access to ".." at the
-                // preopened root.  Fall back to "." so the entry still
-                // appears with valid metadata instead of an error.
-                {
-                    let dotdot = path_data.path().join("..");
-                    #[cfg(target_os = "wasi")]
-                    let dotdot = if dotdot.metadata().is_err() {
-                        path_data.path().into()
-                    } else {
-                        dotdot
-                    };
-                    dotdot.into()
-                },
-                None,
-                Some(OsStr::new("..").into()),
-                config,
-                false,
-            ),
-        ];
-        (v, DOT_DIRECTORIES)
-    } else {
-        (Vec::new(), 0)
+    // check if it is among ignore_patterns
+    let options = MatchOptions {
+        // setting require_literal_leading_dot to match behavior in GNU ls
+        require_literal_leading_dot: true,
+        require_literal_separator: false,
+        case_sensitive: true,
     };
 
-    // Convert those entries to the PathData struct
-    for raw_entry in read_dir.by_ref() {
-        match raw_entry {
-            Ok(dir_entry) => {
-                if should_display(&dir_entry, config) {
-                    buf.push(PathData::new(
-                        dir_entry.path().into(),
-                        Some(dir_entry),
-                        None,
-                        config,
-                        false,
-                    ));
-                }
-            }
-            Err(err) => {
-                state.out.flush()?;
-                show!(LsError::IOError(err));
-            }
-        }
-    }
-    // Relinquish unused space since we won't need it anymore.
-    buf.shrink_to_fit();
+    let file_name = entry.file_name();
+    // If the decoding fails, still match best we can
+    // FIXME: use OsStrings or Paths once we have a glob crate that supports it:
+    // https://github.com/rust-lang/glob/issues/23
+    // https://github.com/rust-lang/glob/issues/78
+    // https://github.com/BurntSushi/ripgrep/issues/1250
 
-    sort_entries(buf, config);
+    let file_name = match file_name.to_str() {
+        Some(s) => Cow::Borrowed(s),
+        None => file_name.to_string_lossy(),
+    };
 
-    if config.format == Format::Long || config.alloc_size {
-        let total = write_total(buf, config, &mut state.out)?;
-        if config.dired {
-            dired::add_total(dired, total);
-        }
-    }
-
-    display_items(buf, config, state, dired)?;
-
-    if config.recursive {
-        for e in buf
-            .iter()
-            .skip(trim)
-            .filter(|p| p.file_type().is_some_and(FileType::is_dir))
-            .rev()
-        {
-            // Try to open only to report any errors in order to match GNU semantics.
-            if let Err(err) = fs::read_dir(e.path()) {
-                state.out.flush()?;
-                show!(LsError::IOErrorContext(
-                    e.path().to_path_buf(),
-                    err,
-                    e.command_line
-                ));
-            } else {
-                let fi = FileInformation::from_path(e.path(), e.must_dereference)?;
-                if state.listed_ancestors.insert(fi) {
-                    // Push to stack, but with a less aggressive growth curve.
-                    let (cap, len) = (state.stack.capacity(), state.stack.len());
-                    if cap == len {
-                        state.stack.reserve_exact(len / 4 + 4);
-                    }
-                    state.stack.push((e.path().to_path_buf(), true));
-                } else {
-                    state.out.flush()?;
-                    show!(LsError::AlreadyListedError(e.path().to_path_buf()));
-                }
-            }
-        }
-    }
-    Ok(())
+    !config
+        .ignore_patterns
+        .iter()
+        .any(|p| p.matches_with(&file_name, options))
 }
+
+#[allow(clippy::cognitive_complexity)]
 
 fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
     if dereference {
@@ -1380,6 +1479,234 @@ fn write_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>)
     out.write_all(total.as_bytes())?;
     out.write_all(&[config.line_ending as u8])?;
     Ok(total.len() + 1)
+
+fn display_dir_entry_size(
+    entry: &PathData,
+    config: &Config,
+    state: &mut ListState,
+) -> (usize, usize, usize, usize, usize, usize) {
+    // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
+    if let Some(md) = entry.metadata() {
+        let (size_len, major_len, minor_len) = match display_len_or_rdev(md, config) {
+            SizeOrDeviceId::Device(major, minor) => {
+                (major.len() + minor.len() + 2usize, major.len(), minor.len())
+            }
+            SizeOrDeviceId::Size(size) => (size.len(), 0usize, 0usize),
+        };
+        (
+            display_symlink_count(md).len(),
+            display_uname(md, config, state).len(),
+            display_group(md, config, state).len(),
+            size_len,
+            major_len,
+            minor_len,
+        )
+    } else {
+        (0, 0, 0, 0, 0, 0)
+    }
+}
+
+// A simple, performant, ExtendPad trait to add a string to a Vec<u8>, padding with spaces
+// on the left or right, without making additional copies, or using formatting functions.
+trait ExtendPad {
+    fn extend_pad_left(&mut self, string: &str, count: usize);
+    fn extend_pad_right(&mut self, string: &str, count: usize);
+}
+
+impl ExtendPad for Vec<u8> {
+    fn extend_pad_left(&mut self, string: &str, count: usize) {
+        if string.len() < count {
+            self.extend(iter::repeat_n(b' ', count - string.len()));
+        }
+        self.extend(string.as_bytes());
+    }
+
+    fn extend_pad_right(&mut self, string: &str, count: usize) {
+        self.extend(string.as_bytes());
+        if string.len() < count {
+            self.extend(iter::repeat_n(b' ', count - string.len()));
+        }
+    }
+}
+
+// TODO: Consider converting callers to use ExtendPad instead, as it avoids
+// additional copies.
+fn pad_left(string: &str, count: usize) -> String {
+    format!("{string:>count$}")
+}
+
+fn display_additional_leading_info(
+    item: &PathData,
+    padding: &PaddingCollection,
+    config: &Config,
+) -> UResult<String> {
+    let mut result = String::new();
+    #[cfg(unix)]
+    {
+        if config.inode {
+            let i = if let Some(md) = item.metadata() {
+                get_inode(md)
+            } else {
+                "?".to_owned()
+            };
+            write!(result, "{} ", pad_left(&i, padding.inode)).unwrap();
+        }
+    }
+
+    if config.alloc_size {
+        let s = if let Some(md) = item.metadata() {
+            display_size(get_block_size(md, config), config)
+        } else {
+            "?".to_owned()
+        };
+        // extra space is insert to align the sizes, as needed for all formats, except for the comma format.
+        if config.format == Format::Commas {
+            write!(result, "{s} ").unwrap();
+        } else {
+            write!(result, "{} ", pad_left(&s, padding.block_size)).unwrap();
+        }
+    }
+    Ok(result)
+}
+
+#[allow(clippy::cognitive_complexity)]
+fn display_items(
+    items: &[PathData],
+    config: &Config,
+    state: &mut ListState,
+    dired: &mut DiredOutput,
+) -> UResult<()> {
+    // `-Z`, `--context`:
+    // Display the SELinux security context or '?' if none is found. When used with the `-l`
+    // option, print the security context to the left of the size column.
+
+    let quoted = items.iter().any(|item| {
+        let name = locale_aware_escape_name(item.display_name(), config.quoting_style);
+        os_str_starts_with(&name, b"'")
+    });
+
+    if config.format == Format::Long {
+        let padding_collection = calculate_padding_collection(items, config, state);
+
+        for item in items {
+            #[cfg(unix)]
+            let should_display_leading_info = config.inode || config.alloc_size;
+            #[cfg(not(unix))]
+            let should_display_leading_info = config.alloc_size;
+
+            if should_display_leading_info {
+                let more_info = display_additional_leading_info(item, &padding_collection, config)?;
+
+                write!(state.out, "{more_info}")?;
+            }
+
+            display_item_long(item, &padding_collection, config, state, dired, quoted)?;
+        }
+    } else {
+        let mut longest_context_len = 1;
+        let prefix_context = if config.context {
+            for item in items {
+                let context_len = item.security_context(config).len();
+                longest_context_len = context_len.max(longest_context_len);
+            }
+            Some(longest_context_len)
+        } else {
+            None
+        };
+
+        let padding = calculate_padding_collection(items, config, state);
+
+        // we need to apply normal color to non filename output
+        if let Some(style_manager) = &mut state.style_manager {
+            write!(state.out, "{}", style_manager.apply_normal())?;
+        }
+
+        let mut names_vec = Vec::new();
+
+        #[cfg(unix)]
+        let should_display_leading_info = config.inode || config.alloc_size;
+        #[cfg(not(unix))]
+        let should_display_leading_info = config.alloc_size;
+
+        for i in items {
+            let more_info = if should_display_leading_info {
+                Some(display_additional_leading_info(i, &padding, config)?)
+            } else {
+                None
+            };
+            // it's okay to set current column to zero which is used to decide
+            // whether text will wrap or not, because when format is grid or
+            // column ls will try to place the item name in a new line if it
+            // wraps.
+            let cell = display_item_name(
+                i,
+                config,
+                prefix_context,
+                more_info,
+                state,
+                LazyCell::new(Box::new(|| 0)),
+            );
+
+            names_vec.push(cell);
+        }
+
+        let mut names = names_vec.into_iter();
+
+        match config.format {
+            Format::Columns => {
+                display_grid(
+                    names,
+                    config.width,
+                    Direction::TopToBottom,
+                    &mut state.out,
+                    quoted,
+                    config.tab_size,
+                )?;
+            }
+            Format::Across => {
+                display_grid(
+                    names,
+                    config.width,
+                    Direction::LeftToRight,
+                    &mut state.out,
+                    quoted,
+                    config.tab_size,
+                )?;
+            }
+            Format::Commas => {
+                let mut current_col = 0;
+                if let Some(name) = names.next() {
+                    write_os_str(&mut state.out, &name)?;
+                    current_col = ansi_width(&name.to_string_lossy()) as u16 + 2;
+                }
+                for name in names {
+                    let name_width = ansi_width(&name.to_string_lossy()) as u16;
+                    // If the width is 0 we print one single line
+                    if config.width != 0 && current_col + name_width + 1 > config.width {
+                        current_col = name_width + 2;
+                        writeln!(state.out, ",")?;
+                    } else {
+                        current_col += name_width + 2;
+                        write!(state.out, ", ")?;
+                    }
+                    write_os_str(&mut state.out, &name)?;
+                }
+                // Current col is never zero again if names have been printed.
+                // So we print a newline.
+                if current_col > 0 {
+                    write!(state.out, "{}", config.line_ending)?;
+                }
+            }
+            _ => {
+                for name in names {
+                    write_os_str(&mut state.out, &name)?;
+                    write!(state.out, "{}", config.line_ending)?;
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[allow(unused_variables)]
