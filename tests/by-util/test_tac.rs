@@ -350,7 +350,13 @@ fn test_infinite_pipe() {
     std::thread::sleep(Duration::from_secs(5));
 
     // The process should not have exited, as the stream is infinite
-    assert!(child.is_alive());
+    assert!(
+        child.is_alive(),
+        // This might actually happen on 32-bit systems due to memory constraints
+        // TODO: Address this properly
+        "tac exited unexpectedly when reading from an infinite stream, error: {:?}",
+        child.wait().ok()
+    );
 
     // Clean up
     child.kill();
