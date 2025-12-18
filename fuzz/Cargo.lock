@@ -1597,7 +1597,7 @@ dependencies = [
  "clap",
  "fluent",
  "jiff",
- "libc",
+ "nix",
  "parse_datetime",
  "uucore",
  "windows-sys 0.61.2",
