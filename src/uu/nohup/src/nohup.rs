@@ -56,9 +56,10 @@ impl UError for NohupError {
 }
 
 fn failure_code() -> i32 {
-    match env::var("POSIXLY_CORRECT") {
-        Ok(_) => POSIX_NOHUP_FAILURE,
-        Err(_) => EXIT_CANCELED,
+    if env::var("POSIXLY_CORRECT").is_ok() {
+        POSIX_NOHUP_FAILURE
+    } else {
+        EXIT_CANCELED
     }
 }
 
