@@ -1545,6 +1545,37 @@ fn test_files0_from_zero_length() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_files0_from_non_utf8_filename() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    use std::path::Path;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("file1.txt");
+    at.append("file1.txt", "zebra\n");
+    at.touch("file2.txt");
+    at.append("file2.txt", "apple\n");
+
+    // Create a file with non-UTF-8 bytes in filename
+    let non_utf8_name = OsStr::from_bytes(b"\xff\xfefile3.txt");
+    let non_utf8_path = at.plus_as_string("").to_owned() + "/";
+    let full_path = Path::new(&non_utf8_path).join(non_utf8_name);
+    std::fs::write(&full_path, "banana\n").unwrap();
+
+    // Create files0-from input containing the non-UTF-8 filename bytes
+    let mut files0_input = Vec::new();
+    files0_input.extend_from_slice(b"file1.txt\0");
+    files0_input.extend_from_slice(b"\xff\xfefile3.txt\0");
+    files0_input.extend_from_slice(b"file2.txt\0");
+
+    ucmd.args(&["--files0-from", "-"])
+        .pipe_in(files0_input)
+        .succeeds()
+        .stdout_is("apple\nbanana\nzebra\n");
+}
+
+#[test]
 // Test for GNU tests/sort/sort-float.sh
 fn test_g_float() {
     let input = "0\n-3.3621031431120935063e-4932\n3.3621031431120935063e-4932\n";
