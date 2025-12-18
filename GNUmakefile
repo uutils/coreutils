@@ -70,7 +70,7 @@ OS := $(shell uname -s)
 
 # Windows does not allow symlink by default.
 # Allow to override LN for AppArmor.
-ifeq (,$(findstring _NT,$(OS)))
+ifneq (,$(findstring _NT,$(OS)))
 	LN ?= ln -f
 endif
 LN ?= ln -sf
