@@ -5,8 +5,13 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::env;
+#[cfg(unix)]
+use std::io::{self, Write};
 use uucore::translate;
 use uucore::{error::UResult, format_usage};
+
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 
 static OPT_NULL: &str = "null";
 
@@ -21,15 +26,34 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let separator = if matches.get_flag(OPT_NULL) {
-        "\x00"
+    let separator: &[u8] = if matches.get_flag(OPT_NULL) {
+        b"\x00"
     } else {
-        "\n"
+        b"\n"
     };
 
+    #[cfg(unix)]
+    let mut stdout = io::stdout().lock();
+
     if variables.is_empty() {
-        for (env_var, value) in env::vars() {
-            print!("{env_var}={value}{separator}");
+        for (env_var, value) in env::vars_os() {
+            #[cfg(unix)]
+            {
+                stdout.write_all(env_var.as_bytes())?;
+                stdout.write_all(b"=")?;
+                stdout.write_all(value.as_bytes())?;
+                stdout.write_all(separator)?;
+            }
+            #[cfg(not(unix))]
+            {
+                // On non-Unix, use lossy conversion as OsStrExt is not available
+                print!(
+                    "{}={}{}",
+                    env_var.to_string_lossy(),
+                    value.to_string_lossy(),
+                    String::from_utf8_lossy(separator)
+                );
+            }
         }
         return Ok(());
     }
@@ -41,8 +65,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             error_found = true;
             continue;
         }
-        if let Ok(var) = env::var(env_var) {
-            print!("{var}{separator}");
+        if let Some(var) = env::var_os(&env_var) {
+            #[cfg(unix)]
+            {
+                stdout.write_all(var.as_bytes())?;
+                stdout.write_all(separator)?;
+            }
+            #[cfg(not(unix))]
+            {
+                print!(
+                    "{}{}",
+                    var.to_string_lossy(),
+                    String::from_utf8_lossy(separator)
+                );
+            }
         } else {
             error_found = true;
         }
