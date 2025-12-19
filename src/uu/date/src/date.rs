@@ -487,6 +487,7 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(OPT_SET)
                 .value_name("STRING")
+                .allow_hyphen_values(true)
                 .help({
                     #[cfg(not(any(target_os = "macos", target_os = "redox")))]
                     {
