@@ -137,8 +137,8 @@ pub fn uu_app() -> Command {
 }
 
 fn handle_obsolete(args: &mut Vec<String>) -> Option<usize> {
-    // Sanity check
-    if args.len() > 2 {
+    // Sanity check - need at least the program name and one argument
+    if args.len() >= 2 {
         // Old signal can only be in the first argument position
         let slice = args[1].as_str();
         if let Some(signal) = slice.strip_prefix('-') {

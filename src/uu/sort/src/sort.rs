@@ -25,8 +25,6 @@ use clap::{Arg, ArgAction, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
-#[cfg(target_os = "linux")]
-use nix::libc::{RLIMIT_NOFILE, getrlimit, rlimit};
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{Rng, rng};
 use rayon::prelude::*;
@@ -1075,14 +1073,11 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
 
 #[cfg(target_os = "linux")]
 fn get_rlimit() -> UResult<usize> {
-    let mut limit = rlimit {
-        rlim_cur: 0,
-        rlim_max: 0,
-    };
-    match unsafe { getrlimit(RLIMIT_NOFILE, &raw mut limit) } {
-        0 => Ok(limit.rlim_cur as usize),
-        _ => Err(UUsageError::new(2, translate!("sort-failed-fetch-rlimit"))),
-    }
+    use nix::sys::resource::{Resource, getrlimit};
+
+    getrlimit(Resource::RLIMIT_NOFILE)
+        .map(|(rlim_cur, _)| rlim_cur as usize)
+        .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))
 }
 
 const STDIN_FILE: &str = "-";

@@ -33,18 +33,13 @@ path_GNU="$("${READLINK}" -fm -- "${path_GNU:-${path_UUTILS}/../gnu}")"
 
 ###
 
-release_tag_GNU="v9.9"
-
 # check if the GNU coreutils has been cloned, if not print instructions
-# note: the ${path_GNU} might already exist, so we check for the .git directory
-if test ! -d "${path_GNU}/.git"; then
+# note: the ${path_GNU} might already exist, so we check for the configure
+if test ! -f "${path_GNU}/configure"; then
     echo "Could not find the GNU coreutils (expected at '${path_GNU}')"
     echo "Download them to the expected path:"
-    echo "  git clone --recurse-submodules https://github.com/coreutils/coreutils.git \"${path_GNU}\""
-    echo "Afterwards, checkout the latest release tag:"
-    echo "  cd \"${path_GNU}\""
-    echo "  git fetch --all --tags"
-    echo "  git checkout tags/${release_tag_GNU}"
+    echo "  (cd '${path_GNU}' && fetch-gnu.sh ) "
+    echo "You can edit fetch-gnu.sh to change the tag"
     exit 1
 fi
 
@@ -130,8 +125,6 @@ if test -f gnu-built; then
 else
     # Disable useless checks
     "${SED}" -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
-    "${SED}" -i '/^wget.*/d' bootstrap.conf # wget is used to DL po. Remove the dep.
-    ./bootstrap --skip-po
     # Use CFLAGS for best build time since we discard GNU coreutils
     CFLAGS="${CFLAGS} -pipe -O0 -s" ./configure -C --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
       --enable-single-binary=symlinks \
@@ -177,9 +170,6 @@ grep -rl '\$abs_path_dir_' tests/*/*.sh | xargs -r "${SED}" -i "s|\$abs_path_dir
 "${SED}" -i "s|--coreutils-prog=||g" tests/misc/coreutils.sh
 # Different message
 "${SED}" -i "s|coreutils: unknown program 'blah'|blah: function/utility not found|" tests/misc/coreutils.sh
-
-# Remove hfs dependency (should be merged to upstream)
-"${SED}" -i -e "s|hfsplus|ext4 -O casefold|" -e "s|cd mnt|rm -d mnt/lost+found;chattr +F mnt;cd mnt|" tests/mv/hardlink-case.sh
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 "${SED}" -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
