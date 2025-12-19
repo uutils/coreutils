@@ -34,70 +34,80 @@ cfg_langinfo! {
     /// Cached result of locale time format detection
     static TIME_FORMAT_CACHE: OnceLock<bool> = OnceLock::new();
 
+    /// Safe wrapper around libc setlocale
+    fn set_time_locale() {
+        unsafe {
+            nix::libc::setlocale(nix::libc::LC_TIME, c"".as_ptr());
+        }
+    }
+
+    /// Safe wrapper around libc nl_langinfo that returns `Option<String>`
+    fn get_locale_info(item: nix::libc::nl_item) -> Option<String> {
+        unsafe {
+            let ptr = nix::libc::nl_langinfo(item);
+            if ptr.is_null() {
+                None
+            } else {
+                CStr::from_ptr(ptr).to_str().ok().map(String::from)
+            }
+        }
+    }
+
     /// Internal function that performs the actual locale detection
     fn detect_12_hour_format() -> bool {
-        unsafe {
-            // Set locale from environment variables (empty string = use LC_TIME/LANG env vars)
-            libc::setlocale(libc::LC_TIME, c"".as_ptr());
-
-        // Get the date/time format string from locale
-        let d_t_fmt_ptr = libc::nl_langinfo(libc::D_T_FMT);
-        if d_t_fmt_ptr.is_null() {
-            return false;
+        // Helper function to check for 12-hour format indicators
+        fn has_12_hour_indicators(format_str: &str) -> bool {
+            const INDICATORS: &[&str] = &["%I", "%l", "%r"];
+            INDICATORS.iter().any(|&indicator| format_str.contains(indicator))
         }
 
-        let Ok(format) = CStr::from_ptr(d_t_fmt_ptr).to_str() else {
-            return false;
-        };
-
-        // Check for 12-hour indicators first (higher priority)
-        // %I = hour (01-12), %l = hour (1-12) space-padded, %r = 12-hour time with AM/PM
-        if format.contains("%I") || format.contains("%l") || format.contains("%r") {
-            return true;
+        // Helper function to check for 24-hour format indicators
+        fn has_24_hour_indicators(format_str: &str) -> bool {
+            const INDICATORS: &[&str] = &["%H", "%k", "%R", "%T"];
+            INDICATORS.iter().any(|&indicator| format_str.contains(indicator))
         }
 
-        // If we find 24-hour indicators, it's definitely not 12-hour
-        // %H = hour (00-23), %k = hour (0-23) space-padded, %R = %H:%M, %T = %H:%M:%S
-        if format.contains("%H")
-            || format.contains("%k")
-            || format.contains("%R")
-            || format.contains("%T")
-        {
-            return false;
+        // Set locale from environment variables (empty string = use LC_TIME/LANG env vars)
+        set_time_locale();
+
+        // Get locale format strings using safe wrappers
+        let d_t_fmt = get_locale_info(nix::libc::D_T_FMT);
+        let t_fmt_opt = get_locale_info(nix::libc::T_FMT);
+        let t_fmt_ampm_opt = get_locale_info(nix::libc::T_FMT_AMPM);
+
+        // Check D_T_FMT first
+        if let Some(ref format) = d_t_fmt {
+            // Check for 12-hour indicators first (higher priority)
+            if has_12_hour_indicators(format) {
+                return true;
+            }
+
+            // If we find 24-hour indicators, it's definitely not 12-hour
+            if has_24_hour_indicators(format) {
+                return false;
+            }
         }
 
         // Also check the time-only format as a fallback
-        let t_fmt_ptr = libc::nl_langinfo(libc::T_FMT);
-        let mut time_fmt_opt = None;
-        if !t_fmt_ptr.is_null() {
-            if let Ok(time_format) = CStr::from_ptr(t_fmt_ptr).to_str() {
-                time_fmt_opt = Some(time_format);
-                if time_format.contains("%I")
-                    || time_format.contains("%l")
-                    || time_format.contains("%r")
-                {
-                    return true;
-                }
+        if let Some(ref time_format) = t_fmt_opt {
+            if has_12_hour_indicators(time_format) {
+                return true;
             }
         }
 
         // Check if there's a specific 12-hour format defined
-        let t_fmt_ampm_ptr = libc::nl_langinfo(libc::T_FMT_AMPM);
-        if !t_fmt_ampm_ptr.is_null() {
-            if let Ok(ampm_format) = CStr::from_ptr(t_fmt_ampm_ptr).to_str() {
-                // If T_FMT_AMPM is non-empty and different from T_FMT, locale supports 12-hour
-                if !ampm_format.is_empty() {
-                    if let Some(time_format) = time_fmt_opt {
-                        if ampm_format != time_format {
-                            return true;
-                        }
-                    } else {
+        if let Some(ref ampm_format) = t_fmt_ampm_opt {
+            // If T_FMT_AMPM is non-empty and different from T_FMT, locale supports 12-hour
+            if !ampm_format.is_empty() {
+                if let Some(ref time_format) = t_fmt_opt {
+                    if ampm_format != time_format {
                         return true;
                     }
+                } else {
+                    return true;
                 }
             }
         }
-    }
 
         // Default to 24-hour format if we can't determine
         false
