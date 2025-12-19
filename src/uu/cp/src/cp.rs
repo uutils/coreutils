@@ -1723,6 +1723,13 @@ pub(crate) fn copy_attributes(
     let source_metadata =
         fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 
+    // if --no-preserve wasn't explicitly passed and we're copying a directory by default we should preserve mode
+    let mode = if dest.is_dir() && attributes.mode == (Preserve::No { explicit: false }) {
+        Preserve::Yes { required: false }
+    } else {
+        attributes.mode
+    };
+
     // Ownership must be changed first to avoid interfering with mode change.
     #[cfg(unix)]
     handle_preserve(&attributes.ownership, || -> CopyResult<()> {
@@ -1760,7 +1767,7 @@ pub(crate) fn copy_attributes(
         Ok(())
     })?;
 
-    handle_preserve(&attributes.mode, || -> CopyResult<()> {
+    handle_preserve(&mode, || -> CopyResult<()> {
         // The `chmod()` system call that underlies the
         // `fs::set_permissions()` call is unable to change the
         // permissions of a symbolic link. In that case, we just

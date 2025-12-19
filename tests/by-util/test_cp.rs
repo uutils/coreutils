@@ -7571,3 +7571,71 @@ fn test_cp_xattr_enotsup_handling() {
         std::fs::remove_file(f).ok();
     }
 }
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_cp_preserve_directory_permissions_by_default() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let dir = "a/b/c/d";
+    let file = "foo.txt";
+
+    at.mkdir_all(dir);
+
+    let file_path = format!("{dir}/{file}");
+
+    at.touch(file_path);
+
+    scene.cmd("chmod").arg("-R").arg("555").arg("a").succeeds();
+    scene.cmd("cp").arg("-r").arg("a").arg("b").succeeds();
+
+    scene.ucmd().arg("-r").arg("a").arg("c").succeeds();
+
+    assert_eq!(at.get_mode("b"), 0o40555);
+    assert_eq!(at.get_mode("b/b"), 0o40555);
+    assert_eq!(at.get_mode("b/b/c"), 0o40555);
+    assert_eq!(at.get_mode("b/b/c/d"), 0o40555);
+
+    assert_eq!(at.get_mode("c"), 0o40555);
+    assert_eq!(at.get_mode("c/b"), 0o40555);
+    assert_eq!(at.get_mode("c/b/c"), 0o40555);
+    assert_eq!(at.get_mode("c/b/c/d"), 0o40555);
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_cp_no_preserve_directory_permissions() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let dir = "a/b/c/d";
+    let file = "foo.txt";
+
+    at.mkdir_all(dir);
+
+    let file_path = format!("{dir}/{file}");
+
+    at.touch(file_path);
+
+    scene.cmd("chmod").arg("-R").arg("555").arg("a").succeeds();
+    scene.cmd("cp").arg("-r").arg("a").arg("b").succeeds();
+
+    scene
+        .ucmd()
+        .arg("-r")
+        .arg("--no-preserve=mode")
+        .arg("a")
+        .arg("c")
+        .succeeds();
+
+    assert_eq!(at.get_mode("b"), 0o40555);
+    assert_eq!(at.get_mode("b/b"), 0o40555);
+    assert_eq!(at.get_mode("b/b/c"), 0o40555);
+    assert_eq!(at.get_mode("b/b/c/d"), 0o40555);
+
+    assert_eq!(at.get_mode("c"), 0o40755);
+    assert_eq!(at.get_mode("c/b"), 0o40755);
+    assert_eq!(at.get_mode("c/b/c"), 0o40755);
+    assert_eq!(at.get_mode("c/b/c/d"), 0o40755);
+}
