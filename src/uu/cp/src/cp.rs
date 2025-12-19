@@ -897,7 +897,7 @@ impl Attributes {
         ownership: Preserve::Yes { required: true },
         mode: Preserve::Yes { required: true },
         timestamps: Preserve::Yes { required: true },
-        xattr: Preserve::Yes { required: true },
+        xattr: Preserve::No { explicit: false },
         ..Self::NONE
     };
 
