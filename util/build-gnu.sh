@@ -120,21 +120,24 @@ done
 
 if test -f gnu-built; then
     echo "GNU build already found. Skip"
-    echo "'rm -f $(pwd)/gnu-built' to force the build"
+    echo "'rm -f $(pwd)/{gnu-built,src/getlimits}' to force the build"
     echo "Note: the customization of the tests will still happen"
 else
     # Disable useless checks
     "${SED}" -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
     # Use CFLAGS for best build time since we discard GNU coreutils
-    CFLAGS="${CFLAGS} -pipe -O0 -s" ./configure --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
+    CFLAGS="${CFLAGS} -pipe -O0 -s" ./configure -C --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
       --enable-single-binary=symlinks \
       "$([ "${SELINUX_ENABLED}" = 1 ] && echo --with-selinux || echo --without-selinux)"
     #Add timeout to to protect against hangs
     "${SED}" -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
     # Use a better diff
     "${SED}" -i 's|diff -c|diff -u|g' tests/Coreutils.pm
+
+    # Skip make if possible
     # Use our nproc for *BSD and macOS
-    "${MAKE}" -j "$("${UU_BUILD_DIR}/nproc")"
+    test -f src/getlimits || "${MAKE}" -j "$("${UU_BUILD_DIR}/nproc")"
+    cp -f src/getlimits "${UU_BUILD_DIR}"
 
     # Handle generated factor tests
     t_first=00
@@ -218,8 +221,6 @@ sed -i -e "s|---dis ||g" tests/tail/overlay-headers.sh
 "${SED}" -i -e "s|grep '^#define HAVE_INOTIFY 1' \"\$CONFIG_HEADER\" >/dev/null && is_local_dir_ \. |is_local_dir_ . |" \
     -e "s|strace -e inotify_add_watch|strace -f -e inotify_add_watch|" \
     tests/tail/inotify-dir-recreate.sh
-
-test -f "${UU_BUILD_DIR}/getlimits" || cp src/getlimits "${UU_BUILD_DIR}"
 
 # pr produces very long log and this command isn't super interesting
 # SKIP for now
