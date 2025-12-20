@@ -1339,6 +1339,8 @@ pub struct TestScenario {
     tmpd: Rc<TempDir>,
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
     tmp_fs_mountpoint: Option<String>,
+    #[cfg(target_vendor = "apple")]
+    tmp_fs_ramdisk: Option<String>,
 }
 
 impl TestScenario {
@@ -1355,6 +1357,8 @@ impl TestScenario {
             tmpd,
             #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
             tmp_fs_mountpoint: None,
+            #[cfg(target_vendor = "apple")]
+            tmp_fs_ramdisk: None,
         };
         let mut fixture_path_builder = env::current_dir().unwrap();
         fixture_path_builder.push(TESTS_DIR);
@@ -1422,6 +1426,64 @@ impl TestScenario {
         Ok(())
     }
 
+    /// Mounts a temporary filesystem at the specified mount point (macOS).
+    #[cfg(target_vendor = "apple")]
+    pub fn mount_temp_fs(&mut self, mount_point: &str) -> core::result::Result<(), String> {
+        if self.tmp_fs_ramdisk.is_some() {
+            return Err("already mounted".to_string());
+        }
+
+        // Create a 10MB ramdisk using hdiutil (10 * 2048 = 20480 512-byte sectors)
+        let attach_result = self
+            .cmd("hdiutil")
+            .args(&["attach", "-nomount", "ram://20480"])
+            .run();
+
+        if !attach_result.succeeded() {
+            return Err("Failed to create ramdisk".to_string());
+        }
+
+        let ramdisk_device = attach_result.stdout_str().trim().to_string();
+        if ramdisk_device.is_empty() {
+            return Err("hdiutil returned empty device name".to_string());
+        }
+
+        // Format the ramdisk with HFS+ filesystem
+        let format_result = self
+            .cmd("newfs_hfs")
+            .arg("-M")
+            .arg("700")
+            .arg(&ramdisk_device)
+            .run();
+
+        if !format_result.succeeded() {
+            // Clean up ramdisk on failure
+            let _ = self.cmd("hdiutil").args(&["detach", &ramdisk_device]).run();
+            return Err(format!(
+                "Failed to format ramdisk: {}",
+                format_result.stderr_str()
+            ));
+        }
+
+        // Mount the ramdisk at the specified mount point
+        let mount_result = self
+            .cmd("mount")
+            .args(&["-t", "hfs", &ramdisk_device, mount_point])
+            .run();
+
+        if !mount_result.succeeded() {
+            // Clean up ramdisk on failure
+            let _ = self.cmd("hdiutil").args(&["detach", &ramdisk_device]).run();
+            return Err(format!(
+                "Failed to mount ramdisk: {}",
+                mount_result.stderr_str()
+            ));
+        }
+
+        self.tmp_fs_ramdisk = Some(ramdisk_device);
+        Ok(())
+    }
+
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
     /// Unmounts the temporary filesystem if it is currently mounted.
     pub fn umount_temp_fs(&mut self) {
@@ -1430,11 +1492,25 @@ impl TestScenario {
             self.tmp_fs_mountpoint = None;
         }
     }
+
+    #[cfg(target_vendor = "apple")]
+    /// Unmounts and detaches the temporary ramdisk (macOS).
+    pub fn umount_temp_fs(&mut self) {
+        if let Some(ramdisk_device) = self.tmp_fs_ramdisk.as_ref() {
+            // hdiutil detach will unmount automatically
+            self.cmd("hdiutil")
+                .args(&["detach", ramdisk_device])
+                .succeeds();
+            self.tmp_fs_ramdisk = None;
+        }
+    }
 }
 
 impl Drop for TestScenario {
     fn drop(&mut self) {
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+        self.umount_temp_fs();
+        #[cfg(target_vendor = "apple")]
         self.umount_temp_fs();
     }
 }

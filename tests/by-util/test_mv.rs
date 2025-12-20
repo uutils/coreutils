@@ -2545,46 +2545,41 @@ fn test_special_file_different_filesystem() {
 fn test_mv_dir_containing_fifo_cross_filesystem() {
     use std::time::Duration;
 
-    // Skip if /dev/shm not available
-    if !Path::new("/dev/shm").exists() {
+    let mut scene = TestScenario::new(util_name!());
+
+    // Test must be run as root (or with `sudo -E`)
+    if scene.cmd("whoami").run().stdout_str() != "root\n" {
         return;
     }
 
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.mkdir("a");
-    at.mkfifo("a/f");
+    {
+        let at = &scene.fixtures;
+        at.mkdir("a");
+        at.mkfifo("a/f");
+        at.mkdir("mnt");
+    }
+
+    // Prepare the mount
+    let mountpoint_path = scene.fixtures.plus_as_string("mnt");
+    scene
+        .mount_temp_fs(&mountpoint_path)
+        .expect("mounting tmpfs failed");
 
     // This will hang without the fix, so use timeout
-    // Move to /dev/shm which is typically a different filesystem (tmpfs)
-    ucmd.args(&["a", "/dev/shm/test_mv_fifo_dir"])
+    // Move to the mounted tmpfs which is a different filesystem
+    scene
+        .ucmd()
+        .args(&["a", "mnt/dest"])
         .timeout(Duration::from_secs(2))
         .succeeds();
 
+    // Ditch the mount before the asserts
+    scene.umount_temp_fs();
+
+    let at = &scene.fixtures;
     assert!(!at.dir_exists("a"));
-    assert!(Path::new("/dev/shm/test_mv_fifo_dir").exists());
-    assert!(Path::new("/dev/shm/test_mv_fifo_dir/f").exists());
-    std::fs::remove_dir_all("/dev/shm/test_mv_fifo_dir").ok();
-}
-
-/// Test moving a directory containing a FIFO file (same filesystem - issue #9656)
-/// This tests FIFO handling doesn't fail even on same filesystem
-#[cfg(unix)]
-#[test]
-fn test_mv_dir_containing_fifo_same_filesystem() {
-    use std::time::Duration;
-
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.mkdir("a");
-    at.mkfifo("a/f");
-
-    // This will hang without the fix, so use timeout
-    ucmd.args(&["a", "b"])
-        .timeout(Duration::from_secs(2))
-        .succeeds();
-
-    assert!(!at.dir_exists("a"));
-    assert!(at.dir_exists("b"));
-    assert!(at.is_fifo("b/f"));
+    assert!(at.dir_exists("mnt/dest"));
+    assert!(at.is_fifo("mnt/dest/f"));
 }
 
 /// Test cross-device move with permission denied error
