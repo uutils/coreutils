@@ -3126,7 +3126,6 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
- "hex",
  "tempfile",
  "uucore",
 ]

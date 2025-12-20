@@ -22,7 +22,7 @@ use uucore::checksum::{
 use uucore::error::UResult;
 use uucore::hardware::{HasHardwareFeatures as _, SimdPolicy};
 use uucore::line_ending::LineEnding;
-use uucore::{format_usage, translate};
+use uucore::{format_usage, show_error, translate};
 
 /// Print CPU hardware capability detection information to stderr
 /// This matches GNU cksum's --debug behavior
@@ -31,9 +31,9 @@ fn print_cpu_debug_info() {
 
     fn print_feature(name: &str, available: bool) {
         if available {
-            eprintln!("cksum: using {name} hardware support");
+            show_error!("using {name} hardware support");
         } else {
-            eprintln!("cksum: {name} support not detected");
+            show_error!("{name} support not detected");
         }
     }
 
