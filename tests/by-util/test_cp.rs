@@ -7383,3 +7383,25 @@ fn test_cp_recurse_verbose_output_with_symlink_already_exists() {
         .no_stderr()
         .stdout_is(output);
 }
+
+#[test]
+fn test_cp_circular_symbolic_links_in_directory() {
+    let source_dir = "source_dir";
+    let target_dir = "target_dir";
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir(source_dir);
+    at.symlink_file(
+        format!("{source_dir}/a").as_str(),
+        format!("{source_dir}/b").as_str(),
+    );
+    at.symlink_file(
+        format!("{source_dir}/b").as_str(),
+        format!("{source_dir}/a").as_str(),
+    );
+
+    ucmd.arg(source_dir)
+        .arg(target_dir)
+        .arg("-rL")
+        .fails_with_code(1);
+}
