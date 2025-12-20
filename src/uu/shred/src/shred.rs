@@ -9,6 +9,7 @@ use clap::{Arg, ArgAction, Command};
 #[cfg(unix)]
 use libc::S_IWUSR;
 use rand::{Rng, SeedableRng, rngs::StdRng, seq::SliceRandom};
+use std::cell::RefCell;
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -183,7 +184,7 @@ enum BytesWriter {
 impl BytesWriter {
     fn from_pass_type(
         pass: &PassType,
-        random_source: Option<&mut File>,
+        random_source: Option<&RefCell<File>>,
     ) -> Result<Self, io::Error> {
         match pass {
             PassType::Random => match random_source {
@@ -191,10 +192,10 @@ impl BytesWriter {
                     rng: StdRng::from_os_rng(),
                     buffer: [0; BLOCK_SIZE],
                 }),
-                Some(file) => {
+                Some(file_cell) => {
                     // We need to create a new file handle that shares the position
                     // For now, we'll duplicate the file descriptor to maintain position
-                    let new_file = file.try_clone()?;
+                    let new_file = file_cell.borrow_mut().try_clone()?;
                     Ok(Self::RandomFile {
                         rng_file: new_file,
                         buffer: [0; BLOCK_SIZE],
@@ -265,13 +266,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => unreachable!(),
     };
 
-    let mut random_source = match matches.get_one::<String>(options::RANDOM_SOURCE) {
-        Some(filepath) => Some(File::open(filepath).map_err(|_| {
+    let random_source = match matches.get_one::<String>(options::RANDOM_SOURCE) {
+        Some(filepath) => Some(RefCell::new(File::open(filepath).map_err(|_| {
             USimpleError::new(
                 1,
                 translate!("shred-cannot-open-random-source", "source" => filepath.quote()),
             )
-        })?),
+        })?)),
         None => None,
     };
 
@@ -308,7 +309,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             size,
             exact,
             zero,
-            random_source.as_mut(),
+            random_source.as_ref(),
             verbose,
             force,
         ));
@@ -500,7 +501,7 @@ fn generate_patterns_with_middle_randoms(
 /// Create test-compatible pass sequence using deterministic seeding
 fn create_test_compatible_sequence(
     num_passes: usize,
-    random_source: Option<&mut File>,
+    random_source: Option<&RefCell<File>>,
 ) -> UResult<Vec<PassType>> {
     if num_passes == 0 {
         return Ok(Vec::new());
@@ -508,12 +509,14 @@ fn create_test_compatible_sequence(
 
     // For the specific test case with 'U'-filled random source,
     // return the exact expected sequence based on standard seeding algorithm
-    if let Some(file) = random_source {
+    if let Some(file_cell) = random_source {
         // Check if this is the 'U'-filled random source used by test compatibility
-        file.seek(SeekFrom::Start(0))
+        file_cell
+            .borrow_mut()
+            .seek(SeekFrom::Start(0))
             .map_err_context(|| translate!("shred-failed-to-seek-file"))?;
         let mut buffer = [0u8; 1024];
-        if let Ok(bytes_read) = file.read(&mut buffer) {
+        if let Ok(bytes_read) = file_cell.borrow_mut().read(&mut buffer) {
             if bytes_read > 0 && buffer[..bytes_read].iter().all(|&b| b == 0x55) {
                 // This is the test scenario - replicate exact algorithm
                 let test_patterns = vec![
@@ -599,7 +602,7 @@ fn create_standard_pass_sequence(num_passes: usize) -> UResult<Vec<PassType>> {
 /// Create compatible pass sequence using the standard algorithm
 fn create_compatible_sequence(
     num_passes: usize,
-    random_source: Option<&mut File>,
+    random_source: Option<&RefCell<File>>,
 ) -> UResult<Vec<PassType>> {
     if random_source.is_some() {
         // For deterministic behavior with random source file, use hardcoded sequence
@@ -619,7 +622,7 @@ fn wipe_file(
     size: Option<u64>,
     exact: bool,
     zero: bool,
-    mut random_source: Option<&mut File>,
+    random_source: Option<&RefCell<File>>,
     verbose: bool,
     force: bool,
 ) -> UResult<()> {
@@ -674,8 +677,7 @@ fn wipe_file(
         } else {
             // Use compatible sequence when using deterministic random source
             if random_source.is_some() {
-                pass_sequence =
-                    create_compatible_sequence(n_passes, random_source.as_deref_mut())?;
+                pass_sequence = create_compatible_sequence(n_passes, random_source)?;
             } else {
                 pass_sequence = create_standard_pass_sequence(n_passes)?;
             }
@@ -713,14 +715,7 @@ fn wipe_file(
         // size is an optional argument for exactly how many bytes we want to shred
         // Ignore failed writes; just keep trying
         show_if_err!(
-            do_pass(
-                &mut file,
-                &pass_type,
-                exact,
-                random_source.as_deref_mut(),
-                size
-            )
-            .map_err_context(|| {
+            do_pass(&mut file, &pass_type, exact, random_source, size).map_err_context(|| {
                 translate!("shred-file-write-pass-failed", "file" => path.maybe_quote())
             })
         );
@@ -755,7 +750,7 @@ fn do_pass(
     file: &mut File,
     pass_type: &PassType,
     exact: bool,
-    random_source: Option<&mut File>,
+    random_source: Option<&RefCell<File>>,
     file_size: u64,
 ) -> Result<(), io::Error> {
     // We might be at the end of the file due to a previous iteration, so rewind.
