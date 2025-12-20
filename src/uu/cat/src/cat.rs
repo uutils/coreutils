@@ -98,6 +98,7 @@ enum CatError {
     },
     #[error("{}", translate!("cat-error-is-directory"))]
     IsDirectory,
+    #[cfg(unix)]
     #[error("{}", translate!("cat-error-no-such-device-or-address"))]
     NoSuchDeviceOrAddress,
     #[error("{}", translate!("cat-error-input-file-is-output-file"))]
