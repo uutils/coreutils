@@ -25,8 +25,6 @@ use clap::{Arg, ArgAction, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
-#[cfg(target_os = "linux")]
-use nix::sys::resource::{getrlimit, Resource, RLIM_INFINITY};
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{Rng, rng};
 use rayon::prelude::*;
@@ -1073,13 +1071,21 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
 }
 
 #[cfg(target_os = "linux")]
-pub(crate) fn fd_soft_limit() -> Option<usize> {
-    let (soft, _hard) = getrlimit(Resource::RLIMIT_NOFILE).ok()?;
-    if soft == RLIM_INFINITY {
-        None
-    } else {
-        usize::try_from(soft).ok()
+fn get_rlimit() -> UResult<usize> {
+    use nix::sys::resource::{getrlimit, Resource, RLIM_INFINITY};
+
+    let (rlim_cur, _rlim_max) = getrlimit(Resource::RLIMIT_NOFILE)
+        .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))?;
+    if rlim_cur == RLIM_INFINITY {
+        return Err(UUsageError::new(2, translate!("sort-failed-fetch-rlimit")));
     }
+    usize::try_from(rlim_cur)
+        .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn fd_soft_limit() -> Option<usize> {
+    get_rlimit().ok()
 }
 
 #[cfg(not(target_os = "linux"))]
