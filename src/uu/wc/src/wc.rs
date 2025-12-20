@@ -840,10 +840,8 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
     if settings.debug {
         let policy = SimdPolicy::detect();
         if policy.allows_simd() {
-            let enabled: Vec<&'static str> = policy
-                .iter_features()
-                .map(hardware_feature_label)
-                .collect();
+            let enabled: Vec<&'static str> =
+                policy.iter_features().map(hardware_feature_label).collect();
             if enabled.is_empty() {
                 eprintln!("{}", translate!("wc-debug-hw-unavailable"));
             } else {
