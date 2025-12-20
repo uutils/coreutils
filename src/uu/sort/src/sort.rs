@@ -26,7 +26,7 @@ use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
 #[cfg(target_os = "linux")]
-use nix::libc;
+use nix::sys::resource::{getrlimit, Resource, RLIM_INFINITY};
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{Rng, rng};
 use rayon::prelude::*;
@@ -1074,21 +1074,11 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
 
 #[cfg(target_os = "linux")]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
-    let mut limit = libc::rlimit {
-        rlim_cur: 0,
-        rlim_max: 0,
-    };
-
-    let result = unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &raw mut limit) };
-    if result == 0 {
-        let current = limit.rlim_cur;
-        if current == libc::RLIM_INFINITY {
-            None
-        } else {
-            usize::try_from(current).ok()
-        }
-    } else {
+    let (soft, _hard) = getrlimit(Resource::RLIMIT_NOFILE).ok()?;
+    if soft == RLIM_INFINITY {
         None
+    } else {
+        usize::try_from(soft).ok()
     }
 }
 
@@ -1239,9 +1229,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.threads = matches
             .get_one::<String>(options::PARALLEL)
             .map_or_else(|| "0".to_string(), String::from);
-        unsafe {
-            env::set_var("RAYON_NUM_THREADS", &settings.threads);
-        }
+        let num_threads = match settings.threads.parse::<usize>() {
+            Ok(0) | Err(_) => std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
+            Ok(n) => n,
+        };
+        let _ = rayon::ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build_global();
     }
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {

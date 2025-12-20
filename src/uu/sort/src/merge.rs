@@ -62,6 +62,8 @@ fn replace_output_file_in_input_files(
     Ok(())
 }
 
+/// Determine the effective merge batch size, enforcing a minimum and respecting the
+/// file-descriptor soft limit after reserving stdio/output and a safety margin.
 fn effective_merge_batch_size(settings: &GlobalSettings) -> usize {
     const MIN_BATCH_SIZE: usize = 2;
     const RESERVED_STDIO: usize = 3;
