@@ -243,8 +243,7 @@ fn embed_static_utility_locales(
 ///
 /// It always includes "en-US" to ensure that a fallback is available if the
 /// system locale's translation file is missing or if `LANG` is not set.
-/// 
-
+///
 
 // using vector string because it gives us flexibility to embed an unlimited number of LANGUAGE automatically
 fn get_locales_to_embed() -> Vec<String> {
@@ -267,16 +266,12 @@ fn get_locales_to_embed() -> Vec<String> {
     locales
 }
 
-
 /// Function to Jump Over the local files
-fn for_each_locale<F>(
-    locales: &[String],
-    mut f: F,
-) -> Result<(), Box<dyn std::error::Error>>
+fn for_each_locale<F>(locales: &[String], mut f: F) -> Result<(), Box<dyn std::error::Error>>
 where
     F: FnMut(&str) -> Result<(), Box<dyn std::error::Error>>,
 {
-    // Loop through every string in the slice 
+    // Loop through every string in the slice
     for locale in locales {
         f(locale)?;
     }
@@ -333,7 +328,6 @@ where
     })
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -348,7 +342,11 @@ mod tests {
 
     #[test]
     fn test_for_each_locale_multi() {
-        let locales = vec!["en-US".to_string(), "es-ES".to_string(), "fr-FR".to_string()];
+        let locales = vec![
+            "en-US".to_string(),
+            "es-ES".to_string(),
+            "fr-FR".to_string(),
+        ];
         let mut collected = Vec::new();
 
         for_each_locale(&locales, |locale| {
