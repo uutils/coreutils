@@ -650,6 +650,11 @@ fn remove_dir_recursive(
             }
         }
 
+        // Guard trivial error for tests/rm/rm1.sh
+        if error {
+            return true;
+        }
+        
         // Ask the user whether to remove the current directory.
         if options.interactive == InteractiveMode::Always && !prompt_dir(path, options) {
             return false;
