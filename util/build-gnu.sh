@@ -105,7 +105,8 @@ test -f "${UU_BUILD_DIR}/[" || (cd ${UU_BUILD_DIR} && ln -s "test" "[")
 
 cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
 
-# Any binaries that aren't built become `false` so their tests fail
+# Any binaries that aren't built become `false` to make tests failure
+# Note that some test (e.g. runcon/runcon-compute.sh) incorrectly passes by this
 for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs); do
     bin_path="${UU_BUILD_DIR}/${binary}"
     test -f "${bin_path}" || {
@@ -165,6 +166,11 @@ fi
 grep -rl 'path_prepend_' tests/* | xargs -r "${SED}" -i 's| path_prepend_ ./src||'
 # path_prepend_ sets $abs_path_dir_: set it manually instead.
 grep -rl '\$abs_path_dir_' tests/*/*.sh | xargs -r "${SED}" -i "s|\$abs_path_dir_|${UU_BUILD_DIR//\//\\/}|g"
+
+# We can't build runcon and chcon without libselinux. But GNU no longer builds dummies of them. So consider they are SELinux specific.
+"${SED}" -i 's/^print_ver_.*/require_selinux_/' tests/runcon/runcon-compute.sh
+"${SED}" -i 's/^print_ver_.*/require_selinux_/' tests/runcon/runcon-no-reorder.sh
+"${SED}" -i 's/^print_ver_.*/require_selinux_/' tests/chcon/chcon-fail.sh
 
 # We use coreutils yes
 "${SED}" -i "s|--coreutils-prog=||g" tests/misc/coreutils.sh
