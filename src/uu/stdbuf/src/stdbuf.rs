@@ -240,8 +240,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 use std::os::unix::process::ExitStatusExt;
                 let signal_msg = status
                     .signal()
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "unknown".to_string());
+                    .map_or_else(|| "unknown".to_string(), |s| s.to_string());
                 Err(USimpleError::new(
                     1,
                     translate!("stdbuf-error-killed-by-signal", "signal" => signal_msg),
