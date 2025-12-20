@@ -73,3 +73,23 @@ checksum-failed-open-file = { $count ->
    *[other] { $count } listed files could not be read
 }
 checksum-error-algo-bad-format = { $file }: { $line }: improperly formatted { $algo } checksum line
+
+# checksum argument help messages
+checksum-help-algorithm = select the digest type to use. See DIGEST below
+checksum-help-untagged = create a reversed style checksum, without digest type
+checksum-help-tag-default = create a BSD style checksum (default)
+checksum-help-tag = create a BSD style checksum
+checksum-help-text = read in text mode (default)
+checksum-help-length = digest length in bits; must not exceed the max size and must be a multiple of 8 for blake2b; must be 224, 256, 384, or 512 for sha2 or sha3
+checksum-help-check = read checksums from the FILEs and check them
+checksum-help-base64 = emit base64-encoded digests, not hexadecimal
+checksum-help-raw = emit a raw binary digest, not hexadecimal
+checksum-help-zero = end each output line with NUL, not newline, and disable file name escaping
+
+checksum-help-strict = exit non-zero for improperly formatted checksum lines
+checksum-help-warn = warn about improperly formatted checksum lines
+checksum-help-status = don't output anything, status code shows success
+checksum-help-quiet = don't print OK for each successfully verified file
+checksum-help-ignore-missing = don't fail or report status for missing files
+
+checksum-help-debug = print CPU hardware capability detection info used by cksum

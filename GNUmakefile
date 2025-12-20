@@ -84,6 +84,7 @@ PROGS       := \
 	basename \
 	cat \
 	cksum \
+	b2sum \
 	comm \
 	cp \
 	csplit \
@@ -185,7 +186,6 @@ SELINUX_PROGS := \
 	runcon
 
 HASHSUM_PROGS := \
-	b2sum \
 	md5sum \
 	sha1sum \
 	sha224sum \
@@ -223,6 +223,7 @@ TEST_PROGS  := \
 	chmod \
 	chown \
 	cksum \
+	b2sum \
 	comm \
 	cp \
 	csplit \

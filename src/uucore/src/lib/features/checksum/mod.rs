@@ -19,6 +19,7 @@ use crate::sum::{
     Sha3_256, Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256, Sm3, SysV,
 };
 
+pub mod cli;
 pub mod compute;
 pub mod validate;
 
@@ -397,6 +398,8 @@ pub enum ChecksumError {
     BinaryTextConflict,
     #[error("--text mode is only supported with --untagged")]
     TextWithoutUntagged,
+    #[error("--tag does not support --text mode")]
+    TextAfterTag,
     #[error("--check is not supported with --algorithm={{bsd,sysv,crc,crc32b}}")]
     AlgorithmNotSupportedWithCheck,
     #[error("You cannot combine multiple hash algorithms!")]
