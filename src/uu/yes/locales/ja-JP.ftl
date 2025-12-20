@@ -1,5 +1,6 @@
 yes-about = STRING（または 'y'）を含む行を繰り返し表示します
-yes-usage = yes [STRING]...
+yes-usage =
+    yes [STRING]...
 
 # Error messages
 yes-error-standard-output = 標準出力: { $error }

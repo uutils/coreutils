@@ -1,5 +1,6 @@
 yes-about = STRING(또는 'y')이 포함된 줄을 반복해서 표시합니다
-yes-usage = yes [STRING]...
+yes-usage =
+    yes [STRING]...
 
 # Error messages
 yes-error-standard-output = 표준 출력: { $error }

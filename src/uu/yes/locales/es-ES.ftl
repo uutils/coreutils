@@ -1,5 +1,6 @@
 yes-about = Imprimir una cadena repetidamente hasta que se interrumpa
-yes-usage = uso: yes [CADENA]...
+yes-usage =
+    yes [CADENA]...
 
 # Mensajes de error
 yes-error-standard-output = salida estándar: { $error }

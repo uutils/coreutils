@@ -1,5 +1,6 @@
 yes-about = แสดงบรรทัดที่มี STRING (หรือ 'y') ซ้ำๆ
-yes-usage = yes [STRING]...
+yes-usage =
+    yes [STRING]...
 
 # Error messages
 yes-error-standard-output = เอาต์พุตมาตรฐาน: { $error }
