@@ -663,7 +663,7 @@ mod tests {
 
     // Using --suffix without --backup defaults to --backup=existing
     #[test]
-    fn test_backup_mode_suffix_without_backup() {
+    fn test_backup_mode_suffix_without_backup_option() {
         let _dummy = TEST_MUTEX.lock().unwrap();
         let matches = make_app().get_matches_from(vec!["command", "--suffix", ".bak"]);
 
@@ -674,7 +674,7 @@ mod tests {
 
     // Using --suffix without --backup uses env var if existing
     #[test]
-    fn test_backup_mode_suffix_without_backup_with_env_var() {
+    fn test_backup_mode_suffix_without_backup_option_with_env_var() {
         let _dummy = TEST_MUTEX.lock().unwrap();
         unsafe { env::set_var(ENV_VERSION_CONTROL, "numbered") };
         let matches = make_app().get_matches_from(vec!["command", "--suffix", ".bak"]);
