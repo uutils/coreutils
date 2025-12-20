@@ -33,18 +33,13 @@ path_GNU="$("${READLINK}" -fm -- "${path_GNU:-${path_UUTILS}/../gnu}")"
 
 ###
 
-release_tag_GNU="v9.9"
-
 # check if the GNU coreutils has been cloned, if not print instructions
-# note: the ${path_GNU} might already exist, so we check for the .git directory
-if test ! -d "${path_GNU}/.git"; then
+# note: the ${path_GNU} might already exist, so we check for the configure
+if test ! -f "${path_GNU}/configure"; then
     echo "Could not find the GNU coreutils (expected at '${path_GNU}')"
     echo "Download them to the expected path:"
-    echo "  git clone --recurse-submodules https://github.com/coreutils/coreutils.git \"${path_GNU}\""
-    echo "Afterwards, checkout the latest release tag:"
-    echo "  cd \"${path_GNU}\""
-    echo "  git fetch --all --tags"
-    echo "  git checkout tags/${release_tag_GNU}"
+    echo "  (cd '${path_GNU}' && fetch-gnu.sh ) "
+    echo "You can edit fetch-gnu.sh to change the tag"
     exit 1
 fi
 
@@ -125,23 +120,24 @@ done
 
 if test -f gnu-built; then
     echo "GNU build already found. Skip"
-    echo "'rm -f $(pwd)/gnu-built' to force the build"
+    echo "'rm -f $(pwd)/{gnu-built,src/getlimits}' to force the build"
     echo "Note: the customization of the tests will still happen"
 else
     # Disable useless checks
     "${SED}" -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
-    "${SED}" -i '/^wget.*/d' bootstrap.conf # wget is used to DL po. Remove the dep.
-    ./bootstrap --skip-po
     # Use CFLAGS for best build time since we discard GNU coreutils
-    CFLAGS="${CFLAGS} -pipe -O0 -s" ./configure --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
+    CFLAGS="${CFLAGS} -pipe -O0 -s" ./configure -C --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
       --enable-single-binary=symlinks \
       "$([ "${SELINUX_ENABLED}" = 1 ] && echo --with-selinux || echo --without-selinux)"
     #Add timeout to to protect against hangs
     "${SED}" -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
     # Use a better diff
     "${SED}" -i 's|diff -c|diff -u|g' tests/Coreutils.pm
+
+    # Skip make if possible
     # Use our nproc for *BSD and macOS
-    "${MAKE}" -j "$("${UU_BUILD_DIR}/nproc")"
+    test -f src/getlimits || "${MAKE}" -j "$("${UU_BUILD_DIR}/nproc")"
+    cp -f src/getlimits "${UU_BUILD_DIR}"
 
     # Handle generated factor tests
     t_first=00
@@ -174,9 +170,6 @@ grep -rl '\$abs_path_dir_' tests/*/*.sh | xargs -r "${SED}" -i "s|\$abs_path_dir
 "${SED}" -i "s|--coreutils-prog=||g" tests/misc/coreutils.sh
 # Different message
 "${SED}" -i "s|coreutils: unknown program 'blah'|blah: function/utility not found|" tests/misc/coreutils.sh
-
-# Remove hfs dependency (should be merged to upstream)
-"${SED}" -i -e "s|hfsplus|ext4 -O casefold|" -e "s|cd mnt|rm -d mnt/lost+found;chattr +F mnt;cd mnt|" tests/mv/hardlink-case.sh
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 "${SED}" -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
@@ -228,8 +221,6 @@ sed -i -e "s|---dis ||g" tests/tail/overlay-headers.sh
 "${SED}" -i -e "s|grep '^#define HAVE_INOTIFY 1' \"\$CONFIG_HEADER\" >/dev/null && is_local_dir_ \. |is_local_dir_ . |" \
     -e "s|strace -e inotify_add_watch|strace -f -e inotify_add_watch|" \
     tests/tail/inotify-dir-recreate.sh
-
-test -f "${UU_BUILD_DIR}/getlimits" || cp src/getlimits "${UU_BUILD_DIR}"
 
 # pr produces very long log and this command isn't super interesting
 # SKIP for now
