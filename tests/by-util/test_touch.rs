@@ -477,7 +477,8 @@ fn test_touch_reference_dangling() {
             dangling_symlink.to_str().unwrap(),
             "some_file",
         ])
-        .fails();
+        .fails()
+        .stderr_contains("touch: failed to get attributes of");
 }
 
 #[test]
