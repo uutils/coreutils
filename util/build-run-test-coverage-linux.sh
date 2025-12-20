@@ -57,7 +57,7 @@ export CARGO_INCREMENTAL=0
 export RUSTFLAGS="-Cinstrument-coverage -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
 export RUSTDOCFLAGS="-Cpanic=abort"
 export RUSTUP_TOOLCHAIN="nightly-gnu"
-export LLVM_PROFILE_FILE="${PROFRAW_DIR}/coverage-%m-%p.profraw"
+export LLVM_PROFILE_FILE="${PROFRAW_DIR}/coverage-%4m.profraw"
 
 # Disable expanded command printing for the rest of the program
 set +x
@@ -104,10 +104,12 @@ run_test_and_aggregate "uucore" "-p uucore --all-features"
 echo "# Aggregating all the profraw files under ${REPORT_PATH}"
 grcov \
     "${PROFDATA_DIR}" \
-    --binary-path "${REPO_main_dir}/target/debug/coreutils" \
+    --binary-path "${REPO_main_dir}/target/debug/" \
     --output-types lcov \
     --output-path ${REPORT_PATH} \
     --llvm \
+    --excl-start "^mod test.*\{" \
+    --excl-stop "^\}" \
     --keep-only "${REPO_main_dir}"'/src/*'
 
 

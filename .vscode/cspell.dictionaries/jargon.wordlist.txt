@@ -41,6 +41,7 @@ duplicative
 dsync
 endianness
 enqueue
+ERANGE
 errored
 executable
 executables
@@ -75,6 +76,7 @@ iflag
 iflags
 kibi
 kibibytes
+langinfo
 libacl
 lcase
 listxattr
@@ -128,6 +130,7 @@ semiprimes
 setcap
 setfacl
 setfattr
+setlocale
 shortcode
 shortcodes
 siginfo
@@ -162,6 +165,8 @@ xattrs
 xpass
 
 # * abbreviations
+AMPM
+ampm
 consts
 deps
 dev
@@ -188,3 +193,18 @@ nofield
 # * clippy
 uninlined
 nonminimal
+
+# * CPU/hardware features
+ASIMD
+asimd
+hwcaps
+PCLMUL
+pclmul
+PCLMULQDQ
+pclmulqdq
+PMULL
+pmull
+TUNABLES
+tunables
+VMULL
+vmull

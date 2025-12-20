@@ -439,7 +439,7 @@ fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
                 .map_err(|e| ChrootError::CannotEnter("root".to_string(), e.into()))?
                 .as_bytes_with_nul()
                 .as_ptr()
-                .cast::<libc::c_char>(),
+                .cast(),
         )
     };
 

@@ -5,14 +5,12 @@
 
 // spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST
 
+mod locale;
+
 use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime;
 use jiff::tz::{TimeZone, TimeZoneDatabase};
 use jiff::{Timestamp, Zoned};
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
-use libc::clock_settime;
-#[cfg(all(unix, not(target_os = "redox")))]
-use libc::{CLOCK_REALTIME, clock_getres, timespec};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -491,6 +489,7 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(OPT_SET)
                 .value_name("STRING")
+                .allow_hyphen_values(true)
                 .help({
                     #[cfg(not(any(target_os = "macos", target_os = "redox")))]
                     {
@@ -537,7 +536,7 @@ fn make_format_string(settings: &Settings) -> &str {
         },
         Format::Resolution => "%s.%N",
         Format::Custom(ref fmt) => fmt,
-        Format::Default => "%a %b %e %X %Z %Y",
+        Format::Default => locale::get_locale_default_format(),
     }
 }
 
@@ -700,25 +699,20 @@ fn get_clock_resolution() -> Timestamp {
 }
 
 #[cfg(all(unix, not(target_os = "redox")))]
+/// Returns the resolution of the system’s realtime clock.
+///
+/// # Panics
+///
+/// Panics if `clock_getres` fails. On a POSIX-compliant system this should not occur,
+/// as `CLOCK_REALTIME` is required to be supported.
+/// Failure would indicate a non-conforming or otherwise broken implementation.
 fn get_clock_resolution() -> Timestamp {
-    let mut timespec = timespec {
-        tv_sec: 0,
-        tv_nsec: 0,
-    };
-    unsafe {
-        // SAFETY: the timespec struct lives for the full duration of this function call.
-        //
-        // The clock_getres function can only fail if the passed clock_id is not
-        // a known clock. All compliant posix implementors must support
-        // CLOCK_REALTIME, therefore this function call cannot fail on any
-        // compliant posix implementation.
-        //
-        // See more here:
-        // https://pubs.opengroup.org/onlinepubs/9799919799/functions/clock_getres.html
-        clock_getres(CLOCK_REALTIME, &raw mut timespec);
-    }
+    use nix::time::{ClockId, clock_getres};
+
+    let timespec = clock_getres(ClockId::CLOCK_REALTIME).unwrap();
+
     #[allow(clippy::unnecessary_cast)] // Cast required on 32-bit platforms
-    Timestamp::constant(timespec.tv_sec as i64, timespec.tv_nsec as i32)
+    Timestamp::constant(timespec.tv_sec() as _, timespec.tv_nsec() as _)
 }
 
 #[cfg(all(unix, target_os = "redox"))]
@@ -766,20 +760,13 @@ fn set_system_datetime(_date: Zoned) -> UResult<()> {
 /// `<https://linux.die.net/man/3/clock_settime>`
 /// `<https://www.gnu.org/software/libc/manual/html_node/Time-Types.html>`
 fn set_system_datetime(date: Zoned) -> UResult<()> {
+    use nix::{sys::time::TimeSpec, time::ClockId};
+
     let ts = date.timestamp();
-    let timespec = timespec {
-        tv_sec: ts.as_second() as _,
-        tv_nsec: ts.subsec_nanosecond() as _,
-    };
+    let timespec = TimeSpec::new(ts.as_second() as _, ts.subsec_nanosecond() as _);
 
-    let result = unsafe { clock_settime(CLOCK_REALTIME, &raw const timespec) };
-
-    if result == 0 {
-        Ok(())
-    } else {
-        Err(std::io::Error::last_os_error()
-            .map_err_context(|| translate!("date-error-cannot-set-date")))
-    }
+    nix::time::clock_settime(ClockId::CLOCK_REALTIME, timespec)
+        .map_err_context(|| translate!("date-error-cannot-set-date"))
 }
 
 #[cfg(windows)]

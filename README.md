@@ -29,10 +29,14 @@ options might be missing or different behavior might be experienced.
 
 <div class="oranda-hide">
 
+We provide prebuilt binaries at https://github.com/uutils/coreutils/releases/latest .
+It is recommended to install from main branch if you install from source.
+
 To install it:
 
 ```shell
-cargo install coreutils
+cargo install --git https://github.com/uutils/coreutils coreutils
+# cargo install --git https://github.com/uutils/coreutils uu_true # for one util only
 ~/.cargo/bin/coreutils
 ```
 
@@ -228,8 +232,10 @@ make UTILS='UTILITY_1 UTILITY_2' install
 To install every program with a prefix (e.g. uu-echo uu-cat):
 
 ```shell
-make PROG_PREFIX=PREFIX_GOES_HERE install
+make PROG_PREFIX=uu- install
 ```
+
+`PROG_PREFIX` requires separator `-`, `_`, or `=`.
 
 To install the multicall binary:
 
@@ -320,7 +326,7 @@ make uninstall
 To uninstall every program with a set prefix:
 
 ```shell
-make PROG_PREFIX=PREFIX_GOES_HERE uninstall
+make PROG_PREFIX=uu- uninstall
 ```
 
 To uninstall the multicall binary:

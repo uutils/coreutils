@@ -3,17 +3,17 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) execvp SIGHUP cproc vprocmgr cstrs homeout
+// spell-checker:ignore (ToDO) SIGHUP cproc vprocmgr homeout
 
 use clap::{Arg, ArgAction, Command};
-use libc::{SIG_IGN, SIGHUP};
-use libc::{c_char, dup2, execvp, signal};
+use libc::{SIG_IGN, SIGHUP, dup2, signal};
 use std::env;
-use std::ffi::CString;
 use std::fs::{File, OpenOptions};
-use std::io::{Error, IsTerminal};
+use std::io::{Error, ErrorKind, IsTerminal};
 use std::os::unix::prelude::*;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
+use std::process;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, set_exit_code};
@@ -55,10 +55,21 @@ impl UError for NohupError {
     }
 }
 
+fn failure_code() -> i32 {
+    if env::var("POSIXLY_CORRECT").is_ok() {
+        POSIX_NOHUP_FAILURE
+    } else {
+        EXIT_CANCELED
+    }
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches =
-        uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
+    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(
+        uu_app(),
+        args,
+        failure_code(),
+    )?;
 
     replace_fds()?;
 
@@ -68,17 +79,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(NohupError::CannotDetach.into());
     }
 
-    let cstrs: Vec<CString> = matches
-        .get_many::<String>(options::CMD)
-        .unwrap()
-        .map(|x| CString::new(x.as_bytes()).unwrap())
-        .collect();
-    let mut args: Vec<*const c_char> = cstrs.iter().map(|s| s.as_ptr()).collect();
-    args.push(std::ptr::null());
+    let mut cmd_iter = matches.get_many::<String>(options::CMD).unwrap();
+    let cmd = cmd_iter.next().unwrap();
+    let args: Vec<&String> = cmd_iter.collect();
 
-    let ret = unsafe { execvp(args[0], args.as_mut_ptr()) };
-    match ret {
-        libc::ENOENT => set_exit_code(EXIT_ENOENT),
+    let err = process::Command::new(cmd).args(args).exec();
+
+    match err.kind() {
+        ErrorKind::NotFound => set_exit_code(EXIT_ENOENT),
         _ => set_exit_code(EXIT_CANNOT_INVOKE),
     }
     Ok(())
@@ -127,10 +135,7 @@ fn replace_fds() -> UResult<()> {
 }
 
 fn find_stdout() -> UResult<File> {
-    let internal_failure_code = match env::var("POSIXLY_CORRECT") {
-        Ok(_) => POSIX_NOHUP_FAILURE,
-        Err(_) => EXIT_CANCELED,
-    };
+    let internal_failure_code = failure_code();
 
     match OpenOptions::new()
         .create(true)

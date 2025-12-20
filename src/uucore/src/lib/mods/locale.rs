@@ -264,8 +264,7 @@ fn create_english_bundle_from_embedded(
 fn get_message_internal(id: &str, args: Option<FluentArgs>) -> String {
     LOCALIZER.with(|lock| {
         lock.get()
-            .map(|loc| loc.format(id, args.as_ref()))
-            .unwrap_or_else(|| id.to_string()) // Return the key ID if localizer not initialized
+            .map_or_else(|| id.to_string(), |loc| loc.format(id, args.as_ref())) // Return the key ID if localizer not initialized
     })
 }
 

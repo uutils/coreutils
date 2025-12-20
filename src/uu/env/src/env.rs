@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) chdir execvp progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction
+// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction
 
 pub mod native_int_str;
 pub mod split_iterator;
@@ -21,16 +21,14 @@ use native_int_str::{
 use nix::libc;
 #[cfg(unix)]
 use nix::sys::signal::{SigHandler::SigIgn, Signal, signal};
-#[cfg(unix)]
-use nix::unistd::execvp;
 use std::borrow::Cow;
 use std::env;
-#[cfg(unix)]
-use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Write};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 
 use uucore::display::Quotable;
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
@@ -102,7 +100,6 @@ struct Options<'a> {
 }
 
 /// print `name=value` env pairs on screen
-/// if null is true, separate pairs with a \0, \n otherwise
 fn print_env(line_ending: LineEnding) {
     let stdout_raw = io::stdout();
     let mut stdout = stdout_raw.lock();
@@ -607,34 +604,16 @@ impl EnvAppData {
 
         #[cfg(unix)]
         {
-            // Convert program name to CString.
-            let Ok(prog_cstring) = CString::new(prog.as_bytes()) else {
-                return Err(self.make_error_no_such_file_or_dir(&prog));
-            };
+            // Execute the program using exec, which replaces the current process.
+            let err = std::process::Command::new(&*prog)
+                .arg0(&*arg0)
+                .args(args)
+                .exec();
 
-            // Prepare arguments for execvp.
-            let mut argv = Vec::new();
-
-            // Convert arg0 to CString.
-            let Ok(arg0_cstring) = CString::new(arg0.as_bytes()) else {
-                return Err(self.make_error_no_such_file_or_dir(&prog));
-            };
-            argv.push(arg0_cstring);
-
-            // Convert remaining arguments to CString.
-            for arg in args {
-                let Ok(arg_cstring) = CString::new(arg.as_bytes()) else {
-                    return Err(self.make_error_no_such_file_or_dir(&prog));
-                };
-                argv.push(arg_cstring);
-            }
-
-            // Execute the program using execvp. this replaces the current
-            // process. The execvp function takes care of appending a NULL
-            // argument to the argument list so that we don't have to.
-            match execvp(&prog_cstring, &argv) {
-                Err(nix::errno::Errno::ENOENT) => Err(self.make_error_no_such_file_or_dir(&prog)),
-                Err(nix::errno::Errno::EACCES) => {
+            // exec() only returns if there was an error
+            match err.kind() {
+                io::ErrorKind::NotFound => Err(self.make_error_no_such_file_or_dir(&prog)),
+                io::ErrorKind::PermissionDenied => {
                     uucore::show_error!(
                         "{}",
                         translate!(
@@ -644,18 +623,15 @@ impl EnvAppData {
                     );
                     Err(126.into())
                 }
-                Err(_) => {
+                _ => {
                     uucore::show_error!(
                         "{}",
                         translate!(
                             "env-error-unknown",
-                            "error" => "execvp failed"
+                            "error" => err
                         )
                     );
                     Err(126.into())
-                }
-                Ok(_) => {
-                    unreachable!("execvp should never return on success")
                 }
             }
         }

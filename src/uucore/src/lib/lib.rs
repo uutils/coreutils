@@ -54,11 +54,18 @@ pub use crate::features::fast_inc;
 pub use crate::features::format;
 #[cfg(feature = "fs")]
 pub use crate::features::fs;
+#[cfg(feature = "hardware")]
+pub use crate::features::hardware;
 #[cfg(feature = "i18n-common")]
 pub use crate::features::i18n;
 #[cfg(feature = "lines")]
 pub use crate::features::lines;
-#[cfg(feature = "parser")]
+#[cfg(any(
+    feature = "parser",
+    feature = "parser-num",
+    feature = "parser-size",
+    feature = "parser-glob"
+))]
 pub use crate::features::parser;
 #[cfg(feature = "quoting-style")]
 pub use crate::features::quoting_style;
@@ -163,9 +170,9 @@ pub fn get_canonical_util_name(util_name: &str) -> &str {
         "[" => "test",
 
         // hashsum aliases - all these hash commands are aliases for hashsum
-        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum"
-        | "sha3sum" | "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum"
-        | "shake128sum" | "shake256sum" | "b2sum" | "b3sum" => "hashsum",
+        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" | "b2sum" => {
+            "hashsum"
+        }
 
         "dir" => "ls", // dir is an alias for ls
 
@@ -321,7 +328,10 @@ pub fn set_utility_is_second_arg() {
 
 // args_os() can be expensive to call, it copies all of argv before iterating.
 // So if we want only the first arg or so it's overkill. We cache it.
+#[cfg(windows)]
 static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| wild::args_os().collect());
+#[cfg(not(windows))]
+static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| std::env::args_os().collect());
 
 static UTIL_NAME: LazyLock<String> = LazyLock::new(|| {
     let base_index = usize::from(get_utility_is_second_arg());

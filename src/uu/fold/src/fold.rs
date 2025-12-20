@@ -443,7 +443,7 @@ fn process_utf8_line<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URes
             }
         }
 
-        let next_idx = iter.peek().map(|(idx, _)| *idx).unwrap_or(line_bytes.len());
+        let next_idx = iter.peek().map_or(line_bytes.len(), |(idx, _)| *idx);
 
         if ch == '\n' {
             *ctx.last_space = None;

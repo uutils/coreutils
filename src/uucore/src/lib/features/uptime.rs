@@ -62,10 +62,9 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
         tv_sec: 0,
         tv_nsec: 0,
     };
-    let raw_tp = &mut tp as *mut timespec;
 
     // OpenBSD prototype: clock_gettime(clk_id: ::clockid_t, tp: *mut ::timespec) -> ::c_int;
-    let ret: c_int = unsafe { clock_gettime(CLOCK_BOOTTIME, raw_tp) };
+    let ret: c_int = unsafe { clock_gettime(CLOCK_BOOTTIME, &raw mut tp) };
 
     if ret == 0 {
         #[cfg(target_pointer_width = "64")]

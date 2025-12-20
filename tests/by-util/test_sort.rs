@@ -108,6 +108,33 @@ fn test_invalid_buffer_size() {
 }
 
 #[test]
+fn test_legacy_plus_minus_accepts_when_modern_posix2() {
+    let size_max = usize::MAX;
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input.txt", "aa\nbb\n");
+
+    ucmd.env("_POSIX2_VERSION", "200809")
+        .arg(format!("+0.{size_max}R"))
+        .arg("input.txt")
+        .succeeds()
+        .stdout_is("aa\nbb\n");
+}
+
+#[test]
+fn test_legacy_plus_minus_accepts_with_size_max() {
+    let size_max = usize::MAX;
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input.txt", "aa\nbb\n");
+
+    ucmd.env("_POSIX2_VERSION", "200809")
+        .arg("+1")
+        .arg(format!("-1.{size_max}R"))
+        .arg("input.txt")
+        .succeeds()
+        .stdout_is("aa\nbb\n");
+}
+
+#[test]
 fn test_ext_sort_stable() {
     new_ucmd!()
         .arg("-n")

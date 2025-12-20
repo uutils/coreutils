@@ -525,7 +525,7 @@ impl Iterator for UtmpxIter {
                 // All the strings live inline in the struct as arrays, which
                 // makes things easier.
                 Some(UtmpxRecord::Traditional(Box::new(Utmpx {
-                    inner: ptr::read(res as *const _),
+                    inner: ptr::read(res.cast_const()),
                 })))
             }
         }

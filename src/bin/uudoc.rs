@@ -66,6 +66,7 @@ fn gen_manpage<T: Args>(
     args: impl Iterator<Item = OsString>,
     util_map: &UtilityMap<T>,
 ) -> ! {
+    uucore::set_utility_is_second_arg();
     let all_utilities = validation::get_all_utilities(util_map);
 
     let matches = Command::new("manpage")
@@ -139,7 +140,9 @@ fn print_tldr_error() {
         "To include examples in the documentation, download the tldr archive and put it in the docs/ folder."
     );
     eprintln!();
-    eprintln!("  curl https://tldr.sh/assets/tldr.zip -o docs/tldr.zip");
+    eprintln!(
+        "  curl -L https://github.com/tldr-pages/tldr/releases/latest/download/tldr.zip -o docs/tldr.zip"
+    );
     eprintln!();
 }
 
