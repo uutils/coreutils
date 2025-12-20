@@ -1073,7 +1073,7 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
 
 #[cfg(target_os = "linux")]
 fn get_rlimit() -> UResult<usize> {
-    use nix::sys::resource::{getrlimit, Resource, RLIM_INFINITY};
+    use nix::sys::resource::{RLIM_INFINITY, Resource, getrlimit};
 
     let (rlim_cur, _rlim_max) = getrlimit(Resource::RLIMIT_NOFILE)
         .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))?;
