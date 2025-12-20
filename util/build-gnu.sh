@@ -3,16 +3,15 @@
 #
 
 # spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
-# spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink texinfo CARGOFLAGS
+# spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) greadlink gsed multihardlink texinfo CARGOFLAGS
 # spell-checker:ignore openat TOCTOU CFLAGS
 # spell-checker:ignore hfsplus casefold chattr
 
 set -e
 
-# Use system's GNU version for make, nproc, readlink and sed on *BSD and macOS
+# Use GNU make, readlink and sed on *BSD and macOS
 MAKE=$(command -v gmake||command -v make)
-NPROC=$(command -v gnproc||command -v nproc)
-READLINK=$(command -v greadlink||command -v readlink)
+READLINK=$(command -v greadlink||command -v readlink) # Use our readlink to remove a dependency
 SED=$(command -v gsed||command -v sed)
 
 SYSTEM_TIMEOUT=$(command -v timeout)
@@ -34,18 +33,13 @@ path_GNU="$("${READLINK}" -fm -- "${path_GNU:-${path_UUTILS}/../gnu}")"
 
 ###
 
-release_tag_GNU="v9.9"
-
 # check if the GNU coreutils has been cloned, if not print instructions
-# note: the ${path_GNU} might already exist, so we check for the .git directory
-if test ! -d "${path_GNU}/.git"; then
+# note: the ${path_GNU} might already exist, so we check for the configure
+if test ! -f "${path_GNU}/configure"; then
     echo "Could not find the GNU coreutils (expected at '${path_GNU}')"
     echo "Download them to the expected path:"
-    echo "  git clone --recurse-submodules https://github.com/coreutils/coreutils.git \"${path_GNU}\""
-    echo "Afterwards, checkout the latest release tag:"
-    echo "  cd \"${path_GNU}\""
-    echo "  git fetch --all --tags"
-    echo "  git checkout tags/${release_tag_GNU}"
+    echo "  (cd '${path_GNU}' && fetch-gnu.sh ) "
+    echo "You can edit fetch-gnu.sh to change the tag"
     exit 1
 fi
 
@@ -111,7 +105,8 @@ test -f "${UU_BUILD_DIR}/[" || (cd ${UU_BUILD_DIR} && ln -s "test" "[")
 
 cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
 
-# Any binaries that aren't built become `false` so their tests fail
+# Any binaries that aren't built become `false` to make tests failure
+# Note that some test (e.g. runcon/runcon-compute.sh) incorrectly passes by this
 for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs); do
     bin_path="${UU_BUILD_DIR}/${binary}"
     test -f "${bin_path}" || {
@@ -126,22 +121,24 @@ done
 
 if test -f gnu-built; then
     echo "GNU build already found. Skip"
-    echo "'rm -f $(pwd)/gnu-built' to force the build"
+    echo "'rm -f $(pwd)/{gnu-built,src/getlimits}' to force the build"
     echo "Note: the customization of the tests will still happen"
 else
     # Disable useless checks
     "${SED}" -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
-    "${SED}" -i '/^wget.*/d' bootstrap.conf # wget is used to DL po. Remove the dep.
-    ./bootstrap --skip-po
     # Use CFLAGS for best build time since we discard GNU coreutils
-    CFLAGS="${CFLAGS} -pipe -O0 -s" ./configure --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
+    CFLAGS="${CFLAGS} -pipe -O0 -s" ./configure -C --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
       --enable-single-binary=symlinks \
       "$([ "${SELINUX_ENABLED}" = 1 ] && echo --with-selinux || echo --without-selinux)"
     #Add timeout to to protect against hangs
     "${SED}" -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
     # Use a better diff
     "${SED}" -i 's|diff -c|diff -u|g' tests/Coreutils.pm
-    "${MAKE}" -j "$("${NPROC}")"
+
+    # Skip make if possible
+    # Use our nproc for *BSD and macOS
+    test -f src/getlimits || "${MAKE}" -j "$("${UU_BUILD_DIR}/nproc")"
+    cp -f src/getlimits "${UU_BUILD_DIR}"
 
     # Handle generated factor tests
     t_first=00
@@ -170,13 +167,15 @@ grep -rl 'path_prepend_' tests/* | xargs -r "${SED}" -i 's| path_prepend_ ./src|
 # path_prepend_ sets $abs_path_dir_: set it manually instead.
 grep -rl '\$abs_path_dir_' tests/*/*.sh | xargs -r "${SED}" -i "s|\$abs_path_dir_|${UU_BUILD_DIR//\//\\/}|g"
 
+# We can't build runcon and chcon without libselinux. But GNU no longer builds dummies of them. So consider they are SELinux specific.
+"${SED}" -i 's/^print_ver_.*/require_selinux_/' tests/runcon/runcon-compute.sh
+"${SED}" -i 's/^print_ver_.*/require_selinux_/' tests/runcon/runcon-no-reorder.sh
+"${SED}" -i 's/^print_ver_.*/require_selinux_/' tests/chcon/chcon-fail.sh
+
 # We use coreutils yes
 "${SED}" -i "s|--coreutils-prog=||g" tests/misc/coreutils.sh
 # Different message
 "${SED}" -i "s|coreutils: unknown program 'blah'|blah: function/utility not found|" tests/misc/coreutils.sh
-
-# Remove hfs dependency (should be merged to upstream)
-"${SED}" -i -e "s|hfsplus|ext4 -O casefold|" -e "s|cd mnt|rm -d mnt/lost+found;chattr +F mnt;cd mnt|" tests/mv/hardlink-case.sh
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 "${SED}" -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
@@ -223,7 +222,11 @@ sed -i -e "s|---dis ||g" tests/tail/overlay-headers.sh
 # Do not FAIL, just do a regular ERROR
 "${SED}" -i -e "s|framework_failure_ 'no inotify_add_watch';|fail=1;|" tests/tail/inotify-rotate-resources.sh
 
-test -f "${UU_BUILD_DIR}/getlimits" || cp src/getlimits "${UU_BUILD_DIR}"
+# The notify crate makes inotify_add_watch calls in a background thread, so strace needs -f to follow threads.
+# Also remove the HAVE_INOTIFY header check since that's for C builds.
+"${SED}" -i -e "s|grep '^#define HAVE_INOTIFY 1' \"\$CONFIG_HEADER\" >/dev/null && is_local_dir_ \. |is_local_dir_ . |" \
+    -e "s|strace -e inotify_add_watch|strace -f -e inotify_add_watch|" \
+    tests/tail/inotify-dir-recreate.sh
 
 # pr produces very long log and this command isn't super interesting
 # SKIP for now

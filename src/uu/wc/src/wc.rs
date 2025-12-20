@@ -29,6 +29,7 @@ use uucore::translate;
 use uucore::{
     error::{FromIo, UError, UResult},
     format_usage,
+    hardware::{HardwareFeature, HasHardwareFeatures as _, SimdPolicy},
     parser::shortcut_value_parser::ShortcutValueParser,
     quoting_style::{self, QuotingStyle},
     show,
@@ -49,6 +50,7 @@ struct Settings<'a> {
     show_lines: bool,
     show_words: bool,
     show_max_line_length: bool,
+    debug: bool,
     files0_from: Option<Input<'a>>,
     total_when: TotalWhen,
 }
@@ -62,6 +64,7 @@ impl Default for Settings<'_> {
             show_lines: true,
             show_words: true,
             show_max_line_length: false,
+            debug: false,
             files0_from: None,
             total_when: TotalWhen::default(),
         }
@@ -85,6 +88,7 @@ impl<'a> Settings<'a> {
             show_lines: matches.get_flag(options::LINES),
             show_words: matches.get_flag(options::WORDS),
             show_max_line_length: matches.get_flag(options::MAX_LINE_LENGTH),
+            debug: matches.get_flag(options::DEBUG),
             files0_from,
             total_when,
         };
@@ -95,6 +99,7 @@ impl<'a> Settings<'a> {
             Self {
                 files0_from: settings.files0_from,
                 total_when,
+                debug: settings.debug,
                 ..Default::default()
             }
         }
@@ -122,6 +127,7 @@ mod options {
     pub static MAX_LINE_LENGTH: &str = "max-line-length";
     pub static TOTAL: &str = "total";
     pub static WORDS: &str = "words";
+    pub static DEBUG: &str = "debug";
 }
 static ARG_FILES: &str = "files";
 static STDIN_REPR: &str = "-";
@@ -444,6 +450,12 @@ pub fn uu_app() -> Command {
                 .long(options::WORDS)
                 .help(translate!("wc-help-words"))
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::DEBUG)
+                .long(options::DEBUG)
+                .action(ArgAction::SetTrue)
+                .hide(true),
         )
         .arg(
             Arg::new(ARG_FILES)
@@ -805,6 +817,17 @@ fn escape_name_wrapper(name: &OsStr) -> String {
         .expect("All escaped names with the escaping option return valid strings.")
 }
 
+fn hardware_feature_label(feature: HardwareFeature) -> &'static str {
+    match feature {
+        HardwareFeature::Avx512 => "AVX512F",
+        HardwareFeature::Avx2 => "AVX2",
+        HardwareFeature::PclMul => "PCLMUL",
+        HardwareFeature::Vmull => "VMULL",
+        HardwareFeature::Sse2 => "SSE2",
+        HardwareFeature::Asimd => "ASIMD",
+    }
+}
+
 fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
     let mut total_word_count = WordCount::default();
     let mut num_inputs: usize = 0;
@@ -813,6 +836,41 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
         TotalWhen::Only => (1, false),
         _ => (compute_number_width(inputs, settings), true),
     };
+
+    if settings.debug {
+        let policy = SimdPolicy::detect();
+        if policy.allows_simd() {
+            let enabled: Vec<&'static str> = policy
+                .iter_features()
+                .map(hardware_feature_label)
+                .collect();
+            if enabled.is_empty() {
+                eprintln!("{}", translate!("wc-debug-hw-unavailable"));
+            } else {
+                eprintln!(
+                    "{}",
+                    translate!("wc-debug-hw-using", "features" => enabled.join(", "))
+                );
+            }
+        } else {
+            let disabled: Vec<&'static str> = policy
+                .disabled_features()
+                .into_iter()
+                .map(hardware_feature_label)
+                .collect();
+            if disabled.is_empty() {
+                eprintln!("{}", translate!("wc-debug-hw-disabled-env"));
+            } else {
+                eprintln!(
+                    "{}",
+                    translate!(
+                        "wc-debug-hw-disabled-glibc",
+                        "features" => disabled.join(", ")
+                    )
+                );
+            }
+        }
+    }
 
     for maybe_input in inputs.try_iter(settings)? {
         num_inputs += 1;

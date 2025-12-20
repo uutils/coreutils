@@ -2,7 +2,7 @@ name: GnuTests
 
 # spell-checker:ignore (abbrev/names) CodeCov gnulib GnuTests Swatinem
 # spell-checker:ignore (jargon) submodules devel
-# spell-checker:ignore (libs/utils) autopoint chksum getenforce gperf lcov libexpect limactl pyinotify setenforce shopt texinfo valgrind libattr libcap taiki-e
+# spell-checker:ignore (libs/utils) autopoint chksum dpkg getenforce getlimits gperf lcov libexpect limactl pyinotify setenforce shopt texinfo valgrind libattr libcap taiki-e
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
 # spell-checker:ignore (people) Dawid Dziurla * dawidd dtolnay
 # spell-checker:ignore (vars) FILESET SUBDIRS XPASS
@@ -42,16 +42,6 @@ jobs:
       with:
         path: 'uutils'
         persist-credentials: false
-    - name: Extract GNU version from build-gnu.sh
-      id: gnu-version
-      run: |
-        GNU_VERSION=$(grep '^release_tag_GNU=' uutils/util/build-gnu.sh | cut -d'"' -f2)
-        if [ -z "$GNU_VERSION" ]; then
-          echo "Error: Failed to extract GNU version from build-gnu.sh"
-          exit 1
-        fi
-        echo "REPO_GNU_REF=${GNU_VERSION}" >> $GITHUB_ENV
-        echo "Extracted GNU version: ${GNU_VERSION}"
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
@@ -60,21 +50,18 @@ jobs:
       with:
         workspaces: "./uutils -> target"
     - name: Checkout code (GNU coreutils)
-      uses: actions/checkout@v6
+      run: (mkdir -p gnu && cd gnu && bash ../uutils/util/fetch-gnu.sh)
+    - name: Restore files for faster configure and skipping make
+      uses: actions/cache@v5
+      id: cache-config-gnu
       with:
-        repository: 'coreutils/coreutils'
-        path: 'gnu'
-        ref: ${{ env.REPO_GNU_REF }}
-        submodules: false
-        persist-credentials: false
-    - name: Override submodule URL and initialize submodules
-      # Use github instead of upstream git server
-      run: |
-        git submodule sync --recursive
-        git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
-        git submodule update --init --recursive --depth 1
-      working-directory: gnu
-
+        path: |
+          gnu/config.cache
+          gnu/src/getlimits
+        key: ${{ runner.os }}-gnu-config-${{ env.REPO_GNU_REF }}-${{ hashFiles('gnu/configure') }}
+        restore-keys: |
+          ${{ runner.os }}-gnu-config-${{ env.REPO_GNU_REF }}-
+          ${{ runner.os }}-gnu-config-
     #### Build environment setup
     - name: Install dependencies
       shell: bash
@@ -83,6 +70,8 @@ jobs:
         sudo apt-get update
         ## Check that build-gnu.sh works on the non SELinux system by installing libselinux only on lima
         sudo apt-get install -y autopoint gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev attr quilt
+        curl http://launchpadlibrarian.net/831710181/automake_1.18.1-3_all.deb > automake-1.18.deb
+        sudo dpkg -i --force-depends automake-1.18.deb
     - name: Add various locales
       shell: bash
       run: |
@@ -115,6 +104,15 @@ jobs:
         ## Build binaries
         cd 'uutils'
         env PROFILE=release-small bash util/build-gnu.sh
+        
+    - name: Save files for faster configure and skipping make
+      uses: actions/cache/save@v5
+      if: always() && steps.cache-config-gnu.outputs.cache-hit != 'true'
+      with:
+        path: |
+          gnu/config.cache
+          gnu/src/getlimits
+        key: ${{ runner.os }}-gnu-config-${{ env.REPO_GNU_REF }}-${{ hashFiles('gnu/configure') }}
 
     ### Run tests as user
     - name: Run GNU tests
@@ -206,16 +204,6 @@ jobs:
       with:
         path: 'uutils'
         persist-credentials: false
-    - name: Extract GNU version from build-gnu.sh
-      id: gnu-version-selinux
-      run: |
-        GNU_VERSION=$(grep '^release_tag_GNU=' uutils/util/build-gnu.sh | cut -d'"' -f2)
-        if [ -z "$GNU_VERSION" ]; then
-          echo "Error: Failed to extract GNU version from build-gnu.sh"
-          exit 1
-        fi
-        echo "REPO_GNU_REF=${GNU_VERSION}" >> $GITHUB_ENV
-        echo "Extracted GNU version: ${GNU_VERSION}"
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
@@ -224,20 +212,7 @@ jobs:
       with:
         workspaces: "./uutils -> target"
     - name: Checkout code (GNU coreutils)
-      uses: actions/checkout@v6
-      with:
-        repository: 'coreutils/coreutils'
-        path: 'gnu'
-        ref: ${{ env.REPO_GNU_REF }}
-        submodules: false
-        persist-credentials: false
-    - name: Override submodule URL and initialize submodules
-      # Use github instead of upstream git server
-      run: |
-        git submodule sync --recursive
-        git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
-        git submodule update --init --recursive --depth 1
-      working-directory: gnu
+      run: (mkdir -p gnu && cd gnu && bash ../uutils/util/fetch-gnu.sh)
 
     #### Lima build environment setup
     - name: Setup Lima

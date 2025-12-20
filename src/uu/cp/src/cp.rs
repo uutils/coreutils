@@ -2319,8 +2319,7 @@ fn copy_file(
     let initial_dest_metadata = dest.symlink_metadata().ok();
     let dest_is_symlink = initial_dest_metadata
         .as_ref()
-        .map(|md| md.file_type().is_symlink())
-        .unwrap_or(false);
+        .is_some_and(|md| md.file_type().is_symlink());
     let dest_target_exists = dest.try_exists().unwrap_or(false);
     // Fail if dest is a dangling symlink or a symlink this program created previously
     if dest_is_symlink {
