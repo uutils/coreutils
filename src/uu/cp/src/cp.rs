@@ -1719,7 +1719,7 @@ pub(crate) fn copy_attributes(
             // When preserving mode with -p, also preserve ACL xattrs
             // ACLs are stored as xattrs (system.posix_acl_*) and should be
             // preserved even when general xattrs are not
-            #[cfg(all(unix, not(target_os = "android")))]
+            #[cfg(all(unix, not(any(target_os = "android", target_os = "openbsd"))))]
             copy_acl_xattrs(source, dest)?;
         }
 
