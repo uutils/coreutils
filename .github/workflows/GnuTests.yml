@@ -6,6 +6,7 @@ name: GnuTests
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
 # spell-checker:ignore (people) Dawid Dziurla * dawidd dtolnay
 # spell-checker:ignore (vars) FILESET SUBDIRS XPASS
+# spell-checker:ignore userns
 
 # * note: to run a single test => `REPO/util/run-gnu-test.sh PATH/TO/TEST/SCRIPT`
 
@@ -116,6 +117,9 @@ jobs:
     - name: Run GNU tests
       shell: bash
       run: |
+        ## Use unshare
+        sudo sysctl -w kernel.unprivileged_userns_clone=1
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
         ## Run GNU tests
         path_GNU='gnu'
         path_UUTILS='uutils'
