@@ -37,3 +37,4 @@ wc-debug-hw-unavailable = wc : debug : prise en charge matérielle indisponible 
 wc-debug-hw-using = wc : debug : utilisation de l'accélération matérielle (fonctions : { $features })
 wc-debug-hw-disabled-env = wc : debug : prise en charge matérielle désactivée par l'environnement
 wc-debug-hw-disabled-glibc = wc : debug : prise en charge matérielle désactivée par GLIBC_TUNABLES ({ $features })
+wc-debug-hw-limited-glibc = wc : debug : prise en charge matérielle limitée par GLIBC_TUNABLES (désactivé : { $disabled } ; activé : { $enabled })

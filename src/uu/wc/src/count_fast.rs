@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // cSpell:ignore sysconf
-use crate::word_count::WordCount;
+use crate::{wc_simd_allowed, word_count::WordCount};
 use uucore::hardware::SimdPolicy;
 
 use super::WordCountable;
@@ -233,7 +233,8 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
 ) -> (WordCount, Option<io::Error>) {
     let mut total = WordCount::default();
     let buf: &mut [u8] = &mut AlignedBuffer::default().data;
-    let simd_allowed = SimdPolicy::detect().allows_simd();
+    let policy = SimdPolicy::detect();
+    let simd_allowed = wc_simd_allowed(policy);
     loop {
         match handle.read(buf) {
             Ok(0) => return (total, None),

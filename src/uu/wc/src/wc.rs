@@ -828,6 +828,55 @@ fn hardware_feature_label(feature: HardwareFeature) -> &'static str {
     }
 }
 
+fn is_wc_simd_runtime_feature(feature: &HardwareFeature) -> bool {
+    matches!(
+        feature,
+        HardwareFeature::Avx2 | HardwareFeature::Sse2 | HardwareFeature::Asimd
+    )
+}
+
+fn is_wc_simd_debug_feature(feature: &HardwareFeature) -> bool {
+    matches!(
+        feature,
+        HardwareFeature::Avx512
+            | HardwareFeature::Avx2
+            | HardwareFeature::Sse2
+            | HardwareFeature::Asimd
+    )
+}
+
+fn wc_simd_enabled_features(policy: &SimdPolicy) -> Vec<HardwareFeature> {
+    policy
+        .iter_features()
+        .filter(is_wc_simd_runtime_feature)
+        .collect()
+}
+
+fn wc_simd_disabled_features(policy: &SimdPolicy) -> Vec<HardwareFeature> {
+    policy
+        .disabled_features()
+        .into_iter()
+        .filter(is_wc_simd_debug_feature)
+        .collect()
+}
+
+fn wc_simd_disabled_runtime_features(policy: &SimdPolicy) -> Vec<HardwareFeature> {
+    policy
+        .disabled_features()
+        .into_iter()
+        .filter(is_wc_simd_runtime_feature)
+        .collect()
+}
+
+pub(crate) fn wc_simd_allowed(policy: &SimdPolicy) -> bool {
+    if !wc_simd_disabled_runtime_features(policy).is_empty() {
+        return false;
+    }
+    policy
+        .iter_features()
+        .any(|feature| is_wc_simd_runtime_feature(&feature))
+}
+
 fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
     let mut total_word_count = WordCount::default();
     let mut num_inputs: usize = 0;
@@ -839,34 +888,41 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
 
     if settings.debug {
         let policy = SimdPolicy::detect();
-        if policy.allows_simd() {
-            let enabled: Vec<&'static str> =
-                policy.iter_features().map(hardware_feature_label).collect();
-            if enabled.is_empty() {
-                eprintln!("{}", translate!("wc-debug-hw-unavailable"));
-            } else {
-                eprintln!(
-                    "{}",
-                    translate!("wc-debug-hw-using", "features" => enabled.join(", "))
-                );
-            }
-        } else {
-            let disabled: Vec<&'static str> = policy
-                .disabled_features()
-                .into_iter()
-                .map(hardware_feature_label)
-                .collect();
-            if disabled.is_empty() {
-                eprintln!("{}", translate!("wc-debug-hw-disabled-env"));
-            } else {
-                eprintln!(
-                    "{}",
-                    translate!(
-                        "wc-debug-hw-disabled-glibc",
-                        "features" => disabled.join(", ")
-                    )
-                );
-            }
+        let enabled_features = wc_simd_enabled_features(policy);
+        let disabled_features = wc_simd_disabled_features(policy);
+        let disabled_runtime_features = wc_simd_disabled_runtime_features(policy);
+
+        let enabled: Vec<&'static str> = enabled_features
+            .iter()
+            .copied()
+            .map(hardware_feature_label)
+            .collect();
+        let disabled: Vec<&'static str> = disabled_features
+            .iter()
+            .copied()
+            .map(hardware_feature_label)
+            .collect();
+
+        let runtime_disabled = !disabled_runtime_features.is_empty();
+
+        match (enabled.is_empty(), runtime_disabled, disabled.is_empty()) {
+            (true, false, _) => eprintln!("{}", translate!("wc-debug-hw-unavailable")),
+            (_, true, _) => eprintln!(
+                "{}",
+                translate!("wc-debug-hw-disabled-glibc", "features" => disabled.join(", "))
+            ),
+            (false, false, true) => eprintln!(
+                "{}",
+                translate!("wc-debug-hw-using", "features" => enabled.join(", "))
+            ),
+            (false, false, false) => eprintln!(
+                "{}",
+                translate!(
+                    "wc-debug-hw-limited-glibc",
+                    "disabled" => disabled.join(", "),
+                    "enabled" => enabled.join(", ")
+                )
+            ),
         }
     }
 

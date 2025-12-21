@@ -37,3 +37,4 @@ wc-debug-hw-unavailable = wc: debug: hardware support unavailable on this CPU
 wc-debug-hw-using = wc: debug: using hardware support (features: { $features })
 wc-debug-hw-disabled-env = wc: debug: hardware support disabled by environment
 wc-debug-hw-disabled-glibc = wc: debug: hardware support disabled by GLIBC_TUNABLES ({ $features })
+wc-debug-hw-limited-glibc = wc: debug: hardware support limited by GLIBC_TUNABLES (disabled: { $disabled }; enabled: { $enabled })
