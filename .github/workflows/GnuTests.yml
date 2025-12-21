@@ -58,7 +58,7 @@ jobs:
         path: |
           gnu/config.cache
           gnu/src/getlimits
-        key: ${{ runner.os }}-gnu-config-${{ hashFiles('gnu/NEWS') }}-${{ hashFiles('gnu/configure') }}
+        key: ${{ runner.os }}-gnu-config-${{ hashFiles('gnu/NEWS') }}-${{ hashFiles('uutils/util/build-gnu.sh') }} # use build-gnu.sh for extremely safe caching
 
     #### Build environment setup
     - name: Install dependencies
@@ -110,7 +110,7 @@ jobs:
         path: |
           gnu/config.cache
           gnu/src/getlimits
-        key: ${{ runner.os }}-gnu-config-${{ hashFiles('gnu/NEWS') }}-${{ hashFiles('gnu/configure') }}
+        key: ${{ runner.os }}-gnu-config-${{ hashFiles('gnu/NEWS') }}-${{ hashFiles('uutils/util/build-gnu.sh') }}
 
     ### Run tests as user
     - name: Run GNU tests
