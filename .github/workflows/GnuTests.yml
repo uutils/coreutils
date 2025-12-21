@@ -58,10 +58,8 @@ jobs:
         path: |
           gnu/config.cache
           gnu/src/getlimits
-        key: ${{ runner.os }}-gnu-config-${{ env.REPO_GNU_REF }}-${{ hashFiles('gnu/configure') }}
-        restore-keys: |
-          ${{ runner.os }}-gnu-config-${{ env.REPO_GNU_REF }}-
-          ${{ runner.os }}-gnu-config-
+        key: ${{ runner.os }}-gnu-config-${{ hashFiles('gnu/NEWS') }}-${{ hashFiles('gnu/configure') }}
+
     #### Build environment setup
     - name: Install dependencies
       shell: bash
@@ -112,7 +110,7 @@ jobs:
         path: |
           gnu/config.cache
           gnu/src/getlimits
-        key: ${{ runner.os }}-gnu-config-${{ env.REPO_GNU_REF }}-${{ hashFiles('gnu/configure') }}
+        key: ${{ runner.os }}-gnu-config-${{ hashFiles('gnu/NEWS') }}-${{ hashFiles('gnu/configure') }}
 
     ### Run tests as user
     - name: Run GNU tests
