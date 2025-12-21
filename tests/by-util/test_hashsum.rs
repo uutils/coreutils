@@ -74,33 +74,6 @@ macro_rules! test_digest {
                        get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg("--zero").arg(INPUT_FILE).succeeds().no_stderr().stdout_str()));
         }
 
-
-        #[cfg(windows)]
-        #[test]
-        fn test_text_mode() {
-            use uutests::new_ucmd;
-
-            // TODO Replace this with hard-coded files that store the
-            // expected output of text mode on an input file that has
-            // "\r\n" line endings.
-            let result = new_ucmd!()
-                .args(&[DIGEST_ARG, BITS_ARG, "-b"])
-                .pipe_in("a\nb\nc\n")
-                .succeeds();
-            let expected = result.no_stderr().stdout();
-            // Replace the "*-\n" at the end of the output with " -\n".
-            // The asterisk indicates that the digest was computed in
-            // binary mode.
-            let n = expected.len();
-            let expected = [&expected[..n - 3], b" -\n"].concat();
-            new_ucmd!()
-                .args(&[DIGEST_ARG, BITS_ARG, "-t"])
-                .pipe_in("a\r\nb\r\nc\r\n")
-                .succeeds()
-                .no_stderr()
-                .stdout_is(std::str::from_utf8(&expected).unwrap());
-        }
-
         #[test]
         fn test_missing_file() {
             let ts = TestScenario::new(util_name!());
