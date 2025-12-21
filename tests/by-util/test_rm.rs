@@ -773,6 +773,10 @@ fn test_current_or_parent_dir_rm4() {
         "rm: refusing to remove '.' or '..' directory: skipping 'd/./'",
         "rm: refusing to remove '.' or '..' directory: skipping 'd/..'",
         "rm: refusing to remove '.' or '..' directory: skipping 'd/../'",
+        "rm: refusing to remove '.' or '..' directory: skipping '.'",
+        "rm: refusing to remove '.' or '..' directory: skipping './'",
+        "rm: refusing to remove '.' or '..' directory: skipping '../'",
+        "rm: refusing to remove '.' or '..' directory: skipping '..'",
     ];
     let std_err_str = ts
         .ucmd()
@@ -782,6 +786,10 @@ fn test_current_or_parent_dir_rm4() {
         .arg("d/.////")
         .arg("d/..")
         .arg("d/../")
+        .arg(".")
+        .arg("./")
+        .arg("../")
+        .arg("..")
         .fails()
         .stderr_move_str();
 
@@ -804,6 +812,10 @@ fn test_current_or_parent_dir_rm4_windows() {
         "rm: refusing to remove '.' or '..' directory: skipping 'd\\.\\'",
         "rm: refusing to remove '.' or '..' directory: skipping 'd\\..'",
         "rm: refusing to remove '.' or '..' directory: skipping 'd\\..\\'",
+        "rm: refusing to remove '.' or '..' directory: skipping '.'",
+        "rm: refusing to remove '.' or '..' directory: skipping '.\\'",
+        "rm: refusing to remove '.' or '..' directory: skipping '..'",
+        "rm: refusing to remove '.' or '..' directory: skipping '..\\'",
     ];
     let std_err_str = ts
         .ucmd()
@@ -813,6 +825,10 @@ fn test_current_or_parent_dir_rm4_windows() {
         .arg("d\\.\\\\\\\\")
         .arg("d\\..")
         .arg("d\\..\\")
+        .arg(".")
+        .arg(".\\")
+        .arg("..")
+        .arg("..\\")
         .fails()
         .stderr_move_str();
 

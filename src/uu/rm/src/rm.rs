@@ -851,7 +851,9 @@ fn path_is_current_or_parent_directory(path: &Path) -> bool {
     let dir_separator = MAIN_SEPARATOR as u8;
     if let Ok(path_bytes) = path_str {
         return path_bytes == ([b'.'])
+            || path_bytes == ([b'.', dir_separator])
             || path_bytes == ([b'.', b'.'])
+            || path_bytes == ([b'.', b'.', dir_separator])
             || path_bytes.ends_with(&[dir_separator, b'.'])
             || path_bytes.ends_with(&[dir_separator, b'.', b'.'])
             || path_bytes.ends_with(&[dir_separator, b'.', dir_separator])
