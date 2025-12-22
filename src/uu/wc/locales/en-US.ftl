@@ -33,8 +33,8 @@ wc-standard-input = standard input
 wc-total = total
 
 # Debug messages
-wc-debug-hw-unavailable = wc: debug: hardware support unavailable on this CPU
-wc-debug-hw-using = wc: debug: using hardware support (features: { $features })
-wc-debug-hw-disabled-env = wc: debug: hardware support disabled by environment
-wc-debug-hw-disabled-glibc = wc: debug: hardware support disabled by GLIBC_TUNABLES ({ $features })
-wc-debug-hw-limited-glibc = wc: debug: hardware support limited by GLIBC_TUNABLES (disabled: { $disabled }; enabled: { $enabled })
+wc-debug-hw-unavailable = debug: hardware support unavailable on this CPU
+wc-debug-hw-using = debug: using hardware support (features: { $features })
+wc-debug-hw-disabled-env = debug: hardware support disabled by environment
+wc-debug-hw-disabled-glibc = debug: hardware support disabled by GLIBC_TUNABLES ({ $features })
+wc-debug-hw-limited-glibc = debug: hardware support limited by GLIBC_TUNABLES (disabled: { $disabled }; enabled: { $enabled })
