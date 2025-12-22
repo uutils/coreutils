@@ -28,7 +28,8 @@ echo "path_UUTILS='${path_UUTILS}'"
 echo "path_GNU='${path_GNU}'"
 
 # Use GNU nproc for *BSD
-MAKEFLAGS="${MAKEFLAGS} -j $(${path_GNU}/src/nproc)"
+NPROC=$(command -v ${path_GNU}/src/nproc||command -v nproc)
+MAKEFLAGS="${MAKEFLAGS} -j ${NPROC}"
 export MAKEFLAGS
 ###
 
