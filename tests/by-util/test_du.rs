@@ -1092,7 +1092,7 @@ fn test_du_threshold() {
     at.write("subdir/links/bigfile.txt", &"x".repeat(10000)); // ~10K file
     at.write("subdir/deeper/deeper_dir/smallfile.txt", "small"); // small file
 
-    let threshold = if cfg!(windows) { "7K" } else { "10K" };
+    let threshold = "10K";
 
     ts.ucmd()
         .arg("--apparent-size")
@@ -1120,11 +1120,7 @@ fn test_du_binary_threshold() {
     at.write("subdir/links/bigfile.txt", &"x".repeat(10000));
     at.write("subdir/deeper/deeper_dir/smallfile.txt", "small");
 
-    let threshold_bin = if cfg!(windows) {
-        "0b1101110000000"
-    } else {
-        "0b10011100010000"
-    };
+    let threshold_bin = "0b10011100010000";
 
     ts.ucmd()
         .arg("--apparent-size")
