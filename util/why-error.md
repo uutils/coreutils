@@ -7,6 +7,7 @@ This file documents why some GNU tests are failing:
 * dd/nocache_eof.sh
 * dd/skip-seek-past-file.sh - https://github.com/uutils/coreutils/issues/7216
 * dd/stderr.sh
+* tests/df/no-mtab-status.sh - https://github.com/uutils/coreutils/issues/9760
 * fmt/non-space.sh
 * help/help-version-getopt.sh
 * help/help-version.sh
