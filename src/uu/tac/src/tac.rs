@@ -8,13 +8,9 @@ mod error;
 
 use clap::{Arg, ArgAction, Command};
 use memchr::memmem;
-use memmap2::Mmap;
 use std::ffi::OsString;
 use std::io::{BufWriter, Read, Write, stdin, stdout};
-use std::{
-    fs::{File, read},
-    path::Path,
-};
+use std::{fs::read, path::Path};
 use uucore::error::UError;
 use uucore::error::UResult;
 use uucore::{format_usage, show};
@@ -233,23 +229,17 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
     };
 
     for filename in filenames {
-        let mmap;
         let buf;
 
         let data: &[u8] = if filename == "-" {
-            if let Some(mmap1) = try_mmap_stdin() {
-                mmap = mmap1;
-                &mmap
-            } else {
-                let mut buf1 = Vec::new();
-                if let Err(e) = stdin().read_to_end(&mut buf1) {
-                    let e: Box<dyn UError> = TacError::ReadError(OsString::from("stdin"), e).into();
-                    show!(e);
-                    continue;
-                }
-                buf = buf1;
-                &buf
+            let mut buf1 = Vec::new();
+            if let Err(e) = stdin().read_to_end(&mut buf1) {
+                let e: Box<dyn UError> = TacError::ReadError(OsString::from("stdin"), e).into();
+                show!(e);
+                continue;
             }
+            buf = buf1;
+            &buf
         } else {
             let path = Path::new(filename);
             if path.is_dir() {
@@ -264,20 +254,15 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
                 continue;
             }
 
-            if let Some(mmap1) = try_mmap_path(path) {
-                mmap = mmap1;
-                &mmap
-            } else {
-                match read(path) {
-                    Ok(buf1) => {
-                        buf = buf1;
-                        &buf
-                    }
-                    Err(e) => {
-                        let e: Box<dyn UError> = TacError::ReadError(filename.clone(), e).into();
-                        show!(e);
-                        continue;
-                    }
+            match read(path) {
+                Ok(buf1) => {
+                    buf = buf1;
+                    &buf
+                }
+                Err(e) => {
+                    let e: Box<dyn UError> = TacError::ReadError(filename.clone(), e).into();
+                    show!(e);
+                    continue;
                 }
             }
         };
@@ -295,20 +280,4 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
         }
     }
     Ok(())
-}
-
-fn try_mmap_stdin() -> Option<Mmap> {
-    // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
-    // and our process will be terminated, thus preventing access of invalid memory.
-    unsafe { Mmap::map(&stdin()).ok() }
-}
-
-fn try_mmap_path(path: &Path) -> Option<Mmap> {
-    let file = File::open(path).ok()?;
-
-    // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
-    // and our process will be terminated, thus preventing access of invalid memory.
-    let mmap = unsafe { Mmap::map(&file).ok()? };
-
-    Some(mmap)
 }
