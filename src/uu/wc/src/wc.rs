@@ -828,14 +828,14 @@ fn hardware_feature_label(feature: HardwareFeature) -> &'static str {
     }
 }
 
-fn is_wc_simd_runtime_feature(feature: &HardwareFeature) -> bool {
+fn is_simd_runtime_feature(feature: &HardwareFeature) -> bool {
     matches!(
         feature,
         HardwareFeature::Avx2 | HardwareFeature::Sse2 | HardwareFeature::Asimd
     )
 }
 
-fn is_wc_simd_debug_feature(feature: &HardwareFeature) -> bool {
+fn is_simd_debug_feature(feature: &HardwareFeature) -> bool {
     matches!(
         feature,
         HardwareFeature::Avx512
@@ -845,36 +845,44 @@ fn is_wc_simd_debug_feature(feature: &HardwareFeature) -> bool {
     )
 }
 
-fn wc_simd_enabled_features(policy: &SimdPolicy) -> Vec<HardwareFeature> {
-    policy
+struct WcSimdFeatures {
+    enabled: Vec<HardwareFeature>,
+    disabled: Vec<HardwareFeature>,
+    disabled_runtime: Vec<HardwareFeature>,
+}
+
+fn wc_simd_features(policy: &SimdPolicy) -> WcSimdFeatures {
+    let enabled = policy
         .iter_features()
-        .filter(is_wc_simd_runtime_feature)
-        .collect()
-}
+        .filter(is_simd_runtime_feature)
+        .collect();
 
-fn wc_simd_disabled_features(policy: &SimdPolicy) -> Vec<HardwareFeature> {
-    policy
-        .disabled_features()
-        .into_iter()
-        .filter(is_wc_simd_debug_feature)
-        .collect()
-}
+    let mut disabled = Vec::new();
+    let mut disabled_runtime = Vec::new();
+    for feature in policy.disabled_features() {
+        if is_simd_debug_feature(&feature) {
+            disabled.push(feature);
+        }
+        if is_simd_runtime_feature(&feature) {
+            disabled_runtime.push(feature);
+        }
+    }
 
-fn wc_simd_disabled_runtime_features(policy: &SimdPolicy) -> Vec<HardwareFeature> {
-    policy
-        .disabled_features()
-        .into_iter()
-        .filter(is_wc_simd_runtime_feature)
-        .collect()
+    WcSimdFeatures {
+        enabled,
+        disabled,
+        disabled_runtime,
+    }
 }
 
 pub(crate) fn wc_simd_allowed(policy: &SimdPolicy) -> bool {
-    if !wc_simd_disabled_runtime_features(policy).is_empty() {
+    let disabled_features = policy.disabled_features();
+    if disabled_features.iter().any(is_simd_runtime_feature) {
         return false;
     }
     policy
         .iter_features()
-        .any(|feature| is_wc_simd_runtime_feature(&feature))
+        .any(|feature| is_simd_runtime_feature(&feature))
 }
 
 fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
@@ -888,41 +896,46 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
 
     if settings.debug {
         let policy = SimdPolicy::detect();
-        let enabled_features = wc_simd_enabled_features(policy);
-        let disabled_features = wc_simd_disabled_features(policy);
-        let disabled_runtime_features = wc_simd_disabled_runtime_features(policy);
+        let features = wc_simd_features(policy);
 
-        let enabled: Vec<&'static str> = enabled_features
+        let enabled: Vec<&'static str> = features
+            .enabled
             .iter()
             .copied()
             .map(hardware_feature_label)
             .collect();
-        let disabled: Vec<&'static str> = disabled_features
+        let disabled: Vec<&'static str> = features
+            .disabled
             .iter()
             .copied()
             .map(hardware_feature_label)
             .collect();
 
-        let runtime_disabled = !disabled_runtime_features.is_empty();
+        let enabled_empty = enabled.is_empty();
+        let disabled_empty = disabled.is_empty();
+        let runtime_disabled = !features.disabled_runtime.is_empty();
 
-        match (enabled.is_empty(), runtime_disabled, disabled.is_empty()) {
-            (true, false, _) => eprintln!("{}", translate!("wc-debug-hw-unavailable")),
-            (_, true, _) => eprintln!(
+        if enabled_empty && !runtime_disabled {
+            eprintln!("{}", translate!("wc-debug-hw-unavailable"));
+        } else if runtime_disabled {
+            eprintln!(
                 "{}",
                 translate!("wc-debug-hw-disabled-glibc", "features" => disabled.join(", "))
-            ),
-            (false, false, true) => eprintln!(
+            );
+        } else if !enabled_empty && disabled_empty {
+            eprintln!(
                 "{}",
                 translate!("wc-debug-hw-using", "features" => enabled.join(", "))
-            ),
-            (false, false, false) => eprintln!(
+            );
+        } else {
+            eprintln!(
                 "{}",
                 translate!(
                     "wc-debug-hw-limited-glibc",
                     "disabled" => disabled.join(", "),
                     "enabled" => enabled.join(", ")
                 )
-            ),
+            );
         }
     }
 
