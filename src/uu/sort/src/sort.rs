@@ -2115,16 +2115,12 @@ pub enum GeneralBigDecimalParseResult {
 /// Using a [`GeneralBigDecimalParseResult`] instead of [`ExtendedBigDecimal`] is necessary to correctly order floats.
 #[inline(always)]
 fn general_bd_parse(a: &[u8], decimal_pt: u8) -> GeneralBigDecimalParseResult {
-    let mut parsed_bytes = Vec::new();
-    let input = if decimal_pt == DECIMAL_PT {
-        a
-    } else {
-        parsed_bytes = a
-            .iter()
+    let parsed_bytes = (decimal_pt != DECIMAL_PT).then(|| {
+        a.iter()
             .map(|&b| if b == decimal_pt { DECIMAL_PT } else { b })
-            .collect::<Vec<_>>();
-        parsed_bytes.as_slice()
-    };
+            .collect::<Vec<_>>()
+    });
+    let input = parsed_bytes.as_deref().unwrap_or(a);
 
     // The string should be valid ASCII to be parsed.
     let Ok(a) = std::str::from_utf8(input) else {
