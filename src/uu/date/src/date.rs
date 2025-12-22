@@ -115,6 +115,12 @@ impl From<&str> for Rfc3339Format {
     }
 }
 
+enum DayDelta {
+    Same,
+    Previous,
+    Next
+}
+
 /// Parse military timezone with optional hour offset.
 /// Pattern: single letter (a-z except j) optionally followed by 1-2 digits.
 /// Returns Some(total_hours_in_utc) or None if pattern doesn't match.
@@ -127,7 +133,7 @@ impl From<&str> for Rfc3339Format {
 ///
 /// The hour offset from digits is added to the base military timezone offset.
 /// Examples: "m" -> 12 (noon UTC), "m9" -> 21 (9pm UTC), "a5" -> 4 (4am UTC next day)
-fn parse_military_timezone_with_offset(s: &str) -> Option<i32> {
+fn parse_military_timezone_with_offset(s: &str) -> Option<(i32, DayDelta)> {
     if s.is_empty() || s.len() > 3 {
         return None;
     }
@@ -159,11 +165,17 @@ fn parse_military_timezone_with_offset(s: &str) -> Option<i32> {
         _ => return None,
     };
 
+    let day_delta = match additional_hours - tz_offset {
+        h if h < 0 => DayDelta::Previous,
+        h if h >= 24 => DayDelta::Next,
+        _ => DayDelta::Same,
+    };
+
     // Calculate total hours: midnight (0) + tz_offset + additional_hours
     // Midnight in timezone X converted to UTC
     let total_hours = (0 - tz_offset + additional_hours).rem_euclid(24);
 
-    Some(total_hours)
+    Some((total_hours, day_delta))
 }
 
 #[uucore::main]
@@ -305,11 +317,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     format!("{date_part} 00:00 {offset}")
                 };
                 parse_date(composed)
-            } else if let Some(total_hours) = military_tz_with_offset {
+            } else if let Some((total_hours, day_delta)) = military_tz_with_offset {
                 // Military timezone with optional hour offset
                 // Convert to UTC time: midnight + military_tz_offset + additional_hours
-                let date_part =
-                    strtime::format("%F", &now).unwrap_or_else(|_| String::from("1970-01-01"));
+                let date_part = match day_delta {
+                    DayDelta::Same => {
+                        strtime::format("%F", &now).unwrap_or_else(|_| String::from("1970-01-01"))
+                    },
+                    DayDelta::Next => {
+                        strtime::format("%F", &now.tomorrow().unwrap()).unwrap_or_else(|_| String::from("1970-01-01"))
+                    },
+                    DayDelta::Previous => {
+                        strtime::format("%F", &now.yesterday().unwrap()).unwrap_or_else(|_| String::from("1970-01-01"))
+                    },
+                };
                 let composed = format!("{date_part} {total_hours:02}:00:00 +00:00");
                 parse_date(composed)
             } else if is_pure_digits {
