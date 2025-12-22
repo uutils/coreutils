@@ -25,7 +25,6 @@ uucore = { workspace = true, features = [
   "sum",
   "hardware",
 ] }
-hex = { workspace = true }
 fluent = { workspace = true }
 
 [dev-dependencies]
