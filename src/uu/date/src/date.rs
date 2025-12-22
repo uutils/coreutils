@@ -115,6 +115,7 @@ impl From<&str> for Rfc3339Format {
     }
 }
 
+#[derive(PartialEq, Debug)]
 enum DayDelta {
     Same,
     Previous,
@@ -837,11 +838,11 @@ mod tests {
     #[test]
     fn test_parse_military_timezone_with_offset() {
         // Valid cases: letter only, letter + digit, uppercase
-        assert_eq!(parse_military_timezone_with_offset("m"), Some(12)); // UTC+12 -> 12:00 UTC
-        assert_eq!(parse_military_timezone_with_offset("m9"), Some(21)); // 12 + 9 = 21
-        assert_eq!(parse_military_timezone_with_offset("a5"), Some(4)); // 23 + 5 = 28 % 24 = 4
-        assert_eq!(parse_military_timezone_with_offset("z"), Some(0)); // UTC+0 -> 00:00 UTC
-        assert_eq!(parse_military_timezone_with_offset("M9"), Some(21)); // Uppercase works
+        assert_eq!(parse_military_timezone_with_offset("m"), Some((12, DayDelta::Previous))); // UTC+12 -> 12:00 UTC
+        assert_eq!(parse_military_timezone_with_offset("m9"), Some((21, DayDelta::Previous))); // 12 + 9 = 21
+        assert_eq!(parse_military_timezone_with_offset("a5"), Some((4, DayDelta::Same))); // 23 + 5 = 28 % 24 = 4
+        assert_eq!(parse_military_timezone_with_offset("z"), Some((0, DayDelta::Same))); // UTC+0 -> 00:00 UTC
+        assert_eq!(parse_military_timezone_with_offset("M9"), Some((21, DayDelta::Previous))); // Uppercase works
 
         // Invalid cases: 'j' reserved, empty, too long, starts with digit
         assert_eq!(parse_military_timezone_with_offset("j"), None); // Reserved for local time
