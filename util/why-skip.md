@@ -7,7 +7,6 @@
 * tests/rm/rm-readdir-fail.sh
 * tests/rm/r-root.sh
 * tests/df/skip-duplicates.sh
-* tests/df/no-mtab-status.sh
 
 = LD_PRELOAD was ineffective? =
 * tests/cp/nfs-removal-race.sh
