@@ -7,7 +7,6 @@
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
-use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process;
 use tempfile::TempDir;
@@ -188,11 +187,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let options =
         ProgramOptions::try_from(&matches).map_err(|e| UUsageError::new(125, e.to_string()))?;
 
-    let mut command_values = matches.get_many::<OsString>(options::COMMAND).unwrap();
-    let mut command = process::Command::new(command_values.next().unwrap());
+    let mut command_values = matches
+        .get_many::<OsString>(options::COMMAND)
+        .ok_or_else(|| UUsageError::new(125, "no command specified".to_string()))?;
+    let Some(first_command) = command_values.next() else {
+        return Err(UUsageError::new(125, "no command specified".to_string()));
+    };
+    let mut command = process::Command::new(first_command);
     let command_params: Vec<&OsString> = command_values.collect();
 
-    let tmp_dir = tempdir().unwrap();
+    let tmp_dir = tempdir()
+        .map_err(|e| UUsageError::new(125, format!("failed to create temp directory: {e}")))?;
     let (preload_env, libstdbuf) = get_preload_env(&tmp_dir)?;
     command.env(preload_env, libstdbuf);
     set_command_env(&mut command, "_STDBUF_I", &options.stdin);
@@ -229,10 +234,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Err(i.into())
             }
         }
-        None => Err(USimpleError::new(
-            1,
-            translate!("stdbuf-error-killed-by-signal", "signal" => status.signal().unwrap()),
-        )),
+        None => {
+            #[cfg(unix)]
+            {
+                use std::os::unix::process::ExitStatusExt;
+                let signal_msg = status
+                    .signal()
+                    .map_or_else(|| "unknown".to_string(), |s| s.to_string());
+                Err(USimpleError::new(
+                    1,
+                    translate!("stdbuf-error-killed-by-signal", "signal" => signal_msg),
+                ))
+            }
+            #[cfg(not(unix))]
+            {
+                Err(USimpleError::new(
+                    1,
+                    "process terminated abnormally".to_string(),
+                ))
+            }
+        }
     }
 }
 

@@ -244,6 +244,52 @@ fn test_install_mode_symbolic() {
 }
 
 #[test]
+fn test_install_mode_comma_separated() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "target_dir";
+    let file = "source_file";
+    // Test comma-separated mode like chmod: ug+rwX,o+rX
+    let mode_arg = "--mode=ug+rwX,o+rX";
+
+    at.touch(file);
+    at.mkdir(dir);
+    ucmd.arg(file).arg(dir).arg(mode_arg).succeeds().no_stderr();
+
+    let dest_file = &format!("{dir}/{file}");
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(dest_file));
+    let permissions = at.metadata(dest_file).permissions();
+    // ug+rwX: For files, X only adds execute if file already has execute (it doesn't here, starting at 0)
+    //         So this adds rw to user and group = 0o660
+    // o+rX: For files, X doesn't add execute, so this adds r to others = 0o004
+    // Total: 0o664 for file (0o100_664)
+    assert_eq!(0o100_664_u32, PermissionsExt::mode(&permissions));
+}
+
+#[test]
+fn test_install_mode_comma_separated_directory() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir = "test_dir";
+    // Test comma-separated mode for directory creation: ug+rwX,o+rX
+    let mode_arg = "--mode=ug+rwX,o+rX";
+
+    scene
+        .ucmd()
+        .arg("-d")
+        .arg(dir)
+        .arg(mode_arg)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.dir_exists(dir));
+    let permissions = at.metadata(dir).permissions();
+    // ug+rwX sets user and group to rwx (0o770), o+rX sets others to r-x (0o005)
+    // Total: 0o775 for directory (0o040_775)
+    assert_eq!(0o040_775_u32, PermissionsExt::mode(&permissions));
+}
+
+#[test]
 fn test_install_mode_symbolic_ignore_umask() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "target_dir";
@@ -1174,6 +1220,30 @@ fn test_install_backup_short_custom_suffix() {
     scene
         .ucmd()
         .arg("-b")
+        .arg(format!("--suffix={suffix}"))
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(format!("{file_b}{suffix}")));
+}
+
+#[test]
+fn test_install_suffix_without_backup_option() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_install_backup_custom_suffix_file_a";
+    let file_b = "test_install_backup_custom_suffix_file_b";
+    let suffix = "super-suffix-of-the-century";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    scene
+        .ucmd()
         .arg(format!("--suffix={suffix}"))
         .arg(file_a)
         .arg(file_b)

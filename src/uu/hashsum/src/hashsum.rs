@@ -3,53 +3,28 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) algo, algoname, regexes, nread, nonames
+// spell-checker:ignore (ToDO) algo, algoname, bitlen, regexes, nread
 
-use clap::ArgAction;
-use clap::builder::ValueParser;
-use clap::value_parser;
-use clap::{Arg, ArgMatches, Command};
 use std::ffi::{OsStr, OsString};
-use std::fs::File;
-use std::io::{BufReader, Read, stdin};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
-use uucore::checksum::ChecksumError;
-use uucore::checksum::ChecksumOptions;
-use uucore::checksum::ChecksumVerbose;
-use uucore::checksum::HashAlgorithm;
-use uucore::checksum::calculate_blake2b_length;
-use uucore::checksum::create_sha3;
-use uucore::checksum::detect_algo;
-use uucore::checksum::digest_reader;
-use uucore::checksum::escape_filename;
-use uucore::checksum::perform_checksum_validation;
-use uucore::error::{UResult, strip_errno};
-use uucore::format_usage;
-use uucore::sum::{Digest, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
-use uucore::translate;
+
+use clap::builder::ValueParser;
+use clap::{Arg, ArgAction, ArgMatches, Command};
+
+use uucore::checksum::compute::{
+    ChecksumComputeOptions, figure_out_output_format, perform_checksum_computation,
+};
+use uucore::checksum::validate::{
+    ChecksumValidateOptions, ChecksumVerbose, perform_checksum_validation,
+};
+use uucore::checksum::{AlgoKind, ChecksumError, SizedAlgoKind, calculate_blake2b_length_str};
+use uucore::error::UResult;
+use uucore::line_ending::LineEnding;
+use uucore::{format_usage, translate};
 
 const NAME: &str = "hashsum";
-// Using the same read buffer size as GNU
-const READ_BUFFER_SIZE: usize = 32 * 1024;
-
-struct Options<'a> {
-    algoname: &'static str,
-    digest: Box<dyn Digest + 'static>,
-    binary: bool,
-    binary_name: &'a str,
-    //check: bool,
-    tag: bool,
-    nonames: bool,
-    //status: bool,
-    //quiet: bool,
-    //strict: bool,
-    //warn: bool,
-    output_bits: usize,
-    zero: bool,
-    //ignore_missing: bool,
-}
 
 /// Creates a hasher instance based on the command-line flags.
 ///
@@ -63,10 +38,10 @@ struct Options<'a> {
 /// the output length in bits or an Err if multiple hash algorithms are specified or if a
 /// required flag is missing.
 #[allow(clippy::cognitive_complexity)]
-fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
-    let mut alg: Option<HashAlgorithm> = None;
+fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<(AlgoKind, Option<usize>)> {
+    let mut alg: Option<(AlgoKind, Option<usize>)> = None;
 
-    let mut set_or_err = |new_alg: HashAlgorithm| -> UResult<()> {
+    let mut set_or_err = |new_alg: (AlgoKind, Option<usize>)| -> UResult<()> {
         if alg.is_some() {
             return Err(ChecksumError::CombineMultipleAlgorithms.into());
         }
@@ -75,80 +50,57 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
     };
 
     if matches.get_flag("md5") {
-        set_or_err(detect_algo("md5sum", None)?)?;
+        set_or_err((AlgoKind::Md5, None))?;
     }
     if matches.get_flag("sha1") {
-        set_or_err(detect_algo("sha1sum", None)?)?;
+        set_or_err((AlgoKind::Sha1, None))?;
     }
     if matches.get_flag("sha224") {
-        set_or_err(detect_algo("sha224sum", None)?)?;
+        set_or_err((AlgoKind::Sha224, None))?;
     }
     if matches.get_flag("sha256") {
-        set_or_err(detect_algo("sha256sum", None)?)?;
+        set_or_err((AlgoKind::Sha256, None))?;
     }
     if matches.get_flag("sha384") {
-        set_or_err(detect_algo("sha384sum", None)?)?;
+        set_or_err((AlgoKind::Sha384, None))?;
     }
     if matches.get_flag("sha512") {
-        set_or_err(detect_algo("sha512sum", None)?)?;
+        set_or_err((AlgoKind::Sha512, None))?;
     }
     if matches.get_flag("b2sum") {
-        set_or_err(detect_algo("b2sum", None)?)?;
+        set_or_err((AlgoKind::Blake2b, None))?;
     }
     if matches.get_flag("b3sum") {
-        set_or_err(detect_algo("b3sum", None)?)?;
+        set_or_err((AlgoKind::Blake3, None))?;
     }
     if matches.get_flag("sha3") {
         match matches.get_one::<usize>("bits") {
-            Some(bits) => set_or_err(create_sha3(*bits)?)?,
+            Some(bits @ (224 | 256 | 384 | 512)) => set_or_err((AlgoKind::Sha3, Some(*bits)))?,
+            Some(bits) => return Err(ChecksumError::InvalidLengthForSha(bits.to_string()).into()),
             None => return Err(ChecksumError::LengthRequired("SHA3".into()).into()),
         }
     }
     if matches.get_flag("sha3-224") {
-        set_or_err(HashAlgorithm {
-            name: "SHA3-224",
-            create_fn: Box::new(|| Box::new(Sha3_224::new())),
-            bits: 224,
-        })?;
+        set_or_err((AlgoKind::Sha3, Some(224)))?;
     }
     if matches.get_flag("sha3-256") {
-        set_or_err(HashAlgorithm {
-            name: "SHA3-256",
-            create_fn: Box::new(|| Box::new(Sha3_256::new())),
-            bits: 256,
-        })?;
+        set_or_err((AlgoKind::Sha3, Some(256)))?;
     }
     if matches.get_flag("sha3-384") {
-        set_or_err(HashAlgorithm {
-            name: "SHA3-384",
-            create_fn: Box::new(|| Box::new(Sha3_384::new())),
-            bits: 384,
-        })?;
+        set_or_err((AlgoKind::Sha3, Some(384)))?;
     }
     if matches.get_flag("sha3-512") {
-        set_or_err(HashAlgorithm {
-            name: "SHA3-512",
-            create_fn: Box::new(|| Box::new(Sha3_512::new())),
-            bits: 512,
-        })?;
+        set_or_err((AlgoKind::Sha3, Some(512)))?;
     }
     if matches.get_flag("shake128") {
         match matches.get_one::<usize>("bits") {
-            Some(bits) => set_or_err(HashAlgorithm {
-                name: "SHAKE128",
-                create_fn: Box::new(|| Box::new(Shake128::new())),
-                bits: *bits,
-            })?,
+            Some(bits) => set_or_err((AlgoKind::Shake128, Some(*bits)))?,
             None => return Err(ChecksumError::LengthRequired("SHAKE128".into()).into()),
         }
     }
     if matches.get_flag("shake256") {
         match matches.get_one::<usize>("bits") {
-            Some(bits) => set_or_err(HashAlgorithm {
-                name: "SHAKE256",
-                create_fn: Box::new(|| Box::new(Shake256::new())),
-                bits: *bits,
-            })?,
+            Some(bits) => set_or_err((AlgoKind::Shake256, Some(*bits)))?,
             None => return Err(ChecksumError::LengthRequired("SHAKE256".into()).into()),
         }
     }
@@ -187,21 +139,21 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     //        least somewhat better from a user's perspective.
     let matches = uucore::clap_localization::handle_clap_result(command, args)?;
 
-    let input_length: Option<&usize> = if binary_name == "b2sum" {
-        matches.get_one::<usize>(options::LENGTH)
+    let input_length: Option<&String> = if binary_name == "b2sum" {
+        matches.get_one::<String>(options::LENGTH)
     } else {
         None
     };
 
     let length = match input_length {
-        Some(length) => calculate_blake2b_length(*length)?,
+        Some(length) => calculate_blake2b_length_str(length)?,
         None => None,
     };
 
-    let algo = if is_hashsum_bin {
+    let (algo_kind, length) = if is_hashsum_bin {
         create_algorithm_from_flags(&matches)?
     } else {
-        detect_algo(&binary_name, length)?
+        (AlgoKind::from_bin_name(&binary_name)?, length)
     };
 
     let binary = if matches.get_flag("binary") {
@@ -213,9 +165,9 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     };
     let check = matches.get_flag("check");
     let status = matches.get_flag("status");
-    let quiet = matches.get_flag("quiet") || status;
+    let quiet = matches.get_flag("quiet");
     let strict = matches.get_flag("strict");
-    let warn = matches.get_flag("warn") && !status;
+    let warn = matches.get_flag("warn");
     let ignore_missing = matches.get_flag("ignore-missing");
 
     if ignore_missing && !check {
@@ -227,16 +179,14 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         // on Windows, allow --binary/--text to be used with --check
         // and keep the behavior of defaulting to binary
         #[cfg(not(windows))]
-        let binary = {
+        {
             let text_flag = matches.get_flag("text");
             let binary_flag = matches.get_flag("binary");
 
             if binary_flag || text_flag {
                 return Err(ChecksumError::BinaryTextConflict.into());
             }
-
-            false
-        };
+        }
 
         // Execute the checksum validation based on the presence of files or the use of stdin
         // Determine the source of input: a list of files or stdin.
@@ -247,52 +197,45 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
 
         let verbose = ChecksumVerbose::new(status, quiet, warn);
 
-        let opts = ChecksumOptions {
-            binary,
+        let opts = ChecksumValidateOptions {
             ignore_missing,
             strict,
             verbose,
         };
 
         // Execute the checksum validation
-        return perform_checksum_validation(
-            input.iter().copied(),
-            Some(algo.name),
-            Some(algo.bits),
-            opts,
-        );
+        return perform_checksum_validation(input.iter().copied(), Some(algo_kind), length, opts);
     } else if quiet {
         return Err(ChecksumError::QuietNotCheck.into());
     } else if strict {
         return Err(ChecksumError::StrictNotCheck.into());
     }
 
-    let nonames = *matches
-        .try_get_one("no-names")
-        .unwrap_or(None)
-        .unwrap_or(&false);
-    let zero = matches.get_flag("zero");
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag("zero"));
 
-    let opts = Options {
-        algoname: algo.name,
-        digest: (algo.create_fn)(),
-        output_bits: algo.bits,
-        binary,
-        binary_name: &binary_name,
-        tag: matches.get_flag("tag"),
-        nonames,
-        //status,
-        //quiet,
-        //warn,
-        zero,
-        //ignore_missing,
+    let algo = SizedAlgoKind::from_unsized(algo_kind, length)?;
+
+    let opts = ChecksumComputeOptions {
+        algo_kind: algo,
+        output_format: figure_out_output_format(
+            algo,
+            matches.get_flag(options::TAG),
+            binary,
+            /* raw */ false,
+            /* base64: */ false,
+        ),
+        line_ending,
     };
 
+    let files = matches.get_many::<OsString>(options::FILE).map_or_else(
+        // No files given, read from stdin.
+        || Box::new(iter::once(OsStr::new("-"))) as Box<dyn Iterator<Item = &OsStr>>,
+        // At least one file given, read from them.
+        |files| Box::new(files.map(OsStr::new)) as Box<dyn Iterator<Item = &OsStr>>,
+    );
+
     // Show the hashsum of the input
-    match matches.get_many::<OsString>(options::FILE) {
-        Some(files) => hashsum(opts, files.map(|f| f.as_os_str())),
-        None => hashsum(opts, iter::once(OsStr::new("-"))),
-    }
+    perform_checksum_computation(opts, files)
 }
 
 mod options {
@@ -429,24 +372,10 @@ fn uu_app_opt_length(command: Command) -> Command {
     command.arg(
         Arg::new(options::LENGTH)
             .long(options::LENGTH)
-            .value_parser(value_parser!(usize))
             .short('l')
             .help(translate!("hashsum-help-length"))
             .overrides_with(options::LENGTH)
             .action(ArgAction::Set),
-    )
-}
-
-pub fn uu_app_b3sum() -> Command {
-    uu_app_b3sum_opts(uu_app_common())
-}
-
-fn uu_app_b3sum_opts(command: Command) -> Command {
-    command.arg(
-        Arg::new("no-names")
-            .long("no-names")
-            .help(translate!("hashsum-help-no-names"))
-            .action(ArgAction::SetTrue),
     )
 }
 
@@ -467,7 +396,7 @@ fn uu_app_opt_bits(command: Command) -> Command {
 }
 
 pub fn uu_app_custom() -> Command {
-    let mut command = uu_app_b3sum_opts(uu_app_opt_bits(uu_app_common()));
+    let mut command = uu_app_opt_bits(uu_app_common());
     let algorithms = &[
         ("md5", translate!("hashsum-help-md5")),
         ("sha1", translate!("hashsum-help-sha1")),
@@ -522,88 +451,4 @@ fn uu_app(binary_name: &str) -> (Command, bool) {
     };
 
     (command, is_hashsum_bin)
-}
-
-#[allow(clippy::cognitive_complexity)]
-fn hashsum<'a, I>(mut options: Options, files: I) -> UResult<()>
-where
-    I: Iterator<Item = &'a OsStr>,
-{
-    let binary_marker = if options.binary { "*" } else { " " };
-    let mut err_found = None;
-    for filename in files {
-        let filename = Path::new(filename);
-
-        let mut file = BufReader::with_capacity(
-            READ_BUFFER_SIZE,
-            if filename == OsStr::new("-") {
-                Box::new(stdin()) as Box<dyn Read>
-            } else {
-                let file_buf = match File::open(filename) {
-                    Ok(f) => f,
-                    Err(e) => {
-                        eprintln!(
-                            "{}: {}: {}",
-                            options.binary_name,
-                            filename.to_string_lossy(),
-                            strip_errno(&e)
-                        );
-                        err_found = Some(ChecksumError::Io(e));
-                        continue;
-                    }
-                };
-                Box::new(file_buf) as Box<dyn Read>
-            },
-        );
-
-        let sum = match digest_reader(
-            &mut options.digest,
-            &mut file,
-            options.binary,
-            options.output_bits,
-        ) {
-            Ok((sum, _)) => sum,
-            Err(e) => {
-                eprintln!(
-                    "{}: {}: {}",
-                    options.binary_name,
-                    filename.to_string_lossy(),
-                    strip_errno(&e)
-                );
-                err_found = Some(ChecksumError::Io(e));
-                continue;
-            }
-        };
-
-        let (escaped_filename, prefix) = escape_filename(filename);
-        if options.tag {
-            if options.algoname == "blake2b" {
-                if options.digest.output_bits() == 512 {
-                    println!("BLAKE2b ({escaped_filename}) = {sum}");
-                } else {
-                    // special case for BLAKE2b with non-default output length
-                    println!(
-                        "BLAKE2b-{} ({escaped_filename}) = {sum}",
-                        options.digest.output_bits()
-                    );
-                }
-            } else {
-                println!(
-                    "{prefix}{} ({escaped_filename}) = {sum}",
-                    options.algoname.to_ascii_uppercase()
-                );
-            }
-        } else if options.nonames {
-            println!("{sum}");
-        } else if options.zero {
-            // with zero, we don't escape the filename
-            print!("{sum} {binary_marker}{}\0", filename.display());
-        } else {
-            println!("{prefix}{sum} {binary_marker}{escaped_filename}");
-        }
-    }
-    match err_found {
-        None => Ok(()),
-        Some(e) => Err(Box::new(e)),
-    }
 }

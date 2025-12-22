@@ -108,6 +108,33 @@ fn test_invalid_buffer_size() {
 }
 
 #[test]
+fn test_legacy_plus_minus_accepts_when_modern_posix2() {
+    let size_max = usize::MAX;
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input.txt", "aa\nbb\n");
+
+    ucmd.env("_POSIX2_VERSION", "200809")
+        .arg(format!("+0.{size_max}R"))
+        .arg("input.txt")
+        .succeeds()
+        .stdout_is("aa\nbb\n");
+}
+
+#[test]
+fn test_legacy_plus_minus_accepts_with_size_max() {
+    let size_max = usize::MAX;
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input.txt", "aa\nbb\n");
+
+    ucmd.env("_POSIX2_VERSION", "200809")
+        .arg("+1")
+        .arg(format!("-1.{size_max}R"))
+        .arg("input.txt")
+        .succeeds()
+        .stdout_is("aa\nbb\n");
+}
+
+#[test]
 fn test_ext_sort_stable() {
     new_ucmd!()
         .arg("-n")
@@ -1002,32 +1029,31 @@ fn test_compress_merge() {
 #[test]
 #[cfg(not(target_os = "android"))]
 fn test_compress_fail() {
+    let result = new_ucmd!()
+        .args(&[
+            "ext_sort.txt",
+            "-n",
+            "--compress-program",
+            "nonexistent-program",
+            "-S",
+            "10",
+        ])
+        .succeeds();
+
     #[cfg(not(windows))]
-    new_ucmd!()
-        .args(&[
-            "ext_sort.txt",
-            "-n",
-            "--compress-program",
-            "nonexistent-program",
-            "-S",
-            "10",
-        ])
-        .fails()
-        .stderr_only("sort: couldn't execute compress program: errno 2\n");
-    // With coverage, it fails with a different error:
-    // "thread 'main' panicked at 'called `Option::unwrap()` on ...
-    // So, don't check the output
+    result.stderr_contains(
+        "sort: could not run compress program 'nonexistent-program': No such file or directory",
+    );
+
     #[cfg(windows)]
-    new_ucmd!()
-        .args(&[
-            "ext_sort.txt",
-            "-n",
-            "--compress-program",
-            "nonexistent-program",
-            "-S",
-            "10",
-        ])
-        .fails();
+    result.stderr_contains("could not run compress program");
+
+    // Check that it still produces correct sorted output to stdout
+    let expected = new_ucmd!()
+        .args(&["ext_sort.txt", "-n"])
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(result.stdout_str(), expected);
 }
 
 #[test]
