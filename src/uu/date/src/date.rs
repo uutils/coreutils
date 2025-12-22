@@ -298,9 +298,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             } else if let Some(total_hours) = military_tz_with_offset {
                 // Military timezone with optional hour offset
                 // Convert to UTC time: midnight + military_tz_offset + additional_hours
-                let yesterday = now.checked_sub(1.day()).unwrap_or(now);
-                let date_part = strtime::format("%F", &yesterday)
-                    .unwrap_or_else(|_| String::from("1970-01-01"));
+                let yesterday = now.checked_sub(1.day());
+                let date_part = match yesterday {
+                    Ok(yesterday) => strtime::format("%F", &yesterday)
+                        .unwrap_or_else(|_| String::from("1970-01-01")),
+                    Err(_) => String::from("1970-01-01"),
+                };
                 let composed = format!("{date_part} {total_hours:02}:00:00 +00:00");
                 parse_date(composed)
             } else if is_pure_digits {
