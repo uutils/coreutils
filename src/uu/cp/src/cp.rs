@@ -1708,7 +1708,23 @@ pub(crate) fn copy_attributes(
         // do nothing, since every symbolic link has the same
         // permissions.
         if !dest.is_symlink() {
-            fs::set_permissions(dest, source_metadata.permissions())
+            // gnu compatibility: cp strips both setuid & setgid bits if preserving either ownership or group fails
+            let mut perms = source_metadata.permissions();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::MetadataExt;
+
+                let dest_metadata = fs::symlink_metadata(dest)
+                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+
+                if dest_metadata.uid() != source_metadata.uid()
+                    || dest_metadata.gid() != source_metadata.gid()
+                {
+                    let mode = perms.mode() & !0o6000;
+                    perms.set_mode(mode);
+                }
+            }
+            fs::set_permissions(dest, perms)
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
             // FIXME: Implement this for windows as well
             #[cfg(feature = "feat_acl")]

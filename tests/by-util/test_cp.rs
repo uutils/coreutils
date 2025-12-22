@@ -7400,3 +7400,98 @@ fn test_cp_recurse_verbose_output_with_symlink_already_exists() {
         .no_stderr()
         .stdout_is(output);
 }
+
+#[test]
+#[cfg(unix)]
+fn test_cp_strip_uid_gid_preserve_ownership_fails() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let ucmd = &mut scene.ucmd();
+
+    let src = "src";
+    let dest_dir = "dir";
+    let dest = "dir/dest";
+
+    // Test must be run as root (or with `sudo -E`)
+    if scene.cmd("whoami").run().stdout_str() != "root\n" {
+        return;
+    }
+
+    at.touch(src);
+    at.set_mode(src, 0o6755);
+
+    at.mkdir(dest_dir);
+    at.set_mode(dest_dir, 0o777);
+
+    // Need to drop privileges for preserving ownership to fail
+    unsafe {
+        libc::seteuid(1000);
+    }
+
+    ucmd.arg("-p").arg(src).arg(dest).succeeds();
+
+    // When preserving ownership fails, setuid and setgid bits should be stripped
+    let dest_metadata = at.metadata(dest);
+    assert_eq!(
+        dest_metadata.mode() & 0o6755,
+        0o755,
+        "setuid or setgid not stripped"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_strip_uid_gid_preserve_group_fails() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let ucmd = &mut scene.ucmd();
+
+    let dir = "dir";
+    let src = "dir/src";
+    let dest = "dir/dest";
+
+    // Test must be run as root (or with `sudo -E`)
+    if scene.cmd("whoami").run().stdout_str() != "root\n" {
+        return;
+    }
+
+    at.mkdir(dir);
+    at.set_mode(dir, 0o777);
+
+    // Drop privileges before creating file
+    // Will need root to set group later
+    let orig_euid = unsafe { libc::geteuid() };
+    let orig_egid = unsafe { libc::getegid() };
+
+    unsafe {
+        libc::seteuid(1000);
+        libc::setegid(1000);
+    }
+
+    at.touch(src);
+    at.set_mode(src, 0o6755);
+
+    // Escalate privileges to set group
+    unsafe {
+        libc::seteuid(orig_euid);
+        libc::setegid(orig_egid);
+    }
+
+    scene.cmd("chgrp").arg("0").arg(src).succeeds();
+
+    // Drop again before running cp
+    unsafe {
+        libc::seteuid(1000);
+        libc::setegid(1000);
+    }
+
+    ucmd.arg("-p").arg(src).arg(dest).succeeds();
+
+    // When preserving group fails, setuid and setgid bits should be stripped
+    let dest_metadata = at.metadata(dest);
+    assert_eq!(
+        dest_metadata.mode() & 0o6755,
+        0o755,
+        "setuid or setgid not stripped"
+    );
+}
