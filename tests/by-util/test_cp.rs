@@ -7403,5 +7403,6 @@ fn test_cp_circular_symbolic_links_in_directory() {
     ucmd.arg(source_dir)
         .arg(target_dir)
         .arg("-rL")
-        .fails_with_code(1);
+        .fails_with_code(1)
+        .stderr_contains("Too many levels of symbolic links");
 }
