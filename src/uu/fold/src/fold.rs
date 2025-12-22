@@ -19,6 +19,7 @@ const TAB_WIDTH: usize = 8;
 const NL: u8 = b'\n';
 const CR: u8 = b'\r';
 const TAB: u8 = b'\t';
+// Implementation threshold (8 KiB) to prevent unbounded buffer growth during streaming.
 const STREAMING_FLUSH_THRESHOLD: usize = 8 * 1024;
 
 mod options {
@@ -289,6 +290,8 @@ fn compute_col_count(buffer: &[u8], mode: WidthMode) -> usize {
 }
 
 fn emit_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
+    // Emit a folded line and keep the remaining buffer (if any) for the next line.
+    // When `-s` is active, we prefer breaking at the last recorded whitespace.
     let consume = match *ctx.last_space {
         Some(index) => index + 1,
         None => ctx.output.len(),
@@ -324,6 +327,9 @@ fn emit_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
 }
 
 fn maybe_flush_unbroken_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
+    // In streaming mode without `-s`, avoid unbounded buffering by periodically
+    // flushing long unbroken output segments. When `-s` is enabled we must keep
+    // the buffer to preserve the last whitespace boundary for folding.
     if ctx.spaces || ctx.output.len() < STREAMING_FLUSH_THRESHOLD {
         return Ok(());
     }
@@ -336,11 +342,13 @@ fn maybe_flush_unbroken_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResul
 }
 
 fn push_byte<W: Write>(ctx: &mut FoldContext<'_, W>, byte: u8) -> UResult<()> {
+    // Append a single byte and flush if the buffer grows too large.
     ctx.output.push(byte);
     maybe_flush_unbroken_output(ctx)
 }
 
 fn push_bytes<W: Write>(ctx: &mut FoldContext<'_, W>, bytes: &[u8]) -> UResult<()> {
+    // Append a byte slice and flush if the buffer grows too large.
     if bytes.is_empty() {
         return Ok(());
     }
