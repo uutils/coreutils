@@ -34,9 +34,6 @@ pub struct ChecksumComputeOptions {
 
     /// Whether to finish lines with '\n' or '\0'.
     pub line_ending: LineEnding,
-
-    /// (non-GNU option) Do not print file names
-    pub no_names: bool,
 }
 
 /// Reading mode used to compute digest.
@@ -218,12 +215,6 @@ fn print_untagged_checksum(
     sum: &String,
     reading_mode: ReadingMode,
 ) -> UResult<()> {
-    // early check for the "no-names" option
-    if options.no_names {
-        print!("{sum}");
-        return Ok(());
-    }
-
     let (escaped_filename, prefix) = if options.line_ending == LineEnding::Nul {
         (filename.to_string_lossy().to_string(), "")
     } else {

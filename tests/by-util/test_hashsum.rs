@@ -8,7 +8,7 @@ use rstest::rstest;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
-// spell-checker:ignore checkfile, nonames, testf, ntestf
+// spell-checker:ignore checkfile, testf, ntestf
 macro_rules! get_hash(
     ($str:expr) => (
         $str.split(' ').collect::<Vec<&str>>()[0]
@@ -39,19 +39,6 @@ macro_rules! test_digest {
             let ts = TestScenario::new(util_name!());
             assert_eq!(ts.fixtures.read(EXPECTED_FILE),
                        get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).pipe_in_fixture(INPUT_FILE).succeeds().no_stderr().stdout_str()));
-        }
-
-        #[test]
-        fn test_nonames() {
-            let ts = TestScenario::new(util_name!());
-            // EXPECTED_FILE has no newline character at the end
-            if DIGEST_ARG == "--b3sum" {
-                // Option only available on b3sum
-                assert_eq!(format!("{0}\n{0}\n", ts.fixtures.read(EXPECTED_FILE)),
-                       ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg("--no-names").arg(INPUT_FILE).arg("-").pipe_in_fixture(INPUT_FILE)
-                       .succeeds().no_stderr().stdout_str()
-                       );
-                }
         }
 
         #[test]

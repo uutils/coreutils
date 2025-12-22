@@ -216,7 +216,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         algo_kind: algo,
         output_format,
         line_ending,
-        no_names: false,
     };
 
     perform_checksum_computation(opts, files)?;

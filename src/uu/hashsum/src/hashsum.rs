@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) algo, algoname, bitlen, regexes, nread, nonames
+// spell-checker:ignore (ToDO) algo, algoname, bitlen, regexes, nread
 
 use std::ffi::{OsStr, OsString};
 use std::iter;
@@ -211,10 +211,6 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         return Err(ChecksumError::StrictNotCheck.into());
     }
 
-    let no_names = *matches
-        .try_get_one("no-names")
-        .unwrap_or(None)
-        .unwrap_or(&false);
     let line_ending = LineEnding::from_zero_flag(matches.get_flag("zero"));
 
     let algo = SizedAlgoKind::from_unsized(algo_kind, length)?;
@@ -229,7 +225,6 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
             /* base64: */ false,
         ),
         line_ending,
-        no_names,
     };
 
     let files = matches.get_many::<OsString>(options::FILE).map_or_else(
@@ -384,19 +379,6 @@ fn uu_app_opt_length(command: Command) -> Command {
     )
 }
 
-pub fn uu_app_b3sum() -> Command {
-    uu_app_b3sum_opts(uu_app_common())
-}
-
-fn uu_app_b3sum_opts(command: Command) -> Command {
-    command.arg(
-        Arg::new("no-names")
-            .long("no-names")
-            .help(translate!("hashsum-help-no-names"))
-            .action(ArgAction::SetTrue),
-    )
-}
-
 pub fn uu_app_bits() -> Command {
     uu_app_opt_bits(uu_app_common())
 }
@@ -414,7 +396,7 @@ fn uu_app_opt_bits(command: Command) -> Command {
 }
 
 pub fn uu_app_custom() -> Command {
-    let mut command = uu_app_b3sum_opts(uu_app_opt_bits(uu_app_common()));
+    let mut command = uu_app_opt_bits(uu_app_common());
     let algorithms = &[
         ("md5", translate!("hashsum-help-md5")),
         ("sha1", translate!("hashsum-help-sha1")),
