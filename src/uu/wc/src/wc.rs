@@ -32,7 +32,7 @@ use uucore::{
     hardware::{HardwareFeature, HasHardwareFeatures as _, SimdPolicy},
     parser::shortcut_value_parser::ShortcutValueParser,
     quoting_style::{self, QuotingStyle},
-    show,
+    show, show_error,
 };
 
 use crate::{
