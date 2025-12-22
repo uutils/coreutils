@@ -31,5 +31,3 @@
 
 = Disabled. Enabled at GNU coreutils > 9.9 =
 * tests/misc/tac-continue.sh
-* tests/mkdir/writable-under-readonly.sh
-* tests/cp/cp-mv-enotsup-xattr.sh
