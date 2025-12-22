@@ -916,19 +916,19 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
         let runtime_disabled = !features.disabled_runtime.is_empty();
 
         if enabled_empty && !runtime_disabled {
-            eprintln!("{}", translate!("wc-debug-hw-unavailable"));
+            show_error!("{}", translate!("wc-debug-hw-unavailable"));
         } else if runtime_disabled {
-            eprintln!(
+            show_error!(
                 "{}",
                 translate!("wc-debug-hw-disabled-glibc", "features" => disabled.join(", "))
             );
         } else if !enabled_empty && disabled_empty {
-            eprintln!(
+            show_error!(
                 "{}",
                 translate!("wc-debug-hw-using", "features" => enabled.join(", "))
             );
         } else {
-            eprintln!(
+            show_error!(
                 "{}",
                 translate!(
                     "wc-debug-hw-limited-glibc",
