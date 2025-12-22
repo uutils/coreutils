@@ -471,6 +471,10 @@ fn process_utf8_line<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URes
         return process_ascii_line(line.as_bytes(), ctx);
     }
 
+    process_utf8_chars(line, ctx)
+}
+
+fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> UResult<()> {
     let line_bytes = line.as_bytes();
     let mut iter = line.char_indices().peekable();
 
@@ -599,6 +603,11 @@ fn process_non_utf8_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) ->
     Ok(())
 }
 
+/// Process buffered bytes, emitting output for valid UTF-8 prefixes and
+/// deferring incomplete sequences until more input arrives.
+///
+/// If the buffer contains invalid UTF-8, it is handled in non-UTF-8 mode and
+/// the buffer is fully consumed.
 fn process_pending_chunk<W: Write>(
     pending: &mut Vec<u8>,
     ctx: &mut FoldContext<'_, W>,
@@ -612,8 +621,9 @@ fn process_pending_chunk<W: Write>(
             }
             Err(err) => {
                 if err.error_len().is_some() {
-                    process_non_utf8_line(pending, ctx)?;
+                    let res = process_non_utf8_line(pending, ctx);
                     pending.clear();
+                    res?;
                     break;
                 }
 
