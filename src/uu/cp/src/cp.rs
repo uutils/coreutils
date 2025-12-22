@@ -1722,6 +1722,7 @@ pub(crate) fn copy_attributes(
     let context = &*format!("{} -> {}", source.quote(), dest.quote());
     let source_metadata =
         fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+    #[cfg(unix)]
     let mut ownership_failed = false;
 
     let mode_explicitly_disabled = matches!(attributes.mode, Preserve::No { explicit: true });
@@ -1778,10 +1779,33 @@ pub(crate) fn copy_attributes(
         // do nothing, since every symbolic link has the same
         // permissions.
         if !dest.is_symlink() {
-            let mut permissions = source_metadata.permissions();
-            if ownership_failed {
-                permissions.set_mode(permissions.mode() & !(libc::S_ISUID | libc::S_ISGID));
-            }
+            let permissions = source_metadata.permissions();
+
+            #[cfg(unix)]
+            let permissions = {
+                let mut perms = permissions;
+                if ownership_failed {
+                    #[cfg(not(any(
+                        target_os = "android",
+                        target_os = "macos",
+                        target_os = "freebsd",
+                        target_os = "redox",
+                    )))]
+                    let mask = libc::S_ISUID | libc::S_ISGID;
+
+                    #[cfg(any(
+                        target_os = "android",
+                        target_os = "macos",
+                        target_os = "freebsd",
+                        target_os = "redox",
+                    ))]
+                    let mask = (libc::S_ISUID | libc::S_ISGID) as u32;
+
+                    perms.set_mode(perms.mode() & !mask);
+                }
+                perms
+            };
+
             fs::set_permissions(dest, permissions)
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
             // FIXME: Implement this for windows as well

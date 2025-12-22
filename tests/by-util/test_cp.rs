@@ -7415,6 +7415,7 @@ fn test_cp_recurse_verbose_output_with_symlink_already_exists() {
 
 #[test]
 #[cfg(unix)]
+<<<<<<< HEAD
 fn test_cp_hlp_flag_ordering() {
     // GNU cp: "If more than one of -H, -L, and -P is specified, only the final one takes effect"
     let (at, mut ucmd) = at_and_ucmd!();
@@ -7670,4 +7671,25 @@ fn test_cp_gnu_preserve_mode() {
     let d3_mode = at.metadata("d3").mode();
 
     assert_eq!(d1_mode, d3_mode);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_preserve_strip_setuid() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "/bin/sh";
+    let destination = "sh_copy";
+
+    ucmd.arg("-p").arg(source).arg(destination).succeeds();
+
+    use std::os::unix::fs::PermissionsExt;
+    let mode = at.metadata(destination).permissions().mode();
+
+    let mask = libc::S_ISUID as u32 | libc::S_ISGID as u32;
+
+    assert_eq!(
+        mode & mask,
+        0,
+        "SetUID/SetGID need to be stripped if ownership preservation fails."
+    );
 }
