@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) algo, algoname, bitlen, regexes, nread, nonames
+// spell-checker:ignore (ToDO) algo, algoname, bitlen, regexes, nread
 
 use std::ffi::{OsStr, OsString};
 use std::iter;
@@ -11,7 +11,7 @@ use std::num::ParseIntError;
 use std::path::Path;
 
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 
 use uucore::checksum::compute::{
     ChecksumComputeOptions, figure_out_output_format, perform_checksum_computation,
@@ -19,7 +19,7 @@ use uucore::checksum::compute::{
 use uucore::checksum::validate::{
     ChecksumValidateOptions, ChecksumVerbose, perform_checksum_validation,
 };
-use uucore::checksum::{AlgoKind, ChecksumError, SizedAlgoKind, calculate_blake2b_length};
+use uucore::checksum::{AlgoKind, ChecksumError, SizedAlgoKind, calculate_blake2b_length_str};
 use uucore::error::UResult;
 use uucore::line_ending::LineEnding;
 use uucore::{format_usage, translate};
@@ -139,14 +139,14 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     //        least somewhat better from a user's perspective.
     let matches = uucore::clap_localization::handle_clap_result(command, args)?;
 
-    let input_length: Option<&usize> = if binary_name == "b2sum" {
-        matches.get_one::<usize>(options::LENGTH)
+    let input_length: Option<&String> = if binary_name == "b2sum" {
+        matches.get_one::<String>(options::LENGTH)
     } else {
         None
     };
 
     let length = match input_length {
-        Some(length) => calculate_blake2b_length(*length)?,
+        Some(length) => calculate_blake2b_length_str(length)?,
         None => None,
     };
 
@@ -211,10 +211,6 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         return Err(ChecksumError::StrictNotCheck.into());
     }
 
-    let no_names = *matches
-        .try_get_one("no-names")
-        .unwrap_or(None)
-        .unwrap_or(&false);
     let line_ending = LineEnding::from_zero_flag(matches.get_flag("zero"));
 
     let algo = SizedAlgoKind::from_unsized(algo_kind, length)?;
@@ -229,8 +225,6 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
             /* base64: */ false,
         ),
         line_ending,
-        binary,
-        no_names,
     };
 
     let files = matches.get_many::<OsString>(options::FILE).map_or_else(
@@ -378,24 +372,10 @@ fn uu_app_opt_length(command: Command) -> Command {
     command.arg(
         Arg::new(options::LENGTH)
             .long(options::LENGTH)
-            .value_parser(value_parser!(usize))
             .short('l')
             .help(translate!("hashsum-help-length"))
             .overrides_with(options::LENGTH)
             .action(ArgAction::Set),
-    )
-}
-
-pub fn uu_app_b3sum() -> Command {
-    uu_app_b3sum_opts(uu_app_common())
-}
-
-fn uu_app_b3sum_opts(command: Command) -> Command {
-    command.arg(
-        Arg::new("no-names")
-            .long("no-names")
-            .help(translate!("hashsum-help-no-names"))
-            .action(ArgAction::SetTrue),
     )
 }
 
@@ -416,7 +396,7 @@ fn uu_app_opt_bits(command: Command) -> Command {
 }
 
 pub fn uu_app_custom() -> Command {
-    let mut command = uu_app_b3sum_opts(uu_app_opt_bits(uu_app_common()));
+    let mut command = uu_app_opt_bits(uu_app_common());
     let algorithms = &[
         ("md5", translate!("hashsum-help-md5")),
         ("sha1", translate!("hashsum-help-sha1")),

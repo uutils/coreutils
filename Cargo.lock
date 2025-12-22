@@ -367,9 +367,9 @@ dependencies = [
 
 [[package]]
 name = "clap_complete"
-version = "4.5.61"
+version = "4.5.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39615915e2ece2550c0149addac32fb5bd312c657f43845bb9088cb9c8a7c992"
+checksum = "004eef6b14ce34759aa7de4aea3217e368f463f46a3ed3764ca4b5a4404003b4"
 dependencies = [
  "clap",
 ]
@@ -534,7 +534,7 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
 name = "coreutils"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bincode",
  "bytecount",
@@ -701,9 +701,9 @@ checksum = "19d374276b40fb8bbdee95aef7c7fa6b5316ec764510eb64b8dd0e2ed0d7e7f5"
 
 [[package]]
 name = "crc-fast"
-version = "1.8.0"
+version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2f7c8d397a6353ef0c1d6217ab91b3ddb5431daf57fd013f506b967dcf44458"
+checksum = "85d9be5297a59f1b7651fd2711a1f4461929f53b182b394df0df15b3a387ef51"
 dependencies = [
  "crc",
  "digest",
@@ -791,9 +791,9 @@ dependencies = [
 
 [[package]]
 name = "ctor"
-version = "0.6.1"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ffc71fcdcdb40d6f087edddf7f8f1f8f79e6cf922f555a9ee8779752d4819bd"
+checksum = "424e0138278faeb2b401f174ad17e715c829512d74f3d1e81eb43365c2e0590e"
 dependencies = [
  "ctor-proc-macro",
  "dtor",
@@ -1577,7 +1577,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde_core",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1875,7 +1875,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2441,7 +2441,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.11.0",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2747,7 +2747,7 @@ dependencies = [
  "getrandom 0.3.3",
  "once_cell",
  "rustix",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3006,7 +3006,7 @@ dependencies = [
 
 [[package]]
 name = "uu_arch"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3016,7 +3016,7 @@ dependencies = [
 
 [[package]]
 name = "uu_base32"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "base64-simd",
  "clap",
@@ -3026,7 +3026,7 @@ dependencies = [
 
 [[package]]
 name = "uu_base64"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3038,7 +3038,7 @@ dependencies = [
 
 [[package]]
 name = "uu_basename"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3047,7 +3047,7 @@ dependencies = [
 
 [[package]]
 name = "uu_basenc"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3057,7 +3057,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cat"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3072,7 +3072,7 @@ dependencies = [
 
 [[package]]
 name = "uu_chcon"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3085,7 +3085,7 @@ dependencies = [
 
 [[package]]
 name = "uu_chgrp"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3094,7 +3094,7 @@ dependencies = [
 
 [[package]]
 name = "uu_chmod"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3104,7 +3104,7 @@ dependencies = [
 
 [[package]]
 name = "uu_chown"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3113,7 +3113,7 @@ dependencies = [
 
 [[package]]
 name = "uu_chroot"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3123,7 +3123,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cksum"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3135,7 +3135,7 @@ dependencies = [
 
 [[package]]
 name = "uu_comm"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3144,7 +3144,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cp"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3164,7 +3164,7 @@ dependencies = [
 
 [[package]]
 name = "uu_csplit"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3175,7 +3175,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cut"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bstr",
  "clap",
@@ -3188,12 +3188,12 @@ dependencies = [
 
 [[package]]
 name = "uu_date"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
  "jiff",
- "libc",
+ "nix",
  "parse_datetime",
  "uucore",
  "windows-sys 0.61.2",
@@ -3201,7 +3201,7 @@ dependencies = [
 
 [[package]]
 name = "uu_dd"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3215,7 +3215,7 @@ dependencies = [
 
 [[package]]
 name = "uu_df"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3227,7 +3227,7 @@ dependencies = [
 
 [[package]]
 name = "uu_dir"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "uu_ls",
@@ -3236,7 +3236,7 @@ dependencies = [
 
 [[package]]
 name = "uu_dircolors"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3245,7 +3245,7 @@ dependencies = [
 
 [[package]]
 name = "uu_dirname"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3254,7 +3254,7 @@ dependencies = [
 
 [[package]]
 name = "uu_du"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3268,7 +3268,7 @@ dependencies = [
 
 [[package]]
 name = "uu_echo"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3277,7 +3277,7 @@ dependencies = [
 
 [[package]]
 name = "uu_env"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3289,7 +3289,7 @@ dependencies = [
 
 [[package]]
 name = "uu_expand"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3302,7 +3302,7 @@ dependencies = [
 
 [[package]]
 name = "uu_expr"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3315,7 +3315,7 @@ dependencies = [
 
 [[package]]
 name = "uu_factor"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3329,7 +3329,7 @@ dependencies = [
 
 [[package]]
 name = "uu_false"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3338,7 +3338,7 @@ dependencies = [
 
 [[package]]
 name = "uu_fmt"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3349,7 +3349,7 @@ dependencies = [
 
 [[package]]
 name = "uu_fold"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3361,7 +3361,7 @@ dependencies = [
 
 [[package]]
 name = "uu_groups"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3371,7 +3371,7 @@ dependencies = [
 
 [[package]]
 name = "uu_hashsum"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3382,7 +3382,7 @@ dependencies = [
 
 [[package]]
 name = "uu_head"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3393,7 +3393,7 @@ dependencies = [
 
 [[package]]
 name = "uu_hostid"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3403,7 +3403,7 @@ dependencies = [
 
 [[package]]
 name = "uu_hostname"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "dns-lookup",
@@ -3415,7 +3415,7 @@ dependencies = [
 
 [[package]]
 name = "uu_id"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3425,7 +3425,7 @@ dependencies = [
 
 [[package]]
 name = "uu_install"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "file_diff",
@@ -3438,7 +3438,7 @@ dependencies = [
 
 [[package]]
 name = "uu_join"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3449,7 +3449,7 @@ dependencies = [
 
 [[package]]
 name = "uu_kill"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3459,7 +3459,7 @@ dependencies = [
 
 [[package]]
 name = "uu_link"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3468,7 +3468,7 @@ dependencies = [
 
 [[package]]
 name = "uu_ln"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3478,7 +3478,7 @@ dependencies = [
 
 [[package]]
 name = "uu_logname"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3488,7 +3488,7 @@ dependencies = [
 
 [[package]]
 name = "uu_ls"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "ansi-width",
  "clap",
@@ -3508,7 +3508,7 @@ dependencies = [
 
 [[package]]
 name = "uu_mkdir"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3517,7 +3517,7 @@ dependencies = [
 
 [[package]]
 name = "uu_mkfifo"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3527,7 +3527,7 @@ dependencies = [
 
 [[package]]
 name = "uu_mknod"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3537,7 +3537,7 @@ dependencies = [
 
 [[package]]
 name = "uu_mktemp"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3549,7 +3549,7 @@ dependencies = [
 
 [[package]]
 name = "uu_more"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "crossterm",
@@ -3561,7 +3561,7 @@ dependencies = [
 
 [[package]]
 name = "uu_mv"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3577,7 +3577,7 @@ dependencies = [
 
 [[package]]
 name = "uu_nice"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3588,7 +3588,7 @@ dependencies = [
 
 [[package]]
 name = "uu_nl"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3600,7 +3600,7 @@ dependencies = [
 
 [[package]]
 name = "uu_nohup"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3611,7 +3611,7 @@ dependencies = [
 
 [[package]]
 name = "uu_nproc"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3621,7 +3621,7 @@ dependencies = [
 
 [[package]]
 name = "uu_numfmt"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3633,7 +3633,7 @@ dependencies = [
 
 [[package]]
 name = "uu_od"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "byteorder",
  "clap",
@@ -3645,7 +3645,7 @@ dependencies = [
 
 [[package]]
 name = "uu_paste"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3654,7 +3654,7 @@ dependencies = [
 
 [[package]]
 name = "uu_pathchk"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3664,7 +3664,7 @@ dependencies = [
 
 [[package]]
 name = "uu_pinky"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3673,7 +3673,7 @@ dependencies = [
 
 [[package]]
 name = "uu_pr"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3685,7 +3685,7 @@ dependencies = [
 
 [[package]]
 name = "uu_printenv"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3694,7 +3694,7 @@ dependencies = [
 
 [[package]]
 name = "uu_printf"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3703,7 +3703,7 @@ dependencies = [
 
 [[package]]
 name = "uu_ptx"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3714,7 +3714,7 @@ dependencies = [
 
 [[package]]
 name = "uu_pwd"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3723,7 +3723,7 @@ dependencies = [
 
 [[package]]
 name = "uu_readlink"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3732,7 +3732,7 @@ dependencies = [
 
 [[package]]
 name = "uu_realpath"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3741,7 +3741,7 @@ dependencies = [
 
 [[package]]
 name = "uu_rm"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3756,7 +3756,7 @@ dependencies = [
 
 [[package]]
 name = "uu_rmdir"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3766,7 +3766,7 @@ dependencies = [
 
 [[package]]
 name = "uu_runcon"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3778,7 +3778,7 @@ dependencies = [
 
 [[package]]
 name = "uu_seq"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bigdecimal",
  "clap",
@@ -3793,7 +3793,7 @@ dependencies = [
 
 [[package]]
 name = "uu_shred"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3804,7 +3804,7 @@ dependencies = [
 
 [[package]]
 name = "uu_shuf"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3817,7 +3817,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sleep"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3826,7 +3826,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sort"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bigdecimal",
  "binary-heap-plus",
@@ -3850,7 +3850,7 @@ dependencies = [
 
 [[package]]
 name = "uu_split"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3863,7 +3863,7 @@ dependencies = [
 
 [[package]]
 name = "uu_stat"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3873,7 +3873,7 @@ dependencies = [
 
 [[package]]
 name = "uu_stdbuf"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3885,7 +3885,7 @@ dependencies = [
 
 [[package]]
 name = "uu_stdbuf_libstdbuf"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "ctor",
  "libc",
@@ -3893,7 +3893,7 @@ dependencies = [
 
 [[package]]
 name = "uu_stty"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3903,7 +3903,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sum"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3912,7 +3912,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sync"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3923,7 +3923,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tac"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3936,7 +3936,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tail"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3952,7 +3952,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tee"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3962,7 +3962,7 @@ dependencies = [
 
 [[package]]
 name = "uu_test"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3974,7 +3974,7 @@ dependencies = [
 
 [[package]]
 name = "uu_timeout"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3985,7 +3985,7 @@ dependencies = [
 
 [[package]]
 name = "uu_touch"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "clap",
@@ -4000,7 +4000,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tr"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bytecount",
  "clap",
@@ -4011,7 +4011,7 @@ dependencies = [
 
 [[package]]
 name = "uu_true"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4020,7 +4020,7 @@ dependencies = [
 
 [[package]]
 name = "uu_truncate"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4029,7 +4029,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tsort"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -4041,7 +4041,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tty"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4051,7 +4051,7 @@ dependencies = [
 
 [[package]]
 name = "uu_uname"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4061,7 +4061,7 @@ dependencies = [
 
 [[package]]
 name = "uu_unexpand"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -4074,7 +4074,7 @@ dependencies = [
 
 [[package]]
 name = "uu_uniq"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -4085,7 +4085,7 @@ dependencies = [
 
 [[package]]
 name = "uu_unlink"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4094,7 +4094,7 @@ dependencies = [
 
 [[package]]
 name = "uu_uptime"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "clap",
@@ -4106,7 +4106,7 @@ dependencies = [
 
 [[package]]
 name = "uu_users"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4116,7 +4116,7 @@ dependencies = [
 
 [[package]]
 name = "uu_vdir"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "uu_ls",
@@ -4125,7 +4125,7 @@ dependencies = [
 
 [[package]]
 name = "uu_wc"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bytecount",
  "clap",
@@ -4141,7 +4141,7 @@ dependencies = [
 
 [[package]]
 name = "uu_who"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4150,7 +4150,7 @@ dependencies = [
 
 [[package]]
 name = "uu_whoami"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4160,7 +4160,7 @@ dependencies = [
 
 [[package]]
 name = "uu_yes"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4171,7 +4171,7 @@ dependencies = [
 
 [[package]]
 name = "uucore"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "base64-simd",
  "bigdecimal",
@@ -4228,7 +4228,7 @@ dependencies = [
 
 [[package]]
 name = "uucore_procs"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4246,7 +4246,7 @@ dependencies = [
 
 [[package]]
 name = "uutests"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "ctor",
  "libc",
@@ -4411,7 +4411,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4817,9 +4817,9 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "6.0.0"
+version = "7.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb2a05c7c36fde6c09b08576c9f7fb4cda705990f73b58fe011abf7dfb24168b"
+checksum = "bdd8a47718a4ee5fe78e07667cd36f3de80e7c2bfe727c7074245ffc7303c037"
 dependencies = [
  "arbitrary",
  "crc32fast",

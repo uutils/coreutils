@@ -15,8 +15,8 @@ use thiserror::Error;
 use crate::error::{UError, UResult};
 use crate::show_error;
 use crate::sum::{
-    Blake2b, Blake3, Bsd, CRC32B, Crc, Digest, DigestWriter, Md5, Sha1, Sha3_224, Sha3_256,
-    Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256, Sm3, SysV,
+    Blake2b, Blake3, Bsd, CRC32B, Crc, Digest, DigestOutput, DigestWriter, Md5, Sha1, Sha3_224,
+    Sha3_256, Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256, Sm3, SysV,
 };
 
 pub mod compute;
@@ -289,7 +289,9 @@ impl SizedAlgoKind {
             }
             // [`calculate_blake2b_length`] expects a length in bits but we
             // have a length in bytes.
-            (ak::Blake2b, Some(l)) => Ok(Self::Blake2b(calculate_blake2b_length(8 * l)?)),
+            (ak::Blake2b, Some(l)) => Ok(Self::Blake2b(calculate_blake2b_length_str(
+                &(8 * l).to_string(),
+            )?)),
             (ak::Blake2b, None) => Ok(Self::Blake2b(None)),
 
             (ak::Sha224, None) => Ok(Self::Sha2(ShaLength::Len224)),
@@ -420,8 +422,7 @@ pub fn digest_reader<T: Read>(
     digest: &mut Box<dyn Digest>,
     reader: &mut T,
     binary: bool,
-    output_bits: usize,
-) -> io::Result<(String, usize)> {
+) -> io::Result<(DigestOutput, usize)> {
     digest.reset();
 
     // Read bytes from `reader` and write those bytes to `digest`.
@@ -440,19 +441,7 @@ pub fn digest_reader<T: Read>(
     let output_size = std::io::copy(reader, &mut digest_writer)? as usize;
     digest_writer.finalize();
 
-    if digest.output_bits() > 0 {
-        Ok((digest.result_str(), output_size))
-    } else {
-        // Assume it's SHAKE.  result_str() doesn't work with shake (as of 8/30/2016)
-        let mut bytes = vec![0; output_bits.div_ceil(8)];
-        digest.hash_finalize(&mut bytes);
-        Ok((hex::encode(bytes), output_size))
-    }
-}
-
-/// Calculates the length of the digest.
-pub fn calculate_blake2b_length(bit_length: usize) -> UResult<Option<usize>> {
-    calculate_blake2b_length_str(bit_length.to_string().as_str())
+    Ok((digest.result(), output_size))
 }
 
 /// Calculates the length of the digest.
@@ -604,10 +593,10 @@ mod tests {
 
     #[test]
     fn test_calculate_blake2b_length() {
-        assert_eq!(calculate_blake2b_length(0).unwrap(), None);
-        assert!(calculate_blake2b_length(10).is_err());
-        assert!(calculate_blake2b_length(520).is_err());
-        assert_eq!(calculate_blake2b_length(512).unwrap(), None);
-        assert_eq!(calculate_blake2b_length(256).unwrap(), Some(32));
+        assert_eq!(calculate_blake2b_length_str("0").unwrap(), None);
+        assert!(calculate_blake2b_length_str("10").is_err());
+        assert!(calculate_blake2b_length_str("520").is_err());
+        assert_eq!(calculate_blake2b_length_str("512").unwrap(), None);
+        assert_eq!(calculate_blake2b_length_str("256").unwrap(), Some(32));
     }
 }

@@ -3,10 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use rstest::rstest;
+
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
-// spell-checker:ignore checkfile, nonames, testf, ntestf
+// spell-checker:ignore checkfile, testf, ntestf
 macro_rules! get_hash(
     ($str:expr) => (
         $str.split(' ').collect::<Vec<&str>>()[0]
@@ -40,19 +42,6 @@ macro_rules! test_digest {
         }
 
         #[test]
-        fn test_nonames() {
-            let ts = TestScenario::new(util_name!());
-            // EXPECTED_FILE has no newline character at the end
-            if DIGEST_ARG == "--b3sum" {
-                // Option only available on b3sum
-                assert_eq!(format!("{0}\n{0}\n", ts.fixtures.read(EXPECTED_FILE)),
-                       ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg("--no-names").arg(INPUT_FILE).arg("-").pipe_in_fixture(INPUT_FILE)
-                       .succeeds().no_stderr().stdout_str()
-                       );
-                }
-        }
-
-        #[test]
         fn test_check() {
             let ts = TestScenario::new(util_name!());
             println!("File content='{}'", ts.fixtures.read(INPUT_FILE));
@@ -70,33 +59,6 @@ macro_rules! test_digest {
             let ts = TestScenario::new(util_name!());
             assert_eq!(ts.fixtures.read(EXPECTED_FILE),
                        get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg("--zero").arg(INPUT_FILE).succeeds().no_stderr().stdout_str()));
-        }
-
-
-        #[cfg(windows)]
-        #[test]
-        fn test_text_mode() {
-            use uutests::new_ucmd;
-
-            // TODO Replace this with hard-coded files that store the
-            // expected output of text mode on an input file that has
-            // "\r\n" line endings.
-            let result = new_ucmd!()
-                .args(&[DIGEST_ARG, BITS_ARG, "-b"])
-                .pipe_in("a\nb\nc\n")
-                .succeeds();
-            let expected = result.no_stderr().stdout();
-            // Replace the "*-\n" at the end of the output with " -\n".
-            // The asterisk indicates that the digest was computed in
-            // binary mode.
-            let n = expected.len();
-            let expected = [&expected[..n - 3], b" -\n"].concat();
-            new_ucmd!()
-                .args(&[DIGEST_ARG, BITS_ARG, "-t"])
-                .pipe_in("a\r\nb\r\nc\r\n")
-                .succeeds()
-                .no_stderr()
-                .stdout_is(std::str::from_utf8(&expected).unwrap());
         }
 
         #[test]
@@ -250,11 +212,16 @@ fn test_invalid_b2sum_length_option_not_multiple_of_8() {
         .ccmd("b2sum")
         .arg("--length=9")
         .arg(at.subdir.join("testf"))
-        .fails_with_code(1);
+        .fails_with_code(1)
+        .stderr_contains("b2sum: invalid length: '9'")
+        .stderr_contains("b2sum: length is not a multiple of 8");
 }
 
-#[test]
-fn test_invalid_b2sum_length_option_too_large() {
+#[rstest]
+#[case("513")]
+#[case("1024")]
+#[case("18446744073709552000")]
+fn test_invalid_b2sum_length_option_too_large(#[case] len: &str) {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
@@ -262,9 +229,13 @@ fn test_invalid_b2sum_length_option_too_large() {
 
     scene
         .ccmd("b2sum")
-        .arg("--length=513")
+        .arg("--length")
+        .arg(len)
         .arg(at.subdir.join("testf"))
-        .fails_with_code(1);
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains(format!("b2sum: invalid length: '{len}'"))
+        .stderr_contains("b2sum: maximum digest length for 'BLAKE2b' is 512 bits");
 }
 
 #[test]

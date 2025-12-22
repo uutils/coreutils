@@ -20,14 +20,14 @@ use uucore::checksum::{
     sanitize_sha2_sha3_length_str,
 };
 use uucore::error::UResult;
-use uucore::hardware::CpuFeatures;
+use uucore::hardware::{HasHardwareFeatures as _, SimdPolicy};
 use uucore::line_ending::LineEnding;
 use uucore::{format_usage, translate};
 
 /// Print CPU hardware capability detection information to stderr
 /// This matches GNU cksum's --debug behavior
 fn print_cpu_debug_info() {
-    let features = CpuFeatures::detect();
+    let features = SimdPolicy::detect();
 
     fn print_feature(name: &str, available: bool) {
         if available {
@@ -216,8 +216,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         algo_kind: algo,
         output_format,
         line_ending,
-        binary: false,
-        no_names: false,
     };
 
     perform_checksum_computation(opts, files)?;
