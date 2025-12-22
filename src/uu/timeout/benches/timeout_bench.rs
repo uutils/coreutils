@@ -61,55 +61,48 @@ fn run_child(_: String) -> ! {
 }
 
 #[cfg(unix)]
-mod unix {
-    use super::*;
-    use divan::{Bencher, black_box};
-    use uu_timeout::uumain;
-    use uucore::benchmark::run_util_function;
-
-    fn bench_timeout_with_mode(bencher: Bencher, args: &[&str], child_mode: &str) {
-        let child_path = env::current_exe()
-            .expect("failed to locate timeout bench executable")
-            .into_os_string()
-            .into_string()
-            .expect("bench executable path must be valid UTF-8");
-
-        let mut owned_args: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
-        owned_args.push(child_path);
-        owned_args.push(CHILD_FLAG.into());
-        owned_args.push(child_mode.to_string());
-
-        let arg_refs: Vec<&str> = owned_args.iter().map(|s| s.as_str()).collect();
-
-        bencher.bench(|| {
-            black_box(run_util_function(uumain, &arg_refs));
-        });
-    }
-
-    /// Benchmark the fast path where the command exits immediately.
-    #[divan::bench]
-    fn timeout_quick_exit(bencher: Bencher) {
-        bench_timeout_with_mode(bencher, &["0.02"], "quick-exit");
-    }
-
-    /// Benchmark a command that runs longer than the threshold and receives the default signal.
-    #[divan::bench]
-    fn timeout_enforced(bencher: Bencher) {
-        bench_timeout_with_mode(bencher, &["0.02"], "long-sleep");
-    }
-
-    pub fn run() {
-        divan::main();
-    }
-}
+use divan::{Bencher, black_box};
+#[cfg(unix)]
+use uu_timeout::uumain;
+#[cfg(unix)]
+use uucore::benchmark::run_util_function;
 
 #[cfg(unix)]
-fn main() {
-    maybe_run_child_mode();
-    unix::run();
+fn bench_timeout_with_mode(bencher: Bencher, args: &[&str], child_mode: &str) {
+    let child_path = env::current_exe()
+        .expect("failed to locate timeout bench executable")
+        .into_os_string()
+        .into_string()
+        .expect("bench executable path must be valid UTF-8");
+
+    let mut owned_args: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
+    owned_args.push(child_path);
+    owned_args.push(CHILD_FLAG.into());
+    owned_args.push(child_mode.to_string());
+
+    let arg_refs: Vec<&str> = owned_args.iter().map(|s| s.as_str()).collect();
+
+    bencher.bench(|| {
+        black_box(run_util_function(uumain, &arg_refs));
+    });
 }
 
-#[cfg(not(unix))]
+/// Benchmark the fast path where the command exits immediately.
+#[cfg(unix)]
+#[divan::bench]
+fn timeout_quick_exit(bencher: Bencher) {
+    bench_timeout_with_mode(bencher, &["0.02"], "quick-exit");
+}
+
+/// Benchmark a command that runs longer than the threshold and receives the default signal.
+#[cfg(unix)]
+#[divan::bench]
+fn timeout_enforced(bencher: Bencher) {
+    bench_timeout_with_mode(bencher, &["0.02"], "long-sleep");
+}
+
 fn main() {
     maybe_run_child_mode();
+    #[cfg(unix)]
+    divan::main();
 }
