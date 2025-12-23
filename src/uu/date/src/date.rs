@@ -119,7 +119,7 @@ impl From<&str> for Rfc3339Format {
 enum DayDelta {
     Same,
     Previous,
-    Next
+    Next,
 }
 
 /// Parse military timezone with optional hour offset.
@@ -324,17 +324,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let date_part = match day_delta {
                     DayDelta::Same => {
                         strtime::format("%F", &now).unwrap_or_else(|_| String::from("1970-01-01"))
-                    },
-                    DayDelta::Next => {
-                        now.tomorrow()
-                            .and_then(|d| strtime::format("%F", &d))
-                            .unwrap_or_else(|_| String::from("1970-01-01"))
-                    },
-                    DayDelta::Previous => {
-                        now.yesterday()
-                            .and_then(|d| strtime::format("%F", &d))
-                            .unwrap_or_else(|_| String::from("1970-01-01"))
-                    },
+                    }
+                    DayDelta::Next => now
+                        .tomorrow()
+                        .and_then(|d| strtime::format("%F", &d))
+                        .unwrap_or_else(|_| String::from("1970-01-01")),
+                    DayDelta::Previous => now
+                        .yesterday()
+                        .and_then(|d| strtime::format("%F", &d))
+                        .unwrap_or_else(|_| String::from("1970-01-01")),
                 };
                 let composed = format!("{date_part} {total_hours:02}:00:00 +00:00");
                 parse_date(composed)
@@ -842,11 +840,26 @@ mod tests {
     #[test]
     fn test_parse_military_timezone_with_offset() {
         // Valid cases: letter only, letter + digit, uppercase
-        assert_eq!(parse_military_timezone_with_offset("m"), Some((12, DayDelta::Previous))); // UTC+12 -> 12:00 UTC
-        assert_eq!(parse_military_timezone_with_offset("m9"), Some((21, DayDelta::Previous))); // 12 + 9 = 21
-        assert_eq!(parse_military_timezone_with_offset("a5"), Some((4, DayDelta::Same))); // 23 + 5 = 28 % 24 = 4
-        assert_eq!(parse_military_timezone_with_offset("z"), Some((0, DayDelta::Same))); // UTC+0 -> 00:00 UTC
-        assert_eq!(parse_military_timezone_with_offset("M9"), Some((21, DayDelta::Previous))); // Uppercase works
+        assert_eq!(
+            parse_military_timezone_with_offset("m"),
+            Some((12, DayDelta::Previous))
+        ); // UTC+12 -> 12:00 UTC
+        assert_eq!(
+            parse_military_timezone_with_offset("m9"),
+            Some((21, DayDelta::Previous))
+        ); // 12 + 9 = 21
+        assert_eq!(
+            parse_military_timezone_with_offset("a5"),
+            Some((4, DayDelta::Same))
+        ); // 23 + 5 = 28 % 24 = 4
+        assert_eq!(
+            parse_military_timezone_with_offset("z"),
+            Some((0, DayDelta::Same))
+        ); // UTC+0 -> 00:00 UTC
+        assert_eq!(
+            parse_military_timezone_with_offset("M9"),
+            Some((21, DayDelta::Previous))
+        ); // Uppercase works
 
         // Invalid cases: 'j' reserved, empty, too long, starts with digit
         assert_eq!(parse_military_timezone_with_offset("j"), None); // Reserved for local time
