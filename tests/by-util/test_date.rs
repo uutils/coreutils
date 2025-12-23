@@ -18,6 +18,45 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_empty_arguments() {
+    new_ucmd!().arg("").fails_with_code(1);
+    new_ucmd!().args(&["", ""]).fails_with_code(1);
+    new_ucmd!().args(&["", "", ""]).fails_with_code(1);
+}
+
+#[test]
+fn test_extra_operands() {
+    new_ucmd!()
+        .args(&["test", "extra"])
+        .fails_with_code(1)
+        .stderr_contains("extra operand 'extra'");
+}
+
+#[test]
+fn test_invalid_long_option() {
+    new_ucmd!()
+        .arg("--fB")
+        .fails_with_code(1)
+        .stderr_contains("unexpected argument '--fB'");
+}
+
+#[test]
+fn test_invalid_short_option() {
+    new_ucmd!()
+        .arg("-w")
+        .fails_with_code(1)
+        .stderr_contains("unexpected argument '-w'");
+}
+
+#[test]
+fn test_single_dash_as_date() {
+    new_ucmd!()
+        .arg("-")
+        .fails_with_code(1)
+        .stderr_contains("invalid date");
+}
+
+#[test]
 fn test_date_email() {
     for param in ["--rfc-email", "--rfc-e", "-R", "--rfc-2822", "--rfc-822"] {
         new_ucmd!().arg(param).succeeds();
@@ -290,6 +329,27 @@ fn test_date_set_permissions_error() {
             .fails();
         result.no_stdout();
         assert!(result.stderr_str().starts_with("date: cannot set date: "));
+    }
+}
+
+#[test]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+fn test_date_set_hyphen_prefixed_values() {
+    // test -s flag accepts hyphen-prefixed values like "-3 days"
+    if !(geteuid() == 0 || uucore::os::is_wsl_1()) {
+        let test_cases = vec!["-1 hour", "-2 days", "-3 weeks", "-1 month"];
+
+        for date_str in test_cases {
+            let result = new_ucmd!().arg("--set").arg(date_str).fails();
+            result.no_stdout();
+            // permission error, not argument parsing error
+            assert!(
+                result.stderr_str().starts_with("date: cannot set date: "),
+                "Expected permission error for '{}', but got: {}",
+                date_str,
+                result.stderr_str()
+            );
+        }
     }
 }
 
@@ -1070,4 +1130,59 @@ fn test_date_military_timezone_with_offset_variations() {
             .succeeds()
             .stdout_is(format!("{expected}\n"));
     }
+}
+
+// Locale-aware hour formatting tests
+#[test]
+#[cfg(unix)]
+fn test_date_locale_hour_c_locale() {
+    // C locale should use 24-hour format
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-10-11T13:00")
+        .succeeds()
+        .stdout_contains("13:00");
+}
+
+#[test]
+#[cfg(any(
+    target_os = "linux",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "dragonfly"
+))]
+fn test_date_locale_hour_en_us() {
+    // en_US locale typically uses 12-hour format when available
+    // Note: If locale is not installed on system, falls back to C locale (24-hour)
+    let result = new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-10-11T13:00")
+        .succeeds();
+
+    let stdout = result.stdout_str();
+    // Accept either 12-hour (if locale available) or 24-hour (if locale unavailable)
+    // The important part is that the code doesn't crash and handles locale detection gracefully
+    assert!(
+        stdout.contains("1:00") || stdout.contains("13:00"),
+        "date output should contain either 1:00 (12-hour) or 13:00 (24-hour), got: {stdout}"
+    );
+}
+
+#[test]
+fn test_date_explicit_format_overrides_locale() {
+    // Explicit format should override locale preferences
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-10-11T13:00")
+        .arg("+%H:%M")
+        .succeeds()
+        .stdout_is("13:00\n");
 }

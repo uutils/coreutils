@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore binvalid finvalid hinvalid iinvalid linvalid nabcabc nabcabcabc ninvalid vinvalid winvalid dabc näää
+// spell-checker:ignore binvalid finvalid hinvalid iinvalid linvalid nabcabc nabcabcabc ninvalid vinvalid winvalid dabc näää févr
 use uutests::{at_and_ucmd, new_ucmd, util::TestScenario, util_name};
 
 #[test]
@@ -209,23 +209,24 @@ fn test_number_separator() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_number_separator_non_utf8() {
-    use std::{
-        ffi::{OsStr, OsString},
-        os::unix::ffi::{OsStrExt, OsStringExt},
-    };
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
     let separator_bytes = [0xFF, 0xFE];
     let mut v = b"--number-separator=".to_vec();
     v.extend_from_slice(&separator_bytes);
 
     let arg = OsString::from_vec(v);
-    let separator = OsStr::from_bytes(&separator_bytes);
+
+    // Raw bytes should be preserved in the separator output
+    let mut expected = b"     1".to_vec();
+    expected.extend_from_slice(&separator_bytes);
+    expected.extend_from_slice(b"test\n");
 
     new_ucmd!()
         .arg(arg)
         .pipe_in("test")
         .succeeds()
-        .stdout_is(format!("     1{}test\n", separator.to_string_lossy()));
+        .stdout_is_bytes(expected);
 }
 
 #[test]
@@ -791,14 +792,24 @@ fn test_file_with_non_utf8_content() {
 
     let filename = "file";
     let content: &[u8] = b"a\n\xFF\xFE\nb";
-    let invalid_utf8: &[u8] = b"\xFF\xFE";
 
     at.write_bytes(filename, content);
 
-    ucmd.arg(filename).succeeds().stdout_is(format!(
-        "     1\ta\n     2\t{}\n     3\tb\n",
-        String::from_utf8_lossy(invalid_utf8)
-    ));
+    // Raw bytes should be preserved in output (not converted to UTF-8 replacement chars)
+    let expected: Vec<u8> = b"     1\ta\n     2\t\xFF\xFE\n     3\tb\n".to_vec();
+    ucmd.arg(filename).succeeds().stdout_is_bytes(expected);
+}
+
+#[test]
+fn test_stdin_non_utf8_preserved() {
+    // Verify that non-UTF8 bytes are preserved in output, not converted to replacement chars
+    // This is important for locale compatibility
+    let input: Vec<u8> = b"f\xe9vr.\n".to_vec(); // "févr." in Latin-1
+    let expected: Vec<u8> = b"     1\tf\xe9vr.\n".to_vec();
+    new_ucmd!()
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes(expected);
 }
 
 // Regression tests for issue #9132: repeated flags should use last value

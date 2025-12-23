@@ -4,7 +4,8 @@
 // file that was distributed with this source code.
 
 use std::ffi::OsString;
-use uucore::parser::parse_size::{ParseSizeError, parse_size_u64_max};
+use uucore::parser::parse_signed_num::{SignPrefix, parse_signed_num_max};
+use uucore::parser::parse_size::ParseSizeError;
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct ParseError;
@@ -107,30 +108,12 @@ fn process_num_block(
 }
 
 /// Parses an -c or -n argument,
-/// the bool specifies whether to read from the end
+/// the bool specifies whether to read from the end (all but last N)
 pub fn parse_num(src: &str) -> Result<(u64, bool), ParseSizeError> {
-    let mut size_string = src.trim();
-    let mut all_but_last = false;
-
-    if let Some(c) = size_string.chars().next() {
-        if c == '+' || c == '-' {
-            // head: '+' is not documented (8.32 man pages)
-            size_string = &size_string[1..];
-            if c == '-' {
-                all_but_last = true;
-            }
-        }
-    } else {
-        return Err(ParseSizeError::ParseFailure(src.to_string()));
-    }
-
-    // remove leading zeros so that size is interpreted as decimal, not octal
-    let trimmed_string = size_string.trim_start_matches('0');
-    if trimmed_string.is_empty() {
-        Ok((0, all_but_last))
-    } else {
-        parse_size_u64_max(trimmed_string).map(|n| (n, all_but_last))
-    }
+    let result = parse_signed_num_max(src)?;
+    // head: '-' means "all but last N"
+    let all_but_last = result.sign == Some(SignPrefix::Minus);
+    Ok((result.value, all_but_last))
 }
 
 #[cfg(test)]
