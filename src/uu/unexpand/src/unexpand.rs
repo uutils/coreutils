@@ -35,17 +35,10 @@ enum ParseError {
 
 impl UError for ParseError {}
 
-fn parse_increment_syntax(word: &str, nums: &[usize]) -> Result<usize, ParseError> {
-    if nums.is_empty() {
-        return Err(ParseError::InvalidCharacter("+".to_string()));
-    }
+fn parse_tab_num(word: &str) -> Result<usize, ParseError> {
     match word.parse::<usize>() {
-        Ok(num) => {
-            if num == 0 {
-                return Err(ParseError::TabSizeCannotBeZero);
-            }
-            Ok(num)
-        }
+        Ok(0) => Err(ParseError::TabSizeCannotBeZero),
+        Ok(num) => Ok(num),
         Err(e) => match e.kind() {
             IntErrorKind::PosOverflow => Err(ParseError::TabSizeTooLarge),
             _ => Err(ParseError::InvalidCharacter(
@@ -55,27 +48,7 @@ fn parse_increment_syntax(word: &str, nums: &[usize]) -> Result<usize, ParseErro
     }
 }
 
-fn parse_extend_syntax(word: &str, nums: &[usize]) -> Result<usize, ParseError> {
-    if nums.is_empty() {
-        return Err(ParseError::InvalidCharacter("/".to_string()));
-    }
-    match word.parse::<usize>() {
-        Ok(num) => {
-            if num == 0 {
-                return Err(ParseError::TabSizeCannotBeZero);
-            }
-            Ok(num)
-        }
-        Err(e) => match e.kind() {
-            IntErrorKind::PosOverflow => Err(ParseError::TabSizeTooLarge),
-            _ => Err(ParseError::InvalidCharacter(
-                word.trim_start_matches(char::is_numeric).to_string(),
-            )),
-        },
-    }
-}
-
-fn tabstops_parse(s: &str) -> Result<TabConfig, ParseError> {
+fn parse_tabstops(s: &str) -> Result<TabConfig, ParseError> {
     let words = s.split(',');
 
     let mut nums = Vec::new();
@@ -93,29 +66,25 @@ fn tabstops_parse(s: &str) -> Result<TabConfig, ParseError> {
             if increment_size.is_some() || extend_size.is_some() {
                 return Err(ParseError::InvalidCharacter("+".to_string()));
             }
-            increment_size = Some(parse_increment_syntax(word, &nums)?);
+            if nums.is_empty() {
+                return Err(ParseError::InvalidCharacter("+".to_string()));
+            }
+            increment_size = Some(parse_tab_num(word)?);
         } else if let Some(word) = word.strip_prefix('/') {
             // /N means repeat every N positions after the last tab stop
             if increment_size.is_some() || extend_size.is_some() {
                 return Err(ParseError::InvalidCharacter("/".to_string()));
             }
-            extend_size = Some(parse_extend_syntax(word, &nums)?);
+            if nums.is_empty() {
+                return Err(ParseError::InvalidCharacter("/".to_string()));
+            }
+            extend_size = Some(parse_tab_num(word)?);
         } else {
             // Regular number
             if increment_size.is_some() || extend_size.is_some() {
                 return Err(ParseError::InvalidCharacter(word.to_string()));
             }
-            match word.parse::<usize>() {
-                Ok(num) => nums.push(num),
-                Err(e) => {
-                    return match e.kind() {
-                        IntErrorKind::PosOverflow => Err(ParseError::TabSizeTooLarge),
-                        _ => Err(ParseError::InvalidCharacter(
-                            word.trim_start_matches(char::is_numeric).to_string(),
-                        )),
-                    };
-                }
-            }
+            nums.push(parse_tab_num(word)?);
         }
     }
 
@@ -127,19 +96,10 @@ fn tabstops_parse(s: &str) -> Result<TabConfig, ParseError> {
         });
     }
 
-    if nums.contains(&0) {
-        return Err(ParseError::TabSizeCannotBeZero);
-    }
-
-    // Now handle the increment/extend if specified
+    // Handle the increment if specified
     if let Some(inc) = increment_size {
-        if nums.is_empty() {
-            return Err(ParseError::InvalidCharacter("+".to_string()));
-        }
         let last = *nums.last().unwrap();
         nums.push(last + inc);
-    } else if extend_size.is_some() && nums.is_empty() {
-        return Err(ParseError::InvalidCharacter("/".to_string()));
     }
 
     if let (false, _) = nums
@@ -185,7 +145,7 @@ impl Options {
                 increment_size: None,
                 extend_size: None,
             },
-            Some(s) => tabstops_parse(&s.map(|s| s.as_str()).collect::<Vec<_>>().join(","))?,
+            Some(s) => parse_tabstops(&s.map(|s| s.as_str()).collect::<Vec<_>>().join(","))?,
         };
 
         let aflag = (matches.get_flag(options::ALL) || matches.contains_id(options::TABS))
@@ -610,7 +570,7 @@ fn unexpand(options: &Options) -> UResult<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ParseError, is_digit_or_comma, parse_extend_syntax, parse_increment_syntax};
+    use crate::{ParseError, is_digit_or_comma, parse_tab_num, parse_tabstops};
 
     #[test]
     fn test_is_digit_or_comma() {
@@ -620,64 +580,56 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_increment_syntax() {
-        let nums = vec![3];
-        assert_eq!(parse_increment_syntax("6", &nums).unwrap(), 6);
-        assert_eq!(parse_increment_syntax("12", &nums).unwrap(), 12);
+    fn test_parse_tab_num() {
+        assert_eq!(parse_tab_num("6").unwrap(), 6);
+        assert_eq!(parse_tab_num("12").unwrap(), 12);
+        assert_eq!(parse_tab_num("9").unwrap(), 9);
+        assert_eq!(parse_tab_num("4").unwrap(), 4);
     }
 
     #[test]
-    fn test_parse_increment_syntax_errors() {
-        let nums = vec![3];
-        let empty_nums = vec![];
-
+    fn test_parse_tab_num_errors() {
         // Zero is not allowed
         assert!(matches!(
-            parse_increment_syntax("0", &nums),
+            parse_tab_num("0"),
             Err(ParseError::TabSizeCannotBeZero)
         ));
 
-        // Need previous tab stop
+        // Invalid character
         assert!(matches!(
-            parse_increment_syntax("6", &empty_nums),
+            parse_tab_num("6x"),
             Err(ParseError::InvalidCharacter(_))
         ));
 
         // Invalid character
         assert!(matches!(
-            parse_increment_syntax("6x", &nums),
+            parse_tab_num("9y"),
             Err(ParseError::InvalidCharacter(_))
         ));
     }
 
     #[test]
-    fn test_parse_extend_syntax() {
-        let nums = vec![3];
-        assert_eq!(parse_extend_syntax("9", &nums).unwrap(), 9);
-        assert_eq!(parse_extend_syntax("4", &nums).unwrap(), 4);
-    }
-
-    #[test]
-    fn test_parse_extend_syntax_errors() {
-        let nums = vec![3];
-        let empty_nums = vec![];
-
-        // Zero is not allowed
+    fn test_parse_tabstops_extended_syntax() {
+        // +N requires previous tab stops
         assert!(matches!(
-            parse_extend_syntax("0", &nums),
-            Err(ParseError::TabSizeCannotBeZero)
-        ));
-
-        // Need previous tab stop
-        assert!(matches!(
-            parse_extend_syntax("9", &empty_nums),
+            parse_tabstops("+6"),
             Err(ParseError::InvalidCharacter(_))
         ));
 
-        // Invalid character
+        // /N requires previous tab stops
         assert!(matches!(
-            parse_extend_syntax("9y", &nums),
+            parse_tabstops("/9"),
             Err(ParseError::InvalidCharacter(_))
         ));
+
+        // Valid +N with previous tab stop
+        let config = parse_tabstops("3,+6").unwrap();
+        assert_eq!(config.tabstops, vec![3, 9]);
+        assert_eq!(config.increment_size, Some(6));
+
+        // Valid /N with previous tab stop
+        let config = parse_tabstops("3,/4").unwrap();
+        assert_eq!(config.tabstops, vec![3]);
+        assert_eq!(config.extend_size, Some(4));
     }
 }
