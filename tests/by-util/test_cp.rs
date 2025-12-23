@@ -1801,8 +1801,7 @@ fn test_cp_preserve_default_no_xattr() {
     use std::process::Command;
     use uutests::util::compare_xattrs;
 
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
 
     let source_file = "source_with_xattr";
     let dest_file_p = "dest_with_p_flag";
@@ -1854,15 +1853,13 @@ fn test_cp_preserve_default_no_xattr() {
     );
 
     // -p should not preserve xattrs
-    scene
-        .ucmd()
-        .args(&[
-            "-p",
-            &at.plus_as_string(source_file),
-            &at.plus_as_string(dest_file_p),
-        ])
-        .succeeds()
-        .no_output();
+    ucmd.args(&[
+        "-p",
+        &at.plus_as_string(source_file),
+        &at.plus_as_string(dest_file_p),
+    ])
+    .succeeds()
+    .no_output();
 
     // xattrs should not be copied
     assert!(
@@ -1871,16 +1868,12 @@ fn test_cp_preserve_default_no_xattr() {
     );
 
     // mode, ownership, and timestamps should be preserved
-    #[cfg(not(any(target_os = "freebsd", target_os = "macos")))]
-    {
-        let metadata_src = at.metadata(source_file);
-        let metadata_dst = at.metadata(dest_file_p);
-        assert_metadata_eq!(metadata_src, metadata_dst);
-    }
+    let metadata_src = at.metadata(source_file);
+    let metadata_dst = at.metadata(dest_file_p);
+    assert_metadata_eq!(metadata_src, metadata_dst);
 
     // --preserve=xattr should explicitly preserve xattrs
-    scene
-        .ucmd()
+    new_ucmd!()
         .args(&[
             "--preserve=xattr",
             &at.plus_as_string(source_file),
