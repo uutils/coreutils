@@ -32,7 +32,12 @@ pub mod fsext;
 pub mod i18n;
 #[cfg(feature = "lines")]
 pub mod lines;
-#[cfg(feature = "parser")]
+#[cfg(any(
+    feature = "parser",
+    feature = "parser-num",
+    feature = "parser-size",
+    feature = "parser-glob"
+))]
 pub mod parser;
 #[cfg(feature = "quoting-style")]
 pub mod quoting_style;

@@ -802,6 +802,26 @@ fn test_mv_custom_backup_suffix() {
 }
 
 #[test]
+fn test_suffix_without_backup_option() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_mv_custom_backup_suffix_file_a";
+    let file_b = "test_mv_custom_backup_suffix_file_b";
+    let suffix = "super-suffix-of-the-century";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    ucmd.arg(format!("--suffix={suffix}"))
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(format!("{file_b}{suffix}")));
+}
+
+#[test]
 fn test_mv_custom_backup_suffix_hyphen_value() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_custom_backup_suffix_file_a";
