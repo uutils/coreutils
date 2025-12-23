@@ -18,10 +18,7 @@ use uucore::checksum::compute::{
 use uucore::checksum::validate::{
     ChecksumValidateOptions, ChecksumVerbose, perform_checksum_validation,
 };
-use uucore::checksum::{
-    AlgoKind, ChecksumError, SizedAlgoKind, calculate_blake2b_length_str,
-    sanitize_sha2_sha3_length_str,
-};
+use uucore::checksum::{AlgoKind, ChecksumError, SizedAlgoKind, calculate_blake2b_length_str};
 use uucore::error::UResult;
 use uucore::line_ending::LineEnding;
 use uucore::{format_usage, translate};
@@ -71,36 +68,6 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<(AlgoKind, Optio
     }
     if matches.get_flag("b2sum") {
         set_or_err((AlgoKind::Blake2b, None))?;
-    }
-    if matches.get_flag("b3sum") {
-        set_or_err((AlgoKind::Blake3, None))?;
-    }
-    if matches.get_flag("sha3") {
-        match matches.get_one::<String>(options::LENGTH) {
-            Some(len) => set_or_err((
-                AlgoKind::Sha3,
-                Some(sanitize_sha2_sha3_length_str(AlgoKind::Sha3, len)?),
-            ))?,
-            None => return Err(ChecksumError::LengthRequired("SHA3".into()).into()),
-        }
-    }
-    if matches.get_flag("sha3-224") {
-        set_or_err((AlgoKind::Sha3, Some(224)))?;
-    }
-    if matches.get_flag("sha3-256") {
-        set_or_err((AlgoKind::Sha3, Some(256)))?;
-    }
-    if matches.get_flag("sha3-384") {
-        set_or_err((AlgoKind::Sha3, Some(384)))?;
-    }
-    if matches.get_flag("sha3-512") {
-        set_or_err((AlgoKind::Sha3, Some(512)))?;
-    }
-    if matches.get_flag("shake128") {
-        set_or_err((AlgoKind::Shake128, Some(128)))?;
-    }
-    if matches.get_flag("shake256") {
-        set_or_err((AlgoKind::Shake256, Some(256)))?;
     }
 
     if alg.is_none() {
@@ -372,15 +339,7 @@ pub fn uu_app_custom() -> Command {
         ("sha256", translate!("hashsum-help-sha256")),
         ("sha384", translate!("hashsum-help-sha384")),
         ("sha512", translate!("hashsum-help-sha512")),
-        ("sha3", translate!("hashsum-help-sha3")),
-        ("sha3-224", translate!("hashsum-help-sha3-224")),
-        ("sha3-256", translate!("hashsum-help-sha3-256")),
-        ("sha3-384", translate!("hashsum-help-sha3-384")),
-        ("sha3-512", translate!("hashsum-help-sha3-512")),
-        ("shake128", translate!("hashsum-help-shake128")),
-        ("shake256", translate!("hashsum-help-shake256")),
         ("b2sum", translate!("hashsum-help-b2sum")),
-        ("b3sum", translate!("hashsum-help-b3sum")),
     ];
 
     for (name, desc) in algorithms {

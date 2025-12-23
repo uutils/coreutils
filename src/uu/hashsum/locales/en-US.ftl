@@ -18,7 +18,6 @@ hashsum-help-ignore-missing = don't fail or report status for missing files
 hashsum-help-warn = warn about improperly formatted checksum lines
 hashsum-help-zero = end each output line with NUL, not newline
 hashsum-help-length = digest length in bits; must not exceed the max for the blake2 algorithm and must be a multiple of 8
-hashsum-help-bits = set the size of the output (only for SHAKE)
 
 # Algorithm help messages
 hashsum-help-md5 = work with MD5
@@ -27,15 +26,7 @@ hashsum-help-sha224 = work with SHA224
 hashsum-help-sha256 = work with SHA256
 hashsum-help-sha384 = work with SHA384
 hashsum-help-sha512 = work with SHA512
-hashsum-help-sha3 = work with SHA3
-hashsum-help-sha3-224 = work with SHA3-224
-hashsum-help-sha3-256 = work with SHA3-256
-hashsum-help-sha3-384 = work with SHA3-384
-hashsum-help-sha3-512 = work with SHA3-512
-hashsum-help-shake128 = work with SHAKE128 using BITS for the output size
-hashsum-help-shake256 = work with SHAKE256 using BITS for the output size
 hashsum-help-b2sum = work with BLAKE2
-hashsum-help-b3sum = work with BLAKE3
 
 # Error messages
 hashsum-error-failed-to-read-input = failed to read input
