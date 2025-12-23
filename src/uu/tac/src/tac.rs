@@ -10,7 +10,7 @@ use clap::{Arg, ArgAction, Command};
 use memchr::memmem;
 use memmap2::Mmap;
 use std::ffi::OsString;
-use std::io::{BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufWriter, Read, Seek, Write, stdin, stdout};
 use std::{fs::File, path::Path};
 use uucore::error::UError;
 use uucore::error::UResult;
@@ -265,8 +265,17 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
                 mmap = mmap1;
                 &mmap
             } else {
-                let mut buf1 = Vec::new();
-                if let Err(e) = File::open(path).and_then(|mut f| f.read_to_end(&mut buf1)) {
+                let mut f = File::open(path)?;
+                let mut buf1;
+
+                if let Some(size) = try_seek_end(&mut f) {
+                    // Normal file with known size
+                    buf1 = Vec::with_capacity(size as usize);
+                } else {
+                    // Unable to determine size - fall back to normal read
+                    buf1 = Vec::new();
+                }
+                if let Err(e) = f.read_to_end(&mut buf1) {
                     let e: Box<dyn UError> = TacError::ReadError(filename.clone(), e).into();
                     show!(e);
                     continue;
@@ -310,4 +319,47 @@ fn try_mmap_path(path: &Path) -> Option<Mmap> {
     let mmap = unsafe { Mmap::map(&file).ok()? };
 
     Some(mmap)
+}
+
+/// Attempt to seek to end of file
+/// 
+/// Returns `Some(size)` if successful, `None` if unable to determine size. 
+/// Hangs if file is an infinite stream.
+/// 
+/// Leaves file cursor at start of file
+fn try_seek_end(file: &mut File) -> Option<u64> {
+    let size = file.seek(std::io::SeekFrom::End(0)).ok();
+
+    if size == Some(0) {
+        // Might be an empty file or infinite stream;
+        // Try reading a byte to distinguish
+        file.seek(std::io::SeekFrom::Start(0)).ok()?;
+        let mut test_byte = [0u8; 1];
+        match file.read(&mut test_byte).ok()? {
+            0 => {
+                // Truly empty file
+                return size;
+            }
+            _ => {
+                // Has data despite size 0 - likely a pipe or special file
+                // Loop forever looking for EOF
+                loop {
+                    let mut byte = [0u8; 1];
+                    match file.read(&mut byte) {
+                        Ok(0) => break,  // Found EOF
+                        Ok(_) => continue, // Keep looking
+                        Err(_) => break,
+                    }
+                }
+
+                // TODO: Prove this is actually unreachable
+                unreachable!();
+            }
+        }
+    }
+
+    // Leave the file cursor at the start
+    file.seek(std::io::SeekFrom::Start(0)).ok()?;
+
+    size
 }
