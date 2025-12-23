@@ -101,7 +101,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
         the input file is not a FIFO, pipe, or regular file, it is unspecified whether or
         not the -f option shall be ignored.
         */
-        if !settings.has_only_stdin() || settings.pid != 0 {
+        if !settings.has_only_stdin() || settings.pid != 0 || observer.stdin_is_tailable() {
             follow::follow(observer, settings)?;
         }
     }
@@ -277,45 +277,83 @@ fn tail_stdin(
         return Ok(());
     }
 
-    if let Some(path) = input.resolve() {
-        // fifo
+    let resolved_stdin = input.resolve().or_else(resolve_stdin_path);
+
+    if let Some(ref path) = resolved_stdin {
+        let mut stdin_is_seekable_file = false;
         let mut stdin_offset = 0;
-        if cfg!(unix) {
-            // Save the current seek position/offset of a stdin redirected file.
-            // This is needed to pass "gnu/tests/tail-2/start-middle.sh"
-            if let Ok(mut stdin_handle) = Handle::stdin() {
-                if let Ok(offset) = stdin_handle.as_file_mut().stream_position() {
-                    stdin_offset = offset;
-                }
+
+        if let Ok(mut stdin_handle) = Handle::stdin() {
+            if let Ok(offset) = stdin_handle.as_file_mut().stream_position() {
+                stdin_offset = offset;
+            }
+            if let Ok(meta) = stdin_handle.as_file_mut().metadata() {
+                stdin_is_seekable_file = meta.is_file();
             }
         }
-        tail_file(
-            settings,
-            header_printer,
-            input,
-            &path,
-            observer,
-            stdin_offset,
-        )?;
-    } else {
-        // pipe
-        header_printer.print_input(input);
-        if paths::stdin_is_bad_fd() {
+
+        if !stdin_is_seekable_file {
+            stdin_is_seekable_file = path.metadata().map(|meta| meta.is_file()).unwrap_or(false);
+        }
+
+        if stdin_is_seekable_file {
+            tail_file(
+                settings,
+                header_printer,
+                input,
+                path,
+                observer,
+                stdin_offset,
+            )?;
+
+            observer.set_stdin_is_tailable(true);
+            observer.set_stdin_key(path.clone());
+            if settings.follow.is_some() {
+                observer.add_path(path, input.display_name.as_str(), None, true)?;
+            }
+            return Ok(());
+        }
+
+        if path.metadata().map(|meta| meta.is_dir()).unwrap_or(false) {
+            header_printer.print_input(input);
             set_exit_code(1);
             show_error!(
                 "{}",
-                translate!("tail-error-cannot-fstat", "file" => translate!("tail-stdin-header"), "error" => translate!("tail-bad-fd"))
+                translate!(
+                    "tail-error-reading-file",
+                    "file" => input.display_name.clone(),
+                    "error" => translate!("tail-is-a-directory")
+                )
             );
-            if settings.follow.is_some() {
-                show_error!(
-                    "{}",
-                    translate!("tail-error-reading-file", "file" => translate!("tail-stdin-header"), "error" => translate!("tail-bad-fd"))
-                );
-            }
-        } else {
-            let mut reader = BufReader::new(stdin());
-            unbounded_tail(&mut reader, settings)?;
+            return Ok(());
         }
+    }
+
+    header_printer.print_input(input);
+    if paths::stdin_is_bad_fd() {
+        set_exit_code(1);
+        show_error!(
+            "{}",
+            translate!(
+                "tail-error-cannot-fstat",
+                "file" => translate!("tail-stdin-header"),
+                "error" => translate!("tail-bad-fd")
+            )
+        );
+        if settings.follow.is_some() {
+            show_error!(
+                "{}",
+                translate!(
+                    "tail-error-reading-file",
+                    "file" => translate!("tail-stdin-header"),
+                    "error" => translate!("tail-bad-fd")
+                )
+            );
+        }
+    } else {
+        let mut reader = BufReader::new(stdin());
+        unbounded_tail(&mut reader, settings)?;
+        observer.add_stdin(input.display_name.as_str(), Some(Box::new(reader)), true)?;
     }
 
     Ok(())
@@ -584,6 +622,39 @@ where
     } else {
         io::copy(file, &mut stdout).unwrap();
     }
+}
+
+#[cfg(windows)]
+fn resolve_stdin_path() -> Option<PathBuf> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Foundation::MAX_PATH;
+    use windows_sys::Win32::Storage::FileSystem::{FILE_NAME_OPENED, GetFinalPathNameByHandleW};
+
+    let handle = std::io::stdin().lock().as_raw_handle();
+    if handle.is_null() {
+        return None;
+    }
+
+    let mut buffer = [0u16; MAX_PATH as usize];
+    let len = unsafe {
+        GetFinalPathNameByHandleW(
+            handle,
+            buffer.as_mut_ptr(),
+            buffer.len() as u32,
+            FILE_NAME_OPENED,
+        )
+    } as usize;
+
+    if len == 0 || len >= buffer.len() {
+        return None;
+    }
+
+    String::from_utf16(&buffer[..len]).ok().map(PathBuf::from)
+}
+
+#[cfg(not(windows))]
+fn resolve_stdin_path() -> Option<PathBuf> {
+    None
 }
 
 #[cfg(test)]
