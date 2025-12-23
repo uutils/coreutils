@@ -118,7 +118,7 @@ impl From<&str> for Rfc3339Format {
 /// Indicates whether parsing a military timezone causes the date to remain the same, roll back to the previous day, or
 /// advance to the next day.
 /// This can occur when applying a military timezone with an optional hour offset crosses midnight
-/// in eihter direction.
+/// in either direction.
 #[derive(PartialEq, Debug)]
 enum DayDelta {
     /// The date does not change
