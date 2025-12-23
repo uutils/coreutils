@@ -16,13 +16,11 @@ This file documents why some GNU tests are failing:
 * misc/close-stdout.sh
 * numfmt/numfmt.pl - https://github.com/uutils/coreutils/issues/7219 / https://github.com/uutils/coreutils/issues/7221
 * misc/stdbuf.sh - https://github.com/uutils/coreutils/issues/7072
-* misc/tsort.pl - https://github.com/uutils/coreutils/issues/7074
 * misc/write-errors.sh
 * ptx/ptx-overrun.sh
 * ptx/ptx.pl
 * rm/one-file-system.sh - https://github.com/uutils/coreutils/issues/7011
 * rm/rm1.sh - https://github.com/uutils/coreutils/issues/9479
-* shred/shred-passes.sh - https://github.com/uutils/coreutils/pull/9317
 * sort/sort-debug-keys.sh
 * sort/sort-debug-warn.sh
 * sort/sort-float.sh
