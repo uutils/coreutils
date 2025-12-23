@@ -329,7 +329,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 // Military timezone with optional hour offset
                 // Convert to UTC time: midnight + military_tz_offset + additional_hours
 
-                // When calculating a military timezone with an optional hour offset, midgnight may
+                // When calculating a military timezone with an optional hour offset, midnight may
                 // be crossed in either direction. `day_delta` indicates wether the date remains
                 // the same, moves to the previous day, or advances to the next day.
                 let date_part = match day_delta {
