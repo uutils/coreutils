@@ -10,7 +10,7 @@ mod locale;
 use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime;
 use jiff::tz::{TimeZone, TimeZoneDatabase};
-use jiff::{Timestamp, Zoned};
+use jiff::{SignedDuration, Timestamp, Zoned};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -159,9 +159,9 @@ fn parse_military_timezone_with_offset(s: &str) -> Option<i32> {
         _ => return None,
     };
 
-    // Calculate total hours: midnight (0) + tz_offset + additional_hours
+    // Calculate total hours: midnight (0) - tz_offset + additional_hours
     // Midnight in timezone X converted to UTC
-    let total_hours = (0 - tz_offset + additional_hours).rem_euclid(24);
+    let total_hours = 0 - tz_offset + additional_hours;
 
     Some(total_hours)
 }
@@ -297,9 +297,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             } else if let Some(total_hours) = military_tz_with_offset {
                 // Military timezone with optional hour offset
                 // Convert to UTC time: midnight + military_tz_offset + additional_hours
-                let date_part =
-                    strtime::format("%F", &now).unwrap_or_else(|_| String::from("1970-01-01"));
-                let composed = format!("{date_part} {total_hours:02}:00:00 +00:00");
+                let date = now
+                    .start_of_day()
+                    .unwrap_or_else(|_| Zoned::now())
+                    .saturating_add(SignedDuration::from_hours(total_hours as i64));
+                let composed = strtime::format("%F %T +00:00", &date)
+                    .unwrap_or_else(|_| String::from("1970-01-01 00:00:00 +00:00"));
                 parse_date(composed)
             } else if is_pure_digits {
                 // Derive HH and MM from the input
@@ -805,16 +808,18 @@ mod tests {
     #[test]
     fn test_parse_military_timezone_with_offset() {
         // Valid cases: letter only, letter + digit, uppercase
-        assert_eq!(parse_military_timezone_with_offset("m"), Some(12)); // UTC+12 -> 12:00 UTC
-        assert_eq!(parse_military_timezone_with_offset("m9"), Some(21)); // 12 + 9 = 21
-        assert_eq!(parse_military_timezone_with_offset("a5"), Some(4)); // 23 + 5 = 28 % 24 = 4
+        assert_eq!(parse_military_timezone_with_offset("m"), Some(-12)); // UTC+12 -> 12:00 UTC
+        assert_eq!(parse_military_timezone_with_offset("m9"), Some(-3)); // 12 + 9 = 21
+        assert_eq!(parse_military_timezone_with_offset("a5"), Some(4)); // -1 + 5 = 4
         assert_eq!(parse_military_timezone_with_offset("z"), Some(0)); // UTC+0 -> 00:00 UTC
-        assert_eq!(parse_military_timezone_with_offset("M9"), Some(21)); // Uppercase works
+        assert_eq!(parse_military_timezone_with_offset("M9"), Some(-3)); // Uppercase works
 
         // Invalid cases: 'j' reserved, empty, too long, starts with digit
         assert_eq!(parse_military_timezone_with_offset("j"), None); // Reserved for local time
         assert_eq!(parse_military_timezone_with_offset(""), None); // Empty
         assert_eq!(parse_military_timezone_with_offset("m999"), None); // Too long
         assert_eq!(parse_military_timezone_with_offset("9m"), None); // Starts with digit
+        assert_eq!(parse_military_timezone_with_offset("y"), Some(12));
+        assert_eq!(parse_military_timezone_with_offset("m13"), Some(1)); // 12 + 13 = 25 -> 1 next day
     }
 }
