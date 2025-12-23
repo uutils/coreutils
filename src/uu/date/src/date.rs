@@ -115,10 +115,17 @@ impl From<&str> for Rfc3339Format {
     }
 }
 
+/// Indicates whether parsing a military timezone causes the date to remain the same, roll back to the previous day, or
+/// advance to the next day.
+/// This can occur when applying a military timezone with an optional hour offset crosses midnight
+/// in eihter direction.
 #[derive(PartialEq, Debug)]
 enum DayDelta {
+    /// The date does not change
     Same,
+    /// The date rolls back to the previous day.
     Previous,
+    /// The date advances to the next day.
     Next,
 }
 
@@ -321,6 +328,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             } else if let Some((total_hours, day_delta)) = military_tz_with_offset {
                 // Military timezone with optional hour offset
                 // Convert to UTC time: midnight + military_tz_offset + additional_hours
+
+                // When calculating a military timezone with an optional hour offset, midgnight may
+                // be crossed in either direction. `day_delta` indicates wether the date remains
+                // the same, moves to the previous day, or advances to the next day.
                 let date_part = match day_delta {
                     DayDelta::Same => {
                         strtime::format("%F", &now).unwrap_or_else(|_| String::from("1970-01-01"))
