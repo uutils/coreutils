@@ -326,10 +326,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         strtime::format("%F", &now).unwrap_or_else(|_| String::from("1970-01-01"))
                     },
                     DayDelta::Next => {
-                        strtime::format("%F", &now.tomorrow().unwrap()).unwrap_or_else(|_| String::from("1970-01-01"))
+                        now.tomorrow()
+                            .and_then(|d| strtime::format("%F", &d))
+                            .unwrap_or_else(|_| String::from("1970-01-01"))
                     },
                     DayDelta::Previous => {
-                        strtime::format("%F", &now.yesterday().unwrap()).unwrap_or_else(|_| String::from("1970-01-01"))
+                        now.yesterday()
+                            .and_then(|d| strtime::format("%F", &d))
+                            .unwrap_or_else(|_| String::from("1970-01-01"))
                     },
                 };
                 let composed = format!("{date_part} {total_hours:02}:00:00 +00:00");
