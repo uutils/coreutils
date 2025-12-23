@@ -18,7 +18,7 @@ use uucore::libc::mode_t;
 use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use uucore::safe_traversal::DirFd;
 use uucore::{format_usage, show, show_error};
 
@@ -338,7 +338,7 @@ impl Chmoder {
     }
 
     /// Handle symlinks during directory traversal based on traversal mode
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(unix))]
     fn handle_symlink_during_traversal(
         &self,
         path: &Path,
@@ -423,7 +423,7 @@ impl Chmoder {
         r
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(unix))]
     fn walk_dir_with_context(&self, file_path: &Path, is_command_line_arg: bool) -> UResult<()> {
         let mut r = self.chmod_file(file_path);
 
@@ -454,7 +454,7 @@ impl Chmoder {
         r
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     fn walk_dir_with_context(&self, file_path: &Path, is_command_line_arg: bool) -> UResult<()> {
         let mut r = self.chmod_file(file_path);
 
@@ -487,7 +487,7 @@ impl Chmoder {
         r
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     fn safe_traverse_dir(&self, dir_fd: &DirFd, dir_path: &Path) -> UResult<()> {
         let mut r = Ok(());
 
@@ -546,7 +546,7 @@ impl Chmoder {
         r
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     fn handle_symlink_during_safe_recursion(
         &self,
         path: &Path,
@@ -578,7 +578,7 @@ impl Chmoder {
         }
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     fn safe_chmod_file(
         &self,
         file_path: &Path,
@@ -610,7 +610,7 @@ impl Chmoder {
         Ok(())
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(unix))]
     fn handle_symlink_during_recursion(&self, path: &Path) -> UResult<()> {
         // Use the common symlink handling logic
         self.handle_symlink_during_traversal(path, false)

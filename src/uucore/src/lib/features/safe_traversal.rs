@@ -6,7 +6,7 @@
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
 //
-// Only available on Linux
+// Available on Unix
 //
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod
@@ -253,7 +253,7 @@ impl DirFd {
             FchmodatFlags::NoFollowSymlink
         };
 
-        let mode = Mode::from_bits_truncate(mode);
+        let mode = Mode::from_bits_truncate(mode as libc::mode_t);
 
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
@@ -266,7 +266,7 @@ impl DirFd {
 
     /// Change mode of this directory
     pub fn fchmod(&self, mode: u32) -> io::Result<()> {
-        let mode = Mode::from_bits_truncate(mode);
+        let mode = Mode::from_bits_truncate(mode as libc::mode_t);
 
         nix::sys::stat::fchmod(&self.fd, mode)
             .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
@@ -389,7 +389,7 @@ impl Metadata {
     }
 
     pub fn mode(&self) -> u32 {
-        self.stat.st_mode
+        self.stat.st_mode as u32
     }
 
     pub fn nlink(&self) -> u64 {
@@ -421,7 +421,7 @@ impl Metadata {
 // Add MetadataExt trait implementation for compatibility
 impl std::os::unix::fs::MetadataExt for Metadata {
     fn dev(&self) -> u64 {
-        self.stat.st_dev
+        self.stat.st_dev as u64
     }
 
     fn ino(&self) -> u64 {
@@ -436,7 +436,7 @@ impl std::os::unix::fs::MetadataExt for Metadata {
     }
 
     fn mode(&self) -> u32 {
-        self.stat.st_mode
+        self.stat.st_mode as u32
     }
 
     fn nlink(&self) -> u64 {
@@ -460,7 +460,7 @@ impl std::os::unix::fs::MetadataExt for Metadata {
     }
 
     fn rdev(&self) -> u64 {
-        self.stat.st_rdev
+        self.stat.st_rdev as u64
     }
 
     fn size(&self) -> u64 {

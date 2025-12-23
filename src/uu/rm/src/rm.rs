@@ -26,7 +26,7 @@ use uucore::translate;
 use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
 
 mod platform;
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use platform::{safe_remove_dir_recursive, safe_remove_empty_dir, safe_remove_file};
 
 #[derive(Debug, Error)]
@@ -539,7 +539,7 @@ fn is_readable_metadata(metadata: &Metadata) -> bool {
 
 /// Whether the given file or directory is readable.
 #[cfg(unix)]
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(unix))]
 fn is_readable(path: &Path) -> bool {
     match fs::metadata(path) {
         Err(_) => false,
@@ -605,14 +605,14 @@ fn remove_dir_recursive(
         return false;
     }
 
-    // Use secure traversal on Linux for all recursive directory removals
-    #[cfg(target_os = "linux")]
+    // Use secure traversal on Unix (all supported platforms) for all recursive directory removals
+    #[cfg(unix)]
     {
         safe_remove_dir_recursive(path, options, progress_bar)
     }
 
-    // Fallback for non-Linux or use fs::remove_dir_all for very long paths
-    #[cfg(not(target_os = "linux"))]
+    // Fallback for non-Unix or use fs::remove_dir_all for very long paths
+    #[cfg(not(unix))]
     {
         if let Some(s) = path.to_str() {
             if s.len() > 1000 {
@@ -734,8 +734,8 @@ fn remove_dir(path: &Path, options: &Options, progress_bar: Option<&ProgressBar>
         return true;
     }
 
-    // Use safe traversal on Linux for empty directory removal
-    #[cfg(target_os = "linux")]
+    // Use safe traversal on Unix (all supported platforms) for empty directory removal
+    #[cfg(unix)]
     {
         if let Some(result) = safe_remove_empty_dir(path, options, progress_bar) {
             return result;
@@ -758,8 +758,8 @@ fn remove_file(path: &Path, options: &Options, progress_bar: Option<&ProgressBar
             pb.inc(1);
         }
 
-        // Use safe traversal on Linux for individual file removal
-        #[cfg(target_os = "linux")]
+        // Use safe traversal on Unix for individual file removal
+        #[cfg(unix)]
         {
             if let Some(result) = safe_remove_file(path, options, progress_bar) {
                 return result;

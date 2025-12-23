@@ -25,7 +25,7 @@ use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::fsext::{MetadataTimeField, metadata_get_time};
 use uucore::line_ending::LineEnding;
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use uucore::safe_traversal::DirFd;
 use uucore::translate;
 
@@ -164,7 +164,7 @@ impl Stat {
     }
 
     /// Create a Stat using safe traversal methods with `DirFd` for the root directory
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     fn new_from_dirfd(dir_fd: &DirFd, full_path: &Path) -> std::io::Result<Self> {
         // Get metadata for the directory itself using fstat
         let safe_metadata = dir_fd.metadata()?;
@@ -293,9 +293,9 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
     }
 }
 
-#[cfg(target_os = "linux")]
-// For now, implement safe_du only on Linux
-// This is done for Ubuntu but should be extended to other platforms that support openat
+#[cfg(unix)]
+// Implement safe_du on Unix
+// This is done for TOCTOU safety
 fn safe_du(
     path: &Path,
     options: &TraversalOptions,
@@ -439,7 +439,7 @@ fn safe_du(
         const S_IFMT: u32 = 0o170_000;
         const S_IFDIR: u32 = 0o040_000;
         const S_IFLNK: u32 = 0o120_000;
-        let is_symlink = (lstat.st_mode & S_IFMT) == S_IFLNK;
+        let is_symlink = (lstat.st_mode as u32 & S_IFMT) == S_IFLNK;
 
         // Handle symlinks with -L option
         // For safe traversal with -L, we skip symlinks to directories entirely
@@ -450,12 +450,12 @@ fn safe_du(
             continue;
         }
 
-        let is_dir = (lstat.st_mode & S_IFMT) == S_IFDIR;
+        let is_dir = (lstat.st_mode as u32 & S_IFMT) == S_IFDIR;
         let entry_stat = lstat;
 
         let file_info = (entry_stat.st_ino != 0).then_some(FileInfo {
             file_id: entry_stat.st_ino as u128,
-            dev_id: entry_stat.st_dev,
+            dev_id: entry_stat.st_dev as u64,
         });
 
         // For safe traversal, we need to handle stats differently
@@ -1106,14 +1106,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
 
         // Determine which traversal method to use
-        #[cfg(target_os = "linux")]
+        #[cfg(unix)]
         let use_safe_traversal = traversal_options.dereference != Deref::All;
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(unix))]
         let use_safe_traversal = false;
 
         if use_safe_traversal {
-            // Use safe traversal (Linux only, when not using -L)
-            #[cfg(target_os = "linux")]
+            // Use safe traversal (Unix only, when not using -L)
+            #[cfg(unix)]
             {
                 // Pre-populate seen_inodes with the starting directory to detect cycles
                 if let Ok(stat) = Stat::new(&path, None, &traversal_options) {
@@ -1168,9 +1168,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     .send(Ok(StatPrintInfo { stat, depth: 0 }))
                     .map_err(|e| USimpleError::new(1, e.to_string()))?;
             } else {
-                #[cfg(target_os = "linux")]
+                #[cfg(unix)]
                 let error_msg = translate!("du-error-cannot-access", "path" => path.quote());
-                #[cfg(not(target_os = "linux"))]
+                #[cfg(not(unix))]
                 let error_msg = translate!("du-error-cannot-access-no-such-file", "path" => path.to_string_lossy().quote());
 
                 print_tx
