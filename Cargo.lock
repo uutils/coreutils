@@ -392,9 +392,9 @@ dependencies = [
 
 [[package]]
 name = "codspeed"
-version = "4.1.0"
+version = "4.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3b847e05a34be5c38f3f2a5052178a3bd32e6b5702f3ea775efde95c483a539"
+checksum = "eb56923193c76a0e5b6b17b2c2bb1e151ef8a5e06b557e1cbe38c6db467763f9"
 dependencies = [
  "anyhow",
  "cc",
@@ -410,9 +410,9 @@ dependencies = [
 
 [[package]]
 name = "codspeed-divan-compat"
-version = "4.1.0"
+version = "4.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0f0e9fe5eaa39995ec35e46407f7154346cc25bd1300c64c21636f3d00cb2cc"
+checksum = "7558ff5740fbc26a5fc55c4934cfed94dfccee76abc17b57ecf5d0bee3592b5e"
 dependencies = [
  "clap",
  "codspeed",
@@ -423,9 +423,9 @@ dependencies = [
 
 [[package]]
 name = "codspeed-divan-compat-macros"
-version = "4.1.0"
+version = "4.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88c8babf2a40fd2206a2e030cf020d0d58144cd56e1dc408bfba02cdefb08b4f"
+checksum = "8de343ca0a4fbaabbd3422941fdee24407d00e2fa686a96021c21a78ab2bb895"
 dependencies = [
  "divan-macros",
  "itertools 0.14.0",
@@ -437,9 +437,9 @@ dependencies = [
 
 [[package]]
 name = "codspeed-divan-compat-walltime"
-version = "4.1.0"
+version = "4.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f26092328e12a36704ffc552f379c6405dd94d3149970b79b22d371717c2aae"
+checksum = "9d9de586cc7e9752fc232f08e0733c2016122e16065c4adf0c8a8d9e370749ee"
 dependencies = [
  "cfg-if",
  "clap",
@@ -699,9 +699,9 @@ checksum = "19d374276b40fb8bbdee95aef7c7fa6b5316ec764510eb64b8dd0e2ed0d7e7f5"
 
 [[package]]
 name = "crc-fast"
-version = "1.8.2"
+version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85d9be5297a59f1b7651fd2711a1f4461929f53b182b394df0df15b3a387ef51"
+checksum = "2fd92aca2c6001b1bf5ba0ff84ee74ec8501b52bbef0cac80bf25a6c1d87a83d"
 dependencies = [
  "crc",
  "digest",
@@ -1699,9 +1699,9 @@ checksum = "df1d3c3b53da64cf5760482273a98e575c651a67eec7f77df96b5b642de8f039"
 
 [[package]]
 name = "linux-raw-sys"
-version = "0.12.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b83b49c75b50cb715b09d337b045481493a8ada2bb3e872f2bae71db45b27696"
+checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
 
 [[package]]
 name = "litemap"
@@ -3126,7 +3126,6 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
- "hex",
  "tempfile",
  "uucore",
 ]
@@ -3151,7 +3150,7 @@ dependencies = [
  "fluent",
  "indicatif",
  "libc",
- "linux-raw-sys 0.12.0",
+ "linux-raw-sys 0.12.1",
  "selinux",
  "tempfile",
  "thiserror 2.0.17",
