@@ -18,6 +18,45 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_empty_arguments() {
+    new_ucmd!().arg("").fails_with_code(1);
+    new_ucmd!().args(&["", ""]).fails_with_code(1);
+    new_ucmd!().args(&["", "", ""]).fails_with_code(1);
+}
+
+#[test]
+fn test_extra_operands() {
+    new_ucmd!()
+        .args(&["test", "extra"])
+        .fails_with_code(1)
+        .stderr_contains("extra operand 'extra'");
+}
+
+#[test]
+fn test_invalid_long_option() {
+    new_ucmd!()
+        .arg("--fB")
+        .fails_with_code(1)
+        .stderr_contains("unexpected argument '--fB'");
+}
+
+#[test]
+fn test_invalid_short_option() {
+    new_ucmd!()
+        .arg("-w")
+        .fails_with_code(1)
+        .stderr_contains("unexpected argument '-w'");
+}
+
+#[test]
+fn test_single_dash_as_date() {
+    new_ucmd!()
+        .arg("-")
+        .fails_with_code(1)
+        .stderr_contains("invalid date");
+}
+
+#[test]
 fn test_date_email() {
     for param in ["--rfc-email", "--rfc-e", "-R", "--rfc-2822", "--rfc-822"] {
         new_ucmd!().arg(param).succeeds();
