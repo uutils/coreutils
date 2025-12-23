@@ -256,13 +256,16 @@ pub const LOCAL_FLAGS: &[Flag<L>] = &[
     // Not supported by nix
     // Flag::new("xcase", L::XCASE),
     Flag::new("tostop", L::TOSTOP),
+    #[cfg(not(target_os = "cygwin"))]
     Flag::new("echoprt", L::ECHOPRT),
+    #[cfg(not(target_os = "cygwin"))]
     Flag::new("prterase", L::ECHOPRT).hidden(),
     Flag::new("echoctl", L::ECHOCTL).sane(),
     Flag::new("ctlecho", L::ECHOCTL).sane().hidden(),
     Flag::new("echoke", L::ECHOKE).sane(),
     Flag::new("crtkill", L::ECHOKE).sane().hidden(),
     Flag::new("flusho", L::FLUSHO),
+    #[cfg(not(target_os = "cygwin"))]
     Flag::new("extproc", L::EXTPROC),
 ];
 
