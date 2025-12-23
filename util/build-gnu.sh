@@ -155,18 +155,17 @@ else
         echo "strip t${i}.sh from Makefile"
         "${SED}" -i -e "s/\$(tf)\/t${i}.sh//g" Makefile
     done
-
-    # Remove tests checking for --version & --help
-    # Not really interesting for us and logs are too big
-    "${SED}" -i -e '/tests\/help\/help-version.sh/ D' \
-        -e '/tests\/help\/help-version-getopt.sh/ D' \
-        Makefile
     touch gnu-built
 fi
 
 grep -rl 'path_prepend_' tests/* | xargs -r "${SED}" -i 's| path_prepend_ ./src||'
 # path_prepend_ sets $abs_path_dir_: set it manually instead.
 grep -rl '\$abs_path_dir_' tests/*/*.sh | xargs -r "${SED}" -i "s|\$abs_path_dir_|${UU_BUILD_DIR//\//\\/}|g"
+
+# Fail tests checking for --version & --help we can't pass producing too big logs
+# But we keep them into the log and should not remove
+cp -svf /usr/bin/false tests/help/help-version.sh
+cp -svf /usr/bin/false tests/help/help-version-getopt.sh
 
 # We can't build runcon and chcon without libselinux. But GNU no longer builds dummies of them. So consider they are SELinux specific.
 "${SED}" -i 's/^print_ver_.*/require_selinux_/' tests/runcon/runcon-compute.sh
