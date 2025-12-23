@@ -415,7 +415,7 @@ impl Chmoder {
                 return Err(ChmodError::PreserveRoot("/".to_string()).into());
             }
             if self.recursive {
-                r = self.walk_dir_with_context(file, true);
+                r = self.walk_dir_with_context(file, true).and(r);
             } else {
                 r = self.chmod_file(file).and(r);
             }
