@@ -322,10 +322,10 @@ fn try_mmap_path(path: &Path) -> Option<Mmap> {
 }
 
 /// Attempt to seek to end of file
-/// 
-/// Returns `Some(size)` if successful, `None` if unable to determine size. 
+///
+/// Returns `Some(size)` if successful, `None` if unable to determine size.
 /// Hangs if file is an infinite stream.
-/// 
+///
 /// Leaves file cursor at start of file
 fn try_seek_end(file: &mut File) -> Option<u64> {
     let size = file.seek(std::io::SeekFrom::End(0)).ok();
@@ -346,7 +346,7 @@ fn try_seek_end(file: &mut File) -> Option<u64> {
                 loop {
                     let mut byte = [0u8; 1];
                     match file.read(&mut byte) {
-                        Ok(0) => break,  // Found EOF
+                        Ok(0) => break,    // Found EOF
                         Ok(_) => continue, // Keep looking
                         Err(_) => break,
                     }
