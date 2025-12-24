@@ -353,7 +353,7 @@ fn test_invalid_regex_word_trailing_backslash() {
     new_ucmd!()
         .args(&["-W", "bar\\"])
         .fails_with_code(1)
-        .stderr_contains("ptx: invalid regular expression");
+        .stderr_contains("ptx: Invalid regexp");
 }
 
 #[test]
@@ -361,5 +361,5 @@ fn test_invalid_regex_word_unclosed_group() {
     new_ucmd!()
         .args(&["-W", "(wrong"])
         .fails_with_code(1)
-        .stderr_contains("ptx: invalid regular expression");
+        .stderr_contains("ptx: Invalid regexp");
 }

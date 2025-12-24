@@ -348,9 +348,9 @@ fn create_word_set(
     file_map: &FileMap,
 ) -> UResult<BTreeSet<WordRef>> {
     let reg = Regex::new(&filter.word_regex)
-        .map_err(|e| USimpleError::new(1, format!("invalid regular expression: {}", e)))?;
+        .map_err(|e| USimpleError::new(1, translate!("ptx-error-invalid-regexp", "error" => e)))?;
     let ref_reg = Regex::new(&config.context_regex)
-        .map_err(|e| USimpleError::new(1, format!("invalid regular expression: {}", e)))?;
+        .map_err(|e| USimpleError::new(1, translate!("ptx-error-invalid-regexp", "error" => e)))?;
     let mut word_set: BTreeSet<WordRef> = BTreeSet::new();
     for (file, lines) in file_map {
         let mut count: usize = 0;
