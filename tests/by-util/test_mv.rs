@@ -2636,6 +2636,74 @@ fn test_mv_cross_device_permission_denied() {
         .expect("Unable to restore directory permissions");
 }
 
+/// Rootless cross-device move using unshare + tmpfs mounts.
+/// This mirrors the GNU part-fail scenario but avoids sudo by using user namespaces.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_rootless_unshare_tmpfs_dir_with_dangling_symlink() {
+    use std::fs;
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let base = at.plus("unshare-rootless");
+    fs::create_dir_all(&base).unwrap();
+
+    // Preflight: ensure unshare works in this environment (user namespaces enabled).
+    let preflight = match Command::new("unshare")
+        .args(["-rm", "sh", "-c", "true"])
+        .output()
+    {
+        Ok(out) => out,
+        Err(e) => {
+            println!("test skipped: unshare not available: {e}");
+            return;
+        }
+    };
+    if !preflight.status.success() {
+        let stderr = String::from_utf8_lossy(&preflight.stderr);
+        println!("test skipped: unshare not permitted: {stderr}");
+        return;
+    }
+
+    let script = r#"set -eu
+cleanup() {
+  umount -l "$BASE/a" 2>/dev/null || true
+  umount -l "$BASE/b" 2>/dev/null || true
+  rmdir "$BASE/a" "$BASE/b" 2>/dev/null || true
+}
+trap cleanup EXIT
+mkdir -p "$BASE/a" "$BASE/b"
+mount -t tmpfs tmpfs "$BASE/a"
+mount -t tmpfs tmpfs "$BASE/b"
+mkdir -p "$BASE/a/d"
+ln -s miss "$BASE/a/d/dang"
+"$UUTILS" mv -v "$BASE/a/d" "$BASE/b"
+test -L "$BASE/b/d/dang"
+test ! -e "$BASE/a/d"
+"#;
+
+    let output = Command::new("unshare")
+        .args(["-rm", "sh", "-c", script])
+        .env("BASE", &base)
+        .env("UUTILS", &scene.bin_path)
+        .output()
+        .expect("failed to run unshare");
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("Operation not permitted")
+            || stderr.contains("permission denied")
+            || stderr.contains("not permitted")
+        {
+            println!("test skipped: unshare/mount not permitted: {stderr}");
+            return;
+        }
+        panic!("unshare rootless mv test failed: {stderr}");
+    }
+}
+
 #[test]
 #[cfg(feature = "selinux")]
 fn test_mv_selinux_context() {
