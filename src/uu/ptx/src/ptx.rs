@@ -306,7 +306,7 @@ fn read_input(input_files: &[OsString], config: &Config) -> std::io::Result<File
             reader.read_to_string(&mut buffer)?;
 
             re.split(&buffer)
-                .map(|s| s.replace("\n", " ")) // ptx behavior: newlines become spaces inside sentences
+                .map(|s| s.replace('\n', " ")) // ptx behavior: newlines become spaces inside sentences
                 .filter(|s| !s.is_empty()) // remove empty sentences
                 .collect()
         } else {
