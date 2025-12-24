@@ -342,9 +342,15 @@ fn read_lines(
 }
 
 /// Go through every lines in the input files and record each match occurrence as a `WordRef`.
-fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> BTreeSet<WordRef> {
-    let reg = Regex::new(&filter.word_regex).unwrap();
-    let ref_reg = Regex::new(&config.context_regex).unwrap();
+fn create_word_set(
+    config: &Config,
+    filter: &WordFilter,
+    file_map: &FileMap,
+) -> UResult<BTreeSet<WordRef>> {
+    let reg = Regex::new(&filter.word_regex)
+        .map_err(|e| USimpleError::new(1, format!("invalid regular expression: {}", e)))?;
+    let ref_reg = Regex::new(&config.context_regex)
+        .map_err(|e| USimpleError::new(1, format!("invalid regular expression: {}", e)))?;
     let mut word_set: BTreeSet<WordRef> = BTreeSet::new();
     for (file, lines) in file_map {
         let mut count: usize = 0;
@@ -383,7 +389,7 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
             count += 1;
         }
     }
-    word_set
+    Ok(word_set)
 }
 
 fn get_reference(config: &Config, word_ref: &WordRef, line: &str, context_reg: &Regex) -> String {
@@ -927,7 +933,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let word_filter = WordFilter::new(&matches, &config)?;
     let file_map = read_input(&input_files, &config).map_err_context(String::new)?;
-    let word_set = create_word_set(&config, &word_filter, &file_map);
+    let word_set = create_word_set(&config, &word_filter, &file_map)?;
     write_traditional_output(&mut config, &file_map, &word_set, &output_file)
 }
 
