@@ -338,3 +338,19 @@ fn test_unicode_truncation_alignment() {
         .succeeds()
         .stdout_only("     /   bar\n        föö/\n");
 }
+
+#[test]
+fn test_invalid_regex_word_trailing_backslash() {
+    new_ucmd!()
+        .args(&["-W", "bar\\"])
+        .fails_with_code(1)
+        .stderr_contains("ptx: invalid regular expression");
+}
+
+#[test]
+fn test_invalid_regex_word_unclosed_group() {
+    new_ucmd!()
+        .args(&["-W", "(wrong"])
+        .fails_with_code(1)
+        .stderr_contains("ptx: invalid regular expression");
+}
