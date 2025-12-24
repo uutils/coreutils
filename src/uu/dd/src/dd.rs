@@ -272,14 +272,38 @@ impl Source {
                         return Ok(len);
                     }
                 }
-                let m = read_and_discard(f, n, ibs)?;
-                if m < n {
-                    show_error!(
-                        "{}",
-                        translate!("dd-error-cannot-skip-offset", "file" => "standard input")
-                    );
+                // Try seek first; fall back to read if not seekable
+                match n.try_into().ok().map(|n| f.seek(SeekFrom::Current(n))) {
+                    Some(Ok(pos)) => {
+                        if pos > f.metadata().map(|m| m.len()).unwrap_or(u64::MAX) {
+                            show_error!(
+                                "{}",
+                                translate!("dd-error-cannot-skip-offset", "file" => "standard input")
+                            );
+                        }
+                        Ok(pos)
+                    }
+                    Some(Err(e)) if e.raw_os_error() == Some(libc::ESPIPE) => {
+                        match io::copy(&mut f.take(n), &mut io::sink()) {
+                            Ok(m) if m < n => {
+                                show_error!(
+                                    "{}",
+                                    translate!("dd-error-cannot-skip-offset", "file" => "standard input")
+                                );
+                                Ok(m)
+                            }
+                            other => other,
+                        }
+                    }
+                    _ => {
+                        show_error!(
+                            "{}",
+                            translate!("dd-error-cannot-skip-invalid", "file" => "standard input")
+                        );
+                        set_exit_code(1);
+                        Ok(0)
+                    }
                 }
-                Ok(m)
             }
             Self::File(f) => f.seek(SeekFrom::Current(n.try_into().unwrap())),
             #[cfg(unix)]
