@@ -1217,3 +1217,33 @@ fn test_progress_no_output_on_error() {
         .stderr_contains("cannot remove")
         .stderr_contains("No such file or directory");
 }
+
+/// Test error 'Is directory' comes before 'Dir not empty'
+#[test]
+fn test_error_message_priority1() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("d");
+    at.touch("d/f");
+
+    ts.ucmd()
+        .arg("d")
+        .fails()
+        .stderr_is("rm: cannot remove 'd': Is a directory\n");
+}
+
+/// Test error 'Dir not empty' comes before 'Refusing to remove . or ..'
+#[test]
+fn test_error_message_priority2() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.touch("f");
+
+    ts.ucmd()
+        .arg("-d")
+        .arg(".")
+        .fails()
+        .stderr_is("rm: cannot remove '.': Directory not empty\n");
+}
