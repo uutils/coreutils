@@ -7,7 +7,7 @@ du-after-help = Display values are in units of the first available SIZE from --b
 
   SIZE is an integer and optional unit (example: 10M is 10*1024*1024).
   Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB,... (powers
-  of 1000).
+  of 1000). Units can be decimal, hexadecimal, octal, binary.
 
   PATTERN allows some advanced exclusions. For example, the following syntaxes
   are supported:
@@ -69,6 +69,7 @@ du-error-printing-thread-panicked = Printing thread panicked.
 du-error-invalid-suffix = invalid suffix in --{ $option } argument { $value }
 du-error-invalid-argument = invalid --{ $option } argument { $value }
 du-error-argument-too-large = --{ $option } argument { $value } too large
+du-error-hyphen-file-name-not-allowed = when reading file names from standard input, no file name of '-' allowed
 
 # Verbose/status messages
 du-verbose-ignored = { $path } ignored

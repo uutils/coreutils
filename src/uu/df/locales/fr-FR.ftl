@@ -7,7 +7,7 @@ df-after-help = Les valeurs affichées sont en unités de la première TAILLE di
 
   TAILLE est un entier et une unité optionnelle (exemple : 10M est 10*1024*1024).
   Les unités sont K, M, G, T, P, E, Z, Y (puissances de 1024) ou KB, MB,... (puissances
-  de 1000).
+  de 1000). Les unités peuvent être décimales, hexadécimales, octales, binaires.
 
 # Messages d'aide
 df-help-print-help = afficher les informations d'aide.

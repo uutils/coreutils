@@ -150,3 +150,12 @@ fn test_base32_file_not_found() {
         .fails()
         .stderr_only("base32: a.txt: No such file or directory\n");
 }
+
+#[test]
+fn test_encode_large_input_is_buffered() {
+    let input = "A".repeat(6000);
+    new_ucmd!()
+        .pipe_in(input)
+        .succeeds()
+        .stdout_contains("BIFAUCQK"); // spell-checker:disable-line
+}

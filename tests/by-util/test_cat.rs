@@ -576,37 +576,17 @@ fn test_write_fast_fallthrough_uses_flush() {
 
 #[test]
 #[cfg(unix)]
-#[ignore = ""]
 fn test_domain_socket() {
-    use std::io::prelude::*;
     use std::os::unix::net::UnixListener;
-    use std::sync::{Arc, Barrier};
-    use std::thread;
 
-    let dir = tempfile::Builder::new()
-        .prefix("unix_socket")
-        .tempdir()
-        .expect("failed to create dir");
-    let socket_path = dir.path().join("sock");
-    let listener = UnixListener::bind(&socket_path).expect("failed to create socket");
+    let s = TestScenario::new(util_name!());
+    let socket_path = s.fixtures.plus("sock");
+    let _ = UnixListener::bind(&socket_path).expect("failed to create socket");
 
-    // use a barrier to ensure we don't run cat before the listener is setup
-    let barrier = Arc::new(Barrier::new(2));
-    let barrier2 = Arc::clone(&barrier);
-
-    let thread = thread::spawn(move || {
-        let mut stream = listener.accept().expect("failed to accept connection").0;
-        barrier2.wait();
-        stream
-            .write_all(b"a\tb")
-            .expect("failed to write test data");
-    });
-
-    let child = new_ucmd!().args(&[socket_path]).run_no_wait();
-    barrier.wait();
-    child.wait().unwrap().stdout_is("a\tb");
-
-    thread.join().unwrap();
+    s.ucmd()
+        .args(&[socket_path])
+        .fails()
+        .stderr_contains("No such device or address");
 }
 
 #[test]

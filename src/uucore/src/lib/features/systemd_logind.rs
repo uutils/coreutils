@@ -53,7 +53,7 @@ mod login {
     pub fn get_sessions() -> Result<Vec<String>, Box<dyn std::error::Error>> {
         let mut sessions_ptr: *mut *mut libc::c_char = ptr::null_mut();
 
-        let result = unsafe { ffi::sd_get_sessions(&mut sessions_ptr) };
+        let result = unsafe { ffi::sd_get_sessions(&raw mut sessions_ptr) };
 
         if result < 0 {
             return Err(format!("sd_get_sessions failed: {result}").into());
@@ -71,11 +71,11 @@ mod login {
                 let session_cstr = unsafe { CStr::from_ptr(session_ptr) };
                 sessions.push(session_cstr.to_string_lossy().into_owned());
 
-                unsafe { libc::free(session_ptr as *mut libc::c_void) };
+                unsafe { libc::free(session_ptr.cast()) };
                 i += 1;
             }
 
-            unsafe { libc::free(sessions_ptr as *mut libc::c_void) };
+            unsafe { libc::free(sessions_ptr.cast()) };
         }
 
         Ok(sessions)
@@ -86,7 +86,7 @@ mod login {
         let session_cstring = CString::new(session_id)?;
         let mut uid: std::os::raw::c_uint = 0;
 
-        let result = unsafe { ffi::sd_session_get_uid(session_cstring.as_ptr(), &mut uid) };
+        let result = unsafe { ffi::sd_session_get_uid(session_cstring.as_ptr(), &raw mut uid) };
 
         if result < 0 {
             return Err(
@@ -102,7 +102,8 @@ mod login {
         let session_cstring = CString::new(session_id)?;
         let mut usec: u64 = 0;
 
-        let result = unsafe { ffi::sd_session_get_start_time(session_cstring.as_ptr(), &mut usec) };
+        let result =
+            unsafe { ffi::sd_session_get_start_time(session_cstring.as_ptr(), &raw mut usec) };
 
         if result < 0 {
             return Err(format!(
@@ -119,7 +120,7 @@ mod login {
         let session_cstring = CString::new(session_id)?;
         let mut tty_ptr: *mut libc::c_char = ptr::null_mut();
 
-        let result = unsafe { ffi::sd_session_get_tty(session_cstring.as_ptr(), &mut tty_ptr) };
+        let result = unsafe { ffi::sd_session_get_tty(session_cstring.as_ptr(), &raw mut tty_ptr) };
 
         if result < 0 {
             return Err(
@@ -134,7 +135,7 @@ mod login {
         let tty_cstr = unsafe { CStr::from_ptr(tty_ptr) };
         let tty_string = tty_cstr.to_string_lossy().into_owned();
 
-        unsafe { libc::free(tty_ptr as *mut libc::c_void) };
+        unsafe { libc::free(tty_ptr.cast()) };
 
         Ok(Some(tty_string))
     }
@@ -147,7 +148,7 @@ mod login {
         let mut host_ptr: *mut libc::c_char = ptr::null_mut();
 
         let result =
-            unsafe { ffi::sd_session_get_remote_host(session_cstring.as_ptr(), &mut host_ptr) };
+            unsafe { ffi::sd_session_get_remote_host(session_cstring.as_ptr(), &raw mut host_ptr) };
 
         if result < 0 {
             return Err(format!(
@@ -163,7 +164,7 @@ mod login {
         let host_cstr = unsafe { CStr::from_ptr(host_ptr) };
         let host_string = host_cstr.to_string_lossy().into_owned();
 
-        unsafe { libc::free(host_ptr as *mut libc::c_void) };
+        unsafe { libc::free(host_ptr.cast()) };
 
         Ok(Some(host_string))
     }
@@ -176,7 +177,7 @@ mod login {
         let mut display_ptr: *mut libc::c_char = ptr::null_mut();
 
         let result =
-            unsafe { ffi::sd_session_get_display(session_cstring.as_ptr(), &mut display_ptr) };
+            unsafe { ffi::sd_session_get_display(session_cstring.as_ptr(), &raw mut display_ptr) };
 
         if result < 0 {
             return Err(format!(
@@ -192,7 +193,7 @@ mod login {
         let display_cstr = unsafe { CStr::from_ptr(display_ptr) };
         let display_string = display_cstr.to_string_lossy().into_owned();
 
-        unsafe { libc::free(display_ptr as *mut libc::c_void) };
+        unsafe { libc::free(display_ptr.cast()) };
 
         Ok(Some(display_string))
     }
@@ -204,7 +205,8 @@ mod login {
         let session_cstring = CString::new(session_id)?;
         let mut type_ptr: *mut libc::c_char = ptr::null_mut();
 
-        let result = unsafe { ffi::sd_session_get_type(session_cstring.as_ptr(), &mut type_ptr) };
+        let result =
+            unsafe { ffi::sd_session_get_type(session_cstring.as_ptr(), &raw mut type_ptr) };
 
         if result < 0 {
             return Err(
@@ -219,7 +221,7 @@ mod login {
         let type_cstr = unsafe { CStr::from_ptr(type_ptr) };
         let type_string = type_cstr.to_string_lossy().into_owned();
 
-        unsafe { libc::free(type_ptr as *mut libc::c_void) };
+        unsafe { libc::free(type_ptr.cast()) };
 
         Ok(Some(type_string))
     }
@@ -231,7 +233,8 @@ mod login {
         let session_cstring = CString::new(session_id)?;
         let mut seat_ptr: *mut libc::c_char = ptr::null_mut();
 
-        let result = unsafe { ffi::sd_session_get_seat(session_cstring.as_ptr(), &mut seat_ptr) };
+        let result =
+            unsafe { ffi::sd_session_get_seat(session_cstring.as_ptr(), &raw mut seat_ptr) };
 
         if result < 0 {
             return Err(
@@ -246,7 +249,7 @@ mod login {
         let seat_cstr = unsafe { CStr::from_ptr(seat_ptr) };
         let seat_string = seat_cstr.to_string_lossy().into_owned();
 
-        unsafe { libc::free(seat_ptr as *mut libc::c_void) };
+        unsafe { libc::free(seat_ptr.cast()) };
 
         Ok(Some(seat_string))
     }
@@ -373,9 +376,9 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
             let ret = libc::getpwuid_r(
                 uid,
                 passwd.as_mut_ptr(),
-                buf.as_mut_ptr() as *mut libc::c_char,
+                buf.as_mut_ptr().cast(),
                 buf.len(),
-                &mut result,
+                &raw mut result,
             );
 
             if ret == 0 && !result.is_null() {
