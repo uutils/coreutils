@@ -45,6 +45,7 @@ use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::format_usage;
+use uucore::i18n::decimal::locale_decimal_separator;
 use uucore::line_ending::LineEnding;
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
@@ -110,8 +111,6 @@ mod options {
 
     pub const FILES: &str = "files";
 }
-
-const DECIMAL_PT: u8 = b'.';
 
 const NEGATIVE: &u8 = &b'-';
 const POSITIVE: &u8 = &b'+';
@@ -2048,7 +2047,10 @@ fn get_leading_gen(inp: &[u8]) -> Range<usize> {
             continue;
         }
 
-        if c == DECIMAL_PT && !had_decimal_pt && !had_e_notation {
+        if locale_decimal_separator().as_bytes().first() == Some(&c)
+            && !had_decimal_pt
+            && !had_e_notation
+        {
             had_decimal_pt = true;
             continue;
         }

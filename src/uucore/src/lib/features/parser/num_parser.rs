@@ -18,6 +18,7 @@ use num_traits::ToPrimitive;
 use num_traits::Zero;
 
 use crate::extendedbigdecimal::ExtendedBigDecimal;
+use crate::i18n::decimal::locale_decimal_separator;
 
 /// Base for number parsing
 #[derive(Clone, Copy, PartialEq)]
@@ -291,9 +292,9 @@ fn parse_digits(base: Base, str: &str, fractional: bool) -> (Option<BigUint>, i6
     let (digits, rest) = base.parse_digits(str);
 
     // If allowed, parse the fractional part of the number if there can be one and the
-    // input contains a '.' decimal separator.
+    // input contains the locale-specific decimal separator.
     if fractional {
-        if let Some(rest) = rest.strip_prefix('.') {
+        if let Some(rest) = rest.strip_prefix(locale_decimal_separator()) {
             return base.parse_digits_count(rest, digits);
         }
     }
