@@ -30,7 +30,7 @@ use std::cmp;
 use std::env;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Seek, SeekFrom, Stdout, Write};
+use std::io::{self, BufReader, Read, Seek, SeekFrom, Stdout, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::fd::AsFd;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -219,10 +219,13 @@ impl Source {
         Self::StdinFile(f)
     }
 
-    fn skip(&mut self, n: u64) -> io::Result<u64> {
+    fn skip(&mut self, n: u64, ibs: usize) -> io::Result<u64> {
         match self {
             #[cfg(not(unix))]
-            Self::Stdin(stdin) => match io::copy(&mut stdin.take(n), &mut io::sink()) {
+            Self::Stdin(stdin) => match io::copy(
+                &mut BufReader::with_capacity(ibs, stdin.take(n)),
+                &mut io::sink(),
+            ) {
                 Ok(m) if m < n => {
                     show_error!(
                         "{}",
@@ -247,7 +250,10 @@ impl Source {
                         return Ok(len);
                     }
                 }
-                match io::copy(&mut f.take(n), &mut io::sink()) {
+                match io::copy(
+                    &mut BufReader::with_capacity(ibs, f.take(n)),
+                    &mut io::sink(),
+                ) {
                     Ok(m) if m < n => {
                         show_error!(
                             "{}",
@@ -261,7 +267,10 @@ impl Source {
             }
             Self::File(f) => f.seek(SeekFrom::Current(n.try_into().unwrap())),
             #[cfg(unix)]
-            Self::Fifo(f) => io::copy(&mut f.take(n), &mut io::sink()),
+            Self::Fifo(f) => io::copy(
+                &mut BufReader::with_capacity(ibs, f.take(n)),
+                &mut io::sink(),
+            ),
         }
     }
 
@@ -346,7 +355,7 @@ impl<'a> Input<'a> {
             }
         }
         if settings.skip > 0 {
-            src.skip(settings.skip)?;
+            src.skip(settings.skip, settings.ibs)?;
         }
         Ok(Self { src, settings })
     }
@@ -369,7 +378,7 @@ impl<'a> Input<'a> {
 
         let mut src = Source::File(src);
         if settings.skip > 0 {
-            src.skip(settings.skip)?;
+            src.skip(settings.skip, settings.ibs)?;
         }
         Ok(Self { src, settings })
     }
@@ -383,7 +392,7 @@ impl<'a> Input<'a> {
         opts.custom_flags(make_linux_iflags(&settings.iflags).unwrap_or(0));
         let mut src = Source::Fifo(opts.open(filename)?);
         if settings.skip > 0 {
-            src.skip(settings.skip)?;
+            src.skip(settings.skip, settings.ibs)?;
         }
         Ok(Self { src, settings })
     }
@@ -605,7 +614,7 @@ impl Dest {
         }
     }
 
-    fn seek(&mut self, n: u64) -> io::Result<u64> {
+    fn seek(&mut self, n: u64, obs: usize) -> io::Result<u64> {
         match self {
             Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), stdout),
             Self::File(f, _) => {
@@ -627,7 +636,10 @@ impl Dest {
             #[cfg(unix)]
             Self::Fifo(f) => {
                 // Seeking in a named pipe means *reading* from the pipe.
-                io::copy(&mut f.take(n), &mut io::sink())
+                io::copy(
+                    &mut BufReader::with_capacity(obs, f.take(n)),
+                    &mut io::sink(),
+                )
             }
             #[cfg(unix)]
             Self::Sink => Ok(0),
@@ -781,7 +793,7 @@ impl<'a> Output<'a> {
     /// Instantiate this struct with stdout as a destination.
     fn new_stdout(settings: &'a Settings) -> UResult<Self> {
         let mut dst = Dest::Stdout(io::stdout());
-        dst.seek(settings.seek)
+        dst.seek(settings.seek, settings.obs)
             .map_err_context(|| translate!("dd-error-write-error"))?;
         Ok(Self { dst, settings })
     }
@@ -829,7 +841,7 @@ impl<'a> Output<'a> {
             Density::Dense
         };
         let mut dst = Dest::File(dst, density);
-        dst.seek(settings.seek)
+        dst.seek(settings.seek, settings.obs)
             .map_err_context(|| translate!("dd-error-failed-to-seek"))?;
         Ok(Self { dst, settings })
     }
@@ -859,7 +871,7 @@ impl<'a> Output<'a> {
         // file for reading. But then we need to close the file and
         // re-open it for writing.
         if settings.seek > 0 {
-            Dest::Fifo(File::open(filename)?).seek(settings.seek)?;
+            Dest::Fifo(File::open(filename)?).seek(settings.seek, settings.obs)?;
         }
         // If `count=0`, then we don't bother opening the file for
         // writing because that would cause this process to block
