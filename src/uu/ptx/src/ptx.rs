@@ -7,7 +7,7 @@
 
 use std::cmp;
 use std::cmp::PartialEq;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::fmt::Write as FmtWrite;
 use std::fs::File;
@@ -279,10 +279,10 @@ struct FileContent {
     offset: usize,
 }
 
-type FileMap = HashMap<OsString, FileContent>;
+type FileMap = Vec<(OsString, FileContent)>;
 
 fn read_input(input_files: &[OsString], config: &Config) -> std::io::Result<FileMap> {
-    let mut file_map: FileMap = HashMap::new();
+    let mut file_map: FileMap = FileMap::new();
     let mut offset: usize = 0;
 
     let sentence_splitter = if let Some(re_str) = &config.sentence_regex {
@@ -310,14 +310,14 @@ fn read_input(input_files: &[OsString], config: &Config) -> std::io::Result<File
         // Since we will be jumping around the line a lot, we dump the content into a Vec<char>, which can be indexed in constant time.
         let chars_lines: Vec<Vec<char>> = lines.iter().map(|x| x.chars().collect()).collect();
         let size = lines.len();
-        file_map.insert(
+        file_map.push((
             filename.clone(),
             FileContent {
                 lines,
                 chars_lines,
                 offset,
             },
-        );
+        ));
         offset += size;
     }
     Ok(file_map)
@@ -792,8 +792,13 @@ fn write_traditional_output(
     }
 
     for word_ref in words {
-        let file_map_value: &FileContent = file_map
-            .get(&word_ref.filename)
+        let (_, file_map_value) = file_map
+            .iter()
+            .find(|(name, content)| {
+                name == &word_ref.filename
+                    && word_ref.global_line_nr >= content.offset
+                    && word_ref.global_line_nr < content.offset + content.lines.len()
+            })
             .expect("Missing file in file map");
         let FileContent {
             ref lines,
