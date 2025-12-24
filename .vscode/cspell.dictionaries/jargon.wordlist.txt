@@ -164,6 +164,8 @@ wordlists
 xattrs
 xpass
 
+jemalloc
+jemallocator
 # * abbreviations
 AMPM
 ampm
