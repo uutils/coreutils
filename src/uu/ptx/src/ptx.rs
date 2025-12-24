@@ -792,6 +792,10 @@ fn write_traditional_output(
     }
 
     for word_ref in words {
+        // Since `ptx` accepts duplicate file arguments (e.g., `ptx file file`),
+        // simply looking up by filename is ambiguous.
+        // We use the `global_line_nr` (which is unique across the entire input stream)
+        // to identify which file covers this line.
         let (_, file_map_value) = file_map
             .iter()
             .find(|(name, content)| {
