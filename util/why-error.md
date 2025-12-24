@@ -21,7 +21,6 @@ This file documents why some GNU tests are failing:
 * ptx/ptx.pl
 * rm/one-file-system.sh - https://github.com/uutils/coreutils/issues/7011
 * rm/rm1.sh - https://github.com/uutils/coreutils/issues/9479
-* sort/sort-debug-keys.sh
 * sort/sort-debug-warn.sh
 * sort/sort-float.sh
 * sort/sort-h-thousands-sep.sh
