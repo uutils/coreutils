@@ -1153,6 +1153,8 @@ fn test_date_military_timezone_with_offset_and_date() {
         // midnight crossings with hour offsets to tomorrow
         ("n23", 1),
         ("y23", 1),
+        // midnight crossing even with positive offset
+        ("m9", -1), // M = UTC+12 (-12 h + 9h is still `yesterday`)
     ];
 
     for (input, day_delta) in test_cases {
