@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore funcs
+// spell-checker:ignore funcs biguint modpow unfactored
 // NOTE:
 //   For BigUint > u128, this implementation attempts factorization using Miller-Rabin,
 //   an improved Pollard-rho, and p-1.
@@ -76,7 +76,7 @@ fn print_factors_str(
     let success = factor_biguint_recursive(&x_big, &mut factors);
 
     if !success {
-        // 完全分解できなかった場合のみ exit code=1
+        // Only set exit code=1 when complete factorization could not be achieved
         set_exit_code(1);
     }
 
@@ -274,7 +274,7 @@ fn pollard_p_minus_1(n: &BigUint) -> Option<BigUint> {
             return Some(g);
         }
 
-        // a^(M) を段階的に構成（指数を 2^k で伸ばす近似）
+        // Construct a^(M) step by step (approximating by extending the exponent with 2^k)
         let mut e = 2u64;
         while e <= b1 {
             a = a.modpow(&BigUint::from_u64(e).unwrap(), n);
