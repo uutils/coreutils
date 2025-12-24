@@ -319,7 +319,12 @@ fn supplemental_gids(uid: libc::uid_t) -> Vec<libc::gid_t> {
 
 /// Set the supplemental group IDs for this process.
 fn set_supplemental_gids(gids: &[libc::gid_t]) -> std::io::Result<()> {
-    #[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "openbsd"))]
+    #[cfg(any(
+        target_vendor = "apple",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "cygwin"
+    ))]
     let n = gids.len() as libc::c_int;
     #[cfg(any(target_os = "linux", target_os = "android"))]
     let n = gids.len() as libc::size_t;
@@ -439,7 +444,7 @@ fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
                 .map_err(|e| ChrootError::CannotEnter("root".to_string(), e.into()))?
                 .as_bytes_with_nul()
                 .as_ptr()
-                .cast::<libc::c_char>(),
+                .cast(),
         )
     };
 
