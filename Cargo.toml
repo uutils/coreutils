@@ -336,7 +336,7 @@ jiff = { version = "0.2.10", default-features = false, features = [
   "alloc",
   "tz-system",
 ] }
-libc = "0.2.172"
+libc = "0.2.178"
 linux-raw-sys = "0.12"
 lscolors = { version = "0.21.0", default-features = false, features = [
   "gnu_legacy",

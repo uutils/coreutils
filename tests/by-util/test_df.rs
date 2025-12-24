@@ -601,6 +601,7 @@ fn test_default_block_size_in_posix_portability_mode() {
 }
 
 #[test]
+#[cfg_attr(target_os = "freebsd", ignore)] // https://github.com/uutils/coreutils/pull/8722
 fn test_block_size_1024() {
     fn get_header(block_size: u64) -> String {
         let output = new_ucmd!()

@@ -50,6 +50,7 @@ jobs:
         copyback: false
         # We need jq and GNU coreutils to run show-utils.sh and bash to use inline shell string replacement
         prepare: pkg install -y curl sudo jq coreutils bash
+        release: '14.2'
         run: |
           ## Prepare, build, and test
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
