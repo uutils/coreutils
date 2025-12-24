@@ -281,7 +281,6 @@ fn test_sentence_regexp_split_behavior() {
 fn test_sentence_regexp_empty_match_failure() {
     new_ucmd!()
         .args(&["-G", "-S", "^"])
-        .pipe_in("Input")
         .fails()
         .stderr_contains("A regular expression cannot match a length zero string");
 }
