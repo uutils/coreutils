@@ -216,6 +216,10 @@ fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
     if let Some(regex) = matches.get_one::<String>(options::SENTENCE_REGEXP) {
         config.sentence_regex = Some(regex.clone());
 
+        // TODO: The regex crate used here is not fully compatible with GNU's regex implementation.
+        // For example, it does not support backreferences.
+        // In the future, we might want to switch to the onig crate (like expr does) for better compatibility.
+
         // Verify regex is valid and doesn't match empty string
         if let Ok(re) = Regex::new(regex) {
             if re.is_match("") {
