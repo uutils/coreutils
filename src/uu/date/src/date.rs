@@ -332,18 +332,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 // When calculating a military timezone with an optional hour offset, midnight may
                 // be crossed in either direction. `day_delta` indicates wether the date remains
                 // the same, moves to the previous day, or advances to the next day.
+                // Changing day can result in error, this closure will help handle these errors
+                // gracefully.
+                let format_date_closure = |date: Result<Zoned, _>| -> String {
+                    date.and_then(|d| strtime::format("%F", &d))
+                        .unwrap_or_else(|_| String::from("1970-01-01"))
+                };
                 let date_part = match day_delta {
-                    DayDelta::Same => {
-                        strtime::format("%F", &now).unwrap_or_else(|_| String::from("1970-01-01"))
-                    }
-                    DayDelta::Next => now
-                        .tomorrow()
-                        .and_then(|d| strtime::format("%F", &d))
-                        .unwrap_or_else(|_| String::from("1970-01-01")),
-                    DayDelta::Previous => now
-                        .yesterday()
-                        .and_then(|d| strtime::format("%F", &d))
-                        .unwrap_or_else(|_| String::from("1970-01-01")),
+                    DayDelta::Same => format_date_closure(Ok(now)),
+                    DayDelta::Next => format_date_closure(now.tomorrow()),
+                    DayDelta::Previous => format_date_closure(now.yesterday()),
                 };
                 let composed = format!("{date_part} {total_hours:02}:00:00 +00:00");
                 parse_date(composed)
