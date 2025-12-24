@@ -16,19 +16,19 @@ use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
 use filetime::{FileTime, set_file_times, set_symlink_file_times};
 use jiff::{Timestamp, Zoned};
+#[cfg(unix)]
+use nix::sys::stat::futimens;
+#[cfg(unix)]
+use nix::sys::time::TimeSpec;
 use std::borrow::Cow;
 use std::ffi::OsString;
 #[cfg(unix)]
 use std::fs::OpenOptions;
 use std::fs::{self, File};
 use std::io::{Error, ErrorKind};
-#[cfg(unix)]
-use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-#[cfg(unix)]
-use uucore::libc;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
 use uucore::{format_usage, show};
@@ -590,6 +590,11 @@ fn update_times(
 }
 
 #[cfg(unix)]
+/// Set file times via file descriptor using `futimens`.
+///
+/// This opens the file write-only and uses the POSIX `futimens` call to set
+/// access and modification times on the open FD (not by path), which also
+/// triggers `IN_CLOSE_WRITE` on Linux when the FD is closed.
 fn try_futimens_via_write_fd(path: &Path, atime: FileTime, mtime: FileTime) -> std::io::Result<()> {
     let metadata = fs::metadata(path)?;
     if !metadata.is_file() {
@@ -597,23 +602,11 @@ fn try_futimens_via_write_fd(path: &Path, atime: FileTime, mtime: FileTime) -> s
     }
 
     let file = OpenOptions::new().write(true).open(path)?;
-    let times = [
-        libc::timespec {
-            tv_sec: atime.unix_seconds() as libc::time_t,
-            tv_nsec: atime.nanoseconds() as libc::c_long,
-        },
-        libc::timespec {
-            tv_sec: mtime.unix_seconds() as libc::time_t,
-            tv_nsec: mtime.nanoseconds() as libc::c_long,
-        },
-    ];
+    let atime_spec = TimeSpec::new(atime.unix_seconds() as _, atime.nanoseconds() as _);
+    let mtime_spec = TimeSpec::new(mtime.unix_seconds() as _, mtime.nanoseconds() as _);
 
-    let rc = unsafe { libc::futimens(file.as_raw_fd(), times.as_ptr()) };
-    if rc == 0 {
-        Ok(())
-    } else {
-        Err(std::io::Error::last_os_error())
-    }
+    futimens(&file, &atime_spec, &mtime_spec)
+        .map_err(|err| std::io::Error::from_raw_os_error(err as i32))
 }
 
 /// Get metadata of the provided path
@@ -895,6 +888,13 @@ mod tests {
         uu_app,
     };
 
+    #[cfg(unix)]
+    use std::fs;
+    #[cfg(unix)]
+    use std::io::ErrorKind;
+    #[cfg(unix)]
+    use tempfile::tempdir;
+
     #[cfg(windows)]
     use std::env;
     #[cfg(windows)]
@@ -965,5 +965,38 @@ mod tests {
             Err(e) => panic!("Expected TouchError::InvalidFiletime, got {e}"),
             Ok(_) => panic!("Expected to error with TouchError::InvalidFiletime but succeeded"),
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_try_futimens_via_write_fd_sets_times() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("futimens-file");
+        fs::write(&path, b"data").unwrap();
+
+        let atime = FileTime::from_unix_time(1_600_000_000, 123_456_789);
+        let mtime = FileTime::from_unix_time(1_600_000_100, 987_654_321);
+
+        super::try_futimens_via_write_fd(&path, atime, mtime).unwrap();
+
+        let metadata = fs::metadata(&path).unwrap();
+        let actual_atime = FileTime::from_last_access_time(&metadata);
+        let actual_mtime = FileTime::from_last_modification_time(&metadata);
+
+        assert_eq!(actual_atime, atime);
+        assert_eq!(actual_mtime, mtime);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_try_futimens_via_write_fd_rejects_non_file() {
+        let dir = tempdir().unwrap();
+        let atime = FileTime::from_unix_time(1_600_000_000, 0);
+        let mtime = FileTime::from_unix_time(1_600_000_001, 0);
+
+        let err = super::try_futimens_via_write_fd(dir.path(), atime, mtime)
+            .expect_err("expected error for non-regular file");
+        assert_eq!(err.kind(), ErrorKind::Other);
+        assert!(err.to_string().contains("not a regular file"));
     }
 }
