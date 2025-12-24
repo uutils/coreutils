@@ -614,6 +614,7 @@ impl Dest {
         }
     }
 
+    #[cfg_attr(not(unix), allow(unused_variables))]
     fn seek(&mut self, n: u64, obs: usize) -> io::Result<u64> {
         match self {
             Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), stdout),
