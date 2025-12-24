@@ -18,11 +18,17 @@ use filetime::{FileTime, set_file_times, set_symlink_file_times};
 use jiff::{Timestamp, Zoned};
 use std::borrow::Cow;
 use std::ffi::OsString;
+#[cfg(unix)]
+use std::fs::OpenOptions;
 use std::fs::{self, File};
 use std::io::{Error, ErrorKind};
+#[cfg(unix)]
+use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
+#[cfg(unix)]
+use uucore::libc;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
 use uucore::{format_usage, show};
@@ -566,11 +572,48 @@ fn update_times(
     // The filename, access time (atime), and modification time (mtime) are provided as inputs.
 
     if opts.no_deref && !is_stdout {
-        set_symlink_file_times(path, atime, mtime)
-    } else {
-        set_file_times(path, atime, mtime)
+        return set_symlink_file_times(path, atime, mtime).map_err_context(
+            || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
+        );
     }
-    .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
+
+    #[cfg(unix)]
+    {
+        // Open write-only and use futimens to trigger IN_CLOSE_WRITE on Linux.
+        if !is_stdout && try_futimens_via_write_fd(path, atime, mtime).is_ok() {
+            return Ok(());
+        }
+    }
+
+    set_file_times(path, atime, mtime)
+        .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
+}
+
+#[cfg(unix)]
+fn try_futimens_via_write_fd(path: &Path, atime: FileTime, mtime: FileTime) -> std::io::Result<()> {
+    let metadata = fs::metadata(path)?;
+    if !metadata.is_file() {
+        return Err(Error::other("not a regular file"));
+    }
+
+    let file = OpenOptions::new().write(true).open(path)?;
+    let times = [
+        libc::timespec {
+            tv_sec: atime.unix_seconds() as libc::time_t,
+            tv_nsec: atime.nanoseconds() as libc::c_long,
+        },
+        libc::timespec {
+            tv_sec: mtime.unix_seconds() as libc::time_t,
+            tv_nsec: mtime.nanoseconds() as libc::c_long,
+        },
+    ];
+
+    let rc = unsafe { libc::futimens(file.as_raw_fd(), times.as_ptr()) };
+    if rc == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
 }
 
 /// Get metadata of the provided path
