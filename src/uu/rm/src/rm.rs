@@ -527,8 +527,8 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
 ///
 /// `path` must be a directory. If there is an error reading the
 /// contents of the directory, this returns `false`.
-fn is_dir_empty(path: &Path) -> bool {
-    fs::read_dir(path).is_ok_and(|mut iter| iter.next().is_none())
+fn is_dir_empty(path: &Path) -> Result<bool, io::Error> {
+    fs::read_dir(path).map(|mut iter| iter.next().is_none())
 }
 
 #[cfg(unix)]
@@ -599,7 +599,7 @@ fn remove_dir_recursive(
     // Base case 2: this is a non-empty directory, but the user
     // doesn't want to descend into it.
     if options.interactive == InteractiveMode::Always
-        && !is_dir_empty(path)
+        && !is_dir_empty(path).unwrap_or(false)
         && !prompt_descend(path)
     {
         return false;
@@ -699,7 +699,8 @@ fn handle_dir(path: &Path, options: &Options, progress_bar: Option<&ProgressBar>
     }
 
     // Refuse to remove non-empty directory without -r/-R
-    if !options.recursive && !is_dir_empty(path) {
+    // If we can't read the directory, fall through to let remove_dir handle the error
+    if !options.recursive && !is_dir_empty(path).unwrap_or(true) {
         show_error!(
             "{}: Directory not empty",
             translate!("rm-error-cannot-remove", "file" => path.quote())
