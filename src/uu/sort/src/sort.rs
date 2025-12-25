@@ -221,6 +221,11 @@ impl SortMode {
     }
 }
 
+/// Return the length of the byte slice while ignoring embedded NULs (used for debug underline alignment).
+fn count_non_null_bytes(bytes: &[u8]) -> usize {
+    bytes.iter().filter(|&&c| c != b'\0').count()
+}
+
 pub struct Output {
     file: Option<(OsString, File)>,
 }
@@ -670,14 +675,19 @@ impl<'a> Line<'a> {
                 _ => {}
             }
 
+            // Don't let embedded NUL bytes influence column alignment in the
+            // debug underline output, since they are often filtered out (e.g.
+            // via `tr -d '\0'`) before inspection.
             let select = &line[..selection.start];
-            write!(writer, "{}", " ".repeat(select.len()))?;
+            let indent = count_non_null_bytes(select);
+            write!(writer, "{}", " ".repeat(indent))?;
 
             if selection.is_empty() {
                 writeln!(writer, "{}", translate!("sort-error-no-match-for-key"))?;
             } else {
                 let select = &line[selection];
-                writeln!(writer, "{}", "_".repeat(select.len()))?;
+                let underline_len = count_non_null_bytes(select);
+                writeln!(writer, "{}", "_".repeat(underline_len))?;
             }
         }
 
