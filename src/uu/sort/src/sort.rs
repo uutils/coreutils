@@ -122,6 +122,16 @@ fn locale_decimal_pt() -> u8 {
     }
 }
 
+fn effective_decimal_pt(input: &[u8], locale_decimal: u8) -> u8 {
+    if locale_decimal == b',' {
+        let has_comma = input.iter().any(|&c| c == b',');
+        if !has_comma && input.iter().any(|&c| c == b'.') {
+            return b'.';
+        }
+    }
+    locale_decimal
+}
+
 const NEGATIVE: &u8 = &b'-';
 const POSITIVE: &u8 = &b'+';
 
@@ -646,8 +656,9 @@ impl<'a> Line<'a> {
                 }
                 SortMode::GeneralNumeric => {
                     let initial_selection = &self.line[selection.clone()];
-
-                    let leading = get_leading_gen(initial_selection, locale_decimal_pt());
+                    let locale_decimal = locale_decimal_pt();
+                    let decimal_pt = effective_decimal_pt(initial_selection, locale_decimal);
+                    let leading = get_leading_gen(initial_selection, decimal_pt);
 
                     // Shorten selection to leading.
                     selection.start += leading.start;
@@ -974,7 +985,8 @@ impl FieldSelector {
             Selection::WithNumInfo(range_str, info)
         } else if self.settings.mode == SortMode::GeneralNumeric {
             // Parse this number as BigDecimal, as this is the requirement for general numeric sorting.
-            let decimal_pt = locale_decimal_pt();
+            let locale_decimal = locale_decimal_pt();
+            let decimal_pt = effective_decimal_pt(range_str, locale_decimal);
             Selection::AsBigDecimal(general_bd_parse(
                 &range_str[get_leading_gen(range_str, decimal_pt)],
                 decimal_pt,
