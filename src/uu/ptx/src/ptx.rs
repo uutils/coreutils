@@ -614,11 +614,17 @@ fn format_dumb_line(
     };
 
     // Calculate the width for the left half (before the keyword)
-    let half_width = config.line_width / 2;
+    let half_width = cmp::max(config.line_width / 2, config.gap_size);
+
+    let left_part_len = if left_part.contains(&config.trunc_str) {
+        left_part.len() - config.trunc_str.len()
+    } else {
+        left_part.len()
+    };
 
     // Right-justify the left part within the left half
     let padding = if left_part.len() < half_width {
-        half_width - left_part.len()
+        half_width - left_part_len
     } else {
         0
     };

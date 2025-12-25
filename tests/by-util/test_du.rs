@@ -283,6 +283,120 @@ fn test_du_env_block_size_hierarchy() {
 }
 
 #[test]
+fn test_du_binary_block_size() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "a";
+
+    at.mkdir(dir);
+    let fpath = at.plus(format!("{dir}/file"));
+    std::fs::File::create(&fpath)
+        .expect("cannot create test file")
+        .set_len(100_000)
+        .expect("cannot set file size");
+
+    let test_cases = [
+        ("0b1", "1"),
+        ("0b10100", "20"),
+        ("0b1000000000", "512"),
+        ("0b10K", "2K"),
+    ];
+
+    for (binary, decimal) in test_cases {
+        let decimal = ts
+            .ucmd()
+            .arg(dir)
+            .arg(format!("--block-size={decimal}"))
+            .succeeds()
+            .stdout_move_str();
+
+        let binary = ts
+            .ucmd()
+            .arg(dir)
+            .arg(format!("--block-size={binary}"))
+            .succeeds()
+            .stdout_move_str();
+
+        assert_eq!(
+            decimal, binary,
+            "Binary {binary} should equal decimal {decimal}"
+        );
+    }
+}
+
+#[test]
+fn test_du_binary_env_block_size() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "a";
+
+    at.mkdir(dir);
+    let fpath = at.plus(format!("{dir}/file"));
+    std::fs::File::create(&fpath)
+        .expect("cannot create test file")
+        .set_len(100_000)
+        .expect("cannot set file size");
+
+    let expected = ts
+        .ucmd()
+        .arg(dir)
+        .arg("--block-size=1024")
+        .succeeds()
+        .stdout_move_str();
+
+    let result = ts
+        .ucmd()
+        .arg(dir)
+        .env("DU_BLOCK_SIZE", "0b10000000000")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(expected, result);
+}
+
+#[test]
+fn test_du_invalid_binary_size() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .arg("--block-size=0b123")
+        .arg("/tmp")
+        .fails_with_code(1)
+        .stderr_only("du: invalid suffix in --block-size argument '0b123'\n");
+
+    ts.ucmd()
+        .arg("--threshold=0b123")
+        .arg("/tmp")
+        .fails_with_code(1)
+        .stderr_only("du: invalid suffix in --threshold argument '0b123'\n");
+}
+
+#[test]
+fn test_du_binary_edge_cases() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("foo", "test");
+
+    ts.ucmd()
+        .arg("-B0b")
+        .arg("foo")
+        .fails()
+        .stderr_only("du: invalid --block-size argument '0b'\n");
+
+    ts.ucmd()
+        .arg("-B0B")
+        .arg("foo")
+        .fails()
+        .stderr_only("du: invalid suffix in --block-size argument '0B'\n");
+
+    ts.ucmd()
+        .arg("--block-size=0b1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111")
+        .arg("foo")
+        .fails_with_code(1)
+        .stderr_contains("too large");
+}
+
+#[test]
 fn test_du_non_existing_files() {
     new_ucmd!()
         .arg("non_existing_a")
@@ -978,7 +1092,7 @@ fn test_du_threshold() {
     at.write("subdir/links/bigfile.txt", &"x".repeat(10000)); // ~10K file
     at.write("subdir/deeper/deeper_dir/smallfile.txt", "small"); // small file
 
-    let threshold = if cfg!(windows) { "7K" } else { "10K" };
+    let threshold = "10K";
 
     ts.ucmd()
         .arg("--apparent-size")
@@ -993,6 +1107,27 @@ fn test_du_threshold() {
         .succeeds()
         .stdout_does_not_contain("links")
         .stdout_contains("deeper_dir");
+}
+
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_du_binary_threshold() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("subdir/links");
+    at.mkdir_all("subdir/deeper/deeper_dir");
+    at.write("subdir/links/bigfile.txt", &"x".repeat(10000));
+    at.write("subdir/deeper/deeper_dir/smallfile.txt", "small");
+
+    let threshold_bin = "0b10011100010000";
+
+    ts.ucmd()
+        .arg("--apparent-size")
+        .arg(format!("--threshold={threshold_bin}"))
+        .succeeds()
+        .stdout_contains("links")
+        .stdout_does_not_contain("deeper_dir");
 }
 
 #[test]
@@ -1528,7 +1663,7 @@ fn test_du_blocksize_zero_do_not_panic() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.write("foo", "some content");
-    for block_size in ["0", "00", "000", "0x0"] {
+    for block_size in ["0", "00", "000", "0x0", "0b0"] {
         ts.ucmd()
             .arg(format!("-B{block_size}"))
             .arg("foo")
