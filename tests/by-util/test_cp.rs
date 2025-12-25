@@ -7404,5 +7404,6 @@ fn test_cp_circular_symbolic_links_in_directory() {
         .arg(target_dir)
         .arg("-rL")
         .fails_with_code(1)
-        .stderr_contains("Too many levels of symbolic links");
+        .stderr_contains(format!("IO error for operation on {source_dir}/a"))
+        .stderr_contains(format!("IO error for operation on {source_dir}/b"));
 }
