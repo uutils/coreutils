@@ -1241,9 +1241,11 @@ fn test_error_message_priority2() {
 
     at.touch("f");
 
-    ts.ucmd()
-        .arg("-d")
-        .arg(".")
-        .fails()
-        .stderr_is("rm: cannot remove '.': Directory not empty\n");
+    let result = ts.ucmd().arg("-d").arg(".").fails();
+
+    #[cfg(not(windows))]
+    result.stderr_is("rm: cannot remove '.': Directory not empty\n");
+
+    #[cfg(windows)]
+    result.stderr_is("rm: cannot remove '.': The directory is not empty.\r\n");
 }
