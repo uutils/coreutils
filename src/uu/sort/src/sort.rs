@@ -124,8 +124,8 @@ fn locale_decimal_pt() -> u8 {
 
 fn effective_decimal_pt(input: &[u8], locale_decimal: u8) -> u8 {
     if locale_decimal == b',' {
-        let has_comma = input.iter().any(|&c| c == b',');
-        if !has_comma && input.iter().any(|&c| c == b'.') {
+        let has_comma = input.contains(&b',');
+        if !has_comma && input.contains(&b'.') {
             return b'.';
         }
     }
