@@ -732,10 +732,33 @@ fn rename(
                 return Ok(());
             }
             OverwriteMode::Interactive => {
-                if !prompt_yes!(
-                    "{}",
-                    translate!("mv-prompt-overwrite", "target" => to.quote())
-                ) {
+                let mut msg = translate!("mv-prompt-overwrite", "target" => to.quote());
+
+                #[cfg(unix)]
+                {
+                    use libc::mode_t;
+                    use std::os::unix::fs::PermissionsExt;
+
+                    if let Ok(meta) = fs::metadata(to) {
+                        let mode = meta.permissions().mode() & 0o777;
+
+                        // Check if the owner's write bit (0o200) is missing
+                        if (mode & 0o200) == 0 {
+                            let octal_mode = format!("{mode:04o}");
+                            // Prepend Zero-Width Non-Joiner (\u{200c}) to stop Fluent from formatting it as a number
+                            let mode_string = format!("\u{200c}{octal_mode}");
+
+                            msg = translate!(
+                                "mv-prompt-overriding-mode",
+                                "target" => to.quote(),
+                                "mode" => mode_string,
+                                "mode_str" => uucore::fs::display_permissions_unix(mode as mode_t, false)
+                            );
+                        }
+                    }
+                }
+
+                if !prompt_yes!("{}", msg) {
                     return Err(io::Error::other(""));
                 }
             }

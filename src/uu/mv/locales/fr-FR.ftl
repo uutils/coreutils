@@ -59,6 +59,7 @@ mv-debug-skipped = ignoré {$target}
 
 # Messages de confirmation
 mv-prompt-overwrite = écraser {$target} ?
+mv-prompt-overriding-mode = écraser {$target}, en ignorant le mode {$mode} ({$mode_str}) ?
 
 # Messages de progression
 mv-progress-moving = déplacement

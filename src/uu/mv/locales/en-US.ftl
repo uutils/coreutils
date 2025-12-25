@@ -61,6 +61,7 @@ mv-debug-skipped = skipped {$target}
 
 # Prompt messages
 mv-prompt-overwrite = overwrite {$target}?
+mv-prompt-overriding-mode = overwrite {$target}, overriding mode {$mode} ({$mode_str})?
 
 # Progress messages
 mv-progress-moving = moving
