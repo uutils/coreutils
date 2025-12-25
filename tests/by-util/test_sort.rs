@@ -2061,7 +2061,7 @@ fn debug_key_annotation_output(ts: &TestScenario) -> String {
     output
 }
 
-const EXPECTED_DEBUG_KEY_ANNOTATION: &str = r#"1
+const EXPECTED_DEBUG_KEY_ANNOTATION: &str = r"1
  ^ no match for key
 
 ^ no match for key
@@ -2281,9 +2281,9 @@ B>chr1
  __
 1 3
  __
-"#;
+";
 
-const EXPECTED_DEBUG_KEY_ANNOTATION_LOCALE: &str = r#"   1²---++3   1,234  Mi
+const EXPECTED_DEBUG_KEY_ANNOTATION_LOCALE: &str = r"   1²---++3   1,234  Mi
                _
    _________
 ________________________
@@ -2302,7 +2302,7 @@ _____
              _____
              ______
 ___________________
-"#;
+";
 
 #[test]
 fn test_color_environment_variables() {
