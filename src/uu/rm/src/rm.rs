@@ -915,7 +915,10 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
             )
         ),
         (_, _, InteractiveMode::Always) => {
-            prompt_yes!("{}", translate!("rm-prompt-remove-directory", "path" => path.quote()))
+            prompt_yes!(
+                "{}",
+                translate!("rm-prompt-remove-directory", "path" => path.quote())
+            )
         }
         (_, _, _) => true,
     }
@@ -926,7 +929,10 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
 #[cfg(not(unix))]
 fn handle_writable_directory(path: &Path, options: &Options, _metadata: &Metadata) -> bool {
     if options.interactive == InteractiveMode::Always {
-        prompt_yes!("{}", translate!("rm-prompt-remove-directory", "path" => path.quote()))
+        prompt_yes!(
+            "{}",
+            translate!("rm-prompt-remove-directory", "path" => path.quote())
+        )
     } else {
         true
     }
