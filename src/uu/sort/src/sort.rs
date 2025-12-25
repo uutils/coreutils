@@ -1330,7 +1330,6 @@ fn detect_numeric_locale() -> NumericLocaleSettings {
     };
     settings
 }
-
 /// Creates an `Arg` for a sort mode flag.
 fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
     Arg::new(mode)
