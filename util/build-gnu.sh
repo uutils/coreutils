@@ -4,8 +4,7 @@
 
 # spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
 # spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) greadlink gsed multihardlink texinfo CARGOFLAGS
-# spell-checker:ignore openat TOCTOU CFLAGS
-# spell-checker:ignore hfsplus casefold chattr
+# spell-checker:ignore openat TOCTOU CFLAGS tmpfs
 
 set -e
 
@@ -38,7 +37,7 @@ path_GNU="$("${READLINK}" -fm -- "${path_GNU:-${path_UUTILS}/../gnu}")"
 if test ! -f "${path_GNU}/configure"; then
     echo "Could not find the GNU coreutils (expected at '${path_GNU}')"
     echo "Download them to the expected path:"
-    echo "  (cd '${path_GNU}' && fetch-gnu.sh ) "
+    echo " (mkdir -p '${path_GNU}' && cd '${path_GNU}' && bash '${path_UUTILS}/util/fetch-gnu.sh')"
     echo "You can edit fetch-gnu.sh to change the tag"
     exit 1
 fi
@@ -128,7 +127,7 @@ else
     "${SED}" -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
     # Use CFLAGS for best build time since we discard GNU coreutils
     CFLAGS="${CFLAGS} -pipe -O0 -s" ./configure -C --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
-      --enable-single-binary=symlinks \
+      --enable-single-binary=symlinks --enable-install-program="arch,kill,uptime,hostname" \
       "$([ "${SELINUX_ENABLED}" = 1 ] && echo --with-selinux || echo --without-selinux)"
     #Add timeout to to protect against hangs
     "${SED}" -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
@@ -172,6 +171,8 @@ grep -rl '\$abs_path_dir_' tests/*/*.sh | xargs -r "${SED}" -i "s|\$abs_path_dir
 "${SED}" -i 's/^print_ver_.*/require_selinux_/' tests/runcon/runcon-no-reorder.sh
 "${SED}" -i 's/^print_ver_.*/require_selinux_/' tests/chcon/chcon-fail.sh
 
+# Mask mtab by unshare instead of LD_PRELOAD (able to merge this to GNU?)
+"${SED}" -i -e 's|^export LD_PRELOAD=.*||' -e "s|.*maybe LD_PRELOAD.*|df() { unshare -rm bash -c \"mount -t tmpfs tmpfs /proc \&\& command df \\\\\"\\\\\$@\\\\\"\" -- \"\$@\"; }|" tests/df/no-mtab-status.sh
 # We use coreutils yes
 "${SED}" -i "s|--coreutils-prog=||g" tests/misc/coreutils.sh
 # Different message
@@ -222,12 +223,6 @@ sed -i -e "s|---dis ||g" tests/tail/overlay-headers.sh
 # Do not FAIL, just do a regular ERROR
 "${SED}" -i -e "s|framework_failure_ 'no inotify_add_watch';|fail=1;|" tests/tail/inotify-rotate-resources.sh
 
-# The notify crate makes inotify_add_watch calls in a background thread, so strace needs -f to follow threads.
-# Also remove the HAVE_INOTIFY header check since that's for C builds.
-"${SED}" -i -e "s|grep '^#define HAVE_INOTIFY 1' \"\$CONFIG_HEADER\" >/dev/null && is_local_dir_ \. |is_local_dir_ . |" \
-    -e "s|strace -e inotify_add_watch|strace -f -e inotify_add_watch|" \
-    tests/tail/inotify-dir-recreate.sh
-
 # pr produces very long log and this command isn't super interesting
 # SKIP for now
 "${SED}" -i -e "s|my \$prog = 'pr';$|my \$prog = 'pr';CuSkip::skip \"\$prog: SKIP for producing too long logs\";|" tests/pr/pr-tests.pl
@@ -248,9 +243,6 @@ sed -i -e "s|---dis ||g" tests/tail/overlay-headers.sh
 # basenc: swap out error message for unexpected arg
 "${SED}" -i "s/  {ERR=>\"\$prog: foobar\\\\n\" \. \$try_help }/  {ERR=>\"error: unexpected argument '--foobar' found\n\n  tip: to pass '--foobar' as a value, use '-- --foobar'\n\nUsage: basenc [OPTION]... [FILE]\n\nFor more information, try '--help'.\n\"}]/" tests/basenc/basenc.pl
 "${SED}" -i "s/  {ERR_SUBST=>\"s\/(unrecognized|unknown) option \[-' \]\*foobar\[' \]\*\/foobar\/\"}],//" tests/basenc/basenc.pl
-
-# Remove the check whether a util was built. Otherwise tests against utils like "arch" are not run.
-"${SED}" -i "s|require_built_ |# require_built_ |g" init.cfg
 
 # exit early for the selinux check. The first is enough for us.
 "${SED}" -i "s|# Independent of whether SELinux|return 0\n  #|g" init.cfg

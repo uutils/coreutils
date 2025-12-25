@@ -6,6 +6,7 @@ name: GnuTests
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
 # spell-checker:ignore (people) Dawid Dziurla * dawidd dtolnay
 # spell-checker:ignore (vars) FILESET SUBDIRS XPASS
+# spell-checker:ignore userns
 
 # * note: to run a single test => `REPO/util/run-gnu-test.sh PATH/TO/TEST/SCRIPT`
 
@@ -58,10 +59,8 @@ jobs:
         path: |
           gnu/config.cache
           gnu/src/getlimits
-        key: ${{ runner.os }}-gnu-config-${{ env.REPO_GNU_REF }}-${{ hashFiles('gnu/configure') }}
-        restore-keys: |
-          ${{ runner.os }}-gnu-config-${{ env.REPO_GNU_REF }}-
-          ${{ runner.os }}-gnu-config-
+        key: ${{ runner.os }}-gnu-config-${{ hashFiles('gnu/NEWS') }}-${{ hashFiles('uutils/util/build-gnu.sh') }} # use build-gnu.sh for extremely safe caching
+
     #### Build environment setup
     - name: Install dependencies
       shell: bash
@@ -92,6 +91,7 @@ jobs:
         sudo locale-gen --keep-existing fa_IR.UTF-8 # Iran
         sudo locale-gen --keep-existing am_ET.UTF-8 # Ethiopia
         sudo locale-gen --keep-existing th_TH.UTF-8 # Thailand
+        sudo locale-gen --keep-existing zh_CN.GB18030 # China
 
         sudo update-locale
         echo "After:"
@@ -112,12 +112,15 @@ jobs:
         path: |
           gnu/config.cache
           gnu/src/getlimits
-        key: ${{ runner.os }}-gnu-config-${{ env.REPO_GNU_REF }}-${{ hashFiles('gnu/configure') }}
+        key: ${{ runner.os }}-gnu-config-${{ hashFiles('gnu/NEWS') }}-${{ hashFiles('uutils/util/build-gnu.sh') }}
 
     ### Run tests as user
     - name: Run GNU tests
       shell: bash
       run: |
+        ## Use unshare
+        sudo sysctl -w kernel.unprivileged_userns_clone=1
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
         ## Run GNU tests
         path_GNU='gnu'
         path_UUTILS='uutils'
@@ -341,7 +344,7 @@ jobs:
         path: 'uutils'
         persist-credentials: false
     - name: Retrieve reference artifacts
-      uses: dawidd6/action-download-artifact@v11
+      uses: dawidd6/action-download-artifact@v12
       # ref: <https://github.com/dawidd6/action-download-artifact>
       continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
       with:

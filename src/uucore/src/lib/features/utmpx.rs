@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore logind
+// spell-checker:ignore IDLEN logind
 
 //! Aims to provide platform-independent methods to obtain login records
 //!
@@ -56,7 +56,12 @@ pub use libc::getutxent;
 #[cfg_attr(target_env = "musl", allow(deprecated))]
 pub use libc::setutxent;
 use libc::utmpx;
-#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "netbsd"))]
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "linux",
+    target_os = "netbsd",
+    target_os = "cygwin"
+))]
 #[cfg_attr(target_env = "musl", allow(deprecated))]
 pub use libc::utmpxname;
 
@@ -176,6 +181,25 @@ mod ut {
     pub use libc::OLD_TIME;
     pub use libc::RUN_LVL;
     pub use libc::SIGNATURE;
+    pub use libc::USER_PROCESS;
+}
+
+#[cfg(target_os = "cygwin")]
+mod ut {
+    pub static DEFAULT_FILE: &str = "";
+
+    pub use libc::UT_HOSTSIZE;
+    pub use libc::UT_IDLEN;
+    pub use libc::UT_LINESIZE;
+    pub use libc::UT_NAMESIZE;
+
+    pub use libc::BOOT_TIME;
+    pub use libc::DEAD_PROCESS;
+    pub use libc::INIT_PROCESS;
+    pub use libc::LOGIN_PROCESS;
+    pub use libc::NEW_TIME;
+    pub use libc::OLD_TIME;
+    pub use libc::RUN_LVL;
     pub use libc::USER_PROCESS;
 }
 

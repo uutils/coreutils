@@ -30,7 +30,7 @@ use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 
-use uucore::display::Quotable;
+use uucore::display::{OsWrite, Quotable};
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
 #[cfg(unix)]
@@ -100,12 +100,16 @@ struct Options<'a> {
 }
 
 /// print `name=value` env pairs on screen
-fn print_env(line_ending: LineEnding) {
+fn print_env(line_ending: LineEnding) -> io::Result<()> {
     let stdout_raw = io::stdout();
     let mut stdout = stdout_raw.lock();
-    for (n, v) in env::vars() {
-        write!(stdout, "{n}={v}{line_ending}").unwrap();
+    for (n, v) in env::vars_os() {
+        stdout.write_all_os(&n)?;
+        stdout.write_all(b"=")?;
+        stdout.write_all_os(&v)?;
+        write!(stdout, "{line_ending}")?;
     }
+    Ok(())
 }
 
 fn parse_name_value_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<bool> {
@@ -548,7 +552,7 @@ impl EnvAppData {
 
         if opts.program.is_empty() {
             // no program provided, so just dump all env vars to stdout
-            print_env(opts.line_ending);
+            print_env(opts.line_ending)?;
         } else {
             return self.run_program(&opts, self.do_debug_printing);
         }
