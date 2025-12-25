@@ -52,13 +52,22 @@ fn prompt_file_with_stat(path: &Path, stat: &libc::stat, options: &Options) -> b
     //   otherwise fall through to protected wording.
     if options.interactive == InteractiveMode::Always {
         if is_symlink {
-            return prompt_yes!("remove symbolic link {}?", path.quote());
+            return prompt_yes!(
+                "{}",
+                translate!("rm-prompt-remove-symbolic-link", "file" => path.quote())
+            );
         }
         if writable {
             return if len == 0 {
-                prompt_yes!("remove regular empty file {}?", path.quote())
+                prompt_yes!(
+                    "{}",
+                    translate!("rm-prompt-remove-regular-empty-file", "file" => path.quote())
+                )
             } else {
-                prompt_yes!("remove file {}?", path.quote())
+                prompt_yes!(
+                    "{}",
+                    translate!("rm-prompt-remove-file", "file" => path.quote())
+                )
             };
         }
         // Not writable: use protected wording below
@@ -69,10 +78,19 @@ fn prompt_file_with_stat(path: &Path, stat: &libc::stat, options: &Options) -> b
         (false, _, _) if options.interactive == InteractiveMode::PromptProtected => true,
         (_, true, _) => true,
         (_, false, true) => prompt_yes!(
-            "remove write-protected regular empty file {}?",
-            path.quote()
+            "{}",
+            translate!(
+                "rm-prompt-remove-write-protected-regular-empty-file",
+                "file" => path.quote()
+            )
         ),
-        _ => prompt_yes!("remove write-protected regular file {}?", path.quote()),
+        _ => prompt_yes!(
+            "{}",
+            translate!(
+                "rm-prompt-remove-write-protected-regular-file",
+                "file" => path.quote()
+            )
+        ),
     }
 }
 
@@ -90,17 +108,32 @@ fn prompt_dir_with_mode(path: &Path, mode: libc::mode_t, options: &Options) -> b
         (false, _, _, InteractiveMode::PromptProtected) => true,
         (false, false, false, InteractiveMode::Never) => true,
         (_, false, false, _) => prompt_yes!(
-            "attempt removal of inaccessible directory {}?",
-            path.quote()
+            "{}",
+            translate!(
+                "rm-prompt-attempt-remove-inaccessible-directory",
+                "path" => path.quote()
+            )
         ),
         (_, false, true, InteractiveMode::Always) => {
             prompt_yes!(
-                "attempt removal of inaccessible directory {}?",
-                path.quote()
+                "{}",
+                translate!(
+                    "rm-prompt-attempt-remove-inaccessible-directory",
+                    "path" => path.quote()
+                )
             )
         }
-        (_, true, false, _) => prompt_yes!("remove write-protected directory {}?", path.quote()),
-        (_, _, _, InteractiveMode::Always) => prompt_yes!("remove directory {}?", path.quote()),
+        (_, true, false, _) => prompt_yes!(
+            "{}",
+            translate!(
+                "rm-prompt-remove-write-protected-directory",
+                "path" => path.quote()
+            )
+        ),
+        (_, _, _, InteractiveMode::Always) => prompt_yes!(
+            "{}",
+            translate!("rm-prompt-remove-directory", "path" => path.quote())
+        ),
         (_, _, _, _) => true,
     }
 }
