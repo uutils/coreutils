@@ -156,7 +156,7 @@ fn embed_single_utility_locale(
 ///
 /// # Errors
 ///
-/// Returns an error if the `src/uu` directory cannot be read, if any utility 
+/// Returns an error if the `src/uu` directory cannot be read, if any utility
 /// locales cannot be embedded, or if flushing the `embedded_file` fails.
 fn embed_all_utility_locales(
     embedded_file: &mut std::fs::File,
@@ -207,7 +207,7 @@ fn embed_all_utility_locales(
 ///
 /// # Errors
 ///
-/// Returns an error if the directory containing the crate cannot be read or 
+/// Returns an error if the directory containing the crate cannot be read or
 /// if writing to the `embedded_file` fails.
 fn embed_static_utility_locales(
     embedded_file: &mut std::fs::File,
@@ -300,7 +300,7 @@ where
 ///
 /// # Errors
 ///
-/// Returns an error if the file at `locale_path` cannot be read or if 
+/// Returns an error if the file at `locale_path` cannot be read or if
 /// writing to `embedded_file` fails.
 fn embed_locale_file(
     embedded_file: &mut std::fs::File,
@@ -336,7 +336,7 @@ fn embed_locale_file(
 ///
 /// # Errors
 ///
-/// Returns an error if `for_each_locale` fails, which typically happens if 
+/// Returns an error if `for_each_locale` fails, which typically happens if
 /// reading a locale file or writing to the `embedded_file` fails.
 fn embed_component_locales<F>(
     embedded_file: &mut std::fs::File,
