@@ -13,15 +13,10 @@ use memchr::memchr2;
 use std::ffi::OsString;
 use std::fs::{File, metadata};
 use std::io::{self, BufWriter, ErrorKind, IsTerminal, Read, Write};
-/// Unix domain socket support
-#[cfg(unix)]
-use std::net::Shutdown;
 #[cfg(unix)]
 use std::os::fd::AsFd;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
-#[cfg(unix)]
-use std::os::unix::net::UnixStream;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
@@ -103,6 +98,9 @@ enum CatError {
     },
     #[error("{}", translate!("cat-error-is-directory"))]
     IsDirectory,
+    #[cfg(unix)]
+    #[error("{}", translate!("cat-error-no-such-device-or-address"))]
+    NoSuchDeviceOrAddress,
     #[error("{}", translate!("cat-error-input-file-is-output-file"))]
     OutputIsInput,
     #[error("{}", translate!("cat-error-too-many-symbolic-links"))]
@@ -395,15 +393,7 @@ fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -
         }
         InputType::Directory => Err(CatError::IsDirectory),
         #[cfg(unix)]
-        InputType::Socket => {
-            let socket = UnixStream::connect(path)?;
-            socket.shutdown(Shutdown::Write)?;
-            let mut handle = InputHandle {
-                reader: socket,
-                is_interactive: false,
-            };
-            cat_handle(&mut handle, options, state)
-        }
+        InputType::Socket => Err(CatError::NoSuchDeviceOrAddress),
         _ => {
             let file = File::open(path)?;
             if is_unsafe_overwrite(&file, &io::stdout()) {

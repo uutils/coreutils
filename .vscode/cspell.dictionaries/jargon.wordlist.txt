@@ -76,6 +76,7 @@ iflag
 iflags
 kibi
 kibibytes
+langinfo
 libacl
 lcase
 listxattr
@@ -129,6 +130,7 @@ semiprimes
 setcap
 setfacl
 setfattr
+setlocale
 shortcode
 shortcodes
 siginfo
@@ -163,6 +165,8 @@ xattrs
 xpass
 
 # * abbreviations
+AMPM
+ampm
 consts
 deps
 dev
