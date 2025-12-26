@@ -1109,6 +1109,8 @@ pub(crate) fn fd_soft_limit() -> Option<usize> {
 
 #[cfg(unix)]
 pub(crate) fn current_open_fd_count() -> Option<usize> {
+    use nix::fcntl::{FcntlArg, fcntl};
+
     fn count_dir(path: &str) -> Option<usize> {
         let entries = std::fs::read_dir(path).ok()?;
         let mut count = 0usize;
@@ -1133,7 +1135,7 @@ pub(crate) fn current_open_fd_count() -> Option<usize> {
 
     let mut count = 0usize;
     for fd in 0..limit {
-        if unsafe { libc::fcntl(fd as i32, libc::F_GETFD) } != -1 {
+        if fcntl(fd as i32, FcntlArg::F_GETFD).is_ok() {
             count = count.saturating_add(1);
         }
     }
@@ -2198,14 +2200,21 @@ fn general_numeric_compare(
     a.partial_cmp(b).unwrap()
 }
 
-fn get_rand_string() -> [u8; 16] {
+/// Generate a 128-bit salt from a uniform RNG distribution.
+fn get_rand_string() -> [u8; SALT_LEN] {
     rng().sample(rand::distr::StandardUniform)
 }
 
-fn salt_from_random_source(path: &Path) -> UResult<[u8; 16]> {
-    const MAX_BYTES: usize = 1024 * 1024;
+const SALT_LEN: usize = 16; // 128-bit salt
+const MAX_BYTES: usize = 1024 * 1024; // Read cap: 1 MiB
+const BUF_LEN: usize = 8192; // 8 KiB read buffer
+const U64_LEN: usize = 8;
+const RANDOM_SOURCE_TAG: &[u8] = b"uutils-sort-random-source"; // Domain separation tag
+
+/// Create a 128-bit salt by hashing up to 1 MiB from the given file.
+fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
     let mut reader = open_with_open_failed_error(path)?;
-    let mut buf = [0u8; 8192];
+    let mut buf = [0u8; BUF_LEN];
     let mut total = 0usize;
     let mut hasher = FnvHasher::default();
 
@@ -2233,13 +2242,13 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; 16]> {
 
     let first = hasher.finish();
     let mut second_hasher = FnvHasher::default();
-    second_hasher.write(b"uutils-sort-random-source");
+    second_hasher.write(RANDOM_SOURCE_TAG);
     second_hasher.write_u64(first);
     let second = second_hasher.finish();
 
-    let mut out = [0u8; 16];
-    out[..8].copy_from_slice(&first.to_le_bytes());
-    out[8..].copy_from_slice(&second.to_le_bytes());
+    let mut out = [0u8; SALT_LEN];
+    out[..U64_LEN].copy_from_slice(&first.to_le_bytes());
+    out[U64_LEN..].copy_from_slice(&second.to_le_bytes());
     Ok(out)
 }
 
