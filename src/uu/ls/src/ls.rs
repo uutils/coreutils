@@ -365,7 +365,10 @@ pub struct Config {
     time_format_recent: String,        // Time format for recent dates
     time_format_older: Option<String>, // Time format for older dates (optional, if not present, time_format_recent is used)
     context: bool,
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
     selinux_supported: bool,
+    #[cfg(all(feature = "smack", target_os = "linux"))]
+    smack_supported: bool,
     group_directories_first: bool,
     line_ending: LineEnding,
     dired: bool,
@@ -1157,16 +1160,10 @@ impl Config {
             time_format_recent,
             time_format_older,
             context,
-            selinux_supported: {
-                #[cfg(all(feature = "selinux", target_os = "linux"))]
-                {
-                    uucore::selinux::is_selinux_enabled()
-                }
-                #[cfg(not(all(feature = "selinux", target_os = "linux")))]
-                {
-                    false
-                }
-            },
+            #[cfg(all(feature = "selinux", target_os = "linux"))]
+            selinux_supported: uucore::selinux::is_selinux_enabled(),
+            #[cfg(all(feature = "smack", target_os = "linux"))]
+            smack_supported: uucore::smack::is_smack_enabled(),
             group_directories_first: options.get_flag(options::GROUP_DIRECTORIES_FIRST),
             line_ending: LineEnding::from_zero_flag(options.get_flag(options::ZERO)),
             dired,
@@ -3387,33 +3384,53 @@ fn get_security_context<'a>(
         }
     }
 
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
     if config.selinux_supported {
-        #[cfg(all(feature = "selinux", target_os = "linux"))]
-        {
-            match selinux::SecurityContext::of_path(path, must_dereference, false) {
-                Err(_r) => {
-                    // TODO: show the actual reason why it failed
-                    show_warning!("failed to get security context of: {}", path.quote());
-                    return Cow::Borrowed(SUBSTITUTE_STRING);
-                }
-                Ok(None) => return Cow::Borrowed(SUBSTITUTE_STRING),
-                Ok(Some(context)) => {
-                    let context = context.as_bytes();
+        match selinux::SecurityContext::of_path(path, must_dereference, false) {
+            Err(_r) => {
+                // TODO: show the actual reason why it failed
+                show_warning!("failed to get security context of: {}", path.quote());
+                return Cow::Borrowed(SUBSTITUTE_STRING);
+            }
+            Ok(None) => return Cow::Borrowed(SUBSTITUTE_STRING),
+            Ok(Some(context)) => {
+                let context = context.as_bytes();
 
-                    let context = context.strip_suffix(&[0]).unwrap_or(context);
+                let context = context.strip_suffix(&[0]).unwrap_or(context);
 
-                    let res: String = String::from_utf8(context.to_vec()).unwrap_or_else(|e| {
-                        show_warning!(
-                            "getting security context of: {}: {}",
-                            path.quote(),
-                            e.to_string()
-                        );
+                let res: String = String::from_utf8(context.to_vec()).unwrap_or_else(|e| {
+                    show_warning!(
+                        "getting security context of: {}: {}",
+                        path.quote(),
+                        e.to_string()
+                    );
 
-                        String::from_utf8_lossy(context).to_string()
-                    });
+                    String::from_utf8_lossy(context).to_string()
+                });
 
-                    return Cow::Owned(res);
-                }
+                return Cow::Owned(res);
+            }
+        }
+    }
+
+    #[cfg(all(feature = "smack", target_os = "linux"))]
+    if config.smack_supported {
+        // For SMACK, use the path to get the label
+        // If must_dereference is true, we follow the symlink
+        let target_path = if must_dereference {
+            match std::fs::canonicalize(path) {
+                Ok(p) => p,
+                Err(_) => path.to_path_buf(),
+            }
+        } else {
+            path.to_path_buf()
+        };
+
+        match uucore::smack::get_smack_label_for_path(&target_path) {
+            Ok(label) => return Cow::Owned(label),
+            Err(_) => {
+                // No label or error getting label
+                return Cow::Borrowed(SUBSTITUTE_STRING);
             }
         }
     }
