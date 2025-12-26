@@ -378,8 +378,8 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
             (atime, mtime)
         }
         Source::Now => {
-            #[cfg(unix)]
             let now: FileTime;
+            #[cfg(unix)]
             {
                 if opts.date.is_none() {
                     now = FileTime::from_unix_time(0, libc::UTIME_NOW as u32);
@@ -388,7 +388,9 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
                 }
             }
             #[cfg(not(unix))]
-            let now = datetime_to_filetime(&Local::now());
+            {
+                now = datetime_to_filetime(&Local::now());
+            }
             (now, now)
         }
         &Source::Timestamp(ts) => (ts, ts),
