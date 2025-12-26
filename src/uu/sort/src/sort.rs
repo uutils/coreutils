@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD
 
 mod buffer_hint;
 mod check;
@@ -1109,7 +1109,7 @@ pub(crate) fn fd_soft_limit() -> Option<usize> {
 
 #[cfg(unix)]
 pub(crate) fn current_open_fd_count() -> Option<usize> {
-    use nix::fcntl::{FcntlArg, fcntl};
+    use nix::libc;
 
     fn count_dir(path: &str) -> Option<usize> {
         let entries = std::fs::read_dir(path).ok()?;
@@ -1135,7 +1135,9 @@ pub(crate) fn current_open_fd_count() -> Option<usize> {
 
     let mut count = 0usize;
     for fd in 0..limit {
-        if fcntl(fd as i32, FcntlArg::F_GETFD).is_ok() {
+        let fd = fd as libc::c_int;
+        // Probe with libc::fcntl because the fd may be invalid.
+        if unsafe { libc::fcntl(fd, libc::F_GETFD) } != -1 {
             count = count.saturating_add(1);
         }
     }
