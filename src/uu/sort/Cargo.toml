@@ -24,7 +24,6 @@ bigdecimal = { workspace = true }
 binary-heap-plus = { workspace = true }
 clap = { workspace = true }
 compare = { workspace = true }
-ctrlc = { workspace = true }
 fnv = { workspace = true }
 itertools = { workspace = true }
 memchr = { workspace = true }
@@ -41,6 +40,9 @@ uucore = { workspace = true, features = [
   "i18n-decimal",
 ] }
 fluent = { workspace = true }
+
+[target.'cfg(not(target_os = "redox"))'.dependencies]
+ctrlc = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["resource"] }

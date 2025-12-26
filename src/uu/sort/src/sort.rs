@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD
 
 mod buffer_hint;
 mod check;
@@ -1199,7 +1199,16 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
         .action(ArgAction::SetTrue)
 }
 
-#[cfg(unix)]
+#[cfg(all(
+    unix,
+    not(any(
+        target_os = "redox",
+        target_os = "fuchsia",
+        target_os = "haiku",
+        target_os = "solaris",
+        target_os = "illumos"
+    ))
+))]
 fn get_rlimit() -> UResult<usize> {
     use nix::sys::resource::{RLIM_INFINITY, Resource, getrlimit};
 
@@ -1212,19 +1221,35 @@ fn get_rlimit() -> UResult<usize> {
         .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))
 }
 
-#[cfg(unix)]
+#[cfg(all(
+    unix,
+    not(any(
+        target_os = "redox",
+        target_os = "fuchsia",
+        target_os = "haiku",
+        target_os = "solaris",
+        target_os = "illumos"
+    ))
+))]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
     get_rlimit().ok()
 }
 
-#[cfg(not(unix))]
+#[cfg(any(
+    not(unix),
+    target_os = "redox",
+    target_os = "fuchsia",
+    target_os = "haiku",
+    target_os = "solaris",
+    target_os = "illumos"
+))]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
     None
 }
 
 #[cfg(unix)]
 pub(crate) fn current_open_fd_count() -> Option<usize> {
-    use nix::fcntl::{FcntlArg, fcntl};
+    use nix::libc;
 
     fn count_dir(path: &str) -> Option<usize> {
         let entries = std::fs::read_dir(path).ok()?;
@@ -1250,7 +1275,9 @@ pub(crate) fn current_open_fd_count() -> Option<usize> {
 
     let mut count = 0usize;
     for fd in 0..limit {
-        if fcntl(fd as i32, FcntlArg::F_GETFD).is_ok() {
+        let fd = fd as libc::c_int;
+        // Probe with libc::fcntl because the fd may be invalid.
+        if unsafe { libc::fcntl(fd, libc::F_GETFD) } != -1 {
             count = count.saturating_add(1);
         }
     }
