@@ -523,10 +523,7 @@ impl Chmoder {
                         }
                         Err(err) => {
                             let error = if err.kind() == std::io::ErrorKind::PermissionDenied {
-                                ChmodError::PermissionDenied(
-                                    entry_path.to_string_lossy().to_string(),
-                                )
-                                .into()
+                                ChmodError::PermissionDenied(entry_path).into()
                             } else {
                                 err.into()
                             };
