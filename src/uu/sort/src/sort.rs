@@ -554,15 +554,15 @@ fn ordering_incompatible(
     count > 1
 }
 
-fn incompatible_options_error(opts: &str) -> UResult<()> {
-    Err(UUsageError::new(
+fn incompatible_options_error(opts: &str) -> Box<dyn UError> {
+    UUsageError::new(
         2,
         translate!(
             "sort-options-incompatible",
             "opt1" => opts,
             "opt2" => ""
         ),
-    ))
+    )
 }
 enum Selection<'a> {
     AsBigDecimal(GeneralBigDecimalParseResult),
@@ -850,18 +850,18 @@ impl Default for KeyPosition {
     }
 }
 
-fn bad_field_spec(spec: &str, msg_key: &str) -> UResult<()> {
-    Err(UUsageError::new(
+fn bad_field_spec(spec: &str, msg_key: &str) -> Box<dyn UError> {
+    UUsageError::new(
         2,
         translate!(
             "sort-invalid-field-spec",
             "msg" => translate!(msg_key),
             "spec" => spec.quote()
         ),
-    ))
+    )
 }
 
-fn invalid_count_error(msg_key: &str, input: &str) -> UUsageError {
+fn invalid_count_error(msg_key: &str, input: &str) -> Box<dyn UError> {
     UUsageError::new(
         2,
         format!(
@@ -872,20 +872,20 @@ fn invalid_count_error(msg_key: &str, input: &str) -> UUsageError {
     )
 }
 
-fn parse_field_count(input: &str, msg_key: &str) -> UResult<(usize, &str)> {
+fn parse_field_count<'a>(input: &'a str, msg_key: &str) -> UResult<(usize, &'a str)> {
     let bytes = input.as_bytes();
     let mut idx = 0;
     while idx < bytes.len() && bytes[idx].is_ascii_digit() {
         idx += 1;
     }
     if idx == 0 {
-        return Err(invalid_count_error(msg_key, input).into());
+        return Err(invalid_count_error(msg_key, input));
     }
     let (num_str, rest) = input.split_at(idx);
     let value = match num_str.parse::<usize>() {
         Ok(v) => v,
         Err(e) if *e.kind() == IntErrorKind::PosOverflow => usize::MAX,
-        Err(_) => return Err(invalid_count_error(msg_key, input).into()),
+        Err(_) => return Err(invalid_count_error(msg_key, input)),
     };
     Ok((value, rest))
 }
@@ -972,7 +972,7 @@ impl FieldSelector {
         let (from_field, mut rest) =
             parse_field_count(key, "sort-invalid-number-at-field-start")?;
         if from_field == 0 {
-            return bad_field_spec(key, "sort-field-number-is-zero");
+            return Err(bad_field_spec(key, "sort-field-number-is-zero"));
         }
 
         let mut from_char = 1;
@@ -980,7 +980,7 @@ impl FieldSelector {
             let (char_idx, rest_after) =
                 parse_field_count(stripped, "sort-invalid-number-after-dot")?;
             if char_idx == 0 {
-                return bad_field_spec(key, "sort-character-offset-is-zero");
+                return Err(bad_field_spec(key, "sort-character-offset-is-zero"));
             }
             from_char = char_idx;
             rest = rest_after;
@@ -997,7 +997,7 @@ impl FieldSelector {
             let (to_field, mut rest) =
                 parse_field_count(rest_after_comma, "sort-invalid-number-after-comma")?;
             if to_field == 0 {
-                return bad_field_spec(key, "sort-field-number-is-zero");
+                return Err(bad_field_spec(key, "sort-field-number-is-zero"));
             }
 
             let mut to_char = 0;
@@ -1014,7 +1014,7 @@ impl FieldSelector {
                 to_ignore_blanks = true;
             }
             if !rest.is_empty() {
-                return bad_field_spec(key, "sort-stray-character-field-spec");
+                return Err(bad_field_spec(key, "sort-stray-character-field-spec"));
             }
             to = Some(KeyPosition {
                 field: to_field,
@@ -1022,7 +1022,7 @@ impl FieldSelector {
                 ignore_blanks: to_ignore_blanks,
             });
         } else if !rest_after_opts.is_empty() {
-            return bad_field_spec(key, "sort-stray-character-field-spec");
+            return Err(bad_field_spec(key, "sort-stray-character-field-spec"));
         }
 
         if ordering_incompatible(flags, settings.dictionary_order, settings.ignore_non_printing) {
@@ -1032,7 +1032,7 @@ impl FieldSelector {
                 settings.ignore_non_printing,
                 settings.ignore_case,
             );
-            return incompatible_options_error(&opts);
+            return Err(incompatible_options_error(&opts));
         }
 
         settings.mode = flags.to_mode();
@@ -1506,7 +1506,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             ignore_non_printing,
             ignore_case,
         );
-        return incompatible_options_error(&opts);
+        return Err(incompatible_options_error(&opts));
     }
 
     settings.mode = mode_flags.to_mode();
@@ -1613,7 +1613,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     settings.check = matches.contains_id(options::check::CHECK);
     if settings.check && matches.get_flag(options::check::CHECK_SILENT) {
-        return incompatible_options_error("cC");
+        return Err(incompatible_options_error("cC"));
     }
     if matches.get_flag(options::check::CHECK_SILENT)
         || matches!(
@@ -1629,7 +1629,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if matches.contains_id(options::OUTPUT) && settings.check {
         let opts = if settings.check_silent { "Co" } else { "co" };
-        return incompatible_options_error(opts);
+        return Err(incompatible_options_error(opts));
     }
 
     settings.ignore_leading_blanks = matches.get_flag(options::IGNORE_LEADING_BLANKS);
