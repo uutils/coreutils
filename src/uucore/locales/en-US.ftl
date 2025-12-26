@@ -46,6 +46,12 @@ selinux-error-context-retrieval-failure = failed to retrieve the security contex
 selinux-error-context-set-failure = failed to set default file creation context to '{ $context }': { $error }
 selinux-error-context-conversion-failure = failed to set default file creation context to '{ $context }': { $error }
 
+# SMACK error messages
+smack-error-not-enabled = SMACK is not enabled on this system
+smack-error-label-retrieval-failure = failed to get SMACK label: { $error }
+smack-error-label-set-failure = failed to set default file creation context to '{ $context }': { $error }
+smack-error-io = I/O error: { $error }
+
 # Safe traversal error messages
 safe-traversal-error-path-contains-null = path contains null byte
 safe-traversal-error-open-failed = failed to open '{ $path }': { $source }

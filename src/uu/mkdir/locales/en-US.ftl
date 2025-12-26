@@ -14,6 +14,7 @@ mkdir-error-empty-directory-name = cannot create directory '': No such file or d
 mkdir-error-file-exists = { $path }: File exists
 mkdir-error-failed-to-create-tree = failed to create whole tree
 mkdir-error-cannot-set-permissions = cannot set permissions { $path }
+mkdir-error-smack-context = failed to set default file creation context to '{ $context }':
 
 # Verbose output
 mkdir-verbose-created-directory = { $util_name }: created directory { $path }

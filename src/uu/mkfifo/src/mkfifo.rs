@@ -75,6 +75,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
             }
         }
+
+        // Apply SMACK context if requested
+        #[cfg(feature = "smack")]
+        {
+            let set_smack_context = matches.get_flag(options::SELINUX);
+            let context = matches.get_one::<String>(options::CONTEXT);
+
+            if (set_smack_context || context.is_some()) && uucore::smack::is_smack_enabled() {
+                if let Some(ctx) = context {
+                    use std::path::Path;
+                    if let Err(e) = uucore::smack::set_smack_label_for_path(Path::new(&f), ctx) {
+                        let _ = fs::remove_file(&f);
+                        return Err(USimpleError::new(1, e.to_string()));
+                    }
+                }
+            }
+        }
     }
 
     Ok(())

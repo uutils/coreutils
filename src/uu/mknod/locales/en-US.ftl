@@ -32,3 +32,4 @@ mknod-error-invalid-mode = invalid mode ({ $error })
 mknod-error-mode-permission-bits-only = mode must specify only file permission bits
 mknod-error-missing-device-type = missing device type
 mknod-error-invalid-device-type = invalid device type { $type }
+mknod-error-smack-context = failed to set default file creation context to '{ $context }':

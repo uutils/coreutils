@@ -62,10 +62,10 @@ macro_rules! cstr2cow {
 }
 
 fn get_context_help_text() -> String {
-    #[cfg(not(feature = "selinux"))]
-    return translate!("id-context-help-disabled");
-    #[cfg(feature = "selinux")]
+    #[cfg(any(feature = "selinux", feature = "smack"))]
     return translate!("id-context-help-enabled");
+    #[cfg(not(any(feature = "selinux", feature = "smack")))]
+    return translate!("id-context-help-disabled");
 }
 
 mod options {
@@ -99,6 +99,7 @@ struct State {
     zflag: bool,  // --zero
     cflag: bool,  // --context
     selinux_supported: bool,
+    smack_supported: bool,
     ids: Option<Ids>,
     // The behavior for calling GNU's `id` and calling GNU's `id $USER` is similar but different.
     // * The SELinux context is only displayed without a specified user.
@@ -146,6 +147,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 false
             }
         },
+        smack_supported: {
+            #[cfg(feature = "smack")]
+            {
+                uucore::smack::is_smack_enabled()
+            }
+            #[cfg(not(feature = "smack"))]
+            {
+                false
+            }
+        },
         user_specified: !users.is_empty(),
         ids: None,
     };
@@ -179,7 +190,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let line_ending = LineEnding::from_zero_flag(state.zflag);
 
     if state.cflag {
-        return if state.selinux_supported {
+        if state.selinux_supported {
             // print SElinux context and exit
             #[cfg(all(any(target_os = "linux", target_os = "android"), feature = "selinux"))]
             if let Ok(context) = selinux::SecurityContext::current(false) {
@@ -192,13 +203,28 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     translate!("id-error-cannot-get-context"),
                 ));
             }
-            Ok(())
+            return Ok(());
+        } else if state.smack_supported {
+            // print SMACK context and exit
+            #[cfg(all(target_os = "linux", feature = "smack"))]
+            match uucore::smack::get_smack_label_for_self() {
+                Ok(label) => {
+                    print!("{}{line_ending}", label);
+                }
+                Err(_) => {
+                    return Err(USimpleError::new(
+                        1,
+                        translate!("id-error-cannot-get-context"),
+                    ));
+                }
+            }
+            return Ok(());
         } else {
-            Err(USimpleError::new(
+            return Err(USimpleError::new(
                 1,
                 translate!("id-error-context-selinux-only"),
-            ))
-        };
+            ));
+        }
     }
 
     for i in 0..=users.len() {
@@ -674,6 +700,17 @@ fn id_print(state: &State, groups: &[u32]) {
         if let Ok(context) = selinux::SecurityContext::current(false) {
             let bytes = context.as_bytes();
             print!(" context={}", String::from_utf8_lossy(bytes));
+        }
+    }
+
+    #[cfg(all(target_os = "linux", feature = "smack"))]
+    if state.smack_supported
+        && !state.user_specified
+        && std::env::var_os("POSIXLY_CORRECT").is_none()
+    {
+        // print SMACK context (does not depend on "-Z")
+        if let Ok(label) = uucore::smack::get_smack_label_for_self() {
+            print!(" context={}", label);
         }
     }
 }

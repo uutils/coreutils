@@ -300,6 +300,17 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
                 }
             }
 
+            // Apply SMACK context if requested
+            #[cfg(feature = "smack")]
+            if config.set_selinux_context && uucore::smack::is_smack_enabled() {
+                if let Some(ctx) = config.context {
+                    if let Err(e) = uucore::smack::set_smack_label_for_path(path, ctx) {
+                        let _ = std::fs::remove_dir(path);
+                        return Err(USimpleError::new(1, e.to_string()));
+                    }
+                }
+            }
+
             Ok(())
         }
 
