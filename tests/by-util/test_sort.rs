@@ -209,6 +209,24 @@ fn test_version_sort_stable() {
 }
 
 #[test]
+fn test_ignore_case_orders_punctuation_after_letters() {
+    new_ucmd!()
+        .arg("-f")
+        .pipe_in("A\na\n_\n")
+        .succeeds()
+        .stdout_is("A\na\n_\n");
+}
+
+#[test]
+fn test_ignore_case_unique_orders_punctuation_after_letters() {
+    new_ucmd!()
+        .arg("-fu")
+        .pipe_in("a\n_\n")
+        .succeeds()
+        .stdout_is("a\n_\n");
+}
+
+#[test]
 fn test_human_numeric_whitespace() {
     test_helper(
         "human-numeric-whitespace",
