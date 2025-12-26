@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) filetime datetime lpszfilepath mktime DATETIME datelike timelike
+// spell-checker:ignore (ToDO) filetime datetime lpszfilepath mktime DATETIME datelike timelike UTIME
 // spell-checker:ignore (FORMATS) MMDDhhmm YYYYMMDDHHMM YYMMDDHHMM YYYYMMDDHHMMS
 
 pub mod error;
@@ -377,6 +377,16 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
             (atime, mtime)
         }
         Source::Now => {
+            #[cfg(unix)]
+            let now: FileTime;
+            {
+                if opts.date.is_none() {
+                    now = FileTime::from_unix_time(0, libc::UTIME_NOW as u32);
+                } else {
+                    now = datetime_to_filetime(&Local::now());
+                }
+            }
+            #[cfg(not(unix))]
             let now = datetime_to_filetime(&Local::now());
             (now, now)
         }
