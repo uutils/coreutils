@@ -245,6 +245,7 @@ pub fn uu_app() -> Command {
         .after_help(translate!("nl-after-help"))
         .infer_long_args(true)
         .disable_help_flag(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
@@ -344,6 +345,13 @@ pub fn uu_app() -> Command {
         )
 }
 
+/// Helper to write: prefix bytes + line bytes + newline
+fn write_line(writer: &mut impl Write, prefix: &[u8], line: &[u8]) -> std::io::Result<()> {
+    writer.write_all(prefix)?;
+    writer.write_all(line)?;
+    writeln!(writer)
+}
+
 /// `nl` implements the main functionality for an individual buffer.
 fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings) -> UResult<()> {
     let mut writer = BufWriter::new(stdout());
@@ -408,24 +416,17 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                         translate!("nl-error-line-number-overflow"),
                     ));
                 };
-                writeln!(
-                    writer,
-                    "{}{}{}",
-                    settings
-                        .number_format
-                        .format(line_number, settings.number_width),
-                    settings.number_separator.to_string_lossy(),
-                    String::from_utf8_lossy(&line),
-                )
-                .map_err_context(|| translate!("nl-error-could-not-write"))?;
-                // update line number for the potential next line
-                match line_number.checked_add(settings.line_increment) {
-                    Some(new_line_number) => stats.line_number = Some(new_line_number),
-                    None => stats.line_number = None, // overflow
-                }
+                let mut prefix = settings
+                    .number_format
+                    .format(line_number, settings.number_width)
+                    .into_bytes();
+                prefix.extend_from_slice(settings.number_separator.as_encoded_bytes());
+                write_line(&mut writer, &prefix, &line)
+                    .map_err_context(|| translate!("nl-error-could-not-write"))?;
+                stats.line_number = line_number.checked_add(settings.line_increment);
             } else {
-                let spaces = " ".repeat(settings.number_width + 1);
-                writeln!(writer, "{spaces}{}", String::from_utf8_lossy(&line))
+                let prefix = " ".repeat(settings.number_width + 1);
+                write_line(&mut writer, prefix.as_bytes(), &line)
                     .map_err_context(|| translate!("nl-error-could-not-write"))?;
             }
         }

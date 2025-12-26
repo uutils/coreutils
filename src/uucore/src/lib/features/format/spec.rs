@@ -398,7 +398,7 @@ impl Spec {
                             // TODO: This should break the _entire execution_ of printf
                             break;
                         }
-                    };
+                    }
                 }
                 writer.write_all(&parsed).map_err(FormatError::IoError)
             }
@@ -550,6 +550,10 @@ fn write_padded(
     left: bool,
 ) -> Result<(), FormatError> {
     let padlen = width.saturating_sub(text.len());
+
+    // Check if the padding length is too large for formatting
+    super::check_width(padlen).map_err(FormatError::IoError)?;
+
     if left {
         writer.write_all(text)?;
         write!(writer, "{: <padlen$}", "")
@@ -591,14 +595,10 @@ fn eat_number(rest: &mut &[u8], index: &mut usize) -> Option<usize> {
     match rest[*index..].iter().position(|b| !b.is_ascii_digit()) {
         None | Some(0) => None,
         Some(i) => {
-            // TODO: This might need to handle errors better
-            // For example in case of overflow.
-            let parsed = std::str::from_utf8(&rest[*index..(*index + i)])
-                .unwrap()
-                .parse()
-                .unwrap();
+            // Handle large numbers that would cause overflow
+            let num_str = std::str::from_utf8(&rest[*index..(*index + i)]).unwrap();
             *index += i;
-            Some(parsed)
+            Some(num_str.parse().unwrap_or(usize::MAX))
         }
     }
 }

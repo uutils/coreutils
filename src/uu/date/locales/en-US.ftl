@@ -104,3 +104,4 @@ date-error-date-overflow = date overflow '{$date}'
 date-error-setting-date-not-supported-macos = setting the date is not supported by macOS
 date-error-setting-date-not-supported-redox = setting the date is not supported by Redox
 date-error-cannot-set-date = cannot set date
+date-error-extra-operand = extra operand '{$operand}'

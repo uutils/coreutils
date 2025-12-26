@@ -3,14 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //spell-checker:ignore TAOCP indegree
-use clap::{Arg, Command};
+use clap::{Arg, ArgAction, Command};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
 use std::ffi::OsString;
 use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult};
+use uucore::error::{UError, UResult, USimpleError};
 use uucore::{format_usage, show};
 
 use uucore::translate;
@@ -49,15 +49,36 @@ impl UError for LoopNode<'_> {}
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let input = matches
-        .get_one::<OsString>(options::FILE)
-        .expect("Value is required by clap");
+    let mut inputs: Vec<OsString> = matches
+        .get_many::<OsString>(options::FILE)
+        .map(|vals| vals.cloned().collect())
+        .unwrap_or_default();
+
+    if inputs.is_empty() {
+        inputs.push(OsString::from("-"));
+    }
+
+    if inputs.len() > 1 {
+        return Err(USimpleError::new(
+            1,
+            translate!(
+                "tsort-error-extra-operand",
+                "operand" => inputs[1].quote(),
+                "util" => uucore::util_name()
+            ),
+        ));
+    }
+
+    let input = inputs
+        .into_iter()
+        .next()
+        .expect(translate!("tsort-error-at-least-one-input").as_str());
 
     let data = if input == "-" {
         let stdin = std::io::stdin();
         std::io::read_to_string(stdin)?
     } else {
-        let path = Path::new(input);
+        let path = Path::new(&input);
         if path.is_dir() {
             return Err(TsortError::IsDir(input.to_string_lossy().to_string()).into());
         }
@@ -97,11 +118,18 @@ pub fn uu_app() -> Command {
         .about(translate!("tsort-about"))
         .infer_long_args(true)
         .arg(
+            Arg::new("warn")
+                .short('w')
+                .action(ArgAction::SetTrue)
+                .hide(true),
+        )
+        .arg(
             Arg::new(options::FILE)
-                .default_value("-")
                 .hide(true)
                 .value_parser(clap::value_parser!(OsString))
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .num_args(0..)
+                .action(ArgAction::Append),
         )
 }
 
@@ -190,7 +218,7 @@ impl<'input> Graph<'input> {
             let v = self.find_next_node(&mut independent_nodes_queue);
             println!("{v}");
             if let Some(node_to_process) = self.nodes.remove(v) {
-                for successor_name in node_to_process.successor_names {
+                for successor_name in node_to_process.successor_names.into_iter().rev() {
                     let successor_node = self.nodes.get_mut(successor_name).unwrap();
                     successor_node.predecessor_count -= 1;
                     if successor_node.predecessor_count == 0 {
@@ -236,8 +264,8 @@ impl<'input> Graph<'input> {
         for &node in &cycle {
             show!(LoopNode(node));
         }
-        let u = cycle[0];
-        let v = cycle[1];
+        let u = *cycle.last().expect("cycle must be non-empty");
+        let v = cycle[0];
         self.remove_edge(u, v);
         if self.indegree(v).unwrap() == 0 {
             frontier.push_back(v);
@@ -245,7 +273,6 @@ impl<'input> Graph<'input> {
     }
 
     fn detect_cycle(&self) -> Vec<&'input str> {
-        // Sort the nodes just to make this function deterministic.
         let mut nodes: Vec<_> = self.nodes.keys().collect();
         nodes.sort_unstable();
 
@@ -253,11 +280,8 @@ impl<'input> Graph<'input> {
         let mut stack = Vec::with_capacity(self.nodes.len());
         for node in nodes {
             if self.dfs(node, &mut visited, &mut stack) {
-                // last element in the stack appears twice: at the begin
-                // and at the end of the loop
                 let (loop_entry, _) = stack.pop().expect("loop is not empty");
 
-                // skip the prefix which doesn't belong to the loop
                 return stack
                     .into_iter()
                     .map(|(node, _)| node)

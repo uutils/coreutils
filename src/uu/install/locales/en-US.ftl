@@ -22,7 +22,7 @@ install-help-default-context = set SELinux security context of destination file 
 
 # Error messages
 install-error-dir-needs-arg = { $util_name } with -d requires at least one argument.
-install-error-create-dir-failed = failed to create { $path }
+install-error-create-dir-failed = cannot create directory { $path }
 install-error-chmod-failed = failed to chmod { $path }
 install-error-chmod-failed-detailed = { $path }: chmod failed with error { $error }
 install-error-chown-failed = failed to chown { $path }: { $error }

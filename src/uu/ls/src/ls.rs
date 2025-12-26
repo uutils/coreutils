@@ -481,8 +481,7 @@ fn extract_sort(options: &clap::ArgMatches) -> Sort {
     let sort_index = options
         .get_one::<String>(options::SORT)
         .and_then(|_| options.indices_of(options::SORT))
-        .map(|mut indices| indices.next_back().unwrap_or(0))
-        .unwrap_or(0);
+        .map_or(0, |mut indices| indices.next_back().unwrap_or(0));
     let time_index = get_last_index(options::sort::TIME);
     let size_index = get_last_index(options::sort::SIZE);
     let none_index = get_last_index(options::sort::NONE);
@@ -601,8 +600,7 @@ fn extract_color(options: &clap::ArgMatches) -> bool {
     let color_index = options
         .get_one::<String>(options::COLOR)
         .and_then(|_| options.indices_of(options::COLOR))
-        .map(|mut indices| indices.next_back().unwrap_or(0))
-        .unwrap_or(0);
+        .map_or(0, |mut indices| indices.next_back().unwrap_or(0));
     let unsorted_all_index = get_last_index(options::files::UNSORTED_ALL);
 
     let color_enabled = match options.get_one::<String>(options::COLOR) {
@@ -2347,7 +2345,7 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
 
 fn enter_directory(
     path_data: &PathData,
-    read_dir: ReadDir,
+    mut read_dir: ReadDir,
     config: &Config,
     state: &mut ListState,
     dired: &mut DiredOutput,
@@ -2376,7 +2374,7 @@ fn enter_directory(
     };
 
     // Convert those entries to the PathData struct
-    for raw_entry in read_dir {
+    for raw_entry in read_dir.by_ref() {
         let dir_entry = match raw_entry {
             Ok(path) => path,
             Err(err) => {

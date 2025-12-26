@@ -62,10 +62,9 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
         tv_sec: 0,
         tv_nsec: 0,
     };
-    let raw_tp = &mut tp as *mut timespec;
 
     // OpenBSD prototype: clock_gettime(clk_id: ::clockid_t, tp: *mut ::timespec) -> ::c_int;
-    let ret: c_int = unsafe { clock_gettime(CLOCK_BOOTTIME, raw_tp) };
+    let ret: c_int = unsafe { clock_gettime(CLOCK_BOOTTIME, &raw mut tp) };
 
     if ret == 0 {
         #[cfg(target_pointer_width = "64")]
@@ -75,7 +74,7 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
 
         Ok(uptime)
     } else {
-        Err(UptimeError::SystemUptime)
+        Err(UptimeError::SystemUptime)?
     }
 }
 
@@ -213,27 +212,22 @@ pub fn get_nusers() -> usize {
 pub fn get_nusers(file: &str) -> usize {
     use utmp_classic::{UtmpEntry, parse_from_path};
 
-    let mut nusers = 0;
-
-    let entries = match parse_from_path(file) {
-        Some(e) => e,
-        None => return 0,
+    let Ok(entries) = parse_from_path(file) else {
+        return 0;
     };
 
-    for entry in entries {
-        if let UtmpEntry::UTMP {
-            line: _,
-            user,
-            host: _,
-            time: _,
-        } = entry
-        {
-            if !user.is_empty() {
-                nusers += 1;
-            }
-        }
+    if entries.is_empty() {
+        return 0;
     }
-    nusers
+
+    // Count entries that have a non-empty user field
+    entries
+        .iter()
+        .filter_map(|entry| match entry {
+            UtmpEntry::UTMP { user, .. } if !user.is_empty() => Some(()),
+            _ => None,
+        })
+        .count()
 }
 
 /// Get the number of users currently logged in

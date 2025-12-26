@@ -3,10 +3,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{Arg, ArgAction, Command};
 use std::env;
-use uucore::translate;
-use uucore::{error::UResult, format_usage};
+use std::io::Write;
+
+use clap::{Arg, ArgAction, Command};
+
+use uucore::display::{OsWrite, print_all_env_vars};
+use uucore::error::UResult;
+use uucore::line_ending::LineEnding;
+use uucore::{format_usage, translate};
 
 static OPT_NULL: &str = "null";
 
@@ -21,16 +26,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let separator = if matches.get_flag(OPT_NULL) {
-        "\x00"
-    } else {
-        "\n"
-    };
+    let separator = LineEnding::from_zero_flag(matches.get_flag(OPT_NULL));
 
     if variables.is_empty() {
-        for (env_var, value) in env::vars() {
-            print!("{env_var}={value}{separator}");
-        }
+        print_all_env_vars(separator)?;
         return Ok(());
     }
 
@@ -41,8 +40,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             error_found = true;
             continue;
         }
-        if let Ok(var) = env::var(env_var) {
-            print!("{var}{separator}");
+        if let Some(var) = env::var_os(env_var) {
+            let mut stdout = std::io::stdout().lock();
+            stdout.write_all_os(&var)?;
+            write!(stdout, "{separator}")?;
         } else {
             error_found = true;
         }
