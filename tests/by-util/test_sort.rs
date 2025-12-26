@@ -620,7 +620,7 @@ fn test_keys_invalid_field() {
     new_ucmd!()
         .args(&["-k", "1."])
         .fails()
-        .stderr_only("sort: failed to parse key '1.': failed to parse character index '': cannot parse integer from empty string\n");
+        .stderr_only("sort: invalid number after '.': invalid count at start of ''\n");
 }
 
 #[test]
@@ -628,7 +628,7 @@ fn test_keys_invalid_field_option() {
     new_ucmd!()
         .args(&["-k", "1.1x"])
         .fails()
-        .stderr_only("sort: failed to parse key '1.1x': invalid option: 'x'\n");
+        .stderr_only("sort: stray character in field spec: invalid field specification '1.1x'\n");
 }
 
 #[test]
@@ -636,7 +636,7 @@ fn test_keys_invalid_field_zero() {
     new_ucmd!()
         .args(&["-k", "0.1"])
         .fails()
-        .stderr_only("sort: failed to parse key '0.1': field index can not be 0\n");
+        .stderr_only("sort: field number is zero: invalid field specification '0.1'\n");
 }
 
 #[test]
@@ -644,7 +644,68 @@ fn test_keys_invalid_char_zero() {
     new_ucmd!()
         .args(&["-k", "1.0"])
         .fails()
-        .stderr_only("sort: failed to parse key '1.0': invalid character index 0 for the start position of a field\n");
+        .stderr_only("sort: character offset is zero: invalid field specification '1.0'\n");
+}
+
+#[test]
+fn test_keys_invalid_number_formats() {
+    new_ucmd!()
+        .args(&["-k", "2.,3"])
+        .fails_with_code(2)
+        .stderr_only("sort: invalid number after '.': invalid count at start of ',3'\n");
+
+    new_ucmd!()
+        .args(&["-k", "2,"])
+        .fails_with_code(2)
+        .stderr_only("sort: invalid number after ',': invalid count at start of ''\n");
+
+    new_ucmd!()
+        .args(&["-k", "1.1,-k0"])
+        .fails_with_code(2)
+        .stderr_only("sort: invalid number after ',': invalid count at start of '-k0'\n");
+}
+
+#[test]
+fn test_incompatible_options() {
+    new_ucmd!()
+        .arg("-hn")
+        .fails_with_code(2)
+        .stderr_only("sort: options '-hn' are incompatible\n");
+
+    new_ucmd!()
+        .arg("-in")
+        .fails_with_code(2)
+        .stderr_only("sort: options '-in' are incompatible\n");
+
+    new_ucmd!()
+        .arg("-nR")
+        .fails_with_code(2)
+        .stderr_only("sort: options '-nR' are incompatible\n");
+
+    new_ucmd!()
+        .arg("-dfgiMnR")
+        .fails_with_code(2)
+        .stderr_only("sort: options '-dfgMnR' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["--sort=random", "-n"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-nR' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["-c", "-o", "out"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-co' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["-C", "-o", "out"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-Co' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["-c", "-C"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-cC' are incompatible\n");
 }
 
 #[test]
@@ -1204,7 +1265,7 @@ fn test_verifies_files_after_keys() {
             "nonexistent_dir/input_file",
         ])
         .fails_with_code(2)
-        .stderr_contains("failed to parse key");
+        .stderr_contains("invalid field specification '0'");
 }
 
 #[test]
@@ -1735,8 +1796,14 @@ fn test_clap_localization_missing_required_argument() {
 #[test]
 fn test_clap_localization_invalid_value() {
     let test_cases = vec![
-        ("en_US.UTF-8", "sort: failed to parse key 'invalid'"),
-        ("fr_FR.UTF-8", "sort: échec d'analyse de la clé 'invalid'"),
+        (
+            "en_US.UTF-8",
+            "sort: invalid number at field start: invalid count at start of 'invalid'",
+        ),
+        (
+            "fr_FR.UTF-8",
+            "sort: nombre invalide au début du champ: nombre invalide au début de 'invalid'",
+        ),
     ];
 
     for (locale, expected_message) in test_cases {
