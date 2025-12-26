@@ -8,9 +8,10 @@ use std::io::Write;
 
 use clap::{Arg, ArgAction, Command};
 
+use uucore::display::{OsWrite, print_all_env_vars};
 use uucore::error::UResult;
 use uucore::line_ending::LineEnding;
-use uucore::{format_usage, os_str_as_bytes, translate};
+use uucore::{format_usage, translate};
 
 static OPT_NULL: &str = "null";
 
@@ -28,14 +29,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let separator = LineEnding::from_zero_flag(matches.get_flag(OPT_NULL));
 
     if variables.is_empty() {
-        for (env_var, value) in env::vars_os() {
-            let env_bytes = os_str_as_bytes(&env_var)?;
-            let val_bytes = os_str_as_bytes(&value)?;
-            std::io::stdout().lock().write_all(env_bytes)?;
-            print!("=");
-            std::io::stdout().lock().write_all(val_bytes)?;
-            print!("{separator}");
-        }
+        print_all_env_vars(separator)?;
         return Ok(());
     }
 
@@ -47,9 +41,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             continue;
         }
         if let Some(var) = env::var_os(env_var) {
-            let val_bytes = os_str_as_bytes(&var)?;
-            std::io::stdout().lock().write_all(val_bytes)?;
-            print!("{separator}");
+            let mut stdout = std::io::stdout().lock();
+            stdout.write_all_os(&var)?;
+            write!(stdout, "{separator}")?;
         } else {
             error_found = true;
         }

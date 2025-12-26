@@ -185,7 +185,8 @@ unsafe extern "C" {
     target_os = "linux",
     target_os = "android",
     target_os = "freebsd",
-    target_os = "openbsd"
+    target_os = "openbsd",
+    target_os = "cygwin"
 ))]
 /// # Safety
 /// This function is unsafe because it dereferences a raw pointer.

@@ -24,13 +24,13 @@ use nix::sys::signal::{SigHandler::SigIgn, Signal, signal};
 use std::borrow::Cow;
 use std::env;
 use std::ffi::{OsStr, OsString};
-use std::io::{self, Write};
+use std::io;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 
-use uucore::display::{OsWrite, Quotable};
+use uucore::display::{Quotable, print_all_env_vars};
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
 #[cfg(unix)]
@@ -97,19 +97,6 @@ struct Options<'a> {
     argv0: Option<&'a OsStr>,
     #[cfg(unix)]
     ignore_signal: Vec<usize>,
-}
-
-/// print `name=value` env pairs on screen
-fn print_env(line_ending: LineEnding) -> io::Result<()> {
-    let stdout_raw = io::stdout();
-    let mut stdout = stdout_raw.lock();
-    for (n, v) in env::vars_os() {
-        stdout.write_all_os(&n)?;
-        stdout.write_all(b"=")?;
-        stdout.write_all_os(&v)?;
-        write!(stdout, "{line_ending}")?;
-    }
-    Ok(())
 }
 
 fn parse_name_value_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<bool> {
@@ -552,7 +539,7 @@ impl EnvAppData {
 
         if opts.program.is_empty() {
             // no program provided, so just dump all env vars to stdout
-            print_env(opts.line_ending)?;
+            print_all_env_vars(opts.line_ending)?;
         } else {
             return self.run_program(&opts, self.do_debug_printing);
         }

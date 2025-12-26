@@ -91,6 +91,7 @@ jobs:
         sudo locale-gen --keep-existing fa_IR.UTF-8 # Iran
         sudo locale-gen --keep-existing am_ET.UTF-8 # Ethiopia
         sudo locale-gen --keep-existing th_TH.UTF-8 # Thailand
+        sudo locale-gen --keep-existing zh_CN.GB18030 # China
 
         sudo update-locale
         echo "After:"
@@ -343,7 +344,7 @@ jobs:
         path: 'uutils'
         persist-credentials: false
     - name: Retrieve reference artifacts
-      uses: dawidd6/action-download-artifact@v11
+      uses: dawidd6/action-download-artifact@v12
       # ref: <https://github.com/dawidd6/action-download-artifact>
       continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
       with:
