@@ -8,6 +8,7 @@
 
 use std::io;
 use std::path::Path;
+use std::sync::OnceLock;
 
 use thiserror::Error;
 
@@ -43,8 +44,10 @@ impl From<SmackError> for i32 {
 }
 
 /// Checks if SMACK is enabled by verifying smackfs is mounted.
+/// The result is cached after the first call.
 pub fn is_smack_enabled() -> bool {
-    Path::new("/sys/fs/smackfs").exists()
+    static SMACK_ENABLED: OnceLock<bool> = OnceLock::new();
+    *SMACK_ENABLED.get_or_init(|| Path::new("/sys/fs/smackfs").exists())
 }
 
 /// Gets the SMACK label for a filesystem path via xattr.

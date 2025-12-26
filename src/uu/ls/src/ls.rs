@@ -3418,16 +3418,14 @@ fn get_security_context<'a>(
         // For SMACK, use the path to get the label
         // If must_dereference is true, we follow the symlink
         let target_path = if must_dereference {
-             std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+            std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
         } else {
             path.to_path_buf()
         };
 
-         return uucore::smack::get_smack_label_for_path(&target_path)               
-              .map(Cow::Owned) 
-              .unwrap_or(Cow::Borrowed(SUBSTITUTE_STRING));  
-            }
-        }
+        return uucore::smack::get_smack_label_for_path(&target_path)
+            .map(Cow::Owned)
+            .unwrap_or(Cow::Borrowed(SUBSTITUTE_STRING));
     }
 
     Cow::Borrowed(SUBSTITUTE_STRING)
