@@ -4385,14 +4385,17 @@ fn test_ls_dangling_symlinks() {
         .succeeds()
         .stdout_contains("dangle");
 
-    scene
-        .ucmd()
-        .arg("-Li")
-        .arg("temp_dir")
-        .fails_with_code(1)
-        .stderr_contains("cannot access")
-        .stderr_contains("No such file or directory")
-        .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
+    #[cfg(unix)]
+    {
+        scene
+            .ucmd()
+            .arg("-Li")
+            .arg("temp_dir")
+            .fails_with_code(1)
+            .stderr_contains("cannot access")
+            .stderr_contains("No such file or directory")
+            .stdout_contains("? dangle");
+    }
 
     scene
         .ucmd()

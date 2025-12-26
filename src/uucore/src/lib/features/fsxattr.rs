@@ -7,8 +7,12 @@
 
 //! Set of functions to manage xattr on files and dirs
 use std::collections::HashMap;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::path::Path;
+
+pub static POSIX_ACL_ACCESS_KEY: &str = "system.posix_acl_access";
+pub static POSIX_ACL_DEFAULT_KEY: &str = "system.posix_acl_default";
+pub static SET_CAPABILITY_KEY: &str = "security.capability";
 
 /// Copies extended attributes (xattrs) from one file or directory to another.
 ///
@@ -38,9 +42,19 @@ pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
 /// # Returns
 ///
 /// A result containing a HashMap of attributes names and values, or an error.
-pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<HashMap<OsString, Vec<u8>>> {
+pub fn retrieve_xattrs<P: AsRef<Path>>(
+    source: P,
+    must_dereference: bool,
+) -> std::io::Result<HashMap<OsString, Vec<u8>>> {
     let mut attrs = HashMap::new();
-    for attr_name in xattr::list(&source)? {
+
+    let iter = if must_dereference {
+        xattr::list_deref(&source)?
+    } else {
+        xattr::list(&source)?
+    };
+
+    for attr_name in iter {
         if let Some(value) = xattr::get(&source, &attr_name)? {
             attrs.insert(attr_name, value);
         }
@@ -79,10 +93,32 @@ pub fn apply_xattrs<P: AsRef<Path>>(
 /// `true` if the file has extended attributes (indicating an ACL), `false` otherwise.
 pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
     // don't use exacl here, it is doing more getxattr call then needed
-    xattr::list_deref(file).is_ok_and(|acl| {
-        // if we have extra attributes, we have an acl
-        acl.count() > 0
-    })
+    xattr::get_deref(&file, POSIX_ACL_ACCESS_KEY)
+        .ok()
+        .flatten()
+        .or_else(|| {
+            xattr::get_deref(&file, POSIX_ACL_DEFAULT_KEY)
+                .ok()
+                .flatten()
+        })
+        .is_some_and(|vec| !vec.is_empty())
+}
+
+/// Checks if a file has an Capability set based on its extended attributes.
+///
+/// # Arguments
+///
+/// * `file` - A reference to the path of the file.
+///
+/// # Returns
+///
+/// `true` if the file has a capability extended attribute, `false` otherwise.
+pub fn has_capability<P: AsRef<Path>>(file: P) -> bool {
+    // don't use exacl here, it is doing more getxattr call then needed
+    xattr::get_deref(&file, SET_CAPABILITY_KEY)
+        .ok()
+        .flatten()
+        .is_some_and(|vec| !vec.is_empty())
 }
 
 /// Returns the permissions bits of a file or directory which has Access Control List (ACL) entries based on its
@@ -101,9 +137,9 @@ pub fn get_acl_perm_bits_from_xattr<P: AsRef<Path>>(source: P) -> u32 {
 
     // Only default acl entries get inherited by objects under the path i.e. if child directories
     // will have their permissions modified.
-    if let Ok(entries) = retrieve_xattrs(source) {
+    if let Ok(entries) = retrieve_xattrs(source, true) {
         let mut perm: u32 = 0;
-        if let Some(value) = entries.get(&OsString::from("system.posix_acl_default")) {
+        if let Some(value) = entries.get(OsStr::new(POSIX_ACL_DEFAULT_KEY)) {
             // value is xattr byte vector
             // value follows a starts with a 4 byte header, and then has posix_acl_entries, each
             // posix_acl_entry is separated by a u32 sequence i.e. 0xFFFFFFFF
@@ -177,7 +213,7 @@ mod tests {
         test_xattrs.insert(OsString::from(test_attr), test_value.to_vec());
         apply_xattrs(&file_path, test_xattrs).unwrap();
 
-        let retrieved_xattrs = retrieve_xattrs(&file_path).unwrap();
+        let retrieved_xattrs = retrieve_xattrs(&file_path, true).unwrap();
         assert!(retrieved_xattrs.contains_key(OsString::from(test_attr).as_os_str()));
         assert_eq!(
             retrieved_xattrs
@@ -242,9 +278,12 @@ mod tests {
 
         assert!(!has_acl(&file_path));
 
-        let test_attr = "user.test_acl";
-        let test_value = b"test value";
-        xattr::set(&file_path, test_attr, test_value).unwrap();
+        let test_attr = "system.posix_acl_access";
+        let test_value = "invalid_test_value";
+        // perhaps can't set actual ACL in test environment? if so, return early
+        let Ok(_) = xattr::set(&file_path, test_attr, test_value.as_bytes()) else {
+            return;
+        };
 
         assert!(has_acl(&file_path));
     }
