@@ -3423,11 +3423,9 @@ fn get_security_context<'a>(
             path.to_path_buf()
         };
 
-        match uucore::smack::get_smack_label_for_path(&target_path) {
-            Ok(label) => return Cow::Owned(label),
-            Err(_) => {
-                // No label or error getting label
-                return Cow::Borrowed(SUBSTITUTE_STRING);
+         return uucore::smack::get_smack_label_for_path(&target_path)               
+              .map(Cow::Owned) 
+              .unwrap_or(Cow::Borrowed(SUBSTITUTE_STRING));  
             }
         }
     }
