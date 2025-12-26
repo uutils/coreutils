@@ -1846,11 +1846,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), processed_args, 2)?;
 
     // Prevent -o/--output to be specified multiple times
-    if matches
-        .get_occurrences::<OsString>(options::OUTPUT)
-        .is_some_and(|out| out.len() > 1)
-    {
-        return Err(SortError::MultipleOutputFiles.into());
+    if let Some(outputs) = matches.get_many::<OsString>(options::OUTPUT) {
+        let mut iter = outputs.into_iter();
+        if let Some(first) = iter.next() {
+            if iter.any(|out| out != first) {
+                return Err(SortError::MultipleOutputFiles.into());
+            }
+        }
     }
 
     settings.debug = matches.get_flag(options::DEBUG);
