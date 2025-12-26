@@ -437,7 +437,7 @@ struct ModeFlags {
 
 impl ModeFlags {
     fn from_mode(mode: SortMode) -> Self {
-        let mut flags = ModeFlags::default();
+        let mut flags = Self::default();
         match mode {
             SortMode::Numeric => flags.numeric = true,
             SortMode::GeneralNumeric => flags.general_numeric = true,
@@ -1020,7 +1020,7 @@ impl FieldSelector {
             char: from_char,
             ignore_blanks: from_ignore_blanks,
         };
-        Self::new(from, to, settings).map_err(|msg| USimpleError::new(2, msg).into())
+        Self::new(from, to, settings).map_err(|msg| USimpleError::new(2, msg))
     }
 
     fn new(
