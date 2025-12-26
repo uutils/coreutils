@@ -7,7 +7,7 @@ du-after-help = Les valeurs affichées sont en unités de la première TAILLE di
 
   TAILLE est un entier et une unité optionnelle (exemple : 10M est 10*1024*1024).
   Les unités sont K, M, G, T, P, E, Z, Y (puissances de 1024) ou KB, MB,... (puissances
-  de 1000).
+  de 1000). Les unités peuvent être décimales, hexadécimales, octales, binaires.
 
   MOTIF permet des exclusions avancées. Par exemple, les syntaxes suivantes
   sont supportées :
@@ -69,6 +69,7 @@ du-error-printing-thread-panicked = Le thread d'affichage a paniqué.
 du-error-invalid-suffix = suffixe invalide dans l'argument --{ $option } { $value }
 du-error-invalid-argument = argument --{ $option } invalide { $value }
 du-error-argument-too-large = argument --{ $option } { $value } trop grand
+du-error-hyphen-file-name-not-allowed = le nom de fichier '-' n'est pas autorisé lors de la lecture de l'entrée standard
 
 # Messages verbeux/de statut
 du-verbose-ignored = { $path } ignoré

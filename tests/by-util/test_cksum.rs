@@ -10,9 +10,8 @@ use uutests::util::TestScenario;
 use uutests::util::log_info;
 use uutests::util_name;
 
-const ALGOS: [&str; 12] = [
-    "sysv", "bsd", "crc", "crc32b", "md5", "sha1", "sha224", "sha256", "sha384", "sha512",
-    "blake2b", "sm3",
+const ALGOS: [&str; 11] = [
+    "sysv", "bsd", "crc", "md5", "sha1", "sha224", "sha256", "sha384", "sha512", "blake2b", "sm3",
 ];
 const SHA_LENGTHS: [u32; 4] = [224, 256, 384, 512];
 
@@ -2459,6 +2458,71 @@ mod gnu_cksum_c {
         scene
     }
 
+    fn make_scene_with_comment() -> TestScenario {
+        let scene = make_scene();
+
+        scene
+            .fixtures
+            .append("CHECKSUMS", "# Very important comment\n");
+
+        scene
+    }
+
+    fn make_scene_with_invalid_line() -> TestScenario {
+        let scene = make_scene_with_comment();
+
+        scene.fixtures.append("CHECKSUMS", "invalid_line\n");
+
+        scene
+    }
+
+    #[test]
+    fn test_tagged_invalid_length() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        at.write(
+            "sha2-bad-length.sum",
+            "SHA2-128 (/dev/null) = 38b060a751ac96384cd9327eb1b1e36a",
+        );
+
+        ucmd.arg("--check")
+            .arg("sha2-bad-length.sum")
+            .fails()
+            .stderr_contains("sha2-bad-length.sum: no properly formatted checksum lines found");
+    }
+
+    #[test]
+    #[cfg_attr(not(unix), ignore = "/dev/null is only available on UNIX")]
+    fn test_untagged_base64_matching_tag() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        at.write("tag-prefix.sum", "SHA1+++++++++++++++++++++++=  /dev/null");
+
+        ucmd.arg("--check")
+            .arg("-a")
+            .arg("sha1")
+            .arg("tag-prefix.sum")
+            .fails()
+            .stderr_contains("WARNING: 1 computed checksum did NOT match");
+    }
+
+    #[test]
+    #[cfg_attr(windows, ignore = "Awkward filename is not supported on windows")]
+    fn test_awkward_filename() {
+        let ts = TestScenario::new(util_name!());
+        let at = &ts.fixtures;
+
+        let awkward_file = "abc (f) = abc";
+
+        at.touch(awkward_file);
+
+        let result = ts.ucmd().arg("-a").arg("sha1").arg(awkward_file).succeeds();
+
+        at.write_bytes("tag-awkward.sum", result.stdout());
+
+        ts.ucmd().arg("-c").arg("tag-awkward.sum").succeeds();
+    }
+
     #[test]
     #[ignore = "todo"]
     fn test_signed_checksums() {
@@ -2510,16 +2574,6 @@ mod gnu_cksum_c {
             .no_output();
     }
 
-    fn make_scene_with_comment() -> TestScenario {
-        let scene = make_scene();
-
-        scene
-            .fixtures
-            .append("CHECKSUMS", "# Very important comment\n");
-
-        scene
-    }
-
     #[test]
     fn test_status_with_comment() {
         let scene = make_scene_with_comment();
@@ -2531,14 +2585,6 @@ mod gnu_cksum_c {
             .arg("CHECKSUMS")
             .succeeds()
             .no_output();
-    }
-
-    fn make_scene_with_invalid_line() -> TestScenario {
-        let scene = make_scene_with_comment();
-
-        scene.fixtures.append("CHECKSUMS", "invalid_line\n");
-
-        scene
     }
 
     #[test]
@@ -2710,6 +2756,20 @@ mod gnu_cksum_c {
     }
 
     #[test]
+    fn test_ignore_missing_stdin() {
+        let scene = make_scene_with_checksum_missing();
+
+        scene
+            .ucmd()
+            .arg("--ignore-missing")
+            .arg("--check")
+            .pipe_in_fixture("CHECKSUMS-missing")
+            .fails()
+            .no_stdout()
+            .stderr_contains("'standard input': no file was verified");
+    }
+
+    #[test]
     fn test_status_and_warn() {
         let scene = make_scene_with_checksum_missing();
 
@@ -2874,5 +2934,115 @@ mod format_mix {
             .succeeds()
             .stdout_contains("bar: OK")
             .stderr_contains("cksum: WARNING: 1 line is improperly formatted");
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+mod debug_flag {
+    use super::*;
+
+    #[test]
+    fn test_debug_flag() {
+        // Test with default CRC algorithm - should output CPU feature detection
+        new_ucmd!()
+            .arg("--debug")
+            .arg("lorem_ipsum.txt")
+            .succeeds()
+            .stdout_is_fixture("crc_single_file.expected")
+            .stderr_contains("avx512")
+            .stderr_contains("avx2")
+            .stderr_contains("pclmul");
+
+        // Test with MD5 algorithm - CPU detection should be same regardless of algorithm
+        new_ucmd!()
+            .arg("--debug")
+            .arg("-a")
+            .arg("md5")
+            .arg("lorem_ipsum.txt")
+            .succeeds()
+            .stdout_is_fixture("md5_single_file.expected")
+            .stderr_contains("avx512")
+            .stderr_contains("avx2")
+            .stderr_contains("pclmul");
+
+        // Test with stdin - CPU detection should appear once
+        new_ucmd!()
+            .arg("--debug")
+            .pipe_in("test")
+            .succeeds()
+            .stderr_contains("avx512")
+            .stderr_contains("avx2")
+            .stderr_contains("pclmul");
+
+        // Test with multiple files - CPU detection should appear once, not per file
+        new_ucmd!()
+            .arg("--debug")
+            .arg("lorem_ipsum.txt")
+            .arg("alice_in_wonderland.txt")
+            .succeeds()
+            .stdout_is_fixture("crc_multiple_files.expected")
+            .stderr_str_check(|stderr| {
+                // Verify CPU detection happens only once by checking the count of each feature line
+                let avx512_count = stderr
+                    .lines()
+                    .filter(|line| line.contains("avx512"))
+                    .count();
+                let avx2_count = stderr.lines().filter(|line| line.contains("avx2")).count();
+                let pclmul_count = stderr
+                    .lines()
+                    .filter(|line| line.contains("pclmul"))
+                    .count();
+
+                avx512_count == 1 && avx2_count == 1 && pclmul_count == 1
+            });
+    }
+
+    #[test]
+    fn test_debug_with_algorithms() {
+        // Test with SHA256 - CPU detection should be same regardless of algorithm
+        new_ucmd!()
+            .arg("--debug")
+            .arg("-a")
+            .arg("sha256")
+            .arg("lorem_ipsum.txt")
+            .succeeds()
+            .stderr_contains("avx512")
+            .stderr_contains("avx2")
+            .stderr_contains("pclmul");
+
+        // Test with BLAKE2b default length
+        new_ucmd!()
+            .arg("--debug")
+            .arg("-a")
+            .arg("blake2b")
+            .arg("lorem_ipsum.txt")
+            .succeeds()
+            .stderr_contains("avx512")
+            .stderr_contains("avx2")
+            .stderr_contains("pclmul");
+
+        // Test with BLAKE2b custom length
+        new_ucmd!()
+            .arg("--debug")
+            .arg("-a")
+            .arg("blake2b")
+            .arg("--length")
+            .arg("256")
+            .arg("lorem_ipsum.txt")
+            .succeeds()
+            .stderr_contains("avx512")
+            .stderr_contains("avx2")
+            .stderr_contains("pclmul");
+
+        // Test with SHA1
+        new_ucmd!()
+            .arg("--debug")
+            .arg("-a")
+            .arg("sha1")
+            .arg("lorem_ipsum.txt")
+            .succeeds()
+            .stderr_contains("avx512")
+            .stderr_contains("avx2")
+            .stderr_contains("pclmul");
     }
 }

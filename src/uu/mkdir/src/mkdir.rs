@@ -57,20 +57,11 @@ fn get_mode(_matches: &ArgMatches) -> Result<u32, String> {
 #[cfg(not(windows))]
 fn get_mode(matches: &ArgMatches) -> Result<u32, String> {
     // Not tested on Windows
-    let mut new_mode = DEFAULT_PERM;
-
     if let Some(m) = matches.get_one::<String>(options::MODE) {
-        for mode in m.split(',') {
-            if mode.chars().any(|c| c.is_ascii_digit()) {
-                new_mode = mode::parse_numeric(new_mode, m, true)?;
-            } else {
-                new_mode = mode::parse_symbolic(new_mode, mode, mode::get_umask(), true)?;
-            }
-        }
-        Ok(new_mode)
+        mode::parse_chmod(DEFAULT_PERM, m, true, mode::get_umask())
     } else {
         // If no mode argument is specified return the mode derived from umask
-        Ok(!mode::get_umask() & 0o0777)
+        Ok(!mode::get_umask() & DEFAULT_PERM)
     }
 }
 

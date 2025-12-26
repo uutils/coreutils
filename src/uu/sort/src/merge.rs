@@ -30,7 +30,7 @@ use uucore::error::{FromIo, UResult};
 use crate::{
     GlobalSettings, Output, SortError,
     chunks::{self, Chunk, RecycledChunk},
-    compare_by, open,
+    compare_by, fd_soft_limit, open,
     tmp_dir::TmpDirWrapper,
 };
 
@@ -60,6 +60,28 @@ fn replace_output_file_in_input_files(
         }
     }
     Ok(())
+}
+
+/// Determine the effective merge batch size, enforcing a minimum and respecting the
+/// file-descriptor soft limit after reserving stdio/output and a safety margin.
+fn effective_merge_batch_size(settings: &GlobalSettings) -> usize {
+    const MIN_BATCH_SIZE: usize = 2;
+    const RESERVED_STDIO: usize = 3;
+    const RESERVED_OUTPUT: usize = 1;
+    const SAFETY_MARGIN: usize = 1;
+    let mut batch_size = settings.merge_batch_size.max(MIN_BATCH_SIZE);
+
+    if let Some(limit) = fd_soft_limit() {
+        let reserved = RESERVED_STDIO + RESERVED_OUTPUT + SAFETY_MARGIN;
+        let available_inputs = limit.saturating_sub(reserved);
+        if available_inputs >= MIN_BATCH_SIZE {
+            batch_size = batch_size.min(available_inputs);
+        } else {
+            batch_size = MIN_BATCH_SIZE;
+        }
+    }
+
+    batch_size
 }
 
 /// Merge pre-sorted `Box<dyn Read>`s.
@@ -94,18 +116,21 @@ pub fn merge_with_file_limit<
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
-    if files.len() <= settings.merge_batch_size {
+    let batch_size = effective_merge_batch_size(settings);
+    debug_assert!(batch_size >= 2);
+
+    if files.len() <= batch_size {
         let merger = merge_without_limit(files, settings);
         merger?.write_all(settings, output)
     } else {
         let mut temporary_files = vec![];
-        let mut batch = vec![];
+        let mut batch = Vec::with_capacity(batch_size);
         for file in files {
             batch.push(file);
-            if batch.len() >= settings.merge_batch_size {
-                assert_eq!(batch.len(), settings.merge_batch_size);
+            if batch.len() >= batch_size {
+                assert_eq!(batch.len(), batch_size);
                 let merger = merge_without_limit(batch.into_iter(), settings)?;
-                batch = vec![];
+                batch = Vec::with_capacity(batch_size);
 
                 let mut tmp_file =
                     Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
@@ -115,7 +140,7 @@ pub fn merge_with_file_limit<
         }
         // Merge any remaining files that didn't get merged in a full batch above.
         if !batch.is_empty() {
-            assert!(batch.len() < settings.merge_batch_size);
+            assert!(batch.len() < batch_size);
             let merger = merge_without_limit(batch.into_iter(), settings)?;
 
             let mut tmp_file =

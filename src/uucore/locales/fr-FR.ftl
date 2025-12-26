@@ -29,6 +29,7 @@ error-io = Erreur E/S
 error-permission-denied = Permission refusée
 error-file-not-found = Aucun fichier ou répertoire de ce type
 error-invalid-argument = Argument invalide
+error-is-a-directory = { $file }: Est un répertoire
 
 # Actions communes
 action-copying = copie
@@ -54,3 +55,21 @@ safe-traversal-error-unlink-failed = échec de la suppression de { $path } : { $
 safe-traversal-error-invalid-fd = descripteur de fichier invalide
 safe-traversal-current-directory = <répertoire courant>
 safe-traversal-directory = <répertoire>
+
+# Messages relatifs au module checksum
+checksum-no-properly-formatted = { $checksum_file }: aucune ligne correctement formattée n'a été trouvée
+checksum-no-file-verified = { $checksum_file }: aucun fichier n'a été vérifié
+checksum-error-failed-to-read-input = échec de la lecture de l'entrée
+checksum-bad-format = { $count ->
+    [1] { $count } ligne invalide
+   *[other] { $count } lignes invalides
+}
+checksum-failed-cksum = { $count ->
+    [1] { $count } somme de hachage ne correspond PAS
+   *[other] { $count } sommes de hachage ne correspondent PAS
+}
+checksum-failed-open-file = { $count ->
+    [1] { $count } fichier passé n'a pas pu être lu
+   *[other] { $count } fichiers passés n'ont pas pu être lu
+}
+checksum-error-algo-bad-format = { $file }: { $line }: ligne invalide pour { $algo }

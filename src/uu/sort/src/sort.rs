@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef
 
 mod buffer_hint;
 mod check;
@@ -25,8 +25,6 @@ use clap::{Arg, ArgAction, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
-#[cfg(target_os = "linux")]
-use nix::libc::{RLIMIT_NOFILE, getrlimit, rlimit};
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{Rng, rng};
 use rayon::prelude::*;
@@ -51,6 +49,7 @@ use uucore::line_ending::LineEnding;
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+use uucore::posix::{MODERN, TRADITIONAL};
 use uucore::show_error;
 use uucore::translate;
 use uucore::version_cmp::version_cmp;
@@ -220,6 +219,11 @@ impl SortMode {
             Self::Default => None,
         }
     }
+}
+
+/// Return the length of the byte slice while ignoring embedded NULs (used for debug underline alignment).
+fn count_non_null_bytes(bytes: &[u8]) -> usize {
+    bytes.iter().filter(|&&c| c != b'\0').count()
 }
 
 pub struct Output {
@@ -671,14 +675,19 @@ impl<'a> Line<'a> {
                 _ => {}
             }
 
+            // Don't let embedded NUL bytes influence column alignment in the
+            // debug underline output, since they are often filtered out (e.g.
+            // via `tr -d '\0'`) before inspection.
             let select = &line[..selection.start];
-            write!(writer, "{}", " ".repeat(select.len()))?;
+            let indent = count_non_null_bytes(select);
+            write!(writer, "{}", " ".repeat(indent))?;
 
             if selection.is_empty() {
                 writeln!(writer, "{}", translate!("sort-error-no-match-for-key"))?;
             } else {
                 let select = &line[selection];
-                writeln!(writer, "{}", "_".repeat(select.len()))?;
+                let underline_len = count_non_null_bytes(select);
+                writeln!(writer, "{}", "_".repeat(underline_len))?;
             }
         }
 
@@ -1074,17 +1083,168 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
 
 #[cfg(target_os = "linux")]
 fn get_rlimit() -> UResult<usize> {
-    let mut limit = rlimit {
-        rlim_cur: 0,
-        rlim_max: 0,
-    };
-    match unsafe { getrlimit(RLIMIT_NOFILE, &raw mut limit) } {
-        0 => Ok(limit.rlim_cur as usize),
-        _ => Err(UUsageError::new(2, translate!("sort-failed-fetch-rlimit"))),
+    use nix::sys::resource::{RLIM_INFINITY, Resource, getrlimit};
+
+    let (rlim_cur, _rlim_max) = getrlimit(Resource::RLIMIT_NOFILE)
+        .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))?;
+    if rlim_cur == RLIM_INFINITY {
+        return Err(UUsageError::new(2, translate!("sort-failed-fetch-rlimit")));
     }
+    usize::try_from(rlim_cur)
+        .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn fd_soft_limit() -> Option<usize> {
+    get_rlimit().ok()
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn fd_soft_limit() -> Option<usize> {
+    None
 }
 
 const STDIN_FILE: &str = "-";
+
+/// Legacy `+POS1 [-POS2]` syntax is permitted unless `_POSIX2_VERSION` is in
+/// the [TRADITIONAL, MODERN) range (matches GNU behaviour).
+fn allows_traditional_usage() -> bool {
+    !matches!(uucore::posix::posix_version(), Some(ver) if (TRADITIONAL..MODERN).contains(&ver))
+}
+
+#[derive(Debug, Clone)]
+struct LegacyKeyPart {
+    field: usize,
+    char_pos: usize,
+    opts: String,
+}
+
+fn parse_usize_or_max(num: &str) -> Option<usize> {
+    match num.parse::<usize>() {
+        Ok(v) => Some(v),
+        Err(e) if *e.kind() == IntErrorKind::PosOverflow => Some(usize::MAX),
+        Err(_) => None,
+    }
+}
+
+fn parse_legacy_part(spec: &str) -> Option<LegacyKeyPart> {
+    let idx = spec.chars().take_while(|c| c.is_ascii_digit()).count();
+    if idx == 0 {
+        return None;
+    }
+
+    let field = parse_usize_or_max(&spec[..idx])?;
+    let mut char_pos = 0;
+    let mut rest = &spec[idx..];
+
+    if let Some(stripped) = rest.strip_prefix('.') {
+        let char_idx = stripped.chars().take_while(|c| c.is_ascii_digit()).count();
+        if char_idx == 0 {
+            return None;
+        }
+        char_pos = parse_usize_or_max(&stripped[..char_idx])?;
+        rest = &stripped[char_idx..];
+    }
+
+    Some(LegacyKeyPart {
+        field,
+        char_pos,
+        opts: rest.to_string(),
+    })
+}
+
+/// Convert legacy +POS1 [-POS2] into a `-k` key specification using saturating arithmetic.
+fn legacy_key_to_k(from: &LegacyKeyPart, to: Option<&LegacyKeyPart>) -> String {
+    let start_field = from.field.saturating_add(1);
+    let start_char = from.char_pos.saturating_add(1);
+
+    let mut keydef = format!(
+        "{}{}{}",
+        start_field,
+        if from.char_pos == 0 {
+            String::new()
+        } else {
+            format!(".{start_char}")
+        },
+        from.opts
+    );
+
+    if let Some(to) = to {
+        let end_field = if to.char_pos == 0 {
+            // When the end character index is zero, GNU keeps the field number as-is.
+            // Clamp to 1 to avoid generating an invalid field 0.
+            to.field.max(1)
+        } else {
+            to.field.saturating_add(1)
+        };
+
+        keydef.push(',');
+        keydef.push_str(&end_field.to_string());
+        if to.char_pos != 0 {
+            keydef.push('.');
+            keydef.push_str(&to.char_pos.to_string());
+        }
+        keydef.push_str(&to.opts);
+    }
+
+    keydef
+}
+
+/// Preprocess argv to handle legacy +POS1 [-POS2] syntax by converting it into -k forms
+/// before clap sees the arguments.
+fn preprocess_legacy_args<I>(args: I) -> Vec<OsString>
+where
+    I: IntoIterator,
+    I::Item: Into<OsString>,
+{
+    if !allows_traditional_usage() {
+        return args.into_iter().map(Into::into).collect();
+    }
+
+    let mut processed = Vec::new();
+    let mut iter = args.into_iter().map(Into::into).peekable();
+
+    while let Some(arg) = iter.next() {
+        if arg == "--" {
+            processed.push(arg);
+            processed.extend(iter);
+            break;
+        }
+
+        let as_str = arg.to_string_lossy();
+        if let Some(from_spec) = as_str.strip_prefix('+') {
+            if let Some(from) = parse_legacy_part(from_spec) {
+                let mut to_part = None;
+
+                let next_candidate = iter.peek().map(|next| next.to_string_lossy().to_string());
+
+                if let Some(next_str) = next_candidate {
+                    if let Some(stripped) = next_str.strip_prefix('-') {
+                        if stripped.starts_with(|c: char| c.is_ascii_digit()) {
+                            let next_arg = iter.next().unwrap();
+                            if let Some(parsed) = parse_legacy_part(stripped) {
+                                to_part = Some(parsed);
+                            } else {
+                                processed.push(arg);
+                                processed.push(next_arg);
+                                continue;
+                            }
+                        }
+                    }
+                }
+
+                let keydef = legacy_key_to_k(&from, to_part.as_ref());
+                processed.push(OsString::from(format!("-k{keydef}")));
+                continue;
+            }
+        }
+
+        processed.push(arg);
+    }
+
+    processed
+}
+
 #[cfg(target_os = "linux")]
 const LINUX_BATCH_DIVISOR: usize = 4;
 #[cfg(target_os = "linux")]
@@ -1096,12 +1256,12 @@ fn default_merge_batch_size() -> usize {
     #[cfg(target_os = "linux")]
     {
         // Adjust merge batch size dynamically based on available file descriptors.
-        match get_rlimit() {
-            Ok(limit) => {
+        match fd_soft_limit() {
+            Some(limit) => {
                 let usable_limit = limit.saturating_div(LINUX_BATCH_DIVISOR);
                 usable_limit.clamp(LINUX_BATCH_MIN, LINUX_BATCH_MAX)
             }
-            Err(_) => 64,
+            None => 64,
         }
     }
 
@@ -1116,7 +1276,11 @@ fn default_merge_batch_size() -> usize {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut settings = GlobalSettings::default();
 
-    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
+    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(
+        uu_app(),
+        preprocess_legacy_args(args),
+        2,
+    )?;
 
     // Prevent -o/--output to be specified multiple times
     if matches
@@ -1226,9 +1390,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.threads = matches
             .get_one::<String>(options::PARALLEL)
             .map_or_else(|| "0".to_string(), String::from);
-        unsafe {
-            env::set_var("RAYON_NUM_THREADS", &settings.threads);
-        }
+        let num_threads = match settings.threads.parse::<usize>() {
+            Ok(0) | Err(_) => std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
+            Ok(n) => n,
+        };
+        let _ = rayon::ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build_global();
     }
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
@@ -1279,7 +1449,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
                         translate!(
                             "sort-maximum-batch-size-rlimit",
-                            "rlimit" =>  get_rlimit()?
+                            "rlimit" => {
+                                let Some(rlimit) = fd_soft_limit() else {
+                                    return Err(UUsageError::new(
+                                        2,
+                                        translate!("sort-failed-fetch-rlimit"),
+                                    ));
+                                };
+                                rlimit
+                            }
                         )
                     }
                     #[cfg(not(target_os = "linux"))]

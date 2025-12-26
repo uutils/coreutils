@@ -29,6 +29,7 @@ error-io = I/O error
 error-permission-denied = Permission denied
 error-file-not-found = No such file or directory
 error-invalid-argument = Invalid argument
+error-is-a-directory = { $file }: Is a directory
 
 # Common actions
 action-copying = copying
@@ -54,3 +55,21 @@ safe-traversal-error-unlink-failed = failed to unlink { $path }: { $source }
 safe-traversal-error-invalid-fd = invalid file descriptor
 safe-traversal-current-directory = <current directory>
 safe-traversal-directory = <directory>
+
+# checksum-related messages
+checksum-no-properly-formatted = { $checksum_file }: no properly formatted checksum lines found
+checksum-no-file-verified = { $checksum_file }: no file was verified
+checksum-error-failed-to-read-input = failed to read input
+checksum-bad-format = { $count ->
+    [1] { $count } line is improperly formatted
+   *[other] { $count } lines are improperly formatted
+}
+checksum-failed-cksum = { $count ->
+    [1] { $count } computed checksum did NOT match
+   *[other] { $count } computed checksums did NOT match
+}
+checksum-failed-open-file = { $count ->
+    [1] { $count } listed file could not be read
+   *[other] { $count } listed files could not be read
+}
+checksum-error-algo-bad-format = { $file }: { $line }: improperly formatted { $algo } checksum line

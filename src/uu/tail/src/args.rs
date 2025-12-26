@@ -13,7 +13,8 @@ use std::ffi::OsString;
 use std::io::IsTerminal;
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
+use uucore::parser::parse_signed_num::{SignPrefix, parse_signed_num};
+use uucore::parser::parse_size::ParseSizeError;
 use uucore::parser::parse_time;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
@@ -388,27 +389,15 @@ pub fn parse_obsolete(arg: &OsString, input: Option<&OsString>) -> UResult<Optio
 }
 
 fn parse_num(src: &str) -> Result<Signum, ParseSizeError> {
-    let mut size_string = src.trim();
-    let mut starting_with = false;
+    let result = parse_signed_num(src)?;
+    // tail: '+' means "starting from line/byte N", default/'-' means "last N"
+    let is_plus = result.sign == Some(SignPrefix::Plus);
 
-    if let Some(c) = size_string.chars().next() {
-        if c == '+' || c == '-' {
-            // tail: '-' is not documented (8.32 man pages)
-            size_string = &size_string[1..];
-            if c == '+' {
-                starting_with = true;
-            }
-        }
-    }
-
-    match parse_size_u64(size_string) {
-        Ok(n) => match (n, starting_with) {
-            (0, true) => Ok(Signum::PlusZero),
-            (0, false) => Ok(Signum::MinusZero),
-            (n, true) => Ok(Signum::Positive(n)),
-            (n, false) => Ok(Signum::Negative(n)),
-        },
-        Err(_) => Err(ParseSizeError::ParseFailure(size_string.to_string())),
+    match (result.value, is_plus) {
+        (0, true) => Ok(Signum::PlusZero),
+        (0, false) => Ok(Signum::MinusZero),
+        (n, true) => Ok(Signum::Positive(n)),
+        (n, false) => Ok(Signum::Negative(n)),
     }
 }
 

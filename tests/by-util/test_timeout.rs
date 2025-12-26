@@ -15,9 +15,6 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(125);
 }
 
-// FIXME: this depends on the system having true and false in PATH
-//        the best solution is probably to generate some test binaries that we can call for any
-//        utility that requires executing another program (kill, for instance)
 #[test]
 fn test_subcommand_return_code() {
     new_ucmd!().arg("1").arg("true").succeeds();
@@ -55,11 +52,11 @@ fn test_command_with_args() {
 fn test_verbose() {
     for verbose_flag in ["-v", "--verbose"] {
         new_ucmd!()
-            .args(&[verbose_flag, ".1", "sleep", "10"])
+            .args(&[verbose_flag, ".1", "sleep", "1"])
             .fails()
             .stderr_only("timeout: sending signal TERM to command 'sleep'\n");
         new_ucmd!()
-            .args(&[verbose_flag, "-s0", "-k.1", ".1", "sleep", "10"])
+            .args(&[verbose_flag, "-s0", "-k.1", ".1", "sleep", "1"])
             .fails()
             .stderr_only("timeout: sending signal EXIT to command 'sleep'\ntimeout: sending signal KILL to command 'sleep'\n");
     }
@@ -112,7 +109,7 @@ fn test_preserve_status_even_when_send_signal() {
     // So, expected result is success and code 0.
     for cont_spelling in ["CONT", "cOnT", "SIGcont"] {
         new_ucmd!()
-            .args(&["-s", cont_spelling, "--preserve-status", ".1", "sleep", "2"])
+            .args(&["-s", cont_spelling, "--preserve-status", ".1", "sleep", "1"])
             .succeeds()
             .no_output();
     }
@@ -186,10 +183,10 @@ fn test_kill_subprocess() {
     new_ucmd!()
         .args(&[
             // Make sure the CI can spawn the subprocess.
-            "10",
+            "1",
             "sh",
             "-c",
-            "trap 'echo inside_trap' TERM; sleep 30",
+            "trap 'echo inside_trap' TERM; sleep 5",
         ])
         .fails_with_code(124)
         .stdout_contains("inside_trap");
@@ -222,4 +219,19 @@ fn test_terminate_child_on_receiving_terminate() {
         .with_current_output()
         .code_is(143)
         .stdout_contains("child received TERM");
+}
+
+#[test]
+fn test_command_not_found() {
+    // Test exit code 127 when command doesn't exist
+    new_ucmd!()
+        .args(&["1", "/this/command/definitely/does/not/exist"])
+        .fails_with_code(127);
+}
+
+#[test]
+fn test_command_cannot_invoke() {
+    // Test exit code 126 when command exists but cannot be invoked
+    // Try to execute a directory (should give permission denied or similar)
+    new_ucmd!().args(&["1", "/"]).fails_with_code(126);
 }

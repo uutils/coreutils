@@ -174,7 +174,7 @@ jobs:
     - name: Install/setup prerequisites
       shell: bash
       run: |
-        sudo apt-get -y update ; sudo apt-get -y install npm ; sudo npm install cspell -g ;
+        sudo npm install cspell -g ;
     - name: Run `cspell`
       shell: bash
       run: |
@@ -255,7 +255,7 @@ jobs:
         run: npm install -g cspell
 
       - name: Cache pre-commit environments
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
