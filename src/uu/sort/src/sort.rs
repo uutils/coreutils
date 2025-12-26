@@ -1420,8 +1420,10 @@ fn default_merge_batch_size() -> usize {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut settings = GlobalSettings::default();
-    settings.numeric_locale = detect_numeric_locale();
+    let mut settings = GlobalSettings {
+        numeric_locale: detect_numeric_locale(),
+        ..Default::default()
+    };
 
     let matches = uucore::clap_localization::handle_clap_result_with_exit_code(
         uu_app(),
