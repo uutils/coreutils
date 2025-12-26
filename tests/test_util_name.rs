@@ -195,9 +195,9 @@ fn util_invalid_name_invalid_command() {
         .unwrap();
     let output = child.wait_with_output().unwrap();
     assert_eq!(output.status.code(), Some(1));
-    assert_eq!(output.stderr, b"");
+    assert_eq!(output.stdout, b"");
     assert_eq!(
-        output.stdout,
+        output.stderr,
         b"definitely_invalid: function/utility not found\n"
     );
 }

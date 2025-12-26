@@ -37,11 +37,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let silent = matches.get_flag(OPT_SILENT) || matches.get_flag(OPT_QUIET);
     let verbose = matches.get_flag(OPT_VERBOSE);
 
+    // GNU readlink -f/-e/-m follows symlinks first and then applies `..` (physical resolution).
+    // ResolveMode::Logical collapses `..` before following links, which yields the opposite order,
+    // so we choose Physical here for GNU compatibility.
     let res_mode = if matches.get_flag(OPT_CANONICALIZE)
         || matches.get_flag(OPT_CANONICALIZE_EXISTING)
         || matches.get_flag(OPT_CANONICALIZE_MISSING)
     {
-        ResolveMode::Logical
+        ResolveMode::Physical
     } else {
         ResolveMode::None
     };
