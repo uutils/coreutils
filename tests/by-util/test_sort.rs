@@ -1451,6 +1451,16 @@ fn test_multiple_output_files() {
 }
 
 #[test]
+// Test for GNU tests/sort/sort.pl "o3"
+fn test_duplicate_output_files_allowed() {
+    new_ucmd!()
+        .args(&["-o", "foo", "-o", "foo"])
+        .pipe_in("")
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
 fn test_output_file_with_leading_dash() {
     let test_cases = [
         (
