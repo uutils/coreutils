@@ -67,15 +67,6 @@ mod options {
         pub const GENERAL_NUMERIC: &str = "general-numeric-sort";
         pub const VERSION: &str = "version-sort";
         pub const RANDOM: &str = "random-sort";
-
-        pub const ALL_SORT_MODES: [&str; 6] = [
-            GENERAL_NUMERIC,
-            HUMAN_NUMERIC,
-            MONTH,
-            NUMERIC,
-            VERSION,
-            RANDOM,
-        ];
     }
 
     pub mod check {
@@ -202,20 +193,6 @@ enum SortMode {
     Version,
     Random,
     Default,
-}
-
-impl SortMode {
-    fn get_short_name(&self) -> Option<char> {
-        match self {
-            Self::Numeric => Some('n'),
-            Self::HumanNumeric => Some('h'),
-            Self::GeneralNumeric => Some('g'),
-            Self::Month => Some('M'),
-            Self::Version => Some('V'),
-            Self::Random => Some('R'),
-            Self::Default => None,
-        }
-    }
 }
 
 /// Return the length of the byte slice while ignoring embedded NULs (used for debug underline alignment).
@@ -427,8 +404,7 @@ struct KeySettings {
     reverse: bool,
 }
 
-impl KeySettings {
-}
+impl KeySettings {}
 
 impl From<&GlobalSettings> for KeySettings {
     fn from(settings: &GlobalSettings) -> Self {
@@ -555,7 +531,7 @@ fn ordering_incompatible(
 }
 
 fn incompatible_options_error(opts: &str) -> Box<dyn UError> {
-    UUsageError::new(
+    USimpleError::new(
         2,
         translate!(
             "sort-options-incompatible",
@@ -851,7 +827,7 @@ impl Default for KeyPosition {
 }
 
 fn bad_field_spec(spec: &str, msg_key: &str) -> Box<dyn UError> {
-    UUsageError::new(
+    USimpleError::new(
         2,
         translate!(
             "sort-invalid-field-spec",
@@ -862,7 +838,7 @@ fn bad_field_spec(spec: &str, msg_key: &str) -> Box<dyn UError> {
 }
 
 fn invalid_count_error(msg_key: &str, input: &str) -> Box<dyn UError> {
-    UUsageError::new(
+    USimpleError::new(
         2,
         format!(
             "{}: {}",
@@ -969,8 +945,7 @@ impl FieldSelector {
             settings.ignore_blanks
         };
 
-        let (from_field, mut rest) =
-            parse_field_count(key, "sort-invalid-number-at-field-start")?;
+        let (from_field, mut rest) = parse_field_count(key, "sort-invalid-number-at-field-start")?;
         if from_field == 0 {
             return Err(bad_field_spec(key, "sort-field-number-is-zero"));
         }
@@ -1008,8 +983,7 @@ impl FieldSelector {
                 rest = rest_after;
             }
 
-            let (rest, ignore_blanks_end) =
-                parse_ordering_options(rest, &mut settings, &mut flags);
+            let (rest, ignore_blanks_end) = parse_ordering_options(rest, &mut settings, &mut flags);
             if ignore_blanks_end {
                 to_ignore_blanks = true;
             }
@@ -1025,7 +999,11 @@ impl FieldSelector {
             return Err(bad_field_spec(key, "sort-stray-character-field-spec"));
         }
 
-        if ordering_incompatible(flags, settings.dictionary_order, settings.ignore_non_printing) {
+        if ordering_incompatible(
+            flags,
+            settings.dictionary_order,
+            settings.ignore_non_printing,
+        ) {
             let opts = ordering_opts_string(
                 flags,
                 settings.dictionary_order,
@@ -1042,7 +1020,7 @@ impl FieldSelector {
             char: from_char,
             ignore_blanks: from_ignore_blanks,
         };
-        Self::new(from, to, settings).map_err(|msg| UUsageError::new(2, msg).into())
+        Self::new(from, to, settings).map_err(|msg| USimpleError::new(2, msg).into())
     }
 
     fn new(

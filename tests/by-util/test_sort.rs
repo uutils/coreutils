@@ -650,6 +650,11 @@ fn test_keys_invalid_char_zero() {
 #[test]
 fn test_keys_invalid_number_formats() {
     new_ucmd!()
+        .args(&["-k", "0"])
+        .fails_with_code(2)
+        .stderr_only("sort: field number is zero: invalid field specification '0'\n");
+
+    new_ucmd!()
         .args(&["-k", "2.,3"])
         .fails_with_code(2)
         .stderr_only("sort: invalid number after '.': invalid count at start of ',3'\n");
