@@ -1357,3 +1357,29 @@ fn test_chmod_colored_output() {
         .stderr_contains("\x1b[31merreur\x1b[0m") // Red "erreur" in French
         .stderr_contains("\x1b[33m--invalid-option\x1b[0m"); // Yellow invalid option
 }
+
+#[test]
+fn test_chmod_permission_denied_not_no_such_file() {
+    // Test that chmod reports "Permission denied" instead of "No such file or directory"
+    // when a file exists but is inaccessible due to permissions
+    // See: https://github.com/uutils/coreutils/issues/9789
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a directory with no permissions
+    at.mkdir("locked");
+    at.touch("locked/file");
+    set_permissions(at.plus("locked"), Permissions::from_mode(0o000)).unwrap();
+
+    // Try to chmod a file inside the locked directory
+    scene
+        .ucmd()
+        .arg("755")
+        .arg("locked/file")
+        .fails_with_code(1)
+        .stderr_contains("Permission denied")
+        .stderr_does_not_contain("No such file or directory");
+
+    // Cleanup: restore permissions so the directory can be deleted
+    set_permissions(at.plus("locked"), Permissions::from_mode(0o755)).unwrap();
+}
