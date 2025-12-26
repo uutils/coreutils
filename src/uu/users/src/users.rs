@@ -12,8 +12,6 @@ use clap::builder::ValueParser;
 use clap::{Arg, Command};
 use uucore::error::UResult;
 use uucore::format_usage;
-#[cfg(not(target_os = "openbsd"))]
-use uucore::process::pid_is_alive;
 use uucore::translate;
 
 #[cfg(target_os = "openbsd")]
@@ -63,8 +61,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         }
     };
+    // OpenBSD uses the older UTMP format (not UTMPX) which doesn't reliably track PIDs,
+    // so we only filter by pid_is_alive on non-OpenBSD systems.
     #[cfg(not(target_os = "openbsd"))]
     {
+        use uucore::process::pid_is_alive;
         let filename = maybe_file.unwrap_or(utmpx::DEFAULT_FILE.as_ref());
 
         users = Utmpx::iter_all_records_from(filename)

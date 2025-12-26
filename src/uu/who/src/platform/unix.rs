@@ -11,7 +11,6 @@ use crate::uu_app;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
 use uucore::libc::{S_IWGRP, STDIN_FILENO, ttyname};
-#[cfg(not(target_os = "openbsd"))]
 use uucore::process::pid_is_alive;
 use uucore::translate;
 
