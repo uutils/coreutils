@@ -11,6 +11,7 @@
 // spell-checker:ignore lnext rprnt susp swtch vdiscard veof veol verase vintr vkill vlnext vquit vreprint vstart vstop vsusp vswtc vwerase werase
 // spell-checker:ignore sigquit sigtstp
 // spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain exta extb NCCS
+// spell-checker:ignore notaflag notacombo notabaud
 
 mod flags;
 
@@ -65,6 +66,7 @@ const SANE_CONTROL_CHARS: [(S, u8); 12] = [
 ];
 
 #[derive(Clone, Copy, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct Flag<T> {
     name: &'static str,
     #[expect(clippy::struct_field_names)]
@@ -1310,5 +1312,311 @@ impl TermiosFlag for LocalFlags {
 
     fn apply(&self, termios: &mut Termios, val: bool) {
         termios.local_flags.set(*self, val);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Essential unit tests for complex internal parsing and logic functions.
+
+    // Control character parsing tests
+    #[test]
+    fn test_string_to_control_char_undef() {
+        assert_eq!(string_to_control_char("undef").unwrap(), 0);
+        assert_eq!(string_to_control_char("^-").unwrap(), 0);
+        assert_eq!(string_to_control_char("").unwrap(), 0);
+    }
+
+    #[test]
+    fn test_string_to_control_char_hat_notation() {
+        assert_eq!(string_to_control_char("^C").unwrap(), 3);
+        assert_eq!(string_to_control_char("^A").unwrap(), 1);
+        assert_eq!(string_to_control_char("^?").unwrap(), 127);
+    }
+
+    #[test]
+    fn test_string_to_control_char_formats() {
+        assert_eq!(string_to_control_char("A").unwrap(), b'A');
+        assert_eq!(string_to_control_char("65").unwrap(), 65);
+        assert_eq!(string_to_control_char("0x41").unwrap(), 0x41);
+        assert_eq!(string_to_control_char("0101").unwrap(), 0o101);
+    }
+
+    #[test]
+    fn test_string_to_control_char_overflow() {
+        assert!(string_to_control_char("256").is_err());
+        assert!(string_to_control_char("0x100").is_err());
+        assert!(string_to_control_char("0400").is_err());
+    }
+
+    // Control character formatting tests
+    #[test]
+    fn test_control_char_to_string_formats() {
+        assert_eq!(
+            control_char_to_string(0).unwrap(),
+            translate!("stty-output-undef")
+        );
+        assert_eq!(control_char_to_string(3).unwrap(), "^C");
+        assert_eq!(control_char_to_string(b'A').unwrap(), "A");
+        assert_eq!(control_char_to_string(0x7f).unwrap(), "^?");
+        assert_eq!(control_char_to_string(0x80).unwrap(), "M-^@");
+    }
+
+    // Combination settings tests
+    #[test]
+    fn test_combo_to_flags_sane() {
+        let flags = combo_to_flags("sane");
+        assert!(flags.len() > 5); // sane sets multiple flags
+    }
+
+    #[test]
+    fn test_combo_to_flags_raw_cooked() {
+        assert!(!combo_to_flags("raw").is_empty());
+        assert!(!combo_to_flags("cooked").is_empty());
+        assert!(!combo_to_flags("-raw").is_empty());
+    }
+
+    #[test]
+    fn test_combo_to_flags_parity() {
+        assert!(!combo_to_flags("evenp").is_empty());
+        assert!(!combo_to_flags("oddp").is_empty());
+        assert!(!combo_to_flags("-evenp").is_empty());
+    }
+
+    // Parse rows/cols with overflow handling
+    #[test]
+    fn test_parse_rows_cols_normal() {
+        let result = parse_rows_cols("24");
+        assert_eq!(result, Some(24));
+    }
+
+    #[test]
+    fn test_parse_rows_cols_overflow() {
+        assert_eq!(parse_rows_cols("65536"), Some(0)); // wraps to 0
+        assert_eq!(parse_rows_cols("65537"), Some(1)); // wraps to 1
+    }
+
+    // Sane control character defaults
+    #[test]
+    fn test_get_sane_control_char_values() {
+        assert_eq!(get_sane_control_char(S::VINTR), 3); // ^C
+        assert_eq!(get_sane_control_char(S::VQUIT), 28); // ^\
+        assert_eq!(get_sane_control_char(S::VERASE), 127); // DEL
+        assert_eq!(get_sane_control_char(S::VKILL), 21); // ^U
+        assert_eq!(get_sane_control_char(S::VEOF), 4); // ^D
+    }
+
+    // Additional tests for parse_rows_cols
+    #[test]
+    fn test_parse_rows_cols_valid() {
+        assert_eq!(parse_rows_cols("80"), Some(80));
+        assert_eq!(parse_rows_cols("65535"), Some(65535));
+        assert_eq!(parse_rows_cols("0"), Some(0));
+        assert_eq!(parse_rows_cols("1"), Some(1));
+    }
+
+    #[test]
+    fn test_parse_rows_cols_wraparound() {
+        // Test u16 wraparound: (u16::MAX + 1) % (u16::MAX + 1) = 0
+        assert_eq!(parse_rows_cols("131071"), Some(65535)); // (2*65536 - 1) % 65536 = 65535
+        assert_eq!(parse_rows_cols("131072"), Some(0)); // (2*65536) % 65536 = 0
+    }
+
+    #[test]
+    fn test_parse_rows_cols_invalid() {
+        assert_eq!(parse_rows_cols(""), None);
+        assert_eq!(parse_rows_cols("abc"), None);
+        assert_eq!(parse_rows_cols("-1"), None);
+        assert_eq!(parse_rows_cols("12.5"), None);
+        assert_eq!(parse_rows_cols("not_a_number"), None);
+    }
+
+    // Tests for string_to_baud
+    #[test]
+    fn test_string_to_baud_valid() {
+        #[cfg(not(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        )))]
+        {
+            assert!(string_to_baud("9600").is_some());
+            assert!(string_to_baud("115200").is_some());
+            assert!(string_to_baud("38400").is_some());
+            assert!(string_to_baud("19200").is_some());
+        }
+
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        ))]
+        {
+            assert!(string_to_baud("9600").is_some());
+            assert!(string_to_baud("115200").is_some());
+            assert!(string_to_baud("1000000").is_some());
+            assert!(string_to_baud("0").is_some());
+        }
+    }
+
+    #[test]
+    fn test_string_to_baud_invalid() {
+        #[cfg(not(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        )))]
+        {
+            assert_eq!(string_to_baud("995"), None);
+            assert_eq!(string_to_baud("invalid"), None);
+            assert_eq!(string_to_baud(""), None);
+            assert_eq!(string_to_baud("abc"), None);
+        }
+    }
+
+    // Tests for string_to_combo
+    #[test]
+    fn test_string_to_combo_valid() {
+        assert_eq!(string_to_combo("sane"), Some("sane"));
+        assert_eq!(string_to_combo("raw"), Some("raw"));
+        assert_eq!(string_to_combo("cooked"), Some("cooked"));
+        assert_eq!(string_to_combo("-raw"), Some("-raw"));
+        assert_eq!(string_to_combo("-cooked"), Some("-cooked"));
+        assert_eq!(string_to_combo("cbreak"), Some("cbreak"));
+        assert_eq!(string_to_combo("-cbreak"), Some("-cbreak"));
+        assert_eq!(string_to_combo("nl"), Some("nl"));
+        assert_eq!(string_to_combo("-nl"), Some("-nl"));
+        assert_eq!(string_to_combo("ek"), Some("ek"));
+        assert_eq!(string_to_combo("evenp"), Some("evenp"));
+        assert_eq!(string_to_combo("-evenp"), Some("-evenp"));
+        assert_eq!(string_to_combo("parity"), Some("parity"));
+        assert_eq!(string_to_combo("-parity"), Some("-parity"));
+        assert_eq!(string_to_combo("oddp"), Some("oddp"));
+        assert_eq!(string_to_combo("-oddp"), Some("-oddp"));
+        assert_eq!(string_to_combo("pass8"), Some("pass8"));
+        assert_eq!(string_to_combo("-pass8"), Some("-pass8"));
+        assert_eq!(string_to_combo("litout"), Some("litout"));
+        assert_eq!(string_to_combo("-litout"), Some("-litout"));
+        assert_eq!(string_to_combo("crt"), Some("crt"));
+        assert_eq!(string_to_combo("dec"), Some("dec"));
+        assert_eq!(string_to_combo("decctlq"), Some("decctlq"));
+        assert_eq!(string_to_combo("-decctlq"), Some("-decctlq"));
+    }
+
+    #[test]
+    fn test_string_to_combo_invalid() {
+        assert_eq!(string_to_combo("notacombo"), None);
+        assert_eq!(string_to_combo(""), None);
+        assert_eq!(string_to_combo("invalid"), None);
+        // Test non-negatable combos with negation
+        assert_eq!(string_to_combo("-sane"), None);
+        assert_eq!(string_to_combo("-ek"), None);
+        assert_eq!(string_to_combo("-crt"), None);
+        assert_eq!(string_to_combo("-dec"), None);
+    }
+
+    // Tests for cc_to_index
+    #[test]
+    fn test_cc_to_index_valid() {
+        assert_eq!(cc_to_index("intr"), Some(S::VINTR));
+        assert_eq!(cc_to_index("quit"), Some(S::VQUIT));
+        assert_eq!(cc_to_index("erase"), Some(S::VERASE));
+        assert_eq!(cc_to_index("kill"), Some(S::VKILL));
+        assert_eq!(cc_to_index("eof"), Some(S::VEOF));
+        assert_eq!(cc_to_index("start"), Some(S::VSTART));
+        assert_eq!(cc_to_index("stop"), Some(S::VSTOP));
+        assert_eq!(cc_to_index("susp"), Some(S::VSUSP));
+        assert_eq!(cc_to_index("rprnt"), Some(S::VREPRINT));
+        assert_eq!(cc_to_index("werase"), Some(S::VWERASE));
+        assert_eq!(cc_to_index("lnext"), Some(S::VLNEXT));
+        assert_eq!(cc_to_index("discard"), Some(S::VDISCARD));
+    }
+
+    #[test]
+    fn test_cc_to_index_invalid() {
+        // spell-checker:ignore notachar
+        assert_eq!(cc_to_index("notachar"), None);
+        assert_eq!(cc_to_index(""), None);
+        assert_eq!(cc_to_index("INTR"), None); // case sensitive
+        assert_eq!(cc_to_index("invalid"), None);
+    }
+
+    // Tests for check_flag_group
+    #[test]
+    fn test_check_flag_group() {
+        let flag_with_group = Flag::new_grouped("cs5", ControlFlags::CS5, ControlFlags::CSIZE);
+        let flag_without_group = Flag::new("parenb", ControlFlags::PARENB);
+
+        assert!(check_flag_group(&flag_with_group, true));
+        assert!(!check_flag_group(&flag_with_group, false));
+        assert!(!check_flag_group(&flag_without_group, true));
+        assert!(!check_flag_group(&flag_without_group, false));
+    }
+
+    // Additional tests for get_sane_control_char
+    #[test]
+    fn test_get_sane_control_char_all_defined() {
+        assert_eq!(get_sane_control_char(S::VSTART), 17); // ^Q
+        assert_eq!(get_sane_control_char(S::VSTOP), 19); // ^S
+        assert_eq!(get_sane_control_char(S::VSUSP), 26); // ^Z
+        assert_eq!(get_sane_control_char(S::VREPRINT), 18); // ^R
+        assert_eq!(get_sane_control_char(S::VWERASE), 23); // ^W
+        assert_eq!(get_sane_control_char(S::VLNEXT), 22); // ^V
+        assert_eq!(get_sane_control_char(S::VDISCARD), 15); // ^O
+    }
+
+    // Tests for parse_u8_or_err
+    #[test]
+    fn test_parse_u8_or_err_valid() {
+        assert_eq!(parse_u8_or_err("0").unwrap(), 0);
+        assert_eq!(parse_u8_or_err("255").unwrap(), 255);
+        assert_eq!(parse_u8_or_err("128").unwrap(), 128);
+        assert_eq!(parse_u8_or_err("1").unwrap(), 1);
+    }
+
+    #[test]
+    fn test_parse_u8_or_err_overflow() {
+        // Test that overflow values return an error
+        // Note: In test environment, translate!() returns the key, not the translated string
+        // spell-checker:ignore Valeur
+        let err = parse_u8_or_err("256").unwrap_err();
+        assert!(
+            err.contains("value-too-large")
+                || err.contains("Value too large")
+                || err.contains("Valeur trop grande"),
+            "Expected overflow error, got: {err}"
+        );
+
+        assert!(parse_u8_or_err("1000").is_err());
+        assert!(parse_u8_or_err("65536").is_err());
+    }
+
+    #[test]
+    fn test_parse_u8_or_err_invalid() {
+        // Test that invalid values return an error
+        // Note: In test environment, translate!() returns the key, not the translated string
+        // spell-checker:ignore entier invalide
+        let err = parse_u8_or_err("-1").unwrap_err();
+        assert!(
+            err.contains("invalid-integer-argument")
+                || err.contains("invalid integer argument")
+                || err.contains("argument entier invalide"),
+            "Expected invalid argument error, got: {err}"
+        );
+
+        assert!(parse_u8_or_err("abc").is_err());
+        assert!(parse_u8_or_err("").is_err());
+        assert!(parse_u8_or_err("12.5").is_err());
     }
 }
