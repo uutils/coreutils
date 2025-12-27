@@ -31,3 +31,10 @@ decoder-error-io = erreur du flux d'octets sous-jacent : { $error }
 # Autres messages
 wc-standard-input = entrée standard
 wc-total = total
+
+# Messages de débogage
+wc-debug-hw-unavailable = debug : prise en charge matérielle indisponible sur ce CPU
+wc-debug-hw-using = debug : utilisation de l'accélération matérielle (fonctions : { $features })
+wc-debug-hw-disabled-env = debug : prise en charge matérielle désactivée par l'environnement
+wc-debug-hw-disabled-glibc = debug : prise en charge matérielle désactivée par GLIBC_TUNABLES ({ $features })
+wc-debug-hw-limited-glibc = debug : prise en charge matérielle limitée par GLIBC_TUNABLES (désactivé : { $disabled } ; activé : { $enabled })
