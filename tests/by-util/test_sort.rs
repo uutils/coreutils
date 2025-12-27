@@ -638,7 +638,8 @@ fn test_keys_invalid_field() {
     new_ucmd!()
         .args(&["-k", "1."])
         .fails()
-        .stderr_only("sort: invalid number after '.': invalid count at start of ''\n");
+        .stderr_only("sort: invalid number after '.': invalid count at start of ''\n")
+        .matches_gnu();
 }
 
 #[test]
@@ -646,7 +647,8 @@ fn test_keys_invalid_field_option() {
     new_ucmd!()
         .args(&["-k", "1.1x"])
         .fails()
-        .stderr_only("sort: stray character in field spec: invalid field specification '1.1x'\n");
+        .stderr_only("sort: stray character in field spec: invalid field specification '1.1x'\n")
+        .matches_gnu();
 }
 
 #[test]
@@ -654,7 +656,8 @@ fn test_keys_invalid_field_zero() {
     new_ucmd!()
         .args(&["-k", "0.1"])
         .fails()
-        .stderr_only("sort: field number is zero: invalid field specification '0.1'\n");
+        .stderr_only("sort: field number is zero: invalid field specification '0.1'\n")
+        .matches_gnu();
 }
 
 #[test]
@@ -662,7 +665,8 @@ fn test_keys_invalid_char_zero() {
     new_ucmd!()
         .args(&["-k", "1.0"])
         .fails()
-        .stderr_only("sort: character offset is zero: invalid field specification '1.0'\n");
+        .stderr_only("sort: character offset is zero: invalid field specification '1.0'\n")
+        .matches_gnu();
 }
 
 #[test]
@@ -670,22 +674,26 @@ fn test_keys_invalid_number_formats() {
     new_ucmd!()
         .args(&["-k", "0"])
         .fails_with_code(2)
-        .stderr_only("sort: field number is zero: invalid field specification '0'\n");
+        .stderr_only("sort: field number is zero: invalid field specification '0'\n")
+        .matches_gnu();
 
     new_ucmd!()
         .args(&["-k", "2.,3"])
         .fails_with_code(2)
-        .stderr_only("sort: invalid number after '.': invalid count at start of ',3'\n");
+        .stderr_only("sort: invalid number after '.': invalid count at start of ',3'\n")
+        .matches_gnu();
 
     new_ucmd!()
         .args(&["-k", "2,"])
         .fails_with_code(2)
-        .stderr_only("sort: invalid number after ',': invalid count at start of ''\n");
+        .stderr_only("sort: invalid number after ',': invalid count at start of ''\n")
+        .matches_gnu();
 
     new_ucmd!()
         .args(&["-k", "1.1,-k0"])
         .fails_with_code(2)
-        .stderr_only("sort: invalid number after ',': invalid count at start of '-k0'\n");
+        .stderr_only("sort: invalid number after ',': invalid count at start of '-k0'\n")
+        .matches_gnu();
 }
 
 #[test]

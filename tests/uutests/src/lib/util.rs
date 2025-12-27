@@ -120,6 +120,14 @@ pub struct CmdResult {
     stdout: Vec<u8>,
     /// captured standard error after running the Command
     stderr: Vec<u8>,
+    /// arguments used to run the command
+    args: Vec<OsString>,
+    /// environment variables passed to the command
+    env_vars: Vec<(OsString, OsString)>,
+    /// current directory used to run the command
+    current_dir: Option<PathBuf>,
+    /// stdin bytes provided to the command (if any)
+    stdin_bytes: Option<Vec<u8>>,
 }
 
 impl CmdResult {
@@ -130,6 +138,10 @@ impl CmdResult {
         exit_status: Option<ExitStatus>,
         stdout: U,
         stderr: V,
+        args: Vec<OsString>,
+        env_vars: Vec<(OsString, OsString)>,
+        current_dir: Option<PathBuf>,
+        stdin_bytes: Option<Vec<u8>>,
     ) -> Self
     where
         S: Into<PathBuf>,
@@ -144,6 +156,10 @@ impl CmdResult {
             exit_status,
             stdout: stdout.into(),
             stderr: stderr.into(),
+            args,
+            env_vars,
+            current_dir,
+            stdin_bytes,
         }
     }
 
@@ -160,6 +176,10 @@ impl CmdResult {
             self.exit_status,
             function(&self.stdout),
             self.stderr.as_slice(),
+            self.args.clone(),
+            self.env_vars.clone(),
+            self.current_dir.clone(),
+            self.stdin_bytes.clone(),
         )
     }
 
@@ -176,6 +196,10 @@ impl CmdResult {
             self.exit_status,
             function(self.stdout_str()),
             self.stderr.as_slice(),
+            self.args.clone(),
+            self.env_vars.clone(),
+            self.current_dir.clone(),
+            self.stdin_bytes.clone(),
         )
     }
 
@@ -192,6 +216,10 @@ impl CmdResult {
             self.exit_status,
             self.stdout.as_slice(),
             function(&self.stderr),
+            self.args.clone(),
+            self.env_vars.clone(),
+            self.current_dir.clone(),
+            self.stdin_bytes.clone(),
         )
     }
 
@@ -208,6 +236,10 @@ impl CmdResult {
             self.exit_status,
             self.stdout.as_slice(),
             function(self.stderr_str()),
+            self.args.clone(),
+            self.env_vars.clone(),
+            self.current_dir.clone(),
+            self.stdin_bytes.clone(),
         )
     }
 
@@ -700,6 +732,119 @@ impl CmdResult {
         self.no_stdout().stderr_is_bytes(msg)
     }
 
+    /// Compare output and exit status with the GNU coreutils implementation.
+    /// If GNU coreutils isn't available, this is a no-op and prints a skip reason.
+    #[cfg(unix)]
+    #[track_caller]
+    pub fn matches_gnu(&self) -> &Self {
+        match self.gnu_result() {
+            Ok(expected) => {
+                self.stdout_is(expected.stdout_str());
+                self.stderr_is(expected.stderr_str());
+                self.code_is(expected.code());
+            }
+            Err(error) => {
+                println!("test skipped: {error}");
+            }
+        }
+        self
+    }
+
+    /// On non-Unix platforms GNU coreutils may not be available.
+    #[cfg(not(unix))]
+    #[track_caller]
+    pub fn matches_gnu(&self) -> &Self {
+        println!("test skipped: GNU comparison is not supported on this platform");
+        self
+    }
+
+    #[cfg(unix)]
+    fn gnu_result(&self) -> std::result::Result<CmdResult, String> {
+        let util_name = self.util_name.as_ref().ok_or_else(|| {
+            format!("{UUTILS_WARNING}: matches_gnu requires a utility name")
+        })?;
+        println!("{}", check_coreutil_version(util_name, VERSION_MIN)?);
+        let gnu_name = host_name_for(util_name);
+
+        let mut args = self.args.clone();
+        if let Some(first) = args.first() {
+            if first == &OsString::from(util_name) {
+                args.remove(0);
+            }
+        }
+
+        let mut command = Command::new(gnu_name.as_ref());
+        command.env_clear();
+        command.args(&args);
+
+        if let Some(current_dir) = &self.current_dir {
+            command.current_dir(current_dir);
+        } else if let Some(tmpd) = &self.tmpd {
+            command.current_dir(tmpd.path());
+        }
+
+        command
+            .env("PATH", PATH)
+            .envs(DEFAULT_ENV)
+            .envs(self.env_vars.iter().cloned());
+
+        if let Some(ld_preload) = env::var_os("LD_PRELOAD") {
+            command.env("LD_PRELOAD", ld_preload);
+        }
+
+        if let Some(profile) = env::var_os("LLVM_PROFILE_FILE") {
+            command.env("LLVM_PROFILE_FILE", profile);
+        }
+
+        let output = if let Some(stdin_bytes) = &self.stdin_bytes {
+            let mut child = command
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .map_err(|e| format!("{UUTILS_WARNING}: {e}"))?;
+            if let Some(mut stdin) = child.stdin.take() {
+                stdin
+                    .write_all(stdin_bytes)
+                    .map_err(|e| format!("{UUTILS_WARNING}: {e}"))?;
+            }
+            child
+                .wait_with_output()
+                .map_err(|e| format!("{UUTILS_WARNING}: {e}"))?
+        } else {
+            command
+                .stdin(Stdio::null())
+                .output()
+                .map_err(|e| format!("{UUTILS_WARNING}: {e}"))?
+        };
+
+        let (stdout, stderr) = if cfg!(target_os = "linux") {
+            (
+                String::from_utf8_lossy(&output.stdout).to_string(),
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            )
+        } else {
+            let from = gnu_name.to_string() + ":";
+            let to = &from[1..];
+            (
+                String::from_utf8_lossy(&output.stdout).replace(&from, to),
+                String::from_utf8_lossy(&output.stderr).replace(&from, to),
+            )
+        };
+
+        Ok(CmdResult::new(
+            gnu_name.to_string(),
+            Some(util_name.clone()),
+            self.tmpd.clone(),
+            Some(output.status),
+            stdout.as_bytes(),
+            stderr.as_bytes(),
+            args,
+            self.env_vars.clone(),
+            self.current_dir.clone(),
+            self.stdin_bytes.clone(),
+        ))
+    }
     #[track_caller]
     pub fn fails_silently(&self) -> &Self {
         assert!(!self.succeeded());
@@ -2198,6 +2343,10 @@ impl<'a> UChildAssertion<'a> {
             exit_status,
             stdout,
             stderr,
+            self.uchild.args.clone(),
+            self.uchild.env_vars.clone(),
+            self.uchild.current_dir.clone(),
+            self.uchild.stdin_bytes.clone(),
         )
     }
 
@@ -2272,6 +2421,10 @@ pub struct UChild {
     raw: Child,
     bin_path: PathBuf,
     util_name: Option<String>,
+    args: Vec<OsString>,
+    env_vars: Vec<(OsString, OsString)>,
+    current_dir: Option<PathBuf>,
+    stdin_bytes: Option<Vec<u8>>,
     captured_stdout: Option<CapturedOutput>,
     captured_stderr: Option<CapturedOutput>,
     stdin_pty: Option<File>,
@@ -2294,6 +2447,10 @@ impl UChild {
             raw: child,
             bin_path: ucommand.bin_path.clone().unwrap(),
             util_name: ucommand.util_name.clone(),
+            args: ucommand.args.iter().cloned().collect(),
+            env_vars: ucommand.env_vars.clone(),
+            current_dir: ucommand.current_dir.clone(),
+            stdin_bytes: ucommand.bytes_into_stdin.clone(),
             captured_stdout,
             captured_stderr,
             stdin_pty,
@@ -2475,10 +2632,14 @@ impl UChild {
     ///
     /// Returns the error from the call to `wait_with_output` if any
     pub fn wait(self) -> io::Result<CmdResult> {
-        let (bin_path, util_name, tmpd) = (
+        let (bin_path, util_name, tmpd, args, env_vars, current_dir, stdin_bytes) = (
             self.bin_path.clone(),
             self.util_name.clone(),
             self.tmpd.clone(),
+            self.args.clone(),
+            self.env_vars.clone(),
+            self.current_dir.clone(),
+            self.stdin_bytes.clone(),
         );
 
         let output = self.wait_with_output()?;
@@ -2490,6 +2651,10 @@ impl UChild {
             exit_status: Some(output.status),
             stdout: output.stdout,
             stderr: output.stderr,
+            args,
+            env_vars,
+            current_dir,
+            stdin_bytes,
         })
     }
 
@@ -3075,6 +3240,10 @@ pub fn gnu_cmd_result(
         result.exit_status,
         stdout.as_bytes(),
         stderr.as_bytes(),
+        result.args.clone(),
+        result.env_vars.clone(),
+        result.current_dir.clone(),
+        result.stdin_bytes.clone(),
     ))
 }
 
