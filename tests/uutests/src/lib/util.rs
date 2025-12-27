@@ -761,9 +761,10 @@ impl CmdResult {
 
     #[cfg(unix)]
     fn gnu_result(&self) -> std::result::Result<CmdResult, String> {
-        let util_name = self.util_name.as_ref().ok_or_else(|| {
-            format!("{UUTILS_WARNING}: matches_gnu requires a utility name")
-        })?;
+        let util_name = self
+            .util_name
+            .as_ref()
+            .ok_or_else(|| format!("{UUTILS_WARNING}: matches_gnu requires a utility name"))?;
         println!("{}", check_coreutil_version(util_name, VERSION_MIN)?);
         let gnu_name = host_name_for(util_name);
 
