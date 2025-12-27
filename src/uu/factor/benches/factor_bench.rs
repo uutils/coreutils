@@ -24,10 +24,7 @@ fn log_jemalloc_stats(label: &str) {
     let allocated = stats::allocated::read().unwrap();
     let resident = stats::resident::read().unwrap();
 
-    println!(
-        "jemalloc {label}: allocated={} bytes, resident={} bytes",
-        allocated, resident
-    );
+    println!("jemalloc {label}: allocated={allocated} bytes, resident={resident} bytes");
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd")))]
