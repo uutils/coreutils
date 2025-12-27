@@ -3389,7 +3389,13 @@ fn get_security_context<'a>(
         match selinux::SecurityContext::of_path(path, must_dereference, false) {
             Err(_r) => {
                 // TODO: show the actual reason why it failed
-                show_warning!("failed to get security context of: {}", path.quote());
+                show_warning!(
+                    "{}",
+                    translate!(
+                        "ls-warning-failed-to-get-security-context",
+                        "path" => path.quote().to_string()
+                    )
+                );
                 return Cow::Borrowed(SUBSTITUTE_STRING);
             }
             Ok(None) => return Cow::Borrowed(SUBSTITUTE_STRING),
@@ -3400,9 +3406,12 @@ fn get_security_context<'a>(
 
                 let res: String = String::from_utf8(context.to_vec()).unwrap_or_else(|e| {
                     show_warning!(
-                        "getting security context of: {}: {}",
-                        path.quote(),
-                        e.to_string()
+                        "{}",
+                        translate!(
+                            "ls-warning-getting-security-context",
+                            "path" => path.quote().to_string(),
+                            "error" => e.to_string()
+                        )
                     );
 
                     String::from_utf8_lossy(context).to_string()

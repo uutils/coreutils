@@ -124,3 +124,7 @@ ls-invalid-columns-width = ignoring invalid width in environment variable COLUMN
 ls-invalid-ignore-pattern = Invalid pattern for ignore: {$pattern}
 ls-invalid-hide-pattern = Invalid pattern for hide: {$pattern}
 ls-total = total {$size}
+
+# Security context warnings
+ls-warning-failed-to-get-security-context = failed to get security context of: {$path}
+ls-warning-getting-security-context = getting security context of: {$path}: {$error}
