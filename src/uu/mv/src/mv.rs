@@ -978,6 +978,45 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     ))
 }
 
+/// Copy the given symlink to the given destination without dereferencing.
+/// On Windows, dangling symlinks return an error.
+#[cfg(unix)]
+fn copy_symlink(from: &Path, to: &Path) -> io::Result<()> {
+    let from_meta = from.symlink_metadata()?;
+    let path_symlink_points_to = fs::read_link(from)?;
+    unix::fs::symlink(path_symlink_points_to, to).and_then(|_| {
+        try_preserve_ownership(&from_meta, to, false);
+        Ok(())
+    })
+}
+
+#[cfg(windows)]
+fn copy_symlink(from: &Path, to: &Path) -> io::Result<()> {
+    let path_symlink_points_to = fs::read_link(from)?;
+    if path_symlink_points_to.exists() {
+        if path_symlink_points_to.is_dir() {
+            windows::fs::symlink_dir(&path_symlink_points_to, to)?;
+        } else {
+            windows::fs::symlink_file(&path_symlink_points_to, to)?;
+        }
+        Ok(())
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            translate!("mv-error-dangling-symlink"),
+        ))
+    }
+}
+
+#[cfg(not(any(windows, unix)))]
+fn copy_symlink(from: &Path, to: &Path) -> io::Result<()> {
+    let _ = (from, to);
+    Err(io::Error::new(
+        io::ErrorKind::Other,
+        translate!("mv-error-no-symlink-support"),
+    ))
+}
+
 fn rename_dir_fallback(
     from: &Path,
     to: &Path,
@@ -1100,7 +1139,26 @@ fn copy_dir_contents_recursive(
             pb.set_message(from_path.to_string_lossy().to_string());
         }
 
-        if from_path.is_dir() {
+        let entry_type = entry.file_type()?;
+
+        if entry_type.is_symlink() {
+            copy_symlink(&from_path, &to_path)?;
+
+            // Print verbose message for symlink
+            if verbose {
+                let message = translate!(
+                    "mv-verbose-renamed",
+                    "from" => from_path.quote(),
+                    "to" => to_path.quote()
+                );
+                match display_manager {
+                    Some(pb) => pb.suspend(|| {
+                        println!("{message}");
+                    }),
+                    None => println!("{message}"),
+                }
+            }
+        } else if entry_type.is_dir() {
             // Recursively copy subdirectory
             fs::create_dir_all(&to_path)?;
 
