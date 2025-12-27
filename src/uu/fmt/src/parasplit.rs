@@ -26,6 +26,7 @@ fn char_width(c: char) -> usize {
     }
 }
 
+/// Return the UTF-8 sequence length implied by a leading byte, or `None` if invalid.
 fn utf8_char_width(byte: u8) -> Option<usize> {
     match byte {
         0x00..=0x7F => Some(1),
@@ -36,6 +37,7 @@ fn utf8_char_width(byte: u8) -> Option<usize> {
     }
 }
 
+/// Decode a UTF-8 character starting at `start`, returning the char and bytes consumed.
 fn decode_char(bytes: &[u8], start: usize) -> (Option<char>, usize) {
     let first = bytes[start];
     if first < 0x80 {
@@ -610,6 +612,31 @@ impl WordSplit<'_> {
     fn is_punctuation_byte(b: u8) -> bool {
         matches!(b, b'!' | b'.' | b'?')
     }
+
+    fn scan_word_end(&self, word_start: usize) -> (usize, usize, Option<u8>) {
+        let mut word_nchars = 0;
+        let mut idx = word_start;
+        let mut last_ascii = None;
+        while idx < self.length {
+            let (ch, consumed) = decode_char(self.bytes, idx);
+            let is_whitespace = ch.filter(|c| c.is_ascii()).is_some_and(is_fmt_whitespace);
+            if is_whitespace {
+                break;
+            }
+            word_nchars += ch.map_or(1, char_width);
+            if let Some(ch) = ch {
+                if ch.is_ascii() {
+                    last_ascii = Some(ch as u8);
+                } else {
+                    last_ascii = None;
+                }
+            } else {
+                last_ascii = None;
+            }
+            idx += consumed;
+        }
+        (idx, word_nchars, last_ascii)
+    }
 }
 
 pub struct WordInfo<'a> {
@@ -647,28 +674,8 @@ impl<'a> Iterator for WordSplit<'a> {
         // find the beginning of the next whitespace
         // note that this preserves the invariant that self.position
         // points to whitespace character OR end of string
-        let mut word_nchars = 0;
-        let mut idx = word_start;
-        let mut last_ascii = None;
-        while idx < self.length {
-            let (ch, consumed) = decode_char(self.bytes, idx);
-            let is_whitespace = ch.filter(|c| c.is_ascii()).is_some_and(is_fmt_whitespace);
-            if is_whitespace {
-                break;
-            }
-            word_nchars += ch.map_or(1, char_width);
-            if let Some(ch) = ch {
-                if ch.is_ascii() {
-                    last_ascii = Some(ch as u8);
-                } else {
-                    last_ascii = None;
-                }
-            } else {
-                last_ascii = None;
-            }
-            idx += consumed;
-        }
-        self.position = idx;
+        let (next_position, word_nchars, last_ascii) = self.scan_word_end(word_start);
+        self.position = next_position;
 
         let word_start_relative = word_start - old_position;
         // if the previous sentence was punctuation and this sentence has >2 whitespace or one tab, is a new sentence.
