@@ -5,23 +5,105 @@
 
 // Linux-specific implementations for the rm utility
 
-// spell-checker:ignore fstatat unlinkat
+// spell-checker:ignore fstatat unlinkat statx behaviour
 
 use indicatif::ProgressBar;
 use std::ffi::OsStr;
 use std::fs;
+use std::io::{IsTerminal, stdin};
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
+use uucore::prompt_yes;
 use uucore::safe_traversal::DirFd;
 use uucore::show_error;
 use uucore::translate;
 
 use super::super::{
-    InteractiveMode, Options, is_dir_empty, is_readable_metadata, prompt_descend, prompt_dir,
-    prompt_file, remove_file, show_permission_denied_error, show_removal_error,
-    verbose_removed_directory, verbose_removed_file,
+    InteractiveMode, Options, is_dir_empty, is_readable_metadata, prompt_descend, remove_file,
+    show_permission_denied_error, show_removal_error, verbose_removed_directory,
+    verbose_removed_file,
 };
+
+#[inline]
+fn mode_readable(mode: libc::mode_t) -> bool {
+    (mode & libc::S_IRUSR) != 0
+}
+
+#[inline]
+fn mode_writable(mode: libc::mode_t) -> bool {
+    (mode & libc::S_IWUSR) != 0
+}
+
+/// File prompt that reuses existing stat data to avoid extra statx calls
+fn prompt_file_with_stat(path: &Path, stat: &libc::stat, options: &Options) -> bool {
+    if options.interactive == InteractiveMode::Never {
+        return true;
+    }
+
+    let is_symlink = (stat.st_mode & libc::S_IFMT) == libc::S_IFLNK;
+    let writable = mode_writable(stat.st_mode);
+    let len = stat.st_size as u64;
+    let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
+
+    // Match original behaviour:
+    // - Interactive::Always: always prompt; use non-protected wording when writable,
+    //   otherwise fall through to protected wording.
+    if options.interactive == InteractiveMode::Always {
+        if is_symlink {
+            return prompt_yes!("remove symbolic link {}?", path.quote());
+        }
+        if writable {
+            return if len == 0 {
+                prompt_yes!("remove regular empty file {}?", path.quote())
+            } else {
+                prompt_yes!("remove file {}?", path.quote())
+            };
+        }
+        // Not writable: use protected wording below
+    }
+
+    // Interactive::Once or ::PromptProtected (and non-writable Always) paths
+    match (stdin_ok, writable, len == 0) {
+        (false, _, _) if options.interactive == InteractiveMode::PromptProtected => true,
+        (_, true, _) => true,
+        (_, false, true) => prompt_yes!(
+            "remove write-protected regular empty file {}?",
+            path.quote()
+        ),
+        _ => prompt_yes!("remove write-protected regular file {}?", path.quote()),
+    }
+}
+
+/// Directory prompt that reuses existing stat data to avoid extra statx calls
+fn prompt_dir_with_mode(path: &Path, mode: libc::mode_t, options: &Options) -> bool {
+    if options.interactive == InteractiveMode::Never {
+        return true;
+    }
+
+    let readable = mode_readable(mode);
+    let writable = mode_writable(mode);
+    let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
+
+    match (stdin_ok, readable, writable, options.interactive) {
+        (false, _, _, InteractiveMode::PromptProtected) => true,
+        (false, false, false, InteractiveMode::Never) => true,
+        (_, false, false, _) => prompt_yes!(
+            "attempt removal of inaccessible directory {}?",
+            path.quote()
+        ),
+        (_, false, true, InteractiveMode::Always) => {
+            prompt_yes!(
+                "attempt removal of inaccessible directory {}?",
+                path.quote()
+            )
+        }
+        (_, true, false, _) => prompt_yes!("remove write-protected directory {}?", path.quote()),
+        (_, _, _, InteractiveMode::Always) => prompt_yes!("remove directory {}?", path.quote()),
+        (_, _, _, _) => true,
+    }
+}
 
 /// Whether the given file or directory is readable.
 pub fn is_readable(path: &Path) -> bool {
@@ -34,7 +116,8 @@ pub fn safe_remove_file(
     options: &Options,
     progress_bar: Option<&ProgressBar>,
 ) -> Option<bool> {
-    let parent = path.parent()?;
+    // If there is no parent (path is directly under cwd), unlinkat relative to "."
+    let parent = path.parent().unwrap_or(Path::new("."));
     let file_name = path.file_name()?;
 
     let dir_fd = DirFd::open(parent).ok()?;
@@ -65,7 +148,7 @@ pub fn safe_remove_empty_dir(
     options: &Options,
     progress_bar: Option<&ProgressBar>,
 ) -> Option<bool> {
-    let parent = path.parent()?;
+    let parent = path.parent().unwrap_or(Path::new("."));
     let dir_name = path.file_name()?;
 
     let dir_fd = DirFd::open(parent).ok()?;
@@ -196,15 +279,15 @@ pub fn safe_remove_dir_recursive(
 ) -> bool {
     // Base case 1: this is a file or a symbolic link.
     // Use lstat to avoid race condition between check and use
-    match fs::symlink_metadata(path) {
+    let initial_mode = match fs::symlink_metadata(path) {
         Ok(metadata) if !metadata.is_dir() => {
             return remove_file(path, options, progress_bar);
         }
-        Ok(_) => {}
+        Ok(metadata) => metadata.permissions().mode(),
         Err(e) => {
             return show_removal_error(e, path);
         }
-    }
+    };
 
     // Try to open the directory using DirFd for secure traversal
     let dir_fd = match DirFd::open(path) {
@@ -233,7 +316,9 @@ pub fn safe_remove_dir_recursive(
         error
     } else {
         // Ask user permission if needed
-        if options.interactive == InteractiveMode::Always && !prompt_dir(path, options) {
+        if options.interactive == InteractiveMode::Always
+            && !prompt_dir_with_mode(path, initial_mode, options)
+        {
             return false;
         }
 
@@ -252,7 +337,11 @@ pub fn safe_remove_dir_recursive(
         }
 
         // Directory is empty and user approved removal
-        remove_dir_with_special_cases(path, options, error)
+        if let Some(result) = safe_remove_empty_dir(path, options, progress_bar) {
+            result
+        } else {
+            remove_dir_with_special_cases(path, options, error)
+        }
     }
 }
 
@@ -324,7 +413,7 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
             // Ask user permission if needed for this subdirectory
             if !child_error
                 && options.interactive == InteractiveMode::Always
-                && !prompt_dir(&entry_path, options)
+                && !prompt_dir_with_mode(&entry_path, entry_stat.st_mode, options)
             {
                 continue;
             }
@@ -335,7 +424,7 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
             }
         } else {
             // Remove file - check if user wants to remove it first
-            if prompt_file(&entry_path, options) {
+            if prompt_file_with_stat(&entry_path, &entry_stat, options) {
                 error = handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, false, options);
             }
         }
