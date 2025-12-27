@@ -2712,6 +2712,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "string-interner"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23de088478b31c349c9ba67816fa55d9355232d63c3afea8bf513e31f0f1d2c0"
+dependencies = [
+ "hashbrown 0.15.4",
+ "serde",
+]
+
+[[package]]
 name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4043,6 +4053,8 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "nix",
+ "string-interner",
  "tempfile",
  "thiserror 2.0.17",
  "uucore",
