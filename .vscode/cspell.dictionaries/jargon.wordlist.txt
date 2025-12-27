@@ -1,4 +1,6 @@
 AFAICT
+asimd
+ASIMD
 alloc
 arity
 autogenerate
@@ -71,6 +73,7 @@ hardlink
 hardlinks
 hasher
 hashsums
+hwcaps
 infile
 iflag
 iflags
@@ -97,6 +100,7 @@ nocache
 nocreat
 noctty
 noerror
+noexec
 nofollow
 nolinks
 nonblock
@@ -149,6 +153,8 @@ tokenize
 toolchain
 totalram
 truthy
+tunables
+TUNABLES
 ucase
 unbuffered
 udeps
