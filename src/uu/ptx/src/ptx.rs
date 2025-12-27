@@ -304,17 +304,7 @@ fn read_input(input_files: &[OsString], config: &Config) -> std::io::Result<File
             Box::new(file)
         });
 
-        let lines = if let Some(re) = &sentence_splitter {
-            let mut buffer = String::new();
-            reader.read_to_string(&mut buffer)?;
-
-            re.split(&buffer)
-                .map(|s| s.replace('\n', " ")) // ptx behavior: newlines become spaces inside sentences
-                .filter(|s| !s.is_empty()) // remove empty sentences
-                .collect()
-        } else {
-            reader.lines().collect::<std::io::Result<Vec<String>>>()?
-        };
+        let lines = read_lines(sentence_splitter.as_ref(), &mut reader)?;
 
         // Indexing UTF-8 string requires walking from the beginning, which can hurts performance badly when the line is long.
         // Since we will be jumping around the line a lot, we dump the content into a Vec<char>, which can be indexed in constant time.
@@ -331,6 +321,24 @@ fn read_input(input_files: &[OsString], config: &Config) -> std::io::Result<File
         offset += size;
     }
     Ok(file_map)
+}
+
+fn read_lines(
+    sentence_splitter: Option<&Regex>,
+    reader: &mut dyn BufRead,
+) -> std::io::Result<Vec<String>> {
+    if let Some(re) = sentence_splitter {
+        let mut buffer = String::new();
+        reader.read_to_string(&mut buffer)?;
+
+        Ok(re
+            .split(&buffer)
+            .map(|s| s.replace('\n', " ")) // ptx behavior: newlines become spaces inside sentences
+            .filter(|s| !s.is_empty()) // remove empty sentences
+            .collect())
+    } else {
+        reader.lines().collect()
+    }
 }
 
 /// Go through every lines in the input files and record each match occurrence as a `WordRef`.
