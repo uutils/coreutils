@@ -105,6 +105,21 @@ fn mknod(file_name: &str, config: Config) -> i32 {
             }
         }
 
+        // Apply SMACK context if requested
+        #[cfg(feature = "smack")]
+        if config.set_selinux_context && uucore::smack::is_smack_enabled() {
+            if let Some(ctx) = config.context {
+                if let Err(e) =
+                    uucore::smack::set_smack_label_for_path(std::path::Path::new(file_name), ctx)
+                {
+                    // if it fails, delete the file
+                    let _ = std::fs::remove_file(file_name);
+                    eprintln!("{}: {}", uucore::util_name(), e);
+                    return 1;
+                }
+            }
+        }
+
         errno
     }
 }

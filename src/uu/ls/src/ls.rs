@@ -366,6 +366,7 @@ pub struct Config {
     time_format_older: Option<String>, // Time format for older dates (optional, if not present, time_format_recent is used)
     context: bool,
     selinux_supported: bool,
+    smack_supported: bool,
     group_directories_first: bool,
     line_ending: LineEnding,
     dired: bool,
@@ -1163,6 +1164,16 @@ impl Config {
                     uucore::selinux::is_selinux_enabled()
                 }
                 #[cfg(not(all(feature = "selinux", target_os = "linux")))]
+                {
+                    false
+                }
+            },
+            smack_supported: {
+                #[cfg(all(feature = "smack", target_os = "linux"))]
+                {
+                    uucore::smack::is_smack_enabled()
+                }
+                #[cfg(not(all(feature = "smack", target_os = "linux")))]
                 {
                     false
                 }
@@ -3413,6 +3424,30 @@ fn get_security_context<'a>(
                     });
 
                     return Cow::Owned(res);
+                }
+            }
+        }
+    }
+
+    if config.smack_supported {
+        #[cfg(all(feature = "smack", target_os = "linux"))]
+        {
+            // For SMACK, use the path to get the label
+            // If must_dereference is true, we follow the symlink
+            let target_path = if must_dereference {
+                match std::fs::canonicalize(path) {
+                    Ok(p) => p,
+                    Err(_) => path.to_path_buf(),
+                }
+            } else {
+                path.to_path_buf()
+            };
+
+            match uucore::smack::get_smack_label_for_path(&target_path) {
+                Ok(label) => return Cow::Owned(label),
+                Err(_) => {
+                    // No label or error getting label
+                    return Cow::Borrowed(SUBSTITUTE_STRING);
                 }
             }
         }

@@ -392,7 +392,9 @@ fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
         // for NetBSD 3.0
         | "kernfs"
         // for Irix 6.5
-        | "ignore" => true,
+        | "ignore"
+        // Linux initial RAM filesystem
+        | "rootfs" => true,
         _ => fs_type == "none"
             && !mount_option.contains(MOUNT_OPT_BIND)
     }

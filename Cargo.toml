@@ -65,6 +65,16 @@ feat_selinux = [
   "selinux",
   "stat/selinux",
 ]
+# "feat_smack" == enable support for SMACK Security Context (by using `--features feat_smack`)
+# NOTE:
+# * Running a uutils compiled with `feat_smack` requires a SMACK enabled Kernel at run time.
+feat_smack = [
+  "id/smack",
+  "ls/smack",
+  "mkdir/smack",
+  "mkfifo/smack",
+  "mknod/smack",
+]
 ##
 ## feature sets
 ## (common/core and Tier1) feature sets
