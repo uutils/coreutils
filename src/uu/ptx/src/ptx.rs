@@ -205,7 +205,7 @@ enum PtxError {
 
 impl UError for PtxError {}
 
-fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
+fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
     let mut config = Config::default();
     let err_msg = "parsing options failed";
     if matches.get_flag(options::TRADITIONAL) {
@@ -213,22 +213,19 @@ fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
         config.format = OutFormat::Roff;
         "[^ \t\n]+".clone_into(&mut config.context_regex);
     }
-    if let Some(regex) = matches.get_one::<String>(options::SENTENCE_REGEXP) {
-        config.sentence_regex = Some(regex.clone());
-
+    if let Some(regex) = matches.remove_one::<String>(options::SENTENCE_REGEXP) {
         // TODO: The regex crate used here is not fully compatible with GNU's regex implementation.
         // For example, it does not support backreferences.
         // In the future, we might want to switch to the onig crate (like expr does) for better compatibility.
 
         // Verify regex is valid and doesn't match empty string
-        if let Ok(re) = Regex::new(regex) {
+        if let Ok(re) = Regex::new(&regex) {
             if re.is_match("") {
-                return Err(USimpleError::new(
-                    1,
-                    "A regular expression cannot match a length zero string",
-                ));
+                return Err(USimpleError::new(1, translate!("ptx-error-empty-regexp")));
             }
         }
+
+        config.sentence_regex = Some(regex);
     }
     config.auto_ref = matches.get_flag(options::AUTO_REFERENCE);
     config.input_ref = matches.get_flag(options::REFERENCES);
@@ -288,14 +285,16 @@ fn read_input(input_files: &[OsString], config: &Config) -> std::io::Result<File
     let mut file_map: FileMap = HashMap::new();
     let mut offset: usize = 0;
 
-    let sentence_splitter =
-        if let Some(re_str) = &config.sentence_regex {
-            Some(Regex::new(re_str).map_err(|_| {
-                std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid regex")
-            })?)
-        } else {
-            None
-        };
+    let sentence_splitter = if let Some(re_str) = &config.sentence_regex {
+        Some(Regex::new(re_str).map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                translate!("ptx-error-invalid-regexp", "error" => e),
+            )
+        })?)
+    } else {
+        None
+    };
 
     for filename in input_files {
         let mut reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
@@ -878,8 +877,8 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
-    let mut config = get_config(&matches)?;
+    let mut matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let mut config = get_config(&mut matches)?;
 
     let input_files;
     let output_file: OsString;
