@@ -4,7 +4,7 @@
 
 # spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
 # spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) greadlink gsed multihardlink texinfo CARGOFLAGS
-# spell-checker:ignore openat TOCTOU CFLAGS tmpfs
+# spell-checker:ignore openat TOCTOU CFLAGS tmpfs gnproc
 
 set -e
 
@@ -87,18 +87,19 @@ else
 fi
 cd -
 
-# Pass the feature flags to make, which will pass them to cargo
-"${MAKE}" PROFILE="${PROFILE}" SKIP_UTILS=more CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
-# min test for SELinux
-[ "${SELINUX_ENABLED}" = 1 ] && touch g && "${PROFILE}"/stat -c%C g && rm g
-
-cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
-# Create *sum binaries
-for sum in b2sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum; do
-    sum_path="${UU_BUILD_DIR}/${sum}"
-    test -f "${sum_path}" || (cd ${UU_BUILD_DIR} && ln -s "hashsum" "${sum}")
-done
-test -f "${UU_BUILD_DIR}/[" || (cd ${UU_BUILD_DIR} && ln -s "test" "[")
+# bug: seq with MULTICALL=y breaks env-signal-handler.sh
+ "${MAKE}" UTILS="install seq" PROFILE="${PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
+ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use renamed install to ginstall
+if [ "${SELINUX_ENABLED}" = 1 ];then
+    # Build few utils for SELinux for faster build. MULTICALL=y fails...
+    "${MAKE}" UTILS="cat chcon cp cut echo env groups id ln ls mkdir mkfifo mknod mktemp mv printf rm rmdir runcon stat test touch tr true uname wc whoami" PROFILE="${PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
+else
+    # Use MULTICALL=y for faster build
+    "${MAKE}" MULTICALL=y SKIP_UTILS="install more seq" PROFILE="${PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
+    for binary in $("${UU_BUILD_DIR}"/coreutils --list)
+        do ln -vf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
+    done
+fi
 
 ##
 
@@ -109,8 +110,7 @@ cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
 for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs); do
     bin_path="${UU_BUILD_DIR}/${binary}"
     test -f "${bin_path}" || {
-        echo "'${binary}' was not built with uutils, using the 'false' program"
-        cp "${UU_BUILD_DIR}/false" "${bin_path}"
+        cp -v /usr/bin/false "${bin_path}"
     }
 done
 
@@ -135,8 +135,9 @@ else
     "${SED}" -i 's|diff -c|diff -u|g' tests/Coreutils.pm
 
     # Skip make if possible
-    # Use our nproc for *BSD and macOS
-    test -f src/getlimits || "${MAKE}" -j "$("${UU_BUILD_DIR}/nproc")"
+    # Use GNU nproc for *BSD and macOS
+    NPROC="$(command -v nproc||command -v gnproc)"
+    test -f src/getlimits || "${MAKE}" -j "$("${NPROC}")"
     cp -f src/getlimits "${UU_BUILD_DIR}"
 
     # Handle generated factor tests
