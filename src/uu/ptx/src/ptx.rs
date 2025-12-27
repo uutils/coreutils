@@ -735,7 +735,7 @@ fn write_traditional_output(
             Box::new(stdout())
         } else {
             let file = File::create(output_filename)
-                .map_err_context(|| output_filename.to_string_lossy().quote().to_string())?;
+                .map_err_context(|| output_filename.quote().to_string())?;
             Box::new(file)
         });
 
@@ -877,7 +877,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if let Some(file) = files.next() {
             return Err(UUsageError::new(
                 1,
-                translate!("ptx-error-extra-operand", "operand" => file.to_string_lossy().quote()),
+                translate!("ptx-error-extra-operand", "operand" => file.quote()),
             ));
         }
     }

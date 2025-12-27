@@ -5,8 +5,11 @@
 
 // spell-checker:ignore (API) nodename osname sysname (options) mnrsv mnrsvo
 
+use std::ffi::{OsStr, OsString};
+
 use clap::{Arg, ArgAction, Command};
 use platform_info::*;
+use uucore::display::println_verbatim;
 use uucore::translate;
 use uucore::{
     error::{UResult, USimpleError},
@@ -26,18 +29,18 @@ pub mod options {
 }
 
 pub struct UNameOutput {
-    pub kernel_name: Option<String>,
-    pub nodename: Option<String>,
-    pub kernel_release: Option<String>,
-    pub kernel_version: Option<String>,
-    pub machine: Option<String>,
-    pub os: Option<String>,
-    pub processor: Option<String>,
-    pub hardware_platform: Option<String>,
+    pub kernel_name: Option<OsString>,
+    pub nodename: Option<OsString>,
+    pub kernel_release: Option<OsString>,
+    pub kernel_version: Option<OsString>,
+    pub machine: Option<OsString>,
+    pub os: Option<OsString>,
+    pub processor: Option<OsString>,
+    pub hardware_platform: Option<OsString>,
 }
 
 impl UNameOutput {
-    fn display(&self) -> String {
+    fn display(&self) -> OsString {
         [
             self.kernel_name.as_ref(),
             self.nodename.as_ref(),
@@ -50,9 +53,9 @@ impl UNameOutput {
         ]
         .into_iter()
         .flatten()
-        .map(|name| name.as_str())
+        .map(|name| name.as_os_str())
         .collect::<Vec<_>>()
-        .join(" ")
+        .join(OsStr::new(" "))
     }
 
     pub fn new(opts: &Options) -> UResult<Self> {
@@ -68,30 +71,28 @@ impl UNameOutput {
             || opts.processor
             || opts.hardware_platform);
 
-        let kernel_name = (opts.kernel_name || opts.all || none)
-            .then(|| uname.sysname().to_string_lossy().to_string());
+        let kernel_name =
+            (opts.kernel_name || opts.all || none).then(|| uname.sysname().to_owned());
 
-        let nodename =
-            (opts.nodename || opts.all).then(|| uname.nodename().to_string_lossy().to_string());
+        let nodename = (opts.nodename || opts.all).then(|| uname.nodename().to_owned());
 
-        let kernel_release = (opts.kernel_release || opts.all)
-            .then(|| uname.release().to_string_lossy().to_string());
+        let kernel_release = (opts.kernel_release || opts.all).then(|| uname.release().to_owned());
 
-        let kernel_version = (opts.kernel_version || opts.all)
-            .then(|| uname.version().to_string_lossy().to_string());
+        let kernel_version = (opts.kernel_version || opts.all).then(|| uname.version().to_owned());
 
-        let machine =
-            (opts.machine || opts.all).then(|| uname.machine().to_string_lossy().to_string());
+        let machine = (opts.machine || opts.all).then(|| uname.machine().to_owned());
 
-        let os = (opts.os || opts.all).then(|| uname.osname().to_string_lossy().to_string());
+        let os = (opts.os || opts.all).then(|| uname.osname().to_owned());
 
         // This option is unsupported on modern Linux systems
         // See: https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html
-        let processor = opts.processor.then(|| translate!("uname-unknown"));
+        let processor = opts.processor.then(|| translate!("uname-unknown").into());
 
         // This option is unsupported on modern Linux systems
         // See: https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html
-        let hardware_platform = opts.hardware_platform.then(|| translate!("uname-unknown"));
+        let hardware_platform = opts
+            .hardware_platform
+            .then(|| translate!("uname-unknown").into());
 
         Ok(Self {
             kernel_name,
@@ -134,7 +135,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         os: matches.get_flag(options::OS),
     };
     let output = UNameOutput::new(&options)?;
-    println!("{}", output.display());
+    println_verbatim(output.display().as_os_str()).unwrap();
     Ok(())
 }
 

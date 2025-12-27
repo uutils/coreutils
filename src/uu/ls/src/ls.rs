@@ -184,18 +184,18 @@ enum LsError {
     IOError(#[from] std::io::Error),
 
     #[error("{}", match .1.kind() {
-        ErrorKind::NotFound => translate!("ls-error-cannot-access-no-such-file", "path" => .0.to_string_lossy()),
+        ErrorKind::NotFound => translate!("ls-error-cannot-access-no-such-file", "path" => .0.quote()),
         ErrorKind::PermissionDenied => match .1.raw_os_error().unwrap_or(1) {
-            1 => translate!("ls-error-cannot-access-operation-not-permitted", "path" => .0.to_string_lossy()),
+            1 => translate!("ls-error-cannot-access-operation-not-permitted", "path" => .0.quote()),
             _ => if .0.is_dir() {
-                translate!("ls-error-cannot-open-directory-permission-denied", "path" => .0.to_string_lossy())
+                translate!("ls-error-cannot-open-directory-permission-denied", "path" => .0.quote())
             } else {
-                translate!("ls-error-cannot-open-file-permission-denied", "path" => .0.to_string_lossy())
+                translate!("ls-error-cannot-open-file-permission-denied", "path" => .0.quote())
             },
         },
         _ => match .1.raw_os_error().unwrap_or(1) {
-            9 => translate!("ls-error-cannot-open-directory-bad-descriptor", "path" => .0.to_string_lossy()),
-            _ => translate!("ls-error-unknown-io-error", "path" => .0.to_string_lossy(), "error" => format!("{:?}", .1)),
+            9 => translate!("ls-error-cannot-open-directory-bad-descriptor", "path" => .0.quote()),
+            _ => translate!("ls-error-unknown-io-error", "path" => .0.quote(), "error" => format!("{:?}", .1)),
         },
     })]
     IOErrorContext(PathBuf, std::io::Error, bool),
@@ -206,7 +206,7 @@ enum LsError {
     #[error("{}", translate!("ls-error-dired-and-zero-incompatible"))]
     DiredAndZeroAreIncompatible,
 
-    #[error("{}", translate!("ls-error-not-listing-already-listed", "path" => .0.to_string_lossy()))]
+    #[error("{}", translate!("ls-error-not-listing-already-listed", "path" => .0.maybe_quote()))]
     AlreadyListedError(PathBuf),
 
     #[error("{}", translate!("ls-error-invalid-time-style", "style" => .0.quote()))]
@@ -2390,7 +2390,7 @@ fn enter_directory(
                             // 2 = \n + \n
                             dired.padding = 2;
                             dired::indent(&mut state.out)?;
-                            let dir_name_size = e.path().to_string_lossy().len();
+                            let dir_name_size = e.path().as_os_str().len();
                             dired::calculate_subdired(dired, dir_name_size);
                             // inject dir name
                             dired::add_dir_name(dired, dir_name_size);
