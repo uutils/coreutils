@@ -984,9 +984,9 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
 fn copy_symlink(from: &Path, to: &Path) -> io::Result<()> {
     let from_meta = from.symlink_metadata()?;
     let path_symlink_points_to = fs::read_link(from)?;
-    unix::fs::symlink(path_symlink_points_to, to).and_then(|_| {
+    unix::fs::symlink(path_symlink_points_to, to).map(|_| {
         try_preserve_ownership(&from_meta, to, false);
-        Ok(())
+        ()
     })
 }
 
