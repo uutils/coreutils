@@ -478,8 +478,9 @@ fn existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
 /// ```
 ///
 pub fn source_is_target_backup(source: &Path, target: &Path, suffix: &str) -> bool {
-    let source_filename = source.to_string_lossy();
-    let target_backup_filename = format!("{}{suffix}", target.to_string_lossy());
+    let source_filename = source.as_os_str();
+    let mut target_backup_filename = target.as_os_str().to_owned();
+    target_backup_filename.push(suffix);
     source_filename == target_backup_filename
 }
 
