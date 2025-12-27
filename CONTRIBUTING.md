@@ -45,7 +45,8 @@ crates is as follows:
 - `Cargo.toml`
 - `src/main.rs`: contains only a single macro call
 - `src/<util name>.rs`: the actual code for the utility
-- `<util name>.md`: the documentation for the utility
+- `locales/en-US.ftl`: the util's strings
+- `locales/fr-FR.ftl`: French translation of the util's strings
 
 We have separated repositories for crates that we maintain but also publish for
 use by others:
