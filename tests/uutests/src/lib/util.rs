@@ -131,6 +131,7 @@ pub struct CmdResult {
 }
 
 impl CmdResult {
+    #[allow(clippy::too_many_arguments)]
     pub fn new<S, T, U, V>(
         bin_path: S,
         util_name: Option<T>,
