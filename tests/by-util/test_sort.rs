@@ -1246,15 +1246,20 @@ fn test_sigpipe_panic() {
 
 #[test]
 fn test_conflict_check_out() {
-    let check_flags = ["-c=silent", "-c=quiet", "-c=diagnose-first", "-c", "-C"];
-    for check_flag in &check_flags {
+    let cases = [
+        ("-c=silent", "sort: options '-Co' are incompatible\n"),
+        ("-c=quiet", "sort: options '-Co' are incompatible\n"),
+        ("-c=diagnose-first", "sort: options '-co' are incompatible\n"),
+        ("-c", "sort: options '-co' are incompatible\n"),
+        ("-C", "sort: options '-Co' are incompatible\n"),
+    ];
+    for (check_flag, expected) in &cases {
         new_ucmd!()
             .arg(check_flag)
             .arg("-o=/dev/null")
             .fails()
             .stderr_contains(
-                // the rest of the message might be subject to change
-                "error: the argument",
+                expected,
             );
     }
 }
