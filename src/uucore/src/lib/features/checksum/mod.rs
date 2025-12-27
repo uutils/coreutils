@@ -373,12 +373,9 @@ impl SizedAlgoKind {
 pub enum ChecksumError {
     #[error("the --raw option is not supported with multiple files")]
     RawMultipleFiles,
-    #[error("the --ignore-missing option is meaningful only when verifying checksums")]
-    IgnoreNotCheck,
-    #[error("the --strict option is meaningful only when verifying checksums")]
-    StrictNotCheck,
-    #[error("the --quiet option is meaningful only when verifying checksums")]
-    QuietNotCheck,
+
+    #[error("the --{0} option is meaningful only when verifying checksums")]
+    CheckOnlyFlag(String),
 
     // --length sanitization errors
     #[error("--length required for {}", .0.quote())]

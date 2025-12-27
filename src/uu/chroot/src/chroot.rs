@@ -9,12 +9,13 @@ mod error;
 use crate::error::ChrootError;
 use clap::{Arg, ArgAction, Command};
 use std::ffi::CString;
-use std::io::Error;
+use std::io::{Error, ErrorKind};
 use std::os::unix::prelude::OsStrExt;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 use uucore::entries::{Locate, Passwd, grp2gid, usr2uid};
-use uucore::error::{UResult, UUsageError, set_exit_code};
+use uucore::error::{UResult, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
 use uucore::{format_usage, show};
@@ -205,33 +206,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     assert!(!command.is_empty());
     let chroot_command = command[0];
-    let chroot_args = &command[1..];
 
     // NOTE: Tests can only trigger code beyond this point if they're invoked with root permissions
     set_context(&options)?;
 
-    let pstatus = match process::Command::new(chroot_command)
-        .args(chroot_args)
-        .status()
-    {
-        Ok(status) => status,
-        Err(e) => {
-            return Err(if e.kind() == std::io::ErrorKind::NotFound {
-                ChrootError::CommandNotFound(command[0].to_string(), e)
-            } else {
-                ChrootError::CommandFailed(command[0].to_string(), e)
-            }
-            .into());
-        }
-    };
+    let err = process::Command::new(chroot_command)
+        .args(&command[1..])
+        .exec();
 
-    let code = if pstatus.success() {
-        0
+    Err(if err.kind() == ErrorKind::NotFound {
+        ChrootError::CommandNotFound(chroot_command.to_owned(), err)
     } else {
-        pstatus.code().unwrap_or(-1)
-    };
-    set_exit_code(code);
-    Ok(())
+        ChrootError::CommandFailed(chroot_command.to_owned(), err)
+    }
+    .into())
 }
 
 pub fn uu_app() -> Command {
@@ -319,7 +307,12 @@ fn supplemental_gids(uid: libc::uid_t) -> Vec<libc::gid_t> {
 
 /// Set the supplemental group IDs for this process.
 fn set_supplemental_gids(gids: &[libc::gid_t]) -> std::io::Result<()> {
-    #[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "openbsd"))]
+    #[cfg(any(
+        target_vendor = "apple",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "cygwin"
+    ))]
     let n = gids.len() as libc::c_int;
     #[cfg(any(target_os = "linux", target_os = "android"))]
     let n = gids.len() as libc::size_t;
@@ -439,7 +432,7 @@ fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
                 .map_err(|e| ChrootError::CannotEnter("root".to_string(), e.into()))?
                 .as_bytes_with_nul()
                 .as_ptr()
-                .cast::<libc::c_char>(),
+                .cast(),
         )
     };
 

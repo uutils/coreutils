@@ -22,7 +22,7 @@ use uucore::checksum::{
 use uucore::error::UResult;
 use uucore::hardware::{HasHardwareFeatures as _, SimdPolicy};
 use uucore::line_ending::LineEnding;
-use uucore::{format_usage, translate};
+use uucore::{format_usage, show_error, translate};
 
 /// Print CPU hardware capability detection information to stderr
 /// This matches GNU cksum's --debug behavior
@@ -31,9 +31,9 @@ fn print_cpu_debug_info() {
 
     fn print_feature(name: &str, available: bool) {
         if available {
-            eprintln!("cksum: using {name} hardware support");
+            show_error!("using {name} hardware support");
         } else {
-            eprintln!("cksum: {name} support not detected");
+            show_error!("{name} support not detected");
         }
     }
 
@@ -140,6 +140,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let check = matches.get_flag(options::CHECK);
 
+    let check_flag = |flag| match (check, matches.get_flag(flag)) {
+        (_, false) => Ok(false),
+        (true, true) => Ok(true),
+        (false, true) => Err(ChecksumError::CheckOnlyFlag(flag.into())),
+    };
+
+    // Each of the following flags are only expected in --check mode.
+    // If we encounter them otherwise, end with an error.
+    let ignore_missing = check_flag(options::IGNORE_MISSING)?;
+    let warn = check_flag(options::WARN)?;
+    let quiet = check_flag(options::QUIET)?;
+    let strict = check_flag(options::STRICT)?;
+    let status = check_flag(options::STATUS)?;
+
     let algo_cli = matches
         .get_one::<String>(options::ALGORITHM)
         .map(AlgoKind::from_cksum)
@@ -166,11 +180,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let text_flag = matches.get_flag(options::TEXT);
         let binary_flag = matches.get_flag(options::BINARY);
-        let strict = matches.get_flag(options::STRICT);
-        let status = matches.get_flag(options::STATUS);
-        let warn = matches.get_flag(options::WARN);
-        let ignore_missing = matches.get_flag(options::IGNORE_MISSING);
-        let quiet = matches.get_flag(options::QUIET);
         let tag = matches.get_flag(options::TAG);
 
         if tag || binary_flag || text_flag {
@@ -191,6 +200,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Not --check
 
+    // Print hardware debug info if requested
+    if matches.get_flag(options::DEBUG) {
+        print_cpu_debug_info();
+    }
+
     // Set the default algorithm to CRC when not '--check'ing.
     let algo_kind = algo_cli.unwrap_or(AlgoKind::Crc);
 
@@ -199,25 +213,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let algo = SizedAlgoKind::from_unsized(algo_kind, length)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
-    let output_format = figure_out_output_format(
-        algo,
-        tag,
-        binary,
-        matches.get_flag(options::RAW),
-        matches.get_flag(options::BASE64),
-    );
-
-    // Print hardware debug info if requested
-    if matches.get_flag(options::DEBUG) {
-        print_cpu_debug_info();
-    }
-
     let opts = ChecksumComputeOptions {
         algo_kind: algo,
-        output_format,
+        output_format: figure_out_output_format(
+            algo,
+            tag,
+            binary,
+            matches.get_flag(options::RAW),
+            matches.get_flag(options::BASE64),
+        ),
         line_ending,
-        binary: false,
-        no_names: false,
     };
 
     perform_checksum_computation(opts, files)?;
