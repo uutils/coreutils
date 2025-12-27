@@ -393,14 +393,10 @@ impl Metadata {
     }
 
     pub fn nlink(&self) -> u64 {
-        // st_nlink is u32 on most platforms except x86_64
-        #[cfg(target_arch = "x86_64")]
+        // st_nlink type varies by platform (u16 on FreeBSD, u32/u64 on others)
+        #[allow(clippy::unnecessary_cast)]
         {
-            self.stat.st_nlink
-        }
-        #[cfg(not(target_arch = "x86_64"))]
-        {
-            self.stat.st_nlink.into()
+            self.stat.st_nlink as u64
         }
     }
 
@@ -425,13 +421,10 @@ impl std::os::unix::fs::MetadataExt for Metadata {
     }
 
     fn ino(&self) -> u64 {
-        #[cfg(target_pointer_width = "32")]
+        // st_ino type varies by platform (u32 on FreeBSD, u64 on Linux)
+        #[allow(clippy::unnecessary_cast)]
         {
-            self.stat.st_ino.into()
-        }
-        #[cfg(not(target_pointer_width = "32"))]
-        {
-            self.stat.st_ino
+            self.stat.st_ino as u64
         }
     }
 
@@ -440,14 +433,10 @@ impl std::os::unix::fs::MetadataExt for Metadata {
     }
 
     fn nlink(&self) -> u64 {
-        // st_nlink is u32 on most platforms except x86_64
-        #[cfg(target_arch = "x86_64")]
+        // st_nlink type varies by platform (u16 on FreeBSD, u32/u64 on others)
+        #[allow(clippy::unnecessary_cast)]
         {
-            self.stat.st_nlink
-        }
-        #[cfg(not(target_arch = "x86_64"))]
-        {
-            self.stat.st_nlink.into()
+            self.stat.st_nlink as u64
         }
     }
 
