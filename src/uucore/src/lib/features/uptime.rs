@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore gettime BOOTTIME clockid boottime nusers loadavg getloadavg
+// spell-checker:ignore gettime BOOTTIME clockid boottime nusers loadavg getloadavg timeval
 
 //! Provides functions to get system uptime, number of users and load average.
 
@@ -39,6 +39,48 @@ impl UError for UptimeError {
 /// Returns the formatted time string, e.g. "12:34:56"
 pub fn get_formatted_time() -> String {
     Local::now().time().format("%H:%M:%S").to_string()
+}
+
+/// Safely get macOS boot time using sysctl command
+///
+/// This function uses the sysctl command-line tool to retrieve the kernel
+/// boot time on macOS, avoiding any unsafe code. It parses the output
+/// of the sysctl command to extract the boot time.
+///
+/// # Returns
+///
+/// Returns Some(time_t) if successful, None if the call fails.
+#[cfg(target_os = "macos")]
+fn get_macos_boot_time_sysctl() -> Option<time_t> {
+    use std::process::Command;
+
+    // Execute sysctl command to get boot time
+    let output = Command::new("sysctl")
+        .arg("-n")
+        .arg("kern.boottime")
+        .output();
+
+    if let Ok(output) = output {
+        if output.status.success() {
+            // Parse output format: { sec = 1729338352, usec = 0 } Wed Oct 19 08:25:52 2025
+            // We need to extract the seconds value from the structured output
+            let stdout = String::from_utf8_lossy(&output.stdout);
+
+            // Extract the seconds from the output
+            // Look for "sec = " pattern
+            if let Some(sec_start) = stdout.find("sec = ") {
+                let sec_part = &stdout[sec_start + 6..];
+                if let Some(sec_end) = sec_part.find(',') {
+                    let sec_str = &sec_part[..sec_end];
+                    if let Ok(boot_time) = sec_str.trim().parse::<i64>() {
+                        return Some(boot_time as time_t);
+                    }
+                }
+            }
+        }
+    }
+
+    None
 }
 
 /// Get the system uptime
@@ -107,7 +149,8 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
         return Ok(uptime);
     }
 
-    let boot_time = boot_time.or_else(|| {
+    // Try provided boot_time or derive from utmpx
+    let derived_boot_time = boot_time.or_else(|| {
         let records = Utmpx::iter_all_records();
         for line in records {
             match line.record_type() {
@@ -123,7 +166,27 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
         None
     });
 
-    if let Some(t) = boot_time {
+    // macOS-specific fallback: use sysctl kern.boottime when utmpx did not provide BOOT_TIME
+    //
+    // On macOS, the utmpx BOOT_TIME record can be unreliable or absent, causing intermittent
+    // test failures (see issue #3621: https://github.com/uutils/coreutils/issues/3621).
+    // The sysctl(CTL_KERN, KERN_BOOTTIME) approach is the canonical way to retrieve boot time
+    // on macOS and is always available, making uptime more reliable on this platform.
+    //
+    // This fallback only runs if utmpx failed to provide a boot time.
+    #[cfg(target_os = "macos")]
+    let derived_boot_time = {
+        let mut t = derived_boot_time;
+        if t.is_none() {
+            // Use a safe wrapper function to get boot time via sysctl
+            if let Some(boot_time) = get_macos_boot_time_sysctl() {
+                t = Some(boot_time);
+            }
+        }
+        t
+    };
+
+    if let Some(t) = derived_boot_time {
         let now = Local::now().timestamp();
         #[cfg(target_pointer_width = "64")]
         let boottime: i64 = t;
@@ -385,5 +448,79 @@ mod tests {
         assert_eq!("0 users", format_nusers(0));
         assert_eq!("1 user", format_nusers(1));
         assert_eq!("2 users", format_nusers(2));
+    }
+
+    /// Test that sysctl kern.boottime is accessible on macOS and returns valid boot time.
+    /// This ensures the fallback mechanism added for issue #3621 works correctly.
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_macos_sysctl_boottime_available() {
+        // Test the safe wrapper function
+        let boot_time = get_macos_boot_time_sysctl();
+
+        // Verify the safe wrapper succeeded
+        assert!(
+            boot_time.is_some(),
+            "get_macos_boot_time_sysctl should succeed on macOS"
+        );
+
+        let boot_time = boot_time.unwrap();
+
+        // Verify boot time is valid (positive, reasonable value)
+        assert!(boot_time > 0, "Boot time should be positive");
+
+        // Boot time should be after 2000-01-01 (946684800 seconds since epoch)
+        assert!(boot_time > 946684800, "Boot time should be after year 2000");
+
+        // Boot time should be before current time
+        let now = chrono::Local::now().timestamp();
+        assert!(
+            (boot_time as i64) < now,
+            "Boot time should be before current time"
+        );
+    }
+
+    /// Test that get_uptime always succeeds on macOS due to sysctl fallback.
+    /// This addresses the intermittent failures reported in issue #3621.
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_get_uptime_always_succeeds_on_macos() {
+        // Call get_uptime without providing boot_time, forcing the system
+        // to use utmpx or fall back to sysctl
+        let result = get_uptime(None);
+
+        assert!(
+            result.is_ok(),
+            "get_uptime should always succeed on macOS with sysctl fallback"
+        );
+
+        let uptime = result.unwrap();
+        assert!(uptime > 0, "Uptime should be positive");
+
+        // Reasonable upper bound: system hasn't been up for more than 365 days
+        // (This is just a sanity check)
+        assert!(
+            uptime < 365 * 86400,
+            "Uptime seems unreasonably high: {} seconds",
+            uptime
+        );
+    }
+
+    /// Test get_uptime consistency by calling it multiple times.
+    /// Verifies the sysctl fallback produces stable results.
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_get_uptime_macos_consistency() {
+        let uptime1 = get_uptime(None).expect("First call should succeed");
+        let uptime2 = get_uptime(None).expect("Second call should succeed");
+
+        // Uptimes should be very close (within 1 second)
+        let diff = (uptime1 - uptime2).abs();
+        assert!(
+            diff <= 1,
+            "Consecutive uptime calls should be consistent, got {} and {}",
+            uptime1,
+            uptime2
+        );
     }
 }
