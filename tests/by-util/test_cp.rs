@@ -7407,6 +7407,11 @@ fn test_cp_circular_symbolic_links_in_directory() {
     let target_dir = "target_dir";
     let (at, mut ucmd) = at_and_ucmd!();
 
+    #[cfg(not(windows))]
+    let output_without_file_name = format!("IO error for operation on {source_dir}/");
+    #[cfg(windows)]
+    let output_without_file_name = format!("IO error for operation on {source_dir}\\");
+
     at.mkdir(source_dir);
     at.symlink_file(
         format!("{source_dir}/a").as_str(),
@@ -7421,6 +7426,6 @@ fn test_cp_circular_symbolic_links_in_directory() {
         .arg(target_dir)
         .arg("-rL")
         .fails_with_code(1)
-        .stderr_contains(format!("IO error for operation on {source_dir}/a"))
-        .stderr_contains(format!("IO error for operation on {source_dir}/b"));
+        .stderr_contains(format!("{output_without_file_name}a"))
+        .stderr_contains(format!("{output_without_file_name}b"));
 }
