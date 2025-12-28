@@ -88,6 +88,17 @@ macro_rules! assert_metadata_eq {
     }};
 }
 
+/// Get the permissions of the specified file.
+///
+/// # Panics
+///
+/// This function panics if there is an error loading the metadata
+#[cfg(not(windows))]
+pub fn get_mode(filename: PathBuf) -> u32 {
+    let perms = std::fs::metadata(filename).unwrap().permissions();
+    perms.mode()
+}
+
 #[test]
 #[cfg(target_os = "linux")]
 fn test_cp_stream_to_full() {
@@ -7592,15 +7603,15 @@ fn test_cp_preserve_directory_permissions_by_default() {
 
     scene.ucmd().arg("-r").arg("a").arg("c").succeeds();
 
-    assert_eq!(at.get_mode("b"), 0o40555);
-    assert_eq!(at.get_mode("b/b"), 0o40555);
-    assert_eq!(at.get_mode("b/b/c"), 0o40555);
-    assert_eq!(at.get_mode("b/b/c/d"), 0o40555);
+    assert_eq!(get_mode(at.plus("b")), 0o40555);
+    assert_eq!(get_mode(at.plus("b/b")), 0o40555);
+    assert_eq!(get_mode(at.plus("b/b/c")), 0o40555);
+    assert_eq!(get_mode(at.plus("b/b/c/d")), 0o40555);
 
-    assert_eq!(at.get_mode("c"), 0o40555);
-    assert_eq!(at.get_mode("c/b"), 0o40555);
-    assert_eq!(at.get_mode("c/b/c"), 0o40555);
-    assert_eq!(at.get_mode("c/b/c/d"), 0o40555);
+    assert_eq!(get_mode(at.plus("c")), 0o40555);
+    assert_eq!(get_mode(at.plus("c/b")), 0o40555);
+    assert_eq!(get_mode(at.plus("c/b/c")), 0o40555);
+    assert_eq!(get_mode(at.plus("c/b/c/d")), 0o40555);
 }
 
 #[test]
@@ -7629,13 +7640,13 @@ fn test_cp_no_preserve_directory_permissions() {
         .arg("c")
         .succeeds();
 
-    assert_eq!(at.get_mode("b"), 0o40555);
-    assert_eq!(at.get_mode("b/b"), 0o40555);
-    assert_eq!(at.get_mode("b/b/c"), 0o40555);
-    assert_eq!(at.get_mode("b/b/c/d"), 0o40555);
+    assert_eq!(get_mode(at.plus("b")), 0o40555);
+    assert_eq!(get_mode(at.plus("b/b")), 0o40555);
+    assert_eq!(get_mode(at.plus("b/b/c")), 0o40555);
+    assert_eq!(get_mode(at.plus("b/b/c/d")), 0o40555);
 
-    assert_eq!(at.get_mode("c"), 0o40755);
-    assert_eq!(at.get_mode("c/b"), 0o40755);
-    assert_eq!(at.get_mode("c/b/c"), 0o40755);
-    assert_eq!(at.get_mode("c/b/c/d"), 0o40755);
+    assert_eq!(get_mode(at.plus("c")), 0o40755);
+    assert_eq!(get_mode(at.plus("c/b")), 0o40755);
+    assert_eq!(get_mode(at.plus("c/b/c")), 0o40755);
+    assert_eq!(get_mode(at.plus("c/b/c/d")), 0o40755);
 }

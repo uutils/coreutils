@@ -1324,18 +1324,6 @@ impl AtPath {
         perms.set_mode(mode);
         std::fs::set_permissions(&path, perms).unwrap();
     }
-
-    /// Get the permissions of the specified file.
-    ///
-    /// # Panics
-    ///
-    /// This function panics if there is an error loading the metadata
-    #[cfg(not(windows))]
-    pub fn get_mode(&self, filename: &str) -> u32 {
-        let path = self.plus(filename);
-        let perms = std::fs::metadata(&path).unwrap().permissions();
-        perms.mode()
-    }
 }
 
 /// An environment for running a single uutils test case, serves three functions:
