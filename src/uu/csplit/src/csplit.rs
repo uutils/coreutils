@@ -309,7 +309,7 @@ impl SplitWriter<'_> {
     ///
     /// # Errors
     ///
-    /// Some [`CsplitError::WriteError`] if flushing the writer fails.
+    /// Returns an error if flushing the writer fails.
     fn finish_split(&mut self) -> Result<(), CsplitError> {
         if !self.dev_null {
             // Flush the writer to ensure all data is written and errors are detected
