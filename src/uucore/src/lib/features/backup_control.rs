@@ -683,6 +683,7 @@ mod tests {
         let result = determine_backup_mode(&matches).unwrap();
 
         assert_eq!(result, BackupMode::Numbered);
+        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
     }
 
     #[test]
