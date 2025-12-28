@@ -378,7 +378,7 @@ impl Metadata {
     }
 
     pub fn file_type(&self) -> FileType {
-        FileType::from_mode(self.stat.st_mode)
+        FileType::from_mode(self.stat.st_mode as libc::mode_t)
     }
 
     pub fn file_info(&self) -> FileInfo {
@@ -417,6 +417,8 @@ impl Metadata {
 
 // Add MetadataExt trait implementation for compatibility
 impl std::os::unix::fs::MetadataExt for Metadata {
+    // st_dev type varies by platform (i32 on macOS, u64 on Linux)
+    #[allow(clippy::unnecessary_cast)]
     fn dev(&self) -> u64 {
         self.stat.st_dev as u64
     }
@@ -429,6 +431,8 @@ impl std::os::unix::fs::MetadataExt for Metadata {
         }
     }
 
+    // st_mode type varies by platform (u16 on macOS, u32 on Linux)
+    #[allow(clippy::unnecessary_cast)]
     fn mode(&self) -> u32 {
         self.stat.st_mode as u32
     }
@@ -449,6 +453,8 @@ impl std::os::unix::fs::MetadataExt for Metadata {
         self.stat.st_gid
     }
 
+    // st_rdev type varies by platform (i32 on macOS, u64 on Linux)
+    #[allow(clippy::unnecessary_cast)]
     fn rdev(&self) -> u64 {
         self.stat.st_rdev as u64
     }
