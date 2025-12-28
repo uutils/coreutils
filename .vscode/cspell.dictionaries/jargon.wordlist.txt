@@ -136,6 +136,7 @@ shortcodes
 siginfo
 sigusr
 strcasecmp
+strtime
 subcommand
 subexpression
 submodule

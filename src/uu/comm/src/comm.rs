@@ -54,12 +54,12 @@ struct OrderChecker {
     has_error: bool,
 }
 
-enum Input {
-    Stdin(StdinLock<'static>),
+enum Input<'a> {
+    Stdin(StdinLock<'a>),
     FileIn(BufReader<File>),
 }
 
-impl Input {
+impl Input<'_> {
     fn stdin() -> Self {
         Self::Stdin(stdin().lock())
     }
@@ -69,13 +69,13 @@ impl Input {
     }
 }
 
-struct LineReader {
+struct LineReader<'a> {
     line_ending: LineEnding,
-    input: Input,
+    input: Input<'a>,
 }
 
-impl LineReader {
-    fn new(input: Input, line_ending: LineEnding) -> Self {
+impl<'a> LineReader<'a> {
+    fn new(input: Input<'a>, line_ending: LineEnding) -> Self {
         Self { line_ending, input }
     }
 
@@ -178,7 +178,12 @@ pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
     }
 }
 
-fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) -> UResult<()> {
+fn comm(
+    a: &mut LineReader<'_>,
+    b: &mut LineReader<'_>,
+    delim: &str,
+    opts: &ArgMatches,
+) -> UResult<()> {
     let width_col_1 = usize::from(!opts.get_flag(options::COLUMN_1));
     let width_col_2 = usize::from(!opts.get_flag(options::COLUMN_2));
 
@@ -291,7 +296,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
     }
 }
 
-fn open_file(name: &OsString, line_ending: LineEnding) -> io::Result<LineReader> {
+fn open_file(name: &OsString, line_ending: LineEnding) -> io::Result<LineReader<'static>> {
     if name == "-" {
         Ok(LineReader::new(Input::stdin(), line_ending))
     } else {

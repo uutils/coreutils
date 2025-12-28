@@ -44,13 +44,38 @@ cfg_langinfo! {
         DEFAULT_FORMAT_CACHE.get_or_init(|| {
             // Try to get locale format string
             if let Some(format) = get_locale_format_string() {
-                let format_with_tz = ensure_timezone_in_format(&format);
-                return Box::leak(format_with_tz.into_boxed_str());
+                // Validate that the format is complete (contains date and time components)
+                // On some platforms (e.g., macOS ARM64), nl_langinfo may return minimal formats
+                if is_format_complete(&format) {
+                    let format_with_tz = ensure_timezone_in_format(&format);
+                    return Box::leak(format_with_tz.into_boxed_str());
+                }
             }
 
             // Fallback: use 24-hour format as safe default
             "%a %b %e %X %Z %Y"
         })
+    }
+
+    /// Checks if a format string contains both date and time components.
+    /// Returns false for minimal formats that would produce incomplete output.
+    fn is_format_complete(format: &str) -> bool {
+        // Check for date components (at least one of: day, month, or year)
+        let has_date = format.contains("%d") || format.contains("%e")
+            || format.contains("%b") || format.contains("%B")
+            || format.contains("%m")
+            || format.contains("%Y") || format.contains("%y")
+            || format.contains("%F") || format.contains("%x") || format.contains("%D");
+
+        // Check for time components (at least one of: hour, minute, or time format)
+        let has_time = format.contains("%H") || format.contains("%I")
+            || format.contains("%M")
+            || format.contains("%T") || format.contains("%X")
+            || format.contains("%R") || format.contains("%r")
+            || format.contains("%l") || format.contains("%k")
+            || format.contains("%p") || format.contains("%P");
+
+        has_date && has_time
     }
 
     /// Retrieves the date/time format string from the system locale
@@ -59,7 +84,25 @@ cfg_langinfo! {
             // Set locale from environment variables
             libc::setlocale(libc::LC_TIME, c"".as_ptr());
 
-            // Get the date/time format string
+            // Try _DATE_FMT (GNU extension) first as it typically includes %Z
+            // and is what 'locale date_fmt' returns.
+            // On glibc, _DATE_FMT is 0x2006C (some systems use 0x2003B)
+            #[cfg(target_os = "linux")]
+            const _DATE_FMT: libc::nl_item = 0x2006C;
+
+            #[cfg(target_os = "linux")]
+            {
+                let date_fmt_ptr = libc::nl_langinfo(_DATE_FMT);
+                if !date_fmt_ptr.is_null() {
+                    if let Ok(format) = CStr::from_ptr(date_fmt_ptr).to_str() {
+                        if !format.is_empty() {
+                            return Some(format.to_string());
+                        }
+                    }
+                }
+            }
+
+            // Fallback to POSIX D_T_FMT
             let d_t_fmt_ptr = libc::nl_langinfo(libc::D_T_FMT);
             if d_t_fmt_ptr.is_null() {
                 return None;
@@ -112,6 +155,23 @@ mod tests {
     cfg_langinfo! {
         use super::*;
 
+        /// Helper function to expand a format string with a known test date
+        ///
+        /// Uses a fixed test date: Monday, January 15, 2024, 14:30:45 UTC
+        /// This allows us to validate format strings by checking their expanded output
+        /// rather than looking for literal format codes.
+        fn expand_format_with_test_date(format: &str) -> String {
+            use jiff::fmt::strtime;
+
+            // Create test timestamp: Monday, January 15, 2024, 14:30:45 UTC
+            // Use parse_date to get a proper Zoned timestamp (same as production code)
+            let test_date = crate::parse_date("2024-01-15 14:30:45 UTC")
+                .expect("Test date parse should never fail");
+
+            // Expand the format string with the test date
+            strtime::format(format, &test_date).unwrap_or_default()
+        }
+
         #[test]
         fn test_locale_detection() {
             // Just verify the function doesn't panic
@@ -121,10 +181,31 @@ mod tests {
         #[test]
         fn test_default_format_contains_valid_codes() {
             let format = get_locale_default_format();
-            assert!(format.contains("%a")); // abbreviated weekday
-            assert!(format.contains("%b")); // abbreviated month
-            assert!(format.contains("%Y") || format.contains("%y")); // year (4-digit or 2-digit)
-            assert!(format.contains("%Z")); // timezone
+
+            let expanded = expand_format_with_test_date(format);
+
+            // Verify expanded output contains expected components
+            // Test date: Monday, January 15, 2024, 14:30:45
+            assert!(
+                expanded.contains("Mon") || expanded.contains("Monday"),
+                "Expanded format should contain weekday name, got: {expanded}"
+            );
+
+            assert!(
+                expanded.contains("Jan") || expanded.contains("January"),
+                "Expanded format should contain month name, got: {expanded}"
+            );
+
+            assert!(
+                expanded.contains("2024") || expanded.contains("24"),
+                "Expanded format should contain year, got: {expanded}"
+            );
+
+            // Keep literal %Z check - this is enforced by ensure_timezone_in_format()
+            assert!(
+                format.contains("%Z"),
+                "Format string must contain %Z timezone (enforced by ensure_timezone_in_format)"
+            );
         }
 
         #[test]
@@ -135,25 +216,34 @@ mod tests {
             // The format should not be empty
             assert!(!format.is_empty(), "Locale format should not be empty");
 
-            // Should contain date/time components
-            let has_date_component = format.contains("%a")
-                || format.contains("%A")
-                || format.contains("%b")
-                || format.contains("%B")
-                || format.contains("%d")
-                || format.contains("%e");
-            assert!(has_date_component, "Format should contain date components");
+            let expanded = expand_format_with_test_date(format);
 
-            // Should contain time component (hour)
-            let has_time_component = format.contains("%H")
-                || format.contains("%I")
-                || format.contains("%k")
-                || format.contains("%l")
-                || format.contains("%r")
-                || format.contains("%R")
-                || format.contains("%T")
-                || format.contains("%X");
-            assert!(has_time_component, "Format should contain time components");
+            // Verify expanded output contains date components
+            // Test date: Monday, January 15, 2024
+            let has_date_component = expanded.contains("15")     // day
+                || expanded.contains("Jan")                      // month name
+                || expanded.contains("January")                  // full month
+                || expanded.contains("Mon")                      // weekday
+                || expanded.contains("Monday");                  // full weekday
+
+            assert!(
+                has_date_component,
+                "Expanded format should contain date components, got: {expanded}"
+            );
+
+            // Verify expanded output contains time components
+            // Test time: 14:30:45
+            let has_time_component = expanded.contains("14")     // 24-hour
+                || expanded.contains("02")                       // 12-hour
+                || expanded.contains("30")                       // minutes
+                || expanded.contains(':')                        // time separator
+                || expanded.contains("PM")                       // AM/PM indicator
+                || expanded.contains("pm");
+
+            assert!(
+                has_time_component,
+                "Expanded format should contain time components, got: {expanded}"
+            );
         }
 
         #[test]
