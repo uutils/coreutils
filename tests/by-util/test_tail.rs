@@ -1419,6 +1419,9 @@ fn test_retry6() {
         .arg("existing")
         .run_no_wait();
 
+    #[cfg(target_vendor = "apple")]
+    let delay = 1500;
+    #[cfg(not(target_vendor = "apple"))]
     let delay = 1000;
     p.make_assertion_with_delay(delay).is_alive();
 
