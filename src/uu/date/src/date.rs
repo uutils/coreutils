@@ -428,6 +428,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let format_string = make_format_string(&settings);
+    let format_string = locale::expand_locale_format(format_string);
     let mut stdout = BufWriter::new(std::io::stdout().lock());
 
     // Format all the dates
@@ -435,7 +436,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     for date in dates {
         match date {
             Ok(date) => {
-                match BrokenDownTime::from(&date).to_string_with_config(&config, format_string) {
+                match BrokenDownTime::from(&date)
+                    .to_string_with_config(&config, format_string.as_ref())
+                {
                     Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
                         USimpleError::new(1, translate!("date-error-write", "error" => e))
                     })?,
