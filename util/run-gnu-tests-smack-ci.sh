@@ -72,12 +72,10 @@ poweroff -f
 INIT
 chmod +x "$SMACK_DIR/rootfs/init"
 
-# Build utilities with SMACK support
+# Build utilities with SMACK support (only ls has SMACK support for now)
+# TODO: When other utilities have SMACK support, build: ls id mkdir mknod mkfifo
 echo "Building utilities with SMACK support..."
-UTILS="ls id mkdir mknod mkfifo"
-for U in $UTILS; do
-    cargo build --release --manifest-path="$REPO_DIR/Cargo.toml" --package "uu_$U" --bin "$U" --features "uu_$U/smack" 2>/dev/null
-done
+cargo build --release --manifest-path="$REPO_DIR/Cargo.toml" --package uu_ls --bin ls --features uu_ls/smack
 
 # Find SMACK tests
 SMACK_TESTS=$(grep -l 'require_smack_' -r "$GNU_DIR/tests/" 2>/dev/null || true)
@@ -102,11 +100,11 @@ for TEST_PATH in $SMACK_TESTS; do
     rm -rf "$WORK" "$WORK.gz"
     cp -a "$SMACK_DIR/rootfs" "$WORK"
 
-    # Copy built utilities
-    for U in $UTILS; do
-        rm -f "$WORK/bin/$U"
-        cp "$REPO_DIR/target/release/$U" "$WORK/bin/$U"
-    done
+    # Copy built utilities (only ls has SMACK support for now)
+    # TODO: When other utilities have SMACK support, use:
+    # for U in ls id mkdir mknod mkfifo; do cp "$REPO_DIR/target/release/$U" "$WORK/bin/$U"; done
+    rm -f "$WORK/bin/ls"
+    cp "$REPO_DIR/target/release/ls" "$WORK/bin/ls"
 
     # Set test script path
     sed -i "s|\$TEST_SCRIPT|$TEST_REL|g" "$WORK/init"
