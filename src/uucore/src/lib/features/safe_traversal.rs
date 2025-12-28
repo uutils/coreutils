@@ -120,6 +120,35 @@ pub struct DirFd {
 }
 
 impl DirFd {
+        #[cfg(target_os = "redox")]
+        pub fn read_dir(&self) -> io::Result<Vec<OsString>> {
+            Err(io::Error::new(io::ErrorKind::Other, "safe_traversal is not supported on Redox"))
+        }
+
+        #[cfg(target_os = "redox")]
+        pub fn unlink_at(&self, _name: &OsStr, _is_dir: bool) -> io::Result<()> {
+            Err(io::Error::new(io::ErrorKind::Other, "safe_traversal is not supported on Redox"))
+        }
+
+        #[cfg(target_os = "redox")]
+        pub fn chown_at(&self, _name: &OsStr, _uid: Option<u32>, _gid: Option<u32>, _follow_symlinks: bool) -> io::Result<()> {
+            Err(io::Error::new(io::ErrorKind::Other, "safe_traversal is not supported on Redox"))
+        }
+
+        #[cfg(target_os = "redox")]
+        pub fn fchown(&self, _uid: Option<u32>, _gid: Option<u32>) -> io::Result<()> {
+            Err(io::Error::new(io::ErrorKind::Other, "safe_traversal is not supported on Redox"))
+        }
+
+        #[cfg(target_os = "redox")]
+        pub fn chmod_at(&self, _name: &OsStr, _mode: u32, _follow_symlinks: bool) -> io::Result<()> {
+            Err(io::Error::new(io::ErrorKind::Other, "safe_traversal is not supported on Redox"))
+        }
+
+        #[cfg(target_os = "redox")]
+        pub fn fchmod(&self, _mode: u32) -> io::Result<()> {
+            Err(io::Error::new(io::ErrorKind::Other, "safe_traversal is not supported on Redox"))
+        }
     /// Open a directory and return a file descriptor
     pub fn open(path: &Path) -> io::Result<Self> {
         #[cfg(not(target_os = "redox"))]
@@ -167,6 +196,7 @@ impl DirFd {
     }
 
     /// Get raw stat data for a file relative to this directory
+    #[cfg(not(target_os = "redox"))]
     pub fn stat_at(&self, name: &OsStr, follow_symlinks: bool) -> io::Result<FileStat> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
@@ -186,6 +216,10 @@ impl DirFd {
 
         Ok(stat)
     }
+    #[cfg(target_os = "redox")]
+    pub fn stat_at(&self, _name: &OsStr, _follow_symlinks: bool) -> io::Result<()> {
+        Err(io::Error::new(io::ErrorKind::Other, "safe_traversal is not supported on Redox"))
+    }
 
     /// Get metadata for a file relative to this directory
     pub fn metadata_at(&self, name: &OsStr, follow_symlinks: bool) -> io::Result<Metadata> {
@@ -198,13 +232,17 @@ impl DirFd {
     }
 
     /// Get raw stat data for this directory
+    #[cfg(not(target_os = "redox"))]
     pub fn fstat(&self) -> io::Result<FileStat> {
         let stat = nix::sys::stat::fstat(&self.fd).map_err(|e| SafeTraversalError::StatFailed {
             path: translate!("safe-traversal-current-directory").into(),
             source: io::Error::from_raw_os_error(e as i32),
         })?;
-
         Ok(stat)
+    }
+    #[cfg(target_os = "redox")]
+    pub fn fstat(&self) -> io::Result<()> {
+        Err(io::Error::new(io::ErrorKind::Other, "safe_traversal is not supported on Redox"))
     }
 
     /// Read directory entries
