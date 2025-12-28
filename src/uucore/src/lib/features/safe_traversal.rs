@@ -105,7 +105,10 @@ fn read_dir_entries(fd: &OwnedFd) -> io::Result<Vec<OsString>> {
     #[cfg(target_os = "redox")]
     {
         // Redox: directory traversal not implemented
-        return Err(io::Error::new(io::ErrorKind::Other, "safe_traversal is not supported on Redox"));
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            "safe_traversal is not supported on Redox",
+        ));
     }
 
     Ok(entries)
@@ -132,7 +135,10 @@ impl DirFd {
         }
         #[cfg(target_os = "redox")]
         {
-            Err(io::Error::new(io::ErrorKind::Other, "safe_traversal is not supported on Redox"))
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                "safe_traversal is not supported on Redox",
+            ))
         }
     }
 
@@ -153,7 +159,10 @@ impl DirFd {
         }
         #[cfg(target_os = "redox")]
         {
-            Err(io::Error::new(io::ErrorKind::Other, "safe_traversal is not supported on Redox"))
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                "safe_traversal is not supported on Redox",
+            ))
         }
     }
 
