@@ -64,8 +64,98 @@ cfg_langinfo! {
         })
     }
 
-    /// Retrieves the date/time format string from the system locale
-    fn get_locale_format_string() -> Option<String> {
+    /// Replaces %c, %x, %X with their locale-specific format strings.
+    ///
+    /// If a flag like `^` is present (e.g., `%^c`), it is distributed to the
+    /// sub-specifiers within the locale string.
+    pub fn expand_locale_format(format: &str) -> std::borrow::Cow<'_, str> {
+        let mut result = String::with_capacity(format.len());
+        let mut chars = format.chars().peekable();
+        let mut modified = false;
+
+        while let Some(c) = chars.next() {
+            if c != '%' {
+                result.push(c);
+                continue;
+            }
+
+            // Capture flags
+            let mut flags = Vec::new();
+            while let Some(&peek) = chars.peek() {
+                 match peek {
+                    '_' | '-' | '0' | '^' | '#' => {
+                        flags.push(peek);
+                        chars.next();
+                    },
+                    _ => break,
+                 }
+            }
+
+            match chars.peek() {
+                Some(&spec @ ('c' | 'x' | 'X')) => {
+                    chars.next();
+
+                    let item = match spec {
+                        'c' => libc::D_T_FMT,
+                        'x' => libc::D_FMT,
+                        'X' => libc::T_FMT,
+                        _ => unreachable!(),
+                    };
+
+                    if let Some(s) = get_langinfo(item) {
+                        // If the user requested uppercase (%^c), distribute that flag
+                        // to the expanded specifiers.
+                        let replacement = if flags.contains(&'^') {
+                            distribute_flag(&s, '^')
+                        } else {
+                            s
+                        };
+                        result.push_str(&replacement);
+                        modified = true;
+                    } else {
+                        // Reconstruct original sequence if lookup fails
+                        result.push('%');
+                        result.extend(flags);
+                        result.push(spec);
+                    }
+                },
+                Some(_) | None => {
+                    // Not a locale specifier, or end of string.
+                    // Push captured flags and let loop handle the next char.
+                    result.push('%');
+                    result.extend(flags);
+                }
+            }
+        }
+
+        if modified {
+            std::borrow::Cow::Owned(result)
+        } else {
+            std::borrow::Cow::Borrowed(format)
+        }
+    }
+
+    fn distribute_flag(fmt: &str, flag: char) -> String {
+        let mut res = String::with_capacity(fmt.len() * 2);
+        let mut chars = fmt.chars().peekable();
+        while let Some(c) = chars.next() {
+            res.push(c);
+            if c == '%' {
+                if let Some(&n) = chars.peek() {
+                    if n == '%' {
+                         chars.next();
+                         res.push('%');
+                    } else {
+                        res.push(flag);
+                    }
+                }
+            }
+        }
+        res
+    }
+
+    /// Retrieves the date/time format string from the system locale (D_T_FMT, D_FMT, T_FMT)
+    pub fn get_langinfo(item: libc::nl_item) -> Option<String> {
         // In tests, acquire mutex to prevent race conditions with setlocale()
         // which is process-global and not thread-safe
         #[cfg(test)]
@@ -76,18 +166,23 @@ cfg_langinfo! {
             libc::setlocale(libc::LC_TIME, c"".as_ptr());
 
             // Get the date/time format string
-            let d_t_fmt_ptr = libc::nl_langinfo(libc::D_T_FMT);
-            if d_t_fmt_ptr.is_null() {
+            let fmt_ptr = libc::nl_langinfo(item);
+            if fmt_ptr.is_null() {
                 return None;
             }
 
-            let format = CStr::from_ptr(d_t_fmt_ptr).to_str().ok()?;
+            let format = CStr::from_ptr(fmt_ptr).to_str().ok()?;
             if format.is_empty() {
                 return None;
             }
 
             Some(format.to_string())
         }
+    }
+
+    /// Retrieves the date/time format string from the system locale
+    fn get_locale_format_string() -> Option<String> {
+        get_langinfo(libc::D_T_FMT)
     }
 
     /// Ensures the format string includes timezone (%Z)
@@ -121,6 +216,18 @@ cfg_langinfo! {
 )))]
 pub fn get_locale_default_format() -> &'static str {
     "%a %b %e %X %Z %Y"
+}
+
+#[cfg(not(any(
+    target_os = "linux",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "dragonfly"
+)))]
+pub fn expand_locale_format(format: &str) -> std::borrow::Cow<'_, str> {
+    std::borrow::Cow::Borrowed(format)
 }
 
 #[cfg(test)]

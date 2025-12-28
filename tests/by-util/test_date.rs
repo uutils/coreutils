@@ -1404,3 +1404,27 @@ fn test_date_locale_fr_french() {
         "Output should include timezone information, got: {stdout}"
     );
 }
+
+#[test]
+#[cfg(any(
+    target_os = "linux",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "dragonfly"
+))]
+fn test_format_upper_c_locale_expansion() {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-01-01")
+        .arg("+%^c")
+        .succeeds()
+        .stdout_str_check(|out| {
+            // In C locale, %c expands to "%a %b %e %H:%M:%S %Y" (e.g., "Mon Jan  1 ...")
+            // With the ^ flag, we expect "MON JAN  1 ..."
+            out.contains("MON") && out.contains("JAN")
+        });
+}

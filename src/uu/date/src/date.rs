@@ -395,12 +395,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let format_string = make_format_string(&settings);
+    let format_string = locale::expand_locale_format(format_string);
 
     // Format all the dates
     for date in dates {
         match date {
             // TODO: Switch to lenient formatting.
-            Ok(date) => match strtime::format(format_string, &date) {
+            Ok(date) => match strtime::format(format_string.as_ref(), &date) {
                 Ok(s) => println!("{s}"),
                 Err(e) => {
                     return Err(USimpleError::new(
