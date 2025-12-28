@@ -59,7 +59,7 @@ du-error-invalid-glob = Invalid exclude syntax: { $error }
 du-error-cannot-read-directory = cannot read directory { $path }
 du-error-cannot-access = cannot access { $path }
 du-error-read-error-is-directory = { $file }: read error: Is a directory
-du-error-cannot-open-for-reading = cannot open '{ $file }' for reading: No such file or directory
+du-error-cannot-open-for-reading = cannot open { $file } for reading: No such file or directory
 du-error-invalid-zero-length-file-name = { $file }:{ $line }: invalid zero-length file name
 du-error-extra-operand-with-files0-from = extra operand { $file }
   file operands cannot be combined with --files0-from
