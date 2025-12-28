@@ -20,10 +20,15 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 
+#[cfg(not(target_os = "redox"))]
 use nix::dir::Dir;
+#[cfg(not(target_os = "redox"))]
 use nix::fcntl::{OFlag, openat};
+#[cfg(not(target_os = "redox"))]
 use nix::libc;
+#[cfg(not(target_os = "redox"))]
 use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat};
+#[cfg(not(target_os = "redox"))]
 use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
 use os_display::Quotable;
 
@@ -84,19 +89,23 @@ fn read_dir_entries(fd: &OwnedFd) -> io::Result<Vec<OsString>> {
     let mut entries = Vec::new();
 
     // Duplicate the fd for Dir (it takes ownership)
-    let dup_fd = nix::unistd::dup(fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
-
-    let mut dir = Dir::from_fd(dup_fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
-
-    for entry_result in dir.iter() {
-        let entry = entry_result.map_err(|e| io::Error::from_raw_os_error(e as i32))?;
-
-        let name = entry.file_name();
-        let name_os = OsStr::from_bytes(name.to_bytes());
-
-        if name_os != "." && name_os != ".." {
-            entries.push(name_os.to_os_string());
+    #[cfg(not(target_os = "redox"))]
+    {
+        let dup_fd = nix::unistd::dup(fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        let mut dir = Dir::from_fd(dup_fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        for entry_result in dir.iter() {
+            let entry = entry_result.map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+            let name = entry.file_name();
+            let name_os = OsStr::from_bytes(name.to_bytes());
+            if name_os != "." && name_os != ".." {
+                entries.push(name_os.to_os_string());
+            }
         }
+    }
+    #[cfg(target_os = "redox")]
+    {
+        // Redox: directory traversal not implemented
+        return Err(io::Error::new(io::ErrorKind::Other, "safe_traversal is not supported on Redox"));
     }
 
     Ok(entries)
@@ -110,31 +119,42 @@ pub struct DirFd {
 impl DirFd {
     /// Open a directory and return a file descriptor
     pub fn open(path: &Path) -> io::Result<Self> {
-        let flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
-        let fd = nix::fcntl::open(path, flags, Mode::empty()).map_err(|e| {
-            SafeTraversalError::OpenFailed {
-                path: path.into(),
-                source: io::Error::from_raw_os_error(e as i32),
-            }
-        })?;
-
-        Ok(Self { fd })
+        #[cfg(not(target_os = "redox"))]
+        {
+            let flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
+            let fd = nix::fcntl::open(path, flags, Mode::empty()).map_err(|e| {
+                SafeTraversalError::OpenFailed {
+                    path: path.into(),
+                    source: io::Error::from_raw_os_error(e as i32),
+                }
+            })?;
+            Ok(Self { fd })
+        }
+        #[cfg(target_os = "redox")]
+        {
+            Err(io::Error::new(io::ErrorKind::Other, "safe_traversal is not supported on Redox"))
+        }
     }
 
     /// Open a subdirectory relative to this directory
     pub fn open_subdir(&self, name: &OsStr) -> io::Result<Self> {
-        let name_cstr =
-            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
-
-        let flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
-        let fd = openat(&self.fd, name_cstr.as_c_str(), flags, Mode::empty()).map_err(|e| {
-            SafeTraversalError::OpenFailed {
-                path: name.into(),
-                source: io::Error::from_raw_os_error(e as i32),
-            }
-        })?;
-
-        Ok(Self { fd })
+        #[cfg(not(target_os = "redox"))]
+        {
+            let name_cstr =
+                CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+            let flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
+            let fd = openat(&self.fd, name_cstr.as_c_str(), flags, Mode::empty()).map_err(|e| {
+                SafeTraversalError::OpenFailed {
+                    path: name.into(),
+                    source: io::Error::from_raw_os_error(e as i32),
+                }
+            })?;
+            Ok(Self { fd })
+        }
+        #[cfg(target_os = "redox")]
+        {
+            Err(io::Error::new(io::ErrorKind::Other, "safe_traversal is not supported on Redox"))
+        }
     }
 
     /// Get raw stat data for a file relative to this directory
