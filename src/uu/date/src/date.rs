@@ -428,13 +428,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let format_string = make_format_string(&settings);
+    let format_string = locale::expand_locale_format(format_string);
     let mut stdout = BufWriter::new(std::io::stdout().lock());
 
     // Format all the dates
     for date in dates {
         match date {
             // TODO: Switch to lenient formatting.
-            Ok(date) => match strtime::format(format_string, &date) {
+            Ok(date) => match strtime::format(format_string.as_ref(), &date) {
                 Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
                     USimpleError::new(1, translate!("date-error-write", "error" => e))
                 })?,
