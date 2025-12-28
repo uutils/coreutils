@@ -23,7 +23,6 @@ $ ls -w=80
 ```
 
 With GNU coreutils, `--help` usually prints the help message and `--version` prints the version.
-We also commonly provide short options: `-h` for help and `-V` for version.
 
 ## `env`
 
