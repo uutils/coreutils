@@ -276,6 +276,7 @@ impl DirFd {
     }
 
     /// Read directory entries
+    #[cfg(not(target_os = "redox"))]
     pub fn read_dir(&self) -> io::Result<Vec<OsString>> {
         read_dir_entries(&self.fd).map_err(|e| {
             SafeTraversalError::ReadDirFailed {
@@ -287,6 +288,7 @@ impl DirFd {
     }
 
     /// Remove a file or empty directory relative to this directory
+    #[cfg(not(target_os = "redox"))]
     pub fn unlink_at(&self, name: &OsStr, is_dir: bool) -> io::Result<()> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
@@ -308,6 +310,7 @@ impl DirFd {
 
     /// Change ownership of a file relative to this directory
     /// Use uid/gid of None to keep the current value
+    #[cfg(not(target_os = "redox"))]
     pub fn chown_at(
         &self,
         name: &OsStr,
@@ -334,6 +337,7 @@ impl DirFd {
     }
 
     /// Change ownership of this directory
+    #[cfg(not(target_os = "redox"))]
     pub fn fchown(&self, uid: Option<u32>, gid: Option<u32>) -> io::Result<()> {
         let uid = uid.map(Uid::from_raw);
         let gid = gid.map(Gid::from_raw);
@@ -344,6 +348,7 @@ impl DirFd {
     }
 
     /// Change mode of a file relative to this directory
+    #[cfg(not(target_os = "redox"))]
     pub fn chmod_at(&self, name: &OsStr, mode: u32, follow_symlinks: bool) -> io::Result<()> {
         let flags = if follow_symlinks {
             FchmodatFlags::FollowSymlink
@@ -363,6 +368,7 @@ impl DirFd {
     }
 
     /// Change mode of this directory
+    #[cfg(not(target_os = "redox"))]
     pub fn fchmod(&self, mode: u32) -> io::Result<()> {
         let mode = Mode::from_bits_truncate(mode as libc::mode_t);
 
