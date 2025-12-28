@@ -58,6 +58,7 @@ fn decode_char(bytes: &[u8], start: usize) -> (Option<char>, usize) {
     }
 }
 
+/// Compute display width for a UTF-8 byte slice, treating invalid bytes as width 1.
 fn byte_display_width(bytes: &[u8]) -> usize {
     let mut width = 0;
     let mut idx = 0;
