@@ -76,6 +76,9 @@ const FOLLOW_NAME_SHORT_EXP: &str = "follow_name_short.expected";
 #[allow(dead_code)]
 const FOLLOW_NAME_EXP: &str = "follow_name.expected";
 
+#[cfg(target_vendor = "apple")]
+const DEFAULT_SLEEP_INTERVAL_MILLIS: u64 = 1500;
+#[cfg(not(target_vendor = "apple"))]
 const DEFAULT_SLEEP_INTERVAL_MILLIS: u64 = 1000;
 
 // The binary integer "10000000" is *not* a valid UTF-8 encoding
