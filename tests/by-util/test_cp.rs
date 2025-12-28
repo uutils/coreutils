@@ -7415,37 +7415,8 @@ fn test_cp_recurse_verbose_output_with_symlink_already_exists() {
 #[test]
 #[cfg(not(target_os = "windows"))]
 fn test_cp_preserve_directory_permissions_by_default() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    use std::io;
 
-    let dir = "a/b/c/d";
-    let file = "foo.txt";
-
-    at.mkdir_all(dir);
-
-    let file_path = format!("{dir}/{file}");
-
-    at.touch(file_path);
-
-    scene.cmd("chmod").arg("-R").arg("555").arg("a").succeeds();
-    scene.cmd("cp").arg("-r").arg("a").arg("b").succeeds();
-
-    scene.ucmd().arg("-r").arg("a").arg("c").succeeds();
-
-    assert_eq!(get_mode(at.plus("b")), 0o40555);
-    assert_eq!(get_mode(at.plus("b/b")), 0o40555);
-    assert_eq!(get_mode(at.plus("b/b/c")), 0o40555);
-    assert_eq!(get_mode(at.plus("b/b/c/d")), 0o40555);
-
-    assert_eq!(get_mode(at.plus("c")), 0o40555);
-    assert_eq!(get_mode(at.plus("c/b")), 0o40555);
-    assert_eq!(get_mode(at.plus("c/b/c")), 0o40555);
-    assert_eq!(get_mode(at.plus("c/b/c/d")), 0o40555);
-}
-
-#[test]
-#[cfg(not(target_os = "windows"))]
-fn test_cp_no_preserve_directory_permissions() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
@@ -7464,9 +7435,9 @@ fn test_cp_no_preserve_directory_permissions() {
     scene
         .ucmd()
         .arg("-r")
-        .arg("--no-preserve=mode")
         .arg("a")
         .arg("c")
+        .set_stdout(io::stdout())
         .succeeds();
 
     assert_eq!(get_mode(at.plus("b")), 0o40555);
@@ -7474,8 +7445,46 @@ fn test_cp_no_preserve_directory_permissions() {
     assert_eq!(get_mode(at.plus("b/b/c")), 0o40555);
     assert_eq!(get_mode(at.plus("b/b/c/d")), 0o40555);
 
-    assert_eq!(get_mode(at.plus("c")), 0o40755);
-    assert_eq!(get_mode(at.plus("c/b")), 0o40755);
-    assert_eq!(get_mode(at.plus("c/b/c")), 0o40755);
-    assert_eq!(get_mode(at.plus("c/b/c/d")), 0o40755);
+    assert_eq!(get_mode(at.plus("c")), 0o40555);
+    assert_eq!(get_mode(at.plus("c/b")), 0o40555);
+    assert_eq!(get_mode(at.plus("c/b/c")), 0o40555);
+    assert_eq!(get_mode(at.plus("c/b/c/d")), 0o40555);
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_cp_existing_perm_dir() {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene
+        .cmd("mkdir")
+        .arg("-p")
+        .arg("-m")
+        .arg("ug-s,u=rwx,g=rwx,o=rx")
+        .arg("src/dir")
+        .umask(0o022)
+        .succeeds();
+    scene
+        .cmd("mkdir")
+        .arg("-p")
+        .arg("-m")
+        .arg("ug-s,u=rwx,g=,o=")
+        .arg("dst/dir")
+        .umask(0o022)
+        .succeeds();
+
+    scene
+        .ucmd()
+        .arg("-r")
+        .arg("src/.")
+        .arg("dst/")
+        .set_stdout(io::stdout())
+        .succeeds();
+
+    let mode = get_mode(at.plus("dst/dir"));
+
+    assert_eq!(mode, 0o40700);
 }
