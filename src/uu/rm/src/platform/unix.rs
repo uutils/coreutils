@@ -42,10 +42,7 @@ fn prompt_file_with_stat(path: &Path, stat: &libc::stat, options: &Options) -> b
         return true;
     }
 
-    #[cfg(target_os = "android")]
-    let is_symlink = (stat.st_mode & (libc::S_IFMT as u16)) == (libc::S_IFLNK as u16);
-    #[cfg(not(target_os = "android"))]
-    let is_symlink = (stat.st_mode & (libc::S_IFMT as u32)) == (libc::S_IFLNK as u32);
+    let is_symlink = ((stat.st_mode as libc::mode_t) & libc::S_IFMT) == libc::S_IFLNK;
     let writable = mode_writable(stat.st_mode as libc::mode_t);
     let len = stat.st_size as u64;
     let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
@@ -379,10 +376,7 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
         };
 
         // Check if it's a directory
-        #[cfg(target_os = "android")]
-        let is_dir = (entry_stat.st_mode & (libc::S_IFMT as u16)) == (libc::S_IFDIR as u16);
-        #[cfg(not(target_os = "android"))]
-        let is_dir = (entry_stat.st_mode & (libc::S_IFMT as u32)) == (libc::S_IFDIR as u32);
+        let is_dir = ((entry_stat.st_mode as libc::mode_t) & libc::S_IFMT) == libc::S_IFDIR;
 
         if is_dir {
             // Ask user if they want to descend into this directory
