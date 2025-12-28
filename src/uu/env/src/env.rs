@@ -701,9 +701,24 @@ impl EnvAppData {
         #[cfg(unix)]
         {
             let mut signal_action_log = SignalActionLog::default();
-            apply_default_signal(&opts.default_signal, &mut signal_action_log)?;
-            apply_ignore_signal(&opts.ignore_signal, &mut signal_action_log)?;
-            apply_block_signal(&opts.block_signal, &mut signal_action_log)?;
+            apply_signal_action(
+                &opts.default_signal,
+                &mut signal_action_log,
+                SignalActionKind::Default,
+                reset_signal,
+            )?;
+            apply_signal_action(
+                &opts.ignore_signal,
+                &mut signal_action_log,
+                SignalActionKind::Ignore,
+                ignore_signal,
+            )?;
+            apply_signal_action(
+                &opts.block_signal,
+                &mut signal_action_log,
+                SignalActionKind::Block,
+                block_signal,
+            )?;
             if opts.list_signal_handling {
                 list_signal_handling(&signal_action_log);
             }
@@ -990,48 +1005,34 @@ fn apply_specified_env_vars(opts: &Options<'_>) {
 }
 
 #[cfg(unix)]
-fn apply_default_signal(request: &SignalRequest, log: &mut SignalActionLog) -> UResult<()> {
+fn apply_signal_action<F>(
+    request: &SignalRequest,
+    log: &mut SignalActionLog,
+    action_kind: SignalActionKind,
+    signal_fn: F,
+) -> UResult<()>
+where
+    F: Fn(Signal) -> UResult<()>,
+{
     request.for_each_signal(|sig_value, explicit| {
         // On some platforms ALL_SIGNALS may contain values that are not valid in libc.
         // Skip those invalid ones and continue (GNU env also ignores undefined signals).
         let Ok(sig) = signal_from_value(sig_value) else {
             return Ok(());
         };
-        reset_signal(sig)?;
-        log.record(sig_value, SignalActionKind::Default, explicit);
+        signal_fn(sig)?;
+        log.record(sig_value, action_kind, explicit);
 
         // Set environment variable to communicate to Rust child processes
         // that SIGPIPE should be default (not ignored)
-        if sig_value == nix::libc::SIGPIPE as usize {
+        if matches!(action_kind, SignalActionKind::Default)
+            && sig_value == nix::libc::SIGPIPE as usize
+        {
             unsafe {
                 std::env::set_var("RUST_SIGPIPE", "default");
             }
         }
 
-        Ok(())
-    })
-}
-
-#[cfg(unix)]
-fn apply_ignore_signal(request: &SignalRequest, log: &mut SignalActionLog) -> UResult<()> {
-    request.for_each_signal(|sig_value, explicit| {
-        let Ok(sig) = signal_from_value(sig_value) else {
-            return Ok(());
-        };
-        ignore_signal(sig)?;
-        log.record(sig_value, SignalActionKind::Ignore, explicit);
-        Ok(())
-    })
-}
-
-#[cfg(unix)]
-fn apply_block_signal(request: &SignalRequest, log: &mut SignalActionLog) -> UResult<()> {
-    request.for_each_signal(|sig_value, explicit| {
-        let Ok(sig) = signal_from_value(sig_value) else {
-            return Ok(());
-        };
-        block_signal(sig)?;
-        log.record(sig_value, SignalActionKind::Block, explicit);
         Ok(())
     })
 }
