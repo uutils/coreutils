@@ -63,10 +63,6 @@ impl<'a> Iterator for WhitespaceSplitter<'a> {
 }
 
 fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
-    if s.is_empty() {
-        return Err(translate!("numfmt-error-invalid-number-empty"));
-    }
-
     let with_i = s.ends_with('i');
     let mut iter = s.chars();
     if with_i {
@@ -85,18 +81,26 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
         Some('R') => Some((RawSuffix::R, with_i)),
         Some('Q') => Some((RawSuffix::Q, with_i)),
         Some('0'..='9') if !with_i => None,
-        _ => {
+        Some(invalid_suffix) => {
             // If with_i is true, the string ends with 'i' but there's no valid suffix letter
             // This is always an invalid suffix (e.g., "1i", "2Ai")
             if with_i {
-                return Err(translate!("numfmt-error-invalid-suffix", "input" => s.quote()));
+                return Err(
+                    translate!("numfmt-error-invalid-suffix", "input" => s.quote(), "suffix" => "i".quote()),
+                );
             }
             // For other cases, check if the number part (without the last character) is valid
             let number_part = &s[..s.len() - 1];
-            if number_part.is_empty() || number_part.parse::<f64>().is_err() {
+
+            if parse_suffix(number_part).is_err() {
                 return Err(translate!("numfmt-error-invalid-number", "input" => s.quote()));
             }
-            return Err(translate!("numfmt-error-invalid-suffix", "input" => s.quote()));
+            return Err(
+                translate!("numfmt-error-invalid-suffix", "input" => s.quote(), "suffix" => invalid_suffix.to_string().quote()),
+            );
+        }
+        None => {
+            return Err(translate!("numfmt-error-invalid-number-empty"));
         }
     };
 
@@ -536,6 +540,13 @@ mod tests {
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.contains("numfmt-error-invalid-suffix") || error.contains("invalid suffix"));
+
+        let result = parse_suffix("5MP");
+        assert!(result.is_err());
+        assert!(error.contains("numfmt-error-invalid-suffix") || error.contains("invalid suffix"));
+        assert!(
+            !error.contains("numfmt-error-invalid-number") || !error.contains("invalid number")
+        );
     }
 
     #[test]
