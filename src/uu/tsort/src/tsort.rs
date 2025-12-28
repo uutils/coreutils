@@ -22,19 +22,19 @@ mod options {
 #[derive(Debug, Error)]
 enum TsortError {
     /// The input file is actually a directory.
-    #[error("{input}: {message}", input = .0, message = translate!("tsort-error-is-dir"))]
-    IsDir(String),
+    #[error("{input}: {message}", input = .0.maybe_quote(), message = translate!("tsort-error-is-dir"))]
+    IsDir(OsString),
 
     /// The number of tokens in the input data is odd.
     ///
     /// The list of edges must be even because each edge has two
     /// components: a source node and a target node.
     #[error("{input}: {message}", input = .0.maybe_quote(), message = translate!("tsort-error-odd"))]
-    NumTokensOdd(String),
+    NumTokensOdd(OsString),
 
     /// The graph contains a cycle.
-    #[error("{input}: {message}", input = .0, message = translate!("tsort-error-loop"))]
-    Loop(String),
+    #[error("{input}: {message}", input = .0.maybe_quote(), message = translate!("tsort-error-loop"))]
+    Loop(OsString),
 }
 
 // Auxiliary struct, just for printing loop nodes via show! macro
@@ -80,13 +80,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         let path = Path::new(&input);
         if path.is_dir() {
-            return Err(TsortError::IsDir(input.to_string_lossy().to_string()).into());
+            return Err(TsortError::IsDir(input.clone()).into());
         }
         std::fs::read_to_string(path)?
     };
 
     // Create the directed graph from pairs of tokens in the input data.
-    let mut g = Graph::new(input.to_string_lossy().to_string());
+    let mut g = Graph::new(input.clone());
     // Input is considered to be in the format
     // From1 To1 From2 To2 ...
     // with tokens separated by whitespaces
@@ -101,7 +101,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             break;
         };
         let Some(to) = edge_tokens.next() else {
-            return Err(TsortError::NumTokensOdd(input.to_string_lossy().to_string()).into());
+            return Err(TsortError::NumTokensOdd(input.clone()).into());
         };
         g.add_edge(from, to);
     }
@@ -158,7 +158,7 @@ impl<'input> Node<'input> {
 }
 
 struct Graph<'input> {
-    name: String,
+    name: OsString,
     nodes: HashMap<&'input str, Node<'input>>,
 }
 
@@ -169,7 +169,7 @@ enum VisitedState {
 }
 
 impl<'input> Graph<'input> {
-    fn new(name: String) -> Self {
+    fn new(name: OsString) -> Self {
         Self {
             name,
             nodes: HashMap::default(),

@@ -214,8 +214,9 @@ impl SimdPolicy {
         }
     }
 
+    /// Returns true if any SIMD feature remains enabled after applying GLIBC_TUNABLES.
     pub fn allows_simd(&self) -> bool {
-        self.disabled_by_env.is_empty()
+        self.iter_features().next().is_some()
     }
 
     pub fn disabled_features(&self) -> Vec<HardwareFeature> {
