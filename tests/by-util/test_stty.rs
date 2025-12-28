@@ -1557,6 +1557,16 @@ fn test_saved_state_with_control_chars() {
         .code_is(exp_result.code());
 }
 
+// Per POSIX, stty uses stdin for TTY operations. When stdin is a pipe, it should fail.
+#[test]
+#[cfg(unix)]
+fn test_stdin_not_tty_fails() {
+    new_ucmd!()
+        .pipe_in("")
+        .fails()
+        .stderr_contains("standard input: Inappropriate ioctl for device");
+}
+
 #[test]
 #[cfg(unix)]
 fn test_columns_env_wrapping() {
