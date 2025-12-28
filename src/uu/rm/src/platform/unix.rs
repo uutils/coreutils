@@ -317,7 +317,7 @@ pub fn safe_remove_dir_recursive(
     } else {
         // Ask user permission if needed
         if options.interactive == InteractiveMode::Always
-            && !prompt_dir_with_mode(path, initial_mode, options)
+            && !prompt_dir_with_mode(path, initial_mode as libc::mode_t, options)
         {
             return false;
         }

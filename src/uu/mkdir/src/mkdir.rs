@@ -291,7 +291,7 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
             chmod(path, new_mode)?;
 
             // Apply SELinux context if requested
-            #[cfg(feature = "selinux")]
+            #[cfg(all(feature = "selinux", target_os = "linux"))]
             if config.set_selinux_context && uucore::selinux::is_selinux_enabled() {
                 if let Err(e) = uucore::selinux::set_selinux_security_context(path, config.context)
                 {

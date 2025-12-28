@@ -392,9 +392,8 @@ fn test_chmod_recursive() {
     make_file(&at.plus_as_string("a/b/b"), 0o100444);
     make_file(&at.plus_as_string("a/b/c/c"), 0o100444);
     make_file(&at.plus_as_string("z/y"), 0o100444);
-    #[cfg(not(target_os = "linux"))]
-    let err_msg = "chmod: Permission denied\n";
-    #[cfg(target_os = "linux")]
+    // With safe_traversal enabled on all Unix platforms, the error message
+    // now includes the file path consistently across platforms
     let err_msg = "chmod: cannot access 'z': Permission denied\n";
 
     // only the permissions of folder `a` and `z` are changed
