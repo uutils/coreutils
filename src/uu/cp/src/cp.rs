@@ -1540,6 +1540,7 @@ fn file_mode_for_interactive_overwrite(
             match path.metadata() {
                 Ok(me) => {
                     // Cast is necessary on some platforms
+                    #[allow(clippy::unnecessary_cast)]
                     let mode: mode_t = me.mode() as mode_t;
 
                     // It looks like this extra information is added to the prompt iff the file's user write bit is 0
@@ -2592,8 +2593,10 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
             target_os = "redox",
         ))]
         {
+            #[allow(clippy::unnecessary_cast)]
             const MODE_RW_UGO: u32 =
                 (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
+            #[allow(clippy::unnecessary_cast)]
             const S_IRWXUGO: u32 = (S_IRWXU | S_IRWXG | S_IRWXO) as u32;
             return if is_explicit_no_preserve_mode {
                 MODE_RW_UGO

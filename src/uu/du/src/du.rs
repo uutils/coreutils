@@ -439,6 +439,7 @@ fn safe_du(
         const S_IFMT: u32 = 0o170_000;
         const S_IFDIR: u32 = 0o040_000;
         const S_IFLNK: u32 = 0o120_000;
+        #[allow(clippy::unnecessary_cast)]
         let is_symlink = (lstat.st_mode as u32 & S_IFMT) == S_IFLNK;
 
         // Handle symlinks with -L option
@@ -450,9 +451,11 @@ fn safe_du(
             continue;
         }
 
+        #[allow(clippy::unnecessary_cast)]
         let is_dir = (lstat.st_mode as u32 & S_IFMT) == S_IFDIR;
         let entry_stat = lstat;
 
+        #[allow(clippy::unnecessary_cast)]
         let file_info = (entry_stat.st_ino != 0).then_some(FileInfo {
             file_id: entry_stat.st_ino as u128,
             dev_id: entry_stat.st_dev as u64,
@@ -465,6 +468,7 @@ fn safe_du(
             Stat {
                 path: entry_path.clone(),
                 size: 0,
+                #[allow(clippy::unnecessary_cast)]
                 blocks: entry_stat.st_blocks as u64,
                 inodes: 1,
                 inode: file_info,
@@ -476,7 +480,9 @@ fn safe_du(
             // For files
             Stat {
                 path: entry_path.clone(),
+                #[allow(clippy::unnecessary_cast)]
                 size: entry_stat.st_size as u64,
+                #[allow(clippy::unnecessary_cast)]
                 blocks: entry_stat.st_blocks as u64,
                 inodes: 1,
                 inode: file_info,
