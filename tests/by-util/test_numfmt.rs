@@ -256,7 +256,7 @@ fn test_suffixes() {
             new_ucmd!()
                 .args(&args)
                 .fails_with_code(2)
-                .stderr_only(format!("numfmt: invalid suffix in input '1{c}': '{c}'\n"));
+                .stderr_only(format!("numfmt: invalid suffix in input: '1{c}'\n"));
         }
     }
 }
