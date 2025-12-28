@@ -385,10 +385,14 @@ impl Metadata {
         FileInfo::from_stat(&self.stat)
     }
 
+    // st_size type varies by platform (i64 vs u64)
+    #[allow(clippy::unnecessary_cast)]
     pub fn size(&self) -> u64 {
         self.stat.st_size as u64
     }
 
+    // st_mode type varies by platform (u16 on macOS, u32 on Linux)
+    #[allow(clippy::unnecessary_cast)]
     pub fn mode(&self) -> u32 {
         self.stat.st_mode as u32
     }
@@ -459,6 +463,8 @@ impl std::os::unix::fs::MetadataExt for Metadata {
         self.stat.st_rdev as u64
     }
 
+    // st_size type varies by platform (i64 on some platforms, u64 on others)
+    #[allow(clippy::unnecessary_cast)]
     fn size(&self) -> u64 {
         self.stat.st_size as u64
     }
@@ -529,10 +535,14 @@ impl std::os::unix::fs::MetadataExt for Metadata {
         }
     }
 
+    // st_blksize type varies by platform (i32/i64/u32/u64 depending on platform)
+    #[allow(clippy::unnecessary_cast)]
     fn blksize(&self) -> u64 {
         self.stat.st_blksize as u64
     }
 
+    // st_blocks type varies by platform (i64 on some platforms, u64 on others)
+    #[allow(clippy::unnecessary_cast)]
     fn blocks(&self) -> u64 {
         self.stat.st_blocks as u64
     }
