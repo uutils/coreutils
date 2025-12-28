@@ -44,10 +44,16 @@ cfg_langinfo! {
         DEFAULT_FORMAT_CACHE.get_or_init(|| {
             // Try to get locale format string
             if let Some(format) = get_locale_format_string() {
+                #[cfg(test)]
+                eprintln!("DEBUG: get_locale_default_format: Using system format: '{}'", format);
                 let format_with_tz = ensure_timezone_in_format(&format);
+                #[cfg(test)]
+                eprintln!("DEBUG: get_locale_default_format: After timezone adjustment: '{}'", format_with_tz);
                 return Box::leak(format_with_tz.into_boxed_str());
             }
 
+            #[cfg(test)]
+            eprintln!("DEBUG: get_locale_default_format: No system format, using fallback");
             // Fallback: use 24-hour format as safe default
             "%a %b %e %X %Z %Y"
         })
@@ -57,16 +63,32 @@ cfg_langinfo! {
     fn get_locale_format_string() -> Option<String> {
         unsafe {
             // Set locale from environment variables
-            libc::setlocale(libc::LC_TIME, c"".as_ptr());
+            let _locale_result = libc::setlocale(libc::LC_TIME, c"".as_ptr());
+            #[cfg(test)]
+            {
+                let current_locale = if _locale_result.is_null() {
+                    "NULL".to_string()
+                } else {
+                    CStr::from_ptr(_locale_result).to_string_lossy().into_owned()
+                };
+                eprintln!("DEBUG: get_locale_format_string: setlocale result: '{}'", current_locale);
+            }
 
             // Get the date/time format string
             let d_t_fmt_ptr = libc::nl_langinfo(libc::D_T_FMT);
             if d_t_fmt_ptr.is_null() {
+                #[cfg(test)]
+                eprintln!("DEBUG: get_locale_format_string: nl_langinfo returned null pointer");
                 return None;
             }
 
             let format = CStr::from_ptr(d_t_fmt_ptr).to_str().ok()?;
+            #[cfg(test)]
+            eprintln!("DEBUG: get_locale_format_string: raw format from nl_langinfo: '{}'", format);
+
             if format.is_empty() {
+                #[cfg(test)]
+                eprintln!("DEBUG: get_locale_format_string: format string is empty");
                 return None;
             }
 
@@ -121,10 +143,25 @@ mod tests {
         #[test]
         fn test_default_format_contains_valid_codes() {
             let format = get_locale_default_format();
-            assert!(format.contains("%a")); // abbreviated weekday
-            assert!(format.contains("%b")); // abbreviated month
-            assert!(format.contains("%Y") || format.contains("%y")); // year (4-digit or 2-digit)
-            assert!(format.contains("%Z")); // timezone
+
+            // Print the actual format for debugging on macOS and other platforms
+            eprintln!("DEBUG: Detected locale format: '{}'", format);
+            eprintln!("DEBUG: Platform: {}", std::env::consts::OS);
+            eprintln!("DEBUG: Arch: {}", std::env::consts::ARCH);
+
+            // Check for environment variables that might affect locale
+            for var in ["LC_ALL", "LC_TIME", "LANG"] {
+                if let Ok(val) = std::env::var(var) {
+                    eprintln!("DEBUG: {}={}", var, val);
+                } else {
+                    eprintln!("DEBUG: {} is not set", var);
+                }
+            }
+
+            assert!(format.contains("%a"), "Format '{}' should contain abbreviated weekday (%a)", format);
+            assert!(format.contains("%b"), "Format '{}' should contain abbreviated month (%b)", format);
+            assert!(format.contains("%Y") || format.contains("%y"), "Format '{}' should contain year (%Y or %y)", format);
+            assert!(format.contains("%Z"), "Format '{}' should contain timezone (%Z)", format);
         }
 
         #[test]
@@ -132,28 +169,46 @@ mod tests {
             // Verify we're using actual locale format strings, not hardcoded ones
             let format = get_locale_default_format();
 
+            // Print detailed debugging information
+            eprintln!("DEBUG: Testing locale format structure");
+            eprintln!("DEBUG: Format string: '{}'", format);
+            eprintln!("DEBUG: Format length: {} characters", format.len());
+
             // The format should not be empty
-            assert!(!format.is_empty(), "Locale format should not be empty");
+            assert!(!format.is_empty(), "Locale format should not be empty, got: '{}'", format);
 
-            // Should contain date/time components
-            let has_date_component = format.contains("%a")
-                || format.contains("%A")
-                || format.contains("%b")
-                || format.contains("%B")
-                || format.contains("%d")
-                || format.contains("%e");
-            assert!(has_date_component, "Format should contain date components");
+            // Check for date components with detailed output
+            let date_components = ["%a", "%A", "%b", "%B", "%d", "%e"];
+            let found_date_components: Vec<_> = date_components.iter()
+                .filter(|&comp| format.contains(comp))
+                .collect();
+            eprintln!("DEBUG: Found date components: {:?}", found_date_components);
 
-            // Should contain time component (hour)
-            let has_time_component = format.contains("%H")
-                || format.contains("%I")
-                || format.contains("%k")
-                || format.contains("%l")
-                || format.contains("%r")
-                || format.contains("%R")
-                || format.contains("%T")
-                || format.contains("%X");
-            assert!(has_time_component, "Format should contain time components");
+            let has_date_component = !found_date_components.is_empty();
+            assert!(has_date_component,
+                "Format '{}' should contain date components. Checked: {:?}, Found: {:?}",
+                format, date_components, found_date_components);
+
+            // Check for time components with detailed output
+            let time_components = ["%H", "%I", "%k", "%l", "%r", "%R", "%T", "%X"];
+            let found_time_components: Vec<_> = time_components.iter()
+                .filter(|&comp| format.contains(comp))
+                .collect();
+            eprintln!("DEBUG: Found time components: {:?}", found_time_components);
+
+            let has_time_component = !found_time_components.is_empty();
+            assert!(has_time_component,
+                "Format '{}' should contain time components. Checked: {:?}, Found: {:?}",
+                format, time_components, found_time_components);
+
+            // Additional debug: show raw locale format from system
+            eprintln!("DEBUG: Checking raw system locale format...");
+            if let Some(raw_format) = get_locale_format_string() {
+                eprintln!("DEBUG: Raw system format: '{}'", raw_format);
+                eprintln!("DEBUG: Raw format has timezone: {}", raw_format.contains("%Z"));
+            } else {
+                eprintln!("DEBUG: No raw system format available (using fallback)");
+            }
         }
 
         #[test]
