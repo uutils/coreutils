@@ -6845,3 +6845,18 @@ fn test_f_with_long_format() {
     // Long format should still work (contains permissions, etc.)
     assert!(result.contains("-rw"));
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_ls_proc_self_fd_no_errors() {
+    // Regression test: ReadDir must stay alive until metadata() is called
+    // to prevent "cannot access '/proc/self/fd/3'" errors.
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("/proc/self/fd")
+        .succeeds()
+        .stderr_does_not_contain("cannot access");
+}
