@@ -349,14 +349,14 @@ jobs:
       run: |
         python3 uutils/util/gnu-json-result.py gnu/tests-smack > ${{ env.TEST_SMACK_FULL_SUMMARY_FILE }}
     - name: Upload SMACK json results
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: smack-gnu-full-result
         path: ${{ env.TEST_SMACK_FULL_SUMMARY_FILE }}
     - name: Compress SMACK test logs
       run: gzip gnu/tests-smack/*/*.log 2>/dev/null || true
     - name: Upload SMACK test logs
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: smack-test-logs
         path: |
