@@ -29,12 +29,8 @@ options might be missing or different behavior might be experienced.
 
 <div class="oranda-hide">
 
-To install it:
-
-```shell
-cargo install coreutils
-~/.cargo/bin/coreutils
-```
+We provide prebuilt binaries at https://github.com/uutils/coreutils/releases/latest .
+It is recommended to install from main branch if you install from source.
 
 </div>
 
@@ -152,16 +148,16 @@ cargo build -p uu_base32 -p uu_cat -p uu_echo -p uu_rm
 
 Building using `make` is a simple process as well.
 
-To simply build all available utilities:
+To simply build all available utilities (with debug profile):
 
 ```shell
 make
 ```
 
-In release mode:
+In release-fast mode:
 
 ```shell
-make PROFILE=release
+make PROFILE=release-fast
 ```
 
 To build all but a few of the available utilities:
@@ -201,6 +197,12 @@ To install all available utilities:
 make install
 ```
 
+To install all utilities with all possible optimizations:
+
+```shell
+make PROFILE=release-fast install
+```
+
 To install using `sudo` switch `-E` must be used:
 
 ```shell
@@ -222,8 +224,10 @@ make UTILS='UTILITY_1 UTILITY_2' install
 To install every program with a prefix (e.g. uu-echo uu-cat):
 
 ```shell
-make PROG_PREFIX=PREFIX_GOES_HERE install
+make PROG_PREFIX=uu- install
 ```
+
+`PROG_PREFIX` requires separator `-`, `_`, or `=`.
 
 To install the multicall binary:
 
@@ -314,7 +318,7 @@ make uninstall
 To uninstall every program with a set prefix:
 
 ```shell
-make PROG_PREFIX=PREFIX_GOES_HERE uninstall
+make PROG_PREFIX=uu- uninstall
 ```
 
 To uninstall the multicall binary:
