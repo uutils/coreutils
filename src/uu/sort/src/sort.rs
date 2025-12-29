@@ -1067,18 +1067,13 @@ impl FieldSelector {
     }
 }
 
-/// Creates an `Arg` that conflicts with all other sort modes.
+/// Creates an `Arg` for a sort mode flag.
 fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
     Arg::new(mode)
         .short(short)
         .long(mode)
         .help(help)
         .action(ArgAction::SetTrue)
-        .conflicts_with_all(
-            options::modes::ALL_SORT_MODES
-                .iter()
-                .filter(|&&m| m != mode),
-        )
 }
 
 #[cfg(target_os = "linux")]
