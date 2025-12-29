@@ -217,7 +217,7 @@ macro_rules! bin {
             let stdout_was_closed = {
                 #[cfg(unix)]
                 {
-                    use nix::fcntl::{fcntl, FcntlArg};
+                    use nix::fcntl::{FcntlArg, fcntl};
                     match fcntl(std::io::stdout(), FcntlArg::F_GETFL) {
                         Ok(_) => false,
                         Err(nix::errno::Errno::EBADF) => true,
@@ -236,17 +236,16 @@ macro_rules! bin {
             if let Err(e) = std::io::stdout().flush() {
                 // Treat write errors as a failure, but ignore BrokenPipe to avoid
                 // breaking utilities that intentionally silence it (e.g., seq).
-                let ignore_closed_stdout = stdout_was_closed
-                    && {
-                        #[cfg(unix)]
-                        {
-                            e.raw_os_error() == Some(nix::errno::Errno::EBADF as i32)
-                        }
-                        #[cfg(not(unix))]
-                        {
-                            false
-                        }
-                    };
+                let ignore_closed_stdout = stdout_was_closed && {
+                    #[cfg(unix)]
+                    {
+                        e.raw_os_error() == Some(nix::errno::Errno::EBADF as i32)
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        false
+                    }
+                };
                 if e.kind() != std::io::ErrorKind::BrokenPipe && !ignore_closed_stdout {
                     eprintln!("Error flushing stdout: {e}");
                     if code == 0 {
