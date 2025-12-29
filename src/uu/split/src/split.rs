@@ -638,7 +638,7 @@ where
         // STDIN stream that did not fit all content into a buffer
         // Most likely continuous/infinite input stream
         Err(io::Error::other(
-            translate!("split-error-cannot-determine-input-size", "input" => input.to_string_lossy()),
+            translate!("split-error-cannot-determine-input-size", "input" => input.maybe_quote()),
         ))
     } else {
         // Could be that file size is larger than set read limit
@@ -663,7 +663,7 @@ where
                 // TODO It might be possible to do more here
                 // to address all possible file types and edge cases
                 Err(io::Error::other(
-                    translate!("split-error-cannot-determine-file-size", "input" => input.to_string_lossy()),
+                    translate!("split-error-cannot-determine-file-size", "input" => input.maybe_quote()),
                 ))
             }
         }
@@ -1172,7 +1172,7 @@ where
                 Err(error) => {
                     return Err(USimpleError::new(
                         1,
-                        translate!("split-error-cannot-read-from-input", "input" => settings.input.to_string_lossy(), "error" => error),
+                        translate!("split-error-cannot-read-from-input", "input" => settings.input.maybe_quote(), "error" => error),
                     ));
                 }
             }
@@ -1534,7 +1534,7 @@ fn split(settings: &Settings) -> UResult<()> {
         Box::new(stdin()) as Box<dyn Read>
     } else {
         let r = File::open(Path::new(&settings.input)).map_err_context(
-            || translate!("split-error-cannot-open-for-reading", "file" => settings.input.to_string_lossy().quote()),
+            || translate!("split-error-cannot-open-for-reading", "file" => settings.input.quote()),
         )?;
         Box::new(r) as Box<dyn Read>
     };
