@@ -50,12 +50,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install system dependencies
-        shell: bash
-        run: |
-          sudo apt-get -y update
-          sudo apt-get -y install libselinux1-dev
-
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
