@@ -953,9 +953,10 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
         // Store any I/O error from reading to print AFTER stats (matches GNU wc behavior)
         let (word_count, deferred_error) = match word_count_from_input(&input, settings) {
             CountResult::Success(word_count) => (word_count, None),
-            CountResult::Interrupted(word_count, err) => {
-                (word_count, Some(err.map_err_context(|| input.path_display())))
-            }
+            CountResult::Interrupted(word_count, err) => (
+                word_count,
+                Some(err.map_err_context(|| input.path_display())),
+            ),
             CountResult::Failure(err) => {
                 show!(err.map_err_context(|| input.path_display()));
                 continue;
