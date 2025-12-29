@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat biguint
 use std::ffi::{OsStr, OsString};
-use std::io::{BufWriter, ErrorKind, Write, stdout};
+use std::io::{BufWriter, Write, stdout};
 
 use clap::{Arg, ArgAction, Command};
 use num_bigint::BigUint;
@@ -211,7 +211,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match result {
         Ok(()) => Ok(()),
-        Err(err) if err.kind() == ErrorKind::BrokenPipe => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
+            // GNU seq prints the Broken pipe message but still exits with status 0
+            let err = err.map_err_context(|| "write error".into());
+            uucore::show_error!("{err}");
+            Ok(())
+        }
         Err(err) => Err(err.map_err_context(|| "write error".into())),
     }
 }

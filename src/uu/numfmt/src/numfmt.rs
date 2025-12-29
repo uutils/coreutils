@@ -460,9 +460,9 @@ mod tests {
         let result_display = format!("{result}");
         assert_eq!(
             result_debug,
-            "FormattingError(\"numfmt-error-invalid-suffix\")"
+            "FormattingError(\"numfmt-error-invalid-number\")"
         );
-        assert_eq!(result_display, "numfmt-error-invalid-suffix");
+        assert_eq!(result_display, "numfmt-error-invalid-number");
         assert_eq!(result.code(), 2);
     }
 

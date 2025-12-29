@@ -3,10 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore abcdefghijklmnopqrstuvwxyz Anone fdbb littl
+// spell-checker:ignore abcdefghijklmnopqrstuvwxyz Anone fdbb littl bfloat
 
 #[cfg(unix)]
 use std::io::Read;
+#[cfg(target_os = "linux")]
+use std::path::Path;
 
 use unindent::unindent;
 use uutests::util::TestScenario;
@@ -18,6 +20,27 @@ static ALPHA_OUT: &str = "
         0000020 071161 072163 073165 074167 075171 000012
         0000033
         ";
+
+fn erange_message() -> String {
+    let err = std::io::Error::from_raw_os_error(libc::ERANGE);
+    let msg = err.to_string();
+    msg.split(" (os error").next().unwrap_or(&msg).to_string()
+}
+
+fn run_skip_across_inputs(files: &[(&str, &str)], skip: u64, expected: &str) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    for (name, contents) in files {
+        at.write(name, contents);
+    }
+
+    ucmd.arg("-c").arg("-j").arg(skip.to_string()).arg("-An");
+
+    for (name, _) in files {
+        ucmd.arg(name);
+    }
+
+    ucmd.succeeds().stdout_only(expected);
+}
 
 #[test]
 fn test_invalid_arg() {
@@ -174,6 +197,32 @@ fn test_hex32() {
         .stdout_only(expected_output);
 }
 
+// Regression: 16-bit IEEE half should print with canonical precision (no spurious digits)
+#[test]
+fn test_float16_compact() {
+    let input: [u8; 4] = [0x3c, 0x00, 0x3c, 0x00]; // two times 1.0 in big-endian half
+    new_ucmd!()
+        .arg("--endian=big")
+        .arg("-An")
+        .arg("-tfH")
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_only("               1               1\n");
+}
+
+// Regression: 16-bit bfloat should print with canonical precision (no spurious digits)
+#[test]
+fn test_bfloat16_compact() {
+    let input: [u8; 4] = [0x3f, 0x80, 0x3f, 0x80]; // two times 1.0 in big-endian bfloat16
+    new_ucmd!()
+        .arg("--endian=big")
+        .arg("-An")
+        .arg("-tfB")
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_only("               1               1\n");
+}
+
 #[test]
 fn test_f16() {
     let input: [u8; 14] = [
@@ -187,7 +236,7 @@ fn test_f16() {
     ]; // 0x8400 -6.104e-5
     let expected_output = unindent(
         "
-            0000000       1.0000000               0              -0             inf
+            0000000               1               0              -0             inf
             0000010            -inf             NaN   -6.1035156e-5
             0000016
             ",
@@ -214,7 +263,7 @@ fn test_fh() {
     ]; // 0x8400 -6.1035156e-5
     let expected_output = unindent(
         "
-            0000000       1.0000000               0              -0             inf
+            0000000               1               0              -0             inf
             0000010            -inf             NaN   -6.1035156e-5
             0000016
         ",
@@ -241,7 +290,7 @@ fn test_fb() {
     ]; // -6.1035156e-5
     let expected_output = unindent(
         "
-            0000000       1.0000000               0              -0             inf
+            0000000               1               0              -0             inf
             0000010            -inf             NaN   -6.1035156e-5
             0000016
         ",
@@ -368,22 +417,29 @@ fn test_invalid_width() {
 
 #[test]
 fn test_zero_width() {
-    let input: [u8; 4] = [0x00, 0x00, 0x00, 0x00];
-    let expected_output = unindent(
-        "
-            0000000 000000
-            0000002 000000
-            0000004
-            ",
-    );
-
     new_ucmd!()
         .arg("-w0")
-        .arg("-v")
-        .run_piped_stdin(&input[..])
-        .success()
-        .stderr_is_bytes("od: warning: invalid width 0; using 2 instead\n".as_bytes())
-        .stdout_is(expected_output);
+        .arg("-An")
+        .fails_with_code(1)
+        .stderr_only("od: invalid -w argument '0'\n");
+}
+
+#[test]
+fn test_negative_width_argument() {
+    new_ucmd!()
+        .arg("-w-1")
+        .arg("-An")
+        .fails_with_code(1)
+        .stderr_only("od: invalid -w argument '-1'\n");
+}
+
+#[test]
+fn test_non_numeric_width_argument() {
+    new_ucmd!()
+        .arg("-ww")
+        .arg("-An")
+        .fails_with_code(1)
+        .stderr_only("od: invalid -w argument 'w'\n");
 }
 
 #[test]
@@ -400,6 +456,42 @@ fn test_width_without_value() {
         .run_piped_stdin(&input[..])
         .success()
         .stdout_only(expected_output);
+}
+
+#[test]
+fn test_very_wide_ascii_output() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("data-a", "x");
+    ucmd.arg("-a")
+        .arg("-w65537")
+        .arg("-An")
+        .arg("data-a")
+        .succeeds()
+        .stdout_only("   x\n");
+}
+
+#[test]
+fn test_very_wide_char_output() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("data-c", "x");
+    ucmd.arg("-c")
+        .arg("-w65537")
+        .arg("-An")
+        .arg("data-c")
+        .succeeds()
+        .stdout_only("   x\n");
+}
+
+#[test]
+fn test_very_wide_hex_byte_output() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("data-x", &[0x42]);
+    ucmd.arg("-tx1")
+        .arg("-w65537")
+        .arg("-An")
+        .arg("data-x")
+        .succeeds()
+        .stdout_only(" 42\n");
 }
 
 #[test]
@@ -607,6 +699,53 @@ fn test_invalid_offset() {
 }
 
 #[test]
+fn test_invalid_traditional_offsets_are_filenames() {
+    let cases = [("++0", "++0"), ("+-0", "+-0"), ("+ 0", "'+ 0'")];
+
+    for (input, display) in cases {
+        new_ucmd!()
+            .arg(input)
+            .fails_with_code(1)
+            .stderr_only(format!("od: {display}: No such file or directory\n"));
+    }
+
+    new_ucmd!()
+        .arg("--")
+        .arg("-0")
+        .fails_with_code(1)
+        .stderr_only("od: -0: No such file or directory\n");
+}
+
+#[test]
+fn test_traditional_offset_overflow_diagnosed() {
+    let erange = erange_message();
+    let long_octal = "7".repeat(255);
+    let long_decimal = format!("{}.", "9".repeat(254));
+    let long_hex = format!("0x{}", "f".repeat(253));
+
+    new_ucmd!()
+        .arg("-")
+        .arg(&long_octal)
+        .pipe_in(Vec::<u8>::new())
+        .fails_with_code(1)
+        .stderr_only(format!("od: {long_octal}: {erange}\n"));
+
+    new_ucmd!()
+        .arg("-")
+        .arg(&long_decimal)
+        .pipe_in(Vec::<u8>::new())
+        .fails_with_code(1)
+        .stderr_only(format!("od: {long_decimal}: {erange}\n"));
+
+    new_ucmd!()
+        .arg("-")
+        .arg(&long_hex)
+        .pipe_in(Vec::<u8>::new())
+        .fails_with_code(1)
+        .stderr_only(format!("od: {long_hex}: {erange}\n"));
+}
+
+#[test]
 fn test_empty_offset() {
     new_ucmd!()
         .arg("-A")
@@ -668,6 +807,59 @@ fn test_skip_bytes_hex() {
             0000021
             ",
         ));
+}
+
+#[test]
+fn test_skip_bytes_consumes_single_input() {
+    run_skip_across_inputs(&[("g", "a")], 1, "");
+}
+
+#[test]
+fn test_skip_bytes_consumes_two_inputs() {
+    run_skip_across_inputs(&[("g", "a"), ("h", "b")], 2, "");
+}
+
+#[test]
+fn test_skip_bytes_consumes_three_inputs() {
+    run_skip_across_inputs(&[("g", "a"), ("h", "b"), ("i", "c")], 3, "");
+}
+
+#[test]
+fn test_skip_bytes_prints_after_consuming_multiple_inputs() {
+    run_skip_across_inputs(
+        &[("g", "a"), ("h", "b"), ("i", "c"), ("j", "d")],
+        3,
+        "   d\n",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_skip_bytes_proc_file_without_seeking() {
+    let proc_path = Path::new("/proc/version");
+    if !proc_path.exists() {
+        return;
+    }
+
+    let Ok(contents) = std::fs::read(proc_path) else {
+        return;
+    };
+
+    if contents.is_empty() {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("after", "e");
+
+    ucmd.arg("-An")
+        .arg("-c")
+        .arg("-j")
+        .arg(contents.len().to_string())
+        .arg(proc_path)
+        .arg("after")
+        .succeeds()
+        .stdout_only("   e\n");
 }
 
 #[test]
@@ -776,6 +968,24 @@ fn test_stdin_offset() {
             0000021
             ",
         ));
+}
+
+#[test]
+fn test_traditional_decimal_dot_offset() {
+    new_ucmd!()
+        .arg("+1.")
+        .pipe_in("a")
+        .succeeds()
+        .stdout_only("0000001\n");
+}
+
+#[test]
+fn test_traditional_dot_block_offset() {
+    new_ucmd!()
+        .arg("+1.b")
+        .pipe_in(vec![b'a'; 512])
+        .succeeds()
+        .stdout_only("0001000\n");
 }
 
 #[test]

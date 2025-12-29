@@ -24,7 +24,9 @@
 //! # Ok::<(), std::io::Error>(())
 //! ```
 
+use std::env;
 use std::ffi::OsStr;
+use std::fmt;
 use std::fs::File;
 use std::io::{self, BufWriter, Stdout, StdoutLock, Write as IoWrite};
 
@@ -116,4 +118,19 @@ impl OsWrite for Box<dyn OsWrite> {
         let this: &mut dyn OsWrite = self;
         this.write_all_os(buf)
     }
+}
+
+/// Print all environment variables in the format `name=value` with the specified line ending.
+///
+/// This function handles non-UTF-8 environment variable names and values correctly by using
+/// raw bytes on Unix systems.
+pub fn print_all_env_vars<T: fmt::Display>(line_ending: T) -> io::Result<()> {
+    let mut stdout = io::stdout().lock();
+    for (name, value) in env::vars_os() {
+        stdout.write_all_os(&name)?;
+        stdout.write_all(b"=")?;
+        stdout.write_all_os(&value)?;
+        write!(stdout, "{line_ending}")?;
+    }
+    Ok(())
 }

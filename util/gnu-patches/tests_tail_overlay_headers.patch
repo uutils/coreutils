@@ -1,0 +1,49 @@
+--- gnu.orig/tests/tail/overlay-headers.sh	2025-12-07 23:20:20.566198669 +0100
++++ gnu/tests/tail/overlay-headers.sh	2025-12-07 23:20:20.570198688 +0100
+@@ -56,26 +56,39 @@
+
+ kill -0 $pid || fail=1
+
+-# Wait for 5 initial lines
+-retry_delay_ wait4lines_ .1 6 5 || fail=1
++# Wait for 5 initial lines (2 headers + 2 content lines + 1 blank)
++retry_delay_ wait4lines_ .1 6 5 || { echo "Failed waiting for initial 5 lines"; fail=1; }
++
++echo "=== After initial wait, line count: $(countlines_) ==="
++echo "=== Initial output: ===" && cat out && echo "=== End initial output ==="
+
+ # Suspend tail so single read() caters for multiple inotify events
+-kill -STOP $pid || fail=1
++kill -STOP $pid || { echo "Failed to STOP tail process"; fail=1; }
+
+ # Interleave writes to files to generate overlapping inotify events
+ echo line >> file1 || framework_failure_
+ echo line >> file2 || framework_failure_
+ echo line >> file1 || framework_failure_
+ echo line >> file2 || framework_failure_
++echo "=== Files written, resuming tail ==="
+
+ # Resume tail processing
+-kill -CONT $pid || fail=1
++kill -CONT $pid || { echo "Failed to CONT tail process"; fail=1; }
+
+-# Wait for 8 more lines
+-retry_delay_ wait4lines_ .1 6 13 || fail=1
++# Wait for 8 more lines (should total 13)
++retry_delay_ wait4lines_ .1 6 13 || { echo "Failed waiting for 13 total lines"; fail=1; }
+
+ kill $sleep && wait || framework_failure_
+
+-test "$(countlines_)" = 13 || fail=1
++final_count=$(countlines_)
++echo "=== Final line count: $final_count (expected 13) ==="
++
++if test "$final_count" != 13; then
++  echo "=== FAILURE: Expected 13 lines, got $final_count ==="
++  echo "=== Full output content: ==="
++  cat -A out
++  echo "=== End output content ==="
++  fail=1
++fi
+
+ Exit $fail

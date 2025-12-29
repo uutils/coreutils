@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore bfloat multifile
+// spell-checker:ignore bfloat multifile mant
 
 use half::{bf16, f16};
 use std::io;
@@ -164,6 +164,61 @@ impl MemoryDecoder<'_> {
         let bits = self.byte_order.read_u16(&self.data[start..start + 2]);
         let val = f32::from(bf16::from_bits(bits));
         f64::from(val)
+    }
+
+    /// Returns a long double from the internal buffer at position `start`.
+    /// We read 16 bytes as u128 (respecting endianness) and convert to f64.
+    /// This ensures that endianness swapping works correctly even if we lose precision.
+    pub fn read_long_double(&self, start: usize) -> f64 {
+        let bits = self.byte_order.read_u128(&self.data[start..start + 16]);
+        u128_to_f64(bits)
+    }
+}
+
+fn u128_to_f64(u: u128) -> f64 {
+    let sign = (u >> 127) as u64;
+    let exp = ((u >> 112) & 0x7FFF) as u64;
+    let mant = u & ((1 << 112) - 1);
+
+    if exp == 0x7FFF {
+        // Infinity or NaN
+        if mant == 0 {
+            if sign == 0 {
+                f64::INFINITY
+            } else {
+                f64::NEG_INFINITY
+            }
+        } else {
+            f64::NAN
+        }
+    } else if exp == 0 {
+        // Subnormal or zero
+        if mant == 0 {
+            if sign == 0 { 0.0 } else { -0.0 }
+        } else {
+            // Subnormal f128 is too small for f64, flush to zero
+            if sign == 0 { 0.0 } else { -0.0 }
+        }
+    } else {
+        // Normal
+        let new_exp = exp as i64 - 16383 + 1023;
+        if new_exp >= 2047 {
+            // Overflow to infinity
+            if sign == 0 {
+                f64::INFINITY
+            } else {
+                f64::NEG_INFINITY
+            }
+        } else if new_exp <= 0 {
+            // Underflow to zero
+            if sign == 0 { 0.0 } else { -0.0 }
+        } else {
+            // Normal f64
+            // Mantissa: take top 52 bits of 112-bit mantissa
+            let new_mant = (mant >> (112 - 52)) as u64;
+            let bits = (sign << 63) | ((new_exp as u64) << 52) | new_mant;
+            f64::from_bits(bits)
+        }
     }
 }
 
