@@ -17,6 +17,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::sync::OnceLock;
+use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
@@ -171,6 +172,17 @@ fn parse_military_timezone_with_offset(s: &str) -> Option<i32> {
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+
+    // Check for extra operands (multiple positional arguments)
+    if let Some(formats) = matches.get_many::<String>(OPT_FORMAT) {
+        let format_args: Vec<&String> = formats.collect();
+        if format_args.len() > 1 {
+            return Err(USimpleError::new(
+                1,
+                translate!("date-error-extra-operand", "operand" => format_args[1]),
+            ));
+        }
+    }
 
     let format = if let Some(form) = matches.get_one::<String>(OPT_FORMAT) {
         if !form.starts_with('+') {
@@ -352,23 +364,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if path.is_dir() {
                 return Err(USimpleError::new(
                     2,
-                    translate!("date-error-expected-file-got-directory", "path" => path.to_string_lossy()),
+                    translate!("date-error-expected-file-got-directory", "path" => path.quote()),
                 ));
             }
-            let file = File::open(path)
-                .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
+            let file =
+                File::open(path).map_err_context(|| path.as_os_str().maybe_quote().to_string())?;
             let lines = BufReader::new(file).lines();
             let iter = lines.map_while(Result::ok).map(parse_date);
             Box::new(iter)
         }
         DateSource::FileMtime(ref path) => {
             let metadata = std::fs::metadata(path)
-                .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
+                .map_err_context(|| path.as_os_str().maybe_quote().to_string())?;
             let mtime = metadata.modified()?;
             let ts = Timestamp::try_from(mtime).map_err(|e| {
                 USimpleError::new(
                     1,
-                    translate!("date-error-cannot-set-date", "path" => path.to_string_lossy(), "error" => e),
+                    translate!("date-error-cannot-set-date", "path" => path.quote(), "error" => e),
                 )
             })?;
             let date = ts.to_zoned(TimeZone::try_system().unwrap_or(TimeZone::UTC));
@@ -520,7 +532,7 @@ pub fn uu_app() -> Command {
                 .help(translate!("date-help-universal"))
                 .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(OPT_FORMAT))
+        .arg(Arg::new(OPT_FORMAT).num_args(0..).trailing_var_arg(true))
 }
 
 /// Return the appropriate format string for the given settings.

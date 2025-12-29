@@ -28,115 +28,85 @@ macro_rules! cfg_langinfo {
 cfg_langinfo! {
     use std::ffi::CStr;
     use std::sync::OnceLock;
+    use nix::libc;
+
+    #[cfg(test)]
+    use std::sync::Mutex;
 }
 
 cfg_langinfo! {
-    /// Cached result of locale time format detection
-    static TIME_FORMAT_CACHE: OnceLock<bool> = OnceLock::new();
-
-    /// Safe wrapper around libc setlocale
-    fn set_time_locale() {
-        unsafe {
-            nix::libc::setlocale(nix::libc::LC_TIME, c"".as_ptr());
-        }
-    }
-
-    /// Safe wrapper around libc nl_langinfo that returns `Option<String>`
-    fn get_locale_info(item: nix::libc::nl_item) -> Option<String> {
-        unsafe {
-            let ptr = nix::libc::nl_langinfo(item);
-            if ptr.is_null() {
-                None
-            } else {
-                CStr::from_ptr(ptr).to_str().ok().map(String::from)
-            }
-        }
-    }
-
-    /// Internal function that performs the actual locale detection
-    fn detect_12_hour_format() -> bool {
-        // Helper function to check for 12-hour format indicators
-        fn has_12_hour_indicators(format_str: &str) -> bool {
-            const INDICATORS: &[&str] = &["%I", "%l", "%r"];
-            INDICATORS.iter().any(|&indicator| format_str.contains(indicator))
-        }
-
-        // Helper function to check for 24-hour format indicators
-        fn has_24_hour_indicators(format_str: &str) -> bool {
-            const INDICATORS: &[&str] = &["%H", "%k", "%R", "%T"];
-            INDICATORS.iter().any(|&indicator| format_str.contains(indicator))
-        }
-
-        // Set locale from environment variables (empty string = use LC_TIME/LANG env vars)
-        set_time_locale();
-
-        // Get locale format strings using safe wrappers
-        let d_t_fmt = get_locale_info(nix::libc::D_T_FMT);
-        let t_fmt_opt = get_locale_info(nix::libc::T_FMT);
-        let t_fmt_ampm_opt = get_locale_info(nix::libc::T_FMT_AMPM);
-
-        // Check D_T_FMT first
-        if let Some(ref format) = d_t_fmt {
-            // Check for 12-hour indicators first (higher priority)
-            if has_12_hour_indicators(format) {
-                return true;
-            }
-
-            // If we find 24-hour indicators, it's definitely not 12-hour
-            if has_24_hour_indicators(format) {
-                return false;
-            }
-        }
-
-        // Also check the time-only format as a fallback
-        if let Some(ref time_format) = t_fmt_opt {
-            if has_12_hour_indicators(time_format) {
-                return true;
-            }
-        }
-
-        // Check if there's a specific 12-hour format defined
-        if let Some(ref ampm_format) = t_fmt_ampm_opt {
-            // If T_FMT_AMPM is non-empty and different from T_FMT, locale supports 12-hour
-            if !ampm_format.is_empty() {
-                if let Some(ref time_format) = t_fmt_opt {
-                    if ampm_format != time_format {
-                        return true;
-                    }
-                } else {
-                    return true;
-                }
-            }
-        }
-
-        // Default to 24-hour format if we can't determine
-        false
-    }
-}
-
-cfg_langinfo! {
-    /// Detects whether the current locale prefers 12-hour or 24-hour time format
-    /// Results are cached for performance
-    pub fn uses_12_hour_format() -> bool {
-        *TIME_FORMAT_CACHE.get_or_init(detect_12_hour_format)
-    }
-
-    /// Cached default format string
+    /// Cached locale date/time format string
     static DEFAULT_FORMAT_CACHE: OnceLock<&'static str> = OnceLock::new();
 
-    /// Get the locale-appropriate default format string for date output
-    /// This respects the locale's preference for 12-hour vs 24-hour time
-    /// Results are cached for performance (following uucore patterns)
+    /// Mutex to serialize setlocale() calls during tests.
+    ///
+    /// setlocale() is process-global, so parallel tests that call it can
+    /// interfere with each other. This mutex ensures only one test accesses
+    /// locale functions at a time.
+    #[cfg(test)]
+    static LOCALE_MUTEX: Mutex<()> = Mutex::new(());
+
+    /// Returns the default date format string for the current locale.
+    ///
+    /// The format respects locale preferences for time display (12-hour vs 24-hour),
+    /// component ordering, and numeric formatting conventions. Ensures timezone
+    /// information is included in the output.
     pub fn get_locale_default_format() -> &'static str {
         DEFAULT_FORMAT_CACHE.get_or_init(|| {
-            if uses_12_hour_format() {
-                // Use 12-hour format with AM/PM
-                "%a %b %e %r %Z %Y"
-            } else {
-                // Use 24-hour format
-                "%a %b %e %X %Z %Y"
+            // Try to get locale format string
+            if let Some(format) = get_locale_format_string() {
+                let format_with_tz = ensure_timezone_in_format(&format);
+                return Box::leak(format_with_tz.into_boxed_str());
             }
+
+            // Fallback: use 24-hour format as safe default
+            "%a %b %e %X %Z %Y"
         })
+    }
+
+    /// Retrieves the date/time format string from the system locale
+    fn get_locale_format_string() -> Option<String> {
+        // In tests, acquire mutex to prevent race conditions with setlocale()
+        // which is process-global and not thread-safe
+        #[cfg(test)]
+        let _lock = LOCALE_MUTEX.lock().unwrap();
+
+        unsafe {
+            // Set locale from environment variables
+            libc::setlocale(libc::LC_TIME, c"".as_ptr());
+
+            // Get the date/time format string
+            let d_t_fmt_ptr = libc::nl_langinfo(libc::D_T_FMT);
+            if d_t_fmt_ptr.is_null() {
+                return None;
+            }
+
+            let format = CStr::from_ptr(d_t_fmt_ptr).to_str().ok()?;
+            if format.is_empty() {
+                return None;
+            }
+
+            Some(format.to_string())
+        }
+    }
+
+    /// Ensures the format string includes timezone (%Z)
+    fn ensure_timezone_in_format(format: &str) -> String {
+        if format.contains("%Z") {
+            return format.to_string();
+        }
+
+        // Try to insert %Z before year specifier (%Y or %y)
+        if let Some(pos) = format.find("%Y").or_else(|| format.find("%y")) {
+            let mut result = String::with_capacity(format.len() + 3);
+            result.push_str(&format[..pos]);
+            result.push_str("%Z ");
+            result.push_str(&format[pos..]);
+            result
+        } else {
+            // No year found, append %Z at the end
+            format.to_string() + " %Z"
+        }
     }
 }
 
@@ -161,7 +131,6 @@ mod tests {
         #[test]
         fn test_locale_detection() {
             // Just verify the function doesn't panic
-            let _ = uses_12_hour_format();
             let _ = get_locale_default_format();
         }
 
@@ -170,8 +139,125 @@ mod tests {
             let format = get_locale_default_format();
             assert!(format.contains("%a")); // abbreviated weekday
             assert!(format.contains("%b")); // abbreviated month
-            assert!(format.contains("%Y")); // year
+            assert!(format.contains("%Y") || format.contains("%y")); // year (4-digit or 2-digit)
             assert!(format.contains("%Z")); // timezone
+        }
+
+        #[test]
+        fn test_locale_format_structure() {
+            // Verify we're using actual locale format strings, not hardcoded ones
+            let format = get_locale_default_format();
+
+            // The format should not be empty
+            assert!(!format.is_empty(), "Locale format should not be empty");
+
+            // Should contain date/time components
+            let has_date_component = format.contains("%a")
+                || format.contains("%A")
+                || format.contains("%b")
+                || format.contains("%B")
+                || format.contains("%d")
+                || format.contains("%e");
+            assert!(has_date_component, "Format should contain date components");
+
+            // Should contain time component (hour)
+            let has_time_component = format.contains("%H")
+                || format.contains("%I")
+                || format.contains("%k")
+                || format.contains("%l")
+                || format.contains("%r")
+                || format.contains("%R")
+                || format.contains("%T")
+                || format.contains("%X");
+            assert!(has_time_component, "Format should contain time components");
+        }
+
+        #[test]
+        fn test_c_locale_format() {
+            // Acquire mutex to prevent interference with other tests
+            let _lock = LOCALE_MUTEX.lock().unwrap();
+
+            // Save original locale (both environment and process locale)
+            let original_lc_all = std::env::var("LC_ALL").ok();
+            let original_lc_time = std::env::var("LC_TIME").ok();
+            let original_lang = std::env::var("LANG").ok();
+
+            // Save current process locale
+            let original_process_locale = unsafe {
+                let ptr = libc::setlocale(libc::LC_TIME, std::ptr::null());
+                if ptr.is_null() {
+                    None
+                } else {
+                    CStr::from_ptr(ptr).to_str().ok().map(|s| s.to_string())
+                }
+            };
+
+            unsafe {
+                // Set C locale
+                std::env::set_var("LC_ALL", "C");
+                std::env::remove_var("LC_TIME");
+                std::env::remove_var("LANG");
+            }
+
+            // Get the locale format
+            let format = unsafe {
+                libc::setlocale(libc::LC_TIME, c"C".as_ptr());
+                let d_t_fmt_ptr = libc::nl_langinfo(libc::D_T_FMT);
+                if d_t_fmt_ptr.is_null() {
+                    None
+                } else {
+                    CStr::from_ptr(d_t_fmt_ptr).to_str().ok()
+                }
+            };
+
+            if let Some(locale_format) = format {
+                // C locale typically uses 24-hour format
+                // Common patterns: %H (24-hour with leading zero) or %T (HH:MM:SS)
+                let uses_24_hour = locale_format.contains("%H")
+                    || locale_format.contains("%T")
+                    || locale_format.contains("%R");
+                assert!(uses_24_hour, "C locale should use 24-hour format, got: {locale_format}");
+            }
+
+            // Restore original environment variables
+            unsafe {
+                if let Some(val) = original_lc_all {
+                    std::env::set_var("LC_ALL", val);
+                } else {
+                    std::env::remove_var("LC_ALL");
+                }
+                if let Some(val) = original_lc_time {
+                    std::env::set_var("LC_TIME", val);
+                } else {
+                    std::env::remove_var("LC_TIME");
+                }
+                if let Some(val) = original_lang {
+                    std::env::set_var("LANG", val);
+                } else {
+                    std::env::remove_var("LANG");
+                }
+            }
+
+            // Restore original process locale
+            unsafe {
+                if let Some(locale) = original_process_locale {
+                    let c_locale = std::ffi::CString::new(locale).unwrap();
+                    libc::setlocale(libc::LC_TIME, c_locale.as_ptr());
+                } else {
+                    // Restore from environment
+                    libc::setlocale(libc::LC_TIME, c"".as_ptr());
+                }
+            }
+        }
+
+        #[test]
+        fn test_timezone_included_in_format() {
+            // The implementation should ensure %Z is present
+            let format = get_locale_default_format();
+            assert!(
+                format.contains("%Z") || format.contains("%z"),
+                "Format should contain timezone indicator: {format}"
+            );
         }
     }
 }
