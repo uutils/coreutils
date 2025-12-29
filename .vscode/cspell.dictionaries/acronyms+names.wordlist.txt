@@ -3,6 +3,8 @@ aarch
 AIX
 ASLR # address space layout randomization
 AST # abstract syntax tree
+CATN # busybox cat -n feature flag
+CATV # busybox cat -v feature flag
 CICD # continuous integration/deployment
 CPU
 CPUs
