@@ -6,7 +6,8 @@
 // spell-checker:ignore smackfs
 //! SMACK (Simplified Mandatory Access Control Kernel) support
 
-use std::io;
+use std::fs;
+use std::io::{self, Read, Write};
 use std::path::Path;
 use std::sync::OnceLock;
 
@@ -48,6 +49,36 @@ impl From<SmackError> for i32 {
 pub fn is_smack_enabled() -> bool {
     static SMACK_ENABLED: OnceLock<bool> = OnceLock::new();
     *SMACK_ENABLED.get_or_init(|| Path::new("/sys/fs/smackfs").exists())
+}
+
+/// Gets the SMACK label for the current process.
+pub fn get_smack_label_for_self() -> Result<String, SmackError> {
+    if !is_smack_enabled() {
+        return Err(SmackError::SmackNotEnabled);
+    }
+
+    let mut label = String::new();
+    fs::File::open("/proc/self/attr/current")
+        .map_err(SmackError::LabelRetrievalFailure)?
+        .read_to_string(&mut label)
+        .map_err(SmackError::LabelRetrievalFailure)?;
+
+    Ok(label.trim().to_string())
+}
+
+/// Sets the SMACK label for the current process.
+pub fn set_smack_label_for_self(label: &str) -> Result<(), SmackError> {
+    if !is_smack_enabled() {
+        return Err(SmackError::SmackNotEnabled);
+    }
+
+    let label_owned = label.to_string();
+    fs::File::create("/proc/self/attr/current")
+        .map_err(|e| SmackError::LabelSetFailure(label_owned.clone(), e))?
+        .write_all(label.as_bytes())
+        .map_err(|e| SmackError::LabelSetFailure(label_owned, e))?;
+
+    Ok(())
 }
 
 /// Gets the SMACK label for a filesystem path via xattr.
