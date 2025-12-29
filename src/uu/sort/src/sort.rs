@@ -580,6 +580,14 @@ impl<'a> Line<'a> {
         token_buffer: &mut Vec<Field>,
         settings: &GlobalSettings,
     ) -> Self {
+        let needs_line_data = settings.precomputed.needs_tokens
+            || settings.precomputed.selections_per_line > 0
+            || settings.precomputed.num_infos_per_line > 0
+            || settings.precomputed.floats_per_line > 0
+            || settings.mode == SortMode::Numeric;
+        if !needs_line_data {
+            return Self { line, index };
+        }
         token_buffer.clear();
         if settings.precomputed.needs_tokens {
             tokenize(line, settings.separator, token_buffer);
