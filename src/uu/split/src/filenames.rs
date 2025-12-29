@@ -89,7 +89,7 @@ pub enum SuffixError {
 
     /// Suffix contains a directory separator, which is not allowed.
     #[error("{}", translate!("split-error-suffix-contains-separator", "value" => .0.quote()))]
-    ContainsSeparator(String),
+    ContainsSeparator(OsString),
 
     /// Suffix is not large enough to split into specified chunks
     #[error("{}", translate!("split-error-suffix-too-small", "length" => .0))]
@@ -224,9 +224,7 @@ impl Suffix {
             .unwrap()
             .clone();
         if additional.to_string_lossy().chars().any(is_separator) {
-            return Err(SuffixError::ContainsSeparator(
-                additional.to_string_lossy().to_string(),
-            ));
+            return Err(SuffixError::ContainsSeparator(additional));
         }
 
         let result = Self {
