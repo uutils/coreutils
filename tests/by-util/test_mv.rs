@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore mydir hardlinked tmpfs
+// spell-checker:ignore mydir hardlinked tmpfs notty unwriteable
 
 use filetime::FileTime;
 use rstest::rstest;
@@ -13,6 +13,8 @@ use std::path::Path;
 #[cfg(feature = "feat_selinux")]
 use uucore::selinux::get_getfattr_output;
 use uutests::new_ucmd;
+#[cfg(unix)]
+use uutests::util::TerminalSimulation;
 use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, util_name};
 
@@ -2734,4 +2736,71 @@ fn test_mv_verbose_directory_recursive() {
     assert!(stdout.contains("'mv-dir/d/e' -> "));
     assert!(stdout.contains("'mv-dir/d/e/f' -> "));
     assert!(stdout.contains("'mv-dir/d/e/f/file2' -> "));
+}
+
+#[cfg(unix)]
+#[test]
+fn test_mv_prompt_unwriteable_file_when_using_tty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("source");
+    at.touch("target");
+    at.set_mode("target", 0o000);
+
+    ucmd.arg("source")
+        .arg("target")
+        .terminal_sim_stdio(TerminalSimulation {
+            stdin: true,
+            stdout: false,
+            stderr: false,
+            ..Default::default()
+        })
+        .pipe_in("n\n")
+        .fails()
+        .stderr_contains("replace 'target', overriding mode 0000");
+
+    assert!(at.file_exists("source"));
+}
+
+#[cfg(unix)]
+#[test]
+fn test_mv_force_no_prompt_unwriteable_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("source_f");
+    at.touch("target_f");
+    at.set_mode("target_f", 0o000);
+
+    ucmd.arg("-f")
+        .arg("source_f")
+        .arg("target_f")
+        .terminal_sim_stdio(TerminalSimulation {
+            stdin: true,
+            stdout: false,
+            stderr: false,
+            ..Default::default()
+        })
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.file_exists("source_f"));
+    assert!(at.file_exists("target_f"));
+}
+
+#[cfg(unix)]
+#[test]
+fn test_mv_no_prompt_unwriteable_file_with_no_tty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("source_notty");
+    at.touch("target_notty");
+    at.set_mode("target_notty", 0o000);
+
+    ucmd.arg("source_notty")
+        .arg("target_notty")
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.file_exists("source_notty"));
+    assert!(at.file_exists("target_notty"));
 }

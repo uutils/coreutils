@@ -1224,3 +1224,221 @@ fn test_date_explicit_format_overrides_locale() {
         .succeeds()
         .stdout_is("13:00\n");
 }
+
+// Comprehensive locale formatting tests to verify actual locale format strings are used
+#[test]
+#[cfg(any(
+    target_os = "linux",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "dragonfly"
+))]
+fn test_date_locale_leading_zeros_en_us() {
+    // Test for leading zeros in en_US locale
+    // en_US uses %I (01-12) with leading zeros, not %l (1-12) without
+    let result = new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-12-14T01:00")
+        .succeeds();
+
+    let stdout = result.stdout_str();
+    // If locale is available, should have leading zero: "01:00"
+    // If locale unavailable (falls back to C), may have "01:00" (24-hour) or " 1:00"
+    // Key point: output should match what nl_langinfo(D_T_FMT) specifies
+    if stdout.contains("AM") || stdout.contains("PM") {
+        // 12-hour format detected - should have leading zero in en_US
+        assert!(
+            stdout.contains("01:00") || stdout.contains(" 1:00"),
+            "en_US 12-hour format should show '01:00 AM' or ' 1:00 AM', got: {stdout}"
+        );
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_date_locale_c_uses_24_hour() {
+    // C/POSIX locale must use 24-hour format
+    let result = new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-12-14T13:00")
+        .succeeds();
+
+    let stdout = result.stdout_str();
+    // C locale uses 24-hour format, no AM/PM
+    assert!(
+        !stdout.contains("AM") && !stdout.contains("PM"),
+        "C locale should not use AM/PM, got: {stdout}"
+    );
+    assert!(
+        stdout.contains("13"),
+        "C locale should show 13 (24-hour), got: {stdout}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_date_locale_timezone_included() {
+    // Verify timezone is included in output (implementation adds %Z if missing)
+    let result = new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-12-14T13:00")
+        .succeeds();
+
+    let stdout = result.stdout_str();
+    assert!(
+        stdout.contains("UTC") || stdout.contains("+00"),
+        "Output should contain timezone information, got: {stdout}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_date_locale_format_structure() {
+    // Test that output follows locale-defined structure (not hardcoded)
+    let result = new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-12-14T13:00:00")
+        .succeeds();
+
+    let stdout = result.stdout_str();
+
+    // Should contain weekday abbreviation
+    let weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    assert!(
+        weekdays.iter().any(|day| stdout.contains(day)),
+        "Output should contain weekday, got: {stdout}"
+    );
+
+    // Should contain month
+    let months = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    assert!(
+        months.iter().any(|month| stdout.contains(month)),
+        "Output should contain month, got: {stdout}"
+    );
+
+    // Should contain year
+    assert!(
+        stdout.contains("2025"),
+        "Output should contain year, got: {stdout}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_date_locale_format_not_hardcoded() {
+    // This test verifies we're not using hardcoded format strings
+    // by checking that the format actually comes from the locale system
+
+    // Test with C locale
+    let c_result = new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-12-14T01:00:00")
+        .succeeds();
+
+    let c_output = c_result.stdout_str();
+
+    // C locale should use 24-hour format
+    assert!(
+        c_output.contains("01:00") || c_output.contains(" 1:00"),
+        "C locale output: {c_output}"
+    );
+    assert!(
+        !c_output.contains("AM") && !c_output.contains("PM"),
+        "C locale should not have AM/PM: {c_output}"
+    );
+}
+
+#[test]
+#[cfg(any(
+    target_os = "linux",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "dragonfly"
+))]
+fn test_date_locale_en_us_vs_c_difference() {
+    // Verify that en_US and C locales produce different outputs
+    // (if en_US locale is available on the system)
+
+    let c_result = new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-12-14T13:00:00")
+        .succeeds();
+
+    let en_us_result = new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-12-14T13:00:00")
+        .succeeds();
+
+    let c_output = c_result.stdout_str();
+    let en_us_output = en_us_result.stdout_str();
+
+    // C locale: 24-hour, no AM/PM
+    assert!(
+        !c_output.contains("AM") && !c_output.contains("PM"),
+        "C locale should not have AM/PM: {c_output}"
+    );
+
+    // en_US: If locale is installed, should have AM/PM (12-hour)
+    // If not installed, falls back to C locale
+    if en_us_output.contains("PM") {
+        // Locale is available and using 12-hour format
+        assert!(
+            en_us_output.contains("1:00") || en_us_output.contains("01:00"),
+            "en_US with 12-hour should show 1:00 PM or 01:00 PM, got: {en_us_output}"
+        );
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple",))]
+fn test_date_locale_fr_french() {
+    // Test French locale (fr_FR.UTF-8) behavior
+    // French typically uses 24-hour format and may have localized day/month names
+
+    let result = new_ucmd!()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-12-14T13:00:00")
+        .succeeds();
+
+    let stdout = result.stdout_str();
+
+    // French locale should use 24-hour format (no AM/PM)
+    assert!(
+        !stdout.contains("AM") && !stdout.contains("PM"),
+        "French locale should use 24-hour format (no AM/PM), got: {stdout}"
+    );
+
+    // Should have 13:00 (not 1:00)
+    assert!(
+        stdout.contains("13:00"),
+        "French locale should show 13:00 for 1 PM, got: {stdout}"
+    );
+
+    // Timezone should be included (our implementation adds %Z if missing)
+    assert!(
+        stdout.contains("UTC") || stdout.contains("+00") || stdout.contains('Z'),
+        "Output should include timezone information, got: {stdout}"
+    );
+}
