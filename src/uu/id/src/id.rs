@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag cflag
+// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid rgid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag cflag
 
 // README:
 // This was originally based on BSD's `id`
@@ -474,31 +474,32 @@ fn pretty(possible_pw: Option<Passwd>) {
         );
     } else {
         let login = cstr2cow!(getlogin().cast_const());
-        let rid = getuid();
-        if let Ok(p) = Passwd::locate(rid) {
+        let uid = getuid();
+        if let Ok(p) = Passwd::locate(uid) {
             if let Some(user_name) = login {
                 println!("{}\t{user_name}", translate!("id-output-login"));
             }
             println!("{}\t{}", translate!("id-output-uid"), p.name);
         } else {
-            println!("{}\t{rid}", translate!("id-output-uid"));
+            println!("{}\t{uid}", translate!("id-output-uid"));
         }
 
-        let eid = getegid();
-        if eid == rid {
-            if let Ok(p) = Passwd::locate(eid) {
+        let euid = geteuid();
+        if euid != uid {
+            if let Ok(p) = Passwd::locate(euid) {
                 println!("{}\t{}", translate!("id-output-euid"), p.name);
             } else {
-                println!("{}\t{eid}", translate!("id-output-euid"));
+                println!("{}\t{euid}", translate!("id-output-euid"));
             }
         }
 
-        let rid = getgid();
-        if rid != eid {
-            if let Ok(g) = Group::locate(rid) {
-                println!("{}\t{}", translate!("id-output-euid"), g.name);
+        let rgid = getgid();
+        let egid = getegid();
+        if egid != rgid {
+            if let Ok(g) = Group::locate(rgid) {
+                println!("{}\t{}", translate!("id-output-rgid"), g.name);
             } else {
-                println!("{}\t{rid}", translate!("id-output-euid"));
+                println!("{}\t{rgid}", translate!("id-output-rgid"));
             }
         }
 
@@ -535,7 +536,12 @@ fn pline(possible_uid: Option<uid_t>) {
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "cygwin"
+))]
 fn pline(possible_uid: Option<uid_t>) {
     let uid = possible_uid.unwrap_or_else(getuid);
     let pw = Passwd::locate(uid).unwrap();
@@ -552,10 +558,20 @@ fn pline(possible_uid: Option<uid_t>) {
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "cygwin"
+))]
 fn auditid() {}
 
-#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "openbsd")))]
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "cygwin"
+)))]
 fn auditid() {
     use std::mem::MaybeUninit;
 

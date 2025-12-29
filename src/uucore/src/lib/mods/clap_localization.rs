@@ -11,7 +11,7 @@
 //! instead of parsing error strings, providing a more robust solution.
 //!
 
-use crate::error::UResult;
+use crate::error::{UResult, USimpleError};
 use crate::locale::translate;
 
 use clap::error::{ContextKind, ErrorKind};
@@ -108,43 +108,37 @@ impl<'a> ErrorFormatter<'a> {
     where
         F: FnOnce(),
     {
+        let code = self.print_error(err, exit_code);
+        callback();
+        std::process::exit(code);
+    }
+
+    /// Print error and return exit code (no exit call)
+    pub fn print_error(&self, err: &Error, exit_code: i32) -> i32 {
         match err.kind() {
             ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => self.handle_display_errors(err),
-            ErrorKind::UnknownArgument => {
-                self.handle_unknown_argument_with_callback(err, exit_code, callback)
-            }
+            ErrorKind::UnknownArgument => self.handle_unknown_argument(err, exit_code),
             ErrorKind::InvalidValue | ErrorKind::ValueValidation => {
-                self.handle_invalid_value_with_callback(err, exit_code, callback)
+                self.handle_invalid_value(err, exit_code)
             }
-            ErrorKind::MissingRequiredArgument => {
-                self.handle_missing_required_with_callback(err, exit_code, callback)
-            }
+            ErrorKind::MissingRequiredArgument => self.handle_missing_required(err, exit_code),
             ErrorKind::TooFewValues | ErrorKind::TooManyValues | ErrorKind::WrongNumberOfValues => {
                 // These need full clap formatting
                 eprint!("{}", err.render());
-                callback();
-                std::process::exit(exit_code);
+                exit_code
             }
-            _ => self.handle_generic_error_with_callback(err, exit_code, callback),
+            _ => self.handle_generic_error(err, exit_code),
         }
     }
 
     /// Handle help and version display
-    fn handle_display_errors(&self, err: &Error) -> ! {
+    fn handle_display_errors(&self, err: &Error) -> i32 {
         print!("{}", err.render());
-        std::process::exit(0);
+        0
     }
 
-    /// Handle unknown argument errors with callback
-    fn handle_unknown_argument_with_callback<F>(
-        &self,
-        err: &Error,
-        exit_code: i32,
-        callback: F,
-    ) -> !
-    where
-        F: FnOnce(),
-    {
+    /// Handle unknown argument errors
+    fn handle_unknown_argument(&self, err: &Error, exit_code: i32) -> i32 {
         if let Some(invalid_arg) = err.get(ContextKind::InvalidArg) {
             let arg_str = invalid_arg.to_string();
             let error_word = translate!("common-error");
@@ -179,21 +173,13 @@ impl<'a> ErrorFormatter<'a> {
 
             self.print_usage_and_help();
         } else {
-            self.print_simple_error_with_callback(
-                &translate!("clap-error-unexpected-argument-simple"),
-                exit_code,
-                || {},
-            );
+            self.print_simple_error_msg(&translate!("clap-error-unexpected-argument-simple"));
         }
-        callback();
-        std::process::exit(exit_code);
+        exit_code
     }
 
-    /// Handle invalid value errors with callback
-    fn handle_invalid_value_with_callback<F>(&self, err: &Error, exit_code: i32, callback: F) -> !
-    where
-        F: FnOnce(),
-    {
+    /// Handle invalid value errors
+    fn handle_invalid_value(&self, err: &Error, exit_code: i32) -> i32 {
         let invalid_arg = err.get(ContextKind::InvalidArg);
         let invalid_value = err.get(ContextKind::InvalidValue);
 
@@ -219,7 +205,6 @@ impl<'a> ErrorFormatter<'a> {
                     "value" => self.color_mgr.colorize(&value, Color::Yellow),
                     "option" => self.color_mgr.colorize(&option, Color::Green)
                 );
-
                 // Include validation error if present
                 match err.source() {
                     Some(source) if matches!(err.kind(), ErrorKind::ValueValidation) => {
@@ -245,32 +230,22 @@ impl<'a> ErrorFormatter<'a> {
             eprintln!();
             eprintln!("{}", translate!("common-help-suggestion"));
         } else {
-            self.print_simple_error(&err.render().to_string(), exit_code);
+            self.print_simple_error_msg(&err.render().to_string());
         }
 
         // InvalidValue errors traditionally use exit code 1 for backward compatibility
         // But if a utility explicitly requests a high exit code (>= 125), respect it
         // This allows utilities like runcon (125) to override the default while preserving
         // the standard behavior for utilities using normal error codes (1, 2, etc.)
-        let actual_exit_code = if matches!(err.kind(), ErrorKind::InvalidValue) && exit_code < 125 {
+        if matches!(err.kind(), ErrorKind::InvalidValue) && exit_code < 125 {
             1 // Force exit code 1 for InvalidValue unless using special exit codes
         } else {
             exit_code // Respect the requested exit code for special cases
-        };
-        callback();
-        std::process::exit(actual_exit_code);
+        }
     }
 
-    /// Handle missing required argument errors with callback
-    fn handle_missing_required_with_callback<F>(
-        &self,
-        err: &Error,
-        exit_code: i32,
-        callback: F,
-    ) -> !
-    where
-        F: FnOnce(),
-    {
+    /// Handle missing required argument errors
+    fn handle_missing_required(&self, err: &Error, exit_code: i32) -> i32 {
         let rendered_str = err.render().to_string();
         let lines: Vec<&str> = rendered_str.lines().collect();
 
@@ -313,15 +288,11 @@ impl<'a> ErrorFormatter<'a> {
             }
             _ => eprint!("{}", err.render()),
         }
-        callback();
-        std::process::exit(exit_code);
+        exit_code
     }
 
-    /// Handle generic errors with callback
-    fn handle_generic_error_with_callback<F>(&self, err: &Error, exit_code: i32, callback: F) -> !
-    where
-        F: FnOnce(),
-    {
+    /// Handle generic errors
+    fn handle_generic_error(&self, err: &Error, exit_code: i32) -> i32 {
         let rendered_str = err.render().to_string();
         if let Some(main_error_line) = rendered_str.lines().next() {
             self.print_localized_error_line(main_error_line);
@@ -330,27 +301,16 @@ impl<'a> ErrorFormatter<'a> {
         } else {
             eprint!("{}", err.render());
         }
-        callback();
-        std::process::exit(exit_code);
+        exit_code
     }
 
-    /// Print a simple error message
-    fn print_simple_error(&self, message: &str, exit_code: i32) -> ! {
-        self.print_simple_error_with_callback(message, exit_code, || {})
-    }
-
-    /// Print a simple error message with callback
-    fn print_simple_error_with_callback<F>(&self, message: &str, exit_code: i32, callback: F) -> !
-    where
-        F: FnOnce(),
-    {
+    /// Print a simple error message (no exit)
+    fn print_simple_error_msg(&self, message: &str) {
         let error_word = translate!("common-error");
         eprintln!(
             "{}: {message}",
             self.color_mgr.colorize(&error_word, Color::Red)
         );
-        callback();
-        std::process::exit(exit_code);
     }
 
     /// Print error line with localized "error:" prefix
@@ -478,7 +438,9 @@ where
         if e.exit_code() == 0 {
             e.into() // Preserve help/version
         } else {
-            handle_clap_error_with_exit_code(e, exit_code)
+            let formatter = ErrorFormatter::new(crate::util_name());
+            let code = formatter.print_error(&e, exit_code);
+            USimpleError::new(code, "")
         }
     })
 }

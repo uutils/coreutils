@@ -1232,6 +1232,30 @@ fn test_install_backup_short_custom_suffix() {
 }
 
 #[test]
+fn test_install_suffix_without_backup_option() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_install_backup_custom_suffix_file_a";
+    let file_b = "test_install_backup_custom_suffix_file_b";
+    let suffix = "super-suffix-of-the-century";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    scene
+        .ucmd()
+        .arg(format!("--suffix={suffix}"))
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(format!("{file_b}{suffix}")));
+}
+
+#[test]
 fn test_install_backup_short_custom_suffix_hyphen_value() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
