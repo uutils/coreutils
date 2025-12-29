@@ -10,6 +10,7 @@ use std::ffi::OsString;
 use std::fs;
 use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
+use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::libc::EINVAL;
@@ -37,11 +38,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let silent = matches.get_flag(OPT_SILENT) || matches.get_flag(OPT_QUIET);
     let verbose = matches.get_flag(OPT_VERBOSE);
 
+    // GNU readlink -f/-e/-m follows symlinks first and then applies `..` (physical resolution).
+    // ResolveMode::Logical collapses `..` before following links, which yields the opposite order,
+    // so we choose Physical here for GNU compatibility.
     let res_mode = if matches.get_flag(OPT_CANONICALIZE)
         || matches.get_flag(OPT_CANONICALIZE_EXISTING)
         || matches.get_flag(OPT_CANONICALIZE_MISSING)
     {
-        ResolveMode::Logical
+        ResolveMode::Physical
     } else {
         ResolveMode::None
     };
@@ -93,11 +97,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     return Err(1.into());
                 }
 
-                let path = p.to_string_lossy().into_owned();
                 let message = if err.raw_os_error() == Some(EINVAL) {
-                    translate!("readlink-error-invalid-argument", "path" => path.clone())
+                    translate!("readlink-error-invalid-argument", "path" => p.maybe_quote())
                 } else {
-                    err.map_err_context(|| path.clone()).to_string()
+                    err.map_err_context(|| p.maybe_quote().to_string())
+                        .to_string()
                 };
                 show_error!("{message}");
                 return Err(1.into());
