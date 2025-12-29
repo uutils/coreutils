@@ -58,6 +58,11 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Get the project root directory
+///
+/// # Errors
+///
+/// Returns an error if the `CARGO_MANIFEST_DIR` environment variable is not set
+/// or if the current directory structure does not allow determining the project root.
 fn project_root() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR")?;
     let uucore_path = std::path::Path::new(&manifest_dir);
@@ -120,6 +125,11 @@ fn detect_target_utility() -> Option<String> {
 }
 
 /// Embed locale for a single specific utility
+///
+/// # Errors
+///
+/// Returns an error if the locales for `util_name` or `uucore` cannot be found
+/// or if writing to the `embedded_file` fails.
 fn embed_single_utility_locale(
     embedded_file: &mut std::fs::File,
     project_root: &Path,
@@ -142,7 +152,12 @@ fn embed_single_utility_locale(
     Ok(())
 }
 
-/// Embed locale files for all utilities (multicall binary)
+/// Embed locale files for all utilities (multicall binary).
+///
+/// # Errors
+///
+/// Returns an error if the `src/uu` directory cannot be read, if any utility
+/// locales cannot be embedded, or if flushing the `embedded_file` fails.
 fn embed_all_utility_locales(
     embedded_file: &mut std::fs::File,
     project_root: &Path,
@@ -188,6 +203,12 @@ fn embed_all_utility_locales(
     Ok(())
 }
 
+/// Embed static utility locales for crates.io builds.
+///
+/// # Errors
+///
+/// Returns an error if the directory containing the crate cannot be read or
+/// if writing to the `embedded_file` fails.
 fn embed_static_utility_locales(
     embedded_file: &mut std::fs::File,
     locales_to_embed: &(String, Option<String>),
@@ -213,7 +234,7 @@ fn embed_static_utility_locales(
     let mut entries: Vec<_> = std::fs::read_dir(registry_dir)?
         .filter_map(Result::ok)
         .collect();
-    entries.sort_by_key(|e| e.file_name());
+    entries.sort_by_key(std::fs::DirEntry::file_name);
 
     for entry in entries {
         let file_name = entry.file_name();
@@ -256,6 +277,11 @@ fn get_locales_to_embed() -> (String, Option<String>) {
 }
 
 /// Helper function to iterate over the locales to embed.
+///
+/// # Errors
+///
+/// Returns an error if the provided closure `f` returns an error when called
+/// on either the primary or system locale.
 fn for_each_locale<F>(
     locales: &(String, Option<String>),
     mut f: F,
@@ -271,6 +297,11 @@ where
 }
 
 /// Helper function to embed a single locale file.
+///
+/// # Errors
+///
+/// Returns an error if the file at `locale_path` cannot be read or if
+/// writing to `embedded_file` fails.
 fn embed_locale_file(
     embedded_file: &mut std::fs::File,
     locale_path: &Path,
@@ -286,9 +317,11 @@ fn embed_locale_file(
             embedded_file,
             "        // Locale for {component} ({locale})"
         )?;
+        // Determine if we need a hash. If content contains ", we need r#""#
+        let delimiter = if content.contains('"') { "#" } else { "" };
         writeln!(
             embedded_file,
-            "        \"{locale_key}\" => Some(r###\"{content}\"###),"
+            "        \"{locale_key}\" => Some(r{delimiter}\"{content}\"{delimiter}),"
         )?;
 
         // Tell Cargo to rerun if this file changes
@@ -298,7 +331,13 @@ fn embed_locale_file(
 }
 
 /// Higher-level helper to embed locale files for a component with a path pattern.
-/// This eliminates the repetitive for_each_locale + embed_locale_file pattern.
+///
+/// This eliminates the repetitive `for_each_locale` + `embed_locale_file` pattern.
+///
+/// # Errors
+///
+/// Returns an error if `for_each_locale` fails, which typically happens if
+/// reading a locale file or writing to the `embedded_file` fails.
 fn embed_component_locales<F>(
     embedded_file: &mut std::fs::File,
     locales: &(String, Option<String>),
