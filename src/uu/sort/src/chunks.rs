@@ -10,6 +10,7 @@
 
 use std::{
     io::{ErrorKind, Read},
+    ops::Range,
     sync::mpsc::SyncSender,
 };
 
@@ -35,6 +36,7 @@ self_cell!(
 pub struct ChunkContents<'a> {
     pub lines: Vec<Line<'a>>,
     pub line_data: LineData<'a>,
+    pub token_buffer: Vec<Range<usize>>,
 }
 
 #[derive(Debug)]
@@ -54,6 +56,7 @@ impl Chunk {
             contents.line_data.num_infos.clear();
             contents.line_data.parsed_floats.clear();
             contents.line_data.line_num_floats.clear();
+            contents.token_buffer.clear();
             let lines = unsafe {
                 // SAFETY: It is safe to (temporarily) transmute to a vector of lines with a longer lifetime,
                 // because the vector is empty.
@@ -76,6 +79,7 @@ impl Chunk {
                 std::mem::take(&mut contents.line_data.num_infos),
                 std::mem::take(&mut contents.line_data.parsed_floats),
                 std::mem::take(&mut contents.line_data.line_num_floats),
+                std::mem::take(&mut contents.token_buffer),
             )
         });
         RecycledChunk {
@@ -84,6 +88,7 @@ impl Chunk {
             num_infos: recycled_contents.2,
             parsed_floats: recycled_contents.3,
             line_num_floats: recycled_contents.4,
+            token_buffer: recycled_contents.5,
             buffer: self.into_owner(),
         }
     }
@@ -103,6 +108,7 @@ pub struct RecycledChunk {
     num_infos: Vec<NumInfo>,
     parsed_floats: Vec<GeneralBigDecimalParseResult>,
     line_num_floats: Vec<Option<f64>>,
+    token_buffer: Vec<Range<usize>>,
     buffer: Vec<u8>,
 }
 
@@ -114,6 +120,7 @@ impl RecycledChunk {
             num_infos: Vec::new(),
             parsed_floats: Vec::new(),
             line_num_floats: Vec::new(),
+            token_buffer: Vec::new(),
             buffer: vec![0; capacity],
         }
     }
@@ -157,6 +164,7 @@ pub fn read<T: Read>(
         num_infos,
         parsed_floats,
         line_num_floats,
+        mut token_buffer,
         mut buffer,
     } = recycled_chunk;
     if buffer.len() < carry_over.len() {
@@ -193,8 +201,19 @@ pub fn read<T: Read>(
                 parsed_floats,
                 line_num_floats,
             };
-            parse_lines(read, &mut lines, &mut line_data, separator, settings);
-            Ok(ChunkContents { lines, line_data })
+            parse_lines(
+                read,
+                &mut lines,
+                &mut line_data,
+                &mut token_buffer,
+                separator,
+                settings,
+            );
+            Ok(ChunkContents {
+                lines,
+                line_data,
+                token_buffer,
+            })
         });
         sender.send(payload?).unwrap();
     }
@@ -206,6 +225,7 @@ fn parse_lines<'a>(
     read: &'a [u8],
     lines: &mut Vec<Line<'a>>,
     line_data: &mut LineData<'a>,
+    token_buffer: &mut Vec<Range<usize>>,
     separator: u8,
     settings: &GlobalSettings,
 ) {
@@ -216,11 +236,12 @@ fn parse_lines<'a>(
     assert!(line_data.num_infos.is_empty());
     assert!(line_data.parsed_floats.is_empty());
     assert!(line_data.line_num_floats.is_empty());
-    let mut token_buffer = vec![];
+    token_buffer.clear();
+    token_buffer.reserve(read.len());
     lines.extend(
         read.split(|&c| c == separator)
             .enumerate()
-            .map(|(index, line)| Line::create(line, index, line_data, &mut token_buffer, settings)),
+            .map(|(index, line)| Line::create(line, index, line_data, token_buffer, settings)),
     );
 }
 
