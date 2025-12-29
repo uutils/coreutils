@@ -53,7 +53,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -64,7 +64,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -271,9 +271,9 @@ checksum = "120133d4db2ec47efe2e26502ee984747630c67f51974fca0b6c1340cf2368d3"
 
 [[package]]
 name = "console"
-version = "0.16.1"
+version = "0.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b430743a6eb14e9764d4260d4c0d8123087d504eeb9c48f2b2a5e810dd369df4"
+checksum = "03e45a4a8926227e4197636ba97a9fc9b00477e9f4bd711395687c5f0734bec4"
 dependencies = [
  "encode_unicode",
  "libc",
@@ -504,7 +504,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -834,7 +834,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde_core",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1281,7 +1281,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1447,7 +1447,7 @@ dependencies = [
  "getrandom 0.3.4",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1571,17 +1571,16 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uu_cksum"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "hex",
  "uucore",
 ]
 
 [[package]]
 name = "uu_cut"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bstr",
  "clap",
@@ -1592,12 +1591,12 @@ dependencies = [
 
 [[package]]
 name = "uu_date"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
  "jiff",
- "libc",
+ "nix",
  "parse_datetime",
  "uucore",
  "windows-sys 0.61.2",
@@ -1605,7 +1604,7 @@ dependencies = [
 
 [[package]]
 name = "uu_echo"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1614,7 +1613,7 @@ dependencies = [
 
 [[package]]
 name = "uu_env"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1626,7 +1625,7 @@ dependencies = [
 
 [[package]]
 name = "uu_expr"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1639,7 +1638,7 @@ dependencies = [
 
 [[package]]
 name = "uu_printf"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1648,7 +1647,7 @@ dependencies = [
 
 [[package]]
 name = "uu_seq"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bigdecimal",
  "clap",
@@ -1661,7 +1660,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sort"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bigdecimal",
  "binary-heap-plus",
@@ -1684,7 +1683,7 @@ dependencies = [
 
 [[package]]
 name = "uu_split"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1695,7 +1694,7 @@ dependencies = [
 
 [[package]]
 name = "uu_test"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1706,7 +1705,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tr"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bytecount",
  "clap",
@@ -1717,7 +1716,7 @@ dependencies = [
 
 [[package]]
 name = "uu_wc"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bytecount",
  "clap",
@@ -1731,7 +1730,7 @@ dependencies = [
 
 [[package]]
 name = "uucore"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "base64-simd",
  "bigdecimal",
@@ -1798,7 +1797,7 @@ dependencies = [
 
 [[package]]
 name = "uucore_procs"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1806,7 +1805,7 @@ dependencies = [
 
 [[package]]
 name = "uufuzz"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "console",
  "libc",
@@ -1903,7 +1902,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]

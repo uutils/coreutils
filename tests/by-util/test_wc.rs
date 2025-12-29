@@ -808,3 +808,69 @@ fn wc_w_words_with_emoji_separator() {
         .succeeds()
         .stdout_contains("3");
 }
+
+#[cfg(unix)]
+#[test]
+fn test_simd_respects_glibc_tunables() {
+    // Ensure debug output reflects that SIMD paths are disabled via GLIBC_TUNABLES
+    let debug_output = new_ucmd!()
+        .args(&["-l", "--debug", "/dev/null"])
+        .env("GLIBC_TUNABLES", "glibc.cpu.hwcaps=-AVX2,-AVX512F")
+        .succeeds()
+        .stderr_str()
+        .to_string();
+    assert!(
+        !debug_output.contains("using hardware support"),
+        "SIMD should be reported as disabled when GLIBC_TUNABLES blocks AVX features: {debug_output}"
+    );
+    assert!(
+        debug_output.contains("hardware support disabled"),
+        "Debug output should acknowledge GLIBC_TUNABLES restrictions: {debug_output}"
+    );
+
+    // WC results should be identical with and without GLIBC_TUNABLES overrides
+    let sample_sizes = [0usize, 1, 7, 128, 513, 999];
+    use std::fmt::Write as _;
+    for &lines in &sample_sizes {
+        let content: String = (0..lines).fold(String::new(), |mut acc, i| {
+            // Build the input buffer efficiently without allocating per line.
+            let _ = writeln!(acc, "{i}");
+            acc
+        });
+
+        let base = new_ucmd!()
+            .arg("-l")
+            .pipe_in(content.clone())
+            .succeeds()
+            .stdout_str()
+            .trim()
+            .to_string();
+
+        let no_avx512 = new_ucmd!()
+            .arg("-l")
+            .env("GLIBC_TUNABLES", "glibc.cpu.hwcaps=-AVX512F")
+            .pipe_in(content.clone())
+            .succeeds()
+            .stdout_str()
+            .trim()
+            .to_string();
+
+        let no_avx2_avx512 = new_ucmd!()
+            .arg("-l")
+            .env("GLIBC_TUNABLES", "glibc.cpu.hwcaps=-AVX2,-AVX512F")
+            .pipe_in(content)
+            .succeeds()
+            .stdout_str()
+            .trim()
+            .to_string();
+
+        assert_eq!(
+            base, no_avx512,
+            "Line counts should not change when AVX512 is disabled (lines={lines})"
+        );
+        assert_eq!(
+            base, no_avx2_avx512,
+            "Line counts should not change when AVX2/AVX512 are disabled (lines={lines})"
+        );
+    }
+}

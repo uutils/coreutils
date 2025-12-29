@@ -201,9 +201,9 @@ fn replace_special_chars(s: &[u8]) -> Vec<u8> {
     // * \011 ASCII horizontal tab with a tab character,
     // * ASCII backslash with an actual backslash character.
     //
-    s.replace(r#"\040"#, " ")
-        .replace(r#"\011"#, "	")
-        .replace(r#"\134"#, r#"\"#)
+    s.replace(r"\040", " ")
+        .replace(r"\011", "	")
+        .replace(r"\134", r"\")
 }
 
 impl MountInfo {
@@ -353,19 +353,19 @@ impl From<StatFs> for MountInfo {
     fn from(statfs: StatFs) -> Self {
         let dev_name = unsafe {
             // spell-checker:disable-next-line
-            CStr::from_ptr(&statfs.f_mntfromname[0])
+            CStr::from_ptr(statfs.f_mntfromname.as_ptr())
                 .to_string_lossy()
                 .into_owned()
         };
         let fs_type = unsafe {
             // spell-checker:disable-next-line
-            CStr::from_ptr(&statfs.f_fstypename[0])
+            CStr::from_ptr(statfs.f_fstypename.as_ptr())
                 .to_string_lossy()
                 .into_owned()
         };
         let mount_dir_bytes = unsafe {
             // spell-checker:disable-next-line
-            CStr::from_ptr(&statfs.f_mntonname[0]).to_bytes()
+            CStr::from_ptr(statfs.f_mntonname.as_ptr()).to_bytes()
         };
         let mount_dir = os_str_from_bytes(mount_dir_bytes).unwrap().into_owned();
 
@@ -512,7 +512,7 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
     ))]
     {
         let mut mount_buffer_ptr: *mut StatFs = ptr::null_mut();
-        let len = unsafe { get_mount_info(&mut mount_buffer_ptr, 1_i32) };
+        let len = unsafe { get_mount_info(&raw mut mount_buffer_ptr, 1_i32) };
         if len < 0 {
             return Err(USimpleError::new(1, "get_mount_info() failed"));
         }
@@ -674,10 +674,10 @@ impl FsUsage {
             let path = to_nul_terminated_wide_string(path);
             GetDiskFreeSpaceW(
                 path.as_ptr(),
-                &mut sectors_per_cluster,
-                &mut bytes_per_sector,
-                &mut number_of_free_clusters,
-                &mut total_number_of_clusters,
+                &raw mut sectors_per_cluster,
+                &raw mut bytes_per_sector,
+                &raw mut number_of_free_clusters,
+                &raw mut total_number_of_clusters,
             );
         }
 
@@ -887,7 +887,7 @@ impl FsMeta for StatFs {
     fn fsid(&self) -> u64 {
         // Use type inference to determine the type of f_fsid
         // (libc::__fsid_t on Android, libc::fsid_t on other platforms)
-        let f_fsid: &[u32; 2] = unsafe { &*(&raw const self.f_fsid as *const [u32; 2]) };
+        let f_fsid: &[u32; 2] = unsafe { &*(&raw const self.f_fsid).cast() };
         ((u64::from(f_fsid[0])) << 32) | u64::from(f_fsid[1])
     }
     #[cfg(not(any(
@@ -938,7 +938,7 @@ pub fn statfs(path: &OsStr) -> Result<StatFs, String> {
         Ok(p) => {
             let mut buffer: StatFs = unsafe { mem::zeroed() };
             unsafe {
-                match statfs_fn(p.as_ptr(), &mut buffer) {
+                match statfs_fn(p.as_ptr(), &raw mut buffer) {
                     0 => Ok(buffer),
                     _ => {
                         let errno = IOError::last_os_error().raw_os_error().unwrap_or(0);
@@ -1177,23 +1177,23 @@ mod tests {
     fn test_mountinfo_dir_special_chars() {
         let info = MountInfo::new(
             LINUX_MOUNTINFO,
-            &br#"317 61 7:0 / /mnt/f\134\040\011oo rw,relatime shared:641 - ext4 /dev/loop0 rw"#
+            &br"317 61 7:0 / /mnt/f\134\040\011oo rw,relatime shared:641 - ext4 /dev/loop0 rw"
                 .split(|c| *c == b' ')
                 .collect::<Vec<_>>(),
         )
         .unwrap();
 
-        assert_eq!(info.mount_dir, r#"/mnt/f\ 	oo"#);
+        assert_eq!(info.mount_dir, r"/mnt/f\ 	oo");
 
         let info = MountInfo::new(
             LINUX_MTAB,
-            &br#"/dev/loop0 /mnt/f\134\040\011oo ext4 rw,relatime 0 0"#
+            &br"/dev/loop0 /mnt/f\134\040\011oo ext4 rw,relatime 0 0"
                 .split(|c| *c == b' ')
                 .collect::<Vec<_>>(),
         )
         .unwrap();
 
-        assert_eq!(info.mount_dir, r#"/mnt/f\ 	oo"#);
+        assert_eq!(info.mount_dir, r"/mnt/f\ 	oo");
     }
 
     #[test]

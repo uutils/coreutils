@@ -7,7 +7,7 @@ du-after-help = Display values are in units of the first available SIZE from --b
 
   SIZE is an integer and optional unit (example: 10M is 10*1024*1024).
   Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB,... (powers
-  of 1000).
+  of 1000). Units can be decimal, hexadecimal, octal, binary.
 
   PATTERN allows some advanced exclusions. For example, the following syntaxes
   are supported:
@@ -59,7 +59,7 @@ du-error-invalid-glob = Invalid exclude syntax: { $error }
 du-error-cannot-read-directory = cannot read directory { $path }
 du-error-cannot-access = cannot access { $path }
 du-error-read-error-is-directory = { $file }: read error: Is a directory
-du-error-cannot-open-for-reading = cannot open '{ $file }' for reading: No such file or directory
+du-error-cannot-open-for-reading = cannot open { $file } for reading: No such file or directory
 du-error-invalid-zero-length-file-name = { $file }:{ $line }: invalid zero-length file name
 du-error-extra-operand-with-files0-from = extra operand { $file }
   file operands cannot be combined with --files0-from

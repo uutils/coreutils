@@ -43,7 +43,7 @@ jobs:
       with:
         disable_annotations: true
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.2.8
+      uses: vmactions/freebsd-vm@v1.2.9
       with:
         usesh: true
         sync: rsync
@@ -139,7 +139,7 @@ jobs:
       with:
         disable_annotations: true
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.2.8
+      uses: vmactions/freebsd-vm@v1.2.9
       with:
         usesh: true
         sync: rsync
