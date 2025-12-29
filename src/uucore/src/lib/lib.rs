@@ -230,10 +230,7 @@ mod early_stdout_state {
     }
 
     #[used]
-    #[cfg_attr(
-        target_os = "macos",
-        unsafe(link_section = "__DATA,__mod_init_func")
-    )]
+    #[cfg_attr(target_os = "macos", unsafe(link_section = "__DATA,__mod_init_func"))]
     #[cfg_attr(not(target_os = "macos"), unsafe(link_section = ".init_array"))]
     static INIT: extern "C" fn() = init;
 }
@@ -360,8 +357,8 @@ macro_rules! bin {
                 // Treat write errors as a failure, but ignore BrokenPipe to avoid
                 // breaking utilities that intentionally silence it (e.g., seq).
                 let stdout_was_written = uucore::stdout_was_written();
-                let ignore_closed_stdout = uucore::is_closed_stdout_error(&e, stdout_was_closed)
-                    && !stdout_was_written;
+                let ignore_closed_stdout =
+                    uucore::is_closed_stdout_error(&e, stdout_was_closed) && !stdout_was_written;
                 if e.kind() != std::io::ErrorKind::BrokenPipe && !ignore_closed_stdout {
                     eprintln!("Error flushing stdout: {e}");
                     if code == 0 {
