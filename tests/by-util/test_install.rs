@@ -101,6 +101,7 @@ fn test_install_ancestors_mode_directories() {
     let mode_arg = "--mode=200";
     let probe = "probe";
 
+    // Get default permissions for comparison
     at.mkdir(probe);
     let default_perms = at.metadata(probe).permissions().mode();
 
@@ -112,11 +113,36 @@ fn test_install_ancestors_mode_directories() {
     assert!(at.dir_exists(ancestor2));
     assert!(at.dir_exists(target_dir));
 
+    // GNU install behavior: For restrictive modes (like 200, no execute permission),
+    // intermediate directories get default permissions, only the final directory
+    // gets the specified mode. This prevents locking yourself out of intermediate dirs.
     assert_eq!(default_perms, at.metadata(ancestor1).permissions().mode());
     assert_eq!(default_perms, at.metadata(ancestor2).permissions().mode());
-
-    // Expected mode only on the target_dir.
     assert_eq!(0o40_200_u32, at.metadata(target_dir).permissions().mode());
+}
+
+#[test]
+fn test_install_ancestors_mode_directories_normal_mode() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ancestor1 = "ancestor1_normal";
+    let ancestor2 = "ancestor1_normal/ancestor2";
+    let target_dir = "ancestor1_normal/ancestor2/target_dir";
+    let directories_arg = "-d";
+    let mode_arg = "--mode=755";
+
+    ucmd.args(&[mode_arg, directories_arg, target_dir])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.dir_exists(ancestor1));
+    assert!(at.dir_exists(ancestor2));
+    assert!(at.dir_exists(target_dir));
+
+    // GNU install behavior: For normal modes (with execute permission, like 755),
+    // ALL newly created directories get the specified mode.
+    assert_eq!(0o40_755_u32, at.metadata(ancestor1).permissions().mode());
+    assert_eq!(0o40_755_u32, at.metadata(ancestor2).permissions().mode());
+    assert_eq!(0o40_755_u32, at.metadata(target_dir).permissions().mode());
 }
 
 #[test]
