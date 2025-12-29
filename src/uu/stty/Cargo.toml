@@ -19,7 +19,7 @@ path = "src/stty.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["parser"] }
 nix = { workspace = true, features = ["term", "ioctl"] }
 fluent = { workspace = true }
 

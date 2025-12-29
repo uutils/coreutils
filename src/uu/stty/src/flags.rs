@@ -27,6 +27,8 @@ use nix::sys::termios::{
     SpecialCharacterIndices as S,
 };
 
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum AllFlags<'a> {
     #[cfg(any(
         target_os = "freebsd",
