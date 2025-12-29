@@ -21,7 +21,7 @@ mod tmp_dir;
 use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
@@ -1119,6 +1119,83 @@ struct LegacyKeyPart {
     opts: String,
 }
 
+#[derive(Debug, Clone)]
+struct LegacyKeyWarning {
+    key_index: usize,
+    from_field: usize,
+    to_field: Option<usize>,
+    to_char: Option<usize>,
+}
+
+impl LegacyKeyWarning {
+    fn legacy_key_display(&self) -> String {
+        match self.to_field {
+            Some(to) => format!("+{} -{}", self.from_field, to),
+            None => format!("+{}", self.from_field),
+        }
+    }
+
+    fn replacement_key_display(&self) -> String {
+        let start_field = self.from_field.saturating_add(1);
+        match self.to_field {
+            Some(to_field) => {
+                let end_field = match self.to_char {
+                    Some(0) | None => to_field.max(1),
+                    Some(_) => to_field.saturating_add(1),
+                };
+                format!("{start_field},{end_field}")
+            }
+            None => start_field.to_string(),
+        }
+    }
+}
+
+#[derive(Default)]
+struct GlobalOptionFlags {
+    keys_specified: bool,
+    ignore_leading_blanks: bool,
+    dictionary_order: bool,
+    ignore_case: bool,
+    ignore_non_printing: bool,
+    reverse: bool,
+    stable: bool,
+    unique: bool,
+    mode_numeric: bool,
+    mode_general: bool,
+    mode_human: bool,
+    mode_month: bool,
+    mode_random: bool,
+    mode_version: bool,
+}
+
+impl GlobalOptionFlags {
+    fn from_matches(matches: &ArgMatches) -> Self {
+        let sort_value = matches
+            .get_one::<String>(options::modes::SORT)
+            .map(|s| s.as_str());
+        Self {
+            keys_specified: matches.contains_id(options::KEY),
+            ignore_leading_blanks: matches.get_flag(options::IGNORE_LEADING_BLANKS),
+            dictionary_order: matches.get_flag(options::DICTIONARY_ORDER),
+            ignore_case: matches.get_flag(options::IGNORE_CASE),
+            ignore_non_printing: matches.get_flag(options::IGNORE_NONPRINTING),
+            reverse: matches.get_flag(options::REVERSE),
+            stable: matches.get_flag(options::STABLE),
+            unique: matches.get_flag(options::UNIQUE),
+            mode_human: matches.get_flag(options::modes::HUMAN_NUMERIC)
+                || sort_value == Some("human-numeric"),
+            mode_month: matches.get_flag(options::modes::MONTH) || sort_value == Some("month"),
+            mode_general: matches.get_flag(options::modes::GENERAL_NUMERIC)
+                || sort_value == Some("general-numeric"),
+            mode_numeric: matches.get_flag(options::modes::NUMERIC)
+                || sort_value == Some("numeric"),
+            mode_version: matches.get_flag(options::modes::VERSION)
+                || sort_value == Some("version"),
+            mode_random: matches.get_flag(options::modes::RANDOM) || sort_value == Some("random"),
+        }
+    }
+}
+
 fn parse_usize_or_max(num: &str) -> Option<usize> {
     match num.parse::<usize>() {
         Ok(v) => Some(v),
@@ -1192,16 +1269,18 @@ fn legacy_key_to_k(from: &LegacyKeyPart, to: Option<&LegacyKeyPart>) -> String {
 
 /// Preprocess argv to handle legacy +POS1 [-POS2] syntax by converting it into -k forms
 /// before clap sees the arguments.
-fn preprocess_legacy_args<I>(args: I) -> Vec<OsString>
+fn preprocess_legacy_args<I>(args: I) -> (Vec<OsString>, Vec<LegacyKeyWarning>)
 where
     I: IntoIterator,
     I::Item: Into<OsString>,
 {
     if !allows_traditional_usage() {
-        return args.into_iter().map(Into::into).collect();
+        return (args.into_iter().map(Into::into).collect(), Vec::new());
     }
 
     let mut processed = Vec::new();
+    let mut legacy_warnings = Vec::new();
+    let mut key_index = 0usize;
     let mut iter = args.into_iter().map(Into::into).peekable();
 
     while let Some(arg) = iter.next() {
@@ -1234,7 +1313,39 @@ where
                 }
 
                 let keydef = legacy_key_to_k(&from, to_part.as_ref());
+                key_index = key_index.saturating_add(1);
+                legacy_warnings.push(LegacyKeyWarning {
+                    key_index,
+                    from_field: from.field,
+                    to_field: to_part.as_ref().map(|p| p.field),
+                    to_char: to_part.as_ref().map(|p| p.char_pos),
+                });
                 processed.push(OsString::from(format!("-k{keydef}")));
+                continue;
+            }
+        }
+
+        if as_str == "-k" || as_str == "--key" {
+            processed.push(arg);
+            if let Some(next_arg) = iter.next() {
+                processed.push(next_arg);
+            }
+            key_index = key_index.saturating_add(1);
+            continue;
+        }
+
+        if let Some(spec) = as_str.strip_prefix("-k") {
+            if !spec.is_empty() {
+                processed.push(arg);
+                key_index = key_index.saturating_add(1);
+                continue;
+            }
+        }
+
+        if let Some(spec) = as_str.strip_prefix("--key=") {
+            if !spec.is_empty() {
+                processed.push(arg);
+                key_index = key_index.saturating_add(1);
                 continue;
             }
         }
@@ -1242,7 +1353,7 @@ where
         processed.push(arg);
     }
 
-    processed
+    (processed, legacy_warnings)
 }
 
 #[cfg(target_os = "linux")]
@@ -1271,16 +1382,230 @@ fn default_merge_batch_size() -> usize {
     }
 }
 
+fn locale_failed_to_set() -> bool {
+    matches!(env::var("LC_ALL").ok().as_deref(), Some("missing"))
+}
+
+fn key_zero_width(selector: &FieldSelector) -> bool {
+    let Some(to) = &selector.to else {
+        return false;
+    };
+    if to.field < selector.from.field {
+        return true;
+    }
+    if to.field == selector.from.field {
+        return to.char != 0 && to.char < selector.from.char;
+    }
+    false
+}
+
+fn key_spans_multiple_fields(selector: &FieldSelector) -> bool {
+    if !matches!(
+        selector.settings.mode,
+        SortMode::Numeric | SortMode::HumanNumeric | SortMode::GeneralNumeric
+    ) {
+        return false;
+    }
+    match &selector.to {
+        None => true,
+        Some(to) => to.field > selector.from.field,
+    }
+}
+
+fn key_leading_blanks_significant(selector: &FieldSelector) -> bool {
+    selector.settings.mode == SortMode::Default
+        && !selector.from.ignore_blanks
+        && !selector.settings.ignore_blanks
+}
+
+fn emit_debug_warnings(
+    settings: &GlobalSettings,
+    flags: &GlobalOptionFlags,
+    legacy_warnings: &[LegacyKeyWarning],
+) {
+    if locale_failed_to_set() {
+        show_error!("{}", translate!("sort-warning-failed-to-set-locale"));
+    }
+
+    show_error!("{}", translate!("sort-warning-simple-byte-comparison"));
+
+    for (idx, selector) in settings.selectors.iter().enumerate() {
+        let key_index = idx + 1;
+        if let Some(legacy) = legacy_warnings
+            .iter()
+            .find(|warning| warning.key_index == key_index)
+        {
+            show_error!(
+                "{}",
+                translate!(
+                    "sort-warning-obsolescent-key",
+                    "key" => legacy.legacy_key_display(),
+                    "replacement" => legacy.replacement_key_display()
+                )
+            );
+        }
+
+        if key_zero_width(selector) {
+            show_error!(
+                "{}",
+                translate!("sort-warning-key-zero-width", "key" => key_index)
+            );
+            continue;
+        }
+
+        if flags.keys_specified && key_spans_multiple_fields(selector) {
+            show_error!(
+                "{}",
+                translate!(
+                    "sort-warning-key-numeric-spans-fields",
+                    "key" => key_index
+                )
+            );
+        } else if flags.keys_specified && key_leading_blanks_significant(selector) {
+            show_error!(
+                "{}",
+                translate!(
+                    "sort-warning-leading-blanks-significant",
+                    "key" => key_index
+                )
+            );
+        }
+    }
+
+    let numeric_used = settings.selectors.iter().any(|selector| {
+        matches!(
+            selector.settings.mode,
+            SortMode::Numeric | SortMode::HumanNumeric | SortMode::GeneralNumeric
+        )
+    });
+
+    let mut suppress_decimal_warning = false;
+    if numeric_used {
+        if let Some(sep) = settings.separator {
+            match sep {
+                b'.' => {
+                    show_error!(
+                        "{}",
+                        translate!("sort-warning-separator-decimal", "sep" => ".")
+                    );
+                    suppress_decimal_warning = true;
+                }
+                b'-' => {
+                    show_error!(
+                        "{}",
+                        translate!("sort-warning-separator-minus", "sep" => "-")
+                    );
+                }
+                b'+' => {
+                    show_error!(
+                        "{}",
+                        translate!("sort-warning-separator-plus", "sep" => "+")
+                    );
+                }
+                _ => {}
+            }
+        }
+
+        if !suppress_decimal_warning {
+            show_error!("{}", translate!("sort-warning-numbers-use-decimal-point"));
+        }
+    }
+
+    let uses_reverse = settings
+        .selectors
+        .iter()
+        .any(|selector| selector.settings.reverse);
+    let uses_blanks = settings
+        .selectors
+        .iter()
+        .any(|selector| selector.settings.ignore_blanks || selector.from.ignore_blanks);
+    let uses_dictionary = settings
+        .selectors
+        .iter()
+        .any(|selector| selector.settings.dictionary_order);
+    let uses_case = settings
+        .selectors
+        .iter()
+        .any(|selector| selector.settings.ignore_case);
+    let uses_non_printing = settings
+        .selectors
+        .iter()
+        .any(|selector| selector.settings.ignore_non_printing);
+
+    let uses_mode = |mode| {
+        settings
+            .selectors
+            .iter()
+            .any(|selector| selector.settings.mode == mode)
+    };
+
+    let reverse_unused = flags.reverse && !uses_reverse;
+    let last_resort_active =
+        settings.mode != SortMode::Random && !settings.stable && !settings.unique;
+    let reverse_ignored = reverse_unused && !last_resort_active;
+    let reverse_last_resort_warning = reverse_unused && last_resort_active;
+
+    let mut ignored_opts = String::new();
+    if flags.ignore_leading_blanks && !uses_blanks {
+        ignored_opts.push('b');
+    }
+    if flags.dictionary_order && !uses_dictionary {
+        ignored_opts.push('d');
+    }
+    if flags.ignore_case && !uses_case {
+        ignored_opts.push('f');
+    }
+    if flags.ignore_non_printing && !uses_non_printing {
+        ignored_opts.push('i');
+    }
+    if flags.mode_general && !uses_mode(SortMode::GeneralNumeric) {
+        ignored_opts.push('g');
+    }
+    if flags.mode_human && !uses_mode(SortMode::HumanNumeric) {
+        ignored_opts.push('h');
+    }
+    if flags.mode_month && !uses_mode(SortMode::Month) {
+        ignored_opts.push('M');
+    }
+    if flags.mode_numeric && !uses_mode(SortMode::Numeric) {
+        ignored_opts.push('n');
+    }
+    if flags.mode_random && !uses_mode(SortMode::Random) {
+        ignored_opts.push('R');
+    }
+    if reverse_ignored {
+        ignored_opts.push('r');
+    }
+    if flags.mode_version && !uses_mode(SortMode::Version) {
+        ignored_opts.push('V');
+    }
+
+    if ignored_opts.len() == 1 {
+        show_error!(
+            "{}",
+            translate!("sort-warning-option-ignored", "option" => ignored_opts)
+        );
+    } else if ignored_opts.len() > 1 {
+        show_error!(
+            "{}",
+            translate!("sort-warning-options-ignored", "options" => ignored_opts)
+        );
+    }
+
+    if reverse_last_resort_warning {
+        show_error!("{}", translate!("sort-warning-option-reverse-last-resort"));
+    }
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut settings = GlobalSettings::default();
 
-    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(
-        uu_app(),
-        preprocess_legacy_args(args),
-        2,
-    )?;
+    let (processed_args, legacy_warnings) = preprocess_legacy_args(args);
+    let matches =
+        uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), processed_args, 2)?;
+    let global_flags = GlobalOptionFlags::from_matches(&matches);
 
     // Prevent -o/--output to be specified multiple times
     if matches
@@ -1568,6 +1893,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let output = Output::new(matches.get_one::<OsString>(options::OUTPUT))?;
+
+    if settings.debug {
+        emit_debug_warnings(&settings, &global_flags, &legacy_warnings);
+    }
 
     settings.init_precomputed();
 
