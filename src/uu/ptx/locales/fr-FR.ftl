@@ -28,3 +28,5 @@ ptx-error-dumb-format = Il n'y a pas de format simple avec les extensions GNU d�
 ptx-error-not-implemented = { $feature } pas encore implémenté
 ptx-error-write-failed = échec de l'écriture
 ptx-error-extra-operand = opérande supplémentaire { $operand }
+ptx-error-empty-regexp = Une expression régulière ne peut pas correspondre à une chaîne de longueur zéro
+ptx-error-invalid-regexp = Expression régulière invalide : { $error }
