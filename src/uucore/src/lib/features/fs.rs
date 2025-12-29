@@ -149,6 +149,7 @@ impl FileInformation {
                 not(target_pointer_width = "64")
             )
         ))]
+        #[cfg_attr(target_os = "freebsd", allow(clippy::useless_conversion))]
         return self.0.st_nlink.into();
         #[cfg(target_os = "aix")]
         return self.0.st_nlink.try_into().unwrap();
@@ -168,6 +169,7 @@ impl FileInformation {
             target_os = "netbsd",
             not(target_pointer_width = "64")
         ))]
+        #[cfg_attr(target_os = "freebsd", allow(clippy::useless_conversion))]
         return self.0.st_ino.into();
     }
 }
