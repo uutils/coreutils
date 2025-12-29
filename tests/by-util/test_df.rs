@@ -140,6 +140,30 @@ fn test_df_follows_symlinks() {
 }
 
 #[test]
+fn test_df_trailing_zeros() {
+    use regex::Regex;
+
+    new_ucmd!()
+        .arg("-h")
+        .arg("--output=size,used")
+        .arg("--total")
+        .succeeds()
+        .stdout_does_not_match(&Regex::new("\\s[1-9][A-Z]").unwrap());
+}
+
+#[test]
+fn test_df_rounding() {
+    use regex::Regex;
+
+    new_ucmd!()
+        .arg("-H")
+        .arg("--output=size,used")
+        .arg("--total")
+        .succeeds()
+        .stdout_does_not_match(&Regex::new("\\s\\d{3}\\.\\d[A-Z]").unwrap());
+}
+
+#[test]
 fn test_df_output_overridden() {
     let expected = if cfg!(target_os = "macos") {
         vec![
@@ -302,7 +326,7 @@ fn test_type_option() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "freebsd", target_os = "windows")))] // FIXME: fix test for FreeBSD & Win
+#[cfg(not(any(target_os = "freebsd", target_os = "openbsd", target_os = "windows")))] // FIXME: fix test for FreeBSD, OpenBSD & Win
 #[cfg(not(feature = "feat_selinux"))]
 fn test_type_option_with_file() {
     let fs_type = new_ucmd!()
@@ -625,6 +649,53 @@ fn test_block_size_with_suffix() {
 }
 
 #[test]
+fn test_df_binary_block_size() {
+    fn get_header(block_size: &str) -> String {
+        let output = new_ucmd!()
+            .args(&["-B", block_size, "--output=size"])
+            .succeeds()
+            .stdout_str_lossy();
+        output.lines().next().unwrap().trim().to_string()
+    }
+
+    let test_cases = [
+        ("0b1", "1"),
+        ("0b10100", "20"),
+        ("0b1000000000", "512"),
+        ("0b10K", "2K"),
+    ];
+
+    for (binary, decimal) in test_cases {
+        let binary_result = get_header(binary);
+        let decimal_result = get_header(decimal);
+        assert_eq!(
+            binary_result, decimal_result,
+            "Binary {binary} should equal decimal {decimal}"
+        );
+    }
+}
+
+#[test]
+fn test_df_binary_env_block_size() {
+    fn get_header(env_var: &str, env_value: &str) -> String {
+        let output = new_ucmd!()
+            .env(env_var, env_value)
+            .args(&["--output=size"])
+            .succeeds()
+            .stdout_str_lossy();
+        output.lines().next().unwrap().trim().to_string()
+    }
+
+    let binary_header = get_header("DF_BLOCK_SIZE", "0b10000000000");
+    let decimal_header = get_header("DF_BLOCK_SIZE", "1024");
+    assert_eq!(binary_header, decimal_header);
+
+    let binary_header = get_header("BLOCK_SIZE", "0b10000000000");
+    let decimal_header = get_header("BLOCK_SIZE", "1024");
+    assert_eq!(binary_header, decimal_header);
+}
+
+#[test]
 fn test_block_size_in_posix_portability_mode() {
     fn get_header(block_size: &str) -> String {
         let output = new_ucmd!()
@@ -664,6 +735,24 @@ fn test_block_size_from_env() {
     assert_eq!(get_header("DF_BLOCK_SIZE", "111"), "111B-blocks");
     assert_eq!(get_header("BLOCK_SIZE", "222"), "222B-blocks");
     assert_eq!(get_header("BLOCKSIZE", "333"), "333B-blocks");
+}
+
+#[test]
+fn test_block_size_from_env_zero() {
+    fn get_header(env_var: &str, env_value: &str) -> String {
+        let output = new_ucmd!()
+            .arg("--output=size")
+            .env(env_var, env_value)
+            .succeeds()
+            .stdout_str_lossy();
+        output.lines().next().unwrap().trim().to_string()
+    }
+
+    let default_block_size_header = "1K-blocks";
+
+    assert_eq!(get_header("DF_BLOCK_SIZE", "0"), default_block_size_header);
+    assert_eq!(get_header("BLOCK_SIZE", "0"), default_block_size_header);
+    assert_eq!(get_header("BLOCKSIZE", "0"), default_block_size_header);
 }
 
 #[test]
@@ -717,6 +806,16 @@ fn test_invalid_block_size_from_env() {
     let output = new_ucmd!()
         .arg("--output=size")
         .env("DF_BLOCK_SIZE", "invalid")
+        .env("BLOCK_SIZE", "222")
+        .succeeds()
+        .stdout_str_lossy();
+    let header = output.lines().next().unwrap().trim().to_string();
+
+    assert_eq!(header, default_block_size_header);
+
+    let output = new_ucmd!()
+        .arg("--output=size")
+        .env("DF_BLOCK_SIZE", "0")
         .env("BLOCK_SIZE", "222")
         .succeeds()
         .stdout_str_lossy();
@@ -795,6 +894,32 @@ fn test_invalid_block_size_suffix() {
         .arg("--block-size=1.2")
         .fails()
         .stderr_contains("invalid suffix in --block-size argument '1.2'");
+}
+
+#[test]
+fn test_df_invalid_binary_size() {
+    new_ucmd!()
+        .arg("--block-size=0b123")
+        .fails()
+        .stderr_contains("invalid suffix in --block-size argument '0b123'");
+}
+
+#[test]
+fn test_df_binary_edge_cases() {
+    new_ucmd!()
+        .arg("-B0b")
+        .fails()
+        .stderr_contains("invalid --block-size argument '0b'");
+
+    new_ucmd!()
+        .arg("-B0B")
+        .fails()
+        .stderr_contains("invalid suffix in --block-size argument '0B'");
+
+    new_ucmd!()
+        .arg("--block-size=0b1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111")
+        .fails()
+        .stderr_contains("too large");
 }
 
 #[test]

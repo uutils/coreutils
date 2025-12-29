@@ -3,13 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //spell-checker:ignore TAOCP indegree
-use clap::{Arg, Command};
-use std::collections::{HashMap, HashSet, VecDeque};
+use clap::{Arg, ArgAction, Command};
+use std::collections::hash_map::Entry;
+use std::collections::{HashMap, VecDeque};
 use std::ffi::OsString;
 use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult};
+use uucore::error::{UError, UResult, USimpleError};
 use uucore::{format_usage, show};
 
 use uucore::translate;
@@ -21,48 +22,71 @@ mod options {
 #[derive(Debug, Error)]
 enum TsortError {
     /// The input file is actually a directory.
-    #[error("{input}: {message}", input = .0, message = translate!("tsort-error-is-dir"))]
-    IsDir(String),
+    #[error("{input}: {message}", input = .0.maybe_quote(), message = translate!("tsort-error-is-dir"))]
+    IsDir(OsString),
 
     /// The number of tokens in the input data is odd.
     ///
     /// The list of edges must be even because each edge has two
     /// components: a source node and a target node.
     #[error("{input}: {message}", input = .0.maybe_quote(), message = translate!("tsort-error-odd"))]
-    NumTokensOdd(String),
+    NumTokensOdd(OsString),
 
     /// The graph contains a cycle.
-    #[error("{input}: {message}", input = .0, message = translate!("tsort-error-loop"))]
-    Loop(String),
-
-    /// A particular node in a cycle. (This is mainly used for printing.)
-    #[error("{0}")]
-    LoopNode(String),
+    #[error("{input}: {message}", input = .0.maybe_quote(), message = translate!("tsort-error-loop"))]
+    Loop(OsString),
 }
 
+// Auxiliary struct, just for printing loop nodes via show! macro
+#[derive(Debug, Error)]
+#[error("{0}")]
+struct LoopNode<'a>(&'a str);
+
 impl UError for TsortError {}
+impl UError for LoopNode<'_> {}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let input = matches
-        .get_one::<OsString>(options::FILE)
-        .expect("Value is required by clap");
+    let mut inputs: Vec<OsString> = matches
+        .get_many::<OsString>(options::FILE)
+        .map(|vals| vals.cloned().collect())
+        .unwrap_or_default();
+
+    if inputs.is_empty() {
+        inputs.push(OsString::from("-"));
+    }
+
+    if inputs.len() > 1 {
+        return Err(USimpleError::new(
+            1,
+            translate!(
+                "tsort-error-extra-operand",
+                "operand" => inputs[1].quote(),
+                "util" => uucore::util_name()
+            ),
+        ));
+    }
+
+    let input = inputs
+        .into_iter()
+        .next()
+        .expect(translate!("tsort-error-at-least-one-input").as_str());
 
     let data = if input == "-" {
         let stdin = std::io::stdin();
         std::io::read_to_string(stdin)?
     } else {
-        let path = Path::new(input);
+        let path = Path::new(&input);
         if path.is_dir() {
-            return Err(TsortError::IsDir(input.to_string_lossy().to_string()).into());
+            return Err(TsortError::IsDir(input.clone()).into());
         }
         std::fs::read_to_string(path)?
     };
 
     // Create the directed graph from pairs of tokens in the input data.
-    let mut g = Graph::new(input.to_string_lossy().to_string());
+    let mut g = Graph::new(input.clone());
     // Input is considered to be in the format
     // From1 To1 From2 To2 ...
     // with tokens separated by whitespaces
@@ -77,7 +101,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             break;
         };
         let Some(to) = edge_tokens.next() else {
-            return Err(TsortError::NumTokensOdd(input.to_string_lossy().to_string()).into());
+            return Err(TsortError::NumTokensOdd(input.clone()).into());
         };
         g.add_edge(from, to);
     }
@@ -94,11 +118,18 @@ pub fn uu_app() -> Command {
         .about(translate!("tsort-about"))
         .infer_long_args(true)
         .arg(
+            Arg::new("warn")
+                .short('w')
+                .action(ArgAction::SetTrue)
+                .hide(true),
+        )
+        .arg(
             Arg::new(options::FILE)
-                .default_value("-")
                 .hide(true)
                 .value_parser(clap::value_parser!(OsString))
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .num_args(0..)
+                .action(ArgAction::Append),
         )
 }
 
@@ -127,12 +158,18 @@ impl<'input> Node<'input> {
 }
 
 struct Graph<'input> {
-    name: String,
+    name: OsString,
     nodes: HashMap<&'input str, Node<'input>>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum VisitedState {
+    Opened,
+    Closed,
+}
+
 impl<'input> Graph<'input> {
-    fn new(name: String) -> Self {
+    fn new(name: OsString) -> Self {
         Self {
             name,
             nodes: HashMap::default(),
@@ -181,7 +218,7 @@ impl<'input> Graph<'input> {
             let v = self.find_next_node(&mut independent_nodes_queue);
             println!("{v}");
             if let Some(node_to_process) = self.nodes.remove(v) {
-                for successor_name in node_to_process.successor_names {
+                for successor_name in node_to_process.successor_names.into_iter().rev() {
                     let successor_node = self.nodes.get_mut(successor_name).unwrap();
                     successor_node.predecessor_count -= 1;
                     if successor_node.predecessor_count == 0 {
@@ -224,11 +261,11 @@ impl<'input> Graph<'input> {
     fn find_and_break_cycle(&mut self, frontier: &mut VecDeque<&'input str>) {
         let cycle = self.detect_cycle();
         show!(TsortError::Loop(self.name.clone()));
-        for node in &cycle {
-            show!(TsortError::LoopNode((*node).to_string()));
+        for &node in &cycle {
+            show!(LoopNode(node));
         }
-        let u = cycle[0];
-        let v = cycle[1];
+        let u = *cycle.last().expect("cycle must be non-empty");
+        let v = cycle[0];
         self.remove_edge(u, v);
         if self.indegree(v).unwrap() == 0 {
             frontier.push_back(v);
@@ -236,45 +273,76 @@ impl<'input> Graph<'input> {
     }
 
     fn detect_cycle(&self) -> Vec<&'input str> {
-        // Sort the nodes just to make this function deterministic.
         let mut nodes: Vec<_> = self.nodes.keys().collect();
         nodes.sort_unstable();
 
-        let mut visited = HashSet::new();
+        let mut visited = HashMap::new();
         let mut stack = Vec::with_capacity(self.nodes.len());
         for node in nodes {
-            if !visited.contains(node) && self.dfs(node, &mut visited, &mut stack) {
-                return stack;
+            if self.dfs(node, &mut visited, &mut stack) {
+                let (loop_entry, _) = stack.pop().expect("loop is not empty");
+
+                return stack
+                    .into_iter()
+                    .map(|(node, _)| node)
+                    .skip_while(|&node| node != loop_entry)
+                    .collect();
             }
         }
-        unreachable!();
+        unreachable!("detect_cycle is expected to be called only on graphs with cycles");
     }
 
-    fn dfs(
-        &self,
+    fn dfs<'a>(
+        &'a self,
         node: &'input str,
-        visited: &mut HashSet<&'input str>,
-        stack: &mut Vec<&'input str>,
+        visited: &mut HashMap<&'input str, VisitedState>,
+        stack: &mut Vec<(&'input str, &'a [&'input str])>,
     ) -> bool {
-        if stack.contains(&node) {
-            return true;
-        }
-        if visited.contains(&node) {
+        stack.push((
+            node,
+            self.nodes.get(node).map_or(&[], |n| &n.successor_names),
+        ));
+        let state = *visited.entry(node).or_insert(VisitedState::Opened);
+
+        if state == VisitedState::Closed {
             return false;
         }
 
-        visited.insert(node);
-        stack.push(node);
+        while let Some((node, pending_successors)) = stack.pop() {
+            let Some((&next_node, pending)) = pending_successors.split_first() else {
+                // no more pending successors in the list -> close the node
+                visited.insert(node, VisitedState::Closed);
+                continue;
+            };
 
-        if let Some(successor_names) = self.nodes.get(node).map(|n| &n.successor_names) {
-            for &successor in successor_names {
-                if self.dfs(successor, visited, stack) {
-                    return true;
+            // schedule processing for the pending part of successors for this node
+            stack.push((node, pending));
+
+            match visited.entry(next_node) {
+                Entry::Vacant(v) => {
+                    // It's a first time we enter this node
+                    v.insert(VisitedState::Opened);
+                    stack.push((
+                        next_node,
+                        self.nodes
+                            .get(next_node)
+                            .map_or(&[], |n| &n.successor_names),
+                    ));
+                }
+                Entry::Occupied(o) => {
+                    if *o.get() == VisitedState::Opened {
+                        // we are entering the same opened node again -> loop found
+                        // stack contains it
+                        //
+                        // But part of the stack may not be belonging to this loop
+                        // push found node to the stack to be able to trace the beginning of the loop
+                        stack.push((next_node, &[]));
+                        return true;
+                    }
                 }
             }
         }
 
-        stack.pop();
         false
     }
 }

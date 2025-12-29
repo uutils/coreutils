@@ -163,10 +163,7 @@ impl Options {
             block_size: read_block_size(matches).map_err(|e| match e {
                 ParseSizeError::InvalidSuffix(s) => OptionsError::InvalidSuffix(s),
                 ParseSizeError::SizeTooBig(_) => OptionsError::BlockSizeTooLarge(
-                    matches
-                        .get_one::<String>(OPT_BLOCKSIZE)
-                        .unwrap()
-                        .to_string(),
+                    matches.get_one::<String>(OPT_BLOCKSIZE).unwrap().to_owned(),
                 ),
                 ParseSizeError::ParseFailure(s) => OptionsError::InvalidBlockSize(s),
                 ParseSizeError::PhysicalMem(s) => OptionsError::InvalidBlockSize(s),
@@ -373,7 +370,7 @@ where
             Err(FsError::InvalidPath) => {
                 show!(USimpleError::new(
                     1,
-                    translate!("df-error-no-such-file-or-directory", "path" => path.as_ref().display())
+                    translate!("df-error-no-such-file-or-directory", "path" => path.as_ref().maybe_quote())
                 ));
             }
             Err(FsError::MountMissing) => {

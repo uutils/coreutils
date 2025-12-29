@@ -51,10 +51,7 @@ pub(crate) enum FsError {
 /// `mounts` after mount that has the same `mount_dir`.
 #[cfg(not(windows))]
 fn is_over_mounted(mounts: &[MountInfo], mount: &MountInfo) -> bool {
-    let last_mount_for_dir = mounts
-        .iter()
-        .filter(|m| m.mount_dir == mount.mount_dir)
-        .next_back();
+    let last_mount_for_dir = mounts.iter().rfind(|m| m.mount_dir == mount.mount_dir);
 
     if let Some(lmi) = last_mount_for_dir {
         lmi.dev_name != mount.dev_name

@@ -125,7 +125,7 @@ pub fn wrap_chown<P: AsRef<Path>>(
                             entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                         )
                     };
-                };
+                }
             }
         }
         return Err(out);
@@ -157,7 +157,7 @@ pub fn wrap_chown<P: AsRef<Path>>(
                 };
             }
             _ => (),
-        };
+        }
     } else if verbosity.level == VerbosityLevel::Verbose {
         out = if verbosity.groups_only {
             format!(
@@ -464,8 +464,8 @@ impl ChownExecutor {
                 *ret = 1;
                 if self.verbosity.level != VerbosityLevel::Silent {
                     show_error!(
-                        "cannot read directory '{}': {}",
-                        dir_path.display(),
+                        "cannot read directory {}: {}",
+                        dir_path.quote(),
                         strip_errno(&e)
                     );
                 }
@@ -484,11 +484,7 @@ impl ChownExecutor {
                 Err(e) => {
                     *ret = 1;
                     if self.verbosity.level != VerbosityLevel::Silent {
-                        show_error!(
-                            "cannot access '{}': {}",
-                            entry_path.display(),
-                            strip_errno(&e)
-                        );
+                        show_error!("cannot access {}: {}", entry_path.quote(), strip_errno(&e));
                     }
                     continue;
                 }
@@ -549,8 +545,8 @@ impl ChownExecutor {
                         *ret = 1;
                         if self.verbosity.level != VerbosityLevel::Silent {
                             show_error!(
-                                "cannot access '{}': {}",
-                                entry_path.display(),
+                                "cannot access {}: {}",
+                                entry_path.quote(),
                                 strip_errno(&e)
                             );
                         }
@@ -582,8 +578,8 @@ impl ChownExecutor {
                     ret = 1;
                     if let Some(path) = e.path() {
                         show_error!(
-                            "cannot access '{}': {}",
-                            path.display(),
+                            "cannot access {}: {}",
+                            path.quote(),
                             if let Some(error) = e.io_error() {
                                 strip_errno(error)
                             } else {
@@ -702,7 +698,7 @@ impl ChownExecutor {
         DirFd::open(path)
             .map_err(|e| {
                 if self.verbosity.level != VerbosityLevel::Silent {
-                    show_error!("cannot access '{}': {}", path.display(), strip_errno(&e));
+                    show_error!("cannot access {}: {}", path.quote(), strip_errno(&e));
                 }
             })
             .ok()

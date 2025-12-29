@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat biguint
 use std::ffi::{OsStr, OsString};
-use std::io::{BufWriter, ErrorKind, Write, stdout};
+use std::io::{BufWriter, Write, stdout};
 
 use clap::{Arg, ArgAction, Command};
 use num_bigint::BigUint;
@@ -123,7 +123,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let first = if numbers.len() > 1 {
         match numbers[0].parse() {
             Ok(num) => num,
-            Err(e) => return Err(SeqError::ParseError(numbers[0].to_string(), e).into()),
+            Err(e) => return Err(SeqError::ParseError(numbers[0].to_owned(), e).into()),
         }
     } else {
         PreciseNumber::one()
@@ -131,13 +131,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let increment = if numbers.len() > 2 {
         match numbers[1].parse() {
             Ok(num) => num,
-            Err(e) => return Err(SeqError::ParseError(numbers[1].to_string(), e).into()),
+            Err(e) => return Err(SeqError::ParseError(numbers[1].to_owned(), e).into()),
         }
     } else {
         PreciseNumber::one()
     };
     if increment.is_zero() {
-        return Err(SeqError::ZeroIncrement(numbers[1].to_string()).into());
+        return Err(SeqError::ZeroIncrement(numbers[1].to_owned()).into());
     }
     let last: PreciseNumber = {
         // We are guaranteed that `numbers.len()` is greater than zero
@@ -146,7 +146,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let n: usize = numbers.len();
         match numbers[n - 1].parse() {
             Ok(num) => num,
-            Err(e) => return Err(SeqError::ParseError(numbers[n - 1].to_string(), e).into()),
+            Err(e) => return Err(SeqError::ParseError(numbers[n - 1].to_owned(), e).into()),
         }
     };
 
@@ -211,7 +211,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match result {
         Ok(()) => Ok(()),
-        Err(err) if err.kind() == ErrorKind::BrokenPipe => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
+            // GNU seq prints the Broken pipe message but still exits with status 0
+            let err = err.map_err_context(|| "write error".into());
+            uucore::show_error!("{err}");
+            Ok(())
+        }
         Err(err) => Err(err.map_err_context(|| "write error".into())),
     }
 }

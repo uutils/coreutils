@@ -22,14 +22,14 @@ workspace = true
 path = "src/lib/lib.rs"
 
 [dependencies]
-bstr = { workspace = true }
+bstr = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
 clap = { workspace = true }
 uucore_procs = { workspace = true }
-number_prefix = { workspace = true }
+unit-prefix = { workspace = true, optional = true }
+phf = { workspace = true }
 dns-lookup = { workspace = true, optional = true }
 dunce = { version = "1.0.4", optional = true }
-wild = "2.2.1"
 glob = { workspace = true, optional = true }
 itertools = { workspace = true, optional = true }
 jiff = { workspace = true, optional = true, features = [
@@ -64,7 +64,6 @@ sha3 = { workspace = true, optional = true }
 blake2b_simd = { workspace = true, optional = true }
 blake3 = { workspace = true, optional = true }
 sm3 = { workspace = true, optional = true }
-crc32fast = { workspace = true, optional = true }
 crc-fast = { workspace = true, optional = true }
 bigdecimal = { workspace = true, optional = true }
 num-traits = { workspace = true, optional = true }
@@ -101,7 +100,11 @@ xattr = { workspace = true, optional = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+procfs = { workspace = true, optional = true }
+
 [target.'cfg(target_os = "windows")'.dependencies]
+wild = "2.2.1"
 winapi-util = { workspace = true, optional = true }
 windows-sys = { workspace = true, optional = true, default-features = false, features = [
   "Wdk_System_SystemInformation",
@@ -120,23 +123,25 @@ default = []
 # * non-default features
 backup-control = []
 colors = []
-checksum = ["data-encoding", "quoting-style", "sum"]
+checksum = ["quoting-style", "sum", "base64-simd"]
 encoding = ["data-encoding", "data-encoding-macro", "z85", "base64-simd"]
 entries = ["libc"]
 extendedbigdecimal = ["bigdecimal", "num-traits"]
 fast-inc = []
 fs = ["dunce", "libc", "winapi-util", "windows-sys"]
-fsext = ["libc", "windows-sys"]
+fsext = ["libc", "windows-sys", "bstr"]
 fsxattr = ["xattr"]
+hardware = []
 lines = []
 feat_systemd_logind = ["utmpx", "libc"]
 format = [
   "bigdecimal",
   "extendedbigdecimal",
   "itertools",
-  "parser",
+  "parser-num",
   "num-traits",
   "quoting-style",
+  "unit-prefix",
 ]
 i18n-all = ["i18n-collator", "i18n-decimal"]
 i18n-common = ["icu_locale"]
@@ -145,7 +150,10 @@ i18n-decimal = ["i18n-common", "icu_decimal", "icu_provider"]
 mode = ["libc"]
 perms = ["entries", "libc", "walkdir"]
 buf-copy = []
-parser = ["extendedbigdecimal", "glob", "num-traits"]
+parser-num = ["extendedbigdecimal", "num-traits"]
+parser-size = ["parser-num", "procfs"]
+parser-glob = ["glob"]
+parser = ["parser-num", "parser-size", "parser-glob"]
 pipes = []
 process = ["libc"]
 proc-info = ["tty", "walkdir"]
@@ -154,6 +162,7 @@ ranges = []
 ringbuffer = []
 safe-traversal = ["libc"]
 selinux = ["dep:selinux"]
+smack = ["xattr"]
 signals = []
 sum = [
   "digest",
@@ -166,8 +175,8 @@ sum = [
   "blake2b_simd",
   "blake3",
   "sm3",
-  "crc32fast",
   "crc-fast",
+  "data-encoding",
 ]
 update-control = ["parser"]
 utf8 = []

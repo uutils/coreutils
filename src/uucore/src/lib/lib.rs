@@ -54,11 +54,18 @@ pub use crate::features::fast_inc;
 pub use crate::features::format;
 #[cfg(feature = "fs")]
 pub use crate::features::fs;
+#[cfg(feature = "hardware")]
+pub use crate::features::hardware;
 #[cfg(feature = "i18n-common")]
 pub use crate::features::i18n;
 #[cfg(feature = "lines")]
 pub use crate::features::lines;
-#[cfg(feature = "parser")]
+#[cfg(any(
+    feature = "parser",
+    feature = "parser-num",
+    feature = "parser-size",
+    feature = "parser-glob"
+))]
 pub use crate::features::parser;
 #[cfg(feature = "quoting-style")]
 pub use crate::features::quoting_style;
@@ -118,6 +125,9 @@ pub use crate::features::fsxattr;
 #[cfg(all(target_os = "linux", feature = "selinux"))]
 pub use crate::features::selinux;
 
+#[cfg(all(target_os = "linux", feature = "smack"))]
+pub use crate::features::smack;
+
 //## core functions
 
 #[cfg(unix)]
@@ -163,9 +173,9 @@ pub fn get_canonical_util_name(util_name: &str) -> &str {
         "[" => "test",
 
         // hashsum aliases - all these hash commands are aliases for hashsum
-        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum"
-        | "sha3sum" | "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum"
-        | "shake128sum" | "shake256sum" | "b2sum" | "b3sum" => "hashsum",
+        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" | "b2sum" => {
+            "hashsum"
+        }
 
         "dir" => "ls", // dir is an alias for ls
 
@@ -184,6 +194,10 @@ macro_rules! bin {
         pub fn main() {
             use std::io::Write;
             use uucore::locale;
+
+            // Preserve inherited SIGPIPE settings (e.g., from env --default-signal=PIPE)
+            uucore::panic::preserve_inherited_sigpipe();
+
             // suppress extraneous error output for SIGPIPE failures/panics
             uucore::panic::mute_sigpipe_panic();
             locale::setup_localization(uucore::get_canonical_util_name(stringify!($util)))
@@ -321,14 +335,24 @@ pub fn set_utility_is_second_arg() {
 
 // args_os() can be expensive to call, it copies all of argv before iterating.
 // So if we want only the first arg or so it's overkill. We cache it.
+#[cfg(windows)]
 static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| wild::args_os().collect());
+#[cfg(not(windows))]
+static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| std::env::args_os().collect());
 
 static UTIL_NAME: LazyLock<String> = LazyLock::new(|| {
     let base_index = usize::from(get_utility_is_second_arg());
     let is_man = usize::from(ARGV[base_index].eq("manpage"));
     let argv_index = base_index + is_man;
 
-    ARGV[argv_index].to_string_lossy().into_owned()
+    // Strip directory path to show only utility name
+    // (e.g., "mkdir" instead of "./target/debug/mkdir")
+    // in version output, error messages, and other user-facing output
+    std::path::Path::new(&ARGV[argv_index])
+        .file_name()
+        .unwrap_or(&ARGV[argv_index])
+        .to_string_lossy()
+        .into_owned()
 });
 
 /// Derive the utility name.
@@ -375,6 +399,13 @@ impl<T: Iterator<Item = OsString> + Sized> Args for T {}
 /// args_os() can be expensive to call
 pub fn args_os() -> impl Iterator<Item = OsString> {
     ARGV.iter().cloned()
+}
+
+/// Returns an iterator over the command line arguments as `OsString`s, filtering out empty arguments.
+/// This is useful for handling cases where extra whitespace or empty arguments are present.
+/// args_os_filtered() can be expensive to call
+pub fn args_os_filtered() -> impl Iterator<Item = OsString> {
+    ARGV.iter().filter(|arg| !arg.is_empty()).cloned()
 }
 
 /// Read a line from stdin and check whether the first character is `'y'` or `'Y'`

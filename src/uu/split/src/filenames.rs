@@ -89,7 +89,7 @@ pub enum SuffixError {
 
     /// Suffix contains a directory separator, which is not allowed.
     #[error("{}", translate!("split-error-suffix-contains-separator", "value" => .0.quote()))]
-    ContainsSeparator(String),
+    ContainsSeparator(OsString),
 
     /// Suffix is not large enough to split into specified chunks
     #[error("{}", translate!("split-error-suffix-too-small", "length" => .0))]
@@ -153,7 +153,7 @@ impl Suffix {
                 if let Some(opt) = matches.get_one::<String>(OPT_NUMERIC_SUFFIXES) {
                     start = opt
                         .parse::<usize>()
-                        .map_err(|_| SuffixError::NotParsable(opt.to_string()))?;
+                        .map_err(|_| SuffixError::NotParsable(opt.to_owned()))?;
                     auto_widening = false;
                 }
             }
@@ -162,7 +162,7 @@ impl Suffix {
                 // if option was specified, but without value - this will return None as there is no default value
                 if let Some(opt) = matches.get_one::<String>(OPT_HEX_SUFFIXES) {
                     start = usize::from_str_radix(opt, 16)
-                        .map_err(|_| SuffixError::NotParsable(opt.to_string()))?;
+                        .map_err(|_| SuffixError::NotParsable(opt.to_owned()))?;
                     auto_widening = false;
                 }
             }
@@ -177,7 +177,7 @@ impl Suffix {
                 // suffix length was specified in command line
                 (
                     v.parse::<usize>()
-                        .map_err(|_| SuffixError::NotParsable(v.to_string()))?,
+                        .map_err(|_| SuffixError::NotParsable(v.to_owned()))?,
                     true,
                 )
             } else {
@@ -224,9 +224,7 @@ impl Suffix {
             .unwrap()
             .clone();
         if additional.to_string_lossy().chars().any(is_separator) {
-            return Err(SuffixError::ContainsSeparator(
-                additional.to_string_lossy().to_string(),
-            ));
+            return Err(SuffixError::ContainsSeparator(additional));
         }
 
         let result = Self {
