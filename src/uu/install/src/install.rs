@@ -84,10 +84,10 @@ enum InstallError {
     #[error("{}", translate!("install-error-target-not-dir", "path" => .0.quote()))]
     TargetDirIsntDir(PathBuf),
 
-    #[error("{}", translate!("install-error-backup-failed", "from" => .0.to_string_lossy(), "to" => .1.to_string_lossy()))]
+    #[error("{}", translate!("install-error-backup-failed", "from" => .0.quote(), "to" => .1.quote()))]
     BackupFailed(PathBuf, PathBuf, #[source] std::io::Error),
 
-    #[error("{}", translate!("install-error-install-failed", "from" => .0.to_string_lossy(), "to" => .1.to_string_lossy()))]
+    #[error("{}", translate!("install-error-install-failed", "from" => .0.quote(), "to" => .1.quote()))]
     InstallFailed(PathBuf, PathBuf, #[source] std::io::Error),
 
     #[error("{}", translate!("install-error-strip-failed", "error" => .0.clone()))]
@@ -111,11 +111,11 @@ enum InstallError {
     #[error("{}", translate!("install-error-override-directory-failed", "dir" => .0.quote(), "file" => .1.quote()))]
     OverrideDirectoryFailed(PathBuf, PathBuf),
 
-    #[error("{}", translate!("install-error-same-file", "file1" => .0.to_string_lossy(), "file2" => .1.to_string_lossy()))]
+    #[error("{}", translate!("install-error-same-file", "file1" => .0.quote(), "file2" => .1.quote()))]
     SameFile(PathBuf, PathBuf),
 
     #[error("{}", translate!("install-error-extra-operand", "operand" => .0.quote(), "usage" => .1.clone()))]
-    ExtraOperand(String, String),
+    ExtraOperand(OsString, String),
 
     #[cfg(feature = "selinux")]
     #[error("{}", .0)]
@@ -338,7 +338,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     let specified_mode: Option<u32> = if matches.contains_id(OPT_MODE) {
         let x = matches.get_one::<String>(OPT_MODE).ok_or(1)?;
-        Some(mode::parse(x, considering_dir, 0).map_err(|err| {
+        Some(uucore::mode::parse(x, considering_dir, 0).map_err(|err| {
             show_error!(
                 "{}",
                 translate!("install-error-invalid-mode", "error" => err)
@@ -679,7 +679,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
     }
     if b.no_target_dir && paths.len() > 2 {
         return Err(InstallError::ExtraOperand(
-            paths[2].to_string_lossy().into_owned(),
+            paths[2].clone(),
             format_usage(&translate!("install-usage")),
         )
         .into());
@@ -695,7 +695,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
         if paths.is_empty() {
             return Err(UUsageError::new(
                 1,
-                translate!("install-error-missing-destination-operand", "path" => last_path.to_string_lossy()),
+                translate!("install-error-missing-destination-operand", "path" => last_path.quote()),
             ));
         }
 
@@ -836,10 +836,9 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
     Ok(())
 }
 
-/// Handle incomplete user/group parings for chown.
+/// Handle ownership changes when -o/--owner or -g/--group flags are used.
 ///
 /// Returns a Result type with the Err variant containing the error message.
-/// If the user is root, revert the uid & gid
 ///
 /// # Parameters
 ///
@@ -860,11 +859,8 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
     // Determine the owner and group IDs to be used for chown.
     let (owner_id, group_id) = if b.owner_id.is_some() || b.group_id.is_some() {
         (b.owner_id, b.group_id)
-    } else if geteuid() == 0 {
-        // Special case for root user.
-        (Some(0), Some(0))
     } else {
-        // No chown operation needed.
+        // No chown operation needed - file ownership comes from process naturally.
         return Ok(());
     };
 
@@ -960,7 +956,7 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         if e.kind() != std::io::ErrorKind::NotFound {
             show_error!(
                 "{}",
-                translate!("install-error-failed-to-remove", "path" => to.display(), "error" => format!("{e:?}"))
+                translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => format!("{e:?}"))
             );
         }
     }

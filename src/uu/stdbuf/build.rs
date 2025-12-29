@@ -26,6 +26,11 @@ mod platform {
     pub const DYLIB_EXT: &str = ".dylib";
 }
 
+#[cfg(target_os = "cygwin")]
+mod platform {
+    pub const DYLIB_EXT: &str = ".dll";
+}
+
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/libstdbuf/src/libstdbuf.rs");
@@ -103,6 +108,9 @@ fn main() {
     assert!(status.success(), "Failed to build libstdbuf");
 
     // Copy the built library to OUT_DIR for include_bytes! to find
+    #[cfg(target_os = "cygwin")]
+    let lib_name = format!("stdbuf{}", platform::DYLIB_EXT);
+    #[cfg(not(target_os = "cygwin"))]
     let lib_name = format!("libstdbuf{}", platform::DYLIB_EXT);
     let dest_path = Path::new(&out_dir).join(format!("libstdbuf{}", platform::DYLIB_EXT));
 

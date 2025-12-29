@@ -77,7 +77,7 @@ fn test_multiple_arguments() {
         .arg("call_graph.txt")
         .arg("invalid_file")
         .fails()
-        .stderr_contains("unexpected argument 'invalid_file' found");
+        .stderr_contains("extra operand 'invalid_file'");
 }
 
 #[test]
@@ -119,7 +119,7 @@ fn test_two_cycles() {
     new_ucmd!()
         .pipe_in("a b b c c b b d d b")
         .fails_with_code(1)
-        .stdout_is("a\nb\nc\nd\n")
+        .stdout_is("a\nb\nd\nc\n")
         .stderr_is("tsort: -: input contains a loop:\ntsort: b\ntsort: c\ntsort: -: input contains a loop:\ntsort: b\ntsort: d\n");
 }
 
@@ -152,4 +152,96 @@ fn test_loop_for_iterative_dfs_correctness() {
         .pipe_in(input)
         .fails_with_code(1)
         .stderr_contains("tsort: -: input contains a loop:\ntsort: B\ntsort: C");
+}
+
+const TSORT_LOOP_STDERR: &str = "tsort: f: input contains a loop:\ntsort: s\ntsort: t\n";
+const TSORT_LOOP_STDERR_AC: &str = "tsort: f: input contains a loop:\ntsort: a\ntsort: b\ntsort: f: input contains a loop:\ntsort: a\ntsort: c\n";
+const TSORT_ODD_ERROR: &str = "tsort: -: input contains an odd number of tokens\n";
+const TSORT_EXTRA_OPERAND_ERROR: &str =
+    "tsort: extra operand 'g'\nTry 'tsort --help' for more information.\n";
+
+#[test]
+fn test_cycle_loop_from_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "t b\nt s\ns t\n");
+
+    ucmd.arg("f")
+        .fails_with_code(1)
+        .stdout_is("s\nt\nb\n")
+        .stderr_is(TSORT_LOOP_STDERR);
+}
+
+#[test]
+fn test_cycle_loop_with_extra_node_from_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "t x\nt s\ns t\n");
+
+    ucmd.arg("f")
+        .fails_with_code(1)
+        .stdout_is("s\nt\nx\n")
+        .stderr_is(TSORT_LOOP_STDERR);
+}
+
+#[test]
+fn test_cycle_loop_multiple_loops_from_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "a a\na b\na c\nc a\nb a\n");
+
+    ucmd.arg("f")
+        .fails_with_code(1)
+        .stdout_is("a\nc\nb\n")
+        .stderr_is(TSORT_LOOP_STDERR_AC);
+}
+
+#[test]
+fn test_posix_graph_examples() {
+    new_ucmd!()
+        .pipe_in("a b c c d e\ng g\nf g e f\nh h\n")
+        .succeeds()
+        .stdout_only("a\nc\nd\nh\nb\ne\nf\ng\n");
+
+    new_ucmd!()
+        .pipe_in("b a\nd c\nz h x h r h\n")
+        .succeeds()
+        .stdout_only("b\nd\nr\nx\nz\na\nc\nh\n");
+}
+
+#[test]
+fn test_linear_tree_graphs() {
+    new_ucmd!()
+        .pipe_in("a b b c c d d e e f f g\n")
+        .succeeds()
+        .stdout_only("a\nb\nc\nd\ne\nf\ng\n");
+
+    new_ucmd!()
+        .pipe_in("a b b c c d d e e f f g\nc x x y y z\n")
+        .succeeds()
+        .stdout_only("a\nb\nc\nx\nd\ny\ne\nz\nf\ng\n");
+
+    new_ucmd!()
+        .pipe_in("a b b c c d d e e f f g\nc x x y y z\nf r r s s t\n")
+        .succeeds()
+        .stdout_only("a\nb\nc\nx\nd\ny\ne\nz\nf\nr\ng\ns\nt\n");
+}
+
+#[test]
+fn test_odd_number_of_tokens() {
+    new_ucmd!()
+        .pipe_in("a\n")
+        .fails_with_code(1)
+        .stdout_is("")
+        .stderr_is(TSORT_ODD_ERROR);
+}
+
+#[test]
+fn test_only_one_input_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "");
+    at.write("g", "");
+
+    ucmd.arg("f")
+        .arg("g")
+        .fails_with_code(1)
+        .stdout_is("")
+        .stderr_is(TSORT_EXTRA_OPERAND_ERROR);
 }
