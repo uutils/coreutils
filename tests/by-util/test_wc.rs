@@ -449,6 +449,23 @@ fn test_read_from_directory_error() {
         .stdout_is(STDOUT);
 }
 
+#[cfg(unix)]
+#[test]
+fn test_read_error_order_with_stderr_to_stdout() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("ioerrdir");
+
+    let expected = format!(
+        "{:>7} {:>7} {:>7} ioerrdir\nwc: ioerrdir: Is a directory\n",
+        0, 0, 0
+    );
+
+    ucmd.arg("ioerrdir")
+        .stderr_to_stdout()
+        .fails()
+        .stdout_only(expected);
+}
+
 /// Test that getting counts from nonexistent file is an error.
 #[test]
 fn test_read_from_nonexistent_file() {
