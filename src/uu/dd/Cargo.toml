@@ -23,7 +23,7 @@ gcd = { workspace = true }
 libc = { workspace = true }
 uucore = { workspace = true, features = [
   "format",
-  "parser",
+  "parser-size",
   "quoting-style",
   "fs",
 ] }

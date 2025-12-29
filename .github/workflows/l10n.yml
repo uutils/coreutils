@@ -141,7 +141,7 @@ jobs:
     - name: Install/setup prerequisites
       shell: bash
       run: |
-        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev locales
+        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
         sudo locale-gen --keep-existing fr_FR.UTF-8
         locale -a | grep -i fr || exit 1
     - name: Build coreutils with clap localization support
@@ -312,7 +312,7 @@ jobs:
       shell: bash
       run: |
         ## Install/setup prerequisites
-        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev locales
+        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
     - name: Generate French locale
       shell: bash
       run: |
@@ -429,10 +429,10 @@ jobs:
         ## Install/setup prerequisites
         case '${{ matrix.job.os }}' in
           ubuntu-*)
-            sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev build-essential
+            sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
           ;;
           macos-*)
-            brew install coreutils make
+            brew install coreutils
           ;;
         esac
     - name: Install via make and test multi-call binary
@@ -453,22 +453,22 @@ jobs:
 
         # First check if binary exists after build
         echo "Checking if coreutils was built..."
-        ls -la target/release/coreutils || echo "No coreutils binary in target/release/"
+        ls -la target/release-small/coreutils || echo "No coreutils binary in target/release-small/"
 
-        make FEATURES="${{ matrix.job.features }}" PROFILE=release MULTICALL=y
+        make FEATURES="${{ matrix.job.features }}" PROFILE=release-small MULTICALL=y
 
-        echo "After build, checking target/release/:"
-        ls -la target/release/ | grep -E "(coreutils|^total)" || echo "Build may have failed"
+        echo "After build, checking target/release-small/:"
+        ls -la target/release-small/ | grep -E "(coreutils|^total)" || echo "Build may have failed"
 
         echo "Running make install..."
         echo "Before install - checking what we have:"
-        ls -la target/release/coreutils 2>/dev/null || echo "No coreutils in target/release"
+        ls -la target/release-small/coreutils 2>/dev/null || echo "No coreutils in target/release-small"
 
         # Run make install with verbose output to see what happens
-        echo "About to run: make install DESTDIR=\"$INSTALL_DIR\" PREFIX=/usr PROFILE=release MULTICALL=y"
+        echo "About to run: make install DESTDIR=\"$INSTALL_DIR\" PREFIX=/usr PROFILE=release-small MULTICALL=y"
         echo "Expected install path: $INSTALL_DIR/usr/bin/coreutils"
 
-        make install DESTDIR="$INSTALL_DIR" PREFIX=/usr PROFILE=release MULTICALL=y || {
+        make install DESTDIR="$INSTALL_DIR" PREFIX=/usr PROFILE=release-small MULTICALL=y || {
           echo "Make install failed! Exit code: $?"
           echo "Let's see what happened:"
           ls -la "$INSTALL_DIR" 2>/dev/null || echo "Install directory doesn't exist"
@@ -482,13 +482,13 @@ jobs:
         echo "Current directory: $(pwd)"
         echo "INSTALL_DIR: $INSTALL_DIR"
         echo "Checking if build succeeded..."
-        if [ -f "target/release/coreutils" ]; then
-          echo "✓ Build succeeded - coreutils binary exists in target/release/"
-          ls -la target/release/coreutils
+        if [ -f "target/release-small/coreutils" ]; then
+          echo "✓ Build succeeded - coreutils binary exists in target/release-small/"
+          ls -la target/release-small/coreutils
         else
-          echo "✗ Build failed - no coreutils binary in target/release/"
-          echo "Contents of target/release/:"
-          ls -la target/release/ | head -20
+          echo "✗ Build failed - no coreutils binary in target/release-small/"
+          echo "Contents of target/release-small/:"
+          ls -la target/release-small/ | head -20
           exit 1
         fi
 
@@ -580,13 +580,13 @@ jobs:
         ## Install/setup prerequisites
         case '${{ matrix.job.os }}' in
           ubuntu-*)
-            sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev build-essential locales
+            sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
             # Generate French locale for testing
             sudo locale-gen --keep-existing fr_FR.UTF-8
             locale -a | grep -i fr || echo "French locale generation may have failed"
           ;;
           macos-*)
-            brew install coreutils make
+            brew install coreutils
           ;;
         esac
     - name: Test Make installation
@@ -600,8 +600,8 @@ jobs:
         mkdir -p "$MAKE_INSTALL_DIR"
 
         # Build and install using make with DESTDIR
-        make FEATURES="${{ matrix.job.features }}" PROFILE=release MULTICALL=y
-        make install DESTDIR="$MAKE_INSTALL_DIR" PREFIX=/usr PROFILE=release MULTICALL=y
+        make FEATURES="${{ matrix.job.features }}" PROFILE=release-small MULTICALL=y
+        make install DESTDIR="$MAKE_INSTALL_DIR" PREFIX=/usr PROFILE=release-small MULTICALL=y
 
         # Verify installation
         echo "Testing make-installed binaries..."
@@ -912,7 +912,7 @@ jobs:
       run: |
         ## Install/setup prerequisites including locale support
         sudo apt-get -y update
-        sudo apt-get -y install libselinux1-dev locales build-essential
+        sudo apt-get -y install libselinux1-dev
 
         # Generate multiple locales for testing
         sudo locale-gen --keep-existing en_US.UTF-8 fr_FR.UTF-8 de_DE.UTF-8 es_ES.UTF-8
@@ -928,8 +928,8 @@ jobs:
         mkdir -p "$INSTALL_DIR"
 
         # Build and install using make with DESTDIR
-        make FEATURES="feat_os_unix" PROFILE=release MULTICALL=y
-        make install DESTDIR="$INSTALL_DIR" PREFIX=/usr PROFILE=release MULTICALL=y
+        make FEATURES="feat_os_unix" PROFILE=release-small MULTICALL=y
+        make install DESTDIR="$INSTALL_DIR" PREFIX=/usr PROFILE=release-small MULTICALL=y
 
         # Debug: Show what was installed
         echo "Contents of installation directory:"
@@ -1109,8 +1109,8 @@ jobs:
 
         # Clean and build standard version
         make clean
-        make FEATURES="feat_os_unix" PROFILE=release MULTICALL=y
-        make install DESTDIR="$STANDARD_BUILD_INSTALL_DIR" PREFIX=/usr PROFILE=release MULTICALL=y
+        make FEATURES="feat_os_unix" PROFILE=release-small MULTICALL=y
+        make install DESTDIR="$STANDARD_BUILD_INSTALL_DIR" PREFIX=/usr PROFILE=release-small MULTICALL=y
 
         # Verify standard build binary works
         if "$STANDARD_BUILD_INSTALL_DIR/usr/bin/coreutils" --version >/dev/null 2>&1; then
@@ -1160,7 +1160,7 @@ jobs:
         # Use different cache key for each build to avoid conflicts
         key: cat-locale-embedding
     - name: Install prerequisites
-      run: sudo apt-get -y update && sudo apt-get -y install libselinux1-dev build-essential
+      run: sudo apt-get -y update && sudo apt-get -y install libselinux1-dev
     - name: Build cat with targeted locale embedding
       run: UUCORE_TARGET_UTIL=cat cargo build -p uu_cat --release
     - name: Verify cat locale count
@@ -1192,7 +1192,7 @@ jobs:
         # Use different cache key for each build to avoid conflicts
         key: ls-locale-embedding
     - name: Install prerequisites
-      run: sudo apt-get -y update && sudo apt-get -y install libselinux1-dev build-essential
+      run: sudo apt-get -y update && sudo apt-get -y install libselinux1-dev
     - name: Build ls with targeted locale embedding
       run: UUCORE_TARGET_UTIL=ls cargo build -p uu_ls --release
     - name: Verify ls locale count
@@ -1224,7 +1224,7 @@ jobs:
         # Use different cache key for each build to avoid conflicts
         key: multicall-locale-embedding
     - name: Install prerequisites
-      run: sudo apt-get -y update && sudo apt-get -y install libselinux1-dev build-essential
+      run: sudo apt-get -y update && sudo apt-get -y install libselinux1-dev
     - name: Build multicall binary with all locales
       run: cargo build --release
     - name: Verify multicall locale count
@@ -1264,7 +1264,7 @@ jobs:
     - name: Install prerequisites
       run: |
         sudo apt-get -y update
-        sudo apt-get -y install libselinux1-dev locales
+        sudo apt-get -y install libselinux1-dev
         # Generate French locale for testing
         sudo locale-gen --keep-existing fr_FR.UTF-8
         locale -a | grep -i fr || exit 1

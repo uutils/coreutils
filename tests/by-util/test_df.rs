@@ -649,6 +649,53 @@ fn test_block_size_with_suffix() {
 }
 
 #[test]
+fn test_df_binary_block_size() {
+    fn get_header(block_size: &str) -> String {
+        let output = new_ucmd!()
+            .args(&["-B", block_size, "--output=size"])
+            .succeeds()
+            .stdout_str_lossy();
+        output.lines().next().unwrap().trim().to_string()
+    }
+
+    let test_cases = [
+        ("0b1", "1"),
+        ("0b10100", "20"),
+        ("0b1000000000", "512"),
+        ("0b10K", "2K"),
+    ];
+
+    for (binary, decimal) in test_cases {
+        let binary_result = get_header(binary);
+        let decimal_result = get_header(decimal);
+        assert_eq!(
+            binary_result, decimal_result,
+            "Binary {binary} should equal decimal {decimal}"
+        );
+    }
+}
+
+#[test]
+fn test_df_binary_env_block_size() {
+    fn get_header(env_var: &str, env_value: &str) -> String {
+        let output = new_ucmd!()
+            .env(env_var, env_value)
+            .args(&["--output=size"])
+            .succeeds()
+            .stdout_str_lossy();
+        output.lines().next().unwrap().trim().to_string()
+    }
+
+    let binary_header = get_header("DF_BLOCK_SIZE", "0b10000000000");
+    let decimal_header = get_header("DF_BLOCK_SIZE", "1024");
+    assert_eq!(binary_header, decimal_header);
+
+    let binary_header = get_header("BLOCK_SIZE", "0b10000000000");
+    let decimal_header = get_header("BLOCK_SIZE", "1024");
+    assert_eq!(binary_header, decimal_header);
+}
+
+#[test]
 fn test_block_size_in_posix_portability_mode() {
     fn get_header(block_size: &str) -> String {
         let output = new_ucmd!()
@@ -847,6 +894,32 @@ fn test_invalid_block_size_suffix() {
         .arg("--block-size=1.2")
         .fails()
         .stderr_contains("invalid suffix in --block-size argument '1.2'");
+}
+
+#[test]
+fn test_df_invalid_binary_size() {
+    new_ucmd!()
+        .arg("--block-size=0b123")
+        .fails()
+        .stderr_contains("invalid suffix in --block-size argument '0b123'");
+}
+
+#[test]
+fn test_df_binary_edge_cases() {
+    new_ucmd!()
+        .arg("-B0b")
+        .fails()
+        .stderr_contains("invalid --block-size argument '0b'");
+
+    new_ucmd!()
+        .arg("-B0B")
+        .fails()
+        .stderr_contains("invalid suffix in --block-size argument '0B'");
+
+    new_ucmd!()
+        .arg("--block-size=0b1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111")
+        .fails()
+        .stderr_contains("too large");
 }
 
 #[test]

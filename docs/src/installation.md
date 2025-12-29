@@ -172,7 +172,9 @@ scoop install uutils-coreutils
 
 ### MSYS2
 
-[MSYS2 package](https://packages.msys2.org/base/mingw-w64-uutils-coreutils)
+[MSYS2 package (Windows native)](https://packages.msys2.org/base/mingw-w64-uutils-coreutils)
+
+[MSYS2 package (Cygwin)](https://packages.msys2.org/base/uutils-coreutils)
 
 ## Alternative installers
 

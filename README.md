@@ -29,12 +29,8 @@ options might be missing or different behavior might be experienced.
 
 <div class="oranda-hide">
 
-To install it:
-
-```shell
-cargo install coreutils
-~/.cargo/bin/coreutils
-```
+We provide prebuilt binaries at https://github.com/uutils/coreutils/releases/latest .
+It is recommended to install from main branch if you install from source.
 
 </div>
 
