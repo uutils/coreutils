@@ -214,6 +214,11 @@ impl EncodingWrapper {
     }
 }
 
+pub struct PadResult {
+    pub chunk: Vec<u8>,
+    pub had_invalid_tail: bool,
+}
+
 pub trait SupportsFastDecodeAndEncode {
     /// Returns the list of characters used by this encoding
     fn alphabet(&self) -> &'static [u8];
@@ -245,6 +250,19 @@ pub trait SupportsFastDecodeAndEncode {
     ///
     /// The decoding performed by `fast_decode` depends on this number being correct.
     fn valid_decoding_multiple(&self) -> usize;
+
+    /// Whether the decoder can flush partial chunks (multiples of `valid_decoding_multiple`)
+    /// before seeing the full input. Defaults to `false` for encodings that must consume the
+    /// entire input (e.g. base58).
+    fn supports_partial_decode(&self) -> bool {
+        false
+    }
+
+    /// Gives encoding-specific logic a chance to pad a trailing, non-empty remainder
+    /// before the final decode attempt. The default implementation opts out.
+    fn pad_remainder(&self, _remainder: &[u8]) -> Option<PadResult> {
+        None
+    }
 }
 
 impl SupportsFastDecodeAndEncode for Base58Wrapper {
@@ -502,5 +520,82 @@ impl SupportsFastDecodeAndEncode for EncodingWrapper {
 
     fn unpadded_multiple(&self) -> usize {
         self.unpadded_multiple
+    }
+}
+
+pub struct Base32Wrapper {
+    inner: EncodingWrapper,
+}
+
+impl Base32Wrapper {
+    pub fn new(
+        encoding: Encoding,
+        valid_decoding_multiple: usize,
+        unpadded_multiple: usize,
+        alphabet: &'static [u8],
+    ) -> Self {
+        Self {
+            inner: EncodingWrapper::new(
+                encoding,
+                valid_decoding_multiple,
+                unpadded_multiple,
+                alphabet,
+            ),
+        }
+    }
+}
+
+impl SupportsFastDecodeAndEncode for Base32Wrapper {
+    fn alphabet(&self) -> &'static [u8] {
+        self.inner.alphabet()
+    }
+
+    fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
+        self.inner.decode_into_vec(input, output)
+    }
+
+    fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()> {
+        self.inner.encode_to_vec_deque(input, output)
+    }
+
+    fn unpadded_multiple(&self) -> usize {
+        self.inner.unpadded_multiple()
+    }
+
+    fn valid_decoding_multiple(&self) -> usize {
+        self.inner.valid_decoding_multiple()
+    }
+
+    fn pad_remainder(&self, remainder: &[u8]) -> Option<PadResult> {
+        if remainder.is_empty() || remainder.contains(&b'=') {
+            return None;
+        }
+
+        const VALID_REMAINDERS: [usize; 4] = [2, 4, 5, 7];
+
+        let mut len = remainder.len();
+        let mut trimmed = false;
+
+        while len > 0 && !VALID_REMAINDERS.contains(&len) {
+            len -= 1;
+            trimmed = true;
+        }
+
+        if len == 0 {
+            return None;
+        }
+
+        let mut padded = remainder[..len].to_vec();
+        let missing = self.valid_decoding_multiple() - padded.len();
+        padded.extend(std::iter::repeat_n(b'=', missing));
+
+        Some(PadResult {
+            chunk: padded,
+            had_invalid_tail: trimmed,
+        })
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        true
     }
 }
