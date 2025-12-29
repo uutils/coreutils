@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 //spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
 //spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV sigbus tmpfs mksocket
+//spell-checker: ignore (ToDO) ttyname
 
 #![allow(dead_code)]
 #![allow(
@@ -1146,7 +1147,7 @@ impl AtPath {
         unsafe {
             let name = CString::new(self.plus_as_string(fifo)).unwrap();
             let mut stat: libc::stat = std::mem::zeroed();
-            if libc::stat(name.as_ptr(), &mut stat) >= 0 {
+            if libc::stat(name.as_ptr(), &raw mut stat) >= 0 {
                 libc::S_IFIFO & stat.st_mode as libc::mode_t != 0
             } else {
                 false
@@ -1159,7 +1160,7 @@ impl AtPath {
         unsafe {
             let name = CString::new(self.plus_as_string(char_dev)).unwrap();
             let mut stat: libc::stat = std::mem::zeroed();
-            if libc::stat(name.as_ptr(), &mut stat) >= 0 {
+            if libc::stat(name.as_ptr(), &raw mut stat) >= 0 {
                 libc::S_IFCHR & stat.st_mode as libc::mode_t != 0
             } else {
                 false
@@ -1672,7 +1673,7 @@ impl UCommand {
 
     /// Set if process should be run in a simulated terminal
     ///
-    /// This is useful to test behavior that is only active if e.g. [`stdout.is_terminal()`] is [`true`].
+    /// This is useful to test behavior that is only active if e.g. `stdout.is_terminal()` is `true`.
     /// This function uses default terminal size and attaches stdin, stdout and stderr to that terminal.
     /// For more control over the terminal simulation, use `terminal_sim_stdio`
     /// (unix: pty, windows: `ConPTY`[not yet supported])
@@ -1693,7 +1694,7 @@ impl UCommand {
 
     /// Allows to simulate a terminal use-case with specific properties.
     ///
-    /// This is useful to test behavior that is only active if e.g. [`stdout.is_terminal()`] is [`true`].
+    /// This is useful to test behavior that is only active if e.g. `stdout.is_terminal()` is `true`.
     /// This function allows to set a specific size and to attach the terminal to only parts of the in/out.
     #[cfg(unix)]
     pub fn terminal_sim_stdio(&mut self, config: TerminalSimulation) -> &mut Self {
@@ -2886,6 +2887,24 @@ pub fn whoami() -> String {
         })
 }
 
+/// Create a PTY (pseudo-terminal) for testing utilities that require a TTY.
+///
+/// Returns a tuple of (path, controller_fd, replica_fd) where:
+/// - path: The filesystem path to the PTY replica device
+/// - controller_fd: The controller file descriptor
+/// - replica_fd: The replica file descriptor
+#[cfg(unix)]
+pub fn pty_path() -> (String, OwnedFd, OwnedFd) {
+    use nix::pty::openpty;
+    use nix::unistd::ttyname;
+    let pty = openpty(None, None).expect("Failed to create PTY");
+    let path = ttyname(&pty.slave)
+        .expect("Failed to get PTY path")
+        .to_string_lossy()
+        .to_string();
+    (path, pty.master, pty.slave)
+}
+
 /// Add prefix 'g' for `util_name` if not on linux
 #[cfg(unix)]
 pub fn host_name_for(util_name: &str) -> Cow<'_, str> {
@@ -2904,15 +2923,8 @@ pub fn host_name_for(util_name: &str) -> Cow<'_, str> {
     util_name.into()
 }
 
-// GNU coreutils version 8.32 is the reference version since it is the latest version and the
-// GNU test suite in "coreutils/.github/workflows/GnuTests.yml" runs against it.
-// However, here 8.30 was chosen because right now there's no ubuntu image for the github actions
-// CICD available with a higher version than 8.30.
-// GNU coreutils versions from the CICD images for comparison:
-// ubuntu-2004: 8.30 (latest)
-// ubuntu-1804: 8.28
-// macos-latest: 8.32
-const VERSION_MIN: &str = "8.30"; // minimum Version for the reference `coreutil` in `$PATH`
+// Choose same coreutils version with ubuntu-latest runner: https://github.com/actions/runner-images/tree/main/images/ubuntu
+const VERSION_MIN: &str = "9.4"; // minimum Version for the reference `coreutil` in `$PATH`
 
 const UUTILS_WARNING: &str = "uutils-tests-warning";
 const UUTILS_INFO: &str = "uutils-tests-info";

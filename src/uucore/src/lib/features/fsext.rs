@@ -7,9 +7,9 @@
 
 // spell-checker:ignore DATETIME getmntinfo subsecond (fs) cifs smbfs
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
 const LINUX_MTAB: &str = "/etc/mtab";
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
 const LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
 #[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 static MOUNT_OPT_BIND: &str = "bind";
@@ -94,7 +94,8 @@ pub use libc::statfs as StatFs;
     target_os = "dragonfly",
     target_os = "illumos",
     target_os = "solaris",
-    target_os = "redox"
+    target_os = "redox",
+    target_os = "cygwin",
 ))]
 pub use libc::statvfs as StatFs;
 
@@ -112,7 +113,8 @@ pub use libc::statfs as statfs_fn;
     target_os = "illumos",
     target_os = "solaris",
     target_os = "dragonfly",
-    target_os = "redox"
+    target_os = "redox",
+    target_os = "cygwin",
 ))]
 pub use libc::statvfs as statfs_fn;
 
@@ -189,7 +191,7 @@ pub struct MountInfo {
     pub dummy: bool,
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
 fn replace_special_chars(s: &[u8]) -> Vec<u8> {
     use bstr::ByteSlice;
 
@@ -199,13 +201,13 @@ fn replace_special_chars(s: &[u8]) -> Vec<u8> {
     // * \011 ASCII horizontal tab with a tab character,
     // * ASCII backslash with an actual backslash character.
     //
-    s.replace(r#"\040"#, " ")
-        .replace(r#"\011"#, "	")
-        .replace(r#"\134"#, r#"\"#)
+    s.replace(r"\040", " ")
+        .replace(r"\011", "	")
+        .replace(r"\134", r"\")
 }
 
 impl MountInfo {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
     fn new(file_name: &str, raw: &[&[u8]]) -> Option<Self> {
         use std::ffi::OsStr;
         use std::os::unix::ffi::OsStrExt;
@@ -243,7 +245,7 @@ impl MountInfo {
                 mount_option = String::from_utf8_lossy(raw[3]).to_string();
             }
             _ => return None,
-        };
+        }
 
         let dev_id = mount_dev_id(&mount_dir);
         let dummy = is_dummy_filesystem(&fs_type, &mount_option);
@@ -345,19 +347,19 @@ impl From<StatFs> for MountInfo {
     fn from(statfs: StatFs) -> Self {
         let dev_name = unsafe {
             // spell-checker:disable-next-line
-            CStr::from_ptr(&statfs.f_mntfromname[0])
+            CStr::from_ptr(statfs.f_mntfromname.as_ptr())
                 .to_string_lossy()
                 .into_owned()
         };
         let fs_type = unsafe {
             // spell-checker:disable-next-line
-            CStr::from_ptr(&statfs.f_fstypename[0])
+            CStr::from_ptr(statfs.f_fstypename.as_ptr())
                 .to_string_lossy()
                 .into_owned()
         };
         let mount_dir_bytes = unsafe {
             // spell-checker:disable-next-line
-            CStr::from_ptr(&statfs.f_mntonname[0]).to_bytes()
+            CStr::from_ptr(statfs.f_mntonname.as_ptr()).to_bytes()
         };
         let mount_dir = os_str_from_bytes(mount_dir_bytes).unwrap().into_owned();
 
@@ -459,9 +461,9 @@ use crate::error::UResult;
     target_os = "windows"
 ))]
 use crate::error::USimpleError;
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
 use std::fs::File;
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
 use std::io::{BufRead, BufReader};
 #[cfg(any(
     target_vendor = "apple",
@@ -481,7 +483,7 @@ use std::slice;
 
 /// Read file system list.
 pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
     {
         let (file_name, f) = File::open(LINUX_MOUNTINFO)
             .map(|f| (LINUX_MOUNTINFO, f))
@@ -504,7 +506,7 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
     ))]
     {
         let mut mount_buffer_ptr: *mut StatFs = ptr::null_mut();
-        let len = unsafe { get_mount_info(&mut mount_buffer_ptr, 1_i32) };
+        let len = unsafe { get_mount_info(&raw mut mount_buffer_ptr, 1_i32) };
         if len < 0 {
             return Err(USimpleError::new(1, "get_mount_info() failed"));
         }
@@ -666,10 +668,10 @@ impl FsUsage {
             let path = to_nul_terminated_wide_string(path);
             GetDiskFreeSpaceW(
                 path.as_ptr(),
-                &mut sectors_per_cluster,
-                &mut bytes_per_sector,
-                &mut number_of_free_clusters,
-                &mut total_number_of_clusters,
+                &raw mut sectors_per_cluster,
+                &raw mut bytes_per_sector,
+                &raw mut number_of_free_clusters,
+                &raw mut total_number_of_clusters,
             );
         }
 
@@ -722,6 +724,7 @@ impl FsMeta for StatFs {
             not(target_os = "solaris"),
             not(target_os = "redox"),
             not(target_arch = "s390x"),
+            not(target_os = "cygwin"),
             target_pointer_width = "64"
         ))]
         return self.f_bsize;
@@ -730,6 +733,7 @@ impl FsMeta for StatFs {
             not(target_os = "freebsd"),
             not(target_os = "netbsd"),
             not(target_os = "redox"),
+            not(target_os = "cygwin"),
             any(
                 target_arch = "s390x",
                 target_vendor = "apple",
@@ -747,6 +751,7 @@ impl FsMeta for StatFs {
             target_os = "illumos",
             target_os = "solaris",
             target_os = "redox",
+            target_os = "cygwin",
             all(target_os = "android", target_pointer_width = "64"),
         ))]
         return self.f_bsize.try_into().unwrap();
@@ -876,7 +881,7 @@ impl FsMeta for StatFs {
     fn fsid(&self) -> u64 {
         // Use type inference to determine the type of f_fsid
         // (libc::__fsid_t on Android, libc::fsid_t on other platforms)
-        let f_fsid: &[u32; 2] = unsafe { &*(&raw const self.f_fsid as *const [u32; 2]) };
+        let f_fsid: &[u32; 2] = unsafe { &*(&raw const self.f_fsid).cast() };
         ((u64::from(f_fsid[0])) << 32) | u64::from(f_fsid[1])
     }
     #[cfg(not(any(
@@ -927,7 +932,7 @@ pub fn statfs(path: &OsStr) -> Result<StatFs, String> {
         Ok(p) => {
             let mut buffer: StatFs = unsafe { mem::zeroed() };
             unsafe {
-                match statfs_fn(p.as_ptr(), &mut buffer) {
+                match statfs_fn(p.as_ptr(), &raw mut buffer) {
                     0 => Ok(buffer),
                     _ => {
                         let errno = IOError::last_os_error().raw_os_error().unwrap_or(0);
@@ -1166,23 +1171,23 @@ mod tests {
     fn test_mountinfo_dir_special_chars() {
         let info = MountInfo::new(
             LINUX_MOUNTINFO,
-            &br#"317 61 7:0 / /mnt/f\134\040\011oo rw,relatime shared:641 - ext4 /dev/loop0 rw"#
+            &br"317 61 7:0 / /mnt/f\134\040\011oo rw,relatime shared:641 - ext4 /dev/loop0 rw"
                 .split(|c| *c == b' ')
                 .collect::<Vec<_>>(),
         )
         .unwrap();
 
-        assert_eq!(info.mount_dir, r#"/mnt/f\ 	oo"#);
+        assert_eq!(info.mount_dir, r"/mnt/f\ 	oo");
 
         let info = MountInfo::new(
             LINUX_MTAB,
-            &br#"/dev/loop0 /mnt/f\134\040\011oo ext4 rw,relatime 0 0"#
+            &br"/dev/loop0 /mnt/f\134\040\011oo ext4 rw,relatime 0 0"
                 .split(|c| *c == b' ')
                 .collect::<Vec<_>>(),
         )
         .unwrap();
 
-        assert_eq!(info.mount_dir, r#"/mnt/f\ 	oo"#);
+        assert_eq!(info.mount_dir, r"/mnt/f\ 	oo");
     }
 
     #[test]

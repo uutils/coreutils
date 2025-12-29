@@ -1941,3 +1941,13 @@ fn test_o_direct_various_block_sizes() {
         ts.fixtures.remove(&output_file);
     }
 }
+
+#[test]
+fn test_skip_overflow() {
+    new_ucmd!()
+        .args(&["bs=1", "skip=9223372036854775808", "count=0"])
+        .fails()
+        .stderr_contains(
+            "dd: invalid number: ‘9223372036854775808’: Value too large for defined data type",
+        );
+}
