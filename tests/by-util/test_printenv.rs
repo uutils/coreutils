@@ -117,3 +117,16 @@ fn test_non_utf8_value() {
     );
     result.stdout_is_bytes(b"/tmp/lib.so\xff\n");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_non_utf8_env_vars() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let non_utf8_value = OsString::from_vec(b"hello\x80world".to_vec());
+    new_ucmd!()
+        .env("NON_UTF8_VAR", &non_utf8_value)
+        .succeeds()
+        .stdout_contains_bytes(b"NON_UTF8_VAR=hello\x80world");
+}
