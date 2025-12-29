@@ -114,6 +114,10 @@ dd-after-help = ### Operands
   - noctty : do not assign a controlling tty.
   - nofollow : do not follow system links.
 
+# Common strings
+dd-standard-input = 'standard input'
+dd-standard-output = 'standard output'
+
 # Error messages
 dd-error-failed-to-open = failed to open { $path }
 dd-error-write-error = write error
@@ -123,8 +127,7 @@ dd-error-cannot-skip-offset = '{ $file }': cannot skip to specified offset
 dd-error-cannot-skip-invalid = '{ $file }': cannot skip: Invalid argument
 dd-error-cannot-seek-invalid = '{ $output }': cannot seek: Invalid argument
 dd-error-not-directory = setting flags for '{ $file }': Not a directory
-dd-error-failed-discard-cache-input = failed to discard cache for: 'standard input'
-dd-error-failed-discard-cache-output = failed to discard cache for: 'standard output'
+dd-error-failed-discard-cache = failed to discard cache for: { $file }
 
 # Parse errors
 dd-error-unrecognized-operand = Unrecognized operand '{ $operand }'

@@ -290,7 +290,7 @@ macro_rules! f {
                 unsafe {
                     let data = $fid(k);
                     if !data.is_null() {
-                        Ok($st::from_raw(ptr::read(data as *const _)))
+                        Ok($st::from_raw(ptr::read(data.cast_const())))
                     } else {
                         // FIXME: Resource limits, signals and I/O failure may
                         // cause this too. See getpwnam(3).
@@ -317,12 +317,12 @@ macro_rules! f {
                     // f!(getgrnam, getgrgid, gid_t, Group);
                     let data = $fnam(cstring.as_ptr());
                     if !data.is_null() {
-                        return Ok($st::from_raw(ptr::read(data as *const _)));
+                        return Ok($st::from_raw(ptr::read(data.cast_const())));
                     }
                     if let Ok(id) = k.parse::<$t>() {
                         let data = $fid(id);
                         if !data.is_null() {
-                            Ok($st::from_raw(ptr::read(data as *const _)))
+                            Ok($st::from_raw(ptr::read(data.cast_const())))
                         } else {
                             Err(IOError::new(
                                 ErrorKind::NotFound,

@@ -9,7 +9,7 @@ chmod-error-dangling-symlink = cannot operate on dangling symlink {$file}
 chmod-error-no-such-file = cannot access {$file}: No such file or directory
 chmod-error-preserve-root = it is dangerous to operate recursively on {$file}
   chmod: use --no-preserve-root to override this failsafe
-chmod-error-permission-denied = {$file}: Permission denied
+chmod-error-permission-denied = cannot access {$file}: Permission denied
 chmod-error-new-permissions = {$file}: new permissions are {$actual}, not {$expected}
 chmod-error-missing-operand = missing operand
 

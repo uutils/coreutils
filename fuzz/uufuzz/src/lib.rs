@@ -193,13 +193,8 @@ fn read_from_fd(fd: RawFd) -> String {
     let mut captured_output = Vec::new();
     let mut read_buffer = [0; 1024];
     loop {
-        let bytes_read = unsafe {
-            libc::read(
-                fd,
-                read_buffer.as_mut_ptr() as *mut libc::c_void,
-                read_buffer.len(),
-            )
-        };
+        let bytes_read =
+            unsafe { libc::read(fd, read_buffer.as_mut_ptr().cast(), read_buffer.len()) };
 
         if bytes_read == -1 {
             eprintln!("Failed to read from the pipe");

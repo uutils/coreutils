@@ -147,7 +147,7 @@ impl ProgUpdate {
         // Compute the throughput (bytes per second) as a string.
         let duration = self.duration.as_secs_f64();
         let safe_millis = std::cmp::max(1, self.duration.as_millis());
-        let rate = 1000 * (btotal / safe_millis);
+        let rate = (1000u128 * btotal) / safe_millis;
         let transfer_rate = to_magnitude_and_suffix(rate, SuffixType::Si);
 
         // If we are rewriting the progress line, do write a carriage
@@ -644,7 +644,7 @@ mod tests {
         prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
         assert_eq!(
             std::str::from_utf8(cursor.get_ref()).unwrap(),
-            "1 byte copied, 1 s, 0.0 B/s\n"
+            "1 byte copied, 1 s, 1.0 B/s\n"
         );
 
         let prog_update = prog_update_write(999);
@@ -652,7 +652,7 @@ mod tests {
         prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
         assert_eq!(
             std::str::from_utf8(cursor.get_ref()).unwrap(),
-            "999 bytes copied, 1 s, 0.0 B/s\n"
+            "999 bytes copied, 1 s, 999 B/s\n"
         );
 
         let prog_update = prog_update_write(1000);
