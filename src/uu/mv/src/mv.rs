@@ -653,7 +653,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
             // If the target file was already created in this mv call, do not overwrite
             show!(USimpleError::new(
                 1,
-                translate!("mv-error-will-not-overwrite-just-created", "target" => targetpath.display(), "source" => sourcepath.display()),
+                translate!("mv-error-will-not-overwrite-just-created", "target" => targetpath.quote(), "source" => sourcepath.quote()),
             ));
             continue;
         }
@@ -1164,7 +1164,7 @@ fn rename_file_fallback(
     // Remove existing target file if it exists
     if to.is_symlink() {
         fs::remove_file(to).map_err(|err| {
-            let inter_device_msg = translate!("mv-error-inter-device-move-failed", "from" => from.display(), "to" => to.display(), "err" => err);
+            let inter_device_msg = translate!("mv-error-inter-device-move-failed", "from" => from.quote(), "to" => to.quote(), "err" => err);
             io::Error::new(err.kind(), inter_device_msg)
         })?;
     } else if to.exists() {

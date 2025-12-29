@@ -183,7 +183,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     if !options.newroot.is_dir() {
-        return Err(ChrootError::NoSuchDirectory(format!("{}", options.newroot.display())).into());
+        return Err(ChrootError::NoSuchDirectory(options.newroot).into());
     }
 
     let commands = match matches.get_many::<String>(options::COMMAND) {
@@ -429,7 +429,7 @@ fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
     let err = unsafe {
         chroot(
             CString::new(root.as_os_str().as_bytes().to_vec())
-                .map_err(|e| ChrootError::CannotEnter("root".to_string(), e.into()))?
+                .map_err(|e| ChrootError::CannotEnter("root".into(), e.into()))?
                 .as_bytes_with_nul()
                 .as_ptr()
                 .cast(),
@@ -442,6 +442,6 @@ fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
         }
         Ok(())
     } else {
-        Err(ChrootError::CannotEnter(format!("{}", root.display()), Error::last_os_error()).into())
+        Err(ChrootError::CannotEnter(root.into(), Error::last_os_error()).into())
     }
 }
