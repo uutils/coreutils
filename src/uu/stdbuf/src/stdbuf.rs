@@ -43,6 +43,9 @@ const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf
 #[cfg(all(not(feature = "feat_external_libstdbuf"), target_vendor = "apple"))]
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.dylib"));
 
+#[cfg(all(not(feature = "feat_external_libstdbuf"), target_os = "cygwin"))]
+const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.dll"));
+
 enum BufferType {
     Default,
     Line,

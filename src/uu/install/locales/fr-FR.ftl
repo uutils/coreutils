@@ -38,7 +38,7 @@ install-error-invalid-group = groupe invalide : { $group }
 install-error-omitting-directory = omission du répertoire { $path }
 install-error-not-a-directory = échec de l'accès à { $path } : N'est pas un répertoire
 install-error-override-directory-failed = impossible d'écraser le répertoire { $dir } avec un non-répertoire { $file }
-install-error-same-file = '{ $file1 }' et '{ $file2 }' sont le même fichier
+install-error-same-file = { $file1 } et { $file2 } sont le même fichier
 install-error-extra-operand = opérande supplémentaire { $operand }
   { $usage }
 install-error-invalid-mode = Chaîne de mode invalide : { $error }
@@ -46,7 +46,7 @@ install-error-mutually-exclusive-target = Les options --target-directory et --no
 install-error-mutually-exclusive-compare-preserve = Les options --compare et --preserve-timestamps sont mutuellement exclusives
 install-error-mutually-exclusive-compare-strip = Les options --compare et --strip sont mutuellement exclusives
 install-error-missing-file-operand = opérande de fichier manquant
-install-error-missing-destination-operand = opérande de fichier de destination manquant après '{ $path }'
+install-error-missing-destination-operand = opérande de fichier de destination manquant après { $path }
 install-error-failed-to-remove = Échec de la suppression du fichier existant { $path }. Erreur : { $error }
 
 # Messages d'avertissement

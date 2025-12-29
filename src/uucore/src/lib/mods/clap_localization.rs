@@ -205,7 +205,6 @@ impl<'a> ErrorFormatter<'a> {
                     "value" => self.color_mgr.colorize(&value, Color::Yellow),
                     "option" => self.color_mgr.colorize(&option, Color::Green)
                 );
-
                 // Include validation error if present
                 match err.source() {
                     Some(source) if matches!(err.kind(), ErrorKind::ValueValidation) => {
