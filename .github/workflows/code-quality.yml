@@ -32,7 +32,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@master
@@ -82,7 +82,7 @@ jobs:
           - { os: macos-latest   , features: feat_os_macos }
           - { os: windows-latest , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@master
@@ -133,7 +133,7 @@ jobs:
           else
             extra="--features ${{ matrix.job.features }}"
           fi
-          case '${{ matrix.job.workspace-tests }}' in
+          case '${{ matrix.job.workspace }}' in
           1|t|true|y|yes)
             extra="${extra} --workspace"
             ;;
@@ -156,7 +156,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - name: Initialize workflow variables
@@ -174,7 +174,7 @@ jobs:
     - name: Install/setup prerequisites
       shell: bash
       run: |
-        sudo apt-get -y update ; sudo apt-get -y install npm ; sudo npm install cspell -g ;
+        sudo npm install cspell -g ;
     - name: Run `cspell`
       shell: bash
       run: |
@@ -186,7 +186,7 @@ jobs:
         cfg_files=($(shopt -s nullglob ; echo {.vscode,.}/{,.}c[sS]pell{.json,.config{.js,.cjs,.json,.yaml,.yml},.yaml,.yml} ;))
         cfg_file=${cfg_files[0]}
         unset CSPELL_CFG_OPTION ; if [ -n "$cfg_file" ]; then CSPELL_CFG_OPTION="--config $cfg_file" ; fi
-        S=$(cspell ${CSPELL_CFG_OPTION} --no-summary --no-progress .) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n "s/${PWD//\//\\/}\/(.*):(.*):(.*) - (.*)/::${fault_type} file=\1,line=\2,col=\3::${fault_type^^}: \4 (file:'\1', line:\2)/p" ; fault=true ; true ; }
+        S=$(cspell ${CSPELL_CFG_OPTION} --no-summary --no-progress .) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n "s/^(.*):([0-9]+):([0-9]+) - Unknown word \(([^)]+)\).*$/::${fault_type} file=\1,line=\2,col=\3::${fault_type^^}: \`cspell\`: Unknown word '\4' (file:'\1', line:\2)/p" ; fault=true ; true ; }
         if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
   toml_format:
@@ -194,7 +194,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Clone repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -206,7 +206,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Clone repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -230,7 +230,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -255,7 +255,7 @@ jobs:
         run: npm install -g cspell
 
       - name: Cache pre-commit environments
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}

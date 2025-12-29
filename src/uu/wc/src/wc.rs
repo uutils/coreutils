@@ -24,14 +24,15 @@ use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
-use uucore::translate;
+use uucore::{display::Quotable, translate};
 
 use uucore::{
     error::{FromIo, UError, UResult},
     format_usage,
+    hardware::{HardwareFeature, HasHardwareFeatures as _, SimdPolicy},
     parser::shortcut_value_parser::ShortcutValueParser,
     quoting_style::{self, QuotingStyle},
-    show,
+    show, show_error,
 };
 
 use crate::{
@@ -49,6 +50,7 @@ struct Settings<'a> {
     show_lines: bool,
     show_words: bool,
     show_max_line_length: bool,
+    debug: bool,
     files0_from: Option<Input<'a>>,
     total_when: TotalWhen,
 }
@@ -62,6 +64,7 @@ impl Default for Settings<'_> {
             show_lines: true,
             show_words: true,
             show_max_line_length: false,
+            debug: false,
             files0_from: None,
             total_when: TotalWhen::default(),
         }
@@ -85,6 +88,7 @@ impl<'a> Settings<'a> {
             show_lines: matches.get_flag(options::LINES),
             show_words: matches.get_flag(options::WORDS),
             show_max_line_length: matches.get_flag(options::MAX_LINE_LENGTH),
+            debug: matches.get_flag(options::DEBUG),
             files0_from,
             total_when,
         };
@@ -95,6 +99,7 @@ impl<'a> Settings<'a> {
             Self {
                 files0_from: settings.files0_from,
                 total_when,
+                debug: settings.debug,
                 ..Default::default()
             }
         }
@@ -122,6 +127,7 @@ mod options {
     pub static MAX_LINE_LENGTH: &str = "max-line-length";
     pub static TOTAL: &str = "total";
     pub static WORDS: &str = "words";
+    pub static DEBUG: &str = "debug";
 }
 static ARG_FILES: &str = "files";
 static STDIN_REPR: &str = "-";
@@ -339,8 +345,8 @@ impl TotalWhen {
 
 #[derive(Debug, Error)]
 enum WcError {
-    #[error("{}", translate!("wc-error-files-disabled", "extra" => extra))]
-    FilesDisabled { extra: Cow<'static, str> },
+    #[error("{}", translate!("wc-error-files-disabled", "extra" => extra.quote()))]
+    FilesDisabled { extra: Cow<'static, OsStr> },
     #[error("{}", translate!("wc-error-stdin-repr-not-allowed"))]
     StdinReprNotAllowed,
     #[error("{}", translate!("wc-error-zero-length-filename"))]
@@ -363,7 +369,7 @@ impl WcError {
         }
     }
     fn files_disabled(first_extra: &OsString) -> Self {
-        let extra = first_extra.to_string_lossy().into_owned().into();
+        let extra = first_extra.clone().into();
         Self::FilesDisabled { extra }
     }
 }
@@ -444,6 +450,12 @@ pub fn uu_app() -> Command {
                 .long(options::WORDS)
                 .help(translate!("wc-help-words"))
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::DEBUG)
+                .long(options::DEBUG)
+                .action(ArgAction::SetTrue)
+                .hide(true),
         )
         .arg(
             Arg::new(ARG_FILES)
@@ -805,6 +817,74 @@ fn escape_name_wrapper(name: &OsStr) -> String {
         .expect("All escaped names with the escaping option return valid strings.")
 }
 
+fn hardware_feature_label(feature: HardwareFeature) -> &'static str {
+    match feature {
+        HardwareFeature::Avx512 => "AVX512F",
+        HardwareFeature::Avx2 => "AVX2",
+        HardwareFeature::PclMul => "PCLMUL",
+        HardwareFeature::Vmull => "VMULL",
+        HardwareFeature::Sse2 => "SSE2",
+        HardwareFeature::Asimd => "ASIMD",
+    }
+}
+
+fn is_simd_runtime_feature(feature: &HardwareFeature) -> bool {
+    matches!(
+        feature,
+        HardwareFeature::Avx2 | HardwareFeature::Sse2 | HardwareFeature::Asimd
+    )
+}
+
+fn is_simd_debug_feature(feature: &HardwareFeature) -> bool {
+    matches!(
+        feature,
+        HardwareFeature::Avx512
+            | HardwareFeature::Avx2
+            | HardwareFeature::Sse2
+            | HardwareFeature::Asimd
+    )
+}
+
+struct WcSimdFeatures {
+    enabled: Vec<HardwareFeature>,
+    disabled: Vec<HardwareFeature>,
+    disabled_runtime: Vec<HardwareFeature>,
+}
+
+fn wc_simd_features(policy: &SimdPolicy) -> WcSimdFeatures {
+    let enabled = policy
+        .iter_features()
+        .filter(is_simd_runtime_feature)
+        .collect();
+
+    let mut disabled = Vec::new();
+    let mut disabled_runtime = Vec::new();
+    for feature in policy.disabled_features() {
+        if is_simd_debug_feature(&feature) {
+            disabled.push(feature);
+        }
+        if is_simd_runtime_feature(&feature) {
+            disabled_runtime.push(feature);
+        }
+    }
+
+    WcSimdFeatures {
+        enabled,
+        disabled,
+        disabled_runtime,
+    }
+}
+
+pub(crate) fn wc_simd_allowed(policy: &SimdPolicy) -> bool {
+    let disabled_features = policy.disabled_features();
+    if disabled_features.iter().any(is_simd_runtime_feature) {
+        return false;
+    }
+    policy
+        .iter_features()
+        .any(|feature| is_simd_runtime_feature(&feature))
+}
+
 fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
     let mut total_word_count = WordCount::default();
     let mut num_inputs: usize = 0;
@@ -813,6 +893,51 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
         TotalWhen::Only => (1, false),
         _ => (compute_number_width(inputs, settings), true),
     };
+
+    if settings.debug {
+        let policy = SimdPolicy::detect();
+        let features = wc_simd_features(policy);
+
+        let enabled: Vec<&'static str> = features
+            .enabled
+            .iter()
+            .copied()
+            .map(hardware_feature_label)
+            .collect();
+        let disabled: Vec<&'static str> = features
+            .disabled
+            .iter()
+            .copied()
+            .map(hardware_feature_label)
+            .collect();
+
+        let enabled_empty = enabled.is_empty();
+        let disabled_empty = disabled.is_empty();
+        let runtime_disabled = !features.disabled_runtime.is_empty();
+
+        if enabled_empty && !runtime_disabled {
+            show_error!("{}", translate!("wc-debug-hw-unavailable"));
+        } else if runtime_disabled {
+            show_error!(
+                "{}",
+                translate!("wc-debug-hw-disabled-glibc", "features" => disabled.join(", "))
+            );
+        } else if !enabled_empty && disabled_empty {
+            show_error!(
+                "{}",
+                translate!("wc-debug-hw-using", "features" => enabled.join(", "))
+            );
+        } else {
+            show_error!(
+                "{}",
+                translate!(
+                    "wc-debug-hw-limited-glibc",
+                    "disabled" => disabled.join(", "),
+                    "enabled" => enabled.join(", ")
+                )
+            );
+        }
+    }
 
     for maybe_input in inputs.try_iter(settings)? {
         num_inputs += 1;

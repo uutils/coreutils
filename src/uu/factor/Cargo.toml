@@ -29,5 +29,14 @@ fluent = { workspace = true }
 name = "factor"
 path = "src/main.rs"
 
+[dev-dependencies]
+divan = { workspace = true }
+rand = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
 [lib]
 path = "src/factor.rs"
+
+[[bench]]
+name = "factor_bench"
+harness = false

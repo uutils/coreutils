@@ -12,11 +12,51 @@
 //! [`DigestWriter`] struct provides a wrapper around [`Digest`] that
 //! implements the [`Write`] trait, for use in situations where calling
 //! [`write`] would be useful.
-use std::io::Write;
 
-use hex::encode;
+use std::io::{self, Write};
+
+use data_encoding::BASE64;
+
 #[cfg(windows)]
 use memchr::memmem;
+
+use crate::error::{UResult, USimpleError};
+
+/// Represents the output of a checksum computation.
+#[derive(Debug)]
+pub enum DigestOutput {
+    /// Varying-size output
+    Vec(Vec<u8>),
+    /// Legacy output for Crc and Crc32B modes
+    Crc(u32),
+    /// Legacy output for Sysv and BSD modes
+    U16(u16),
+}
+
+impl DigestOutput {
+    pub fn write_raw(&self, mut w: impl std::io::Write) -> io::Result<()> {
+        match self {
+            Self::Vec(buf) => w.write_all(buf),
+            // For legacy outputs, print them in big endian
+            Self::Crc(n) => w.write_all(&n.to_be_bytes()),
+            Self::U16(n) => w.write_all(&n.to_be_bytes()),
+        }
+    }
+
+    pub fn to_hex(&self) -> UResult<String> {
+        match self {
+            Self::Vec(buf) => Ok(hex::encode(buf)),
+            _ => Err(USimpleError::new(1, "Legacy output cannot be encoded")),
+        }
+    }
+
+    pub fn to_base64(&self) -> UResult<String> {
+        match self {
+            Self::Vec(buf) => Ok(BASE64.encode(buf)),
+            _ => Err(USimpleError::new(1, "Legacy output cannot be encoded")),
+        }
+    }
+}
 
 pub trait Digest {
     fn new() -> Self
@@ -29,10 +69,11 @@ pub trait Digest {
     fn output_bytes(&self) -> usize {
         self.output_bits().div_ceil(8)
     }
-    fn result_str(&mut self) -> String {
+
+    fn result(&mut self) -> DigestOutput {
         let mut buf: Vec<u8> = vec![0; self.output_bytes()];
         self.hash_finalize(&mut buf);
-        encode(buf)
+        DigestOutput::Vec(buf)
     }
 }
 
@@ -167,10 +208,12 @@ impl Digest for Crc {
         out.copy_from_slice(&self.digest.finalize().to_ne_bytes());
     }
 
-    fn result_str(&mut self) -> String {
+    fn result(&mut self) -> DigestOutput {
         let mut out: [u8; 8] = [0; 8];
         self.hash_finalize(&mut out);
-        u64::from_ne_bytes(out).to_string()
+
+        let x = u64::from_ne_bytes(out);
+        DigestOutput::Crc((x & (u32::MAX as u64)) as u32)
     }
 
     fn reset(&mut self) {
@@ -214,10 +257,10 @@ impl Digest for CRC32B {
         32
     }
 
-    fn result_str(&mut self) -> String {
+    fn result(&mut self) -> DigestOutput {
         let mut out = [0; 4];
         self.hash_finalize(&mut out);
-        format!("{}", u32::from_be_bytes(out))
+        DigestOutput::Crc(u32::from_be_bytes(out))
     }
 }
 
@@ -240,10 +283,10 @@ impl Digest for Bsd {
         out.copy_from_slice(&self.state.to_ne_bytes());
     }
 
-    fn result_str(&mut self) -> String {
-        let mut _out: Vec<u8> = vec![0; 2];
+    fn result(&mut self) -> DigestOutput {
+        let mut _out = [0; 2];
         self.hash_finalize(&mut _out);
-        format!("{}", self.state)
+        DigestOutput::U16(self.state)
     }
 
     fn reset(&mut self) {
@@ -275,10 +318,10 @@ impl Digest for SysV {
         out.copy_from_slice(&(self.state as u16).to_ne_bytes());
     }
 
-    fn result_str(&mut self) -> String {
-        let mut _out: Vec<u8> = vec![0; 2];
+    fn result(&mut self) -> DigestOutput {
+        let mut _out = [0; 2];
         self.hash_finalize(&mut _out);
-        format!("{}", self.state)
+        DigestOutput::U16((self.state & (u16::MAX as u32)) as u16)
     }
 
     fn reset(&mut self) {
@@ -292,7 +335,7 @@ impl Digest for SysV {
 
 // Implements the Digest trait for sha2 / sha3 algorithms with fixed output
 macro_rules! impl_digest_common {
-    ($algo_type: ty, $size: expr) => {
+    ($algo_type: ty, $size: literal) => {
         impl Digest for $algo_type {
             fn new() -> Self {
                 Self(Default::default())
@@ -319,7 +362,7 @@ macro_rules! impl_digest_common {
 
 // Implements the Digest trait for sha2 / sha3 algorithms with variable output
 macro_rules! impl_digest_shake {
-    ($algo_type: ty) => {
+    ($algo_type: ty, $output_bits: literal) => {
         impl Digest for $algo_type {
             fn new() -> Self {
                 Self(Default::default())
@@ -338,7 +381,13 @@ macro_rules! impl_digest_shake {
             }
 
             fn output_bits(&self) -> usize {
-                0
+                $output_bits
+            }
+
+            fn result(&mut self) -> DigestOutput {
+                let mut bytes = vec![0; self.output_bits().div_ceil(8)];
+                self.hash_finalize(&mut bytes);
+                DigestOutput::Vec(bytes)
             }
         }
     };
@@ -368,8 +417,8 @@ impl_digest_common!(Sha3_512, 512);
 
 pub struct Shake128(sha3::Shake128);
 pub struct Shake256(sha3::Shake256);
-impl_digest_shake!(Shake128);
-impl_digest_shake!(Shake256);
+impl_digest_shake!(Shake128, 256);
+impl_digest_shake!(Shake256, 512);
 
 /// A struct that writes to a digest.
 ///
@@ -501,14 +550,14 @@ mod tests {
         writer_crlf.write_all(b"\r").unwrap();
         writer_crlf.write_all(b"\n").unwrap();
         writer_crlf.finalize();
-        let result_crlf = digest.result_str();
+        let result_crlf = digest.result();
 
         // We expect "\r\n" to be replaced with "\n" in text mode on Windows.
         let mut digest = Box::new(Md5::new()) as Box<dyn Digest>;
         let mut writer_lf = DigestWriter::new(&mut digest, false);
         writer_lf.write_all(b"\n").unwrap();
         writer_lf.finalize();
-        let result_lf = digest.result_str();
+        let result_lf = digest.result();
 
         assert_eq!(result_crlf, result_lf);
     }

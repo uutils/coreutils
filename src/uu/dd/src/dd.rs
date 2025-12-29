@@ -467,10 +467,15 @@ impl Input<'_> {
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
         #[cfg(target_os = "linux")]
         {
+            let file = self
+                .settings
+                .infile
+                .clone()
+                .unwrap_or_else(|| translate!("dd-standard-input"));
             show_if_err!(
-                self.src
-                    .discard_cache(offset, len)
-                    .map_err_context(|| translate!("dd-error-failed-discard-cache-input"))
+                self.src.discard_cache(offset, len).map_err_context(
+                    || translate!("dd-error-failed-discard-cache", "file" => file)
+                )
             );
         }
         #[cfg(not(target_os = "linux"))]
@@ -909,10 +914,15 @@ impl<'a> Output<'a> {
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
         #[cfg(target_os = "linux")]
         {
+            let file = self
+                .settings
+                .outfile
+                .clone()
+                .unwrap_or_else(|| translate!("dd-standard-output"));
             show_if_err!(
-                self.dst
-                    .discard_cache(offset, len)
-                    .map_err_context(|| { translate!("dd-error-failed-discard-cache-output") })
+                self.dst.discard_cache(offset, len).map_err_context(
+                    || translate!("dd-error-failed-discard-cache", "file" => file)
+                )
             );
         }
         #[cfg(not(target_os = "linux"))]

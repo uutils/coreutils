@@ -19,17 +19,20 @@ use uucore::error::UError;
 /// assert_eq!(i32::from(ExitStatus::CommandTimedOut), 124);
 /// ```
 pub(crate) enum ExitStatus {
-    /// When the child process times out and `--preserve-status` is not specified.
+    /// When the child process times out.
     CommandTimedOut,
 
     /// When `timeout` itself fails.
     TimeoutFailed,
 
+    /// When command is found but cannot be invoked (permission denied, etc.).
+    CannotInvoke,
+
+    /// When command cannot be found.
+    CommandNotFound,
+
     /// When a signal is sent to the child process or `timeout` itself.
     SignalSent(usize),
-
-    /// When there is a failure while waiting for the child process to terminate.
-    WaitingFailed,
 
     /// When `SIGTERM` signal received.
     Terminated,
@@ -40,8 +43,9 @@ impl From<ExitStatus> for i32 {
         match exit_status {
             ExitStatus::CommandTimedOut => 124,
             ExitStatus::TimeoutFailed => 125,
+            ExitStatus::CannotInvoke => 126,
+            ExitStatus::CommandNotFound => 127,
             ExitStatus::SignalSent(s) => 128 + s as Self,
-            ExitStatus::WaitingFailed => 124,
             ExitStatus::Terminated => 143,
         }
     }
