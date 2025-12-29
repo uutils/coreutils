@@ -8,7 +8,7 @@ use rstest::rstest;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
-// spell-checker:ignore checkfile, nonames, testf, ntestf
+// spell-checker:ignore checkfile, testf, ntestf
 macro_rules! get_hash(
     ($str:expr) => (
         $str.split(' ').collect::<Vec<&str>>()[0]
@@ -16,126 +16,206 @@ macro_rules! get_hash(
 );
 
 macro_rules! test_digest {
-    ($($id:ident $t:ident $size:expr)*) => ($(
+    ($id:ident, $t:ident) => {
+        mod $id {
+            use uutests::util::*;
+            use uutests::util_name;
+            static DIGEST_ARG: &'static str = concat!("--", stringify!($t));
+            static EXPECTED_FILE: &'static str = concat!(stringify!($id), ".expected");
+            static CHECK_FILE: &'static str = concat!(stringify!($id), ".checkfile");
+            static INPUT_FILE: &'static str = "input.txt";
 
-    mod $id {
-        use uutests::util::*;
-        use uutests::util_name;
-        static DIGEST_ARG: &'static str = concat!("--", stringify!($t));
-        static BITS_ARG: &'static str = concat!("--bits=", stringify!($size));
-        static EXPECTED_FILE: &'static str = concat!(stringify!($id), ".expected");
-        static CHECK_FILE: &'static str = concat!(stringify!($id), ".checkfile");
-        static INPUT_FILE: &'static str = "input.txt";
+            #[test]
+            fn test_single_file() {
+                let ts = TestScenario::new(util_name!());
+                assert_eq!(
+                    ts.fixtures.read(EXPECTED_FILE),
+                    get_hash!(
+                        ts.ucmd()
+                            .arg(DIGEST_ARG)
+                            .arg(INPUT_FILE)
+                            .succeeds()
+                            .no_stderr()
+                            .stdout_str()
+                    )
+                );
+            }
 
-        #[test]
-        fn test_single_file() {
-            let ts = TestScenario::new(util_name!());
-            assert_eq!(ts.fixtures.read(EXPECTED_FILE),
-                       get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg(INPUT_FILE).succeeds().no_stderr().stdout_str()));
+            #[test]
+            fn test_stdin() {
+                let ts = TestScenario::new(util_name!());
+                assert_eq!(
+                    ts.fixtures.read(EXPECTED_FILE),
+                    get_hash!(
+                        ts.ucmd()
+                            .arg(DIGEST_ARG)
+                            .pipe_in_fixture(INPUT_FILE)
+                            .succeeds()
+                            .no_stderr()
+                            .stdout_str()
+                    )
+                );
+            }
+
+            #[test]
+            fn test_check() {
+                let ts = TestScenario::new(util_name!());
+                println!("File content='{}'", ts.fixtures.read(INPUT_FILE));
+                println!("Check file='{}'", ts.fixtures.read(CHECK_FILE));
+
+                ts.ucmd()
+                    .args(&[DIGEST_ARG, "--check", CHECK_FILE])
+                    .succeeds()
+                    .no_stderr()
+                    .stdout_is("input.txt: OK\n");
+            }
+
+            #[test]
+            fn test_zero() {
+                let ts = TestScenario::new(util_name!());
+                assert_eq!(
+                    ts.fixtures.read(EXPECTED_FILE),
+                    get_hash!(
+                        ts.ucmd()
+                            .arg(DIGEST_ARG)
+                            .arg("--zero")
+                            .arg(INPUT_FILE)
+                            .succeeds()
+                            .no_stderr()
+                            .stdout_str()
+                    )
+                );
+            }
+
+            #[test]
+            fn test_missing_file() {
+                let ts = TestScenario::new(util_name!());
+                let at = &ts.fixtures;
+
+                at.write("a", "file1\n");
+                at.write("c", "file3\n");
+
+                ts.ucmd()
+                    .args(&[DIGEST_ARG, "a", "b", "c"])
+                    .fails()
+                    .stdout_contains("a\n")
+                    .stdout_contains("c\n")
+                    .stderr_contains("b: No such file or directory");
+            }
         }
-
-        #[test]
-        fn test_stdin() {
-            let ts = TestScenario::new(util_name!());
-            assert_eq!(ts.fixtures.read(EXPECTED_FILE),
-                       get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).pipe_in_fixture(INPUT_FILE).succeeds().no_stderr().stdout_str()));
-        }
-
-        #[test]
-        fn test_nonames() {
-            let ts = TestScenario::new(util_name!());
-            // EXPECTED_FILE has no newline character at the end
-            if DIGEST_ARG == "--b3sum" {
-                // Option only available on b3sum
-                assert_eq!(format!("{0}\n{0}\n", ts.fixtures.read(EXPECTED_FILE)),
-                       ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg("--no-names").arg(INPUT_FILE).arg("-").pipe_in_fixture(INPUT_FILE)
-                       .succeeds().no_stderr().stdout_str()
-                       );
-                }
-        }
-
-        #[test]
-        fn test_check() {
-            let ts = TestScenario::new(util_name!());
-            println!("File content='{}'", ts.fixtures.read(INPUT_FILE));
-            println!("Check file='{}'", ts.fixtures.read(CHECK_FILE));
-
-            ts.ucmd()
-                .args(&[DIGEST_ARG, BITS_ARG, "--check", CHECK_FILE])
-                .succeeds()
-                .no_stderr()
-                .stdout_is("input.txt: OK\n");
-        }
-
-        #[test]
-        fn test_zero() {
-            let ts = TestScenario::new(util_name!());
-            assert_eq!(ts.fixtures.read(EXPECTED_FILE),
-                       get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg("--zero").arg(INPUT_FILE).succeeds().no_stderr().stdout_str()));
-        }
-
-
-        #[cfg(windows)]
-        #[test]
-        fn test_text_mode() {
-            use uutests::new_ucmd;
-
-            // TODO Replace this with hard-coded files that store the
-            // expected output of text mode on an input file that has
-            // "\r\n" line endings.
-            let result = new_ucmd!()
-                .args(&[DIGEST_ARG, BITS_ARG, "-b"])
-                .pipe_in("a\nb\nc\n")
-                .succeeds();
-            let expected = result.no_stderr().stdout();
-            // Replace the "*-\n" at the end of the output with " -\n".
-            // The asterisk indicates that the digest was computed in
-            // binary mode.
-            let n = expected.len();
-            let expected = [&expected[..n - 3], b" -\n"].concat();
-            new_ucmd!()
-                .args(&[DIGEST_ARG, BITS_ARG, "-t"])
-                .pipe_in("a\r\nb\r\nc\r\n")
-                .succeeds()
-                .no_stderr()
-                .stdout_is(std::str::from_utf8(&expected).unwrap());
-        }
-
-        #[test]
-        fn test_missing_file() {
-            let ts = TestScenario::new(util_name!());
-            let at = &ts.fixtures;
-
-            at.write("a", "file1\n");
-            at.write("c", "file3\n");
-
-            ts.ucmd()
-                .args(&[DIGEST_ARG, BITS_ARG, "a", "b", "c"])
-                .fails()
-                .stdout_contains("a\n")
-                .stdout_contains("c\n")
-                .stderr_contains("b: No such file or directory");
-        }
-    }
-    )*)
+    };
 }
 
-test_digest! {
-    md5 md5 128
-    sha1 sha1 160
-    sha224 sha224 224
-    sha256 sha256 256
-    sha384 sha384 384
-    sha512 sha512 512
-    sha3_224 sha3 224
-    sha3_256 sha3 256
-    sha3_384 sha3 384
-    sha3_512 sha3 512
-    shake128_256 shake128 256
-    shake256_512 shake256 512
-    b2sum b2sum 512
-    b3sum b3sum 256
+macro_rules! test_digest_with_len {
+    ($id:ident, $t:ident, $size:expr) => {
+        mod $id {
+            use uutests::util::*;
+            use uutests::util_name;
+            static DIGEST_ARG: &'static str = concat!("--", stringify!($t));
+            static LENGTH_ARG: &'static str = concat!("--length=", stringify!($size));
+            static EXPECTED_FILE: &'static str = concat!(stringify!($id), ".expected");
+            static CHECK_FILE: &'static str = concat!(stringify!($id), ".checkfile");
+            static INPUT_FILE: &'static str = "input.txt";
+
+            #[test]
+            fn test_single_file() {
+                let ts = TestScenario::new(util_name!());
+                assert_eq!(
+                    ts.fixtures.read(EXPECTED_FILE),
+                    get_hash!(
+                        ts.ucmd()
+                            .arg(DIGEST_ARG)
+                            .arg(LENGTH_ARG)
+                            .arg(INPUT_FILE)
+                            .succeeds()
+                            .no_stderr()
+                            .stdout_str()
+                    )
+                );
+            }
+
+            #[test]
+            fn test_stdin() {
+                let ts = TestScenario::new(util_name!());
+                assert_eq!(
+                    ts.fixtures.read(EXPECTED_FILE),
+                    get_hash!(
+                        ts.ucmd()
+                            .arg(DIGEST_ARG)
+                            .arg(LENGTH_ARG)
+                            .pipe_in_fixture(INPUT_FILE)
+                            .succeeds()
+                            .no_stderr()
+                            .stdout_str()
+                    )
+                );
+            }
+
+            #[test]
+            fn test_check() {
+                let ts = TestScenario::new(util_name!());
+                println!("File content='{}'", ts.fixtures.read(INPUT_FILE));
+                println!("Check file='{}'", ts.fixtures.read(CHECK_FILE));
+
+                ts.ucmd()
+                    .args(&[DIGEST_ARG, LENGTH_ARG, "--check", CHECK_FILE])
+                    .succeeds()
+                    .no_stderr()
+                    .stdout_is("input.txt: OK\n");
+            }
+
+            #[test]
+            fn test_zero() {
+                let ts = TestScenario::new(util_name!());
+                assert_eq!(
+                    ts.fixtures.read(EXPECTED_FILE),
+                    get_hash!(
+                        ts.ucmd()
+                            .arg(DIGEST_ARG)
+                            .arg(LENGTH_ARG)
+                            .arg("--zero")
+                            .arg(INPUT_FILE)
+                            .succeeds()
+                            .no_stderr()
+                            .stdout_str()
+                    )
+                );
+            }
+
+            #[test]
+            fn test_missing_file() {
+                let ts = TestScenario::new(util_name!());
+                let at = &ts.fixtures;
+
+                at.write("a", "file1\n");
+                at.write("c", "file3\n");
+
+                ts.ucmd()
+                    .args(&[DIGEST_ARG, LENGTH_ARG, "a", "b", "c"])
+                    .fails()
+                    .stdout_contains("a\n")
+                    .stdout_contains("c\n")
+                    .stderr_contains("b: No such file or directory");
+            }
+        }
+    };
 }
+
+test_digest! {md5, md5}
+test_digest! {sha1, sha1}
+test_digest! {b3sum, b3sum}
+test_digest! {shake128, shake128}
+test_digest! {shake256, shake256}
+
+test_digest_with_len! {sha224, sha224, 224}
+test_digest_with_len! {sha256, sha256, 256}
+test_digest_with_len! {sha384, sha384, 384}
+test_digest_with_len! {sha512, sha512, 512}
+test_digest_with_len! {sha3_224, sha3, 224}
+test_digest_with_len! {sha3_256, sha3, 256}
+test_digest_with_len! {sha3_384, sha3, 384}
+test_digest_with_len! {sha3_512, sha3, 512}
+test_digest_with_len! {b2sum, b2sum, 512}
 
 #[test]
 fn test_check_sha1() {
@@ -1077,7 +1157,6 @@ fn test_sha256_binary() {
         get_hash!(
             ts.ucmd()
                 .arg("--sha256")
-                .arg("--bits=256")
                 .arg("binary.png")
                 .succeeds()
                 .no_stderr()
@@ -1094,7 +1173,6 @@ fn test_sha256_stdin_binary() {
         get_hash!(
             ts.ucmd()
                 .arg("--sha256")
-                .arg("--bits=256")
                 .pipe_in_fixture("binary.png")
                 .succeeds()
                 .no_stderr()
@@ -1108,12 +1186,7 @@ fn test_sha256_stdin_binary() {
 #[cfg_attr(windows, ignore = "Discussion is in #9168")]
 fn test_check_sha256_binary() {
     new_ucmd!()
-        .args(&[
-            "--sha256",
-            "--bits=256",
-            "--check",
-            "binary.sha256.checkfile",
-        ])
+        .args(&["--sha256", "--check", "binary.sha256.checkfile"])
         .succeeds()
         .no_stderr()
         .stdout_is("binary.png: OK\n");
