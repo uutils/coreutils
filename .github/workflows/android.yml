@@ -22,7 +22,7 @@ concurrency:
 env:
   TERMUX: v0.118.0
   KEY_POSTFIX: nextest+rustc-hash+adb+sshd+upgrade+XGB+inc18
-  COMMON_EMULATOR_OPTIONS: -no-window -noaudio -no-boot-anim -camera-back none -gpu swiftshader_indirect -metrics-collection
+  COMMON_EMULATOR_OPTIONS: -no-window -noaudio -no-boot-anim -camera-back none -gpu off
   EMULATOR_DISK_SIZE: 12GB
   EMULATOR_HEAP_SIZE: 2048M
   EMULATOR_BOOT_TIMEOUT: 1200 # 20min
@@ -36,15 +36,10 @@ jobs:
       matrix:
         os: [ubuntu-latest] # , macos-latest
         cores: [4] # , 6
-        ram: [4096, 8192]
+        ram: [4096]
         api-level: [28]
         target: [google_apis_playstore]
         arch: [x86, x86_64] # , arm64-v8a
-        exclude:
-          - ram: 8192
-            arch: x86
-          - ram: 4096
-            arch: x86_64
     runs-on: ${{ matrix.os }}
     env:
       EMULATOR_RAM_SIZE: ${{ matrix.ram }}
@@ -80,7 +75,7 @@ jobs:
         echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
         sudo udevadm control --reload-rules
         sudo udevadm trigger --name-match=kvm
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - name: Collect information about runner
@@ -90,7 +85,7 @@ jobs:
         free -mh
         df -Th
     - name: Restore AVD cache
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v5
       id: avd-cache
       continue-on-error: true
       with:
@@ -116,7 +111,7 @@ jobs:
           ~/.android/avd/*/*.lock
     - name: Create and cache emulator image
       if: steps.avd-cache.outputs.cache-hit != 'true'
-      uses: reactivecircus/android-emulator-runner@v2.34.0
+      uses: reactivecircus/android-emulator-runner@v2.35.0
       with:
         api-level: ${{ matrix.api-level }}
         target: ${{ matrix.target }}
@@ -132,7 +127,7 @@ jobs:
           util/android-commands.sh init "${{ matrix.arch }}" "${{ matrix.api-level }}" "${{ env.TERMUX }}"
     - name: Save AVD cache
       if: steps.avd-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       with:
         path: |
           ~/.android/avd/*
@@ -148,7 +143,7 @@ jobs:
         trim: true
     - name: Restore rust cache
       id: rust-cache
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v5
       with:
         path: ~/__rust_cache__
         # The version vX at the end of the key is just a development version to avoid conflicts in
@@ -161,7 +156,7 @@ jobs:
         free -mh
         df -Th
     - name: Build and Test
-      uses: reactivecircus/android-emulator-runner@v2.34.0
+      uses: reactivecircus/android-emulator-runner@v2.35.0
       with:
         api-level: ${{ matrix.api-level }}
         target: ${{ matrix.target }}
@@ -189,13 +184,13 @@ jobs:
         df -Th
     - name: Save rust cache
       if: steps.rust-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       with:
         path: ~/__rust_cache__
         key: ${{ matrix.arch }}_${{ matrix.target}}_${{ steps.read_rustc_hash.outputs.content }}_${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}_v3
     - name: archive any output (error screenshots)
       if: always()
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: test_output_${{ env.AVD_CACHE_KEY }}
         path: output
