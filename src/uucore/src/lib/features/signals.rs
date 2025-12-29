@@ -3,8 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf
-// spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGDANGER SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGMIGRATE SIGMSG SIGPIPE SIGPRE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTALRM SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVIRT SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VIRT VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX TALRM AIOCANCEL XRES RTMIN RTMAX
+// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf pgrp
+// spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGDANGER SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGMIGRATE SIGMSG SIGPIPE SIGPRE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTALRM SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVIRT SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VIRT VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX TALRM AIOCANCEL XRES RTMIN RTMAX LTOSTOP
 
 //! This module provides a way to handle signals in a platform-independent way.
 //! It provides a way to convert signal names to their corresponding values and vice versa.
@@ -344,6 +344,49 @@ pub static ALL_SIGNALS: [&str; 37] = [
     "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "IO", "XCPU",
     "XFSZ", "MSG", "WINCH", "PWR", "USR1", "USR2", "PROF", "DANGER", "VTALRM", "MIGRATE", "PRE",
     "VIRT", "TALRM",
+];
+
+/*
+   The following signals are defined in Cygwin
+   https://cygwin.com/cgit/newlib-cygwin/tree/winsup/cygwin/include/cygwin/signal.h
+
+   SIGHUP     1   hangup
+   SIGINT     2   interrupt
+   SIGQUIT    3   quit
+   SIGILL     4   illegal instruction (not reset when caught)
+   SIGTRAP    5   trace trap (not reset when caught)
+   SIGABRT    6   used by abort
+   SIGEMT     7   EMT instruction
+   SIGFPE     8   floating point exception
+   SIGKILL    9   kill (cannot be caught or ignored)
+   SIGBUS     10  bus error
+   SIGSEGV    11  segmentation violation
+   SIGSYS     12  bad argument to system call
+   SIGPIPE    13  write on a pipe with no one to read it
+   SIGALRM    14  alarm clock
+   SIGTERM    15  software termination signal from kill
+   SIGURG     16  urgent condition on IO channel
+   SIGSTOP    17  sendable stop signal not from tty
+   SIGTSTP    18  stop signal from tty
+   SIGCONT    19  continue a stopped process
+   SIGCHLD    20  to parent on child stop or exit
+   SIGTTIN    21  to readers pgrp upon background tty read
+   SIGTTOU    22  like TTIN for output if (tp->t_local&LTOSTOP)
+   SIGIO      23  input/output possible signal
+   SIGXCPU    24  exceeded CPU time limit
+   SIGXFSZ    25  exceeded file size limit
+   SIGVTALRM  26  virtual time alarm
+   SIGPROF    27  profiling time alarm
+   SIGWINCH   28  window changed
+   SIGLOST    29  resource lost (eg, record-lock lost)
+   SIGUSR1    30  user defined signal 1
+   SIGUSR2    31  user defined signal 2
+*/
+#[cfg(target_os = "cygwin")]
+pub static ALL_SIGNALS: [&str; 32] = [
+    "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS", "SEGV",
+    "SYS", "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "IO",
+    "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "PWR", "USR1", "USR2",
 ];
 
 /// Returns the signal number for a given signal name or value.
