@@ -121,62 +121,39 @@ mod tests {
         #[test]
         fn test_default_format_contains_valid_codes() {
             let format = get_locale_default_format();
-            // On platforms without locale support, fallback may not contain all codes
-            #[cfg(any(
-                target_os = "linux",
-                target_vendor = "apple",
-                target_os = "freebsd",
-                target_os = "netbsd",
-                target_os = "openbsd",
-                target_os = "dragonfly"
-            ))]
-            {
-                // We only strictly check for timezone because ensure_timezone_in_format guarantees it
-                assert!(format.contains("%Z") || format.contains("%z")); // timezone
-
-                // Other components depend on the system locale and might vary (e.g. %F, %c, etc.)
-                // so we don't strictly assert %a or %b here.
-            }
+            assert!(format.contains("%a")); // abbreviated weekday
+            assert!(format.contains("%b")); // abbreviated month
+            assert!(format.contains("%Y") || format.contains("%y")); // year (4-digit or 2-digit)
+            assert!(format.contains("%Z")); // timezone
         }
 
         #[test]
         fn test_locale_format_structure() {
+            // Verify we're using actual locale format strings, not hardcoded ones
             let format = get_locale_default_format();
-            assert!(!format.is_empty(), "Locale format should not be empty");
-            #[cfg(any(
-                target_os = "linux",
-                target_vendor = "apple",
-                target_os = "freebsd",
-                target_os = "netbsd",
-                target_os = "openbsd",
-                target_os = "dragonfly"
-            ))]
-            {
-                let has_date_component = format.contains("%a")
-                    || format.contains("%A")
-                    || format.contains("%b")
-                    || format.contains("%B")
-                    || format.contains("%d")
-                    || format.contains("%e")
-                    || format.contains("%F") // YYYY-MM-DD
-                    || format.contains("%D") // MM/DD/YY
-                    || format.contains("%x") // Locale's date representation
-                    || format.contains("%c") // Locale's date and time
-                    || format.contains("%+"); // date(1) extended format
-                assert!(has_date_component, "Format should contain date components");
 
-                let has_time_component = format.contains("%H")
-                    || format.contains("%I")
-                    || format.contains("%k")
-                    || format.contains("%l")
-                    || format.contains("%r")
-                    || format.contains("%R")
-                    || format.contains("%T")
-                    || format.contains("%X")
-                    || format.contains("%c") // Locale's date and time
-                    || format.contains("%+"); // date(1) extended format
-                assert!(has_time_component, "Format should contain time components");
-            }
+            // The format should not be empty
+            assert!(!format.is_empty(), "Locale format should not be empty");
+
+            // Should contain date/time components
+            let has_date_component = format.contains("%a")
+                || format.contains("%A")
+                || format.contains("%b")
+                || format.contains("%B")
+                || format.contains("%d")
+                || format.contains("%e");
+            assert!(has_date_component, "Format should contain date components");
+
+            // Should contain time component (hour)
+            let has_time_component = format.contains("%H")
+                || format.contains("%I")
+                || format.contains("%k")
+                || format.contains("%l")
+                || format.contains("%r")
+                || format.contains("%R")
+                || format.contains("%T")
+                || format.contains("%X");
+            assert!(has_time_component, "Format should contain time components");
         }
 
         #[test]

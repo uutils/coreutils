@@ -30,6 +30,8 @@ use nix::libc;
 use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat};
 #[cfg(not(target_os = "redox"))]
 use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
+#[cfg(target_os = "redox")]
+use libc;
 use os_display::Quotable;
 
 use crate::translate;
@@ -249,11 +251,13 @@ impl DirFd {
     }
 
     /// Get metadata for a file relative to this directory
+    #[cfg(not(target_os = "redox"))]
     pub fn metadata_at(&self, name: &OsStr, follow_symlinks: bool) -> io::Result<Metadata> {
         self.stat_at(name, follow_symlinks).map(Metadata::from_stat)
     }
 
     /// Get metadata for this directory
+    #[cfg(not(target_os = "redox"))]
     pub fn metadata(&self) -> io::Result<Metadata> {
         self.fstat().map(Metadata::from_stat)
     }
@@ -470,11 +474,13 @@ impl FileType {
 }
 
 /// Metadata wrapper for safer access to file information
+#[cfg(not(target_os = "redox"))]
 #[derive(Debug, Clone)]
 pub struct Metadata {
     stat: FileStat,
 }
 
+#[cfg(not(target_os = "redox"))]
 impl Metadata {
     pub fn from_stat(stat: FileStat) -> Self {
         Self { stat }
@@ -523,6 +529,7 @@ impl Metadata {
 }
 
 // Add MetadataExt trait implementation for compatibility
+#[cfg(not(target_os = "redox"))]
 impl std::os::unix::fs::MetadataExt for Metadata {
     // st_dev type varies by platform (i32 on macOS, u64 on Linux)
     #[allow(clippy::unnecessary_cast)]
