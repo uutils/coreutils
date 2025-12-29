@@ -165,6 +165,39 @@ pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
     Ok(())
 }
 
+/// Returns true if stdout is closed before running a utility.
+pub fn stdout_is_closed() -> bool {
+    #[cfg(unix)]
+    {
+        use nix::fcntl::{fcntl, FcntlArg};
+        match fcntl(std::io::stdout(), FcntlArg::F_GETFL) {
+            Ok(_) => false,
+            Err(nix::errno::Errno::EBADF) => true,
+            Err(_) => false,
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
+}
+
+/// Returns true if the error corresponds to writing to a closed stdout.
+pub fn is_closed_stdout_error(err: &std::io::Error, stdout_was_closed: bool) -> bool {
+    if !stdout_was_closed {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        err.raw_os_error() == Some(nix::errno::Errno::EBADF as i32)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = err;
+        false
+    }
+}
+
 pub fn get_canonical_util_name(util_name: &str) -> &str {
     // remove the "uu_" prefix
     let util_name = &util_name[3..];
@@ -214,21 +247,7 @@ macro_rules! bin {
 
             // Capture whether stdout was already closed before we run the utility.
             // This avoids treating a closed stdout as a flush failure for "silent" commands.
-            let stdout_was_closed = {
-                #[cfg(unix)]
-                {
-                    use nix::fcntl::{FcntlArg, fcntl};
-                    match fcntl(std::io::stdout(), FcntlArg::F_GETFL) {
-                        Ok(_) => false,
-                        Err(nix::errno::Errno::EBADF) => true,
-                        Err(_) => false,
-                    }
-                }
-                #[cfg(not(unix))]
-                {
-                    false
-                }
-            };
+            let stdout_was_closed = uucore::stdout_is_closed();
 
             // execute utility code
             let mut code = $util::uumain(uucore::args_os());
@@ -236,16 +255,7 @@ macro_rules! bin {
             if let Err(e) = std::io::stdout().flush() {
                 // Treat write errors as a failure, but ignore BrokenPipe to avoid
                 // breaking utilities that intentionally silence it (e.g., seq).
-                let ignore_closed_stdout = stdout_was_closed && {
-                    #[cfg(unix)]
-                    {
-                        e.raw_os_error() == Some(nix::errno::Errno::EBADF as i32)
-                    }
-                    #[cfg(not(unix))]
-                    {
-                        false
-                    }
-                };
+                let ignore_closed_stdout = uucore::is_closed_stdout_error(&e, stdout_was_closed);
                 if e.kind() != std::io::ErrorKind::BrokenPipe && !ignore_closed_stdout {
                     eprintln!("Error flushing stdout: {e}");
                     if code == 0 {
