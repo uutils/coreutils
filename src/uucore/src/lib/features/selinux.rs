@@ -53,6 +53,7 @@ impl From<SeLinuxError> for i32 {
 /// Checks if SELinux is enabled on the system.
 ///
 /// This function verifies whether the kernel has SELinux support enabled.
+/// Note: libselinux internally caches this value, so no additional caching is needed.
 pub fn is_selinux_enabled() -> bool {
     selinux::kernel_support() != selinux::KernelSupport::Unsupported
 }
