@@ -2222,6 +2222,20 @@ pub fn list_with_output<O: LsOutput>(
     let mut dirs = Vec::<PathData>::new();
     let initial_locs_len = locs.len();
 
+    let mut state = ListState {
+        out: BufWriter::new(stdout()),
+        style_manager: config.color.as_ref().map(StyleManager::new),
+        #[cfg(unix)]
+        uid_cache: HashMap::default(),
+        #[cfg(unix)]
+        gid_cache: HashMap::default(),
+        // Time range for which to use the "recent" format. Anything from 0.5 year in the past to now
+        // (files with modification time in the future use "old" format).
+        // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
+        recent_time_range: (SystemTime::now() - Duration::new(31_556_952 / 2, 0))
+            ..=SystemTime::now(),
+    };
+
     for loc in locs {
         let path_data = PathData::new(PathBuf::from(loc), None, None, config, true);
 
@@ -2286,7 +2300,14 @@ pub fn list_with_output<O: LsOutput>(
             path_data.path(),
             path_data.must_dereference,
         )?);
-        enter_directory(path_data, read_dir, config, &mut listed_ancestors, output)?;
+        enter_directory(
+            path_data,
+            read_dir,
+            config,
+            &mut state,
+            &mut listed_ancestors,
+            output,
+        )?;
     }
 
     output.finalize(config)?;
@@ -2297,6 +2318,7 @@ fn enter_directory<O: LsOutput>(
     path_data: &PathData,
     mut read_dir: ReadDir,
     config: &Config,
+    state: &mut ListState,
     listed_ancestors: &mut HashSet<FileInformation>,
     output: &mut O,
 ) -> UResult<()> {
@@ -2378,7 +2400,7 @@ fn enter_directory<O: LsOutput>(
                         // when listing several directories in recursive mode, we show
                         // "dirname:" at the beginning of the file list
                         output.write_dir_header(e, config, false)?;
-                        enter_directory(e, rd, config, listed_ancestors, output)?;
+                        enter_directory(e, rd, config, state, listed_ancestors, output)?;
                         listed_ancestors
                             .remove(&FileInformation::from_path(e.path(), e.must_dereference)?);
                     } else {
@@ -2513,119 +2535,6 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
         .ignore_patterns
         .iter()
         .any(|p| p.matches_with(&file_name, options))
-}
-
-#[allow(clippy::cognitive_complexity)]
-fn enter_directory(
-    path_data: &PathData,
-    mut read_dir: ReadDir,
-    config: &Config,
-    state: &mut ListState,
-    listed_ancestors: &mut HashSet<FileInformation>,
-    dired: &mut DiredOutput,
-) -> UResult<()> {
-    // Create vec of entries with initial dot files
-    let mut entries: Vec<PathData> = if config.files == Files::All {
-        vec![
-            PathData::new(
-                path_data.path().to_path_buf(),
-                None,
-                Some(".".into()),
-                config,
-                false,
-            ),
-            PathData::new(
-                path_data.path().join(".."),
-                None,
-                Some("..".into()),
-                config,
-                false,
-            ),
-        ]
-    } else {
-        vec![]
-    };
-
-    // Convert those entries to the PathData struct
-    for raw_entry in read_dir.by_ref() {
-        let dir_entry = match raw_entry {
-            Ok(path) => path,
-            Err(err) => {
-                state.out.flush()?;
-                show!(LsError::IOError(err));
-                continue;
-            }
-        };
-
-        if should_display(&dir_entry, config) {
-            let entry_path_data =
-                PathData::new(dir_entry.path(), Some(dir_entry), None, config, false);
-            entries.push(entry_path_data);
-        }
-    }
-
-    sort_entries(&mut entries, config);
-
-    // Print total after any error display
-    if config.format == Format::Long || config.alloc_size {
-        let total = return_total(&entries, config, &mut state.out)?;
-        write!(state.out, "{}", total.as_str())?;
-        if config.dired {
-            dired::add_total(dired, total.len());
-        }
-    }
-
-    display_items(&entries, config, state, dired)?;
-
-    if config.recursive {
-        for e in entries
-            .iter()
-            .skip(if config.files == Files::All { 2 } else { 0 })
-            .filter(|p| p.file_type().is_some_and(|ft| ft.is_dir()))
-        {
-            match fs::read_dir(e.path()) {
-                Err(err) => {
-                    state.out.flush()?;
-                    show!(LsError::IOErrorContext(
-                        e.path().to_path_buf(),
-                        err,
-                        e.command_line
-                    ));
-                }
-                Ok(rd) => {
-                    if listed_ancestors
-                        .insert(FileInformation::from_path(e.path(), e.must_dereference)?)
-                    {
-                        // when listing several directories in recursive mode, we show
-                        // "dirname:" at the beginning of the file list
-                        writeln!(state.out)?;
-                        if config.dired {
-                            // We already injected the first dir
-                            // Continue with the others
-                            // 2 = \n + \n
-                            dired.padding = 2;
-                            dired::indent(&mut state.out)?;
-                            let dir_name_size = e.path().as_os_str().len();
-                            dired::calculate_subdired(dired, dir_name_size);
-                            // inject dir name
-                            dired::add_dir_name(dired, dir_name_size);
-                        }
-
-                        show_dir_name(e, &mut state.out, config)?;
-                        writeln!(state.out)?;
-                        enter_directory(e, rd, config, state, listed_ancestors, dired)?;
-                        listed_ancestors
-                            .remove(&FileInformation::from_path(e.path(), e.must_dereference)?);
-                    } else {
-                        state.out.flush()?;
-                        show!(LsError::AlreadyListedError(e.path().to_path_buf()));
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(())
 }
 
 fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
