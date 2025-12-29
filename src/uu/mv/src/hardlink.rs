@@ -13,6 +13,8 @@ use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use uucore::display::Quotable;
+
 /// Tracks hardlinks during cross-partition moves to preserve them
 #[derive(Debug, Default)]
 pub struct HardlinkTracker {
@@ -61,12 +63,12 @@ impl std::fmt::Display for HardlinkError {
                 write!(
                     f,
                     "Failed to preserve hardlink: {} -> {}",
-                    source.display(),
-                    target.display()
+                    source.quote(),
+                    target.quote()
                 )
             }
             Self::Metadata { path, error } => {
-                write!(f, "Metadata access error for {}: {}", path.display(), error)
+                write!(f, "Metadata access error for {}: {}", path.quote(), error)
             }
         }
     }
@@ -95,13 +97,13 @@ impl From<HardlinkError> for io::Error {
             HardlinkError::Scan(msg) => Self::other(msg),
             HardlinkError::Preservation { source, target } => Self::other(format!(
                 "Failed to preserve hardlink: {} -> {}",
-                source.display(),
-                target.display()
+                source.quote(),
+                target.quote()
             )),
 
             HardlinkError::Metadata { path, error } => Self::other(format!(
                 "Metadata access error for {}: {}",
-                path.display(),
+                path.quote(),
                 error
             )),
         }
@@ -128,11 +130,7 @@ impl HardlinkTracker {
             Err(e) => {
                 // Gracefully handle metadata errors by logging and continuing without hardlink tracking
                 if options.verbose {
-                    eprintln!(
-                        "warning: cannot get metadata for {}: {}",
-                        source.display(),
-                        e
-                    );
+                    eprintln!("warning: cannot get metadata for {}: {}", source.quote(), e);
                 }
                 return Ok(None);
             }
@@ -152,8 +150,8 @@ impl HardlinkTracker {
                 if options.verbose {
                     eprintln!(
                         "preserving hardlink {} -> {} (hardlinked)",
-                        source.display(),
-                        existing_path.display()
+                        source.quote(),
+                        existing_path.quote()
                     );
                 }
                 return Ok(Some(existing_path.clone()));
@@ -189,7 +187,7 @@ impl HardlinkGroupScanner {
             if let Err(e) = self.scan_single_path(file) {
                 if options.verbose {
                     // Only show warnings for verbose mode
-                    eprintln!("warning: failed to scan {}: {}", file.display(), e);
+                    eprintln!("warning: failed to scan {}: {}", file.quote(), e);
                 }
                 // For non-verbose mode, silently continue for missing files
                 // This provides graceful degradation - we'll lose hardlink info for this file
