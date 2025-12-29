@@ -258,9 +258,83 @@ fn test_utf8() {
 }
 
 #[test]
+fn test_sentence_regexp_basic() {
+    new_ucmd!()
+        .args(&["-G", "-S", "\\."])
+        .pipe_in("Hello. World.")
+        .succeeds()
+        .stdout_contains("Hello")
+        .stdout_contains("World");
+}
+
+#[test]
+fn test_sentence_regexp_split_behavior() {
+    new_ucmd!()
+        .args(&["-G", "-w", "50", "-S", "[.!]"])
+        .pipe_in("One sentence. Two sentence!")
+        .succeeds()
+        .stdout_contains("One sentence")
+        .stdout_contains("Two sentence");
+}
+
+#[test]
+fn test_sentence_regexp_empty_match_failure() {
+    new_ucmd!()
+        .args(&["-G", "-S", "^"])
+        .fails()
+        .stderr_contains("A regular expression cannot match a length zero string");
+}
+
+#[test]
+fn test_sentence_regexp_newlines_are_spaces() {
+    new_ucmd!()
+        .args(&["-G", "-S", "\\."])
+        .pipe_in("Start of\nsentence.")
+        .succeeds()
+        .stdout_contains("Start of sentence");
+}
+
+#[test]
 fn test_gnu_mode_dumb_format() {
     // Test GNU mode (dumb format) - the default mode without -G flag
     new_ucmd!().pipe_in("a b").succeeds().stdout_only(
         "                                       a b\n                                   a   b\n",
     );
+}
+
+#[test]
+fn test_gnu_compatibility_narrow_width() {
+    new_ucmd!()
+        .args(&["-w", "2"])
+        .pipe_in("qux")
+        .succeeds()
+        .stdout_only("      qux\n");
+}
+
+#[test]
+fn test_gnu_compatibility_truncation_width() {
+    new_ucmd!()
+        .args(&["-w", "10"])
+        .pipe_in("foo bar")
+        .succeeds()
+        .stdout_only("     /   bar\n        foo/\n");
+}
+
+#[test]
+fn test_unicode_padding_alignment() {
+    let input = "a\né";
+    new_ucmd!()
+        .args(&["-w", "10"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("        a\n        é\n");
+}
+
+#[test]
+fn test_unicode_truncation_alignment() {
+    new_ucmd!()
+        .args(&["-w", "10"])
+        .pipe_in("föö bar")
+        .succeeds()
+        .stdout_only("     /   bar\n        föö/\n");
 }

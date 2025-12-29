@@ -32,14 +32,6 @@ options might be missing or different behavior might be experienced.
 We provide prebuilt binaries at https://github.com/uutils/coreutils/releases/latest .
 It is recommended to install from main branch if you install from source.
 
-To install it:
-
-```shell
-cargo install --git https://github.com/uutils/coreutils coreutils
-# cargo install --git https://github.com/uutils/coreutils uu_true # for one util only
-~/.cargo/bin/coreutils
-```
-
 </div>
 
 <!-- markdownlint-disable-next-line MD026 -->

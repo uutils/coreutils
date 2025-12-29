@@ -7,7 +7,6 @@
 
 use std::ffi::{OsStr, OsString};
 use std::iter;
-use std::num::ParseIntError;
 use std::path::Path;
 
 use clap::builder::ValueParser;
@@ -19,7 +18,10 @@ use uucore::checksum::compute::{
 use uucore::checksum::validate::{
     ChecksumValidateOptions, ChecksumVerbose, perform_checksum_validation,
 };
-use uucore::checksum::{AlgoKind, ChecksumError, SizedAlgoKind, calculate_blake2b_length_str};
+use uucore::checksum::{
+    AlgoKind, ChecksumError, SizedAlgoKind, calculate_blake2b_length_str,
+    sanitize_sha2_sha3_length_str,
+};
 use uucore::error::UResult;
 use uucore::line_ending::LineEnding;
 use uucore::{format_usage, translate};
@@ -74,9 +76,11 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<(AlgoKind, Optio
         set_or_err((AlgoKind::Blake3, None))?;
     }
     if matches.get_flag("sha3") {
-        match matches.get_one::<usize>("bits") {
-            Some(bits @ (224 | 256 | 384 | 512)) => set_or_err((AlgoKind::Sha3, Some(*bits)))?,
-            Some(bits) => return Err(ChecksumError::InvalidLengthForSha(bits.to_string()).into()),
+        match matches.get_one::<String>(options::LENGTH) {
+            Some(len) => set_or_err((
+                AlgoKind::Sha3,
+                Some(sanitize_sha2_sha3_length_str(AlgoKind::Sha3, len)?),
+            ))?,
             None => return Err(ChecksumError::LengthRequired("SHA3".into()).into()),
         }
     }
@@ -93,16 +97,10 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<(AlgoKind, Optio
         set_or_err((AlgoKind::Sha3, Some(512)))?;
     }
     if matches.get_flag("shake128") {
-        match matches.get_one::<usize>("bits") {
-            Some(bits) => set_or_err((AlgoKind::Shake128, Some(*bits)))?,
-            None => return Err(ChecksumError::LengthRequired("SHAKE128".into()).into()),
-        }
+        set_or_err((AlgoKind::Shake128, Some(128)))?;
     }
     if matches.get_flag("shake256") {
-        match matches.get_one::<usize>("bits") {
-            Some(bits) => set_or_err((AlgoKind::Shake256, Some(*bits)))?,
-            None => return Err(ChecksumError::LengthRequired("SHAKE256".into()).into()),
-        }
+        set_or_err((AlgoKind::Shake256, Some(256)))?;
     }
 
     if alg.is_none() {
@@ -110,11 +108,6 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<(AlgoKind, Optio
     }
 
     Ok(alg.unwrap())
-}
-
-// TODO: return custom error type
-fn parse_bit_num(arg: &str) -> Result<usize, ParseIntError> {
-    arg.parse()
 }
 
 #[uucore::main]
@@ -139,15 +132,14 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     //        least somewhat better from a user's perspective.
     let matches = uucore::clap_localization::handle_clap_result(command, args)?;
 
-    let input_length: Option<&String> = if binary_name == "b2sum" {
-        matches.get_one::<String>(options::LENGTH)
+    let length: Option<usize> = if binary_name == "b2sum" {
+        if let Some(len) = matches.get_one::<String>(options::LENGTH) {
+            calculate_blake2b_length_str(len)?
+        } else {
+            None
+        }
     } else {
         None
-    };
-
-    let length = match input_length {
-        Some(length) => calculate_blake2b_length_str(length)?,
-        None => None,
     };
 
     let (algo_kind, length) = if is_hashsum_bin {
@@ -371,24 +363,8 @@ fn uu_app_opt_length(command: Command) -> Command {
     )
 }
 
-pub fn uu_app_bits() -> Command {
-    uu_app_opt_bits(uu_app_common())
-}
-
-fn uu_app_opt_bits(command: Command) -> Command {
-    // Needed for variable-length output sums (e.g. SHAKE)
-    command.arg(
-        Arg::new("bits")
-            .long("bits")
-            .help(translate!("hashsum-help-bits"))
-            .value_name("BITS")
-            // XXX: should we actually use validators?  they're not particularly efficient
-            .value_parser(parse_bit_num),
-    )
-}
-
 pub fn uu_app_custom() -> Command {
-    let mut command = uu_app_opt_bits(uu_app_common());
+    let mut command = uu_app_opt_length(uu_app_common());
     let algorithms = &[
         ("md5", translate!("hashsum-help-md5")),
         ("sha1", translate!("hashsum-help-sha1")),

@@ -85,6 +85,8 @@ pub mod hardware;
 pub mod selinux;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
 pub mod signals;
+#[cfg(all(target_os = "linux", feature = "smack"))]
+pub mod smack;
 #[cfg(feature = "feat_systemd_logind")]
 pub mod systemd_logind;
 #[cfg(all(

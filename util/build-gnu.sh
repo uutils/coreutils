@@ -37,7 +37,7 @@ path_GNU="$("${READLINK}" -fm -- "${path_GNU:-${path_UUTILS}/../gnu}")"
 if test ! -f "${path_GNU}/configure"; then
     echo "Could not find the GNU coreutils (expected at '${path_GNU}')"
     echo "Download them to the expected path:"
-    echo "  (cd '${path_GNU}' && fetch-gnu.sh ) "
+    echo " (mkdir -p '${path_GNU}' && cd '${path_GNU}' && bash '${path_UUTILS}/util/fetch-gnu.sh')"
     echo "You can edit fetch-gnu.sh to change the tag"
     exit 1
 fi
@@ -223,15 +223,9 @@ sed -i -e "s|---dis ||g" tests/tail/overlay-headers.sh
 # Do not FAIL, just do a regular ERROR
 "${SED}" -i -e "s|framework_failure_ 'no inotify_add_watch';|fail=1;|" tests/tail/inotify-rotate-resources.sh
 
-# The notify crate makes inotify_add_watch calls in a background thread, so strace needs -f to follow threads.
-# Also remove the HAVE_INOTIFY header check since that's for C builds.
-"${SED}" -i -e "s|grep '^#define HAVE_INOTIFY 1' \"\$CONFIG_HEADER\" >/dev/null && is_local_dir_ \. |is_local_dir_ . |" \
-    -e "s|strace -e inotify_add_watch|strace -f -e inotify_add_watch|" \
-    tests/tail/inotify-dir-recreate.sh
-
-# pr produces very long log and this command isn't super interesting
-# SKIP for now
-"${SED}" -i -e "s|my \$prog = 'pr';$|my \$prog = 'pr';CuSkip::skip \"\$prog: SKIP for producing too long logs\";|" tests/pr/pr-tests.pl
+# pr-tests.pl: Override the comparison function to suppress diff output
+# This prevents the test from overwhelming logs while still reporting failures
+"${SED}" -i '/^my $fail = run_tests/i no warnings "redefine"; *Coreutils::_compare_files = sub { my ($p, $t, $io, $a, $e) = @_; my $d = File::Compare::compare($a, $e); warn "$p: test $t: mismatch\\n" if $d; return $d; };' tests/pr/pr-tests.pl
 
 # We don't have the same error message and no need to be that specific
 "${SED}" -i -e "s|invalid suffix in --pages argument|invalid --pages argument|" \
