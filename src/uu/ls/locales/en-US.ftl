@@ -124,3 +124,13 @@ ls-invalid-columns-width = ignoring invalid width in environment variable COLUMN
 ls-invalid-ignore-pattern = Invalid pattern for ignore: {$pattern}
 ls-invalid-hide-pattern = Invalid pattern for hide: {$pattern}
 ls-total = total {$size}
+
+# Security context warnings
+ls-warning-failed-to-get-security-context = failed to get security context of: {$path}
+ls-warning-getting-security-context = getting security context of: {$path}: {$error}
+
+# SMACK error messages (used by uucore::smack when called from ls)
+smack-error-not-enabled = SMACK is not enabled on this system
+smack-error-label-retrieval-failure = failed to get SMACK label: { $error }
+smack-error-label-set-failure = failed to set SMACK label to '{ $context }': { $error }
+smack-error-no-label-set = no SMACK label set
