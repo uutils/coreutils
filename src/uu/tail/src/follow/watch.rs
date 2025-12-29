@@ -58,7 +58,7 @@ impl WatcherRx {
             } else {
                 return Err(USimpleError::new(
                     1,
-                    translate!("tail-error-cannot-watch-parent-directory", "path" => path.display()),
+                    translate!("tail-error-cannot-watch-parent-directory", "path" => path.quote()),
                 ));
             }
         }

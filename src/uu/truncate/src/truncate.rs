@@ -38,6 +38,10 @@ impl TruncateMode {
     /// reduce by is greater than `fsize`, then this function returns
     /// 0 (since it cannot return a negative number).
     ///
+    /// # Returns
+    ///
+    /// `None` if rounding by 0, else the target size.
+    ///
     /// # Examples
     ///
     /// Extending a file of 10 bytes by 5 bytes:
@@ -45,7 +49,7 @@ impl TruncateMode {
     /// ```rust,ignore
     /// let mode = TruncateMode::Extend(5);
     /// let fsize = 10;
-    /// assert_eq!(mode.to_size(fsize), 15);
+    /// assert_eq!(mode.to_size(fsize), Some(15));
     /// ```
     ///
     /// Reducing a file by more than its size results in 0:
@@ -53,24 +57,35 @@ impl TruncateMode {
     /// ```rust,ignore
     /// let mode = TruncateMode::Reduce(5);
     /// let fsize = 3;
-    /// assert_eq!(mode.to_size(fsize), 0);
+    /// assert_eq!(mode.to_size(fsize), Some(0));
     /// ```
-    fn to_size(&self, fsize: u64) -> u64 {
+    ///
+    /// Rounding a file by 0:
+    ///
+    /// ```rust,ignore
+    /// let mode = TruncateMode::RoundDown(0);
+    /// let fsize = 17;
+    /// assert_eq!(mode.to_size(fsize), None);
+    /// ```
+    fn to_size(&self, fsize: u64) -> Option<u64> {
         match self {
-            Self::Absolute(size) => *size,
-            Self::Extend(size) => fsize + size,
-            Self::Reduce(size) => {
-                if *size > fsize {
-                    0
-                } else {
-                    fsize - size
-                }
-            }
-            Self::AtMost(size) => fsize.min(*size),
-            Self::AtLeast(size) => fsize.max(*size),
-            Self::RoundDown(size) => fsize - fsize % size,
-            Self::RoundUp(size) => fsize + fsize % size,
+            Self::Absolute(size) => Some(*size),
+            Self::Extend(size) => Some(fsize + size),
+            Self::Reduce(size) => Some(fsize.saturating_sub(*size)),
+            Self::AtMost(size) => Some(fsize.min(*size)),
+            Self::AtLeast(size) => Some(fsize.max(*size)),
+            Self::RoundDown(size) => fsize.checked_rem(*size).map(|remainder| fsize - remainder),
+            Self::RoundUp(size) => fsize.checked_next_multiple_of(*size),
         }
+    }
+
+    /// Determine if mode is absolute
+    ///
+    /// # Returns
+    ///
+    /// `true` is self matches Self::Absolute(_), `false` otherwise.
+    fn is_absolute(&self) -> bool {
+        matches!(self, Self::Absolute(_))
     }
 }
 
@@ -170,18 +185,9 @@ pub fn uu_app() -> Command {
 ///
 /// If the file could not be opened, or there was a problem setting the
 /// size of the file.
-fn file_truncate(filename: &OsString, create: bool, size: u64) -> UResult<()> {
+fn do_file_truncate(filename: &Path, create: bool, size: u64) -> UResult<()> {
     let path = Path::new(filename);
 
-    #[cfg(unix)]
-    if let Ok(metadata) = metadata(path) {
-        if metadata.file_type().is_fifo() {
-            return Err(USimpleError::new(
-                1,
-                translate!("truncate-error-cannot-open-no-device", "filename" => filename.to_string_lossy().quote()),
-            ));
-        }
-    }
     match OpenOptions::new().write(true).create(create).open(path) {
         Ok(file) => file.set_len(size),
         Err(e) if e.kind() == ErrorKind::NotFound && !create => Ok(()),
@@ -192,155 +198,44 @@ fn file_truncate(filename: &OsString, create: bool, size: u64) -> UResult<()> {
     )
 }
 
-/// Truncate files to a size relative to a given file.
-///
-/// `rfilename` is the name of the reference file.
-///
-/// `size_string` gives the size relative to the reference file to which
-/// to set the target files. For example, "+3K" means "set each file to
-/// be three kilobytes larger than the size of the reference file".
-///
-/// If `create` is true, then each file will be created if it does not
-/// already exist.
-///
-/// # Errors
-///
-/// If any file could not be opened, or there was a problem setting
-/// the size of at least one file.
-///
-/// If at least one file is a named pipe (also known as a fifo).
-fn truncate_reference_and_size(
-    rfilename: &str,
-    size_string: &str,
-    filenames: &[OsString],
-    create: bool,
+fn file_truncate(
+    no_create: bool,
+    reference_size: Option<u64>,
+    mode: &TruncateMode,
+    filename: &OsString,
 ) -> UResult<()> {
-    let mode = match parse_mode_and_size(size_string) {
-        Err(e) => {
-            return Err(USimpleError::new(
-                1,
-                translate!("truncate-error-invalid-number", "error" => e),
-            ));
+    let path = Path::new(filename);
+
+    // Get the length of the file.
+    let file_size = match metadata(path) {
+        Ok(metadata) => {
+            // A pipe has no length. Do this check here to avoid duplicate `stat()` syscall.
+            #[cfg(unix)]
+            if metadata.file_type().is_fifo() {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("truncate-error-cannot-open-no-device", "filename" => filename.to_string_lossy().quote()),
+                ));
+            }
+            metadata.len()
         }
-        Ok(TruncateMode::Absolute(_)) => {
-            return Err(USimpleError::new(
-                1,
-                translate!("truncate-error-must-specify-relative-size"),
-            ));
-        }
-        Ok(m) => m,
+        Err(_) => 0,
     };
 
-    if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = mode {
+    // The reference size can be either:
+    //
+    // 1. The size of a given file
+    // 2. The size of the file to be truncated if no reference has been provided.
+    let actual_reference_size = reference_size.unwrap_or(file_size);
+
+    let Some(truncate_size) = mode.to_size(actual_reference_size) else {
         return Err(USimpleError::new(
             1,
             translate!("truncate-error-division-by-zero"),
         ));
-    }
+    };
 
-    let metadata = metadata(rfilename).map_err(|e| match e.kind() {
-        ErrorKind::NotFound => USimpleError::new(
-            1,
-            translate!("truncate-error-cannot-stat-no-such-file", "filename" => rfilename.quote()),
-        ),
-        _ => e.map_err_context(String::new),
-    })?;
-
-    let fsize = metadata.len();
-    let tsize = mode.to_size(fsize);
-
-    for filename in filenames {
-        file_truncate(filename, create, tsize)?;
-    }
-
-    Ok(())
-}
-
-/// Truncate files to match the size of a given reference file.
-///
-/// `rfilename` is the name of the reference file.
-///
-/// If `create` is true, then each file will be created if it does not
-/// already exist.
-///
-/// # Errors
-///
-/// If any file could not be opened, or there was a problem setting
-/// the size of at least one file.
-///
-/// If at least one file is a named pipe (also known as a fifo).
-fn truncate_reference_file_only(
-    rfilename: &str,
-    filenames: &[OsString],
-    create: bool,
-) -> UResult<()> {
-    let metadata = metadata(rfilename).map_err(|e| match e.kind() {
-        ErrorKind::NotFound => USimpleError::new(
-            1,
-            translate!("truncate-error-cannot-stat-no-such-file", "filename" => rfilename.quote()),
-        ),
-        _ => e.map_err_context(String::new),
-    })?;
-
-    let tsize = metadata.len();
-
-    for filename in filenames {
-        file_truncate(filename, create, tsize)?;
-    }
-
-    Ok(())
-}
-
-/// Truncate files to a specified size.
-///
-/// `size_string` gives either an absolute size or a relative size. A
-/// relative size adjusts the size of each file relative to its current
-/// size. For example, "3K" means "set each file to be three kilobytes"
-/// whereas "+3K" means "set each file to be three kilobytes larger than
-/// its current size".
-///
-/// If `create` is true, then each file will be created if it does not
-/// already exist.
-///
-/// # Errors
-///
-/// If any file could not be opened, or there was a problem setting
-/// the size of at least one file.
-///
-/// If at least one file is a named pipe (also known as a fifo).
-fn truncate_size_only(size_string: &str, filenames: &[OsString], create: bool) -> UResult<()> {
-    let mode = parse_mode_and_size(size_string).map_err(|e| {
-        USimpleError::new(1, translate!("truncate-error-invalid-number", "error" => e))
-    })?;
-
-    if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = mode {
-        return Err(USimpleError::new(
-            1,
-            translate!("truncate-error-division-by-zero"),
-        ));
-    }
-
-    for filename in filenames {
-        let path = Path::new(filename);
-        let fsize = match metadata(path) {
-            Ok(m) => {
-                #[cfg(unix)]
-                if m.file_type().is_fifo() {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("truncate-error-cannot-open-no-device", "filename" => filename.to_string_lossy().quote()),
-                    ));
-                }
-                m.len()
-            }
-            Err(_) => 0,
-        };
-        let tsize = mode.to_size(fsize);
-        // TODO: Fix duplicate call to stat
-        file_truncate(filename, create, tsize)?;
-    }
-
-    Ok(())
+    do_file_truncate(path, !no_create, truncate_size)
 }
 
 fn truncate(
@@ -350,21 +245,50 @@ fn truncate(
     size: Option<String>,
     filenames: &[OsString],
 ) -> UResult<()> {
-    let create = !no_create;
+    let reference_size = match reference {
+        Some(reference_path) => {
+            let reference_metadata = metadata(&reference_path).map_err(|error| match error.kind() {
+                ErrorKind::NotFound => USimpleError::new(
+                    1,
+                    translate!("truncate-error-cannot-stat-no-such-file", "filename" => reference_path.quote()),
+                ),
+                _ => error.map_err_context(String::new),
+            })?;
 
-    // There are four possibilities
-    // - reference file given and size given,
-    // - reference file given but no size given,
-    // - no reference file given but size given,
-    // - no reference file given and no size given,
-    match (reference, size) {
-        (Some(rfilename), Some(size_string)) => {
-            truncate_reference_and_size(&rfilename, &size_string, filenames, create)
+            Some(reference_metadata.len())
         }
-        (Some(rfilename), None) => truncate_reference_file_only(&rfilename, filenames, create),
-        (None, Some(size_string)) => truncate_size_only(&size_string, filenames, create),
-        (None, None) => unreachable!(), // this case cannot happen anymore because it's handled by clap
+        None => None,
+    };
+
+    let size_string = size.as_deref();
+
+    // Omitting the mode is equivalent to extending a file by 0 bytes.
+    let mode = match size_string {
+        Some(string) => match parse_mode_and_size(string) {
+            Err(error) => {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("truncate-error-invalid-number", "error" => error),
+                ));
+            }
+            Ok(mode) => mode,
+        },
+        None => TruncateMode::Extend(0),
+    };
+
+    // If a reference file has been given, the truncate mode cannot be absolute.
+    if reference_size.is_some() && mode.is_absolute() {
+        return Err(USimpleError::new(
+            1,
+            translate!("truncate-error-must-specify-relative-size"),
+        ));
     }
+
+    for filename in filenames {
+        file_truncate(no_create, reference_size, &mode, filename)?;
+    }
+
+    Ok(())
 }
 
 /// Decide whether a character is one of the size modifiers, like '+' or '<'.
@@ -382,13 +306,12 @@ fn is_modifier(c: char) -> bool {
 ///
 /// # Panics
 ///
-/// If `size_string` is empty, or if no number could be parsed from the
-/// given string (for example, if the string were `"abc"`).
+/// If `size_string` is empty.
 ///
 /// # Examples
 ///
 /// ```rust,ignore
-/// assert_eq!(parse_mode_and_size("+123"), (TruncateMode::Extend, 123));
+/// assert_eq!(parse_mode_and_size("+123"), Ok(TruncateMode::Extend(123)));
 /// ```
 fn parse_mode_and_size(size_string: &str) -> Result<TruncateMode, ParseSizeError> {
     // Trim any whitespace.
@@ -432,8 +355,13 @@ mod tests {
 
     #[test]
     fn test_to_size() {
-        assert_eq!(TruncateMode::Extend(5).to_size(10), 15);
-        assert_eq!(TruncateMode::Reduce(5).to_size(10), 5);
-        assert_eq!(TruncateMode::Reduce(5).to_size(3), 0);
+        assert_eq!(TruncateMode::Extend(5).to_size(10), Some(15));
+        assert_eq!(TruncateMode::Reduce(5).to_size(10), Some(5));
+        assert_eq!(TruncateMode::Reduce(5).to_size(3), Some(0));
+        assert_eq!(TruncateMode::RoundDown(4).to_size(13), Some(12));
+        assert_eq!(TruncateMode::RoundDown(4).to_size(16), Some(16));
+        assert_eq!(TruncateMode::RoundUp(8).to_size(10), Some(16));
+        assert_eq!(TruncateMode::RoundUp(8).to_size(16), Some(16));
+        assert_eq!(TruncateMode::RoundDown(0).to_size(123), None);
     }
 }
