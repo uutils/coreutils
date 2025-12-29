@@ -370,7 +370,7 @@ where
             Err(FsError::InvalidPath) => {
                 show!(USimpleError::new(
                     1,
-                    translate!("df-error-no-such-file-or-directory", "path" => path.as_ref().display())
+                    translate!("df-error-no-such-file-or-directory", "path" => path.as_ref().maybe_quote())
                 ));
             }
             Err(FsError::MountMissing) => {

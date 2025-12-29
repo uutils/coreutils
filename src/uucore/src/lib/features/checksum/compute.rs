@@ -20,6 +20,11 @@ use crate::{show, translate};
 /// from it: 32 KiB.
 const READ_BUFFER_SIZE: usize = 32 * 1024;
 
+/// Necessary options when computing a checksum. Historically, these options
+/// included a `binary` field to differentiate `--binary` and `--text` modes on
+/// windows. Since the support for this feature is approximate in GNU, and it's
+/// deprecated anyway, it was decided in #9168 to ignore the difference when
+/// computing the checksum.
 pub struct ChecksumComputeOptions {
     /// Which algorithm to use to compute the digest.
     pub algo_kind: SizedAlgoKind,
@@ -29,12 +34,6 @@ pub struct ChecksumComputeOptions {
 
     /// Whether to finish lines with '\n' or '\0'.
     pub line_ending: LineEnding,
-
-    /// On windows, open files as binary instead of text
-    pub binary: bool,
-
-    /// (non-GNU option) Do not print file names
-    pub no_names: bool,
 }
 
 /// Reading mode used to compute digest.
@@ -42,6 +41,12 @@ pub struct ChecksumComputeOptions {
 /// On most linux systems, this is irrelevant, as there is no distinction
 /// between text and binary files. Refer to GNU's cksum documentation for more
 /// information.
+///
+/// As discussed in #9168, we decide to ignore the reading mode to compute the
+/// digest, both on Windows and UNIX. The reason for that is that this is a
+/// legacy feature that is poorly documented and used. This enum is kept
+/// nonetheless to still take into account the flags passed to cksum when
+/// generating untagged lines.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReadingMode {
     Binary,
@@ -210,12 +215,6 @@ fn print_untagged_checksum(
     sum: &String,
     reading_mode: ReadingMode,
 ) -> UResult<()> {
-    // early check for the "no-names" option
-    if options.no_names {
-        print!("{sum}");
-        return Ok(());
-    }
-
     let (escaped_filename, prefix) = if options.line_ending == LineEnding::Nul {
         (filename.to_string_lossy().to_string(), "")
     } else {
@@ -280,7 +279,9 @@ where
 
         let mut digest = options.algo_kind.create_digest();
 
-        let (digest_output, sz) = digest_reader(&mut digest, &mut file, options.binary)
+        // Always compute the "binary" version of the digest, i.e. on Windows,
+        // never handle CRLFs specifically.
+        let (digest_output, sz) = digest_reader(&mut digest, &mut file, /* binary: */ true)
             .map_err_context(|| translate!("checksum-error-failed-to-read-input"))?;
 
         // Encodes the sum if df is Base64, leaves as-is otherwise.
