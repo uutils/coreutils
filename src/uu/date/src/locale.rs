@@ -29,11 +29,22 @@ cfg_langinfo! {
     use std::ffi::CStr;
     use std::sync::OnceLock;
     use nix::libc;
+
+    #[cfg(test)]
+    use std::sync::Mutex;
 }
 
 cfg_langinfo! {
     /// Cached locale date/time format string
     static DEFAULT_FORMAT_CACHE: OnceLock<&'static str> = OnceLock::new();
+
+    /// Mutex to serialize setlocale() calls during tests.
+    ///
+    /// setlocale() is process-global, so parallel tests that call it can
+    /// interfere with each other. This mutex ensures only one test accesses
+    /// locale functions at a time.
+    #[cfg(test)]
+    static LOCALE_MUTEX: Mutex<()> = Mutex::new(());
 
     /// Returns the default date format string for the current locale.
     ///
@@ -61,6 +72,11 @@ cfg_langinfo! {
 
     /// Retrieves the date/time format string from the system locale
     fn get_locale_format_string() -> Option<String> {
+        // In tests, acquire mutex to prevent race conditions with setlocale()
+        // which is process-global and not thread-safe
+        #[cfg(test)]
+        let _lock = LOCALE_MUTEX.lock().unwrap();
+
         unsafe {
             // Set locale from environment variables
             let _locale_result = libc::setlocale(libc::LC_TIME, c"".as_ptr());
@@ -213,10 +229,23 @@ mod tests {
 
         #[test]
         fn test_c_locale_format() {
-            // Save original locale
+            // Acquire mutex to prevent interference with other tests
+            let _lock = LOCALE_MUTEX.lock().unwrap();
+
+            // Save original locale (both environment and process locale)
             let original_lc_all = std::env::var("LC_ALL").ok();
             let original_lc_time = std::env::var("LC_TIME").ok();
             let original_lang = std::env::var("LANG").ok();
+
+            // Save current process locale
+            let original_process_locale = unsafe {
+                let ptr = libc::setlocale(libc::LC_TIME, std::ptr::null());
+                if ptr.is_null() {
+                    None
+                } else {
+                    CStr::from_ptr(ptr).to_str().ok().map(|s| s.to_string())
+                }
+            };
 
             unsafe {
                 // Set C locale
@@ -232,7 +261,7 @@ mod tests {
                 if d_t_fmt_ptr.is_null() {
                     None
                 } else {
-                    std::ffi::CStr::from_ptr(d_t_fmt_ptr).to_str().ok()
+                    CStr::from_ptr(d_t_fmt_ptr).to_str().ok()
                 }
             };
 
@@ -245,7 +274,7 @@ mod tests {
                 assert!(uses_24_hour, "C locale should use 24-hour format, got: {locale_format}");
             }
 
-            // Restore original locale
+            // Restore original environment variables
             unsafe {
                 if let Some(val) = original_lc_all {
                     std::env::set_var("LC_ALL", val);
@@ -261,6 +290,17 @@ mod tests {
                     std::env::set_var("LANG", val);
                 } else {
                     std::env::remove_var("LANG");
+                }
+            }
+
+            // Restore original process locale
+            unsafe {
+                if let Some(locale) = original_process_locale {
+                    let c_locale = std::ffi::CString::new(locale).unwrap();
+                    libc::setlocale(libc::LC_TIME, c_locale.as_ptr());
+                } else {
+                    // Restore from environment
+                    libc::setlocale(libc::LC_TIME, c"".as_ptr());
                 }
             }
         }
