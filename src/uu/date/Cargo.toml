@@ -20,18 +20,17 @@ path = "src/date.rs"
 
 [dependencies]
 clap = { workspace = true }
-chrono = { workspace = true } # TODO: Eventually we'll want to remove this
+fluent = { workspace = true }
 jiff = { workspace = true, features = [
   "tzdb-bundle-platform",
   "tzdb-zoneinfo",
   "tzdb-concatenated",
 ] }
-uucore = { workspace = true, features = ["parser"] }
 parse_datetime = { workspace = true }
-fluent = { workspace = true }
+uucore = { workspace = true, features = ["parser"] }
 
 [target.'cfg(unix)'.dependencies]
-libc = { workspace = true }
+nix = { workspace = true, features = ["time"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [

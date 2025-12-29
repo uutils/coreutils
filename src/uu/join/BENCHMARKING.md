@@ -7,14 +7,14 @@
 The amount of time spent in which part of the code can vary depending on the files being joined and the flags used.
 A benchmark with `-j` and `-i` shows the following time:
 
-| Function/Method  | Fraction of Samples | Why? |
-| ---------------- | ------------------- | ---- |
-| `Line::new`      | 27% | Linear search for field separators, plus some vector operations. |
-| `read_until`     | 22% | Mostly libc reading file contents, with a few vector operations to represent them. |
-| `Input::compare` | 20% | ~2/3 making the keys lowercase, ~1/3 comparing them. |
-| `print_fields`   | 11% | Writing to and flushing the buffer. |
-| Other            | 20% | |
-| libc             | 25% | I/O and memory allocation. |
+| Function/Method  | Fraction of Samples | Why?                                                                               |
+| ---------------- | ------------------- | ---------------------------------------------------------------------------------- |
+| `Line::new`      | 27%                 | Linear search for field separators, plus some vector operations.                   |
+| `read_until`     | 22%                 | Mostly libc reading file contents, with a few vector operations to represent them. |
+| `Input::compare` | 20%                 | ~2/3 making the keys lowercase, ~1/3 comparing them.                               |
+| `print_fields`   | 11%                 | Writing to and flushing the buffer.                                                |
+| Other            | 20%                 |                                                                                    |
+| libc             | 25%                 | I/O and memory allocation.                                                         |
 
 More detailed profiles can be obtained via [flame graphs](https://github.com/flamegraph-rs/flamegraph):
 

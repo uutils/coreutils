@@ -15,8 +15,9 @@ use chrono::{
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
 use filetime::{FileTime, set_file_times, set_symlink_file_times};
+use jiff::{Timestamp, Zoned};
 use std::borrow::Cow;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::{self, File};
 use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
@@ -291,7 +292,6 @@ pub fn uu_app() -> Command {
             Arg::new(options::FORCE)
                 .short('f')
                 .help("(ignored)")
-                .hide(true)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -359,6 +359,7 @@ pub fn uu_app() -> Command {
 /// Possible causes:
 /// - The user doesn't have permission to access the file
 /// - One of the directory components of the file path doesn't exist.
+/// - Dangling symlink is given and -r/--reference is used.
 ///
 /// It will return an `Err` on the first error. However, for any of the files,
 /// if all of the following are true, it will print the error and continue touching
@@ -430,9 +431,9 @@ fn touch_file(
     mtime: FileTime,
 ) -> UResult<()> {
     let filename = if is_stdout {
-        String::from("-")
+        OsStr::new("-")
     } else {
-        path.display().to_string()
+        path.as_os_str()
     };
 
     let metadata_result = if opts.no_deref {
@@ -573,14 +574,21 @@ fn update_times(
 }
 
 /// Get metadata of the provided path
-/// If `follow` is `true`, the function will try to follow symlinks
-/// If `follow` is `false` or the symlink is broken, the function will return metadata of the symlink itself
+/// If `follow` is `true`, the function will try to follow symlinks. Errors if the symlink is dangling, otherwise defaults to symlink metadata.
+/// If `follow` is `false`, the function will return metadata of the symlink itself
 fn stat(path: &Path, follow: bool) -> std::io::Result<(FileTime, FileTime)> {
     let metadata = if follow {
-        fs::metadata(path).or_else(|_| fs::symlink_metadata(path))
+        match fs::metadata(path) {
+            // Successfully followed symlink
+            Ok(meta) => meta,
+            // Dangling symlink
+            Err(e) if e.kind() == ErrorKind::NotFound => return Err(e),
+            // Other error (?), try to get the symlink metadata
+            Err(_) => fs::symlink_metadata(path)?,
+        }
     } else {
-        fs::symlink_metadata(path)
-    }?;
+        fs::symlink_metadata(path)?
+    };
 
     Ok((
         FileTime::from_last_access_time(&metadata),
@@ -637,7 +645,41 @@ fn parse_date(ref_time: DateTime<Local>, s: &str) -> Result<FileTime, TouchError
         }
     }
 
-    if let Ok(dt) = parse_datetime::parse_datetime_at_date(ref_time, s) {
+    // **parse_datetime 0.13 API change:**
+    // The parse_datetime crate was updated from 0.11 to 0.13 in commit 2a69918ca to fix
+    // issue #8754 (large second values like "12345.123456789 seconds ago" failing).
+    // This introduced a breaking API change in parse_datetime_at_date:
+    //
+    // Previously (0.11): parse_datetime_at_date(chrono::DateTime) → chrono::DateTime
+    // Now (0.13):        parse_datetime_at_date(jiff::Zoned) → jiff::Zoned
+    //
+    // Commit 4340913c4 initially adapted to this by switching from parse_datetime_at_date
+    // to parse_datetime, which broke deterministic relative date parsing (the ref_time
+    // parameter was no longer used, causing tests/touch/relative to fail in CI).
+    //
+    // This implementation restores parse_datetime_at_date usage with proper conversions:
+    // chrono::DateTime → jiff::Zoned → parse_datetime_at_date → jiff::Zoned → chrono::DateTime
+    //
+    // The use of parse_datetime_at_date (not parse_datetime) is critical for deterministic
+    // behavior with relative dates like "yesterday" or "2 days ago", which must be
+    // calculated relative to ref_time, not the current system time.
+
+    // Convert chrono DateTime to jiff Zoned for parse_datetime_at_date
+    let ref_zoned = {
+        let ts = Timestamp::new(
+            ref_time.timestamp(),
+            ref_time.timestamp_subsec_nanos() as i32,
+        )
+        .map_err(|_| TouchError::InvalidDateFormat(s.to_owned()))?;
+        Zoned::new(ts, jiff::tz::TimeZone::system())
+    };
+
+    if let Ok(zoned) = parse_datetime::parse_datetime_at_date(ref_zoned, s) {
+        let timestamp = zoned.timestamp();
+        let dt =
+            DateTime::from_timestamp(timestamp.as_second(), timestamp.subsec_nanosecond() as u32)
+                .map(|dt| dt.with_timezone(&Local))
+                .ok_or_else(|| TouchError::InvalidDateFormat(s.to_owned()))?;
         return Ok(datetime_to_filetime(&dt));
     }
 

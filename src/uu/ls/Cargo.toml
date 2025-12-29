@@ -36,7 +36,8 @@ uucore = { workspace = true, features = [
   "fs",
   "fsext",
   "fsxattr",
-  "parser",
+  "parser-size",
+  "parser-glob",
   "quoting-style",
   "time",
   "version-cmp",
@@ -59,3 +60,4 @@ harness = false
 
 [features]
 feat_selinux = ["selinux", "uucore/selinux"]
+smack = ["uucore/smack"]

@@ -3,21 +3,20 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres
+// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST
+
+mod locale;
 
 use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime;
 use jiff::tz::{TimeZone, TimeZoneDatabase};
 use jiff::{Timestamp, Zoned};
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
-use libc::clock_settime;
-#[cfg(all(unix, not(target_os = "redox")))]
-use libc::{CLOCK_REALTIME, clock_getres, timespec};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::sync::OnceLock;
+use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
@@ -117,10 +116,72 @@ impl From<&str> for Rfc3339Format {
     }
 }
 
+/// Parse military timezone with optional hour offset.
+/// Pattern: single letter (a-z except j) optionally followed by 1-2 digits.
+/// Returns Some(total_hours_in_utc) or None if pattern doesn't match.
+///
+/// Military timezone mappings:
+/// - A-I: UTC+1 to UTC+9 (J is skipped for local time)
+/// - K-M: UTC+10 to UTC+12
+/// - N-Y: UTC-1 to UTC-12
+/// - Z: UTC+0
+///
+/// The hour offset from digits is added to the base military timezone offset.
+/// Examples: "m" -> 12 (noon UTC), "m9" -> 21 (9pm UTC), "a5" -> 4 (4am UTC next day)
+fn parse_military_timezone_with_offset(s: &str) -> Option<i32> {
+    if s.is_empty() || s.len() > 3 {
+        return None;
+    }
+
+    let mut chars = s.chars();
+    let letter = chars.next()?.to_ascii_lowercase();
+
+    // Check if first character is a letter (a-z, except j which is handled separately)
+    if !letter.is_ascii_lowercase() || letter == 'j' {
+        return None;
+    }
+
+    // Parse optional digits (1-2 digits for hour offset)
+    let additional_hours: i32 = if let Some(rest) = chars.as_str().chars().next() {
+        if !rest.is_ascii_digit() {
+            return None;
+        }
+        chars.as_str().parse().ok()?
+    } else {
+        0
+    };
+
+    // Map military timezone letter to UTC offset
+    let tz_offset = match letter {
+        'a'..='i' => (letter as i32 - 'a' as i32) + 1, // A=+1, B=+2, ..., I=+9
+        'k'..='m' => (letter as i32 - 'k' as i32) + 10, // K=+10, L=+11, M=+12
+        'n'..='y' => -((letter as i32 - 'n' as i32) + 1), // N=-1, O=-2, ..., Y=-12
+        'z' => 0,                                      // Z=+0
+        _ => return None,
+    };
+
+    // Calculate total hours: midnight (0) + tz_offset + additional_hours
+    // Midnight in timezone X converted to UTC
+    let total_hours = (0 - tz_offset + additional_hours).rem_euclid(24);
+
+    Some(total_hours)
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+
+    // Check for extra operands (multiple positional arguments)
+    if let Some(formats) = matches.get_many::<String>(OPT_FORMAT) {
+        let format_args: Vec<&String> = formats.collect();
+        if format_args.len() > 1 {
+            return Err(USimpleError::new(
+                1,
+                translate!("date-error-extra-operand", "operand" => format_args[1]),
+            ));
+        }
+    }
 
     let format = if let Some(form) = matches.get_one::<String>(OPT_FORMAT) {
         if !form.starts_with('+') {
@@ -205,15 +266,54 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Iterate over all dates - whether it's a single date or a file.
     let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
         DateSource::Human(ref input) => {
+            let input = input.trim();
+            // GNU compatibility (Empty string):
+            // An empty string (or whitespace-only) should be treated as midnight today.
+            let is_empty_or_whitespace = input.is_empty();
+
+            // GNU compatibility (Military timezone 'J'):
+            // 'J' is reserved for local time in military timezones.
+            // GNU date accepts it and treats it as midnight today (00:00:00).
+            let is_military_j = input.eq_ignore_ascii_case("j");
+
+            // GNU compatibility (Military timezone with optional hour offset):
+            // Single letter (a-z except j) optionally followed by 1-2 digits.
+            // Letter represents midnight in that military timezone (UTC offset).
+            // Digits represent additional hours to add.
+            // Examples: "m" -> noon UTC (12:00); "m9" -> 21:00 UTC; "a5" -> 04:00 UTC
+            let military_tz_with_offset = parse_military_timezone_with_offset(input);
+
             // GNU compatibility (Pure numbers in date strings):
             // - Manual: https://www.gnu.org/software/coreutils/manual/html_node/Pure-numbers-in-date-strings.html
-            // - Semantics: a pure decimal number denotes today’s time-of-day (HH or HHMM).
+            // - Semantics: a pure decimal number denotes today's time-of-day (HH or HHMM).
             //   Examples: "0"/"00" => 00:00 today; "7"/"07" => 07:00 today; "0700" => 07:00 today.
             // For all other forms, fall back to the general parser.
             let is_pure_digits =
                 !input.is_empty() && input.len() <= 4 && input.chars().all(|c| c.is_ascii_digit());
 
-            let date = if is_pure_digits {
+            let date = if is_empty_or_whitespace || is_military_j {
+                // Treat empty string or 'J' as midnight today (00:00:00) in local time
+                let date_part =
+                    strtime::format("%F", &now).unwrap_or_else(|_| String::from("1970-01-01"));
+                let offset = if settings.utc {
+                    String::from("+00:00")
+                } else {
+                    strtime::format("%:z", &now).unwrap_or_default()
+                };
+                let composed = if offset.is_empty() {
+                    format!("{date_part} 00:00")
+                } else {
+                    format!("{date_part} 00:00 {offset}")
+                };
+                parse_date(composed)
+            } else if let Some(total_hours) = military_tz_with_offset {
+                // Military timezone with optional hour offset
+                // Convert to UTC time: midnight + military_tz_offset + additional_hours
+                let date_part =
+                    strtime::format("%F", &now).unwrap_or_else(|_| String::from("1970-01-01"));
+                let composed = format!("{date_part} {total_hours:02}:00:00 +00:00");
+                parse_date(composed)
+            } else if is_pure_digits {
                 // Derive HH and MM from the input
                 let (hh_opt, mm_opt) = if input.len() <= 2 {
                     (input.parse::<u32>().ok(), Some(0u32))
@@ -259,23 +359,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if path.is_dir() {
                 return Err(USimpleError::new(
                     2,
-                    translate!("date-error-expected-file-got-directory", "path" => path.to_string_lossy()),
+                    translate!("date-error-expected-file-got-directory", "path" => path.quote()),
                 ));
             }
-            let file = File::open(path)
-                .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
+            let file =
+                File::open(path).map_err_context(|| path.as_os_str().maybe_quote().to_string())?;
             let lines = BufReader::new(file).lines();
             let iter = lines.map_while(Result::ok).map(parse_date);
             Box::new(iter)
         }
         DateSource::FileMtime(ref path) => {
             let metadata = std::fs::metadata(path)
-                .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
+                .map_err_context(|| path.as_os_str().maybe_quote().to_string())?;
             let mtime = metadata.modified()?;
             let ts = Timestamp::try_from(mtime).map_err(|e| {
                 USimpleError::new(
                     1,
-                    translate!("date-error-cannot-set-date", "path" => path.to_string_lossy(), "error" => e),
+                    translate!("date-error-cannot-set-date", "path" => path.quote(), "error" => e),
                 )
             })?;
             let date = ts.to_zoned(TimeZone::try_system().unwrap_or(TimeZone::UTC));
@@ -370,6 +470,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_RFC_EMAIL)
                 .alias(OPT_RFC_2822)
                 .alias(OPT_RFC_822)
+                .overrides_with(OPT_RFC_EMAIL)
                 .help(translate!("date-help-rfc-email"))
                 .action(ArgAction::SetTrue),
         )
@@ -400,6 +501,7 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(OPT_SET)
                 .value_name("STRING")
+                .allow_hyphen_values(true)
                 .help({
                     #[cfg(not(any(target_os = "macos", target_os = "redox")))]
                     {
@@ -419,11 +521,13 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_UNIVERSAL)
                 .short('u')
                 .long(OPT_UNIVERSAL)
-                .alias(OPT_UNIVERSAL_2)
+                .visible_alias(OPT_UNIVERSAL_2)
+                .alias("uct")
+                .overrides_with(OPT_UNIVERSAL)
                 .help(translate!("date-help-universal"))
                 .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(OPT_FORMAT))
+        .arg(Arg::new(OPT_FORMAT).num_args(0..).trailing_var_arg(true))
 }
 
 /// Return the appropriate format string for the given settings.
@@ -444,7 +548,7 @@ fn make_format_string(settings: &Settings) -> &str {
         },
         Format::Resolution => "%s.%N",
         Format::Custom(ref fmt) => fmt,
-        Format::Default => "%a %b %e %X %Z %Y",
+        Format::Default => locale::get_locale_default_format(),
     }
 }
 
@@ -459,8 +563,9 @@ fn make_format_string(settings: &Settings) -> &str {
 /// - MST: Mountain Standard Time (US) preferred over Malaysia Standard Time
 /// - PST: Pacific Standard Time (US) - widely used abbreviation
 /// - GMT: Alias for UTC (universal)
+/// - Australian timezones: AWST, ACST, AEST (cannot be dynamically discovered)
 ///
-/// All other timezones (AWST, JST, CET, etc.) are dynamically resolved from IANA database. // spell-checker:disable-line
+/// All other timezones (JST, CET, etc.) are dynamically resolved from IANA database. // spell-checker:disable-line
 static PREFERRED_TZ_MAPPINGS: &[(&str, &str)] = &[
     // Universal (no ambiguity, but commonly used)
     ("UTC", "UTC"),
@@ -475,7 +580,15 @@ static PREFERRED_TZ_MAPPINGS: &[(&str, &str)] = &[
     ("EST", "America/New_York"), // Ambiguous: US vs Australia
     ("EDT", "America/New_York"),
     // Other highly ambiguous cases
-    ("IST", "Asia/Kolkata"), // Ambiguous: India vs Israel vs Ireland // spell-checker:disable-line
+    /* spell-checker: disable */
+    ("IST", "Asia/Kolkata"), // Ambiguous: India vs Israel vs Ireland
+    // Australian timezones (cannot be discovered from IANA location names)
+    ("AWST", "Australia/Perth"),    // Australian Western Standard Time
+    ("ACST", "Australia/Adelaide"), // Australian Central Standard Time
+    ("ACDT", "Australia/Adelaide"), // Australian Central Daylight Time
+    ("AEST", "Australia/Sydney"),   // Australian Eastern Standard Time
+    ("AEDT", "Australia/Sydney"),   // Australian Eastern Daylight Time
+                                    /* spell-checker: enable */
 ];
 
 /// Lazy-loaded timezone abbreviation lookup map built from IANA database.
@@ -547,18 +660,15 @@ fn resolve_tz_abbreviation<S: AsRef<str>>(date_str: S) -> String {
                     // Try to parse the date with UTC first to get timestamp
                     let date_with_utc = format!("{date_part} +00:00");
                     if let Ok(parsed) = parse_datetime::parse_datetime(&date_with_utc) {
-                        // Create timestamp from parsed date
-                        if let Ok(ts) = Timestamp::new(
-                            parsed.timestamp(),
-                            parsed.timestamp_subsec_nanos() as i32,
-                        ) {
-                            // Get the offset for this specific timestamp in the target timezone
-                            let zoned = ts.to_zoned(tz);
-                            let offset_str = format!("{}", zoned.offset());
+                        // Get timestamp from parsed date (which is already a Zoned)
+                        let ts = parsed.timestamp();
 
-                            // Replace abbreviation with offset
-                            return format!("{date_part} {offset_str}");
-                        }
+                        // Get the offset for this specific timestamp in the target timezone
+                        let zoned = ts.to_zoned(tz);
+                        let offset_str = format!("{}", zoned.offset());
+
+                        // Replace abbreviation with offset
+                        return format!("{date_part} {offset_str}");
                     }
                 }
             }
@@ -571,7 +681,13 @@ fn resolve_tz_abbreviation<S: AsRef<str>>(date_str: S) -> String {
 
 /// Parse a `String` into a `DateTime`.
 /// If it fails, return a tuple of the `String` along with its `ParseError`.
-// TODO: Convert `parse_datetime` to jiff and remove wrapper from chrono to jiff structures.
+///
+/// **Update for parse_datetime 0.13:**
+/// - parse_datetime 0.11: returned `chrono::DateTime` → required conversion to `jiff::Zoned`
+/// - parse_datetime 0.13: returns `jiff::Zoned` directly → no conversion needed
+///
+/// This change was necessary to fix issue #8754 (parsing large second values like
+/// "12345.123456789 seconds ago" which failed in 0.11 but works in 0.13).
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
 ) -> Result<Zoned, (String, parse_datetime::ParseDateTimeError)> {
@@ -580,12 +696,10 @@ fn parse_date<S: AsRef<str> + Clone>(
 
     match parse_datetime::parse_datetime(&resolved) {
         Ok(date) => {
-            let timestamp =
-                Timestamp::new(date.timestamp(), date.timestamp_subsec_nanos() as i32).unwrap();
-            Ok(Zoned::new(
-                timestamp,
-                TimeZone::try_system().unwrap_or(TimeZone::UTC),
-            ))
+            // Convert to system timezone for display
+            // (parse_datetime 0.13 returns Zoned in the input's timezone)
+            let timestamp = date.timestamp();
+            Ok(timestamp.to_zoned(TimeZone::try_system().unwrap_or(TimeZone::UTC)))
         }
         Err(e) => Err((s.as_ref().into(), e)),
     }
@@ -597,25 +711,20 @@ fn get_clock_resolution() -> Timestamp {
 }
 
 #[cfg(all(unix, not(target_os = "redox")))]
+/// Returns the resolution of the system’s realtime clock.
+///
+/// # Panics
+///
+/// Panics if `clock_getres` fails. On a POSIX-compliant system this should not occur,
+/// as `CLOCK_REALTIME` is required to be supported.
+/// Failure would indicate a non-conforming or otherwise broken implementation.
 fn get_clock_resolution() -> Timestamp {
-    let mut timespec = timespec {
-        tv_sec: 0,
-        tv_nsec: 0,
-    };
-    unsafe {
-        // SAFETY: the timespec struct lives for the full duration of this function call.
-        //
-        // The clock_getres function can only fail if the passed clock_id is not
-        // a known clock. All compliant posix implementors must support
-        // CLOCK_REALTIME, therefore this function call cannot fail on any
-        // compliant posix implementation.
-        //
-        // See more here:
-        // https://pubs.opengroup.org/onlinepubs/9799919799/functions/clock_getres.html
-        clock_getres(CLOCK_REALTIME, &raw mut timespec);
-    }
+    use nix::time::{ClockId, clock_getres};
+
+    let timespec = clock_getres(ClockId::CLOCK_REALTIME).unwrap();
+
     #[allow(clippy::unnecessary_cast)] // Cast required on 32-bit platforms
-    Timestamp::constant(timespec.tv_sec as i64, timespec.tv_nsec as i32)
+    Timestamp::constant(timespec.tv_sec() as _, timespec.tv_nsec() as _)
 }
 
 #[cfg(all(unix, target_os = "redox"))]
@@ -663,20 +772,13 @@ fn set_system_datetime(_date: Zoned) -> UResult<()> {
 /// `<https://linux.die.net/man/3/clock_settime>`
 /// `<https://www.gnu.org/software/libc/manual/html_node/Time-Types.html>`
 fn set_system_datetime(date: Zoned) -> UResult<()> {
+    use nix::{sys::time::TimeSpec, time::ClockId};
+
     let ts = date.timestamp();
-    let timespec = timespec {
-        tv_sec: ts.as_second() as _,
-        tv_nsec: ts.subsec_nanosecond() as _,
-    };
+    let timespec = TimeSpec::new(ts.as_second() as _, ts.subsec_nanosecond() as _);
 
-    let result = unsafe { clock_settime(CLOCK_REALTIME, &raw const timespec) };
-
-    if result == 0 {
-        Ok(())
-    } else {
-        Err(std::io::Error::last_os_error()
-            .map_err_context(|| translate!("date-error-cannot-set-date")))
-    }
+    nix::time::clock_settime(ClockId::CLOCK_REALTIME, timespec)
+        .map_err_context(|| translate!("date-error-cannot-set-date"))
 }
 
 #[cfg(windows)]
@@ -705,5 +807,26 @@ fn set_system_datetime(date: Zoned) -> UResult<()> {
             .map_err_context(|| translate!("date-error-cannot-set-date")))
     } else {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_military_timezone_with_offset() {
+        // Valid cases: letter only, letter + digit, uppercase
+        assert_eq!(parse_military_timezone_with_offset("m"), Some(12)); // UTC+12 -> 12:00 UTC
+        assert_eq!(parse_military_timezone_with_offset("m9"), Some(21)); // 12 + 9 = 21
+        assert_eq!(parse_military_timezone_with_offset("a5"), Some(4)); // 23 + 5 = 28 % 24 = 4
+        assert_eq!(parse_military_timezone_with_offset("z"), Some(0)); // UTC+0 -> 00:00 UTC
+        assert_eq!(parse_military_timezone_with_offset("M9"), Some(21)); // Uppercase works
+
+        // Invalid cases: 'j' reserved, empty, too long, starts with digit
+        assert_eq!(parse_military_timezone_with_offset("j"), None); // Reserved for local time
+        assert_eq!(parse_military_timezone_with_offset(""), None); // Empty
+        assert_eq!(parse_military_timezone_with_offset("m999"), None); // Too long
+        assert_eq!(parse_military_timezone_with_offset("9m"), None); // Starts with digit
     }
 }

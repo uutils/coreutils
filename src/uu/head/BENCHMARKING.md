@@ -20,7 +20,7 @@ William Shakespeare*, which is in the public domain in the United States
 and most other parts of the world.
 
 ```shell
-wget -O shakespeare.txt https://www.gutenberg.org/files/100/100-0.txt
+curl -o shakespeare.txt https://www.gutenberg.org/files/100/100-0.txt
 ```
 
 This particular file has about 170,000 lines, each of which is no longer

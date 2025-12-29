@@ -374,7 +374,7 @@ fn cut_files(mut filenames: Vec<OsString>, mode: &Mode) {
             if path.is_dir() {
                 show_error!(
                     "{}: {}",
-                    filename.to_string_lossy().maybe_quote(),
+                    filename.maybe_quote(),
                     translate!("cut-error-is-directory")
                 );
                 set_exit_code(1);
@@ -383,7 +383,7 @@ fn cut_files(mut filenames: Vec<OsString>, mode: &Mode) {
 
             show_if_err!(
                 File::open(path)
-                    .map_err_context(|| filename.to_string_lossy().to_string())
+                    .map_err_context(|| filename.maybe_quote().to_string())
                     .and_then(|file| {
                         match &mode {
                             Mode::Bytes(ranges, opts) | Mode::Characters(ranges, opts) => {
@@ -464,6 +464,8 @@ mod options {
     pub const WHITESPACE_DELIMITED: &str = "whitespace-delimited";
     pub const COMPLEMENT: &str = "complement";
     pub const FILE: &str = "file";
+    // ignored option
+    pub const NOTHING: &str = "nothing";
 }
 
 #[uucore::main]
@@ -682,5 +684,11 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath)
                 .value_parser(clap::value_parser!(OsString)),
+        )
+        .arg(
+            Arg::new(options::NOTHING)
+                .short('n')
+                .help("(ignored)")
+                .action(ArgAction::SetTrue),
         )
 }

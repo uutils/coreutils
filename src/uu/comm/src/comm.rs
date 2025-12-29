@@ -8,8 +8,9 @@
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::{File, metadata};
-use std::io::{self, BufRead, BufReader, Read, Stdin, stdin};
+use std::io::{self, BufRead, BufReader, Read, StdinLock, stdin};
 use std::path::Path;
+use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::fs::paths_refer_to_same_file;
@@ -55,8 +56,18 @@ struct OrderChecker {
 }
 
 enum Input {
-    Stdin(Stdin),
+    Stdin(StdinLock<'static>),
     FileIn(BufReader<File>),
+}
+
+impl Input {
+    fn stdin() -> Self {
+        Self::Stdin(stdin().lock())
+    }
+
+    fn from_file(f: File) -> Self {
+        Self::FileIn(BufReader::new(f))
+    }
 }
 
 struct LineReader {
@@ -73,7 +84,7 @@ impl LineReader {
         let line_ending = self.line_ending.into();
 
         let result = match &mut self.input {
-            Input::Stdin(r) => r.lock().read_until(line_ending, buf),
+            Input::Stdin(r) => r.read_until(line_ending, buf),
             Input::FileIn(r) => r.read_until(line_ending, buf),
         };
 
@@ -283,16 +294,13 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
 
 fn open_file(name: &OsString, line_ending: LineEnding) -> io::Result<LineReader> {
     if name == "-" {
-        Ok(LineReader::new(Input::Stdin(stdin()), line_ending))
+        Ok(LineReader::new(Input::stdin(), line_ending))
     } else {
         if metadata(name)?.is_dir() {
             return Err(io::Error::other(translate!("comm-error-is-directory")));
         }
         let f = File::open(name)?;
-        Ok(LineReader::new(
-            Input::FileIn(BufReader::new(f)),
-            line_ending,
-        ))
+        Ok(LineReader::new(Input::from_file(f), line_ending))
     }
 }
 
@@ -303,9 +311,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let filename1 = matches.get_one::<OsString>(options::FILE_1).unwrap();
     let filename2 = matches.get_one::<OsString>(options::FILE_2).unwrap();
     let mut f1 = open_file(filename1, line_ending)
-        .map_err_context(|| filename1.to_string_lossy().to_string())?;
+        .map_err_context(|| filename1.maybe_quote().to_string())?;
     let mut f2 = open_file(filename2, line_ending)
-        .map_err_context(|| filename2.to_string_lossy().to_string())?;
+        .map_err_context(|| filename2.maybe_quote().to_string())?;
 
     // Due to default_value(), there must be at least one value here, thus unwrap() must not panic.
     let all_delimiters = matches
