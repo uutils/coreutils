@@ -296,7 +296,7 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
     } else {
         let path_ref = Path::new(path);
-        file_buf = File::open(path_ref).map_err_context(|| path.to_string_lossy().to_string())?;
+        file_buf = File::open(path_ref).map_err_context(|| path.maybe_quote().to_string())?;
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
 }
@@ -357,6 +357,15 @@ fn expand_line(
     options: &Options,
 ) -> std::io::Result<()> {
     use self::CharType::{Backspace, Other, Tab};
+
+    // Fast path: if there are no tabs, backspaces, and (in UTF-8 mode or no carriage returns),
+    // we can write the buffer directly without character-by-character processing
+    if !buf.contains(&b'\t') && !buf.contains(&b'\x08') && (options.uflag || !buf.contains(&b'\r'))
+    {
+        output.write_all(buf)?;
+        buf.truncate(0);
+        return Ok(());
+    }
 
     let mut col = 0;
     let mut byte = 0;
@@ -435,7 +444,6 @@ fn expand_line(
         byte += nbytes; // advance the pointer
     }
 
-    output.flush()?;
     buf.truncate(0); // clear the buffer
 
     Ok(())
@@ -450,7 +458,7 @@ fn expand(options: &Options) -> UResult<()> {
         if Path::new(file).is_dir() {
             show_error!(
                 "{}",
-                translate!("expand-error-is-directory", "file" => file.to_string_lossy())
+                translate!("expand-error-is-directory", "file" => file.maybe_quote())
             );
             set_exit_code(1);
             continue;
@@ -471,6 +479,10 @@ fn expand(options: &Options) -> UResult<()> {
             }
         }
     }
+    // Flush once at the end
+    output
+        .flush()
+        .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
     Ok(())
 }
 

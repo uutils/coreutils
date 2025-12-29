@@ -11,8 +11,6 @@
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod
 
-#![cfg(target_os = "linux")]
-
 #[cfg(test)]
 use std::os::unix::ffi::OsStringExt;
 
@@ -20,12 +18,14 @@ use std::ffi::{CString, OsStr, OsString};
 use std::io;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use nix::dir::Dir;
 use nix::fcntl::{OFlag, openat};
+use nix::libc;
 use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat};
 use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
+use os_display::Quotable;
 
 use crate::translate;
 
@@ -35,30 +35,30 @@ pub enum SafeTraversalError {
     #[error("{}", translate!("safe-traversal-error-path-contains-null"))]
     PathContainsNull,
 
-    #[error("{}", translate!("safe-traversal-error-open-failed", "path" => path, "source" => source))]
+    #[error("{}", translate!("safe-traversal-error-open-failed", "path" => path.quote(), "source" => source))]
     OpenFailed {
-        path: String,
+        path: PathBuf,
         #[source]
         source: io::Error,
     },
 
-    #[error("{}", translate!("safe-traversal-error-stat-failed", "path" => path, "source" => source))]
+    #[error("{}", translate!("safe-traversal-error-stat-failed", "path" => path.quote(), "source" => source))]
     StatFailed {
-        path: String,
+        path: PathBuf,
         #[source]
         source: io::Error,
     },
 
-    #[error("{}", translate!("safe-traversal-error-read-dir-failed", "path" => path, "source" => source))]
+    #[error("{}", translate!("safe-traversal-error-read-dir-failed", "path" => path.quote(), "source" => source))]
     ReadDirFailed {
-        path: String,
+        path: PathBuf,
         #[source]
         source: io::Error,
     },
 
-    #[error("{}", translate!("safe-traversal-error-unlink-failed", "path" => path, "source" => source))]
+    #[error("{}", translate!("safe-traversal-error-unlink-failed", "path" => path.quote(), "source" => source))]
     UnlinkFailed {
-        path: String,
+        path: PathBuf,
         #[source]
         source: io::Error,
     },
@@ -67,7 +67,7 @@ pub enum SafeTraversalError {
 impl From<SafeTraversalError> for io::Error {
     fn from(err: SafeTraversalError) -> Self {
         match err {
-            SafeTraversalError::PathContainsNull => io::Error::new(
+            SafeTraversalError::PathContainsNull => Self::new(
                 io::ErrorKind::InvalidInput,
                 translate!("safe-traversal-error-path-contains-null"),
             ),
@@ -113,12 +113,12 @@ impl DirFd {
         let flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
         let fd = nix::fcntl::open(path, flags, Mode::empty()).map_err(|e| {
             SafeTraversalError::OpenFailed {
-                path: path.to_string_lossy().into_owned(),
+                path: path.into(),
                 source: io::Error::from_raw_os_error(e as i32),
             }
         })?;
 
-        Ok(DirFd { fd })
+        Ok(Self { fd })
     }
 
     /// Open a subdirectory relative to this directory
@@ -129,12 +129,12 @@ impl DirFd {
         let flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
         let fd = openat(&self.fd, name_cstr.as_c_str(), flags, Mode::empty()).map_err(|e| {
             SafeTraversalError::OpenFailed {
-                path: name.to_string_lossy().into_owned(),
+                path: name.into(),
                 source: io::Error::from_raw_os_error(e as i32),
             }
         })?;
 
-        Ok(DirFd { fd })
+        Ok(Self { fd })
     }
 
     /// Get raw stat data for a file relative to this directory
@@ -150,7 +150,7 @@ impl DirFd {
 
         let stat = fstatat(&self.fd, name_cstr.as_c_str(), flags).map_err(|e| {
             SafeTraversalError::StatFailed {
-                path: name.to_string_lossy().into_owned(),
+                path: name.into(),
                 source: io::Error::from_raw_os_error(e as i32),
             }
         })?;
@@ -171,7 +171,7 @@ impl DirFd {
     /// Get raw stat data for this directory
     pub fn fstat(&self) -> io::Result<FileStat> {
         let stat = nix::sys::stat::fstat(&self.fd).map_err(|e| SafeTraversalError::StatFailed {
-            path: translate!("safe-traversal-current-directory"),
+            path: translate!("safe-traversal-current-directory").into(),
             source: io::Error::from_raw_os_error(e as i32),
         })?;
 
@@ -182,7 +182,7 @@ impl DirFd {
     pub fn read_dir(&self) -> io::Result<Vec<OsString>> {
         read_dir_entries(&self.fd).map_err(|e| {
             SafeTraversalError::ReadDirFailed {
-                path: translate!("safe-traversal-directory"),
+                path: translate!("safe-traversal-directory").into(),
                 source: e,
             }
             .into()
@@ -201,7 +201,7 @@ impl DirFd {
 
         unlinkat(&self.fd, name_cstr.as_c_str(), flags).map_err(|e| {
             SafeTraversalError::UnlinkFailed {
-                path: name.to_string_lossy().into_owned(),
+                path: name.into(),
                 source: io::Error::from_raw_os_error(e as i32),
             }
         })?;
@@ -285,7 +285,7 @@ impl DirFd {
         }
         // SAFETY: We've verified fd >= 0, and the caller is transferring ownership
         let owned_fd = unsafe { OwnedFd::from_raw_fd(fd) };
-        Ok(DirFd { fd: owned_fd })
+        Ok(Self { fd: owned_fd })
     }
 }
 
@@ -346,23 +346,23 @@ pub enum FileType {
 impl FileType {
     pub fn from_mode(mode: libc::mode_t) -> Self {
         match mode & libc::S_IFMT {
-            libc::S_IFDIR => FileType::Directory,
-            libc::S_IFREG => FileType::RegularFile,
-            libc::S_IFLNK => FileType::Symlink,
-            _ => FileType::Other,
+            libc::S_IFDIR => Self::Directory,
+            libc::S_IFREG => Self::RegularFile,
+            libc::S_IFLNK => Self::Symlink,
+            _ => Self::Other,
         }
     }
 
     pub fn is_directory(&self) -> bool {
-        matches!(self, FileType::Directory)
+        matches!(self, Self::Directory)
     }
 
     pub fn is_regular_file(&self) -> bool {
-        matches!(self, FileType::RegularFile)
+        matches!(self, Self::RegularFile)
     }
 
     pub fn is_symlink(&self) -> bool {
-        matches!(self, FileType::Symlink)
+        matches!(self, Self::Symlink)
     }
 }
 

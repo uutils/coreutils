@@ -8,6 +8,19 @@ advapi32-sys
 aho-corasick
 backtrace
 blake2b_simd
+
+# * uutils project
+uutils
+coreutils
+uucore
+uutests
+ucmd
+uumain
+rlimit
+mkfifo
+urandom
+uchild
+ello
 bstr
 bytecount
 byteorder
@@ -128,6 +141,7 @@ ENOSYS
 ENOTEMPTY
 EOPNOTSUPP
 EPERM
+EPIPE
 EROFS
 
 # * vars/fcntl
@@ -349,6 +363,22 @@ getcwd
 # * other
 weblate
 algs
+
+# * stty terminal flags
+brkint
+cstopb
+decctlq
+echoctl
+echoe
+echoke
+ignbrk
+ignpar
+icrnl
+isig
+istrip
+litout
+opost
+parodd
 
 # translation tests
 CLICOLOR

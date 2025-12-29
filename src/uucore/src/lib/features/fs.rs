@@ -123,6 +123,7 @@ impl FileInformation {
             not(target_os = "openbsd"),
             not(target_os = "illumos"),
             not(target_os = "solaris"),
+            not(target_os = "cygwin"),
             not(target_arch = "aarch64"),
             not(target_arch = "riscv64"),
             not(target_arch = "loongarch64"),
@@ -140,6 +141,7 @@ impl FileInformation {
                 target_os = "openbsd",
                 target_os = "illumos",
                 target_os = "solaris",
+                target_os = "cygwin",
                 target_arch = "aarch64",
                 target_arch = "riscv64",
                 target_arch = "loongarch64",
@@ -696,7 +698,7 @@ pub fn path_ends_with_terminator(path: &Path) -> bool {
     path.as_os_str()
         .as_bytes()
         .last()
-        .is_some_and(|&byte| byte == b'/' || byte == b'\\')
+        .is_some_and(|&byte| byte == b'/')
 }
 
 #[cfg(windows)]
@@ -1053,6 +1055,7 @@ mod tests {
         assert!(path_ends_with_terminator(Path::new("/some/path/")));
 
         // Path ends with a backslash
+        #[cfg(windows)]
         assert!(path_ends_with_terminator(Path::new("C:\\some\\path\\")));
 
         // Path does not end with a terminator
@@ -1064,6 +1067,7 @@ mod tests {
 
         // Root path
         assert!(path_ends_with_terminator(Path::new("/")));
+        #[cfg(windows)]
         assert!(path_ends_with_terminator(Path::new("C:\\")));
     }
 

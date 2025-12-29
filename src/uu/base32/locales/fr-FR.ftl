@@ -37,6 +37,7 @@ basenc-help-base2msbf = chaîne de bits avec le bit de poids fort (msb) en premi
 basenc-help-z85 = encodage de type ascii85 ;
   lors de l'encodage, la longueur d'entrée doit être un multiple de 4 ;
   lors du décodage, la longueur d'entrée doit être un multiple de 5
+basenc-help-base58 = encodage base58 visuellement non ambigu
 
 # Messages d'erreur
 basenc-error-missing-encoding-type = type d'encodage manquant

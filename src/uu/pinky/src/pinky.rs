@@ -135,3 +135,16 @@ impl Capitalize for str {
             })
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_capitalize() {
+        assert_eq!("Zbnmasd", "zbnmasd".capitalize()); // spell-checker:disable-line
+        assert_eq!("Abnmasd", "Abnmasd".capitalize()); // spell-checker:disable-line
+        assert_eq!("1masd", "1masd".capitalize()); // spell-checker:disable-line
+        assert_eq!("", "".capitalize());
+    }
+}

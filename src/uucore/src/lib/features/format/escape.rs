@@ -35,8 +35,8 @@ enum Base {
 impl Base {
     fn as_base(&self) -> u8 {
         match self {
-            Base::Oct(_) => 8,
-            Base::Hex => 16,
+            Self::Oct(_) => 8,
+            Self::Hex => 16,
         }
     }
 

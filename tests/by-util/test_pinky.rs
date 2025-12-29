@@ -3,16 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use pinky::Capitalize;
 #[cfg(not(target_os = "openbsd"))]
 use uucore::entries::{Locate, Passwd};
 use uutests::new_ucmd;
-use uutests::unwrap_or_return;
-#[cfg(target_os = "openbsd")]
-use uutests::util::TestScenario;
 #[cfg(not(target_os = "openbsd"))]
 use uutests::util::{TestScenario, expected_result};
-use uutests::util_name;
+#[cfg(not(target_os = "openbsd"))]
+use uutests::{unwrap_or_return, util_name};
 
 #[test]
 fn test_invalid_arg() {
@@ -20,16 +17,10 @@ fn test_invalid_arg() {
 }
 
 #[test]
-fn test_capitalize() {
-    assert_eq!("Zbnmasd", "zbnmasd".capitalize()); // spell-checker:disable-line
-    assert_eq!("Abnmasd", "Abnmasd".capitalize()); // spell-checker:disable-line
-    assert_eq!("1masd", "1masd".capitalize()); // spell-checker:disable-line
-    assert_eq!("", "".capitalize());
-}
-
-#[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_long_format() {
+    use pinky::Capitalize;
+
     let login = "root";
     let pw: Passwd = Passwd::locate(login).unwrap();
     let user_info = pw.user_info.unwrap_or_default();

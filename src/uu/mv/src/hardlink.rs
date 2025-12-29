@@ -13,6 +13,8 @@ use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use uucore::display::Quotable;
+
 /// Tracks hardlinks during cross-partition moves to preserve them
 #[derive(Debug, Default)]
 pub struct HardlinkTracker {
@@ -53,20 +55,20 @@ pub enum HardlinkError {
 impl std::fmt::Display for HardlinkError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            HardlinkError::Io(e) => write!(f, "I/O error during hardlink operation: {e}"),
-            HardlinkError::Scan(msg) => {
+            Self::Io(e) => write!(f, "I/O error during hardlink operation: {e}"),
+            Self::Scan(msg) => {
                 write!(f, "Failed to scan files for hardlinks: {msg}")
             }
-            HardlinkError::Preservation { source, target } => {
+            Self::Preservation { source, target } => {
                 write!(
                     f,
                     "Failed to preserve hardlink: {} -> {}",
-                    source.display(),
-                    target.display()
+                    source.quote(),
+                    target.quote()
                 )
             }
-            HardlinkError::Metadata { path, error } => {
-                write!(f, "Metadata access error for {}: {}", path.display(), error)
+            Self::Metadata { path, error } => {
+                write!(f, "Metadata access error for {}: {}", path.quote(), error)
             }
         }
     }
@@ -75,8 +77,8 @@ impl std::fmt::Display for HardlinkError {
 impl std::error::Error for HardlinkError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            HardlinkError::Io(e) => Some(e),
-            HardlinkError::Metadata { error, .. } => Some(error),
+            Self::Io(e) => Some(e),
+            Self::Metadata { error, .. } => Some(error),
             _ => None,
         }
     }
@@ -84,7 +86,7 @@ impl std::error::Error for HardlinkError {
 
 impl From<io::Error> for HardlinkError {
     fn from(error: io::Error) -> Self {
-        HardlinkError::Io(error)
+        Self::Io(error)
     }
 }
 
@@ -92,16 +94,16 @@ impl From<HardlinkError> for io::Error {
     fn from(error: HardlinkError) -> Self {
         match error {
             HardlinkError::Io(e) => e,
-            HardlinkError::Scan(msg) => io::Error::other(msg),
-            HardlinkError::Preservation { source, target } => io::Error::other(format!(
+            HardlinkError::Scan(msg) => Self::other(msg),
+            HardlinkError::Preservation { source, target } => Self::other(format!(
                 "Failed to preserve hardlink: {} -> {}",
-                source.display(),
-                target.display()
+                source.quote(),
+                target.quote()
             )),
 
-            HardlinkError::Metadata { path, error } => io::Error::other(format!(
+            HardlinkError::Metadata { path, error } => Self::other(format!(
                 "Metadata access error for {}: {}",
-                path.display(),
+                path.quote(),
                 error
             )),
         }
@@ -128,11 +130,7 @@ impl HardlinkTracker {
             Err(e) => {
                 // Gracefully handle metadata errors by logging and continuing without hardlink tracking
                 if options.verbose {
-                    eprintln!(
-                        "warning: cannot get metadata for {}: {}",
-                        source.display(),
-                        e
-                    );
+                    eprintln!("warning: cannot get metadata for {}: {}", source.quote(), e);
                 }
                 return Ok(None);
             }
@@ -152,8 +150,8 @@ impl HardlinkTracker {
                 if options.verbose {
                     eprintln!(
                         "preserving hardlink {} -> {} (hardlinked)",
-                        source.display(),
-                        existing_path.display()
+                        source.quote(),
+                        existing_path.quote()
                     );
                 }
                 return Ok(Some(existing_path.clone()));
@@ -189,7 +187,7 @@ impl HardlinkGroupScanner {
             if let Err(e) = self.scan_single_path(file) {
                 if options.verbose {
                     // Only show warnings for verbose mode
-                    eprintln!("warning: failed to scan {}: {}", file.display(), e);
+                    eprintln!("warning: failed to scan {}: {}", file.quote(), e);
                 }
                 // For non-verbose mode, silently continue for missing files
                 // This provides graceful degradation - we'll lose hardlink info for this file

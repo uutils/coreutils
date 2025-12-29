@@ -5,9 +5,9 @@
 
 use divan::{Bencher, black_box};
 use uu_tsort::uumain;
-use uucore::benchmark::{create_test_file, run_util_function};
+use uucore::benchmark::{run_util_function, setup_test_file};
 
-/// Generate topological sort test data with different characteristics
+/// Generate topological sort test data - linear chain
 fn generate_linear_chain(num_nodes: usize) -> Vec<u8> {
     let mut data = Vec::new();
 
@@ -18,7 +18,7 @@ fn generate_linear_chain(num_nodes: usize) -> Vec<u8> {
     data
 }
 
-/// Generate a DAG with more complex dependencies
+/// Generate a DAG with tree-like structure
 fn generate_tree_dag(depth: usize, branching_factor: usize) -> Vec<u8> {
     let mut data = Vec::new();
     let mut node_id = 0;
@@ -116,64 +116,8 @@ fn generate_wide_dag(num_nodes: usize) -> Vec<u8> {
     data
 }
 
-/// Benchmark linear chain graphs of different sizes
-/// This tests the performance improvements mentioned in PR #8694
-#[divan::bench(args = [1_000, 10_000, 100_000, 1_000_000])]
-fn tsort_linear_chain(bencher: Bencher, num_nodes: usize) {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let data = generate_linear_chain(num_nodes);
-    let file_path = create_test_file(&data, temp_dir.path());
-    let file_path_str = file_path.to_str().unwrap();
-
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[file_path_str]));
-    });
-}
-
-/// Benchmark tree-like DAG structures
-#[divan::bench(args = [(4, 3), (5, 3), (6, 2), (7, 2)])]
-fn tsort_tree_dag(bencher: Bencher, (depth, branching): (usize, usize)) {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let data = generate_tree_dag(depth, branching);
-    let file_path = create_test_file(&data, temp_dir.path());
-    let file_path_str = file_path.to_str().unwrap();
-
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[file_path_str]));
-    });
-}
-
-/// Benchmark complex DAG with cross-dependencies
-#[divan::bench(args = [1_000, 5_000, 10_000, 50_000])]
-fn tsort_complex_dag(bencher: Bencher, num_nodes: usize) {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let data = generate_complex_dag(num_nodes);
-    let file_path = create_test_file(&data, temp_dir.path());
-    let file_path_str = file_path.to_str().unwrap();
-
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[file_path_str]));
-    });
-}
-
-/// Benchmark wide DAG with many parallel chains
-/// This should stress the hashmap optimizations from PR #8694
-#[divan::bench(args = [10_000, 50_000, 100_000])]
-fn tsort_wide_dag(bencher: Bencher, num_nodes: usize) {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let data = generate_wide_dag(num_nodes);
-    let file_path = create_test_file(&data, temp_dir.path());
-    let file_path_str = file_path.to_str().unwrap();
-
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[file_path_str]));
-    });
-}
-
-/// Benchmark input parsing vs computation by using files with different edge densities
-#[divan::bench(args = [10_000, 50_000])]
-fn tsort_input_parsing_heavy(bencher: Bencher, num_edges: usize) {
-    let temp_dir = tempfile::tempdir().unwrap();
+/// Generate DAG data for input parsing stress tests
+fn generate_input_parsing_heavy(num_edges: usize) -> Vec<u8> {
     // Create a scenario with many edges but relatively few unique nodes
     // This stresses the input parsing and graph construction optimizations
     let num_unique_nodes = (num_edges as f64).sqrt() as usize;
@@ -187,7 +131,64 @@ fn tsort_input_parsing_heavy(bencher: Bencher, num_edges: usize) {
         }
     }
 
-    let file_path = create_test_file(&data, temp_dir.path());
+    data
+}
+
+/// Benchmark linear chain graphs of different sizes
+/// This tests the performance improvements mentioned in PR #8694
+#[divan::bench(args = [1_000_000])]
+fn tsort_linear_chain(bencher: Bencher, num_nodes: usize) {
+    let data = generate_linear_chain(num_nodes);
+    let file_path = setup_test_file(&data);
+    let file_path_str = file_path.to_str().unwrap();
+
+    bencher.bench(|| {
+        black_box(run_util_function(uumain, &[file_path_str]));
+    });
+}
+
+/// Benchmark tree-like DAG structures
+#[divan::bench(args = [(10, 3)])]
+fn tsort_tree_dag(bencher: Bencher, (depth, branching): (usize, usize)) {
+    let data = generate_tree_dag(depth, branching);
+    let file_path = setup_test_file(&data);
+    let file_path_str = file_path.to_str().unwrap();
+
+    bencher.bench(|| {
+        black_box(run_util_function(uumain, &[file_path_str]));
+    });
+}
+
+/// Benchmark complex DAG with cross-dependencies
+#[divan::bench(args = [50_000])]
+fn tsort_complex_dag(bencher: Bencher, num_nodes: usize) {
+    let data = generate_complex_dag(num_nodes);
+    let file_path = setup_test_file(&data);
+    let file_path_str = file_path.to_str().unwrap();
+
+    bencher.bench(|| {
+        black_box(run_util_function(uumain, &[file_path_str]));
+    });
+}
+
+/// Benchmark wide DAG with many parallel chains
+/// This should stress the hashmap optimizations from PR #8694
+#[divan::bench(args = [100_000])]
+fn tsort_wide_dag(bencher: Bencher, num_nodes: usize) {
+    let data = generate_wide_dag(num_nodes);
+    let file_path = setup_test_file(&data);
+    let file_path_str = file_path.to_str().unwrap();
+
+    bencher.bench(|| {
+        black_box(run_util_function(uumain, &[file_path_str]));
+    });
+}
+
+/// Benchmark input parsing vs computation by using files with different edge densities
+#[divan::bench(args = [5_000])]
+fn tsort_input_parsing_heavy(bencher: Bencher, num_edges: usize) {
+    let data = generate_input_parsing_heavy(num_edges);
+    let file_path = setup_test_file(&data);
     let file_path_str = file_path.to_str().unwrap();
 
     bencher.bench(|| {

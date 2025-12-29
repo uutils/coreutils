@@ -163,10 +163,7 @@ impl Options {
             block_size: read_block_size(matches).map_err(|e| match e {
                 ParseSizeError::InvalidSuffix(s) => OptionsError::InvalidSuffix(s),
                 ParseSizeError::SizeTooBig(_) => OptionsError::BlockSizeTooLarge(
-                    matches
-                        .get_one::<String>(OPT_BLOCKSIZE)
-                        .unwrap()
-                        .to_string(),
+                    matches.get_one::<String>(OPT_BLOCKSIZE).unwrap().to_owned(),
                 ),
                 ParseSizeError::ParseFailure(s) => OptionsError::InvalidBlockSize(s),
                 ParseSizeError::PhysicalMem(s) => OptionsError::InvalidBlockSize(s),
@@ -306,13 +303,24 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
     }
 
     let mut mounts = vec![];
-    for mi in read_fs_list()? {
+    for mut mi in read_fs_list()? {
         // TODO The running time of the `is_best()` function is linear
         // in the length of `result`. That makes the running time of
         // this loop quadratic in the length of `vmi`. This could be
         // improved by a more efficient implementation of `is_best()`,
         // but `vmi` is probably not very long in practice.
         if is_included(&mi, opt) && is_best(&mounts, &mi) {
+            let dev_path: &Path = Path::new(&mi.dev_name);
+            if dev_path.is_symlink() {
+                if let Ok(canonicalized_symlink) = uucore::fs::canonicalize(
+                    dev_path,
+                    uucore::fs::MissingHandling::Existing,
+                    uucore::fs::ResolveMode::Logical,
+                ) {
+                    mi.dev_name = canonicalized_symlink.to_string_lossy().to_string();
+                }
+            }
+
             mounts.push(mi);
         }
     }
@@ -362,7 +370,7 @@ where
             Err(FsError::InvalidPath) => {
                 show!(USimpleError::new(
                     1,
-                    translate!("df-error-no-such-file-or-directory", "path" => path.as_ref().display())
+                    translate!("df-error-no-such-file-or-directory", "path" => path.as_ref().maybe_quote())
                 ));
             }
             Err(FsError::MountMissing) => {

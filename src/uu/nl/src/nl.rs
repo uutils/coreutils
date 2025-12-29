@@ -6,8 +6,9 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, stdin};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::path::Path;
+use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
 use uucore::{format_usage, show_error, translate};
 
@@ -221,12 +222,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if path.is_dir() {
                 show_error!(
                     "{}",
-                    translate!("nl-error-is-directory", "path" => path.display())
+                    translate!("nl-error-is-directory", "path" => path.maybe_quote())
                 );
                 set_exit_code(1);
             } else {
-                let reader =
-                    File::open(path).map_err_context(|| file.to_string_lossy().to_string())?;
+                let reader = File::open(path).map_err_context(|| file.maybe_quote().to_string())?;
                 let mut buffer = BufReader::new(reader);
                 nl(&mut buffer, &mut stats, &settings)?;
             }
@@ -245,6 +245,7 @@ pub fn uu_app() -> Command {
         .after_help(translate!("nl-after-help"))
         .infer_long_args(true)
         .disable_help_flag(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
@@ -344,8 +345,16 @@ pub fn uu_app() -> Command {
         )
 }
 
+/// Helper to write: prefix bytes + line bytes + newline
+fn write_line(writer: &mut impl Write, prefix: &[u8], line: &[u8]) -> std::io::Result<()> {
+    writer.write_all(prefix)?;
+    writer.write_all(line)?;
+    writeln!(writer)
+}
+
 /// `nl` implements the main functionality for an individual buffer.
 fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings) -> UResult<()> {
+    let mut writer = BufWriter::new(stdout());
     let mut current_numbering_style = &settings.body_numbering;
     let mut line = Vec::new();
 
@@ -382,7 +391,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
             if settings.renumber {
                 stats.line_number = Some(settings.starting_line_number);
             }
-            println!();
+            writeln!(writer).map_err_context(|| translate!("nl-error-could-not-write"))?;
         } else {
             let is_line_numbered = match current_numbering_style {
                 // consider $join_blank_lines consecutive empty lines to be one logical line
@@ -407,25 +416,24 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                         translate!("nl-error-line-number-overflow"),
                     ));
                 };
-                println!(
-                    "{}{}{}",
-                    settings
-                        .number_format
-                        .format(line_number, settings.number_width),
-                    settings.number_separator.to_string_lossy(),
-                    String::from_utf8_lossy(&line),
-                );
-                // update line number for the potential next line
-                match line_number.checked_add(settings.line_increment) {
-                    Some(new_line_number) => stats.line_number = Some(new_line_number),
-                    None => stats.line_number = None, // overflow
-                }
+                let mut prefix = settings
+                    .number_format
+                    .format(line_number, settings.number_width)
+                    .into_bytes();
+                prefix.extend_from_slice(settings.number_separator.as_encoded_bytes());
+                write_line(&mut writer, &prefix, &line)
+                    .map_err_context(|| translate!("nl-error-could-not-write"))?;
+                stats.line_number = line_number.checked_add(settings.line_increment);
             } else {
-                let spaces = " ".repeat(settings.number_width + 1);
-                println!("{spaces}{}", String::from_utf8_lossy(&line));
+                let prefix = " ".repeat(settings.number_width + 1);
+                write_line(&mut writer, prefix.as_bytes(), &line)
+                    .map_err_context(|| translate!("nl-error-could-not-write"))?;
             }
         }
     }
+    writer
+        .flush()
+        .map_err_context(|| translate!("nl-error-could-not-write"))?;
     Ok(())
 }
 

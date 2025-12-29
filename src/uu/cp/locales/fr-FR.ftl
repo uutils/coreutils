@@ -108,6 +108,7 @@ cp-warning-source-specified-more-than-once = { $file_type } source { $source } s
 # Messages verbeux et de débogage
 cp-verbose-copied = { $source } -> { $dest }
 cp-debug-skipped = { $path } ignoré
+cp-verbose-removed = removed { $path }
 cp-verbose-created-directory = { $source } -> { $dest }
 cp-debug-copy-offload = copy offload : { $offload }, reflink : { $reflink }, sparse detection : { $sparse }
 

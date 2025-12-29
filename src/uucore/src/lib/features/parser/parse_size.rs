@@ -8,16 +8,17 @@
 
 use std::error::Error;
 use std::fmt;
-#[cfg(target_os = "linux")]
-use std::io::BufRead;
 use std::num::{IntErrorKind, ParseIntError};
 
 use crate::display::Quotable;
+#[cfg(target_os = "linux")]
+use procfs::{Current, Meminfo};
 
 /// Error arising from trying to compute system memory.
 enum SystemError {
     IOError,
     ParseError,
+    #[cfg(not(target_os = "linux"))]
     NotFound,
 }
 
@@ -43,25 +44,37 @@ impl From<ParseIntError> for SystemError {
 /// entry in the file.
 #[cfg(target_os = "linux")]
 fn total_physical_memory() -> Result<u128, SystemError> {
-    // On Linux, the `/proc/meminfo` file has a table with information
-    // about memory usage. For example,
-    //
-    //     MemTotal:        7811500 kB
-    //     MemFree:         1487876 kB
-    //     MemAvailable:    3857232 kB
-    //     ...
-    //
-    // We just need to extract the number of `MemTotal`
-    let table = std::fs::read("/proc/meminfo")?;
-    for line in table.lines() {
-        let line = line?;
-        if line.starts_with("MemTotal:") && line.ends_with("kB") {
-            let num_kilobytes: u128 = line[9..line.len() - 2].trim().parse()?;
-            let num_bytes = 1024 * num_kilobytes;
-            return Ok(num_bytes);
+    let info = Meminfo::current().map_err(|_| SystemError::IOError)?;
+    Ok((info.mem_total as u128).saturating_mul(1024))
+}
+
+/// Return the number of bytes of memory that appear to be currently available.
+#[cfg(target_os = "linux")]
+pub fn available_memory_bytes() -> Option<u128> {
+    let info = Meminfo::current().ok()?;
+
+    if let Some(available_kib) = info.mem_available {
+        let available_bytes = (available_kib as u128).saturating_mul(1024);
+        if available_bytes > 0 {
+            return Some(available_bytes);
         }
     }
-    Err(SystemError::NotFound)
+
+    let fallback_kib = (info.mem_free as u128)
+        .saturating_add(info.buffers as u128)
+        .saturating_add(info.cached as u128);
+
+    if fallback_kib > 0 {
+        Some(fallback_kib.saturating_mul(1024))
+    } else {
+        total_physical_memory().ok()
+    }
+}
+
+/// Return `None` when the platform does not expose Linux-like `/proc/meminfo`.
+#[cfg(not(target_os = "linux"))]
+pub fn available_memory_bytes() -> Option<u128> {
+    None
 }
 
 /// Get the total number of bytes of physical memory.
@@ -93,6 +106,7 @@ enum NumberSystem {
     Decimal,
     Octal,
     Hexadecimal,
+    Binary,
 }
 
 impl<'parser> Parser<'parser> {
@@ -121,10 +135,11 @@ impl<'parser> Parser<'parser> {
     }
     /// Parse a size string into a number of bytes.
     ///
-    /// A size string comprises an integer and an optional unit. The unit
-    /// may be K, M, G, T, P, E, Z, Y, R or Q (powers of 1024), or KB, MB,
-    /// etc. (powers of 1000), or b which is 512.
-    /// Binary prefixes can be used, too: KiB=K, MiB=M, and so on.
+    /// A size string comprises an integer and an optional unit. The integer
+    /// may be in decimal, octal (0 prefix), hexadecimal (0x prefix), or
+    /// binary (0b prefix) notation. The unit may be K, M, G, T, P, E, Z, Y,
+    /// R or Q (powers of 1024), or KB, MB, etc. (powers of 1000), or b which
+    /// is 512. Binary prefixes can be used, too: KiB=K, MiB=M, and so on.
     ///
     /// # Errors
     ///
@@ -146,6 +161,7 @@ impl<'parser> Parser<'parser> {
     /// assert_eq!(Ok(9 * 1000), parser.parse("9kB")); // kB is 1000
     /// assert_eq!(Ok(2 * 1024), parser.parse("2K")); // K is 1024
     /// assert_eq!(Ok(44251 * 1024), parser.parse("0xACDBK")); // 0xACDB is 44251 in decimal
+    /// assert_eq!(Ok(44251 * 1024 * 1024), parser.parse("0b1010110011011011")); // 0b1010110011011011 is 44251 in decimal, default M
     /// ```
     pub fn parse(&self, size: &str) -> Result<u128, ParseSizeError> {
         if size.is_empty() {
@@ -162,6 +178,11 @@ impl<'parser> Parser<'parser> {
                 .chars()
                 .take(2)
                 .chain(size.chars().skip(2).take_while(char::is_ascii_hexdigit))
+                .collect(),
+            NumberSystem::Binary => size
+                .chars()
+                .take(2)
+                .chain(size.chars().skip(2).take_while(|c| c.is_digit(2)))
                 .collect(),
             _ => size.chars().take_while(char::is_ascii_digit).collect(),
         };
@@ -255,6 +276,10 @@ impl<'parser> Parser<'parser> {
                 let trimmed_string = numeric_string.trim_start_matches("0x");
                 Self::parse_number(trimmed_string, 16, size)?
             }
+            NumberSystem::Binary => {
+                let trimmed_string = numeric_string.trim_start_matches("0b");
+                Self::parse_number(trimmed_string, 2, size)?
+            }
         };
 
         number
@@ -315,6 +340,14 @@ impl<'parser> Parser<'parser> {
             return NumberSystem::Hexadecimal;
         }
 
+        // Binary prefix: "0b" followed by at least one binary digit (0 or 1)
+        // Note: "0b" alone is treated as decimal 0 with suffix "b"
+        if let Some(prefix) = size.strip_prefix("0b") {
+            if !prefix.is_empty() {
+                return NumberSystem::Binary;
+            }
+        }
+
         let num_digits: usize = size
             .chars()
             .take_while(char::is_ascii_digit)
@@ -350,7 +383,9 @@ impl<'parser> Parser<'parser> {
 /// assert_eq!(Ok(123), parse_size_u128("123"));
 /// assert_eq!(Ok(9 * 1000), parse_size_u128("9kB")); // kB is 1000
 /// assert_eq!(Ok(2 * 1024), parse_size_u128("2K")); // K is 1024
-/// assert_eq!(Ok(44251 * 1024), parse_size_u128("0xACDBK"));
+/// assert_eq!(Ok(44251 * 1024), parse_size_u128("0xACDBK")); // hexadecimal
+/// assert_eq!(Ok(10), parse_size_u128("0b1010")); // binary
+/// assert_eq!(Ok(10 * 1024), parse_size_u128("0b1010K")); // binary with suffix
 /// ```
 pub fn parse_size_u128(size: &str) -> Result<u128, ParseSizeError> {
     Parser::default().parse(size)
@@ -359,6 +394,15 @@ pub fn parse_size_u128(size: &str) -> Result<u128, ParseSizeError> {
 /// Same as `parse_size_u128()`, but for u64
 pub fn parse_size_u64(size: &str) -> Result<u64, ParseSizeError> {
     Parser::default().parse_u64(size)
+}
+
+/// Same as `parse_size_u64()`, except 0 fails to parse
+pub fn parse_size_non_zero_u64(size: &str) -> Result<u64, ParseSizeError> {
+    let v = Parser::default().parse_u64(size)?;
+    if v == 0 {
+        return Err(ParseSizeError::ParseFailure("0".to_string()));
+    }
+    Ok(v)
 }
 
 /// Same as `parse_size_u64()` - deprecated
@@ -542,6 +586,7 @@ mod tests {
         assert!(parse_size_u64("1Y").is_err());
         assert!(parse_size_u64("1R").is_err());
         assert!(parse_size_u64("1Q").is_err());
+        assert!(parse_size_u64("0b1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111").is_err());
 
         assert!(variant_eq(
             &parse_size_u64("1Z").unwrap_err(),
@@ -612,6 +657,7 @@ mod tests {
     #[test]
     fn b_suffix() {
         assert_eq!(Ok(3 * 512), parse_size_u64("3b")); // b is 512
+        assert_eq!(Ok(0), parse_size_u64("0b")); // b should be used as a suffix in this case instead of signifying binary
     }
 
     #[test]
@@ -750,6 +796,12 @@ mod tests {
         assert_eq!(Ok(10), parse_size_u64("0xA"));
         assert_eq!(Ok(94722), parse_size_u64("0x17202"));
         assert_eq!(Ok(44251 * 1024), parse_size_u128("0xACDBK"));
+    }
+
+    #[test]
+    fn parse_binary_size() {
+        assert_eq!(Ok(44251), parse_size_u64("0b1010110011011011"));
+        assert_eq!(Ok(44251 * 1024), parse_size_u64("0b1010110011011011K"));
     }
 
     #[test]

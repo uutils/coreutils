@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::OnceLock;
 
+use os_display::Quotable;
 use thiserror::Error;
 use unic_langid::LanguageIdentifier;
 
@@ -42,7 +43,7 @@ pub enum LocalizationError {
 
 impl From<std::io::Error> for LocalizationError {
     fn from(error: std::io::Error) -> Self {
-        LocalizationError::Io {
+        Self::Io {
             source: error,
             path: PathBuf::from("<unknown>"),
         }
@@ -235,20 +236,18 @@ fn create_english_bundle_from_embedded(
         ));
     }
 
-    let embedded_locales = get_embedded_locales();
     let mut bundle = FluentBundle::new(vec![locale.clone()]);
     bundle.set_use_isolating(false);
 
     // First, try to load common uucore strings
-    let uucore_key = "uucore/en-US.ftl";
-    if let Some(uucore_content) = embedded_locales.get(uucore_key) {
+    if let Some(uucore_content) = get_embedded_locale("uucore/en-US.ftl") {
         let uucore_resource = parse_fluent_resource(uucore_content)?;
         bundle.add_resource_overriding(uucore_resource);
     }
 
     // Then, try to load utility-specific strings
     let locale_key = format!("{util_name}/en-US.ftl");
-    if let Some(ftl_content) = embedded_locales.get(locale_key.as_str()) {
+    if let Some(ftl_content) = get_embedded_locale(&locale_key) {
         let resource = parse_fluent_resource(ftl_content)?;
         bundle.add_resource_overriding(resource);
     }
@@ -266,8 +265,7 @@ fn create_english_bundle_from_embedded(
 fn get_message_internal(id: &str, args: Option<FluentArgs>) -> String {
     LOCALIZER.with(|lock| {
         lock.get()
-            .map(|loc| loc.format(id, args.as_ref()))
-            .unwrap_or_else(|| id.to_string()) // Return the key ID if localizer not initialized
+            .map_or_else(|| id.to_string(), |loc| loc.format(id, args.as_ref())) // Return the key ID if localizer not initialized
     })
 }
 
@@ -460,8 +458,8 @@ fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
 
         Err(LocalizationError::LocalesDirNotFound(format!(
             "Development locales directory not found at {} or {}",
-            dev_path.display(),
-            fallback_dev_path.display()
+            dev_path.quote(),
+            fallback_dev_path.quote()
         )))
     }
 
@@ -483,7 +481,7 @@ fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
 
         Err(LocalizationError::LocalesDirNotFound(format!(
             "Release locales directory not found starting from {}",
-            exe_dir.display()
+            exe_dir.quote()
         )))
     }
 }
@@ -578,7 +576,7 @@ mod tests {
 
         Err(LocalizationError::LocalesDirNotFound(format!(
             "No localization strings found for {locale} in {}",
-            test_locales_dir.display()
+            test_locales_dir.quote()
         )))
     }
 
@@ -620,7 +618,7 @@ mod tests {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
         // Create en-US.ftl
-        let en_content = r#"
+        let en_content = r"
 greeting = Hello, world!
 welcome = Welcome, { $name }!
 count-items = You have { $count ->
@@ -628,27 +626,27 @@ count-items = You have { $count ->
    *[other] { $count } items
 }
 missing-in-other = This message only exists in English
-"#;
+";
 
         // Create fr-FR.ftl
-        let fr_content = r#"
+        let fr_content = r"
 greeting = Bonjour, le monde!
 welcome = Bienvenue, { $name }!
 count-items = Vous avez { $count ->
     [one] { $count } élément
    *[other] { $count } éléments
 }
-"#;
+";
 
         // Create ja-JP.ftl (Japanese)
-        let ja_content = r#"
+        let ja_content = r"
 greeting = こんにちは、世界！
 welcome = ようこそ、{ $name }さん！
 count-items = { $count }個のアイテムがあります
-"#;
+";
 
         // Create ar-SA.ftl (Arabic - Right-to-Left)
-        let ar_content = r#"
+        let ar_content = r"
 greeting = أهلاً بالعالم！
 welcome = أهلاً وسهلاً، { $name }！
 count-items = لديك { $count ->
@@ -658,13 +656,13 @@ count-items = لديك { $count ->
     [few] { $count } عناصر
    *[other] { $count } عنصر
 }
-"#;
+";
 
         // Create es-ES.ftl with invalid syntax
-        let es_invalid_content = r#"
+        let es_invalid_content = r"
 greeting = Hola, mundo!
 invalid-syntax = This is { $missing
-"#;
+";
 
         fs::write(temp_dir.path().join("en-US.ftl"), en_content)
             .expect("Failed to write en-US.ftl");
@@ -1070,7 +1068,6 @@ invalid-syntax = This is { $missing
     #[test]
     fn test_arabic_localization_with_macro() {
         std::thread::spawn(|| {
-            use self::translate;
             let temp_dir = create_test_locales_dir();
             let locale = LanguageIdentifier::from_str("ar-SA").unwrap();
 

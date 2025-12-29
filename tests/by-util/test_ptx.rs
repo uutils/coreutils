@@ -3,12 +3,82 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore roff
-
+// spell-checker:ignore funnnnnnnnnnnnnnnnn
 use uutests::new_ucmd;
 
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+#[test]
+fn test_reference_format_for_stdin() {
+    let input = "Rust is good language";
+    let expected_output = concat!(
+        r#".xx "" "" "Rust is good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Rust is" "good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Rust" "is good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Rust is good" "language" "" ":1""#,
+        "\n",
+    );
+    new_ucmd!()
+        .args(&["-G", "-A"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected_output);
+}
+#[test]
+fn test_tex_format_no_truncation_markers() {
+    let input = "Hello world Rust is a fun language";
+    new_ucmd!()
+        .args(&["-G", "-w", "30", "--format=tex"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only_fixture("test_tex_format_no_truncation_markers.expected");
+}
+#[test]
+fn gnu_ext_disabled_chunk_no_over_reading() {
+    let input = "Hello World Rust is a fun language";
+    new_ucmd!()
+        .args(&["-G", "-w", "30"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_chunk_no_over_reading.expected");
+}
+
+#[test]
+fn test_truncation_no_extra_space_in_after() {
+    new_ucmd!()
+        .args(&["-G", "-w", "30"])
+        .pipe_in("Rust is funnnnnnnnnnnnnnnnn")
+        .succeeds()
+        .stdout_contains(".xx \"\" \"Rust\" \"is/\" \"\"");
+}
+
+#[test]
+fn gnu_ext_disabled_reference_calculation() {
+    let input = "Hello World Rust is good language";
+    let expected_output = concat!(
+        r#".xx "language" "" "Hello World Rust is good" "" ":1""#,
+        "\n",
+        r#".xx "" "Hello World" "Rust is good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Hello" "World Rust is good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Hello World Rust is" "good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Hello World Rust" "is good language" "" ":1""#,
+        "\n",
+        r#".xx "" "Hello World Rust is good" "language" "" ":1""#,
+        "\n",
+    );
+    new_ucmd!()
+        .args(&["-G", "-A"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected_output);
 }
 
 #[test]
@@ -185,4 +255,86 @@ fn test_utf8() {
         .pipe_in("it’s disabled\n")
         .succeeds()
         .stdout_only("\\xx {}{it’s}{disabled}{}{}\n\\xx {}{}{it’s}{ disabled}{}\n");
+}
+
+#[test]
+fn test_sentence_regexp_basic() {
+    new_ucmd!()
+        .args(&["-G", "-S", "\\."])
+        .pipe_in("Hello. World.")
+        .succeeds()
+        .stdout_contains("Hello")
+        .stdout_contains("World");
+}
+
+#[test]
+fn test_sentence_regexp_split_behavior() {
+    new_ucmd!()
+        .args(&["-G", "-w", "50", "-S", "[.!]"])
+        .pipe_in("One sentence. Two sentence!")
+        .succeeds()
+        .stdout_contains("One sentence")
+        .stdout_contains("Two sentence");
+}
+
+#[test]
+fn test_sentence_regexp_empty_match_failure() {
+    new_ucmd!()
+        .args(&["-G", "-S", "^"])
+        .fails()
+        .stderr_contains("A regular expression cannot match a length zero string");
+}
+
+#[test]
+fn test_sentence_regexp_newlines_are_spaces() {
+    new_ucmd!()
+        .args(&["-G", "-S", "\\."])
+        .pipe_in("Start of\nsentence.")
+        .succeeds()
+        .stdout_contains("Start of sentence");
+}
+
+#[test]
+fn test_gnu_mode_dumb_format() {
+    // Test GNU mode (dumb format) - the default mode without -G flag
+    new_ucmd!().pipe_in("a b").succeeds().stdout_only(
+        "                                       a b\n                                   a   b\n",
+    );
+}
+
+#[test]
+fn test_gnu_compatibility_narrow_width() {
+    new_ucmd!()
+        .args(&["-w", "2"])
+        .pipe_in("qux")
+        .succeeds()
+        .stdout_only("      qux\n");
+}
+
+#[test]
+fn test_gnu_compatibility_truncation_width() {
+    new_ucmd!()
+        .args(&["-w", "10"])
+        .pipe_in("foo bar")
+        .succeeds()
+        .stdout_only("     /   bar\n        foo/\n");
+}
+
+#[test]
+fn test_unicode_padding_alignment() {
+    let input = "a\né";
+    new_ucmd!()
+        .args(&["-w", "10"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("        a\n        é\n");
+}
+
+#[test]
+fn test_unicode_truncation_alignment() {
+    new_ucmd!()
+        .args(&["-w", "10"])
+        .pipe_in("föö bar")
+        .succeeds()
+        .stdout_only("     /   bar\n        föö/\n");
 }

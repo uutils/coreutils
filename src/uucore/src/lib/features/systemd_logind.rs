@@ -53,10 +53,10 @@ mod login {
     pub fn get_sessions() -> Result<Vec<String>, Box<dyn std::error::Error>> {
         let mut sessions_ptr: *mut *mut libc::c_char = ptr::null_mut();
 
-        let result = unsafe { ffi::sd_get_sessions(&mut sessions_ptr) };
+        let result = unsafe { ffi::sd_get_sessions(&raw mut sessions_ptr) };
 
         if result < 0 {
-            return Err(format!("sd_get_sessions failed: {}", result).into());
+            return Err(format!("sd_get_sessions failed: {result}").into());
         }
 
         let mut sessions = Vec::new();
@@ -71,11 +71,11 @@ mod login {
                 let session_cstr = unsafe { CStr::from_ptr(session_ptr) };
                 sessions.push(session_cstr.to_string_lossy().into_owned());
 
-                unsafe { libc::free(session_ptr as *mut libc::c_void) };
+                unsafe { libc::free(session_ptr.cast()) };
                 i += 1;
             }
 
-            unsafe { libc::free(sessions_ptr as *mut libc::c_void) };
+            unsafe { libc::free(sessions_ptr.cast()) };
         }
 
         Ok(sessions)
@@ -86,14 +86,12 @@ mod login {
         let session_cstring = CString::new(session_id)?;
         let mut uid: std::os::raw::c_uint = 0;
 
-        let result = unsafe { ffi::sd_session_get_uid(session_cstring.as_ptr(), &mut uid) };
+        let result = unsafe { ffi::sd_session_get_uid(session_cstring.as_ptr(), &raw mut uid) };
 
         if result < 0 {
-            return Err(format!(
-                "sd_session_get_uid failed for session '{}': {}",
-                session_id, result
-            )
-            .into());
+            return Err(
+                format!("sd_session_get_uid failed for session '{session_id}': {result}",).into(),
+            );
         }
 
         Ok(uid)
@@ -104,12 +102,12 @@ mod login {
         let session_cstring = CString::new(session_id)?;
         let mut usec: u64 = 0;
 
-        let result = unsafe { ffi::sd_session_get_start_time(session_cstring.as_ptr(), &mut usec) };
+        let result =
+            unsafe { ffi::sd_session_get_start_time(session_cstring.as_ptr(), &raw mut usec) };
 
         if result < 0 {
             return Err(format!(
-                "sd_session_get_start_time failed for session '{}': {}",
-                session_id, result
+                "sd_session_get_start_time failed for session '{session_id}': {result}",
             )
             .into());
         }
@@ -122,14 +120,12 @@ mod login {
         let session_cstring = CString::new(session_id)?;
         let mut tty_ptr: *mut libc::c_char = ptr::null_mut();
 
-        let result = unsafe { ffi::sd_session_get_tty(session_cstring.as_ptr(), &mut tty_ptr) };
+        let result = unsafe { ffi::sd_session_get_tty(session_cstring.as_ptr(), &raw mut tty_ptr) };
 
         if result < 0 {
-            return Err(format!(
-                "sd_session_get_tty failed for session '{}': {}",
-                session_id, result
-            )
-            .into());
+            return Err(
+                format!("sd_session_get_tty failed for session '{session_id}': {result}",).into(),
+            );
         }
 
         if tty_ptr.is_null() {
@@ -139,7 +135,7 @@ mod login {
         let tty_cstr = unsafe { CStr::from_ptr(tty_ptr) };
         let tty_string = tty_cstr.to_string_lossy().into_owned();
 
-        unsafe { libc::free(tty_ptr as *mut libc::c_void) };
+        unsafe { libc::free(tty_ptr.cast()) };
 
         Ok(Some(tty_string))
     }
@@ -152,12 +148,11 @@ mod login {
         let mut host_ptr: *mut libc::c_char = ptr::null_mut();
 
         let result =
-            unsafe { ffi::sd_session_get_remote_host(session_cstring.as_ptr(), &mut host_ptr) };
+            unsafe { ffi::sd_session_get_remote_host(session_cstring.as_ptr(), &raw mut host_ptr) };
 
         if result < 0 {
             return Err(format!(
-                "sd_session_get_remote_host failed for session '{}': {}",
-                session_id, result
+                "sd_session_get_remote_host failed for session '{session_id}': {result}",
             )
             .into());
         }
@@ -169,7 +164,7 @@ mod login {
         let host_cstr = unsafe { CStr::from_ptr(host_ptr) };
         let host_string = host_cstr.to_string_lossy().into_owned();
 
-        unsafe { libc::free(host_ptr as *mut libc::c_void) };
+        unsafe { libc::free(host_ptr.cast()) };
 
         Ok(Some(host_string))
     }
@@ -182,12 +177,11 @@ mod login {
         let mut display_ptr: *mut libc::c_char = ptr::null_mut();
 
         let result =
-            unsafe { ffi::sd_session_get_display(session_cstring.as_ptr(), &mut display_ptr) };
+            unsafe { ffi::sd_session_get_display(session_cstring.as_ptr(), &raw mut display_ptr) };
 
         if result < 0 {
             return Err(format!(
-                "sd_session_get_display failed for session '{}': {}",
-                session_id, result
+                "sd_session_get_display failed for session '{session_id}': {result}",
             )
             .into());
         }
@@ -199,7 +193,7 @@ mod login {
         let display_cstr = unsafe { CStr::from_ptr(display_ptr) };
         let display_string = display_cstr.to_string_lossy().into_owned();
 
-        unsafe { libc::free(display_ptr as *mut libc::c_void) };
+        unsafe { libc::free(display_ptr.cast()) };
 
         Ok(Some(display_string))
     }
@@ -211,14 +205,13 @@ mod login {
         let session_cstring = CString::new(session_id)?;
         let mut type_ptr: *mut libc::c_char = ptr::null_mut();
 
-        let result = unsafe { ffi::sd_session_get_type(session_cstring.as_ptr(), &mut type_ptr) };
+        let result =
+            unsafe { ffi::sd_session_get_type(session_cstring.as_ptr(), &raw mut type_ptr) };
 
         if result < 0 {
-            return Err(format!(
-                "sd_session_get_type failed for session '{}': {}",
-                session_id, result
-            )
-            .into());
+            return Err(
+                format!("sd_session_get_type failed for session '{session_id}': {result}",).into(),
+            );
         }
 
         if type_ptr.is_null() {
@@ -228,7 +221,7 @@ mod login {
         let type_cstr = unsafe { CStr::from_ptr(type_ptr) };
         let type_string = type_cstr.to_string_lossy().into_owned();
 
-        unsafe { libc::free(type_ptr as *mut libc::c_void) };
+        unsafe { libc::free(type_ptr.cast()) };
 
         Ok(Some(type_string))
     }
@@ -240,14 +233,13 @@ mod login {
         let session_cstring = CString::new(session_id)?;
         let mut seat_ptr: *mut libc::c_char = ptr::null_mut();
 
-        let result = unsafe { ffi::sd_session_get_seat(session_cstring.as_ptr(), &mut seat_ptr) };
+        let result =
+            unsafe { ffi::sd_session_get_seat(session_cstring.as_ptr(), &raw mut seat_ptr) };
 
         if result < 0 {
-            return Err(format!(
-                "sd_session_get_seat failed for session '{}': {}",
-                session_id, result
-            )
-            .into());
+            return Err(
+                format!("sd_session_get_seat failed for session '{session_id}': {result}",).into(),
+            );
         }
 
         if seat_ptr.is_null() {
@@ -257,7 +249,7 @@ mod login {
         let seat_cstr = unsafe { CStr::from_ptr(seat_ptr) };
         let seat_string = seat_cstr.to_string_lossy().into_owned();
 
-        unsafe { libc::free(seat_ptr as *mut libc::c_void) };
+        unsafe { libc::free(seat_ptr.cast()) };
 
         Ok(Some(seat_string))
     }
@@ -276,11 +268,11 @@ mod login {
         use std::fs;
 
         let metadata = fs::metadata("/var/lib/systemd/random-seed")
-            .map_err(|e| format!("Failed to read /var/lib/systemd/random-seed: {}", e))?;
+            .map_err(|e| format!("Failed to read /var/lib/systemd/random-seed: {e}"))?;
 
         metadata
             .modified()
-            .map_err(|e| format!("Failed to get modification time: {}", e).into())
+            .map_err(|e| format!("Failed to get modification time: {e}").into())
     }
 }
 
@@ -361,9 +353,8 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
     // Iterate through all sessions
     for session_id in sessions {
         // Get session UID using safe wrapper
-        let uid = match login::get_session_uid(&session_id) {
-            Ok(uid) => uid,
-            Err(_) => continue,
+        let Ok(uid) = login::get_session_uid(&session_id) else {
+            continue;
         };
 
         // Get username from UID
@@ -385,9 +376,9 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
             let ret = libc::getpwuid_r(
                 uid,
                 passwd.as_mut_ptr(),
-                buf.as_mut_ptr() as *mut libc::c_char,
+                buf.as_mut_ptr().cast(),
                 buf.len(),
-                &mut result,
+                &raw mut result,
             );
 
             if ret == 0 && !result.is_null() {
@@ -396,7 +387,7 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
                     .to_string_lossy()
                     .into_owned()
             } else {
-                format!("{}", uid) // fallback to UID if username not found
+                format!("{uid}") // fallback to UID if username not found
             }
         };
 
@@ -444,8 +435,9 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
             .unwrap_or_default();
 
         // Determine host (use remote_host if available)
+        // If host is local (non-remote) we use display,
         let host = if remote_host.is_empty() {
-            String::new()
+            display.clone()
         } else {
             remote_host
         };
@@ -483,7 +475,7 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
         if !seat.is_empty() && !tty.is_empty() {
             // Both seat and tty - need 2 records, clone for first.
             // The seat is prefixed with '?' to match GNU's output.
-            let seat_formatted = format!("?{}", seat);
+            let seat_formatted = format!("?{seat}");
             records.push(create_record(
                 seat_formatted,
                 seat,
@@ -493,19 +485,19 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
             ));
 
             let tty_formatted = if tty.starts_with("tty") {
-                format!("*{}", tty)
+                format!("*{tty}")
             } else {
                 tty.clone()
             };
             records.push(create_record(tty_formatted, tty, user, session_id, host)); // Move for second (and last) record
         } else if !seat.is_empty() {
             // Only seat
-            let seat_formatted = format!("?{}", seat);
+            let seat_formatted = format!("?{seat}");
             records.push(create_record(seat_formatted, seat, user, session_id, host));
         } else if !tty.is_empty() {
             // Only tty
             let tty_formatted = if tty.starts_with("tty") {
-                format!("*{}", tty)
+                format!("*{tty}")
             } else {
                 tty.clone()
             };
@@ -534,7 +526,7 @@ pub struct SystemdUtmpxCompat {
 impl SystemdUtmpxCompat {
     /// Create new instance from a SystemdLoginRecord
     pub fn new(record: SystemdLoginRecord) -> Self {
-        SystemdUtmpxCompat { record }
+        Self { record }
     }
 
     /// A.K.A. ut.ut_type
@@ -566,10 +558,10 @@ impl SystemdUtmpxCompat {
     /// A.K.A. ut.ut_line
     pub fn tty_device(&self) -> String {
         // Return raw device name for device access if available, otherwise formatted seat_or_tty
-        if !self.record.raw_device.is_empty() {
-            self.record.raw_device.clone()
-        } else {
+        if self.record.raw_device.is_empty() {
             self.record.seat_or_tty.clone()
+        } else {
+            self.record.raw_device.clone()
         }
     }
 
@@ -606,7 +598,7 @@ impl SystemdUtmpxIter {
     /// Create new instance and read records from systemd-logind
     pub fn new() -> UResult<Self> {
         let records = read_login_records()?;
-        Ok(SystemdUtmpxIter {
+        Ok(Self {
             records,
             current_index: 0,
         })
@@ -614,7 +606,7 @@ impl SystemdUtmpxIter {
 
     /// Create empty iterator (for when systemd initialization fails)
     pub fn empty() -> Self {
-        SystemdUtmpxIter {
+        Self {
             records: Vec::new(),
             current_index: 0,
         }

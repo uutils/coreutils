@@ -195,6 +195,31 @@ fn test_symlink_custom_backup_suffix() {
 }
 
 #[test]
+fn test_symlink_suffix_without_backup_option() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("a", "a\n");
+    at.write("b", "b2\n");
+
+    assert!(at.file_exists("a"));
+    assert!(at.file_exists("b"));
+    let suffix = ".sfx";
+    let suffix_arg = &format!("--suffix={suffix}");
+    scene
+        .ucmd()
+        .args(&["-s", "-f", suffix_arg, "a", "b"])
+        .succeeds()
+        .no_stderr();
+    assert!(at.file_exists("a"));
+    assert!(at.file_exists("b"));
+    assert_eq!(at.read("a"), "a\n");
+    assert_eq!(at.read("b"), "a\n");
+    // we should have created backup for b file
+    assert_eq!(at.read(&format!("b{suffix}")), "b2\n");
+}
+
+#[test]
 fn test_symlink_custom_backup_suffix_hyphen_value() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_symlink_custom_backup_suffix";
@@ -794,6 +819,52 @@ fn test_symlink_remove_existing_same_src_and_dest() {
 }
 
 #[test]
+fn test_force_same_file_detected_after_canonicalization() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("file", "hello");
+
+    ucmd.args(&["-f", "file", "./file"])
+        .fails_with_code(1)
+        .stderr_contains("are the same file");
+
+    assert!(at.file_exists("file"));
+    assert_eq!(at.read("file"), "hello");
+}
+
+#[test]
+#[cfg(not(target_os = "android"))]
+fn test_force_ln_existing_hard_link_entry() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("file", "hardlink\n");
+    at.mkdir("dir");
+
+    scene.ucmd().args(&["file", "dir"]).succeeds().no_stderr();
+    assert!(at.file_exists("dir/file"));
+
+    scene
+        .ucmd()
+        .args(&["-f", "file", "dir"])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists("file"));
+    assert!(at.file_exists("dir/file"));
+    assert_eq!(at.read("file"), "hardlink\n");
+    assert_eq!(at.read("dir/file"), "hardlink\n");
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let source_inode = at.metadata("file").ino();
+        let target_inode = at.metadata("dir/file").ino();
+        assert_eq!(source_inode, target_inode);
+    }
+}
+
+#[test]
 #[cfg(not(target_os = "android"))]
 fn test_ln_seen_file() {
     let ts = TestScenario::new(util_name!());
@@ -887,4 +958,18 @@ fn test_ln_non_utf8_paths() {
     // Check if symlink was created successfully
     let symlink_path = at.plus(symlink_name);
     assert!(symlink_path.is_symlink());
+}
+
+#[test]
+fn test_ln_hard_link_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir");
+
+    scene
+        .ucmd()
+        .args(&["dir", "dir_link"])
+        .fails()
+        .stderr_contains("hard link not allowed for directory");
 }

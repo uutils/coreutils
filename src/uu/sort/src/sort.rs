@@ -7,8 +7,9 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef
 
+mod buffer_hint;
 mod check;
 mod chunks;
 mod custom_str_cmp;
@@ -24,8 +25,6 @@ use clap::{Arg, ArgAction, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
-#[cfg(target_os = "linux")]
-use nix::libc::{RLIMIT_NOFILE, getrlimit, rlimit};
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{Rng, rng};
 use rayon::prelude::*;
@@ -50,10 +49,12 @@ use uucore::line_ending::LineEnding;
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+use uucore::posix::{MODERN, TRADITIONAL};
 use uucore::show_error;
 use uucore::translate;
 use uucore::version_cmp::version_cmp;
 
+use crate::buffer_hint::automatic_buffer_size;
 use crate::tmp_dir::TmpDirWrapper;
 
 mod options {
@@ -115,10 +116,12 @@ const DECIMAL_PT: u8 = b'.';
 const NEGATIVE: &u8 = &b'-';
 const POSITIVE: &u8 = &b'+';
 
-// Choosing a higher buffer size does not result in performance improvements
-// (at least not on my machine). TODO: In the future, we should also take the amount of
-// available memory into consideration, instead of relying on this constant only.
-const DEFAULT_BUF_SIZE: usize = 1_000_000_000; // 1 GB
+// The automatic buffer heuristics clamp to this range to avoid
+// over-committing memory on constrained systems while still keeping
+// reasonably large chunks for typical workloads.
+const MIN_AUTOMATIC_BUF_SIZE: usize = 512 * 1024; // 512 KiB
+const FALLBACK_AUTOMATIC_BUF_SIZE: usize = 32 * 1024 * 1024; // 32 MiB
+const MAX_AUTOMATIC_BUF_SIZE: usize = 1024 * 1024 * 1024; // 1 GiB
 
 #[derive(Debug, Error)]
 pub enum SortError {
@@ -148,16 +151,16 @@ pub enum SortError {
     #[error("{}", translate!("sort-open-tmp-file-failed", "error" => strip_errno(.error)))]
     OpenTmpFileFailed { error: std::io::Error },
 
-    #[error("{}", translate!("sort-compress-prog-execution-failed", "code" => .code))]
-    CompressProgExecutionFailed { code: i32 },
+    #[error("{}", translate!("sort-compress-prog-execution-failed", "prog" => .prog, "error" => strip_errno(.error)))]
+    CompressProgExecutionFailed { prog: String, error: std::io::Error },
 
     #[error("{}", translate!("sort-compress-prog-terminated-abnormally", "prog" => .prog.quote()))]
     CompressProgTerminatedAbnormally { prog: String },
 
-    #[error("{}", translate!("sort-cannot-create-tmp-file", "path" => format!("{}", .path.display())))]
+    #[error("{}", translate!("sort-cannot-create-tmp-file", "path" => format!("{}", .path.quote())))]
     TmpFileCreationFailed { path: PathBuf },
 
-    #[error("{}", translate!("sort-file-operands-combined", "file" => format!("{}", .file.display()), "help" => uucore::execution_phrase()))]
+    #[error("{}", translate!("sort-file-operands-combined", "file" => format!("{}", .file.quote()), "help" => uucore::execution_phrase()))]
     FileOperandsCombined { file: PathBuf },
 
     #[error("{error}")]
@@ -169,10 +172,10 @@ pub enum SortError {
     #[error("{}", translate!("sort-minus-in-stdin"))]
     MinusInStdIn,
 
-    #[error("{}", translate!("sort-no-input-from", "file" => format!("{}", .file.display())))]
+    #[error("{}", translate!("sort-no-input-from", "file" => format!("{}", .file.quote())))]
     EmptyInputFile { file: PathBuf },
 
-    #[error("{}", translate!("sort-invalid-zero-length-filename", "file" => format!("{}", .file.display()), "line_num" => .line_num))]
+    #[error("{}", translate!("sort-invalid-zero-length-filename", "file" => .file.maybe_quote(), "line_num" => .line_num))]
     ZeroLengthFileName { file: PathBuf, line_num: usize },
 }
 
@@ -216,6 +219,11 @@ impl SortMode {
             Self::Default => None,
         }
     }
+}
+
+/// Return the length of the byte slice while ignoring embedded NULs (used for debug underline alignment).
+fn count_non_null_bytes(bytes: &[u8]) -> usize {
+    bytes.iter().filter(|&&c| c != b'\0').count()
 }
 
 pub struct Output {
@@ -283,6 +291,7 @@ pub struct GlobalSettings {
     threads: String,
     line_ending: LineEnding,
     buffer_size: usize,
+    buffer_size_is_explicit: bool,
     compress_prog: Option<String>,
     merge_batch_size: usize,
     precomputed: Precomputed,
@@ -296,6 +305,8 @@ struct Precomputed {
     num_infos_per_line: usize,
     floats_per_line: usize,
     selections_per_line: usize,
+    fast_lexicographic: bool,
+    fast_ascii_insensitive: bool,
 }
 
 impl GlobalSettings {
@@ -336,6 +347,47 @@ impl GlobalSettings {
             .iter()
             .filter(|s| matches!(s.settings.mode, SortMode::GeneralNumeric))
             .count();
+
+        self.precomputed.fast_lexicographic = self.can_use_fast_lexicographic();
+        self.precomputed.fast_ascii_insensitive = self.can_use_fast_ascii_insensitive();
+    }
+
+    /// Returns true when the fast lexicographic path can be used safely.
+    fn can_use_fast_lexicographic(&self) -> bool {
+        self.mode == SortMode::Default
+            && !self.ignore_case
+            && !self.dictionary_order
+            && !self.ignore_non_printing
+            && !self.ignore_leading_blanks
+            && self.selectors.len() == 1
+            && {
+                let selector = &self.selectors[0];
+                !selector.needs_selection
+                    && matches!(selector.settings.mode, SortMode::Default)
+                    && !selector.settings.ignore_case
+                    && !selector.settings.dictionary_order
+                    && !selector.settings.ignore_non_printing
+                    && !selector.settings.ignore_blanks
+            }
+    }
+
+    /// Returns true when the ASCII case-insensitive fast path is valid.
+    fn can_use_fast_ascii_insensitive(&self) -> bool {
+        self.mode == SortMode::Default
+            && self.ignore_case
+            && !self.dictionary_order
+            && !self.ignore_non_printing
+            && !self.ignore_leading_blanks
+            && self.selectors.len() == 1
+            && {
+                let selector = &self.selectors[0];
+                !selector.needs_selection
+                    && matches!(selector.settings.mode, SortMode::Default)
+                    && selector.settings.ignore_case
+                    && !selector.settings.dictionary_order
+                    && !selector.settings.ignore_non_printing
+                    && !selector.settings.ignore_blanks
+            }
     }
 }
 
@@ -359,9 +411,10 @@ impl Default for GlobalSettings {
             separator: None,
             threads: String::new(),
             line_ending: LineEnding::Newline,
-            buffer_size: DEFAULT_BUF_SIZE,
+            buffer_size: FALLBACK_AUTOMATIC_BUF_SIZE,
+            buffer_size_is_explicit: false,
             compress_prog: None,
-            merge_batch_size: 32,
+            merge_batch_size: default_merge_batch_size(),
             precomputed: Precomputed::default(),
         }
     }
@@ -622,14 +675,19 @@ impl<'a> Line<'a> {
                 _ => {}
             }
 
+            // Don't let embedded NUL bytes influence column alignment in the
+            // debug underline output, since they are often filtered out (e.g.
+            // via `tr -d '\0'`) before inspection.
             let select = &line[..selection.start];
-            write!(writer, "{}", " ".repeat(select.len()))?;
+            let indent = count_non_null_bytes(select);
+            write!(writer, "{}", " ".repeat(indent))?;
 
             if selection.is_empty() {
                 writeln!(writer, "{}", translate!("sort-error-no-match-for-key"))?;
             } else {
                 let select = &line[selection];
-                writeln!(writer, "{}", "_".repeat(select.len()))?;
+                let underline_len = count_non_null_bytes(select);
+                writeln!(writer, "{}", "_".repeat(underline_len))?;
             }
         }
 
@@ -1025,24 +1083,204 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
 
 #[cfg(target_os = "linux")]
 fn get_rlimit() -> UResult<usize> {
-    let mut limit = rlimit {
-        rlim_cur: 0,
-        rlim_max: 0,
-    };
-    match unsafe { getrlimit(RLIMIT_NOFILE, &raw mut limit) } {
-        0 => Ok(limit.rlim_cur as usize),
-        _ => Err(UUsageError::new(2, translate!("sort-failed-fetch-rlimit"))),
+    use nix::sys::resource::{RLIM_INFINITY, Resource, getrlimit};
+
+    let (rlim_cur, _rlim_max) = getrlimit(Resource::RLIMIT_NOFILE)
+        .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))?;
+    if rlim_cur == RLIM_INFINITY {
+        return Err(UUsageError::new(2, translate!("sort-failed-fetch-rlimit")));
     }
+    usize::try_from(rlim_cur)
+        .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn fd_soft_limit() -> Option<usize> {
+    get_rlimit().ok()
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn fd_soft_limit() -> Option<usize> {
+    None
 }
 
 const STDIN_FILE: &str = "-";
+
+/// Legacy `+POS1 [-POS2]` syntax is permitted unless `_POSIX2_VERSION` is in
+/// the [TRADITIONAL, MODERN) range (matches GNU behaviour).
+fn allows_traditional_usage() -> bool {
+    !matches!(uucore::posix::posix_version(), Some(ver) if (TRADITIONAL..MODERN).contains(&ver))
+}
+
+#[derive(Debug, Clone)]
+struct LegacyKeyPart {
+    field: usize,
+    char_pos: usize,
+    opts: String,
+}
+
+fn parse_usize_or_max(num: &str) -> Option<usize> {
+    match num.parse::<usize>() {
+        Ok(v) => Some(v),
+        Err(e) if *e.kind() == IntErrorKind::PosOverflow => Some(usize::MAX),
+        Err(_) => None,
+    }
+}
+
+fn parse_legacy_part(spec: &str) -> Option<LegacyKeyPart> {
+    let idx = spec.chars().take_while(|c| c.is_ascii_digit()).count();
+    if idx == 0 {
+        return None;
+    }
+
+    let field = parse_usize_or_max(&spec[..idx])?;
+    let mut char_pos = 0;
+    let mut rest = &spec[idx..];
+
+    if let Some(stripped) = rest.strip_prefix('.') {
+        let char_idx = stripped.chars().take_while(|c| c.is_ascii_digit()).count();
+        if char_idx == 0 {
+            return None;
+        }
+        char_pos = parse_usize_or_max(&stripped[..char_idx])?;
+        rest = &stripped[char_idx..];
+    }
+
+    Some(LegacyKeyPart {
+        field,
+        char_pos,
+        opts: rest.to_string(),
+    })
+}
+
+/// Convert legacy +POS1 [-POS2] into a `-k` key specification using saturating arithmetic.
+fn legacy_key_to_k(from: &LegacyKeyPart, to: Option<&LegacyKeyPart>) -> String {
+    let start_field = from.field.saturating_add(1);
+    let start_char = from.char_pos.saturating_add(1);
+
+    let mut keydef = format!(
+        "{}{}{}",
+        start_field,
+        if from.char_pos == 0 {
+            String::new()
+        } else {
+            format!(".{start_char}")
+        },
+        from.opts
+    );
+
+    if let Some(to) = to {
+        let end_field = if to.char_pos == 0 {
+            // When the end character index is zero, GNU keeps the field number as-is.
+            // Clamp to 1 to avoid generating an invalid field 0.
+            to.field.max(1)
+        } else {
+            to.field.saturating_add(1)
+        };
+
+        keydef.push(',');
+        keydef.push_str(&end_field.to_string());
+        if to.char_pos != 0 {
+            keydef.push('.');
+            keydef.push_str(&to.char_pos.to_string());
+        }
+        keydef.push_str(&to.opts);
+    }
+
+    keydef
+}
+
+/// Preprocess argv to handle legacy +POS1 [-POS2] syntax by converting it into -k forms
+/// before clap sees the arguments.
+fn preprocess_legacy_args<I>(args: I) -> Vec<OsString>
+where
+    I: IntoIterator,
+    I::Item: Into<OsString>,
+{
+    if !allows_traditional_usage() {
+        return args.into_iter().map(Into::into).collect();
+    }
+
+    let mut processed = Vec::new();
+    let mut iter = args.into_iter().map(Into::into).peekable();
+
+    while let Some(arg) = iter.next() {
+        if arg == "--" {
+            processed.push(arg);
+            processed.extend(iter);
+            break;
+        }
+
+        let as_str = arg.to_string_lossy();
+        if let Some(from_spec) = as_str.strip_prefix('+') {
+            if let Some(from) = parse_legacy_part(from_spec) {
+                let mut to_part = None;
+
+                let next_candidate = iter.peek().map(|next| next.to_string_lossy().to_string());
+
+                if let Some(next_str) = next_candidate {
+                    if let Some(stripped) = next_str.strip_prefix('-') {
+                        if stripped.starts_with(|c: char| c.is_ascii_digit()) {
+                            let next_arg = iter.next().unwrap();
+                            if let Some(parsed) = parse_legacy_part(stripped) {
+                                to_part = Some(parsed);
+                            } else {
+                                processed.push(arg);
+                                processed.push(next_arg);
+                                continue;
+                            }
+                        }
+                    }
+                }
+
+                let keydef = legacy_key_to_k(&from, to_part.as_ref());
+                processed.push(OsString::from(format!("-k{keydef}")));
+                continue;
+            }
+        }
+
+        processed.push(arg);
+    }
+
+    processed
+}
+
+#[cfg(target_os = "linux")]
+const LINUX_BATCH_DIVISOR: usize = 4;
+#[cfg(target_os = "linux")]
+const LINUX_BATCH_MIN: usize = 32;
+#[cfg(target_os = "linux")]
+const LINUX_BATCH_MAX: usize = 256;
+
+fn default_merge_batch_size() -> usize {
+    #[cfg(target_os = "linux")]
+    {
+        // Adjust merge batch size dynamically based on available file descriptors.
+        match fd_soft_limit() {
+            Some(limit) => {
+                let usable_limit = limit.saturating_div(LINUX_BATCH_DIVISOR);
+                usable_limit.clamp(LINUX_BATCH_MIN, LINUX_BATCH_MAX)
+            }
+            None => 64,
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        64
+    }
+}
 
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut settings = GlobalSettings::default();
 
-    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
+    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(
+        uu_app(),
+        preprocess_legacy_args(args),
+        2,
+    )?;
 
     // Prevent -o/--output to be specified multiple times
     if matches
@@ -1152,19 +1390,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.threads = matches
             .get_one::<String>(options::PARALLEL)
             .map_or_else(|| "0".to_string(), String::from);
-        unsafe {
-            env::set_var("RAYON_NUM_THREADS", &settings.threads);
-        }
+        let num_threads = match settings.threads.parse::<usize>() {
+            Ok(0) | Err(_) => std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
+            Ok(n) => n,
+        };
+        let _ = rayon::ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build_global();
     }
 
-    settings.buffer_size =
-        matches
-            .get_one::<String>(options::BUF_SIZE)
-            .map_or(Ok(DEFAULT_BUF_SIZE), |s| {
-                GlobalSettings::parse_byte_count(s).map_err(|e| {
-                    USimpleError::new(2, format_error_message(&e, s, options::BUF_SIZE))
-                })
-            })?;
+    if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
+        settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|e| {
+            USimpleError::new(2, format_error_message(&e, size_str, options::BUF_SIZE))
+        })?;
+        settings.buffer_size_is_explicit = true;
+    } else {
+        settings.buffer_size = automatic_buffer_size(&files);
+        settings.buffer_size_is_explicit = false;
+    }
 
     let mut tmp_dir = TmpDirWrapper::new(
         matches
@@ -1204,7 +1449,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
                         translate!(
                             "sort-maximum-batch-size-rlimit",
-                            "rlimit" =>  get_rlimit()?
+                            "rlimit" => {
+                                let Some(rlimit) = fd_soft_limit() else {
+                                    return Err(UUsageError::new(
+                                        2,
+                                        translate!("sort-failed-fetch-rlimit"),
+                                    ));
+                                };
+                                rlimit
+                            }
                         )
                     }
                     #[cfg(not(target_os = "linux"))]
@@ -1611,6 +1864,26 @@ fn compare_by<'a>(
     a_line_data: &LineData<'a>,
     b_line_data: &LineData<'a>,
 ) -> Ordering {
+    if global_settings.precomputed.fast_lexicographic {
+        let cmp = a.line.cmp(b.line);
+        return if global_settings.reverse {
+            cmp.reverse()
+        } else {
+            cmp
+        };
+    }
+
+    if global_settings.precomputed.fast_ascii_insensitive {
+        let cmp = ascii_case_insensitive_cmp(a.line, b.line);
+        if cmp != Ordering::Equal || a.line == b.line {
+            return if global_settings.reverse {
+                cmp.reverse()
+            } else {
+                cmp
+            };
+        }
+    }
+
     let mut selection_index = 0;
     let mut num_info_index = 0;
     let mut parsed_float_index = 0;
@@ -1720,6 +1993,26 @@ fn compare_by<'a>(
     } else {
         cmp
     }
+}
+
+/// Compare two byte slices in ASCII case-insensitive order without allocating.
+/// We lower each byte on the fly so that binary input (including `NUL`) stays
+/// untouched and we avoid locale-sensitive routines such as `strcasecmp`.
+fn ascii_case_insensitive_cmp(a: &[u8], b: &[u8]) -> Ordering {
+    #[inline]
+    fn lower(byte: u8) -> u8 {
+        byte.to_ascii_lowercase()
+    }
+
+    for (lhs, rhs) in a.iter().copied().zip(b.iter().copied()) {
+        let l = lower(lhs);
+        let r = lower(rhs);
+        if l != r {
+            return l.cmp(&r);
+        }
+    }
+
+    a.len().cmp(&b.len())
 }
 
 // This function cleans up the initial comparison done by leading_num_common for a general numeric compare.
