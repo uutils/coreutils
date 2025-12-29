@@ -19,7 +19,7 @@ use clap::{Arg, ArgAction, Command};
 use regex::Regex;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, UUsageError};
+use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::translate;
 
@@ -43,6 +43,7 @@ struct Config {
     context_regex: String,
     line_width: usize,
     gap_size: usize,
+    sentence_regex: Option<String>,
 }
 
 impl Default for Config {
@@ -59,6 +60,7 @@ impl Default for Config {
             context_regex: "\\w+".to_owned(),
             line_width: 72,
             gap_size: 3,
+            sentence_regex: None,
         }
     }
 }
@@ -197,16 +199,13 @@ struct WordRef {
 
 #[derive(Debug, Error)]
 enum PtxError {
-    #[error("{}", translate!("ptx-error-not-implemented", "feature" => (*.0)))]
-    NotImplemented(&'static str),
-
     #[error("{0}")]
     ParseError(ParseIntError),
 }
 
 impl UError for PtxError {}
 
-fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
+fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
     let mut config = Config::default();
     let err_msg = "parsing options failed";
     if matches.get_flag(options::TRADITIONAL) {
@@ -214,8 +213,19 @@ fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
         config.format = OutFormat::Roff;
         "[^ \t\n]+".clone_into(&mut config.context_regex);
     }
-    if matches.contains_id(options::SENTENCE_REGEXP) {
-        return Err(PtxError::NotImplemented("-S").into());
+    if let Some(regex) = matches.remove_one::<String>(options::SENTENCE_REGEXP) {
+        // TODO: The regex crate used here is not fully compatible with GNU's regex implementation.
+        // For example, it does not support backreferences.
+        // In the future, we might want to switch to the onig crate (like expr does) for better compatibility.
+
+        // Verify regex is valid and doesn't match empty string
+        if let Ok(re) = Regex::new(&regex) {
+            if re.is_match("") {
+                return Err(USimpleError::new(1, translate!("ptx-error-empty-regexp")));
+            }
+        }
+
+        config.sentence_regex = Some(regex);
     }
     config.auto_ref = matches.get_flag(options::AUTO_REFERENCE);
     config.input_ref = matches.get_flag(options::REFERENCES);
@@ -271,17 +281,30 @@ struct FileContent {
 
 type FileMap = HashMap<OsString, FileContent>;
 
-fn read_input(input_files: &[OsString]) -> std::io::Result<FileMap> {
+fn read_input(input_files: &[OsString], config: &Config) -> std::io::Result<FileMap> {
     let mut file_map: FileMap = HashMap::new();
     let mut offset: usize = 0;
+
+    let sentence_splitter = if let Some(re_str) = &config.sentence_regex {
+        Some(Regex::new(re_str).map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                translate!("ptx-error-invalid-regexp", "error" => e),
+            )
+        })?)
+    } else {
+        None
+    };
+
     for filename in input_files {
-        let reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
+        let mut reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
             Box::new(stdin())
         } else {
             let file = File::open(Path::new(filename))?;
             Box::new(file)
         });
-        let lines: Vec<String> = reader.lines().collect::<std::io::Result<Vec<String>>>()?;
+
+        let lines = read_lines(sentence_splitter.as_ref(), &mut reader)?;
 
         // Indexing UTF-8 string requires walking from the beginning, which can hurts performance badly when the line is long.
         // Since we will be jumping around the line a lot, we dump the content into a Vec<char>, which can be indexed in constant time.
@@ -298,6 +321,24 @@ fn read_input(input_files: &[OsString]) -> std::io::Result<FileMap> {
         offset += size;
     }
     Ok(file_map)
+}
+
+fn read_lines(
+    sentence_splitter: Option<&Regex>,
+    reader: &mut dyn BufRead,
+) -> std::io::Result<Vec<String>> {
+    if let Some(re) = sentence_splitter {
+        let mut buffer = String::new();
+        reader.read_to_string(&mut buffer)?;
+
+        Ok(re
+            .split(&buffer)
+            .map(|s| s.replace('\n', " ")) // ptx behavior: newlines become spaces inside sentences
+            .filter(|s| !s.is_empty()) // remove empty sentences
+            .collect())
+    } else {
+        reader.lines().collect()
+    }
 }
 
 /// Go through every lines in the input files and record each match occurrence as a `WordRef`.
@@ -614,11 +655,17 @@ fn format_dumb_line(
     };
 
     // Calculate the width for the left half (before the keyword)
-    let half_width = config.line_width / 2;
+    let half_width = cmp::max(config.line_width / 2, config.gap_size);
+
+    let left_part_len = if left_part.contains(&config.trunc_str) {
+        left_part.len() - config.trunc_str.len()
+    } else {
+        left_part.len()
+    };
 
     // Right-justify the left part within the left half
     let padding = if left_part.len() < half_width {
-        half_width - left_part.len()
+        half_width - left_part_len
     } else {
         0
     };
@@ -729,7 +776,7 @@ fn write_traditional_output(
             Box::new(stdout())
         } else {
             let file = File::create(output_filename)
-                .map_err_context(|| output_filename.to_string_lossy().quote().to_string())?;
+                .map_err_context(|| output_filename.quote().to_string())?;
             Box::new(file)
         });
 
@@ -844,8 +891,8 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
-    let mut config = get_config(&matches)?;
+    let mut matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let mut config = get_config(&mut matches)?;
 
     let input_files;
     let output_file: OsString;
@@ -871,13 +918,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if let Some(file) = files.next() {
             return Err(UUsageError::new(
                 1,
-                translate!("ptx-error-extra-operand", "operand" => file.to_string_lossy().quote()),
+                translate!("ptx-error-extra-operand", "operand" => file.quote()),
             ));
         }
     }
 
     let word_filter = WordFilter::new(&matches, &config)?;
-    let file_map = read_input(&input_files).map_err_context(String::new)?;
+    let file_map = read_input(&input_files, &config).map_err_context(String::new)?;
     let word_set = create_word_set(&config, &word_filter, &file_map);
     write_traditional_output(&mut config, &file_map, &word_set, &output_file)
 }
