@@ -633,7 +633,6 @@ impl CommandHelpLocalization for Command {
             .disable_version_flag(true)
             .arg(
                 Arg::new("help")
-                    .short('h')
                     .long("help")
                     .action(ArgAction::Help)
                     .help(translate!("help-flag-help"))
@@ -641,7 +640,6 @@ impl CommandHelpLocalization for Command {
             )
             .arg(
                 Arg::new("version")
-                    .short('V')
                     .long("version")
                     .action(ArgAction::Version)
                     .help(translate!("help-flag-version"))
