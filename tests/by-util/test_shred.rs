@@ -279,7 +279,6 @@ fn test_random_source_regular_file() {
 }
 
 #[test]
-#[ignore = "known issue #7947"]
 fn test_random_source_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -287,12 +286,17 @@ fn test_random_source_dir() {
     let file = "foo.txt";
     at.write(file, "a");
 
-    ucmd
-        .arg("-v")
+    // The test verifies that shred stops immediately on error instead of continuing
+    // Platform differences:
+    // - Unix: Error during write ("File write pass failed: Is a directory")
+    // - Windows: Error during open ("cannot open random source")
+    // Both are correct - key is NOT seeing "pass 2/3" (which proves it stopped)
+    ucmd.arg("-v")
         .arg("--random-source=source")
         .arg(file)
         .fails()
-        .stderr_only("shred: foo.txt: pass 1/3 (random)...\nshred: foo.txt: File write pass failed: Is a directory\n");
+        .stderr_does_not_contain("pass 2/3")
+        .stderr_does_not_contain("pass 3/3");
 }
 
 #[test]
@@ -329,4 +333,90 @@ fn test_shred_non_utf8_paths() {
 
     // Test that shred can handle non-UTF-8 filenames
     ts.ucmd().arg(file_name).succeeds();
+}
+
+#[test]
+fn test_gnu_shred_passes_20() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let us_data = vec![0x55; 102400]; // 100K of 'U' bytes
+    at.write_bytes("Us", &us_data);
+
+    let file = "f";
+    at.write(file, "1"); // Single byte file
+
+    // Test 20 passes with deterministic random source
+    // This should produce the exact same sequence as GNU shred
+    let result = ucmd
+        .arg("-v")
+        .arg("-u")
+        .arg("-n20")
+        .arg("-s4096")
+        .arg("--random-source=Us")
+        .arg(file)
+        .succeeds();
+
+    // Verify the exact pass sequence matches GNU's behavior
+    let expected_passes = [
+        "pass 1/20 (random)",
+        "pass 2/20 (ffffff)",
+        "pass 3/20 (924924)",
+        "pass 4/20 (888888)",
+        "pass 5/20 (db6db6)",
+        "pass 6/20 (777777)",
+        "pass 7/20 (492492)",
+        "pass 8/20 (bbbbbb)",
+        "pass 9/20 (555555)",
+        "pass 10/20 (aaaaaa)",
+        "pass 11/20 (random)",
+        "pass 12/20 (6db6db)",
+        "pass 13/20 (249249)",
+        "pass 14/20 (999999)",
+        "pass 15/20 (111111)",
+        "pass 16/20 (000000)",
+        "pass 17/20 (b6db6d)",
+        "pass 18/20 (eeeeee)",
+        "pass 19/20 (333333)",
+        "pass 20/20 (random)",
+    ];
+
+    for pass in expected_passes {
+        result.stderr_contains(pass);
+    }
+
+    // Also verify removal messages
+    result.stderr_contains("removing");
+    result.stderr_contains("renamed to 0");
+    result.stderr_contains("removed");
+
+    // File should be deleted
+    assert!(!at.file_exists(file));
+}
+
+#[test]
+fn test_gnu_shred_passes_different_counts() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let us_data = vec![0x55; 102400];
+    at.write_bytes("Us", &us_data);
+
+    let file = "f";
+    at.write(file, "1");
+
+    // Test with 19 passes to verify it works for different counts
+    let result = ucmd
+        .arg("-v")
+        .arg("-n19")
+        .arg("--random-source=Us")
+        .arg(file)
+        .succeeds();
+
+    // Should have exactly 19 passes
+    for i in 1..=19 {
+        result.stderr_contains(format!("pass {i}/19"));
+    }
+
+    // First and last should be random
+    result.stderr_contains("pass 1/19 (random)");
+    result.stderr_contains("pass 19/19 (random)");
 }
